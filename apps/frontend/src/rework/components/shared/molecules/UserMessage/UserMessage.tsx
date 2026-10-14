@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { Fragment } from "react";
-import { findSkillInvocations, skillInvocationsText } from "@rework/utils/skillInvocation";
+import { findSkillInvocations, skillInvocationsText, usablePromptList } from "@rework/utils/skillInvocation";
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
 import { CommandTurn } from "@shared/molecules/CommandTurn/CommandTurn";
 import { SkillBadge } from "@shared/molecules/SkillBadge/SkillBadge";
@@ -30,7 +30,9 @@ interface UserMessageProps {
   skillDescriptions?: ReadonlyMap<string, string>;
   skillDescription?: string | null;
   onOpenSkill?: (name: string) => void;
-  onOpenCommand?: () => void;
+  /** `promptIndex` is the entry of the turn's prompt list that was activated;
+   *  absent for a turn that has no usable list. */
+  onOpenCommand?: (promptIndex?: number) => void;
 }
 
 export function UserMessage({
@@ -46,17 +48,31 @@ export function UserMessage({
   const names = skillNames ?? (skillName ? [skillName] : []);
   const displayedText = skillInvocationsText(text, names, command);
   const skillTokens = findSkillInvocations(displayedText, names).map((token) => ({ ...token, kind: "skill" as const }));
-  const promptToken =
-    command && (command.draft_text != null || names.length)
+  const listed = usablePromptList(command, text);
+  const singleToken =
+    !listed && command && (command.draft_text != null || names.length)
       ? findSkillInvocations(displayedText, [command.command]).find((token) =>
           command.draft_text == null
             ? token.from === 0
             : command.draft_command_offset == null || token.from === command.draft_command_offset,
         )
       : undefined;
+  // One badge per listed prompt; a turn without a usable list keeps its single one.
+  const promptTokens = listed
+    ? listed.map((entry, index) => ({
+        kind: "prompt" as const,
+        name: entry.command,
+        from: entry.draft_offset,
+        to: entry.draft_offset + entry.command.length + 1,
+        shown: entry,
+        index,
+      }))
+    : singleToken && command
+      ? [{ ...singleToken, kind: "prompt" as const, shown: command, index: undefined }]
+      : [];
   const tokens = [
-    ...skillTokens.filter((token) => token.from !== promptToken?.from),
-    ...(promptToken ? [{ ...promptToken, kind: "prompt" as const }] : []),
+    ...skillTokens.filter((token) => !promptTokens.some((prompt) => prompt.from === token.from)),
+    ...promptTokens,
   ].sort((a, b) => a.from - b.from);
   return (
     <MessageBubble role="user">
@@ -65,8 +81,12 @@ export function UserMessage({
           {tokens.map((token, index) => (
             <Fragment key={token.from}>
               {displayedText.slice(index ? tokens[index - 1].to : 0, token.from)}
-              {token.kind === "prompt" && command ? (
-                <CommandTurn command={command} inline onOpen={onOpenCommand} />
+              {token.kind === "prompt" ? (
+                <CommandTurn
+                  command={token.shown}
+                  inline
+                  onOpen={onOpenCommand && (() => onOpenCommand(token.index))}
+                />
               ) : (
                 <SkillBadge
                   name={token.name}
@@ -79,7 +99,7 @@ export function UserMessage({
           {displayedText.slice(tokens[tokens.length - 1].to)}
         </div>
       ) : command && !command.draft_text ? (
-        <CommandTurn command={command} onOpen={onOpenCommand} />
+        <CommandTurn command={command} onOpen={onOpenCommand && (() => onOpenCommand())} />
       ) : (
         <p className={styles.text}>{displayedText}</p>
       )}

@@ -4354,47 +4354,96 @@ defaults to `banner`. A patch note keeps one markdown body per locale in
 `title` is a plain-text locale map validated like a banner's (200 characters),
 and must cover exactly the locales that have a body.
 
-**One active patch note.** Enabling a patch note (toggle, or create with
-`enabled=true`) disables the active one in the same transaction. Banners are
-untouched. A partial unique index (`uq_platform_announcement_active_patch_note`,
-`enabled AND kind = 'patch_note'`) makes two enabled patch notes impossible; a
-concurrent activation that loses on it gets `409`.
+**One active patch note; dismissal and re-show.** Superseded by 61.1
+(2026-10-13): any number of patch notes can be enabled, and the per-note
+dismissals, the unique index, its `409` and `dismissal_count` are gone. Toggle,
+content update and delete still read the row `FOR UPDATE`.
 
-**Dismissal and re-show.** Server-side, one row per user and patch note
-(`platform_announcement_dismissal`); a row present means hidden for that user.
-Every off-to-on toggle deletes all of the note's dismissals in the same
-transaction as the enable, so a re-enabled note is shown to everyone again; a
-content edit keeps them. A patch note's `content_version` never moves on a
-content edit and is bumped on every off-to-on toggle, as for a banner: it keys
-the client's "closed this sign-in" flag. Dismissals are also removed with the
-patch note and with the user (`DELETE /users/{id}`). Banners keep their
-per-browser dismissal. The admin list (`AdminAnnouncement`) gives each patch
-note a `dismissal_count`: its rows (one grouped count). Toggle, content update and delete read
-the row `FOR UPDATE`.
+**Activation history.** Superseded by 61.1: one line per exposure
+(`platform_announcement_exposure`) instead of one event per change.
 
-**Activation history.** `platform_announcement_activation_event`, append-only,
-no foreign key so it outlives the announcement. One event per real `enabled`
-change: toggle on/off, creation enabled, automatic disable of the previous
-patch note (actor = the admin enabling the new one) and deletion of an enabled
-announcement (`deactivated`). Each event carries `announcement_id`, `kind`,
-`label` (title per locale at event time), `severity` (the
-banner's severity at event time; `null` for a patch note, whose stored
-severity is a placeholder), `action` (`activated | deactivated`), `actor_uid`
-and `occurred_at`, written in the same
-transaction as the change. The `.toggled` and `.created` audit records gain
-`auto_disabled_ids`.
+### 61.1 Patch-note packages, order and exposure history (2026-10-13)
 
-| Method | Path                                                  | Permission            | Response                                   |
-| ------ | ----------------------------------------------------- | --------------------- | ------------------------------------------ |
-| GET    | `/announcements/patch-note`                           | authenticated         | `ActivePatchNote { patch_note: Announcement \| null, dismissed: bool }`: the enabled patch note and whether the caller dismissed it since it was last enabled |
-| PUT    | `/announcements/{id}/dismissal`                       | authenticated         | `204`, idempotent (one row per user and note); `404` when the id is not a patch note. Identity from the token only |
-| GET    | `/admin/platform/announcements/activation-history`    | `can_manage_platform` | `AnnouncementActivationEvent[]`, 100 newest first |
+OpenSpec change `browse-patch-note-history`. Replaces "one active patch note,
+shown when enabled, dismissible for good" and the event history.
 
-`GET /announcements/patch-note` is read once per application load (no
-polling); a patch note enabled mid-session is seen at the next load. The client
-opens it at load unless `dismissed`, and the profile menu reopens it on request.
-`GET /admin/platform/announcements` now returns `AdminAnnouncement[]`
-(`Announcement` plus `dismissal_count`, null for a banner).
+**Working area.** The `patch_note` rows of `platform_announcement` are what
+administrators edit; users never read them. `enabled` means "included in the
+next announcement": any number can be enabled, a patch note is created
+disabled, and toggling writes no history. Its `content_version` keys nothing.
+
+**Order.** `Announcement.position` (`platform_announcement.position`, nullable
+integer): 1 at the top for a patch note, `null` for a banner. A new patch note
+takes position 1 and the others move down. `GET /admin/platform/announcements`
+returns `Announcement[]`: banners newest first, then patch notes by position.
+
+**Announcement = frozen package.** Announcing snapshots the enabled patch
+notes, in position order, as `PatchNoteSnapshot { id, title, description_long }`
+with every locale they hold. Users read that package, and only that, until the
+next announcement or a withdrawal; later edits, reorders, toggles and deletions
+do not reach it. Every announcement is a new package, pending again for every
+user. Withdrawing leaves no package in effect: the user read is empty and
+nothing is pending.
+
+The announce request carries the ids the administrator confirmed, in order;
+the package is frozen only when the enabled patch notes are exactly that list,
+so a change made meanwhile by someone else is refused, not announced. A
+package holds at most 10 patch notes (`MAX_PATCH_NOTES_PER_ANNOUNCEMENT`).
+Announce, withdraw, create and reorder take one transaction-scoped advisory
+lock on PostgreSQL, so at most one package is ever in effect.
+
+**Exposures.** `platform_announcement_exposure` holds one row per exposure, no
+foreign key so it outlives the announcement: `id`, `kind`, `announcement_id`
+(the banner; for a package, its first patch note), `label` and `severity` as
+they were at the start, `actor_uid`, `activated_at`, `deactivated_at` (null
+while it lasts), and for a package `note_count` and `package`. A banner's row
+starts when it is enabled (toggle, or created enabled) and ends when it is
+disabled or deleted. A package's row starts at the announcement and ends when
+the next one replaces it or when it is withdrawn. The announcement *in effect*
+is the open `patch_note` row with a non-null `note_count`. Rows are written in
+the same transaction as the change.
+
+**Seen.** `platform_announcement_seen`, one row per user (`user_id`,
+`announcement_id`, `seen_at`), replaces `platform_announcement_dismissal`. An
+announcement is pending for a user when one is in effect, it opens the dialog
+(every package does, except the one the upgrade creates, see below) and the
+user's row does not name it. A record never moves a user back to an older
+announcement (one guarded upsert). Rows are removed with the user
+(`DELETE /users/{id}`).
+
+| Method | Path                                                         | Permission            | Request / response |
+| ------ | ------------------------------------------------------------ | --------------------- | ------------------ |
+| GET    | `/announcements/patch-notes`                                 | authenticated         | `PatchNoteHistory { patch_notes: PatchNoteSnapshot[], pending_announcement_id: str \| null }`: the package in effect, empty when none |
+| PUT    | `/announcements/patch-note-announcements/{id}/seen`          | authenticated         | `204`, idempotent; `404` when the id is not an announced package. Identity from the token only |
+| PUT    | `/admin/platform/announcements/patch-notes/order`            | `can_manage_platform` | `PatchNoteOrderRequest { ids: str[] }` (at most 1000) → `204`; `409`, changing nothing, unless the list names each patch note exactly once |
+| GET    | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnouncement { id, announced_at, announced_by } \| null`: the announcement in effect |
+| POST   | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnounceRequest { ids: str[] }` (1 to 1000) → `201` `PatchNoteAnnouncement`; `409`, announcing nothing, when no patch note is included, when more than 10 are, or when the included ones are not exactly `ids` in order |
+| DELETE | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | withdraw, `204`; `404` when none is in effect |
+| GET    | `/admin/platform/announcements/patch-notes/announcements/{id}` | `can_manage_platform` | `PatchNoteSnapshot[]`: the package of a history line; `404` for an unknown line or one without package |
+| GET    | `/admin/platform/announcements/activation-history`           | `can_manage_platform` | `AnnouncementExposure[]`, 100 newest first |
+
+`AnnouncementExposure` is `{ id, kind, announcement_id, label, severity,
+note_count, activated_at, deactivated_at, actor_uid }`; there is no `action`.
+For a patch-note line `label` is the first note's title and `note_count` the
+size of the package; `note_count` is null for a banner and for a line that
+kept no package, which cannot be opened. `GET /announcements/patch-notes` is
+read once per application load (no polling). Audit records:
+`platform.announcement.patch_notes_reordered`, `.patch_notes_announced`,
+`.patch_notes_withdrawn`.
+
+**Removed.** `GET /announcements/patch-note` and `ActivePatchNote`;
+`PUT /announcements/{id}/dismissal`; `AdminAnnouncement` and its
+`dismissal_count`; the `409` on concurrent activation; `auto_disabled_ids` in
+the `.created` and `.toggled` audit records; `AnnouncementActivationEvent` and
+its `action`; `platform_announcement_activation_event`.
+
+**Upgrade.** Migration `e5ff6d80cc9f` drops the unique index and the dismissal
+table and numbers existing patch notes newest first. Migration `a6c1d94e27b3`
+converts the events to exposure rows (each activation paired with the
+deactivation that followed; earlier patch-note activations become ended rows
+without package) and makes the enabled patch note the first package, with
+`opens_dialog = false`: readable from "What's new", pending for nobody. No
+user gets a dialog until an administrator announces.
 
 ## 62. Contract Notes — agent creation assistant (2026-10-08)
 
@@ -4626,6 +4675,12 @@ remains for its other consumers. Current behaviour:
 Public `/frontend/config` includes `platform_access_enabled`, indicating admission administration availability in authenticated deployments with enforced ReBAC, independently of the SQL filtering switch. Support destinations reuse static frontend `contactSupportLink` before protected bootstrap; there is no admission-specific support override. Platform admission remains independent of resource permissions and starts with filtering inactive. Administrators save and activate the shared SQL policy in the UI without deployment settings.
 
 `/admin/platform/access` exposes persisted filtering and versioned all/any rules with allow/block mode under `CAN_MANAGE_PLATFORM`. `policy-preview` tests the actor's own verified human token without saving or observing draft-only values; `policy` saves with an expected revision, conflict detection and the active-filter actor safeguard. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit one-time existing-user snapshot. Independent enrollment links support optional notes/expiration and per-link revocation. Creation and explicit reveal require the acting administrator's own human credential and return uncached plaintext tokens; ordinary paginated history excludes tokens. Tokens are recoverable in SQL for copying the original URL later. Removing Free suspends links; restoring Free resumes unrevoked, unexpired links. An authenticated caller-only opening POST increments the link's aggregate count and last-opening time without persisting visits or visitor identity. Preview and enrollment do not increment counts.
+
+Disabling filtering admits every authenticated, active person while retaining the saved rule, revision, user/team exceptions, Free flags and links for later reactivation. Current `CAN_MANAGE_PLATFORM` authority is an independent admission source while filtering is active, including delegated human requests; role removal withdraws it on the next request. Account suspension, terms acceptance and resource authorization still apply. An unavailable role authority produces an availability error. The activation preview and user list identify the administrator source.
+
+`GET /admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/joiners` returns bounded, paginated successful joiners for a link to platform administrators. Entries use the user's current first name, last name and username while active, or the last recorded values and a deleted flag after account deletion, plus the original join time. The record is written only when enrollment grants a new team membership, not on opening, preview, terms acceptance or an already-member retry. It survives team departure, account deletion, and link suspension, revocation or expiration. Explicit link-history cleanup removes those records. Existing historical joins are not backfilled.
+
+Successful Platform access mutations emit structured `fred.security.audit` events with the actor and relevant state or target identifiers, independently of ordinary application log verbosity. Filtering changes include the resulting revision, and link creation identifies the new link without exposing its token. Bulk manual grants and the initial T0 import emit one bounded summary with counts; they do not create one log event per user. The T0 event includes the number of exceptions actually added; a completed T0 retry emits no import event. Each successful new Free-link team join emits one event with user, team and link IDs. Openings and already-member retries do not emit a join event. Failed requests emit no success event. Link tokens and rule claim values are not written to audit events. Audit-log retention is controlled by the deployment's downstream log pipeline, as described in `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`.
 
 Invitation history supports an optional `status` query (`active`, `revoked`, `expired`, `suspended`) and returns filtered `total` plus team-wide `inactive_count` (2026-10-09). Revoked takes precedence over expired; one server timestamp determines each listing. `DELETE /admin/platform/access/teams/{team_id}/enrollment-links/inactive` requires platform administration and atomically deletes only that team's revoked or expired records under the existing mutation lock. It returns the actual `deleted_count` and audits actor, team and count after commit. Usable suspended links, membership and access settings are preserved; notes and aggregate counters of deleted links are permanently removed. No additional schema migration is required.
 

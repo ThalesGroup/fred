@@ -237,6 +237,34 @@ frontend, so registering an application needs no new Ingress path. Add one only
 if you want the UI to bypass the frontend hop — see the worked example in
 `deploy/charts/fred/values.yaml`.
 
+### Package it as a chart
+
+Ship your application as a Helm chart of your own, released with its images, so that
+any cluster installs it the same way. Fred publishes no application chart: your service
+is your code. Your chart meets this contract:
+
+- **Inside the cluster only.** The UI, and the service if there is one, behind ClusterIP
+  Services, in any namespace; no Ingress, no NodePort, no LoadBalancer. Fred's frontend
+  gateway is the only way in.
+- **The host origin is required.** The origin users open Fred at (`https://fred.example.com`),
+  refused when missing or when it is not a bare origin: your UI accepts messages from it
+  only.
+- **Credentials by reference.** A Secret the operator names (`existingSecret`) or
+  environment variables read from existing Secrets (`extraEnvVars`); never a literal value
+  in a values file. Refuse to render when the service needs credentials and none is given.
+- **The install prints the registration.** `NOTES.txt` prints both blocks of step 3 under
+  one `app_id`, with this release's fully qualified Service addresses, so the operator
+  copies them instead of writing them.
+- **Validated values, documented.** A `values.schema.json` that refuses unknown keys, and
+  a README (`helm show readme`) giving the install command, what Fred must provide, the
+  required values, the credentials and the addresses to override.
+- **The same chart locally.** Your repository's `deploy/k3d/` installs that chart, with
+  instance values only, on fred-deployment-factory's k3d instance
+  (`make k3d-app DIR=<your checkout>`).
+
+[fred-agent-evaluator](https://github.com/fred-agent/fred-agent-evaluator)'s
+`deploy/charts/fred-evaluator` is a worked example: UI, API and a Temporal worker.
+
 ### Put your application in its own namespace
 
 Deploy your workloads beside Fred, not inside it. Fred's only coupling to an
@@ -341,14 +369,14 @@ Fred now ships the clean agent extension mechanism that Meridian lacked. **You n
 Instead:
 
 - **Build your agents as an independent pod** using `fred-sdk` + `fred-runtime`. See [fred-samples](https://github.com/ThalesGroup/fred-samples) for a reference implementation.
-- Your pod lives in its own repository, has its own release cycle and image, and registers itself with the control plane.
+- Your pod lives in its own repository, has its own release cycle and image, and deploys from Fred's published `agent-pod` chart with its image and configuration (a Knowledge Base pod: the `knowledge-base` chart); see `deploy/charts/README.md`. The install prints the `runtime_catalog_sources` entry that registers it with the control plane.
 - The Fred core repository becomes a pure dependency — you consume it, you never patch it.
 - Merging upstream Fred updates requires zero conflict resolution on any source file.
 
 If your fork still has agent code inside `agentic-backend/`, the migration path is:
 
 1. Extract the agent code into its own repository as a `fred-runtime`-based pod.
-2. Register the pod with the control plane (see `apps/fred-agents/` for the wiring pattern).
+2. Deploy it with the `agent-pod` chart and add the `runtime_catalog_sources` entry its install prints.
 3. Remove the agent code from your Fred fork.
 
 **The `contrib/` pattern described in this guide remains valid for frontend static content** (legal notices, release notes). Brand-specific static assets continue to live under `apps/frontend/public/contrib/<your-brand>/` with no conflict risk.

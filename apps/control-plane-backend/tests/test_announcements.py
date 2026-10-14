@@ -34,26 +34,42 @@ from typing import cast
 
 import pytest
 import pytest_asyncio
-from control_plane_backend.announcements.schemas import AnnouncementWriteRequest
+from control_plane_backend.announcements.schemas import (
+    AnnouncementWriteRequest,
+    PatchNoteAnnounceRequest,
+    PatchNoteOrderRequest,
+)
 from control_plane_backend.announcements.service import (
+    announce_patch_notes,
     create_announcement,
     delete_announcement,
-    dismiss_patch_note,
-    get_active_patch_note,
-    list_activation_history,
+    get_patch_note_announcement,
+    get_patch_note_history,
+    get_patch_note_package,
     list_active_announcements,
     list_announcements,
+    list_exposure_history,
+    mark_patch_note_announcement_seen,
     set_announcement_enabled,
+    set_patch_note_order,
     update_announcement,
+    withdraw_patch_note_announcement,
 )
-from control_plane_backend.announcements.store import AnnouncementStore
+from control_plane_backend.announcements.store import (
+    AnnouncementStore,
+    StoredExposure,
+)
+from control_plane_backend.models.announcement_models import (
+    MAX_PATCH_NOTE_IDS,
+    MAX_PATCH_NOTES_PER_ANNOUNCEMENT,
+)
+from control_plane_backend.models.base import utcnow
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from fastapi import HTTPException
 from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_core.security.models import Resource
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 
@@ -380,21 +396,47 @@ async def test_every_admin_operation_asks_for_can_manage_platform(
         user=_user(), announcement_id=created.id, enabled=True, deps=deps
     )
     await delete_announcement(user=_user(), announcement_id=created.id, deps=deps)
+    note = await create_announcement(
+        user=_user(), request=_patch_note(enabled=True), deps=deps
+    )
+    await set_patch_note_order(user=_user(), ordered_ids=[note.id], deps=deps)
+    announced = await _announce(user=_user(), deps=deps)
+    await get_patch_note_announcement(user=_user(), deps=deps)
+    await get_patch_note_package(user=_user(), announcement_id=announced.id, deps=deps)
+    await list_exposure_history(user=_user(), deps=deps)
+    await withdraw_patch_note_announcement(user=_user(), deps=deps)
 
-    assert rebac.asked == [OrganizationPermission.CAN_MANAGE_PLATFORM] * 5
+    assert rebac.asked == [OrganizationPermission.CAN_MANAGE_PLATFORM] * 12
 
 
 @pytest.mark.asyncio
 async def test_non_administrator_is_refused_every_mutation(
     store: AnnouncementStore,
 ) -> None:
-    existing = await create_announcement(
-        user=_user(), request=_write(), deps=_deps(store, _platform_admin())
-    )
+    admin = _deps(store, _platform_admin())
+    existing = await create_announcement(user=_user(), request=_write(), deps=admin)
+    notes = [
+        await create_announcement(
+            user=_user(), request=_patch_note(enabled=True), deps=admin
+        )
+        for _ in range(2)
+    ]
+    order_before = [n.id for n in await _patch_notes(admin)]
+    announced = await _announce(user=_user(), deps=admin)
     deps = _deps(store, _nobody())
 
     for call in (
         lambda: list_announcements(user=_user("mallory"), deps=deps),
+        lambda: set_patch_note_order(
+            user=_user("mallory"), ordered_ids=[notes[0].id, notes[1].id], deps=deps
+        ),
+        lambda: _announce(user=_user("mallory"), deps=deps),
+        lambda: withdraw_patch_note_announcement(user=_user("mallory"), deps=deps),
+        lambda: get_patch_note_announcement(user=_user("mallory"), deps=deps),
+        lambda: get_patch_note_package(
+            user=_user("mallory"), announcement_id=announced.id, deps=deps
+        ),
+        lambda: list_exposure_history(user=_user("mallory"), deps=deps),
         lambda: create_announcement(user=_user("mallory"), request=_write(), deps=deps),
         lambda: update_announcement(
             user=_user("mallory"),
@@ -419,6 +461,10 @@ async def test_non_administrator_is_refused_every_mutation(
     still_there = await store.get(existing.id)
     assert still_there is not None
     assert still_there.enabled is False
+    assert [n.id for n in await _patch_notes(admin)] == order_before
+    # Neither replaced nor withdrawn.
+    current = await get_patch_note_announcement(user=_user(), deps=admin)
+    assert current is not None and current.id == announced.id
 
 
 @pytest.mark.asyncio
@@ -479,6 +525,12 @@ async def test_admin_mutations_emit_audit_records(
             user=_user(), announcement_id=created.id, enabled=True, deps=deps
         )
         await delete_announcement(user=_user(), announcement_id=created.id, deps=deps)
+        note = await create_announcement(
+            user=_user(), request=_patch_note(enabled=True), deps=deps
+        )
+        await set_patch_note_order(user=_user(), ordered_ids=[note.id], deps=deps)
+        await _announce(user=_user(), deps=deps)
+        await withdraw_patch_note_announcement(user=_user(), deps=deps)
 
     events = [
         record.__dict__.get("audit_event")
@@ -490,6 +542,10 @@ async def test_admin_mutations_emit_audit_records(
         "platform.announcement.updated",
         "platform.announcement.toggled",
         "platform.announcement.deleted",
+        "platform.announcement.created",
+        "platform.announcement.patch_notes_reordered",
+        "platform.announcement.patch_notes_announced",
+        "platform.announcement.patch_notes_withdrawn",
     ]
 
 
@@ -588,11 +644,24 @@ def test_every_announcement_route_is_registered() -> None:
         "/control-plane/v1/admin/platform/announcements/{announcement_id}/enabled"
     ]
     assert set(toggle) == {"put"}
-    assert set(paths["/control-plane/v1/announcements/patch-note"]) == {"get"}
-    dismissal = paths["/control-plane/v1/announcements/{announcement_id}/dismissal"]
-    assert set(dismissal) == {"put"}
-    history = paths["/control-plane/v1/admin/platform/announcements/activation-history"]
-    assert set(history) == {"get"}
+    assert set(paths["/control-plane/v1/announcements/patch-notes"]) == {"get"}
+    seen = paths[
+        "/control-plane/v1/announcements/patch-note-announcements"
+        "/{announcement_id}/seen"
+    ]
+    assert set(seen) == {"put"}
+    admin_prefix = "/control-plane/v1/admin/platform/announcements"
+    assert set(paths[f"{admin_prefix}/activation-history"]) == {"get"}
+    assert set(paths[f"{admin_prefix}/patch-notes/order"]) == {"put"}
+    assert set(paths[f"{admin_prefix}/patch-notes/announcement"]) == {
+        "get",
+        "post",
+        "delete",
+    }
+    package = paths[f"{admin_prefix}/patch-notes/announcements/{{announcement_id}}"]
+    assert set(package) == {"get"}
+    assert "/control-plane/v1/announcements/patch-note" not in paths
+    assert "/control-plane/v1/announcements/{announcement_id}/dismissal" not in paths
 
 
 # ---------------------------------------------------------------------------
@@ -649,36 +718,90 @@ def test_banner_rules_are_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Patch notes: one active at a time, and the activation history
+# Patch notes: the working area and its order
 # ---------------------------------------------------------------------------
 
 
 async def _history(deps: ProductServiceDependencies):
-    return await list_activation_history(user=_user(), deps=deps)
+    return await list_exposure_history(user=_user(), deps=deps)
+
+
+async def _patch_notes(deps: ProductServiceDependencies):
+    """The admin list's patch notes, in the order it returns them."""
+    listed = await list_announcements(user=_user(), deps=deps)
+    return [a for a in listed if a.kind == "patch_note"]
+
+
+async def _titled(deps: ProductServiceDependencies, title: str, *, enabled: bool):
+    return await create_announcement(
+        user=_user(),
+        request=_patch_note(
+            title={"en": title}, description_long={"en": f"# {title}"}, enabled=enabled
+        ),
+        deps=deps,
+    )
+
+
+async def _announce(*, user: KeycloakUser, deps: ProductServiceDependencies):
+    """Announce what an administrator who just confirmed the list would send."""
+    included = await deps.get_announcement_store().list_included_patch_notes()
+    return await announce_patch_notes(
+        user=user, expected_ids=[note.id for note in included], deps=deps
+    )
+
+
+async def _read(deps: ProductServiceDependencies, uid: str = "alice"):
+    return await get_patch_note_history(user=_user(uid), deps=deps)
+
+
+async def _pending(deps: ProductServiceDependencies, uid: str) -> str | None:
+    return (await _read(deps, uid)).pending_announcement_id
+
+
+async def _titles(deps: ProductServiceDependencies, uid: str = "alice") -> list[str]:
+    return [note.title["en"] for note in (await _read(deps, uid)).patch_notes]
 
 
 @pytest.mark.asyncio
-async def test_enabling_a_patch_note_disables_the_previous_one(
+async def test_a_patch_note_is_created_off_by_default(
     store: AnnouncementStore,
 ) -> None:
     deps = _deps(store, _platform_admin())
-    a = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=deps
+
+    note = await create_announcement(
+        user=_user(),
+        request=AnnouncementWriteRequest(
+            kind="patch_note",
+            severity="info",
+            title={"en": "3.4"},
+            description_short={},
+            description_long={"en": "# 3.4"},
+        ),
+        deps=deps,
     )
-    b = await create_announcement(user=_user(), request=_patch_note(), deps=deps)
+
+    assert note.enabled is False
+    assert await _titles(deps) == []
+
+
+@pytest.mark.asyncio
+async def test_several_patch_notes_can_be_included_at_once(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    await _titled(deps, "A", enabled=True)
+    b = await _titled(deps, "B", enabled=False)
 
     await set_announcement_enabled(
         user=_user(), announcement_id=b.id, enabled=True, deps=deps
     )
+    await _titled(deps, "C", enabled=True)
 
-    listed = {
-        x.id: x.enabled for x in await list_announcements(user=_user(), deps=deps)
-    }
-    assert listed == {a.id: False, b.id: True}
+    assert all(n.enabled for n in await _patch_notes(deps))
 
 
 @pytest.mark.asyncio
-async def test_enabling_a_patch_note_leaves_banners_enabled(
+async def test_toggling_a_patch_note_leaves_banners_alone(
     store: AnnouncementStore,
 ) -> None:
     deps = _deps(store, _platform_admin())
@@ -686,13 +809,10 @@ async def test_enabling_a_patch_note_leaves_banners_enabled(
         await create_announcement(user=_user(), request=_write(enabled=True), deps=deps)
         for _ in range(2)
     ]
-    await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=deps
-    )
-    b = await create_announcement(user=_user(), request=_patch_note(), deps=deps)
+    note = await _titled(deps, "A", enabled=True)
 
     await set_announcement_enabled(
-        user=_user(), announcement_id=b.id, enabled=True, deps=deps
+        user=_user(), announcement_id=note.id, enabled=False, deps=deps
     )
 
     assert {x.id for x in await list_active_announcements(deps=deps)} == {
@@ -701,188 +821,55 @@ async def test_enabling_a_patch_note_leaves_banners_enabled(
 
 
 @pytest.mark.asyncio
-async def test_creating_an_enabled_patch_note_disables_the_previous_one(
+async def test_a_new_patch_note_goes_to_the_top(store: AnnouncementStore) -> None:
+    deps = _deps(store, _platform_admin())
+    banner = await create_announcement(user=_user(), request=_write(), deps=deps)
+    for title in ("A", "B", "C"):
+        await _titled(deps, title, enabled=False)
+
+    listed = await _patch_notes(deps)
+
+    assert [n.title["en"] for n in listed] == ["C", "B", "A"]
+    assert [n.position for n in listed] == [1, 2, 3]
+    everything = await list_announcements(user=_user(), deps=deps)
+    assert everything[0].id == banner.id and everything[0].position is None
+
+
+@pytest.mark.asyncio
+async def test_reordering_stores_the_given_order(store: AnnouncementStore) -> None:
+    deps = _deps(store, _platform_admin())
+    a, b, c = [await _titled(deps, t, enabled=True) for t in ("A", "B", "C")]
+
+    await set_patch_note_order(user=_user(), ordered_ids=[a.id, c.id, b.id], deps=deps)
+
+    listed = await _patch_notes(deps)
+    assert [n.id for n in listed] == [a.id, c.id, b.id]
+    assert [n.position for n in listed] == [1, 2, 3]
+    assert all(n.enabled for n in listed)
+
+
+@pytest.mark.asyncio
+async def test_a_reorder_that_is_not_the_current_set_is_refused(
     store: AnnouncementStore,
 ) -> None:
     deps = _deps(store, _platform_admin())
-    a = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=deps
-    )
+    a, b = [await _titled(deps, t, enabled=False) for t in ("A", "B")]
+    banner = await create_announcement(user=_user(), request=_write(), deps=deps)
+    before = [n.id for n in await _patch_notes(deps)]
 
-    b = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=deps
-    )
+    for stale in (
+        [a.id],  # another administrator created B meanwhile
+        [a.id, b.id, "deleted-meanwhile"],
+        [a.id, a.id],
+        [a.id, banner.id],
+        [],
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await set_patch_note_order(user=_user(), ordered_ids=stale, deps=deps)
+        assert exc.value.status_code == 409
 
-    assert (await store.get(a.id)).enabled is False  # type: ignore[union-attr]
-    assert b.enabled is True
-
-
-@pytest.mark.asyncio
-async def test_activation_and_deactivation_record_events_with_actor(
-    store: AnnouncementStore,
-) -> None:
-    deps = _deps(store, _platform_admin())
-    x = await create_announcement(
-        user=_user("alice"), request=_write(severity="warning"), deps=deps
-    )
-
-    await set_announcement_enabled(
-        user=_user("alice"), announcement_id=x.id, enabled=True, deps=deps
-    )
-    await set_announcement_enabled(
-        user=_user("bob"), announcement_id=x.id, enabled=False, deps=deps
-    )
-
-    events = await _history(deps)
-    assert [(e.action, e.actor_uid) for e in events] == [
-        ("deactivated", "bob"),
-        ("activated", "alice"),
-    ]
-    assert all(e.announcement_id == x.id and e.kind == "banner" for e in events)
-    assert events[0].label == {"en": "Title", "fr": "Titre"}
-    # The banner's severity is snapshotted so the history can colour its type.
-    assert all(e.severity == "warning" for e in events)
-
-
-@pytest.mark.asyncio
-async def test_auto_deactivation_is_recorded_for_the_acting_admin(
-    store: AnnouncementStore, caplog: pytest.LogCaptureFixture
-) -> None:
-    deps = _deps(store, _platform_admin())
-    a = await create_announcement(
-        user=_user("carol"), request=_patch_note(enabled=True), deps=deps
-    )
-    b = await create_announcement(user=_user("carol"), request=_patch_note(), deps=deps)
-
-    with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER_NAME):
-        await set_announcement_enabled(
-            user=_user("alice"), announcement_id=b.id, enabled=True, deps=deps
-        )
-
-    events = await _history(deps)
-    assert [(e.announcement_id, e.action, e.actor_uid) for e in events[:2]] == [
-        (b.id, "activated", "alice"),
-        (a.id, "deactivated", "alice"),
-    ]
-    assert events[0].kind == "patch_note"
-    assert events[0].label == {"en": "What's new in 3.4", "fr": "Nouveautés 3.4"}
-    # A patch note's stored severity is a placeholder: none in the history.
-    assert all(e.severity is None for e in events[:2])
-    toggled = [
-        r
-        for r in caplog.records
-        if r.__dict__.get("audit_event") == "platform.announcement.toggled"
-    ]
-    assert toggled[0].__dict__["auto_disabled_ids"] == [a.id]
-
-
-@pytest.mark.asyncio
-async def test_no_op_toggle_records_no_event(store: AnnouncementStore) -> None:
-    deps = _deps(store, _platform_admin())
-    x = await create_announcement(user=_user(), request=_write(), deps=deps)
-
-    await set_announcement_enabled(
-        user=_user(), announcement_id=x.id, enabled=False, deps=deps
-    )
-
-    assert await _history(deps) == []
-
-
-@pytest.mark.asyncio
-async def test_deleting_an_enabled_announcement_records_deactivation(
-    store: AnnouncementStore,
-) -> None:
-    deps = _deps(store, _platform_admin())
-    note = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=deps
-    )
-
-    await delete_announcement(user=_user("dave"), announcement_id=note.id, deps=deps)
-
-    events = await _history(deps)
-    assert [(e.action, e.actor_uid) for e in events] == [
-        ("deactivated", "dave"),
-        ("activated", "admin"),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_history_survives_deletion(store: AnnouncementStore) -> None:
-    deps = _deps(store, _platform_admin())
-    x = await create_announcement(user=_user(), request=_write(), deps=deps)
-    for enabled in (True, False):
-        await set_announcement_enabled(
-            user=_user(), announcement_id=x.id, enabled=enabled, deps=deps
-        )
-
-    await delete_announcement(user=_user(), announcement_id=x.id, deps=deps)
-
-    events = await _history(deps)
-    assert [e.action for e in events] == ["deactivated", "activated"]
-    assert all(e.label["en"] == "Title" and e.kind == "banner" for e in events)
-
-
-async def _simulate_concurrent_activation(
-    store: AnnouncementStore, monkeypatch: pytest.MonkeyPatch
-):
-    """Another admin's activation lands between our read and our write."""
-    deps = _deps(store, _platform_admin())
-    await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=deps
-    )
-    b = await create_announcement(user=_user(), request=_patch_note(), deps=deps)
-
-    async def _sees_nothing_to_disable(**_kwargs):
-        return []
-
-    monkeypatch.setattr(store, "disable_other_patch_notes", _sees_nothing_to_disable)
-    return deps, b
-
-
-@pytest.mark.asyncio
-async def test_concurrent_patch_note_activation_returns_409(
-    store: AnnouncementStore, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    deps, b = await _simulate_concurrent_activation(store, monkeypatch)
-
-    with pytest.raises(HTTPException) as exc:
-        await set_announcement_enabled(
-            user=_user(), announcement_id=b.id, enabled=True, deps=deps
-        )
-
-    assert exc.value.status_code == 409
-    assert (await store.get(b.id)).enabled is False  # type: ignore[union-attr]
-
-
-@pytest.mark.asyncio
-async def test_concurrent_enabled_patch_note_creation_returns_409(
-    store: AnnouncementStore, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    deps, _ = await _simulate_concurrent_activation(store, monkeypatch)
-    before = await store.list_all()
-
-    with pytest.raises(HTTPException) as exc:
-        await create_announcement(
-            user=_user(), request=_patch_note(enabled=True), deps=deps
-        )
-
-    assert exc.value.status_code == 409
-    assert len(await store.list_all()) == len(before)
-
-
-@pytest.mark.asyncio
-async def test_failed_toggle_records_no_event(
-    store: AnnouncementStore, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    deps, b = await _simulate_concurrent_activation(store, monkeypatch)
-    before = await _history(deps)
-
-    with pytest.raises(HTTPException):
-        await set_announcement_enabled(
-            user=_user(), announcement_id=b.id, enabled=True, deps=deps
-        )
-
-    assert await _history(deps) == before
+    assert [n.id for n in await _patch_notes(deps)] == before
+    assert (await store.get(banner.id)).position is None  # type: ignore[union-attr]
 
 
 @pytest.mark.asyncio
@@ -897,207 +884,6 @@ async def test_kind_cannot_change_on_update(store: AnnouncementStore) -> None:
 
     assert exc.value.status_code == 422
     assert (await store.get(banner.id)).kind == "banner"  # type: ignore[union-attr]
-
-
-# ---------------------------------------------------------------------------
-# Patch notes: delivery and dismissal
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_active_patch_note_is_delivered_until_dismissed(
-    store: AnnouncementStore,
-) -> None:
-    deps = _deps(store, _nobody())
-    note = await create_announcement(
-        user=_user(),
-        request=_patch_note(enabled=True),
-        deps=_deps(store, _platform_admin()),
-    )
-
-    delivered = await get_active_patch_note(user=_user("alice"), deps=deps)
-    assert delivered.patch_note is not None and delivered.patch_note.id == note.id
-
-    assert delivered.dismissed is False
-
-    await dismiss_patch_note(user=_user("alice"), announcement_id=note.id, deps=deps)
-    await dismiss_patch_note(user=_user("alice"), announcement_id=note.id, deps=deps)
-
-    # Still returned, so the user can reopen it on request, but flagged.
-    after = await get_active_patch_note(user=_user("alice"), deps=deps)
-    assert after.patch_note is not None and after.dismissed is True
-
-
-@pytest.mark.asyncio
-async def test_dismissal_is_per_user(store: AnnouncementStore) -> None:
-    deps = _deps(store, _nobody())
-    note = await create_announcement(
-        user=_user(),
-        request=_patch_note(enabled=True),
-        deps=_deps(store, _platform_admin()),
-    )
-
-    await dismiss_patch_note(user=_user("alice"), announcement_id=note.id, deps=deps)
-
-    assert (
-        await get_active_patch_note(user=_user("bob"), deps=deps)
-    ).dismissed is False
-
-
-@pytest.mark.asyncio
-async def test_new_patch_note_is_delivered_after_dismissing_the_previous_one(
-    store: AnnouncementStore,
-) -> None:
-    admin = _deps(store, _platform_admin())
-    a = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=admin
-    )
-    await dismiss_patch_note(user=_user("alice"), announcement_id=a.id, deps=admin)
-    b = await create_announcement(user=_user(), request=_patch_note(), deps=admin)
-
-    await set_announcement_enabled(
-        user=_user(), announcement_id=b.id, enabled=True, deps=admin
-    )
-
-    delivered = await get_active_patch_note(user=_user("alice"), deps=admin)
-    assert delivered.patch_note is not None and delivered.patch_note.id == b.id
-    assert delivered.dismissed is False
-
-
-@pytest.mark.asyncio
-async def test_editing_a_dismissed_patch_note_does_not_redeliver_it(
-    store: AnnouncementStore,
-) -> None:
-    admin = _deps(store, _platform_admin())
-    a = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=admin
-    )
-    await dismiss_patch_note(user=_user("alice"), announcement_id=a.id, deps=admin)
-
-    edited = await update_announcement(
-        user=_user(),
-        announcement_id=a.id,
-        request=_patch_note(
-            title={"en": "What's new"},
-            description_long={"en": "# Release 3.4 (fixed typo)"},
-        ),
-        deps=admin,
-    )
-
-    assert edited.content_version == a.content_version
-    assert (await get_active_patch_note(user=_user("alice"), deps=admin)).dismissed
-
-
-async def _dismissed_then_disabled(store: AnnouncementStore):
-    """Alice dismissed an active patch note that was then switched off."""
-    admin = _deps(store, _platform_admin())
-    note = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=admin
-    )
-    await dismiss_patch_note(user=_user("alice"), announcement_id=note.id, deps=admin)
-    await set_announcement_enabled(
-        user=_user(), announcement_id=note.id, enabled=False, deps=admin
-    )
-    return admin, note
-
-
-@pytest.mark.asyncio
-async def test_re_enabling_a_patch_note_shows_it_again(
-    store: AnnouncementStore,
-) -> None:
-    admin, note = await _dismissed_then_disabled(store)
-
-    relaunched = await set_announcement_enabled(
-        user=_user(), announcement_id=note.id, enabled=True, deps=admin
-    )
-
-    assert relaunched.content_version == note.content_version + 1
-    assert not (await get_active_patch_note(user=_user("alice"), deps=admin)).dismissed
-    # Once shown again, a fresh "don't show again" holds.
-    await dismiss_patch_note(user=_user("alice"), announcement_id=note.id, deps=admin)
-    assert (await get_active_patch_note(user=_user("alice"), deps=admin)).dismissed
-
-
-@pytest.mark.asyncio
-async def test_re_enabling_a_patch_note_edited_while_off_shows_it_again(
-    store: AnnouncementStore,
-) -> None:
-    admin, note = await _dismissed_then_disabled(store)
-    await update_announcement(
-        user=_user(),
-        announcement_id=note.id,
-        request=_patch_note(title={"en": "What's new in 3.5", "fr": "Nouveautés 3.5"}),
-        deps=admin,
-    )
-
-    relaunched = await set_announcement_enabled(
-        user=_user(), announcement_id=note.id, enabled=True, deps=admin
-    )
-
-    assert relaunched.content_version == note.content_version + 1
-    assert not (await get_active_patch_note(user=_user("alice"), deps=admin)).dismissed
-
-
-@pytest.mark.asyncio
-async def test_re_enabling_clears_only_that_notes_dismissals(
-    store: AnnouncementStore,
-) -> None:
-    admin, note = await _dismissed_then_disabled(store)
-    await dismiss_patch_note(user=_user("bob"), announcement_id=note.id, deps=admin)
-    other = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=admin
-    )
-    await dismiss_patch_note(user=_user("alice"), announcement_id=other.id, deps=admin)
-
-    await set_announcement_enabled(
-        user=_user(), announcement_id=note.id, enabled=True, deps=admin
-    )
-
-    for uid in ("alice", "bob"):
-        assert not await store.is_dismissed(announcement_id=note.id, user_id=uid)
-    assert await store.is_dismissed(announcement_id=other.id, user_id="alice")
-
-
-@pytest.mark.asyncio
-async def test_re_enabling_a_live_patch_note_keeps_its_dismissals(
-    store: AnnouncementStore,
-) -> None:
-    admin = _deps(store, _platform_admin())
-    note = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=admin
-    )
-    await dismiss_patch_note(user=_user("alice"), announcement_id=note.id, deps=admin)
-
-    await set_announcement_enabled(
-        user=_user(), announcement_id=note.id, enabled=True, deps=admin
-    )
-
-    assert await store.is_dismissed(announcement_id=note.id, user_id="alice")
-
-
-@pytest.mark.asyncio
-async def test_admin_list_counts_dismissals_since_last_enabled(
-    store: AnnouncementStore,
-) -> None:
-    admin, note = await _dismissed_then_disabled(store)
-    await dismiss_patch_note(user=_user("bob"), announcement_id=note.id, deps=admin)
-    banner = await create_announcement(user=_user(), request=_write(), deps=admin)
-
-    counts = {
-        a.id: a.dismissal_count
-        for a in await list_announcements(user=_user(), deps=admin)
-    }
-    assert counts == {note.id: 2, banner.id: None}
-
-    await set_announcement_enabled(
-        user=_user(), announcement_id=note.id, enabled=True, deps=admin
-    )
-
-    counts = {
-        a.id: a.dismissal_count
-        for a in await list_announcements(user=_user(), deps=admin)
-    }
-    assert counts[note.id] == 0
 
 
 @pytest.mark.asyncio
@@ -1125,41 +911,513 @@ async def test_toggle_and_delete_lock_the_row_they_read(
     assert locked == [True, True, True]
 
 
+# ---------------------------------------------------------------------------
+# The exposure history: banners
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
-async def test_dismissing_a_banner_returns_404(store: AnnouncementStore) -> None:
-    admin = _deps(store, _platform_admin())
-    banner = await create_announcement(
-        user=_user(), request=_write(enabled=True), deps=admin
+async def test_a_banner_exposure_is_one_line_with_its_author(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    x = await create_announcement(
+        user=_user("alice"), request=_write(severity="warning"), deps=deps
     )
 
-    for announcement_id in (banner.id, "ghost"):
-        with pytest.raises(HTTPException) as exc:
-            await dismiss_patch_note(
-                user=_user("alice"), announcement_id=announcement_id, deps=admin
-            )
-        assert exc.value.status_code == 404
-    assert not await store.is_dismissed(announcement_id=banner.id, user_id="alice")
+    await set_announcement_enabled(
+        user=_user("alice"), announcement_id=x.id, enabled=True, deps=deps
+    )
+    [on_air] = await _history(deps)
+    assert on_air.deactivated_at is None
+
+    await set_announcement_enabled(
+        user=_user("bob"), announcement_id=x.id, enabled=False, deps=deps
+    )
+
+    [line] = await _history(deps)
+    assert (line.id, line.kind, line.announcement_id) == (on_air.id, "banner", x.id)
+    assert line.label == {"en": "Title", "fr": "Titre"}
+    # The severity is snapshotted so the history can colour the type.
+    assert (line.severity, line.actor_uid, line.note_count) == (
+        "warning",
+        "alice",
+        None,
+    )
+    assert line.deactivated_at is not None
+    assert line.deactivated_at >= line.activated_at
 
 
 @pytest.mark.asyncio
-async def test_dismissing_a_note_deleted_meanwhile_returns_404(
+async def test_re_enabling_a_banner_starts_a_new_line(store: AnnouncementStore) -> None:
+    deps = _deps(store, _platform_admin())
+    x = await create_announcement(user=_user(), request=_write(enabled=True), deps=deps)
+    for enabled in (False, True):
+        await set_announcement_enabled(
+            user=_user(), announcement_id=x.id, enabled=enabled, deps=deps
+        )
+
+    newer, older = await _history(deps)
+
+    assert newer.deactivated_at is None and older.deactivated_at is not None
+
+
+@pytest.mark.asyncio
+async def test_no_op_toggle_writes_no_line(store: AnnouncementStore) -> None:
+    deps = _deps(store, _platform_admin())
+    x = await create_announcement(user=_user(), request=_write(), deps=deps)
+
+    await set_announcement_enabled(
+        user=_user(), announcement_id=x.id, enabled=False, deps=deps
+    )
+    assert await _history(deps) == []
+
+    for _ in range(2):
+        await set_announcement_enabled(
+            user=_user(), announcement_id=x.id, enabled=True, deps=deps
+        )
+    assert len(await _history(deps)) == 1
+
+
+@pytest.mark.asyncio
+async def test_deleting_an_enabled_banner_ends_its_line_which_survives(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    x = await create_announcement(user=_user(), request=_write(enabled=True), deps=deps)
+
+    await delete_announcement(user=_user("dave"), announcement_id=x.id, deps=deps)
+
+    [line] = await _history(deps)
+    assert line.deactivated_at is not None
+    assert (line.label["en"], line.kind, line.actor_uid) == ("Title", "banner", "admin")
+
+
+@pytest.mark.asyncio
+async def test_working_on_patch_notes_writes_no_line(store: AnnouncementStore) -> None:
+    deps = _deps(store, _platform_admin())
+    note = await _titled(deps, "A", enabled=True)
+    other = await _titled(deps, "B", enabled=False)
+
+    for enabled in (False, True):
+        await set_announcement_enabled(
+            user=_user(), announcement_id=note.id, enabled=enabled, deps=deps
+        )
+    await set_patch_note_order(user=_user(), ordered_ids=[note.id, other.id], deps=deps)
+    await delete_announcement(user=_user(), announcement_id=note.id, deps=deps)
+
+    assert await _history(deps) == []
+
+
+@pytest.mark.asyncio
+async def test_failed_toggle_writes_no_line(
     store: AnnouncementStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    deps = _deps(store, _platform_admin())
+    banner = await create_announcement(user=_user(), request=_write(), deps=deps)
+
+    async def _fails(*_args, **_kwargs):
+        raise RuntimeError("storage went away")
+
+    monkeypatch.setattr(store, "add_exposure", _fails)
+
+    with pytest.raises(RuntimeError):
+        await set_announcement_enabled(
+            user=_user(), announcement_id=banner.id, enabled=True, deps=deps
+        )
+
+    monkeypatch.undo()
+    assert (await store.get(banner.id)).enabled is False  # type: ignore[union-attr]
+    assert await _history(deps) == []
+
+
+# ---------------------------------------------------------------------------
+# Announcing a package, withdrawing it, and what each user has seen
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_read_until_an_administrator_announces(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    await _titled(deps, "A", enabled=True)
+
+    history = await _read(deps)
+
+    assert history.patch_notes == [] and history.pending_announcement_id is None
+    assert await get_patch_note_announcement(user=_user(), deps=deps) is None
+
+
+@pytest.mark.asyncio
+async def test_announcing_freezes_the_included_notes_in_order(
+    store: AnnouncementStore,
+) -> None:
     admin = _deps(store, _platform_admin())
-    note = await create_announcement(
-        user=_user(), request=_patch_note(enabled=True), deps=admin
+    await _titled(admin, "C", enabled=True)
+    await _titled(admin, "B", enabled=False)
+    a = await create_announcement(
+        user=_user(),
+        request=_patch_note(
+            title={"en": "A", "fr": "A (fr)"},
+            description_long={"en": "# A", "fr": "# A en français"},
+            enabled=True,
+        ),
+        deps=admin,
     )
 
-    async def _foreign_key_failure(**_kwargs):
-        raise IntegrityError("INSERT", {}, Exception("FOREIGN KEY constraint failed"))
+    announced = await _announce(user=_user("alice"), deps=admin)
 
-    monkeypatch.setattr(store, "add_dismissal", _foreign_key_failure)
+    rebac = _nobody()
+    history = await _read(_deps(store, rebac), "bob")
+    assert [n.title["en"] for n in history.patch_notes] == ["A", "C"]
+    # Every language the note holds is frozen with it.
+    assert history.patch_notes[0].model_dump() == {
+        "id": a.id,
+        "title": {"en": "A", "fr": "A (fr)"},
+        "description_long": {"en": "# A", "fr": "# A en français"},
+    }
+    assert history.pending_announcement_id == announced.id
+    # Authentication is the only gate on the read.
+    assert rebac.asked == []
+    current = await get_patch_note_announcement(user=_user(), deps=admin)
+    assert current is not None
+    assert (current.id, current.announced_by) == (announced.id, "alice")
+
+
+@pytest.mark.asyncio
+async def test_the_working_area_never_reaches_users(store: AnnouncementStore) -> None:
+    deps = _deps(store, _platform_admin())
+    a = await _titled(deps, "A", enabled=True)
+    b = await _titled(deps, "B", enabled=True)
+    announced = await _announce(user=_user(), deps=deps)
+    await mark_patch_note_announcement_seen(
+        user=_user("alice"), announcement_id=announced.id, deps=deps
+    )
+    before = await _read(deps, "bob")
+
+    c = await _titled(deps, "C", enabled=True)
+    await update_announcement(
+        user=_user(),
+        announcement_id=a.id,
+        request=_patch_note(title={"en": "A2"}, description_long={"en": "Reworded"}),
+        deps=deps,
+    )
+    await set_patch_note_order(user=_user(), ordered_ids=[a.id, c.id, b.id], deps=deps)
+    await set_announcement_enabled(
+        user=_user(), announcement_id=a.id, enabled=False, deps=deps
+    )
+    await delete_announcement(user=_user(), announcement_id=b.id, deps=deps)
+
+    # Bob still reads the package as announced, and it is still pending for him.
+    assert await _read(deps, "bob") == before
+    assert await _titles(deps) == ["B", "A"]
+    assert await _pending(deps, "alice") is None
+    assert await store.get_seen_announcement_id("alice") == announced.id
+
+
+@pytest.mark.asyncio
+async def test_hiding_every_patch_note_withdraws_nothing(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    note = await _titled(deps, "A", enabled=True)
+    announced = await _announce(user=_user(), deps=deps)
+
+    await set_announcement_enabled(
+        user=_user(), announcement_id=note.id, enabled=False, deps=deps
+    )
+
+    assert await _titles(deps) == ["A"]
+    assert await _pending(deps, "bob") == announced.id
+
+
+@pytest.mark.asyncio
+async def test_announcing_with_nothing_included_is_refused(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    await _titled(deps, "A", enabled=False)
 
     with pytest.raises(HTTPException) as exc:
-        await dismiss_patch_note(
-            user=_user("alice"), announcement_id=note.id, deps=admin
-        )
+        await _announce(user=_user(), deps=deps)
+
+    assert exc.value.status_code == 409
+    assert await _history(deps) == []
+
+
+@pytest.mark.asyncio
+async def test_announcing_freezes_only_the_confirmed_list(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    first = await _titled(deps, "A", enabled=True)
+    second = await _titled(deps, "B", enabled=True)
+
+    # Another administrator's change since the confirmation: order, then content.
+    for confirmed in ([first.id, second.id], [second.id], [second.id, first.id, "x"]):
+        with pytest.raises(HTTPException) as exc:
+            await announce_patch_notes(user=_user(), expected_ids=confirmed, deps=deps)
+        assert exc.value.status_code == 409
+        assert "changed" in exc.value.detail
+    assert await _history(deps) == []
+
+    await announce_patch_notes(
+        user=_user(), expected_ids=[second.id, first.id], deps=deps
+    )
+    assert await _titles(deps) == ["B", "A"]
+
+
+@pytest.mark.asyncio
+async def test_an_announcement_holds_a_bounded_number_of_patch_notes(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    notes = [
+        await _titled(deps, f"N{index}", enabled=True)
+        for index in range(MAX_PATCH_NOTES_PER_ANNOUNCEMENT + 1)
+    ]
+
+    with pytest.raises(HTTPException) as exc:
+        await _announce(user=_user(), deps=deps)
+    assert exc.value.status_code == 409
+    assert str(MAX_PATCH_NOTES_PER_ANNOUNCEMENT) in exc.value.detail
+    assert await _history(deps) == []
+
+    await set_announcement_enabled(
+        user=_user(), announcement_id=notes[0].id, enabled=False, deps=deps
+    )
+    await _announce(user=_user(), deps=deps)
+    assert len(await _titles(deps)) == MAX_PATCH_NOTES_PER_ANNOUNCEMENT
+
+
+def test_patch_note_id_lists_are_bounded() -> None:
+    too_many = [str(index) for index in range(MAX_PATCH_NOTE_IDS + 1)]
+
+    for request in (PatchNoteOrderRequest, PatchNoteAnnounceRequest):
+        request(ids=too_many[:-1])
+        with pytest.raises(ValidationError):
+            request(ids=too_many)
+    with pytest.raises(ValidationError):
+        PatchNoteAnnounceRequest(ids=[])
+
+
+@pytest.mark.asyncio
+async def test_announce_and_withdraw_take_the_patch_note_lock(
+    store: AnnouncementStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deps = _deps(store, _platform_admin())
+    await _titled(deps, "A", enabled=True)
+    locked: list[bool] = []
+
+    async def _spy(*, session):
+        locked.append(session.in_transaction())
+
+    monkeypatch.setattr(store, "lock_patch_notes", _spy)
+
+    await _announce(user=_user(), deps=deps)
+    await withdraw_patch_note_announcement(user=_user(), deps=deps)
+
+    assert locked == [True, True]
+
+
+@pytest.mark.asyncio
+async def test_announcing_again_replaces_the_package_for_everyone(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    a = await _titled(deps, "A", enabled=True)
+    first = await _announce(user=_user("alice"), deps=deps)
+    await mark_patch_note_announcement_seen(
+        user=_user("alice"), announcement_id=first.id, deps=deps
+    )
+    await update_announcement(
+        user=_user(),
+        announcement_id=a.id,
+        request=_patch_note(title={"en": "A"}, description_long={"en": "No typo"}),
+        deps=deps,
+    )
+    await _titled(deps, "B", enabled=True)
+
+    second = await _announce(user=_user("bob"), deps=deps)
+
+    history = await _read(deps, "alice")
+    assert [n.title["en"] for n in history.patch_notes] == ["B", "A"]
+    assert history.patch_notes[1].description_long == {"en": "No typo"}
+    # Never a silent replace: it is pending again for who saw the first one.
+    assert history.pending_announcement_id == second.id
+    newer, older = await _history(deps)
+    assert (newer.id, newer.actor_uid, newer.deactivated_at) == (second.id, "bob", None)
+    assert (newer.label, newer.note_count, newer.kind) == ({"en": "B"}, 2, "patch_note")
+    assert (older.id, older.actor_uid, older.note_count) == (first.id, "alice", 1)
+    # Replaced at the very moment the next one started.
+    assert older.deactivated_at == newer.activated_at
+    assert newer.severity is None
+
+
+@pytest.mark.asyncio
+async def test_a_history_line_keeps_its_package(store: AnnouncementStore) -> None:
+    deps = _deps(store, _platform_admin())
+    a = await _titled(deps, "A", enabled=True)
+    first = await _announce(user=_user(), deps=deps)
+    await delete_announcement(user=_user(), announcement_id=a.id, deps=deps)
+    await _titled(deps, "B", enabled=True)
+    await _announce(user=_user(), deps=deps)
+    banner = await create_announcement(
+        user=_user(), request=_write(enabled=True), deps=deps
+    )
+    [banner_line] = [line for line in await _history(deps) if line.kind == "banner"]
+
+    package = await get_patch_note_package(
+        user=_user(), announcement_id=first.id, deps=deps
+    )
+
+    # As users saw it, although replaced and its note deleted since.
+    assert [(n.id, n.title, n.description_long) for n in package] == [
+        (a.id, {"en": "A"}, {"en": "# A"})
+    ]
+    for no_package in ("ghost", banner.id, banner_line.id):
+        with pytest.raises(HTTPException) as exc:
+            await get_patch_note_package(
+                user=_user(), announcement_id=no_package, deps=deps
+            )
+        assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_withdrawing_leaves_nothing_to_read(store: AnnouncementStore) -> None:
+    deps = _deps(store, _platform_admin())
+    note = await _titled(deps, "A", enabled=True)
+    announced = await _announce(user=_user(), deps=deps)
+    await mark_patch_note_announcement_seen(
+        user=_user("alice"), announcement_id=announced.id, deps=deps
+    )
+
+    await withdraw_patch_note_announcement(user=_user("bob"), deps=deps)
+
+    for uid in ("alice", "bob"):
+        history = await _read(deps, uid)
+        assert history.patch_notes == [] and history.pending_announcement_id is None
+    assert await get_patch_note_announcement(user=_user(), deps=deps) is None
+    [line] = await _history(deps)
+    assert line.id == announced.id and line.deactivated_at is not None
+    # The working area is untouched, and the line still opens.
+    assert (await store.get(note.id)).enabled is True  # type: ignore[union-attr]
+    assert await get_patch_note_package(
+        user=_user(), announcement_id=announced.id, deps=deps
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await withdraw_patch_note_announcement(user=_user(), deps=deps)
     assert exc.value.status_code == 404
+
+    again = await _announce(user=_user(), deps=deps)
+    assert await _pending(deps, "alice") == again.id
+    assert await _titles(deps, "bob") == ["A"]
+
+
+@pytest.mark.asyncio
+async def test_seen_is_per_user_idempotent_and_asks_no_permission(
+    store: AnnouncementStore,
+) -> None:
+    admin = _deps(store, _platform_admin())
+    await _titled(admin, "A", enabled=True)
+    announced = await _announce(user=_user(), deps=admin)
+    rebac = _nobody()
+    deps = _deps(store, rebac)
+
+    for _ in range(2):
+        await mark_patch_note_announcement_seen(
+            user=_user("alice"), announcement_id=announced.id, deps=deps
+        )
+
+    assert await _pending(deps, "alice") is None
+    assert await _titles(deps, "alice") == ["A"]
+    assert await _pending(deps, "bob") == announced.id
+    assert rebac.asked == []
+
+
+@pytest.mark.asyncio
+async def test_an_announcement_made_meanwhile_stays_pending(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    await _titled(deps, "A", enabled=True)
+    shown = await _announce(user=_user(), deps=deps)
+    newer = await _announce(user=_user(), deps=deps)
+
+    # Alice closes the dialog that opened for the first one.
+    await mark_patch_note_announcement_seen(
+        user=_user("alice"), announcement_id=shown.id, deps=deps
+    )
+
+    assert await _pending(deps, "alice") == newer.id
+
+
+@pytest.mark.asyncio
+async def test_a_late_record_does_not_move_a_user_back(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    await _titled(deps, "A", enabled=True)
+    older = await _announce(user=_user(), deps=deps)
+    newer = await _announce(user=_user(), deps=deps)
+    await mark_patch_note_announcement_seen(
+        user=_user("alice"), announcement_id=newer.id, deps=deps
+    )
+
+    await mark_patch_note_announcement_seen(
+        user=_user("alice"), announcement_id=older.id, deps=deps
+    )
+
+    assert await store.get_seen_announcement_id("alice") == newer.id
+    assert await _pending(deps, "alice") is None
+
+
+@pytest.mark.asyncio
+async def test_seen_refuses_what_is_not_an_announced_package(
+    store: AnnouncementStore,
+) -> None:
+    deps = _deps(store, _platform_admin())
+    note = await _titled(deps, "A", enabled=True)
+    await create_announcement(user=_user(), request=_write(enabled=True), deps=deps)
+    [banner_line] = await _history(deps)
+
+    for not_an_announcement in ("ghost", note.id, banner_line.id):
+        with pytest.raises(HTTPException) as exc:
+            await mark_patch_note_announcement_seen(
+                user=_user("alice"),
+                announcement_id=not_an_announcement,
+                deps=deps,
+            )
+        assert exc.value.status_code == 404
+    assert await store.get_seen_announcement_id("alice") is None
+
+
+@pytest.mark.asyncio
+async def test_a_package_that_does_not_open_the_dialog_is_still_read(
+    store: AnnouncementStore,
+) -> None:
+    # What the upgrade leaves behind: readable, pending for nobody.
+    deps = _deps(store, _platform_admin())
+    await store.add_exposure(
+        StoredExposure(
+            id="upgrade",
+            kind="patch_note",
+            announcement_id="p1",
+            label={"en": "A"},
+            actor_uid=None,
+            activated_at=utcnow(),
+            note_count=1,
+            package=[{"id": "p1", "title": {"en": "A"}, "description_long": {}}],
+            opens_dialog=False,
+        )
+    )
+
+    assert await _titles(deps, "alice") == ["A"]
+    assert await _pending(deps, "alice") is None
+    current = await get_patch_note_announcement(user=_user(), deps=deps)
+    assert current is not None and current.announced_by is None
 
 
 @pytest.mark.asyncio
@@ -1167,13 +1425,13 @@ async def test_history_requires_can_manage_platform(store: AnnouncementStore) ->
     rebac = _nobody()
 
     with pytest.raises(AuthorizationError):
-        await list_activation_history(user=_user("mallory"), deps=_deps(store, rebac))
+        await list_exposure_history(user=_user("mallory"), deps=_deps(store, rebac))
 
     assert rebac.asked == [OrganizationPermission.CAN_MANAGE_PLATFORM]
 
 
 @pytest.mark.asyncio
-async def test_user_deletion_removes_patch_note_dismissals(
+async def test_user_deletion_removes_what_the_user_has_seen(
     store: AnnouncementStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from control_plane_backend.app.dependencies import attach_application_container
@@ -1186,9 +1444,12 @@ async def test_user_deletion_removes_patch_note_dismissals(
     from httpx import ASGITransport, AsyncClient
 
     admin = _deps(store, _platform_admin())
-    note = await create_announcement(user=_user(), request=_patch_note(), deps=admin)
+    await _titled(admin, "A", enabled=True)
+    announced = await _announce(user=_user(), deps=admin)
     for uid in ("alice", "bob"):
-        await dismiss_patch_note(user=_user(uid), announcement_id=note.id, deps=admin)
+        await mark_patch_note_announcement_seen(
+            user=_user(uid), announcement_id=announced.id, deps=admin
+        )
 
     async def _nothing(*_args, **_kwargs) -> None:
         return None
@@ -1201,6 +1462,7 @@ async def test_user_deletion_removes_patch_note_dismissals(
         return "synthetic-root"
 
     monkeypatch.setattr(users_api, "remove_user_avatar", _nothing)
+    monkeypatch.setattr(users_api, "_mark_user_join_history_deleted", _nothing)
     container = SimpleNamespace(
         get_rebac_engine=lambda: SimpleNamespace(
             requires_active_accounts=False, check_user_permission_or_raise=_nothing
@@ -1226,8 +1488,8 @@ async def test_user_deletion_removes_patch_note_dismissals(
         response = await client.delete("/users/alice")
 
     assert response.status_code == 204
-    assert not await store.is_dismissed(announcement_id=note.id, user_id="alice")
-    assert await store.is_dismissed(announcement_id=note.id, user_id="bob")
+    assert await store.get_seen_announcement_id("alice") is None
+    assert await store.get_seen_announcement_id("bob") == announced.id
 
 
 @pytest.mark.asyncio
@@ -1244,18 +1506,21 @@ async def test_patch_note_routes_reject_an_unauthenticated_caller(
     app = create_app()
     monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", True)
     get_application_container_from_app(app).configuration.security.user.enabled = True
+    user = "/control-plane/v1/announcements"
+    admin = "/control-plane/v1/admin/platform/announcements"
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        read = await client.get("/control-plane/v1/announcements/patch-note")
-        dismiss = await client.put("/control-plane/v1/announcements/x/dismissal")
-        history = await client.get(
-            "/control-plane/v1/admin/platform/announcements/activation-history"
-        )
+        responses = [
+            await client.get(f"{user}/patch-notes"),
+            await client.put(f"{user}/patch-note-announcements/x/seen"),
+            await client.get(f"{admin}/activation-history"),
+            await client.put(f"{admin}/patch-notes/order", json={"ids": []}),
+            await client.get(f"{admin}/patch-notes/announcement"),
+            await client.post(f"{admin}/patch-notes/announcement", json={"ids": ["x"]}),
+            await client.delete(f"{admin}/patch-notes/announcement"),
+            await client.get(f"{admin}/patch-notes/announcements/x"),
+        ]
 
-    assert (read.status_code, dismiss.status_code, history.status_code) == (
-        401,
-        401,
-        401,
-    )
+    assert [response.status_code for response in responses] == [401] * 8

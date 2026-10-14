@@ -456,8 +456,8 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
     async def no_favorites(_user_id: str) -> None:
         calls.append("delete_favorites")
 
-    async def no_dismissals(_user_id: str) -> None:
-        calls.append("delete_patch_note_dismissals")
+    async def no_seen(_user_id: str) -> None:
+        calls.append("delete_patch_note_seen")
 
     class _Identity:
         async def a_delete_user(self, _user_id: str) -> dict:
@@ -474,9 +474,7 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
         get_prompt_store=lambda: SimpleNamespace(
             delete_favorites_for_user=no_favorites
         ),
-        get_announcement_store=lambda: SimpleNamespace(
-            delete_dismissals_for_user=no_dismissals
-        ),
+        get_announcement_store=lambda: SimpleNamespace(delete_seen_for_user=no_seen),
     )
     app = FastAPI()
     app.include_router(users_api.router)
@@ -501,8 +499,14 @@ async def _noop() -> None:
 
 @pytest.mark.asyncio
 async def test_account_deletion_removes_the_picture_before_the_identity(
-    user_store: _FakeUserStore, content_store: _FakeContentStore
+    user_store: _FakeUserStore,
+    content_store: _FakeContentStore,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    async def no_join_history(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(users_api, "_mark_user_join_history_deleted", no_join_history)
     person = str(uuid4())
     user_store.keys[person] = "users/p/avatar.png"
     calls: list[str] = []
@@ -518,15 +522,21 @@ async def test_account_deletion_removes_the_picture_before_the_identity(
     assert content_store.deleted == ["users/p/avatar.png"]
     assert calls == [
         "delete_favorites",
-        "delete_patch_note_dismissals",
+        "delete_patch_note_seen",
         "delete_identity_account",
     ]
 
 
 @pytest.mark.asyncio
 async def test_account_deletion_without_picture_makes_no_store_call(
-    user_store: _FakeUserStore, content_store: _FakeContentStore
+    user_store: _FakeUserStore,
+    content_store: _FakeContentStore,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    async def no_join_history(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(users_api, "_mark_user_join_history_deleted", no_join_history)
     calls: list[str] = []
 
     async with AsyncClient(

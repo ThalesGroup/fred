@@ -395,20 +395,27 @@
     "commandTurn": {
       "open": "Open the prompt behind the /{{command}} command",
       "openWithText": "Open the prompt behind the /{{command}} command, followed by “{{appended}}”",
-      "panelTitle": "Command prompt"
+      "panelTitle": "Command prompt",
+      "previewLoading": "Loading the prompt…",
+      "previewEmpty": "This prompt is empty.",
+      "previewError": "This prompt cannot be shown. It may have been deleted, or you may no longer have access to it."
     },
     "commandMenu": {
-      "sources": {
-        "platform": "Platform skill",
-        "personal": "Personal prompt",
-        "team": "Team prompt"
-      },
       "ariaLabel": "Available commands",
-      "promptsSection": "Prompt library",
-      "noneInTeam": "No command in this team yet. An editor can give one to a prompt from the Prompts page.",
+      "sections": {
+        "team": "Team \"{{name}}\"",
+        "teamFallback": "Team",
+        "personal": "Personal space",
+        "platform": "Platform skills"
+      },
+      "loading": "Loading commands…",
+      "error": "The commands could not be loaded. Type / again to retry.",
+      "none": "No command yet. Add one to any of your personal prompts from the Prompts page. In a team, an editor can also add one to a team prompt.",
       "noMatch": "No command matches.",
       "runErrorSummary": "Could not run the command",
-      "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment."
+      "runErrorDetail": "The prompt behind the /{{command}} command could not be read. Please try again in a moment.",
+      "runErrorStale": "The /{{command}} command is no longer available: its prompt was deleted or renamed, or it comes from another agent or team. Remove it from your message and choose it again.",
+      "runErrorTooMany": "A message can hold at most {{limit}} prompt commands. Remove a few, then send again."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
     "newConversation": "New conversation",
@@ -623,7 +630,6 @@
       "badge": "Skill: {{name}}",
       "platformProvided": "Skill provided by the platform",
       "requestPlaceholder": "Your request (optional)",
-      "menuTitle": "Skills",
       "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
       "errorTitle": "Skill could not be used",
       "unavailable": "This skill’s content is unavailable.",
@@ -640,10 +646,6 @@
       "description": "Description:",
       "arguments": "Arguments:"
     }
-  },
-  "comingSoon": {
-    "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",
-    "title": "{{siteDisplayName}} is coming soon."
   },
   "common": {
     "cancel": "Cancel",
@@ -3013,7 +3015,7 @@
         "firstCreate": "Create prompt",
         "form": {
           "command": "Command",
-          "commandConflict": "This command label is already used by another team prompt",
+          "commandConflict": "This command is already used by another prompt",
           "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
@@ -3025,6 +3027,19 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
+        "toasts": {
+          "created": "Prompt created",
+          "updated": "Prompt updated",
+          "saveFailed": "Failed to save prompt",
+          "deleted": "Prompt deleted",
+          "deleteFailed": "Failed to delete prompt"
+        },
+        "deleteDialog": {
+          "title": "Delete prompt?",
+          "message": "\"{{name}}\" will be permanently deleted. This action cannot be undone.",
+          "confirm": "Delete"
+        },
+        "missingTeam": "Missing team id in route.",
         "title": "Team prompts",
         "view": {
           "closeAria": "Close",
@@ -3442,13 +3457,10 @@
         "subtitle_one": "{{count}} banner is live for every user.",
         "subtitle_other": "{{count}} banners are live for every user.",
         "subtitle_zero": "No banner is showing right now.",
-        "empty": "No announcement yet.\nCreate a banner, shown at the top of the app, or a patch note, shown to users when they arrive.",
-        "create": "New announcement"
-      },
-      "chooser": {
-        "title": "New announcement",
-        "bannerDescription": "A short message shown at the top of the app.",
-        "patchNoteDescription": "What's new in a release, shown to users when they arrive."
+        "emptyBanners": "No banner yet.\nCreate one to show a message at the top of the app.",
+        "emptyPatchNotes": "No patch note yet.\nCreate one: users do not see it until you announce the update.",
+        "createBanner": "New banner",
+        "createPatchNote": "New patch note"
       },
       "severity": {
         "info": "Info",
@@ -3465,8 +3477,7 @@
         "enableHint": "Enable for all users",
         "disableHint": "Disable for all users",
         "edit": "Edit this announcement",
-        "delete": "Delete this announcement",
-        "preview": "Preview as users see it"
+        "delete": "Delete this announcement"
       },
       "editor": {
         "createTitle": "New announcement",
@@ -3491,13 +3502,11 @@
         "title": "Delete this announcement?",
         "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
       },
-      "kind": {
-        "banner": "Banner",
-        "patch_note": "Patch note"
-      },
       "patchNote": {
         "dialog": {
-          "dontShowAgain": "Don't show again"
+          "navigation": "Browse patch notes",
+          "newer": "Newer patch note",
+          "older": "Older patch note"
         },
         "editor": {
           "createTitle": "New patch note",
@@ -3513,49 +3522,96 @@
           "bodyRequired": "Write the content in this language.",
           "tooLong": "The content is longer than {{max}} characters in one language.",
           "incomplete": "The {{language}} version needs both a title and content, or neither.",
-          "saveAndActivate": "Save and activate"
+          "saveAndActivate": "Save and include"
         },
-        "dismissFailed": "Your choice was not saved. This note may show again next time.",
         "discard": {
           "title": "Discard your changes?",
           "message": "The patch note you are writing has not been saved.",
           "confirm": "Discard changes",
           "cancel": "Keep writing"
         },
-        "activate": {
-          "title": "Switch the active patch note?",
-          "message": "Only one patch note can be active at a time: “{{title}}” will be switched off.",
-          "confirm": "Activate"
+        "savedIncluded": "Patch note saved. It is included in the next announcement.",
+        "savedNotIncluded": "Patch note saved. It is not included in the next announcement.",
+        "row": {
+          "enableHint": "Include in the next announcement",
+          "disableHint": "Leave out of the next announcement",
+          "statusIncluded": "Included in the next announcement",
+          "statusNotIncluded": "Not included",
+          "preview": "Preview as users see it",
+          "edit": "Edit this patch note",
+          "delete": "Delete this patch note",
+          "move": "Move \"{{title}}\""
         },
-        "savedActive": "Patch note saved. Users see it when they arrive.",
-        "savedInactive": "Patch note saved. It is not active: switch it on for users to see it.",
-        "dismissalCount_zero": "No user has chosen to hide this patch note",
-        "dismissalCount_one": "{{count}} user chose to hide this patch note",
-        "dismissalCount_other": "{{count}} users chose to hide this patch note"
+        "delete": {
+          "title": "Delete this patch note?",
+          "message": "\"{{title}}\" will be removed for good. The current announcement is not changed."
+        },
+        "deleted": "Patch note deleted.",
+        "reorder": {
+          "instructions": "To move this patch note, press Space or Enter, use the up and down arrows, then press Space or Enter again to drop it, or Escape to cancel.",
+          "picked": "\"{{title}}\" picked up, at position {{position}} of {{total}}.",
+          "moved": "\"{{title}}\" moved to position {{position}} of {{total}}.",
+          "dropped": "\"{{title}}\" dropped at position {{position}} of {{total}}.",
+          "cancelled": "Move cancelled. \"{{title}}\" stays at position {{position}} of {{total}}.",
+          "failed": "The new order was not saved.",
+          "role": "sortable item"
+        },
+        "announce": {
+          "action": "Announce the update ({{included}}/{{max}})",
+          "lastUse": "Last announced on {{date}}, by {{name}}",
+          "noneIncluded": "Include at least one patch note to announce the update.",
+          "tooMany": "An announcement holds at most {{max}} patch notes. Deselect some to announce.",
+          "confirm": {
+            "title": "Send this list to users?",
+            "message": "Users will see exactly this list, in this order, at their next sign-in and in What's new. Your later changes will not reach them until the next announcement.",
+            "list": "Patch notes included in the announcement",
+            "confirm": "Announce"
+          },
+          "done": "Update announced. Users will see it at their next sign-in.",
+          "failed": "The update was not announced.",
+          "changed": "The patch notes changed meanwhile. Check the list, then announce again.",
+          "withdraw": {
+            "action": "Withdraw the current announcement",
+            "title": "Withdraw the current announcement?",
+            "message": "What's new will be empty for every user and nobody will get the dialog until the next announcement. Your patch notes are not changed.",
+            "confirm": "Withdraw the announcement",
+            "done": "Announcement withdrawn.",
+            "failed": "The announcement was not withdrawn."
+          }
+        }
       },
       "history": {
         "empty": "No activation yet.",
-        "activated": "Activated",
-        "deactivated": "Deactivated",
         "unknownActor": "Unknown author",
-        "error": "Could not load the activation history.",
+        "error": "Could not load the history.",
+        "type": {
+          "banner": "Banner",
+          "patch_note": "Patch notes"
+        },
+        "more_one": "{{title}} + {{count}} other",
+        "more_other": "{{title}} + {{count}} others",
+        "openPackage": "View the announced patch notes",
+        "packageFailed": "Could not open this announcement's patch notes.",
+        "packageEmpty": "This announcement has no readable patch note.",
         "column": {
-          "announcement": "Announcement",
           "type": "Type",
-          "action": "Action",
-          "date": "Date and time",
-          "by": "By"
+          "title": "Title",
+          "activation": "Activation",
+          "deactivation": "Deactivation",
+          "by": "By",
+          "open": "Open"
         },
         "filter": {
           "all": "All",
-          "activated": "Activations",
-          "deactivated": "Deactivations",
-          "group": "Filter by action"
+          "banner": "Banners",
+          "patch_note": "Patch notes",
+          "group": "Filter by type"
         }
       },
       "view": {
         "group": "Announcements page view",
-        "announcements": "Announcements",
+        "banners": "Banners",
+        "patchNotes": "Patch notes",
         "history": "History"
       }
     },
@@ -3618,13 +3674,14 @@
       "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
       "loading": "Loading...",
       "source": {
+        "admin": "Platform administrator",
         "attribute": "Identity attribute",
         "manual": "Manual exception",
         "t0": "Initial import",
         "team": "Authorized team",
         "free": "Link access"
       },
-      "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
+      "actorLockout": "This change would remove your last admission source.",
       "rule": {
         "title": "Admission rule",
         "hint": "Individual exceptions and authorized teams always allow access.",
@@ -3710,7 +3767,8 @@
       "links": {
         "manage": "Manage links",
         "title": "Invitations for {{team}}",
-        "hint": "Share links manually. Accesses count page openings after sign-in.",
+        "hint": "Share links manually. Accesses count page openings after sign-in; Joined users lists successful enrollments.",
+        "suspendedHint": "Link access is disabled for this team. Valid invitation links are suspended until it is enabled again.",
         "note": "Note (optional)",
         "expiry": "Expiration (optional)",
         "expiryDate": "Expiration date",
@@ -3721,10 +3779,16 @@
         },
         "futureExpiry": "Choose a future date and time.",
         "never": "No expiration",
-        "untitled": "No note",
         "created": "Created",
         "statusLabel": "Status",
         "openings": "Accesses",
+        "joiners": "Joined users",
+        "deletedUser": "Deleted",
+        "joinersTitle": "Joined through {{note}}",
+        "joinedAt": "Joined at",
+        "noJoiners": "No joins recorded since tracking began.",
+        "username": "Username",
+        "joinersFailed": "Could not load the people who joined through this link.",
         "actions": "Actions",
         "revoke": "Revoke",
         "revokeTitle": "Revoke this invitation?",

@@ -53,8 +53,9 @@ Plutôt que de retaper une demande récurrente, insérez le contenu d'un prompt
 enregistré dans le champ de saisie, puis modifiez-le avant d'envoyer. C'est un
 raccourci pour ce message, pas un réglage durable de la conversation.
 
-Un prompt porteur d'une commande se lance plus court encore : tapez `/` dans un
-champ vide — voir [Les commandes](/help/fr/features/commands).
+Un prompt porteur d'une commande se lance plus court encore : tapez `/` dans le
+champ de saisie, même s'il contient déjà du texte : voir
+[Les commandes](/help/fr/features/commands).
 
 ## Reprendre un message envoyé
 

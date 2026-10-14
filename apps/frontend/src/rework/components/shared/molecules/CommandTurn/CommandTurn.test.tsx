@@ -95,6 +95,41 @@ describe("UserMessage with a command descriptor", () => {
     expect(onOpenCommand).toHaveBeenCalledTimes(1);
   });
 
+  it("names each listed prompt on its own badge and opens it by its place in the list", () => {
+    const onOpenCommand = vi.fn();
+    render(
+      <UserMessage
+        text={"Summarise.\n\nand\n\nBe formal."}
+        command={{
+          command: "summary",
+          draft_text: "/summary and /tone",
+          draft_command_offset: 0,
+          prompts: [
+            { command: "summary", draft_offset: 0, text_offset: 0, text_length: 10 },
+            { command: "tone", draft_offset: 13, text_offset: 17, text_length: 10 },
+          ],
+        }}
+        onOpenCommand={onOpenCommand}
+      />,
+    );
+
+    const controls = Array.from(container.querySelectorAll("button"));
+    expect(controls.map((control) => control.getAttribute("aria-label"))).toEqual([
+      "chatbot.commandTurn.open:summary",
+      "chatbot.commandTurn.open:tone",
+    ]);
+    act(() => controls[1].click());
+    expect(onOpenCommand).toHaveBeenCalledWith(1);
+  });
+
+  it("opens a turn without a list with no index, not with the click event", () => {
+    const onOpenCommand = vi.fn();
+    render(<UserMessage text={PROMPT_TEXT} command={{ command: "summary" }} onOpenCommand={onOpenCommand} />);
+
+    act(() => container.querySelector("button")!.click());
+    expect(onOpenCommand).toHaveBeenCalledWith();
+  });
+
   it("is inert when nothing can open the prompt", () => {
     render(<UserMessage text={PROMPT_TEXT} command={{ command: "summary" }} />);
 

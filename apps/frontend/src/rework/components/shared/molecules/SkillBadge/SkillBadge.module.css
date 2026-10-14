@@ -2,16 +2,28 @@
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0 */
 
+/* A small container for an invoked skill or prompt, in the composer and in a
+   sent message. Horizontal padding only: a line holding one keeps its height. */
 .badge {
   display: inline-flex;
   align-items: baseline;
   vertical-align: baseline;
   gap: var(--spacing-2xs);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--secondary-container);
+  padding: 0 var(--spacing-2xs);
   min-width: 0;
   max-width: 100%;
-  color: var(--primary);
+  color: var(--on-secondary-container);
   font: var(--font-body-large);
   line-height: 1.5;
+}
+
+/* The user bubble is itself a secondary container: a hairline in the same
+   hue keeps the container readable there without changing its size. */
+.badge[data-surface="bubble"] {
+  box-shadow: inset 0 0 0 1px var(--secondary);
 }
 
 .badge > :first-child {
@@ -25,18 +37,26 @@
 
 .action {
   cursor: pointer;
-  border: 0;
-  background: transparent;
-  padding: 0;
   text-align: start;
 }
 
-.action:hover .name {
-  text-decoration: underline;
+/* Hover and press tint the container like a tonal button: the state layer
+   is translucent, so it is painted over the container's own fill. */
+.action:hover {
+  background-image: linear-gradient(
+    var(--state-on-secondary-container-hover),
+    var(--state-on-secondary-container-hover)
+  );
+}
+
+.action:active {
+  background-image: linear-gradient(
+    var(--state-on-secondary-container-pressed),
+    var(--state-on-secondary-container-pressed)
+  );
 }
 
 .action:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
-  border-radius: var(--radius-xs);
 }

@@ -536,6 +536,9 @@ jobs:
       - name: Check chart - knowledge-flow ingestion worker groups
         run: make check-chart-ingestion-workers
 
+      - name: Check charts - agent-pod and knowledge-base
+        run: make pod-chart-tests
+
       - name: Check chart - root bootstrap secret contract (AUTHZ-07)
         run: |
           set -euo pipefail

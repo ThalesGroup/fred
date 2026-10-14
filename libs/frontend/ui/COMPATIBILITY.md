@@ -51,8 +51,6 @@ other controls, while Button and IconButton can accurately expose
 
 Validated dynamic strings:
 
-- `pages/ComingSoon.tsx`: deployment `agentIconName` passes through `toIconType`
-  with `person` fallback.
 - `pages/TeamApplicationsPage/TeamApplicationsPage.tsx`: generated
   `ApplicationSummary.icon` passes through `toIconType` with `widgets` fallback.
 - `pages/admin/CapabilitiesPage/CapabilitiesPage.tsx`: generated capability icon

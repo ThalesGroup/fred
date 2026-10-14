@@ -395,20 +395,27 @@
     "commandTurn": {
       "open": "Ouvrir le prompt de la commande /{{command}}",
       "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
-      "panelTitle": "Prompt de la commande"
+      "panelTitle": "Prompt de la commande",
+      "previewLoading": "Chargement du prompt…",
+      "previewEmpty": "Ce prompt est vide.",
+      "previewError": "Ce prompt ne peut pas être affiché. Il a peut-être été supprimé, ou vous n'y avez plus accès."
     },
     "commandMenu": {
-      "sources": {
-        "platform": "Skill plateforme",
-        "personal": "Prompt personnel",
-        "team": "Prompt d’équipe"
-      },
       "ariaLabel": "Commandes disponibles",
-      "promptsSection": "Prompts de la bibliothèque",
-      "noneInTeam": "Aucune commande dans cette équipe. Un éditeur peut en attribuer une à un prompt depuis la page Prompts.",
+      "sections": {
+        "team": "Équipe « {{name}} »",
+        "teamFallback": "Équipe",
+        "personal": "Espace personnel",
+        "platform": "Skills plateforme"
+      },
+      "loading": "Chargement des commandes…",
+      "error": "Les commandes n'ont pas pu être chargées. Tapez / à nouveau pour réessayer.",
+      "none": "Aucune commande pour l'instant. Ajoutez-en une à l'un de vos prompts personnels depuis la page Prompts. Dans une équipe, un éditeur peut aussi en ajouter une à un prompt de l'équipe.",
       "noMatch": "Aucune commande ne correspond.",
       "runErrorSummary": "Commande impossible à lancer",
-      "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
+      "runErrorDetail": "Le prompt de la commande /{{command}} n'a pas pu être lu. Réessayez dans un instant.",
+      "runErrorStale": "La commande /{{command}} n'est plus disponible : son prompt a été supprimé ou renommé, ou elle vient d'un autre agent ou d'une autre équipe. Retirez-la de votre message et choisissez-la à nouveau.",
+      "runErrorTooMany": "Un message peut contenir au plus {{limit}} commandes de prompt. Retirez-en quelques-unes, puis envoyez à nouveau."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "newConversation": "Nouvelle conversation",
@@ -623,7 +630,6 @@
       "badge": "Skill : {{name}}",
       "platformProvided": "Skill fourni par la plateforme",
       "requestPlaceholder": "Votre demande (facultative)",
-      "menuTitle": "Skills",
       "usage": "Utilisez /<nom-du-skill> [demande]. Sélectionnez un skill ; la demande est facultative.",
       "errorTitle": "Le skill ne peut pas être utilisé",
       "unavailable": "Le contenu de ce skill est indisponible.",
@@ -640,10 +646,6 @@
       "description": "Description :",
       "arguments": "Arguments :"
     }
-  },
-  "comingSoon": {
-    "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels.",
-    "title": "{{siteDisplayName}} arrive très bientôt."
   },
   "common": {
     "cancel": "Annuler",
@@ -3013,7 +3015,7 @@
         "firstCreate": "Créer un prompt",
         "form": {
           "command": "Commande",
-          "commandConflict": "Label de commande déjà pris par un autre prompt d'équipe",
+          "commandConflict": "Cette commande est déjà utilisée par un autre prompt",
           "commandHelp": "Raccourcis de lancement dans le chat",
           "description": "Description",
           "name": "Nom",
@@ -3025,6 +3027,19 @@
         "modalEdit": "Modifier le prompt",
         "noPrompt": "Créez votre premier prompt pour commencer.",
         "searchPlaceholder": "Rechercher des prompts...",
+        "toasts": {
+          "created": "Prompt créé",
+          "updated": "Prompt modifié",
+          "saveFailed": "Échec de l'enregistrement du prompt",
+          "deleted": "Prompt supprimé",
+          "deleteFailed": "Échec de la suppression du prompt"
+        },
+        "deleteDialog": {
+          "title": "Supprimer le prompt ?",
+          "message": "« {{name}} » sera définitivement supprimé. Cette action est irréversible.",
+          "confirm": "Supprimer"
+        },
+        "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
         "title": "Prompts de l'équipe",
         "view": {
           "closeAria": "Fermer",
@@ -3442,13 +3457,10 @@
         "subtitle_one": "{{count}} bandeau est affiché à tous les utilisateurs.",
         "subtitle_other": "{{count}} bandeaux sont affichés à tous les utilisateurs.",
         "subtitle_zero": "Aucun bandeau n'est affiché actuellement.",
-        "empty": "Aucune annonce pour l'instant.\nCréez un bandeau, affiché en haut de l'application, ou un patch note, présenté aux utilisateurs à leur arrivée.",
-        "create": "Nouvelle annonce"
-      },
-      "chooser": {
-        "title": "Nouvelle annonce",
-        "bannerDescription": "Un message court, affiché en haut de l'application.",
-        "patchNoteDescription": "Les nouveautés d'une version, présentées aux utilisateurs à leur arrivée."
+        "emptyBanners": "Aucun bandeau pour l'instant.\nCréez-en un pour afficher un message en haut de l'application.",
+        "emptyPatchNotes": "Aucun patch note pour l'instant.\nCréez-en un : les utilisateurs ne le voient pas tant que vous n'annoncez pas la mise à jour.",
+        "createBanner": "Nouveau bandeau",
+        "createPatchNote": "Nouveau patch note"
       },
       "severity": {
         "info": "Info",
@@ -3465,8 +3477,7 @@
         "enableHint": "Activer pour tous les utilisateurs",
         "disableHint": "Désactiver pour tous les utilisateurs",
         "edit": "Modifier cette annonce",
-        "delete": "Supprimer cette annonce",
-        "preview": "Prévisualiser comme les utilisateurs"
+        "delete": "Supprimer cette annonce"
       },
       "editor": {
         "createTitle": "Nouvelle annonce",
@@ -3491,13 +3502,11 @@
         "title": "Supprimer cette annonce ?",
         "message": "« {{title}} » sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
       },
-      "kind": {
-        "banner": "Bandeau",
-        "patch_note": "Patch note"
-      },
       "patchNote": {
         "dialog": {
-          "dontShowAgain": "Ne plus afficher"
+          "navigation": "Parcourir les patch notes",
+          "newer": "Patch note plus récent",
+          "older": "Patch note plus ancien"
         },
         "editor": {
           "createTitle": "Nouveau patch note",
@@ -3513,49 +3522,96 @@
           "bodyRequired": "Rédigez le contenu dans cette langue.",
           "tooLong": "Le contenu dépasse {{max}} caractères dans une langue.",
           "incomplete": "La version {{language}} doit avoir un titre et un contenu, ou aucun des deux.",
-          "saveAndActivate": "Enregistrer et activer"
+          "saveAndActivate": "Enregistrer et inclure"
         },
-        "dismissFailed": "Votre choix n'a pas été enregistré. Cette note pourra s'afficher à nouveau.",
         "discard": {
           "title": "Abandonner vos modifications ?",
           "message": "Le patch note que vous rédigez n'a pas été enregistré.",
           "confirm": "Abandonner les modifications",
           "cancel": "Continuer la rédaction"
         },
-        "activate": {
-          "title": "Changer de patch note actif ?",
-          "message": "Un seul patch note peut être actif à la fois : « {{title}} » sera désactivé.",
-          "confirm": "Activer"
+        "savedIncluded": "Patch note enregistré. Il est inclus dans la prochaine annonce.",
+        "savedNotIncluded": "Patch note enregistré. Il n'est pas inclus dans la prochaine annonce.",
+        "row": {
+          "enableHint": "Inclure dans la prochaine annonce",
+          "disableHint": "Retirer de la prochaine annonce",
+          "statusIncluded": "Inclus dans la prochaine annonce",
+          "statusNotIncluded": "Non inclus",
+          "preview": "Prévisualiser comme les utilisateurs",
+          "edit": "Modifier ce patch note",
+          "delete": "Supprimer ce patch note",
+          "move": "Déplacer \"{{title}}\""
         },
-        "savedActive": "Patch note enregistré. Les utilisateurs le voient à leur arrivée.",
-        "savedInactive": "Patch note enregistré. Il n'est pas actif : activez-le pour que les utilisateurs le voient.",
-        "dismissalCount_zero": "Aucun utilisateur n'a masqué ce patch note",
-        "dismissalCount_one": "{{count}} utilisateur a masqué ce patch note",
-        "dismissalCount_other": "{{count}} utilisateurs ont masqué ce patch note"
+        "delete": {
+          "title": "Supprimer ce patch note ?",
+          "message": "\"{{title}}\" sera définitivement supprimé. L'annonce en cours n'est pas modifiée."
+        },
+        "deleted": "Patch note supprimé.",
+        "reorder": {
+          "instructions": "Pour déplacer ce patch note, appuyez sur Espace ou Entrée, utilisez les flèches haut et bas, puis appuyez de nouveau sur Espace ou Entrée pour le déposer, ou sur Échap pour annuler.",
+          "picked": "\"{{title}}\" saisi, en position {{position}} sur {{total}}.",
+          "moved": "\"{{title}}\" déplacé en position {{position}} sur {{total}}.",
+          "dropped": "\"{{title}}\" déposé en position {{position}} sur {{total}}.",
+          "cancelled": "Déplacement annulé. \"{{title}}\" reste en position {{position}} sur {{total}}.",
+          "failed": "Le nouvel ordre n'a pas été enregistré.",
+          "role": "élément déplaçable"
+        },
+        "announce": {
+          "action": "Annoncer la mise à jour ({{included}}/{{max}})",
+          "lastUse": "Dernière annonce le {{date}}, par {{name}}",
+          "noneIncluded": "Incluez au moins un patch note pour annoncer la mise à jour.",
+          "tooMany": "Une annonce contient au plus {{max}} patch notes. Désélectionnez-en pour annoncer.",
+          "confirm": {
+            "title": "Envoyer cette liste aux utilisateurs ?",
+            "message": "Les utilisateurs verront exactement cette liste, dans cet ordre, à leur prochaine connexion et dans \"Nouveautés\". Vos modifications ultérieures ne leur parviendront qu'à la prochaine annonce.",
+            "list": "Patch notes inclus dans l'annonce",
+            "confirm": "Annoncer"
+          },
+          "done": "Mise à jour annoncée. Les utilisateurs la verront à leur prochaine connexion.",
+          "failed": "La mise à jour n'a pas été annoncée.",
+          "changed": "Les patch notes ont changé entre-temps. Vérifiez la liste, puis annoncez de nouveau.",
+          "withdraw": {
+            "action": "Retirer l'annonce en cours",
+            "title": "Retirer l'annonce en cours ?",
+            "message": "\"Nouveautés\" sera vide pour tous les utilisateurs et plus personne ne verra la fenêtre s'ouvrir, jusqu'à la prochaine annonce. Vos patch notes ne sont pas modifiés.",
+            "confirm": "Retirer l'annonce",
+            "done": "Annonce retirée.",
+            "failed": "L'annonce n'a pas été retirée."
+          }
+        }
       },
       "history": {
         "empty": "Aucune activation pour l'instant.",
-        "activated": "Activation",
-        "deactivated": "Désactivation",
         "unknownActor": "Auteur inconnu",
-        "error": "Impossible de charger l'historique des activations.",
+        "error": "Impossible de charger l'historique.",
+        "type": {
+          "banner": "Bandeau",
+          "patch_note": "Patch notes"
+        },
+        "more_one": "{{title}} + {{count}} autre",
+        "more_other": "{{title}} + {{count}} autres",
+        "openPackage": "Voir les patch notes annoncés",
+        "packageFailed": "Impossible d'ouvrir les patch notes de cette annonce.",
+        "packageEmpty": "Cette annonce ne contient aucun patch note lisible.",
         "column": {
-          "announcement": "Annonce",
           "type": "Type",
-          "action": "Action",
-          "date": "Date et heure",
-          "by": "Par"
+          "title": "Titre",
+          "activation": "Activation",
+          "deactivation": "Désactivation",
+          "by": "Par",
+          "open": "Ouvrir"
         },
         "filter": {
           "all": "Tout",
-          "activated": "Activations",
-          "deactivated": "Désactivations",
-          "group": "Filtrer par action"
+          "banner": "Bandeaux",
+          "patch_note": "Patch notes",
+          "group": "Filtrer par type"
         }
       },
       "view": {
         "group": "Vue de la page des annonces",
-        "announcements": "Annonces",
+        "banners": "Bandeaux",
+        "patchNotes": "Patch notes",
         "history": "Historique"
       }
     },
@@ -3618,13 +3674,14 @@
       "invalidLink": "Ce lien ne peut pas être utilisé. Il est peut-être expiré, révoqué ou suspendu, ou le service est indisponible.",
       "loading": "Chargement...",
       "source": {
+        "admin": "Administrateur plateforme",
         "attribute": "Attribut d'identité",
         "manual": "Exception manuelle",
         "t0": "Import initial",
         "team": "Équipe autorisée",
         "free": "Accès par lien"
       },
-      "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation.",
+      "actorLockout": "Ce changement retirerait votre dernière source d'accès.",
       "rule": {
         "title": "Règle d'accès",
         "hint": "Les exceptions individuelles et les équipes autorisées permettent toujours l'accès.",
@@ -3710,7 +3767,8 @@
       "links": {
         "manage": "Gérer les liens",
         "title": "Invitations pour {{team}}",
-        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion.",
+        "hint": "Partagez les liens manuellement. Les accès comptent les ouvertures après connexion; les utilisateurs inscrits sont ceux qui ont rejoint l'équipe.",
+        "suspendedHint": "L'accès par lien est désactivé pour cette équipe. Les liens d'invitation encore valides sont suspendus jusqu'à sa réactivation.",
         "note": "Note (facultative)",
         "expiry": "Expiration (facultative)",
         "expiryDate": "Date d'expiration",
@@ -3721,10 +3779,16 @@
         },
         "futureExpiry": "Choisissez une date et une heure futures.",
         "never": "Sans expiration",
-        "untitled": "Sans note",
         "created": "Création",
         "statusLabel": "Statut",
         "openings": "Accès",
+        "joiners": "Utilisateurs inscrits",
+        "deletedUser": "Supprimé",
+        "joinersTitle": "Inscrits via {{note}}",
+        "joinedAt": "Date d'inscription",
+        "noJoiners": "Aucune inscription enregistrée depuis le début du suivi.",
+        "username": "Identifiant",
+        "joinersFailed": "Impossible de charger les personnes inscrites via ce lien.",
         "actions": "Actions",
         "revoke": "Révoquer",
         "revokeTitle": "Révoquer cette invitation ?",
