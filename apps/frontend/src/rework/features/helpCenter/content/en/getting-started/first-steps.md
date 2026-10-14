@@ -41,16 +41,19 @@ Three zones:
 
 ## News after an update
 
-After an update, a window may open when you arrive in the application to
-present the changes, under a title chosen by the administrators. Close it with
-**Close**: it does not come back while you work, but it will show again the
-next time you sign in. If you tick **Don't show again** before closing, it will
-not show again, on any of your devices, unless the administrators publish it
-again. Later news will be presented to you in turn.
+After an update, the **What's new** window may open when you arrive in the
+application to present the changes. Close it with **Close**: it will not open
+on its own again, on any of your devices, until the administrators' next
+announcement.
 
-To read it again at any time, open your profile menu, at the bottom of the side
+To open it again at any time, open your profile menu, at the bottom of the side
 bar, and choose **What's new**. This entry is there as long as news is
 published.
+
+When several pieces of news are published, the arrows at the bottom left of the
+window move from one to the other: the most recent one is shown first, the right
+arrow leads to the earlier ones, and the mark between them (for example
+"1 / 4") shows where you are.
 
 ## Your personal space
 

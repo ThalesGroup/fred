@@ -39,10 +39,17 @@ jobs:
       matrix:
         include:
           - app: control-plane-backend
+            dir: apps/control-plane-backend
             uv_args: --extra dev
           - app: knowledge-flow-backend
+            dir: apps/knowledge-flow-backend
             uv_args: --extra dev
           - app: fred-agents
+            dir: apps/fred-agents
+            uv_args: ""
+          # The Knowledge Base pod configuration, embedded in the knowledge-base chart.
+          - app: fred-sdk
+            dir: libs/fred-sdk
             uv_args: ""
     steps:
       - uses: actions/checkout@v4
@@ -55,15 +62,15 @@ jobs:
 
       - name: Install dependencies
         run: uv sync ${{ matrix.uv_args }}
-        working-directory: apps/${{ matrix.app }}
+        working-directory: ${{ matrix.dir }}
 
       - name: Schema drift check
         run: make check-config-schema-drift
-        working-directory: apps/${{ matrix.app }}
+        working-directory: ${{ matrix.dir }}
 
       - name: Config file validation
         run: make check-config-files
-        working-directory: apps/${{ matrix.app }}
+        working-directory: ${{ matrix.dir }}
 
   check-chart-schema:
     name: "Helm chart values schema"

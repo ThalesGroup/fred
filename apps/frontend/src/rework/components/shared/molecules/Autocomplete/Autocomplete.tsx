@@ -29,6 +29,8 @@ interface AutocompleteProps<T> {
    *  server search that itself only queries past a minimum length, so the
    *  menu doesn't flash an empty "no options" state below that. */
   minQueryLength?: number;
+  /** Replaces the menu's default empty text, e.g. to tell "searching" from "no match". */
+  noOptionsMessage?: string;
 }
 
 export default function Autocomplete<T>({
@@ -37,6 +39,7 @@ export default function Autocomplete<T>({
   onSelect,
   onFieldValueChange,
   minQueryLength = 0,
+  noOptionsMessage,
 }: AutocompleteProps<T>) {
   const [isFocused, setIsFocused] = useState(false);
   // True right after Escape or a selection — suppresses the menu until the
@@ -141,7 +144,13 @@ export default function Autocomplete<T>({
         value={queryValue}
       />
       <div id={`${baseId}-menu`} className={styles["menu-popover"]} role="presentation">
-        <Menu options={options} baseId={baseId} activeId={activeOptionId} onChange={(v) => selectOption(v)} />
+        <Menu
+          options={options}
+          baseId={baseId}
+          activeId={activeOptionId}
+          noOptionsMessage={noOptionsMessage}
+          onChange={(v) => selectOption(v)}
+        />
       </div>
     </div>
   );
