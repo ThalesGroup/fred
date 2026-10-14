@@ -158,10 +158,50 @@ _BUSY_MESSAGE = (
 # --- catalogue --------------------------------------------------------------------------
 
 
-_DUPLICATE = (
-    "Ignored: the same build_presentation call is already being built in this answer. "
-    "Nothing to do: use that call's result and do not describe this one as a separate deck."
-)
+def _parallel(first: Mapping[str, Any], count: int, position: int) -> str:
+    slides = first.get("slides")
+    head = slides[0] if isinstance(slides, list) and slides else None
+    title = head.get("title") if isinstance(head, dict) else None
+    which = f" (the one whose first slide is '{title}')" if title else ""
+    return (
+        f"No deck was built: build_presentation was called {count} times at once in this "
+        f"answer; only the first call{which} is processed and this one (call {position} of "
+        f"{count}) was ignored. A deck is never split across calls: send ONE call with every "
+        "slide in `slides`, the cover first. To add or change slides of a delivered deck, send "
+        'only `changes` ({"op": "insert", "after": N, "slides": [...]}, {"op": "replace", '
+        '"slide": N, "slides": [...]}, {"op": "edit", ...}). Read the first call\'s result '
+        "before calling again, and do not describe this call to the user as a deck."
+    )
+
+
+def round_refusal(
+    messages: Sequence[BaseMessage], call_id: Optional[str]
+) -> Optional[str]:
+    """The refusal for a build call that is not the first of its model round:
+    calls sent together are fragments or copies of one deck, so the first in
+    the assistant message's order is the one built, whatever finishes first."""
+    if not call_id:
+        return None
+    for message in reversed(messages):
+        if not isinstance(message, AIMessage):
+            continue
+        builds = [c for c in message.tool_calls if c.get("name") == BUILD_TOOL_NAME]
+        ids = [c.get("id") for c in builds]
+        if call_id in ids:
+            position = ids.index(call_id) + 1
+            if position == 1:
+                return None
+            return _parallel(builds[0].get("args") or {}, len(builds), position)
+    return None
+
+
+def _already_delivered(file_name: str, slide_count: int) -> str:
+    return (
+        f"No deck was built: unchanged, deck already delivered as '{file_name}' "
+        f"({slide_count} slides). This plan is exactly that deck, so nothing was rebuilt and "
+        "the user's file is the same. Do not tell the user it was changed or rebuilt; to "
+        "change it, send only `changes`."
+    )
 
 
 def _same_call(problems: str, from_changes: bool) -> str:
@@ -418,6 +458,7 @@ def _assign_loadable(
     prefetched: Mapping[str, object],
     variety: VarietyCheck,
     max_uses: int,
+    continuing: bool = False,
 ) -> Tuple[Assignment, DeckPlan, List[str]]:
     """Assign with the pictures that load only: an id that does not must not
     count as filling a framed picture zone, which would then show its frame."""
@@ -426,7 +467,7 @@ def _assign_loadable(
         plan = plan.model_copy(
             update={"slides": [_without(slide, set(bad)) for slide in plan.slides]}
         )
-    return assign(inventory, plan, variety, max_uses), plan, bad
+    return assign(inventory, plan, variety, max_uses, continuing), plan, bad
 
 
 def _without(slide: SlidePlan, bad: set[str]) -> SlidePlan:
@@ -963,10 +1004,9 @@ def build_builder_tools(
     variety = ctx.config.variety_check
     max_uses = ctx.config.variety_max_uses
 
-    # Models sometimes send the same call twice in parallel: one build at a time,
-    # and a copy of a call still running is answered without a second build.
+    # One build at a time: parallel calls of a round are refused by the
+    # middleware, this guards the turn's state when the tool is called directly.
     build_lock = asyncio.Lock()
-    in_flight: set[str] = set()
     # The last plan this turn evaluated and, when `changes` produced a refused
     # one, the plan they applied to and their shape: a corrected resend applies
     # there again. Only a delivered deck is stored for later turns.
@@ -976,21 +1016,14 @@ def build_builder_tools(
     # Calls refused this turn, keyed with the plan they applied to: the same
     # call on the same base is refused again without a new evaluation.
     refused_calls: Dict[str, str] = {}
+    # The deck delivered this turn and its file name: a `slides` resend of it is
+    # answered without a rebuild (same turn only, so the template is the same).
+    turn_delivered: List[Tuple[DeckPlan, str]] = []
     plans = _BasePlans(identity.session_id, identity.agent_instance_id)
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
-        key = json.dumps(kwargs, sort_keys=True, default=_jsonable)
-        if key in in_flight:
-            return _DUPLICATE, ToolInvocationResult(
-                tool_ref=_TOOL_REF,
-                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=_DUPLICATE),),
-            )
-        in_flight.add(key)
-        try:
-            async with build_lock:
-                return await _build_plan(**kwargs)
-        finally:
-            in_flight.discard(key)
+        async with build_lock:
+            return await _build_plan(**kwargs)
 
     async def _build_plan(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         nonlocal called
@@ -1075,8 +1108,12 @@ def build_builder_tools(
             await _prefetch_image_bytes(image_ids, services) if image_ids else {}
         )
         sent = plan
+        # A new plan after a delivered deck is a change to it, not a second deck.
+        continuing = base is None and (
+            bool(turn_delivered) or deck_delivered(history())
+        )
         assignment, plan, bad = await asyncio.to_thread(
-            _assign_loadable, inventory, plan, prefetched, variety, max_uses
+            _assign_loadable, inventory, plan, prefetched, variety, max_uses, continuing
         )
         first, called = not called, True
         unloadable = [
@@ -1110,22 +1147,6 @@ def build_builder_tools(
             refused(plan)
             return _variety_revision(repeats, assignment)
 
-        if workspace is None:
-            raise RuntimeError(
-                "ppt_builder: RuntimeServices.workspace_fs is not available on this execution path."
-            )
-        started = time.monotonic()
-        try:
-            template_bytes = await template_bytes_loader()
-        except Exception:  # noqa: BLE001 - surfaced to the agent
-            logger.exception("[PPTBUILD][TOOL] template load FAILED")
-            return _error(
-                "No deck was built: the presentation template could not be loaded right now. "
-                "Tell the user and suggest trying again in a moment."
-            )
-
-        if not acquire_heavy_job_slot():
-            return _error(_BUSY_MESSAGE)
         # Stored as delivered: a split list's parts become slides of their own,
         # so the file, the model and later `changes` share one numbering.
         deck, patterns, numbers = assignment.deck(plan)
@@ -1144,6 +1165,29 @@ def build_builder_tools(
                 ],
             }
         )
+        if base is None and turn_delivered:
+            delivered, delivered_name = turn_delivered[0]
+            if delivered.file_name == deck.file_name and unchanged(
+                delivered, deck, _kinds(inventory)
+            ):
+                return _error(_already_delivered(delivered_name, len(deck.slides)))
+
+        if workspace is None:
+            raise RuntimeError(
+                "ppt_builder: RuntimeServices.workspace_fs is not available on this execution path."
+            )
+        started = time.monotonic()
+        try:
+            template_bytes = await template_bytes_loader()
+        except Exception:  # noqa: BLE001 - surfaced to the agent
+            logger.exception("[PPTBUILD][TOOL] template load FAILED")
+            return _error(
+                "No deck was built: the presentation template could not be loaded right now. "
+                "Tell the user and suggest trying again in a moment."
+            )
+
+        if not acquire_heavy_job_slot():
+            return _error(_BUSY_MESSAGE)
         try:
             result = await asyncio.to_thread(
                 _prepare_and_render,
@@ -1195,6 +1239,7 @@ def build_builder_tools(
         # Delivered, the deck is the base: the same changes sent again are a
         # new change to it, not a corrected resend of a refused one.
         turn_base[:] = [deck]
+        turn_delivered[:] = [(deck, file_name)]
         refused_calls.clear()
         turn_parent.clear()
         turn_shape[0] = None

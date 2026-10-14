@@ -52,9 +52,9 @@ from fred_sdk.contracts.runtime import (
     CapabilityTeamAuthorizer,
     capability_team_authorizer,
 )
-from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field, model_validator
 
@@ -92,6 +92,7 @@ from fred_capability_ppt_filler.builder.tools import (
     _error,
     build_builder_tools,
     build_list_images_tool,
+    round_refusal,
 )
 from fred_capability_ppt_filler.capability import (
     CODE_INVALID_UPLOAD,
@@ -434,6 +435,31 @@ class _PptBuilderMiddleware(AgentMiddleware):
                 for t in request.tools
             ]
         return await handler(request.override(**update))
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[Any]],
+    ) -> Any:
+        """Builds sent together in one model round: the first one only."""
+        call = request.tool_call
+        if call.get("name") == BUILD_TOOL_NAME:
+            state = request.state
+            messages = (
+                state.get("messages", ()) if isinstance(state, Mapping) else state
+            )
+            refusal = round_refusal(
+                messages if isinstance(messages, Sequence) else (), call.get("id")
+            )
+            if refusal is not None:
+                text, artifact = _error(refusal)
+                return ToolMessage(
+                    content=text,
+                    artifact=artifact,
+                    tool_call_id=call["id"],
+                    name=BUILD_TOOL_NAME,
+                )
+        return await handler(request)
 
 
 class PptBuilderCapability(

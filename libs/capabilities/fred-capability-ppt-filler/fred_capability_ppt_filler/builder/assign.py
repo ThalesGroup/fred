@@ -1065,7 +1065,17 @@ def _same_problem(slide: _Slide) -> set[str]:
     }
 
 
-def _problem(slide: _Slide, has_cover: bool, offered: set[str]) -> SlideProblem:
+_CONTINUE_DELIVERED = (
+    "a deck was already delivered in this conversation: to add these slides to it, send "
+    'only `changes` with {"op": "insert", "after": N, "slides": [...]} (N = the slide they '
+    'follow), or {"op": "replace", "slide": N, "slides": [...]} to swap a slide; a new deck '
+    "goes in ONE call with every slide, the cover first"
+)
+
+
+def _problem(
+    slide: _Slide, has_cover: bool, offered: set[str], continuing: bool = False
+) -> SlideProblem:
     """The closest pattern's misfits, named down to the element, with fixes."""
     own = _own(slide, has_cover)
     options: List[str] = []
@@ -1129,7 +1139,12 @@ def _problem(slide: _Slide, has_cover: bool, offered: set[str]) -> SlideProblem:
         options += [r.option for r in reasons if r.option]
         options.append(f"a '{closest.kind}' slide takes: {zone_summary(closest)}")
         options += _close_options(slide, own, closest.kind)
-    if slide.first and has_cover:
+    if slide.first and has_cover and continuing:
+        # A fragment of the delivered deck: fitting it as a cover, or adding one,
+        # would make it a second deck, so `changes` is the only remedy.
+        problem = "the first slide is always the template's cover; " + problem
+        options = [_CONTINUE_DELIVERED]
+    elif slide.first and has_cover:
         problem = "the first slide is always the template's cover; " + problem
         takes = f": {zone_summary(own[0][0])}" if own else ""
         options.append(f"add a cover slide before it{takes}")
@@ -1524,10 +1539,12 @@ def assign(
     plan: DeckPlan,
     variety: VarietyCheck = "template_slide",
     max_uses: int = 2,
+    continuing: bool = False,
 ) -> Assignment:
     """One pattern per slide of ``plan``, or the problems that prevent it;
     ``variety`` says how repeats are grouped (``off`` groups by kind, for the
-    note) and, unless ``off``, ``max_uses`` caps each group."""
+    note) and, unless ``off``, ``max_uses`` caps each group. ``continuing``:
+    a deck was delivered, so a plan without a cover is pointed to `changes`."""
     pool = assignable(inventory)
     has_cover = any(p.kind == "cover" for p in pool)
     offered = {p.kind for p in pool}
@@ -1582,7 +1599,7 @@ def assign(
             splits[slide.index] = split
         elif not slide.candidates:
             slide.closest = _closest(slide, has_cover)
-            problems.append(_problem(slide, has_cover, offered))
+            problems.append(_problem(slide, has_cover, offered, continuing))
             # Counted for variety where it lands once fixed: the ask joins this round.
             slide.candidates = _once_fixed(slide, has_cover)
     if not slides:
