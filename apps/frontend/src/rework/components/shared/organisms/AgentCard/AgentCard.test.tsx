@@ -188,21 +188,19 @@ describe("AgentCard more menu", () => {
 describe("AgentCard marketplace bar", () => {
   const bar = () => container.querySelector('[aria-label="rework.agentMarketplace.barLabel"]');
 
-  it("shows Not published without any button, Publish being in the more menu", () => {
+  it("shows no bar for an unpublished agent, with Publish in the more menu", () => {
     render(instance(), true, marketplaceProps({ publishAction: { kind: "publish" } }));
-    expect(bar()?.textContent).toContain("rework.agentMarketplace.notPublished");
-    expect(bar()?.querySelector("button")).toBeNull();
+    expect(bar()).toBeNull();
+    expect(container.querySelector('[aria-label="rework.agentCard.moreMenu"]')).not.toBeNull();
   });
 
-  it("shows only Not published to someone who cannot publish, hidden state included", () => {
+  it("shows no bar for unpublished or dismissed agents", () => {
     render(instance(), false, marketplaceProps({ showDetailedState: false }));
-    expect(bar()?.textContent).toContain("rework.agentMarketplace.notPublished");
-    expect(bar()?.querySelector("button")).toBeNull();
+    expect(bar()).toBeNull();
     act(() => root.unmount());
     container.remove();
     render(instance({ ...PUBLISHED, state: "dismissed" }), true, marketplaceProps());
-    expect(bar()?.textContent).toContain("rework.agentMarketplace.notPublished");
-    expect(bar()?.querySelector("button")).toBeNull();
+    expect(bar()).toBeNull();
   });
 
   it("shows no bar when the team cannot publish", () => {
@@ -236,7 +234,7 @@ describe("AgentCard marketplace bar", () => {
       false,
       marketplaceProps({ showDetailedState: false }),
     );
-    expect(bar()?.textContent).toContain("rework.agentMarketplace.notPublished");
+    expect(bar()).toBeNull();
   });
 
   it("opens the Removed popover with reason, date, admin message and Hide for editors", () => {

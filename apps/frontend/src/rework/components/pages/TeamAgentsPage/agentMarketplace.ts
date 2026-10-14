@@ -35,7 +35,7 @@ export function isQuotaReached(team: TeamWithPermissions | null | undefined): bo
   return !!marketplace && marketplace.published_count >= marketplace.agents_publish_quota;
 }
 
-/** Switch on and public team: the page shows the marketplace bar on every card. */
+/** Switch on and public team: marketplace actions and visible states are available. */
 export function teamCanPublish(team: TeamWithPermissions | null | undefined, isPersonalTeam: boolean): boolean {
   return !isPersonalTeam && !!team?.marketplace?.agents_publishing_enabled && team.visibility === "public";
 }

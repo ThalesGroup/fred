@@ -255,20 +255,25 @@ describe("TeamAgentsPage marketplace", () => {
     expect(menuItem("menu.publish")).toBeDefined();
   });
 
-  it("shows only Not published in the bar, to an editor and to a member", async () => {
+  it("shows no bar for an unpublished agent, to an editor or a member", async () => {
     h.team = team(EDITOR);
     h.instances = [agent()];
     await render();
-    expect(bar()?.textContent).toContain("rework.agentMarketplace.notPublished");
-    expect(bar()?.querySelector("button")).toBeNull();
+    expect(bar()).toBeNull();
     act(() => root.unmount());
     container.remove();
     document.body.innerHTML = "";
 
     h.team = team(MEMBER);
     await render();
-    expect(bar()?.textContent).toContain("rework.agentMarketplace.notPublished");
-    expect(bar()?.querySelector("button")).toBeNull();
+    expect(bar()).toBeNull();
+  });
+
+  it("shows the bar only on published cards in a mixed team", async () => {
+    h.team = team(EDITOR);
+    h.instances = [agent(), agent({ agent_instance_id: "a2", display_name: "Other", marketplace: PUBLISHED })];
+    await render();
+    expect(container.querySelectorAll('[aria-label="rework.agentMarketplace.barLabel"]')).toHaveLength(1);
   });
 
   it("shows no bar on any card when the team cannot publish", async () => {

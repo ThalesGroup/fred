@@ -4044,7 +4044,6 @@
       "barLabel": "Marketplace",
       "published": "Published",
       "publishedTooltip": "This agent is published on the marketplace",
-      "notPublished": "Not published",
       "publish": "Publish",
       "likes_one": "{{count}} like",
       "likes_other": "{{count}} likes",

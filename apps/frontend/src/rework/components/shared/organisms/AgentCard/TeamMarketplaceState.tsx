@@ -65,11 +65,7 @@ export default function TeamMarketplaceState({
 
   const showRemoved = marketplace?.state === "removed" && showDetailedState;
   if (!marketplace || (marketplace.state !== "published" && !showRemoved)) {
-    return (
-      <AgentMarketplaceBar aria-label={t("rework.agentMarketplace.barLabel")}>
-        <span className={styles.marketplaceNotPublished}>{t("rework.agentMarketplace.notPublished")}</span>
-      </AgentMarketplaceBar>
-    );
+    return null;
   }
   if (marketplace.state === "removed") {
     const reason = REMOVAL_REASONS.includes(marketplace.removed_reason ?? "")

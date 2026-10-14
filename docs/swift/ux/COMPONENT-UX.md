@@ -2116,13 +2116,13 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 **Location:** `src/rework/components/shared/molecules/AgentMarketplaceBar/AgentMarketplaceBar.tsx` (bar, `MarketplaceCounter`, `formatMarketplaceDate`), `src/rework/components/shared/organisms/AgentCard/TeamMarketplaceState.tsx`
 **Status:** `Functional`
 
-One bar for both agent cards: the card's last child, flush with its bottom edge at full width, its bottom corners inheriting the card's radius; `surface-container-high` background (one step above the card's `surface-container`, no divider), `font-label-large`, `on-surface-retreat` text, 2.5rem minimum height so every bar has the same height with or without a button. `MarketplaceCounter` is an icon plus a number with a full sentence as `aria-label`; given `onClick` it becomes a toggle button with `aria-pressed` and a filled icon (the marketplace card's Like). On the team card the bar is on every card while the team can publish (switch on, public team, not the personal space) and on none otherwise, so the grid stays even:
+One bar for both agent cards: the card's last child, flush with its bottom edge at full width, its bottom corners inheriting the card's radius; `surface-container-high` background (one step above the card's `surface-container`, no divider), `font-label-large`, `on-surface-retreat` text, 2.5rem minimum height. `MarketplaceCounter` is an icon plus a number with a full sentence as `aria-label`; given `onClick` it becomes a toggle button with `aria-pressed` and a filled icon (the marketplace card's Like). On the team card the bar appears only for a visible publication state while the team can publish (switch on, public team, not the personal space):
 
-- **Not published / hidden** (`dismissed`): a muted (`on-surface-muted`, `label-small`) "Not published" label only; editors publish from the more menu.
+- **Not published / hidden** (`dismissed`): no bar, background or reserved space; editors publish from the more menu.
 - **Published:** like and import counters (`spacing-2xs` icon gap, `spacing-s` between them), then the published chip pushed right — the same `success-container` chip as a published prompt card, in `label-large-emphasized` with an 18px icon.
 - **Modified, not republished:** the bar switches to the `warning` tone, counters kept; a tooltip on the label says the marketplace still shows the previous version.
 - **Removed:** a pill button "Removed from the marketplace" opening a small popover upward (`surface-floating`, `shadow-m`): reason, locale date, the platform admin's message if any, and **Hide** for editors and the team admin only.
-- Members who are not editors only ever see Published; Modified and Removed are hidden even if sent.
+- Members who are not editors only ever see Published; Modified and Removed are hidden even if sent, leaving no bar for Removed.
 
 #### Open UX issues
 
