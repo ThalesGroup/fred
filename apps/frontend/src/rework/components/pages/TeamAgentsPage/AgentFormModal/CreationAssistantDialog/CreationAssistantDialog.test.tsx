@@ -44,7 +44,6 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
 }));
 
 const KEY = "rework.teams.formAgent.creationAssistant";
-const REASONING = "rework.teams.formAgent.capabilities.packs.reasoning.title";
 const CAPABILITIES = [
   { id: "team_wiki", name: "capability.team_wiki.name", description: "capability.team_wiki.description" },
   { id: "html_artifact", name: "capability.html_artifact.name", description: "capability.html_artifact.description" },
@@ -90,7 +89,6 @@ function renderDialog(props: Partial<Parameters<typeof CreationAssistantDialog>[
         templateId="runtime:agent"
         capabilities={CAPABILITIES}
         hasPromptField
-        offersReasoning={false}
         current={{ ...EMPTY, name: "RH" }}
         onApply={onApply}
         onClose={onClose}
@@ -332,66 +330,11 @@ describe("CreationAssistantDialog", () => {
     expect(tileFor(`${KEY}.capabilitiesHeading`)).toBeUndefined();
   });
 
-  it("proposes reasoning first in the capabilities column, ticked, and applies it", async () => {
-    const { onApply } = await draftWith(
-      { ...DRAFT, name: null, role: null, description: null },
-      { offersReasoning: true },
-    );
-    const column = [...document.querySelectorAll("section")].find((node) =>
-      node.textContent?.includes(`${KEY}.capabilitiesHeading`),
-    )!;
-    const columnTiles = [...column.querySelectorAll("li [role='checkbox'] > span:first-child")].map(
-      (tile) => tile.textContent,
-    );
-    expect(columnTiles).toEqual([REASONING, "T:capability.team_wiki.name"]);
-    expect(stateOf(REASONING)).toBe("true");
-
-    await click(`${KEY}.apply`);
-    expect(onApply).toHaveBeenCalledWith({
-      systemPrompt: "You answer HR questions.",
-      capabilityIds: ["team_wiki"],
-      reasoning: true,
-    });
-  });
-
-  it("leaves reasoning out once unticked, and counts it in the column header", async () => {
-    const { onApply } = await draftWith(DRAFT, { offersReasoning: true, current: EMPTY });
-
-    await act(async () => tileFor(REASONING).click());
-    expect(stateOf(`${KEY}.capabilitiesHeading`)).toBe("mixed");
-    await act(async () => tileFor(`${KEY}.capabilitiesHeading`).click());
-    expect(stateOf(REASONING)).toBe("true");
-    await act(async () => tileFor(`${KEY}.capabilitiesHeading`).click());
-    expect(stateOf(REASONING)).toBe("false");
-    expect(stateOf("T:capability.team_wiki.name")).toBe("false");
-
-    await click(`${KEY}.apply`);
-    expect(onApply).toHaveBeenCalledWith(expect.not.objectContaining({ reasoning: true }));
-  });
-
   it("tells the user what to do in the review header only", async () => {
     renderDialog();
     expect(document.body.textContent).not.toContain(`${KEY}.selectHint`);
     await draftWith(DRAFT);
     expect(document.body.textContent).toContain(`${KEY}.selectHint`);
-  });
-
-  it("does not propose reasoning when the form does not offer it", async () => {
-    await draftWith(DRAFT);
-    expect(tileFor(REASONING)).toBeUndefined();
-  });
-
-  it("keeps a selectable reasoning column, without the empty hint, when no capability is recommended or available", async () => {
-    await draftWith({ ...DRAFT, capability_ids: [] }, { offersReasoning: true });
-    expect(document.body.textContent).not.toContain(`${KEY}.noCapabilities`);
-    expect(stateOf(`${KEY}.capabilitiesHeading`)).toBe("true");
-
-    act(() => root.unmount());
-    root = createRoot(container);
-    await draftWith(DRAFT, { offersReasoning: true, capabilities: [] });
-    expect(document.body.textContent).not.toContain(`${KEY}.noCapabilities`);
-    expect(stateOf(REASONING)).toBe("true");
-    expect(stateOf(`${KEY}.capabilitiesHeading`)).toBe("true");
   });
 
   it("shows a friendly error and keeps the description for a retry", async () => {
@@ -425,7 +368,6 @@ describe("CreationAssistantDialog", () => {
             templateId="runtime:agent"
             capabilities={[]}
             hasPromptField
-            offersReasoning
             current={EMPTY}
             onApply={vi.fn()}
             onClose={dialogClose}

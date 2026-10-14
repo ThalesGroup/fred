@@ -48,9 +48,7 @@ describe("buildComposerRuntimeContext", () => {
     });
   });
 
-  it("omits the reasoning key when the agent offers no toggle", () => {
-    // Omitted ≠ false: an absent key reaches the runtime as "no choice was
-    // made" and leaves levels 1-2 in charge.
+  it("omits the reasoning key while the composer hides the reasoning row", () => {
     const context = buildComposerRuntimeContext({
       selectedLibraryIds: [],
       selectedDocumentUids: [],
@@ -90,5 +88,17 @@ describe("buildComposerRuntimeContext", () => {
       reasoning: true,
     });
     expect(asked.reasoning).toBe(true);
+  });
+
+  it("sends chat_profile_id only when the conversation chose a model", () => {
+    const base = {
+      selectedLibraryIds: [],
+      selectedDocumentUids: [],
+      searchPolicy: "hybrid" as const,
+      ragScope: "hybrid" as const,
+    };
+    expect(buildComposerRuntimeContext({ ...base, chatProfileId: "chat.large" }).chat_profile_id).toBe("chat.large");
+    expect(buildComposerRuntimeContext({ ...base, chatProfileId: null })).not.toHaveProperty("chat_profile_id");
+    expect(buildComposerRuntimeContext(base)).not.toHaveProperty("chat_profile_id");
   });
 });

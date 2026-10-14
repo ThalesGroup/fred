@@ -22,6 +22,7 @@ import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
 import TeamSettingsResponsibilities from "@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
+import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import styles from "./TeamSettingsPage.module.scss";
 
 /**
@@ -37,7 +38,7 @@ export default function TeamSettingsPage() {
   const { bootstrap, isLoading: bootstrapLoading } = useFrontendBootstrap();
   const charterEnabled = bootstrap?.team_admin_charter_enabled === true;
   const capabilities = useTeamCapabilities(selectedTeam);
-  const { canUpdateInfo, canUpdateResources } = capabilities;
+  const { canUpdateInfo } = capabilities;
   // The relations themselves: no permission belongs to team_admin alone.
   const myRelations = selectedTeam && "my_relations" in selectedTeam ? (selectedTeam.my_relations ?? []) : [];
   const isTeamAdmin = myRelations.includes("team_admin");
@@ -80,9 +81,11 @@ export default function TeamSettingsPage() {
         // scoped to this team. Server enforces CAN_READ_MEMBERS.
         return <TaskActivity scope="team" teamId={teamId} />;
       case "routing":
-        // TEAM-05, #2118: team_editor writes, team_admin reads (hard
-        // cross-write rule) — canUpdateResources is team_editor-only.
-        return <TeamSettingsRouting team={selectedTeam} canWrite={canUpdateResources} />;
+        // Team admins write the team's models; a personal space's owner holds
+        // no team_admin relation but owns the space.
+        return (
+          <TeamSettingsRouting team={selectedTeam} canWrite={canUpdateInfo || isPersonalTeamId(selectedTeam.id)} />
+        );
       case "responsibilities":
         return <TeamSettingsResponsibilities canAccept={isPendingTeamAdmin} />;
       default:
