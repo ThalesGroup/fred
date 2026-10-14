@@ -316,7 +316,8 @@ async def test_an_outdated_analysis_stays_ready_and_is_refreshed_once(
     assert len(jobs) == 1
     record = await store.get(INSTANCE)
     assert record is not None and record.status == "succeeded"
-    assert status_response(record).current  # being refreshed: no re-run offered
+    view = status_response(record)
+    assert view.current and view.refreshing  # being refreshed: no re-run offered
     assert (await capability.readiness(stored, IDENTITY)).state == "ready"
     assert len(jobs) == 1
 
@@ -324,6 +325,7 @@ async def test_an_outdated_analysis_stays_ready_and_is_refreshed_once(
     await drain()
     record = await store.get(INSTANCE)
     assert record is not None and record.analysis_version == ANALYSIS_VERSION
+    assert not status_response(record).refreshing  # the form stops polling
     assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None
     assert analysis_job.cached_inventory(INSTANCE, SHA, "rules") is not None
 
@@ -348,7 +350,8 @@ async def test_a_failed_refresh_keeps_the_old_analysis_and_is_not_retried(
     assert record is not None and record.status == "succeeded"
     assert record.analysis_version == ANALYSIS_VERSION - 1
     assert record.inventory() is not None and record.attempts == MAX_ATTEMPTS
-    assert not status_response(record).current  # the author may re-run it
+    view = status_response(record)
+    assert not view.current and not view.refreshing  # the author may re-run it
 
     assert (await capability.readiness(stored, IDENTITY)).state == "ready"
     assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None

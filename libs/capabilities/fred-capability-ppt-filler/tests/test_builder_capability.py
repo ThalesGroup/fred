@@ -306,8 +306,10 @@ async def test_rerun_restarts_a_failed_or_interrupted_analysis_only(analysis_db)
         await age_row(analysis_db, "inst-7", analysis_version=0)
         body = (await client.post(f"{_BASE}/rerun")).json()
         assert body["status"] == "succeeded" and body["current"] is True
+        assert body["refreshing"] is True
         await drain()
-        assert (await client.get(_BASE)).json()["analysis_version"] > 0
+        body = (await client.get(_BASE)).json()
+        assert body["analysis_version"] > 0 and body["refreshing"] is False
 
 
 # --- turn wiring -------------------------------------------------------------------------------

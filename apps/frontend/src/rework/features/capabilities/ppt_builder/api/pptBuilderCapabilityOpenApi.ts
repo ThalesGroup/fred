@@ -167,6 +167,7 @@ export type AnalysisStatusResponse = {
   labelling_key: string;
   analysis_version: number;
   current: boolean;
+  refreshing?: boolean;
   error?: string | null;
   updated_at: string;
   has_thumbnails?: boolean;

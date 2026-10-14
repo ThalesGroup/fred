@@ -840,6 +840,8 @@ class AnalysisStatusResponse(BaseModel):
     analysis_version: int
     # False when the rules changed since and no refresh is running: worth a re-run.
     current: bool
+    # An outdated one being refreshed: its old inventory is shown until it ends.
+    refreshing: bool = False
     error: Optional[str] = None
     updated_at: datetime
     has_thumbnails: bool = False
@@ -857,6 +859,7 @@ def status_response(record: AnalysisRecord) -> AnalysisStatusResponse:
         labelling_key=record.labelling_key,
         analysis_version=record.analysis_version,
         current=not record.outdated() or record.refreshing(now),
+        refreshing=record.refreshing(now),
         error=_INTERRUPTED_DETAIL if status == "interrupted" else record.error,
         updated_at=record.updated_at,
         has_thumbnails=record.has_thumbnails,
