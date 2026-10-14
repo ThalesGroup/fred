@@ -397,7 +397,7 @@ async def _card(env: _Env, uid: str, agent_id: str = "agent-1"):
 
 async def _expect(code: str, call) -> marketplace.MarketplaceError:
     with pytest.raises(marketplace.MarketplaceError) as caught:
-        await call
+        _ = await call
     assert caught.value.code == code
     return caught.value
 
