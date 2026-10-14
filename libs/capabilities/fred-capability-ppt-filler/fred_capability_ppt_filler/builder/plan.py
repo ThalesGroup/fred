@@ -154,6 +154,21 @@ _COLUMN_ALIASES = {
     "body": "bullets",
     "content": "bullets",
 }
+# Names a model may give `repeat_layout`, in a slide or as an edit `field`.
+REPEAT_ALIASES = ("same_layout", "keep_layout", "repeat_previous_layout")
+
+
+def as_flag(value: Any) -> bool:
+    """A loose yes: true, 1, "true", "yes", "oui"; anything else is no."""
+    if isinstance(value, (list, tuple)):
+        return any(as_flag(v) for v in value)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value == 1
+    return (_as_text(value) or "").strip().lower() in ("true", "yes", "oui", "1")
+
+
 _SLIDE_ALIASES = {
     "body": "bullets",
     "text": "bullets",
@@ -161,6 +176,7 @@ _SLIDE_ALIASES = {
     # What the first schema called it.
     "pattern": "kind",
     "type": "kind",
+    **{alias: "repeat_layout" for alias in REPEAT_ALIASES},
 }
 
 
@@ -572,6 +588,12 @@ class PlanChart(BaseModel):
         return bool(self.categories) or any(s.values for s in self.series)
 
 
+REPEAT_LAYOUT_HINT = (
+    "true: this slide keeps the previous slide's layout. Set it only when the user "
+    "explicitly asked for identical consecutive slides; never on your own initiative."
+)
+
+
 class SlidePlan(BaseModel):
     title: Optional[str] = None
     subtitle: Optional[str] = None
@@ -600,6 +622,10 @@ class SlidePlan(BaseModel):
         "numbers only, the template sets colours and fonts.",
     )
     notes: Optional[str] = Field(default=None, description="Speaker notes.")
+    repeat_layout: bool = Field(
+        default=False,
+        description=REPEAT_LAYOUT_HINT,
+    )
     # Last on purpose: the model writes the content first, then names its kind.
     kind: Optional[SlideKind] = Field(
         default=None,
@@ -638,6 +664,11 @@ class SlidePlan(BaseModel):
         text = lexicon.normalize(_as_text(value) or "").replace(" ", "_")
         text = lexicon.LEGACY_KINDS.get(text, text)
         return text if text in SLIDE_KINDS else None
+
+    @field_validator("repeat_layout", mode="before")
+    @classmethod
+    def _flag(cls, value: Any) -> bool:
+        return as_flag(value)
 
     @field_validator("bullets", "images", mode="before")
     @classmethod

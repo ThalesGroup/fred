@@ -76,11 +76,14 @@ _EMPTY_ZONE = 1.5  # an unfilled text zone is swept away
 _UNUSED_ITEM = 0.5
 _SHRUNK = 1.0
 _HEADING_LEAD = 1.0  # a heading in bold atop the text: a heading zone reads better
-# Per earlier use anywhere in the deck: above the fit costs, so an unused slide
+# Per earlier use in the section: above the fit costs, so an unused slide
 # of the same kind wins, but below _KIND_STEP until the second reuse.
 _REUSE = 8.0
 _REPEAT = 3.0  # the same slide twice in a row
 _TRIPLE = 1000.0  # three in a row: taken only when nothing else fits
+# A `repeat_layout` slide off the previous slide's template slide: taken only
+# when that one does not hold its content.
+_NOT_REPEATED = 1000.0
 # Per content use of a template slide beyond the author's max:
 # another variant of the tier wins while one fits.
 _OVER_MAX = 100.0
@@ -90,10 +93,11 @@ _NOTE_USES = 3  # the passive note when the variety check is off
 _STRUCTURAL = ("cover", "section", "agenda", "closing")
 # What a variety ask counts: one template slide, one kind, or nothing.
 VarietyCheck = Literal["template_slide", "kind", "off"]
-# Told wherever variety is limited or asked: the tolerance of `_places`.
-PARALLEL_SECTIONS = (
-    "Sections that repeat one structure (the same kinds in the same order after each "
-    "section slide or agenda part) may reuse a slide at the same place in each section."
+# Told wherever variety is limited or asked: `_sections` and the runs of `_repeats`.
+SECTION_RULE = (
+    "The limit counts within each section (from one section slide, or agenda part, to the "
+    "next): a later section may reuse an earlier one's slides, in any order. Never three "
+    "identical slides in a row, unless the user explicitly asked for it (`repeat_layout`)."
 )
 # What each kind suits, in the order alternatives are offered.
 SHAPE_HINTS: Dict[str, str] = {
@@ -184,6 +188,7 @@ class Repeat:
     suggested: List[str]  # "slides 9, 10 → cards holds … (why)"
     structural: bool = False  # cover/section/agenda/closing slides: never asked
     at_most: int = _NOTE_USES - 1  # the slides this group may hold
+    in_a_row: bool = False  # three identical slides or more in a row
 
     @property
     def revisable(self) -> bool:
@@ -205,6 +210,9 @@ class Assignment:
     # Aligned with the deck's slides: the entries before a list's continuation,
     # so the render numbers it on from its first part (never stored).
     starts: List[int] = field(default_factory=list)
+    # Per 1-based plan index of a `repeat_layout` slide: whether it kept the
+    # previous slide's template slide.
+    repeated: Dict[int, bool] = field(default_factory=dict)
 
     def deck(
         self, plan: DeckPlan
@@ -1240,8 +1248,24 @@ def _content(slide: _Slide, pattern: Optional[Pattern] = None) -> bool:
     )
 
 
-def _caps(slides: List[_Slide], pool: List[Pattern], max_uses: int) -> _Caps:
-    content = sum(1 for s in slides if s.candidates and _content(s) and s.part == 1)
+def _exempt(slide: _Slide) -> bool:
+    """Asked by the user to look like another slide: outside the variety limits."""
+    return slide.plan.asked_design is not None or slide.plan.repeat_layout
+
+
+def _caps(
+    slides: List[_Slide],
+    pool: List[Pattern],
+    max_uses: int,
+    sections: Optional[Dict[int, int]] = None,
+) -> _Caps:
+    """The author's max, raised to what the largest section forces."""
+    per: Dict[int, int] = {}
+    for s in slides:
+        if s.candidates and _content(s) and s.part == 1:
+            at = (sections or {}).get(s.index, 0)
+            per[at] = per.get(at, 0) + 1
+    content = max(per.values(), default=0)
     variants = [p.kind for p in pool if p.kind not in _STRUCTURAL]
 
     def cap(distinct: int) -> int:
@@ -1258,76 +1282,26 @@ def _entry(text: str) -> str:
     return " ".join(_NUMBERED.sub("", text).casefold().split()).strip(" .:;-")
 
 
-def _places(slides: List[_Slide]) -> Dict[int, Tuple[int, int]]:
-    """Per content slide inside a section: its section and its place among
-    that section's content slides; empty unless the deck has two sections. A
-    section starts at a `section` slide or, with none, a slide titled as an
-    agenda entry. Full rule: design.md D27."""
+def _sections(slides: List[_Slide]) -> Dict[int, int]:
+    """Per slide (plan index), its section: one starts at each `section` slide
+    or, with none, at a content slide titled as an agenda entry; slides before
+    the first are a section of their own. Empty unless the deck has two."""
     split = any(_wanted(s) == "section" for s in slides)
     entries: set[str] = set()
     for s in slides:
         if not split and _wanted(s) == "agenda":
             texts = list(s.plan.bullets) + [i.heading or i.text for i in s.plan.items]
             entries |= {_entry(t) for t in texts if t} - {""}
-    places: Dict[int, Tuple[int, int]] = {}
-    section = place = 0
+    found: Dict[int, int] = {}
+    section = 0
     for s in slides:
-        if s.part > 1:
-            continue
-        if _wanted(s) == "section":
-            section, place = section + 1, 0
-            continue
-        if not _content(s):
-            continue
-        if entries and _entry(s.plan.title or "") in entries:
-            section, place = section + 1, 0
-        if section:
-            place += 1
-            places[s.index] = (section, place)
-    return places if section > 1 else {}
-
-
-def _mirrored(
-    here: Optional[Tuple[int, int]], there: Optional[Tuple[int, int]]
-) -> bool:
-    """The same place in another section."""
-    return (
-        here is not None
-        and there is not None
-        and here[0] != there[0]
-        and here[1] == there[1]
-    )
-
-
-def _mirrors(
-    slides: List[_Slide], places: Dict[int, Tuple[int, int]]
-) -> List[List[int]]:
-    """Per slide, the earlier slides at its place in another section."""
-    return [
-        [
-            j
-            for j in range(i)
-            if slide.part == 1
-            and slides[j].part == 1
-            and _mirrored(places.get(slide.index), places.get(slides[j].index))
-        ]
-        for i, slide in enumerate(slides)
-    ]
-
-
-def _counted(
-    group: List[Tuple[_Slide, Pattern]], places: Dict[int, Tuple[int, int]]
-) -> int:
-    """A group's uses, its slides at one place of several sections counted once."""
-    at = [places.get(s.index) for s, _ in group]
-    return len(
-        {
-            ("place", here[1])
-            if here is not None and any(_mirrored(here, o) for o in at)
-            else ("slide", s.index)
-            for (s, _), here in zip(group, at)
-        }
-    )
+        if s.part == 1 and (
+            _wanted(s) == "section"
+            or (entries and _content(s) and _entry(s.plan.title or "") in entries)
+        ):
+            section += 1
+        found[s.index] = section
+    return found if section > 1 else {}
 
 
 def _wants_picture(pattern: Pattern, plans: Sequence[SlidePlan]) -> bool:
@@ -1352,70 +1326,75 @@ class _Path:
 def _beam(
     slides: List[_Slide],
     caps: Optional[_Caps] = None,
-    places: Optional[Dict[int, Tuple[int, int]]] = None,
+    sections: Optional[Dict[int, int]] = None,
 ) -> List[Pattern]:
-    """Cheapest pattern sequence under a deck-wide reuse cost. The use counts
+    """Cheapest pattern sequence under a per-section reuse cost. The use counts
     make the cost non-local, so a bounded beam replaces exact dynamic
     programming; paths with the same last two choices and uses are merged."""
-    mirrors = _mirrors(slides, places or {})
-    anchors = sorted({j for found in mirrors for j in found})
+    at = sections or {}
+    structural = {
+        p.id for s in slides for p, _ in s.candidates if p.kind in _STRUCTURAL
+    }
     paths = [_Path(0.0, (), {}, {})]
     for i, slide in enumerate(slides):
-        steps: List[Tuple[float, int, int, bool]] = []
+        if i and at.get(slide.index) != at.get(slides[i - 1].index):
+            # A new section counts its content slides from zero.
+            for path in paths:
+                path.uses = {k: v for k, v in path.uses.items() if k in structural}
+                path.content = {}
+        free = _exempt(slide)
+        steps: List[Tuple[float, int, int]] = []
         for n, path in enumerate(paths):
             last = slides[i - 1].candidates[path.chosen[-1]][0].id if i >= 1 else None
             before = slides[i - 2].candidates[path.chosen[-2]][0].id if i >= 2 else None
+            # Asked to keep the previous slide's layout, and its content fits it.
+            keep = slide.plan.repeat_layout and any(
+                p.id == last for p, _ in slide.candidates
+            )
             for c, (pattern, cost) in enumerate(slide.candidates):
-                # Its earlier section's slide at the same place again: not a reuse.
-                mirrored = any(
-                    slides[j].candidates[path.chosen[j]][0].id == pattern.id
-                    for j in mirrors[i]
-                )
-                uses = 0 if mirrored else path.uses.get(pattern.id, 0)
-                step = path.cost + cost + _REUSE * uses
+                step = path.cost + cost + _REUSE * path.uses.get(pattern.id, 0)
                 if slide.part > 1:
                     # A list's continuation: its first part's slide again is free.
                     if pattern.id != last:
                         step += _SPLIT_SWITCH
                     else:
                         step = path.cost + cost
+                elif keep:
+                    step += 0.0 if pattern.id == last else _NOT_REPEATED
                 elif pattern.id == last:
                     step += _REPEAT + (_TRIPLE if pattern.id == before else 0.0)
                 if (
                     caps is not None
                     and slide.part == 1
-                    and not mirrored
+                    and not free
                     and _content(slide, pattern)
                     and path.content.get(pattern.id, 0) >= caps.slide
                 ):
                     step += _OVER_MAX
-                steps.append((step, n, c, mirrored))
+                steps.append((step, n, c))
         steps.sort()
         kept: List[_Path] = []
         seen: set = set()
-        for step, n, c, mirrored in steps:
+        for step, n, c in steps:
             path = paths[n]
             pattern = slide.candidates[c][0]
             uses = dict(path.uses)
             content = dict(path.content)
-            # A split list counts as one slide, a mirrored one not at all.
-            if slide.part == 1 and not mirrored:
+            # A split list counts as one slide, a slide asked alike not against the cap.
+            if slide.part == 1:
                 uses[pattern.id] = uses.get(pattern.id, 0) + 1
-            if slide.part == 1 and not mirrored and _content(slide, pattern):
+            if slide.part == 1 and not free and _content(slide, pattern):
                 content[pattern.id] = content.get(pattern.id, 0) + 1
-            chosen = path.chosen + (c,)
             state = (
                 path.chosen[-1:],
                 c,
                 frozenset(uses.items()),
                 frozenset(content.items()),
-                # A later slide's mirror must keep its choice through the merge.
-                tuple(chosen[j] for j in anchors if j <= i),
             )
             if state in seen:
                 continue
             seen.add(state)
-            kept.append(_Path(step, chosen, uses, content))
+            kept.append(_Path(step, path.chosen + (c,), uses, content))
             if len(kept) == _BEAM:
                 break
         paths = kept
@@ -1533,54 +1512,100 @@ def _wanted(slide: _Slide) -> Optional[str]:
     return slide.tiers[0][0] if slide.tiers and slide.tiers[0] else slide.plan.kind
 
 
+def _runs(
+    slides: List[_Slide], chosen: Dict[int, Pattern]
+) -> List[List[Tuple[_Slide, Pattern]]]:
+    """Three identical content template slides or more in a row. A slide asked
+    to look alike starts a new run, so it never ends one; a split part breaks it."""
+    runs: List[List[Tuple[_Slide, Pattern]]] = []
+    run: List[Tuple[_Slide, Pattern]] = []
+    for slide in slides:
+        pattern = chosen.get(slide.index) if slide.part == 1 else None
+        if pattern is None or not _content(slide, pattern):
+            run = []
+        elif run and run[-1][1].id == pattern.id and not _exempt(slide):
+            run.append((slide, pattern))
+            if len(run) == 3:
+                runs.append(run)  # the same list: later slides of the run join it
+        else:
+            run = [(slide, pattern)]
+    return runs
+
+
+def _budget(
+    slides: List[_Slide], chosen: Dict[int, Pattern], variants: Dict[str, set[str]]
+) -> Dict[str, int]:
+    """Per kind, the variants ``slides`` leave unused: what may still be suggested."""
+    budget = {k: len(v) for k, v in variants.items()}
+    for slide in slides:
+        k = chosen[slide.index].kind if slide.index in chosen else _wanted(slide)
+        if k in budget:
+            budget[k] -= 1
+    return budget
+
+
 def _repeats(
     slides: List[_Slide],
     chosen: Dict[int, Pattern],
     pool: List[Pattern],
     by_kind: bool,
     caps: Optional[_Caps],
-    places: Optional[Dict[int, Tuple[int, int]]] = None,
+    sections: Optional[Dict[int, int]] = None,
 ) -> List[Repeat]:
-    """Template slides (or, ``by_kind``, content kinds) on more slides than
-    their cap, or on three slides or more without caps, a place repeated
-    across sections counted once. Structural slides count apart; a kind is
-    offered only while the template has more variants of it than the deck
-    already uses."""
-    used = {p.id for p in chosen.values()}
-    unused = [p for p in pool if p.id not in used]
+    """Template slides (or, ``by_kind``, content kinds) on more slides of one
+    section than their cap, or on three slides or more without caps; with caps,
+    also three identical template slides in a row. Slides asked alike are left
+    out; structural slides count apart, deck-wide. Alternatives are read from
+    the sections concerned. Full rule: design.md D27."""
+    at = sections or {}
     variants: Dict[str, set[str]] = {}
     for p in pool:
         variants.setdefault(p.kind, set()).add(zone_summary(p))
-    budget = {k: len(v) for k, v in variants.items()}
-    for slide in slides:
-        if slide.part > 1:
-            continue
-        k = chosen[slide.index].kind if slide.index in chosen else _wanted(slide)
-        if k in budget:
-            budget[k] -= 1
-    given: Dict[str, int] = {}
-    groups: Dict[Tuple[str, str], List[Tuple[_Slide, Pattern]]] = {}
+    groups: Dict[Tuple[str, int, str], List[Tuple[_Slide, Pattern]]] = {}
     for slide in slides:
         pattern = chosen.get(slide.index)
-        # A design the user asked for is never a reason to ask for variety.
-        if pattern is None or slide.part > 1 or slide.plan.asked_design is not None:
+        if pattern is None or slide.part > 1 or _exempt(slide):
             continue
         if not _content(slide, pattern):
-            key = ("structural", pattern.id)
+            key = ("structural", 0, pattern.id)
+        elif by_kind:
+            key = ("kind", at.get(slide.index, 0), pattern.kind)
         else:
-            key = ("kind", pattern.kind) if by_kind else ("slide", pattern.id)
+            key = ("slide", at.get(slide.index, 0), pattern.id)
         groups.setdefault(key, []).append((slide, pattern))
-    repeats = []
-    for (group_by, _), group in groups.items():
+    found = [(key[0] == "structural", False, g) for key, g in groups.items()]
+    if caps is not None:
+        found += [(False, True, run) for run in _runs(slides, chosen)]
+    budgets: Dict[frozenset, Dict[str, int]] = {}
+    given: Dict[str, int] = {}
+    repeats: List[Repeat] = []
+    # A run already listed as over its cap is asked once.
+    listed: set[int] = set()
+    for structural, in_a_row, group in found:
         kind = group[0][1].kind
-        structural = group_by == "structural"
         # Chart slides may only vary among chart designs.
         recast = not structural and kind != "chart"
         at_most = _NOTE_USES - 1
-        if caps is not None and not structural:
+        if caps is not None and not structural and not in_a_row:
             at_most = caps.kind if by_kind else caps.slide
-        if _counted(group, places or {}) <= at_most:
+        if not in_a_row and len(group) <= at_most:
             continue
+        if in_a_row and {s.index for s, _ in group} <= listed:
+            continue
+        if not structural:
+            listed |= {s.index for s, _ in group}
+        scope = {at.get(s.index, 0) for s, _ in group}
+        within = [
+            s
+            for s in slides
+            if s.part == 1 and (structural or at.get(s.index, 0) in scope)
+        ]
+        used = {chosen[s.index].id for s in within if s.index in chosen}
+        unused = [p for p in pool if p.id not in used]
+        budget = budgets.setdefault(
+            frozenset(at.get(s.index, 0) for s in within),
+            _budget(within, chosen, variants),
+        )
         reused = len({p.id for _, p in group}) < len(group)
         # Left out: a variant that has the fit problem of every slide of the group.
         blocked = set.intersection(*(_same_problem(s) for s, _ in group))
@@ -1614,6 +1639,7 @@ def _repeats(
                 suggested,
                 structural,
                 at_most,
+                in_a_row,
             )
         )
     return repeats
@@ -1623,7 +1649,9 @@ def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
     """The passive note: the slides, the variants of their kind left unused,
     and the kinds their content suits."""
     at_text = ", ".join(str(at[n]) for n in repeat.slides)
-    if len(repeat.labels) == 1:
+    if repeat.in_a_row:
+        note = f"Slides {at_text} use the template slide '{repeat.labels[0]}' in a row."
+    elif len(repeat.labels) == 1:
         note = f"Slides {at_text} all use the template slide '{repeat.labels[0]}'."
     else:
         note = (
@@ -1642,6 +1670,20 @@ def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
     if repeat.unused or repeat.suggested:
         return note + " To vary them, recast one as above; otherwise nothing to do."
     return note + " Nothing to do: no other slide of this template suits them."
+
+
+def _repeated_note(number: int, kept: bool) -> str:
+    """Never silent: a slide built alike on the user's word, or one that could not be."""
+    if kept:
+        return (
+            f"Slide {number} keeps slide {number - 1}'s template slide, as the user asked "
+            "(`repeat_layout`): left out of the variety limits."
+        )
+    return (
+        f"Slide {number} has `repeat_layout`, but its content does not fit slide "
+        f"{number - 1}'s template slide, so it was built on another one. To keep that "
+        f"layout, shape its content like slide {number - 1}'s."
+    )
 
 
 _PART_TITLE = re.compile(r"^(.*) \((\d+)/(\d+)\)$")
@@ -1735,21 +1777,22 @@ def assign(
         for part in (splits[slide.index].slides if slide.index in splits else [slide])
     ]
     by_kind = variety != "template_slide"
-    caps = None if variety == "off" else _caps(slides, pool, max_uses)
-    places = _places(slides)
+    # Sections only shape a limit: with the check off, the deck is one.
+    sections = {} if variety == "off" else _sections(slides)
+    caps = None if variety == "off" else _caps(slides, pool, max_uses, sections)
     if problems:
         placed = [s for s in slides if s.candidates]
         found = {
             s.index: p
-            for s, p in zip(placed, _beam(placed, caps, places))
+            for s, p in zip(placed, _beam(placed, caps, sections))
             if s.part == 1
         }
         return Assignment(
             problems=problems,
-            repeats=_repeats(slides, found, pool, by_kind, caps, places),
+            repeats=_repeats(slides, found, pool, by_kind, caps, sections),
         )
 
-    chosen = _beam(slides, caps, places)
+    chosen = _beam(slides, caps, sections)
     patterns: List[Optional[Pattern]] = [None] * len(plan.slides)
     parts: Dict[int, List[Tuple[SlidePlan, Pattern]]] = {}
     for slide, pattern in zip(slides, chosen):
@@ -1758,10 +1801,15 @@ def assign(
             continue
         if slide.part == 1:
             patterns[slide.index - 1] = pattern
-        # Stored as a slide of its own after delivery: its kind keeps it one.
+        # Stored as a slide of its own after delivery: its kind keeps it one,
+        # and only its first part keeps the slide before it.
         kind = slide.plan.kind or pattern.kind
+        first = slide.plan.repeat_layout and slide.part == 1
         parts.setdefault(slide.index, []).append(
-            (slide.plan.model_copy(update={"kind": kind}), pattern)
+            (
+                slide.plan.model_copy(update={"kind": kind, "repeat_layout": first}),
+                pattern,
+            )
         )
     # The deck's own numbers: a split list's parts are slides of their own.
     at: Dict[int, int] = {}
@@ -1772,17 +1820,26 @@ def assign(
         for number, (slide, pattern) in enumerate(zip(slides, chosen), start=1)
         if (note := _substitution(slide, pattern, offered, has_cover, number))
     ]
+    # With a limit, a run is a repeat and noted as one.
     notes += [
         f"Slides {i - 1} to {i + 1} use the same template slide: "
         "no other one holds their content. Nothing to do, unless they must look different: "
         "then give one of them another content shape."
         for i in range(2, len(chosen))
-        if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
+        if caps is None
+        and chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
         and slides[i].part == slides[i - 1].part == 1
+        and not _exempt(slides[i])
     ]
+    repeated = {
+        slide.index: chosen[k].id == chosen[k - 1].id
+        for k, slide in enumerate(slides)
+        if k and slide.part == 1 and slide.plan.repeat_layout
+    }
+    notes += [_repeated_note(at[n], kept) for n, kept in repeated.items()]
     notes += [_split_note(split, at) for split in splits.values()]
     found = {s.index: p for s, p in zip(slides, chosen) if s.part == 1}
-    repeats = _repeats(slides, found, pool, by_kind, caps, places)
+    repeats = _repeats(slides, found, pool, by_kind, caps, sections)
     notes += [_repeat_note(r, at) for r in repeats]
     return Assignment(
         patterns=patterns,
@@ -1790,4 +1847,5 @@ def assign(
         repeats=repeats,
         parts=parts,
         starts=[s.start for s in slides],
+        repeated=repeated,
     )

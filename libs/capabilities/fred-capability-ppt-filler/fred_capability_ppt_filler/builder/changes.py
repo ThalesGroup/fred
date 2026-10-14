@@ -24,7 +24,12 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
-from fred_capability_ppt_filler.builder.plan import HIDDEN_FIELDS, DeckPlan, SlidePlan
+from fred_capability_ppt_filler.builder.plan import (
+    HIDDEN_FIELDS,
+    REPEAT_ALIASES,
+    DeckPlan,
+    SlidePlan,
+)
 
 _OPS: Tuple[str, ...] = ("replace", "insert", "remove", "edit")
 _OP_ALIASES = {
@@ -37,6 +42,8 @@ _OP_ALIASES = {
 _SLIDES_ALIASES = ("with", "new_slides", "new_slide", "content")
 # The edit field that gives a slide the template slide of another one.
 LIKE = "like"
+# The edit field that keeps the previous slide's layout, as the user asked.
+REPEAT = "repeat_layout"
 # Slide fields (and their aliases) a model may write in the change itself.
 _SLIDE_KEYS = frozenset(
     ("title", "subtitle", "bullets", "columns", "items", "image", "images", "table")
@@ -142,6 +149,18 @@ class SlideChange(BaseModel):
         # `{"op": "edit", "slide": 7, "like": 5}` means the `like` field.
         if "like" in data and not data.get("field") and "value" not in data:
             data["field"], data["value"] = LIKE, data["like"]
+        # `{"op": "edit", "slide": 7, "repeat_layout": true}` means that field.
+        for key in (REPEAT, *REPEAT_ALIASES):
+            if (
+                op == "edit"
+                and key in data
+                and not data.get("field")
+                and "value" not in data
+            ):
+                data["field"], data["value"] = REPEAT, data[key]
+                known.add(key)
+        if data.get("field") in REPEAT_ALIASES:
+            data["field"] = REPEAT
         # A new slide written in the change itself, not under `slides`.
         flat = {k: v for k, v in data.items() if k in _SLIDE_KEYS}
         unknown = [_unknown(k, op) for k in data if k not in known | set(flat)]
@@ -194,6 +213,7 @@ _FIELDS: Dict[str, Dict[str, _Type]] = {
         "chart": "chart",
         "notes": "text",
         "kind": "text",
+        REPEAT: "flag",
     },
     "column": {"heading": "text", "bullets": ("list", "text")},
     "item": {k: "text" for k in ("number", "heading", "text", "label", "image")},

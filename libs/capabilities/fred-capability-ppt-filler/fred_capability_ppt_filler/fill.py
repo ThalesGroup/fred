@@ -138,6 +138,8 @@ BuildNoteCode = Literal[
     "other_kind",
     "chart_type_changed",
     "chart_shows_shares",
+    "layout_repeated",
+    "layout_not_repeated",
 ]
 
 

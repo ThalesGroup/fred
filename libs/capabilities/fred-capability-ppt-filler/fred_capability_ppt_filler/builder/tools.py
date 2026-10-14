@@ -72,7 +72,7 @@ from pydantic import (
 from pydantic.json_schema import SkipJsonSchema
 
 from fred_capability_ppt_filler.builder.assign import (
-    PARALLEL_SECTIONS,
+    SECTION_RULE,
     SHAPE_HINTS,
     Assignment,
     Repeat,
@@ -98,6 +98,7 @@ from fred_capability_ppt_filler.builder.models import (
 )
 from fred_capability_ppt_filler.builder.plan import (
     HIDDEN_FIELDS,
+    REPEAT_LAYOUT_HINT,
     DeckPlan,
     PlanChart,
     PlanColumn,
@@ -503,17 +504,28 @@ def _without(slide: SlidePlan, bad: set[str]) -> SlidePlan:
 
 
 def _summary(
-    built: List[BuiltSlide], sent: DeckPlan, bad: List[str], numbers: List[int]
+    built: List[BuiltSlide],
+    sent: DeckPlan,
+    bad: List[str],
+    numbers: List[int],
+    repeated: Optional[Dict[int, bool]] = None,
 ) -> List[BuiltSlide]:
     """The render's per-slide record, with the pictures that did not load
-    before the assignment noted on the first part of the slide naming them."""
+    before the assignment, and a layout kept (or not) as the user asked,
+    noted on the first part of the slide concerned."""
     unusable = set(bad)
     noted: set[int] = set()
     for slide in built:
         number = numbers[slide.number - 1]
-        if not unusable or number in noted:
+        if number in noted:
             continue
         noted.add(number)
+        kept = (repeated or {}).get(number)
+        if kept is not None:
+            code = "layout_repeated" if kept else "layout_not_repeated"
+            slide.notes.append(BuildNote(code=code))
+        if not unusable:
+            continue
         source = sent.slides[number - 1]
         named = [source.image, *source.images, *(i.image for i in source.items)]
         count = len({uid for uid in named if uid in unusable})
@@ -667,7 +679,7 @@ def _needs_revision(
 _VARIETY_ASK = (
     "recast some of the slides under `variety` into one of their options (`suggested` names "
     "the kind each slide's content already suits and what that slide holds), rewriting the "
-    "content in that shape and to those sizes{restated}. " + PARALLEL_SECTIONS
+    "content in that shape and to those sizes{restated}. " + SECTION_RULE
 )
 
 
@@ -677,6 +689,7 @@ def _variety(repeats: List[Repeat]) -> List[Dict[str, Any]]:
             "slides": r.slides,
             "kind": r.kind,
             "at_most": r.at_most,
+            **({"in_a_row": True} if r.in_a_row else {}),
             **({"suggested": r.suggested} if r.suggested else {}),
             "options": [f"another '{r.kind}' variant: {u}" for u in r.unused]
             + r.others,
@@ -939,17 +952,13 @@ def _guide(
     if variety == "off":
         return lead
     if max_uses == 1:
-        return (
-            lead + f" Each slide of the deck must look different. {PARALLEL_SECTIONS}"
-        )
+        return lead + f" Each slide must look different. {SECTION_RULE}"
     if variety == "kind":
         return lead + (
-            f" Use any kind below on at most {max_uses} slides per deck, cover, agenda, "
-            f"section and closing aside. {PARALLEL_SECTIONS}"
+            f" Use any kind below on at most {max_uses} slides, cover, agenda, "
+            f"section and closing aside. {SECTION_RULE}"
         )
-    return lead + (
-        f" Use any variant below at most {max_uses} times per deck. {PARALLEL_SECTIONS}"
-    )
+    return lead + f" Use any variant below at most {max_uses} times. {SECTION_RULE}"
 
 
 def _description(
@@ -978,6 +987,8 @@ def _description(
         'When the user wants a slide to look like another ("same layout/design as slide M"), send '
         '{"op": "edit", "slide": N, "field": "like", "value": M}: slide N takes slide M\'s template slide; '
         "resending a slide's current kind or text never changes its design. "
+        'Identical consecutive slides the user asked for: {"op": "edit", "slide": N, "field": '
+        '"repeat_layout", "value": true}. '
         "For each slide write its content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
@@ -994,7 +1005,8 @@ def _description(
         "optionally, its `kind` from the list below (left out, it is inferred from the content; a kind "
         "the template cannot use there is replaced by a close kind that holds the content, never an "
         "unrelated one). The tool picks the "
-        "template slide for each entry."
+        "template slide for each entry. `repeat_layout`: "
+        + REPEAT_LAYOUT_HINT
         + rules
         + " A slide holds only the fields its kind lists below (no subtitle on a kind that lists "
         "none, item numbers only where listed). Respect the limits below: a slide is not "
@@ -1312,7 +1324,9 @@ def build_builder_tools(
                 # the model chose.
                 file_name=file_name,
                 capability_id=PPT_BUILDER_CAPABILITY_ID,
-                summary=_summary(result.report.built, sent, bad, numbers),
+                summary=_summary(
+                    result.report.built, sent, bad, numbers, assignment.repeated
+                ),
             )
             return (
                 f"Delivered: '{file_name}', {result.slide_count} slides. This replaces any deck built earlier "
