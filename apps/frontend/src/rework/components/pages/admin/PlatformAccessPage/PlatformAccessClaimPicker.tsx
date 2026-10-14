@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
-import TextInput from "@shared/atoms/TextInput/TextInput";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessClaimPicker.module.css";
 import pageStyles from "./PlatformAccessPage.module.css";
@@ -78,8 +78,17 @@ export default function PlatformAccessClaimPicker({
     <Dialog
       open
       title={t("rework.platformAccess.picker.title")}
-      maxWidth={900}
+      maxWidth={640}
       scrollMode="children"
+      compactTitle
+      footerStart={
+        <div className={styles.selection}>
+          <span>{t("rework.platformAccess.picker.selected")}</span>
+          <code className={pageStyles.fieldName} title={selectedField} aria-live="polite" data-empty={!path}>
+            {selectedField ?? t("rework.platformAccess.picker.noSelection")}
+          </code>
+        </div>
+      }
       confirmLabel={t("rework.platformAccess.picker.useField")}
       cancelLabel={t("common.cancel")}
       confirmDisabled={!path || !selectable.has(JSON.stringify(path))}
@@ -89,10 +98,20 @@ export default function PlatformAccessClaimPicker({
       }}
     >
       <div className={styles.content}>
-        <div>
+        <div className={styles.toolbar}>
+          <div className={styles.search}>
+            <SearchInput
+              size="xs"
+              value={search}
+              placeholder={t("rework.platformAccess.picker.search")}
+              ariaLabel={t("rework.platformAccess.picker.search")}
+              clearAriaLabel={t("rework.platformAccess.clearSearch")}
+              onChange={setSearch}
+            />
+          </div>
           <Button
             color="primary"
-            variant="outlined"
+            variant="text"
             size="small"
             aria-expanded={advanced}
             onClick={() => {
@@ -103,13 +122,6 @@ export default function PlatformAccessClaimPicker({
             {t(`rework.platformAccess.picker.${advanced ? "simpleFields" : "advancedFields"}`)}
           </Button>
         </div>
-        <TextInput
-          size="small"
-          compact
-          label={t("rework.platformAccess.picker.search")}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
         {own.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
         {own.isError && (
           <div role="alert">
@@ -130,12 +142,6 @@ export default function PlatformAccessClaimPicker({
             {!ownFields.length && <p>{t(`rework.platformAccess.picker.${advanced ? "empty" : "simpleEmpty"}`)}</p>}
           </>
         )}
-        <div className={styles.selection}>
-          <span>{t("rework.platformAccess.picker.selected")}</span>
-          <code className={pageStyles.fieldName} title={selectedField} aria-live="polite" data-empty={!path}>
-            {selectedField ?? t("rework.platformAccess.picker.noSelection")}
-          </code>
-        </div>
       </div>
     </Dialog>
   );

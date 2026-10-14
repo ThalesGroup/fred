@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 .page {
-  --font-body-small: var(--font-body-medium);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
+  margin: 0 auto;
   padding: var(--spacing-m);
+  width: 100%;
+  max-width: 1080px;
   overflow: auto;
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
 }
 .navigation {
   flex-shrink: 0;
@@ -24,18 +26,23 @@
   display: none;
 }
 .dialogBody {
-  --font-body-small: var(--font-body-medium);
-  font: var(--font-body-large);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  font: var(--font-body-medium);
 }
-.section {
+.dialogBody > p {
+  margin: 0;
+}
+.group {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
-  border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-ms);
-  background: var(--surface-container);
-  padding: var(--spacing-m);
-  color: var(--on-surface);
+  min-width: 0;
+}
+.hint {
+  margin: 0;
+  color: var(--on-surface-retreat);
 }
 .row {
   display: flex;
@@ -44,144 +51,206 @@
   gap: var(--spacing-s);
 }
 
+.conditionsHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+.conditionsHeader > h2 {
+  margin: 0;
+  font: var(--font-title-small);
+}
+.conditionsHeader > button:last-child {
+  margin-inline-start: auto;
+}
+.conditions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+/* One track list for the heading line and every condition, so fields line up like table rows. */
+.conditionRow {
+  display: grid;
+  grid-template-columns:
+    var(--spacing-l) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.4fr)
+    minmax(0, 0.8fr) var(--spacing-xl);
+  align-items: start;
+  gap: var(--spacing-xs);
+}
+.conditionLabels {
+  border: 1px solid transparent;
+  padding: 0 var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
 .condition {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-s);
+  gap: var(--spacing-2xs);
   margin: 0;
-  border: 0;
-  border-top: 1px solid var(--outline-muted);
-  padding: var(--spacing-s) 0;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-main);
+  padding: var(--spacing-xs) var(--spacing-s);
   min-width: 0;
 }
-.ruleEditor {
-  container-type: inline-size;
-  max-width: 72rem;
+.condition > p {
+  padding-inline-start: calc(var(--spacing-l) + var(--spacing-xs));
 }
-.section > h2 {
-  margin: 0;
-  font: var(--font-title-large);
+.conditionNumber {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+.conditionCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+/* Per-condition labels only show once the shared heading line is dropped (narrow widths). */
+.conditionCell > span,
+.conditionCell > label {
+  display: none;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+.conditionToggle {
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 2rem;
+}
+.ruleEditor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  container-type: inline-size;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-ms);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  color: var(--on-surface);
 }
 .ruleEditor > p,
 .condition > p {
   margin: 0;
   color: var(--on-surface-retreat);
-  font: var(--font-body-large);
-}
-.ruleEditor > .hint {
-  font: var(--font-body-medium);
-}
-.conditionHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-s);
-  font: var(--font-title-medium);
-}
-.conditionGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.4fr);
-  align-items: start;
-  gap: var(--spacing-s);
 }
 .ruleActions {
   border-top: 1px solid var(--outline-muted);
   padding-top: var(--spacing-s);
 }
-.testResult {
-  --result-accent: var(--success);
-  border: 1px solid var(--result-accent);
-  border-left-width: 4px;
-  border-radius: var(--radius-ms);
-  background: color-mix(in srgb, var(--result-accent) 8%, var(--surface-container));
-  padding: var(--spacing-m);
-  color: var(--on-surface);
-  font: var(--font-body-large);
+.testResults {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
 }
-.testResult[data-outcome="denied"] {
-  --result-accent: var(--error);
+/* One banner per tested fact, coloured by its own outcome. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  border-radius: var(--radius-s);
+  background: var(--success-container);
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-success-container);
 }
-.testResult h3 {
-  margin: 0 0 var(--spacing-s);
-  color: var(--result-accent);
-  font: var(--font-title-large);
+.banner[data-outcome="error"] {
+  background: var(--error-container);
+  color: var(--on-error-container);
 }
-.testResult p {
-  margin: var(--spacing-xs) 0 0;
-}
-.screenReaderOnly {
-  position: absolute;
-  clip-path: inset(50%);
-  padding: 0;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
+.banner > span:last-child {
+  min-width: 0;
 }
 @container (max-width: 700px) {
-  .conditionGrid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  .conditionLabels {
+    display: none;
   }
-  .conditionGrid > :first-child {
-    grid-column: 1 / -1;
+  .conditionRow {
+    grid-template-columns: var(--spacing-l) minmax(0, 1fr) minmax(0, 1fr) var(--spacing-xl);
+  }
+  .conditionRow > :nth-child(2) {
+    grid-row: 1;
+    grid-column: 2 / 4;
+  }
+  .conditionRow > :nth-child(6) {
+    grid-row: 1;
+    grid-column: 4;
+  }
+  .conditionRow > :nth-child(3) {
+    grid-row: 2;
+    grid-column: 2;
+  }
+  .conditionRow > :nth-child(4) {
+    grid-row: 2;
+    grid-column: 3;
+  }
+  .conditionRow > :nth-child(5) {
+    grid-row: 3;
+    grid-column: 2 / 4;
+  }
+  .conditionCell > span,
+  .conditionCell > label {
+    display: block;
+  }
+  .conditionToggle {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: var(--spacing-xs);
   }
 }
 @container (max-width: 400px) {
-  .conditionGrid {
-    grid-template-columns: minmax(0, 1fr);
+  .conditionRow > :nth-child(3) {
+    grid-column: 2 / 4;
+  }
+  .conditionRow > :nth-child(4) {
+    grid-row: 3;
+    grid-column: 2 / 4;
+  }
+  .conditionRow > :nth-child(5) {
+    grid-row: 4;
   }
 }
 .exampleValue {
   overflow-wrap: anywhere;
 }
-.linkCreation {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--spacing-s);
-}
-.linkToolbar {
+.linkSuspendedNotice,
+.importWarning {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-m);
-  margin-bottom: var(--spacing-m);
-}
-.linkToolbar > p {
-  flex: 1 1 20rem;
-  margin: 0;
-  min-width: 0;
-}
-.linkToolbar > button {
-  margin-inline-start: auto;
-}
-.linkSuspendedNotice {
-  display: flex;
-  align-items: center;
   gap: var(--spacing-s);
-  margin: 0 0 var(--spacing-m);
-  border-left: 4px solid var(--warning);
   border-radius: var(--radius-ms);
   background: var(--warning-container);
   padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-warning-container);
-  font: var(--font-body-medium);
+}
+.linkSuspendedNotice {
+  align-items: center;
+}
+.importWarning {
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+.importWarning > p {
+  margin: 0;
 }
 .dialogBody .linkUrlInput {
   font-family: var(--font-family-mono, monospace);
 }
+/* The filter takes a share of the dialog width instead of a fixed one. */
 .linkControls {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
   align-items: end;
   gap: var(--spacing-m);
-  margin-bottom: var(--spacing-m);
 }
-.linkFilter {
-  width: 12rem;
-  max-width: 100%;
-}
-.linkTable {
-  min-height: 0;
-  max-height: 45dvh;
+.linkControls > button {
+  justify-self: end;
 }
 .linkActions {
   min-width: max-content;
@@ -207,31 +276,16 @@
   white-space: nowrap;
 }
 @media (max-width: 600px) {
-  .linkCreation {
+  .linkControls {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.ruleHeader {
+.saveGroup {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
-}
-.ruleHeader h2 {
-  margin: 0;
-  font: var(--font-title-large);
-}
-.accountField {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-  min-width: 0;
-}
-.accountField > span {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+  margin-inline-start: auto;
 }
 .fieldChoice {
   display: flex;
@@ -244,19 +298,20 @@
   padding: 0;
   width: fit-content;
   max-width: 100%;
-  min-height: 2.5rem;
+  min-height: 2rem;
   color: var(--primary);
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
   text-align: start;
 }
 .fieldName {
   display: inline-block;
   border-radius: var(--radius-ms);
-  background: color-mix(in srgb, var(--primary) 8%, var(--surface-container));
-  padding: var(--spacing-xs) var(--spacing-s);
+  background: var(--primary-container);
+  padding: var(--spacing-2xs) var(--spacing-xs);
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  color: var(--on-primary-container);
   font-family: var(--font-family-mono, monospace);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -265,7 +320,9 @@
   flex-shrink: 0;
 }
 .fieldChoice:not(:disabled):hover .fieldName {
-  background: color-mix(in srgb, var(--primary) 16%, var(--surface-container));
+  background:
+    linear-gradient(var(--state-on-primary-container-hover), var(--state-on-primary-container-hover)),
+    var(--primary-container);
 }
 .fieldChoice:disabled {
   opacity: 0.5;
@@ -275,29 +332,20 @@
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
-.valuePrompt {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-}
-.valuePrompt > p {
-  margin: 0;
-}
 .tokenExample {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-m);
+  gap: var(--spacing-xs);
   margin: 0;
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-ms);
+  border-radius: var(--radius-s);
   background: var(--surface-container);
-  padding: var(--spacing-m);
+  padding: var(--spacing-s);
   min-width: 0;
 }
 .tokenExample dt {
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: var(--spacing-2xs);
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
 }
 .tokenExample dd {
   margin: 0;
@@ -305,7 +353,6 @@
 }
 .tokenValue {
   color: var(--on-surface);
-  font: var(--font-body-large);
   overflow-wrap: anywhere;
 }
 .tokenValue > span {
@@ -346,6 +393,32 @@
   }
 }
 
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+.search {
+  flex: 1 1 20rem;
+  min-width: 0;
+  max-width: 30rem;
+}
+/* Same tint as the selected rows it acts on. */
+.selectionBar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-s);
+  background: var(--state-primary-selected);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface);
+}
+.selectionBar > span {
+  flex: 1;
+  min-width: 0;
+}
 .importRow {
   display: flex;
   flex-wrap: wrap;
@@ -360,16 +433,6 @@
 .importCompleted {
   margin: 0;
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
-}
-.activationBody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-  padding: var(--spacing-s);
-}
-.activationBody > p {
-  margin: 0;
 }
 .reviewHeader {
   display: flex;
@@ -389,23 +452,15 @@
   flex-direction: column;
   gap: var(--spacing-m);
 }
-.reviewUserTable {
+/* Bounds a table inside a dialog so only its rows scroll. */
+.boundedTable {
   display: flex;
   flex-direction: column;
   min-height: 0;
   max-height: min(28rem, 40dvh);
 }
-.reviewUserTable > div {
+.boundedTable > div {
   max-height: inherit;
-}
-.unverifiedUsers {
-  margin-top: var(--spacing-m);
-  border-top: 1px solid var(--outline-muted);
-  padding-top: var(--spacing-s);
-}
-.unverifiedUsers > summary {
-  cursor: pointer;
-  font: var(--font-body-large);
 }
 
 .accessSources {

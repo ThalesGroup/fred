@@ -107,6 +107,7 @@ vi.mock("./PlatformAccessRuleEditor", () => ({
   },
 }));
 import PlatformAccessPage from "./PlatformAccessPage";
+import styles from "./PlatformAccessPage.module.css";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
@@ -195,6 +196,21 @@ it("hides earlier rows during a search request or a failed search", () => {
   expect(host.textContent).not.toContain("Alice");
 });
 
+it("states next to the title whether filtering is on", () => {
+  act(() => root.render(<PlatformAccessPage />));
+  const title = () => host.querySelector("h1")!.parentElement!.textContent;
+  expect(title()).toContain("rework.platformAccess.filteringOff");
+  state.filteringEnabled = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(title()).toContain("rework.platformAccess.filteringOn");
+});
+
+it("names each whitelist panel through its tab only", () => {
+  render();
+  expect(host.querySelector('[id$="-users-panel"]')?.querySelectorAll("h2, h3")).toHaveLength(0);
+  expect(host.querySelector('[id$="-users-panel"]')?.textContent).toContain("rework.platformAccess.whitelistHint");
+});
+
 it("exposes only the selected panel and supports keyboard section navigation", () => {
   act(() => root.render(<PlatformAccessPage />));
   const tabs = [
@@ -225,7 +241,7 @@ it("separates user and team whitelist controls with keyboard-accessible sub-tabs
   render();
   const userPanel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
   const teamPanel = host.querySelector<HTMLElement>('[id$="-whitelist-teams-panel"]')!;
-  expect(userPanel.querySelector('input[aria-label="rework.platformAccess.selectUser"]')).not.toBeNull();
+  expect(userPanel.querySelector('input[aria-label="dataTable.selection.selectRow"]')).not.toBeNull();
   expect(userPanel.textContent).toContain("rework.platformAccess.t0Import");
   expect(userPanel.hidden).toBe(false);
   expect(teamPanel.hidden).toBe(true);
@@ -263,7 +279,7 @@ it("preserves rule drafts and user selections across tabs without mutations", as
   act(() => [...host.querySelectorAll("button")].find((node) => node.textContent === "Edit draft")!.click());
   openTab("users");
   search("Al");
-  const selection = host.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.selectUser"]')!;
+  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
   await act(async () => selection.click());
   openTab("rules");
   expect(host.querySelector('[role="tabpanel"]:not([hidden])')?.textContent).toContain("Unsaved rule");
@@ -300,7 +316,7 @@ it("reduces the completed import to a discreet status without an import action",
 
 it("grants selected users and clears selection only on success", async () => {
   render();
-  const selection = host.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.selectUser"]')!;
+  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
   await act(async () => selection.click());
   const button = [...host.querySelectorAll("button")].find(
     (node) => node.textContent === "rework.platformAccess.allowSelected",
@@ -314,16 +330,12 @@ it("grants selected users and clears selection only on success", async () => {
 it("retains selection across changed search/page results", async () => {
   render();
   await act(async () =>
-    host
-      .querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="rework.platformAccess.selectUser"]')!
-      .click(),
+    host.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="dataTable.selection.selectRow"]')!.click(),
   );
   state.users = [{ user_id: "second", username: "Bob", email: "bob@example.org", sources: [] }];
   render();
   await act(async () =>
-    host
-      .querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="rework.platformAccess.selectUser"]')!
-      .click(),
+    host.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="dataTable.selection.selectRow"]')!.click(),
   );
   await act(async () =>
     [...host.querySelectorAll("button")]
@@ -333,6 +345,74 @@ it("retains selection across changed search/page results", async () => {
   expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["user", "second"] } });
 });
 
+it("shows the selection bar only while users are selected and clears it on request", async () => {
+  render();
+  const bar = () => host.querySelector(`.${styles.selectionBar}`);
+  expect(bar()).toBeNull();
+  expect(host.textContent).not.toContain("rework.platformAccess.allowSelected");
+  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
+  await act(async () => selection.click());
+  expect(bar()?.textContent).toContain("rework.platformAccess.selectedCount");
+  await act(async () =>
+    bar()!.querySelector<HTMLButtonElement>('button[aria-label="rework.platformAccess.clearSelection"]')!.click(),
+  );
+  expect(bar()).toBeNull();
+  expect(selection.checked).toBe(false);
+  expect(state.bulk).not.toHaveBeenCalled();
+});
+
+it("selects every user of the page from the table header", async () => {
+  state.users = [
+    { user_id: "first", username: "Alice", email: "", sources: [] },
+    { user_id: "second", username: "Bob", email: "", sources: [] },
+  ];
+  render();
+  await act(async () =>
+    host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectAllOnPage"]')!.click(),
+  );
+  await act(async () =>
+    [...host.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.allowSelected")!
+      .click(),
+  );
+  expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["first", "second"] } });
+});
+
+it("keeps the selection unchanged while a grant is being saved", async () => {
+  let finish!: () => void;
+  state.grant.mockImplementationOnce(() => ({
+    unwrap: () =>
+      new Promise<undefined>((resolve) => {
+        finish = () => resolve(undefined);
+      }),
+  }));
+  render();
+  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((node) => node.textContent === "rework.platformAccess.allow")!.click(),
+  );
+  await act(async () => selection.click());
+  expect(selection.checked).toBe(false);
+  await act(async () => finish());
+  await act(async () => selection.click());
+  expect(selection.checked).toBe(true);
+});
+
+it("says so when a search matches no user and shows progress while searching", () => {
+  state.users = [];
+  render();
+  const panel = host.querySelector<HTMLElement>('[id$="-whitelist-users-panel"]')!;
+  expect(panel.textContent).toContain("rework.platformAccess.noUsers");
+  expect(panel.querySelector('input[type="checkbox"]')).toBeNull();
+  state.usersFetching = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(panel.textContent).not.toContain("rework.platformAccess.noUsers");
+  expect(panel.querySelector('[role="status"]')).not.toBeNull();
+  state.usersFetching = false;
+  search("");
+  expect(panel.textContent).not.toContain("rework.platformAccess.noUsers");
+});
+
 it("retains the selected users after a failed grant", async () => {
   state.bulk.mockImplementationOnce(() => ({
     unwrap: async () => {
@@ -340,7 +420,7 @@ it("retains the selected users after a failed grant", async () => {
     },
   }));
   render();
-  const selection = host.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.selectUser"]')!;
+  const selection = host.querySelector<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')!;
   await act(async () => selection.click());
   await act(async () =>
     [...host.querySelectorAll("button")]
@@ -358,7 +438,7 @@ it("grants more than 100 selections without a product cap", async () => {
     sources: [],
   }));
   render();
-  const choices = [...host.querySelectorAll<HTMLInputElement>('input[aria-label="rework.platformAccess.selectUser"]')];
+  const choices = [...host.querySelectorAll<HTMLInputElement>('input[aria-label="dataTable.selection.selectRow"]')];
   for (const choice of choices) await act(async () => choice.click());
   expect(choices.filter((choice) => choice.checked)).toHaveLength(101);
   expect(choices[100].disabled).toBe(false);
@@ -391,6 +471,7 @@ it("requires configuration and confirmation across all tabs before activating", 
   expect(state.filter).not.toHaveBeenCalled();
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.textContent).toContain("rework.platformAccess.activation.groups");
+  expect(dialog.querySelector(`.${styles.importWarning}`)?.getAttribute("role")).toBe("alert");
   expect(dialog.textContent).toContain("rework.platformAccess.activation.importWarning");
   act(() =>
     [...dialog.querySelectorAll("button")]
@@ -550,13 +631,16 @@ it("keeps unevaluable accounts outside the two main result lists", () => {
   expect(document.querySelector('[role="dialog"]')?.querySelectorAll('[role="tab"]')).toHaveLength(2);
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Known");
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Uncertain");
-  const details = document.querySelector<HTMLDetailsElement>('[role="dialog"] details')!;
-  expect(details.open).toBe(false);
-  expect(details.querySelector("summary")?.textContent).toContain("rework.platformAccess.activation.unverified");
-  expect(details.textContent).toContain("Unverified");
-  const summary = details.querySelector("summary")!;
-  summary.focus();
-  act(() => summary.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const disclosure = [...dialog.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].find((node) =>
+    node.textContent?.includes("rework.platformAccess.activation.unverified"),
+  )!;
+  expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+  expect(dialog.textContent).not.toContain("Unverified");
+  act(() => disclosure.click());
+  expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+  expect(dialog.textContent).toContain("Unverified");
+  expect(dialog.textContent).toContain("rework.platformAccess.activation.unknownHint");
   expect(state.filter).not.toHaveBeenCalled();
   expect(
     document.querySelector('[role="dialog"]')?.querySelectorAll('[role="tab"]')[1].getAttribute("aria-selected"),
@@ -573,7 +657,7 @@ it("starts with blocked users when present and omits unavailable verification wh
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.textContent).toContain("Refused");
   expect(dialog.textContent).not.toContain("Admitted");
-  expect(dialog.querySelector("details")).toBeNull();
+  expect(dialog.textContent).not.toContain("rework.platformAccess.activation.unverified");
   expect(dialog.querySelectorAll('[role="tab"]')[0].getAttribute("aria-selected")).toBe("true");
   act(() => (dialog.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click());
   expect(dialog.textContent).toContain("Admitted");
