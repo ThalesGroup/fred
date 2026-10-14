@@ -39,6 +39,7 @@ from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
 from pptx import Presentation
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+from pptx.oxml.ns import qn
 from pptx.util import Inches
 
 COVER = {"title": "Quarterly review", "subtitle": "Sales"}
@@ -466,6 +467,119 @@ def test_values_carry_their_unit_and_pies_their_percentages(builtin):
     assert pie.plots[0].data_labels.show_percentage
 
 
+PIE = {
+    "type": "pie",
+    "categories": ["Ventes", "R&D", "Support"],
+    "series": [{"name": "Effectif", "values": [27, 15, 58]}],
+}
+
+
+@pytest.mark.parametrize(
+    "key, raw, mode",
+    [
+        ("show", "value", "value"),
+        ("show", "Values", "value"),
+        ("display", "numbers", "value"),
+        ("labels_as", "absolute", "value"),
+        ("show", "pourcentages", "share"),
+        ("show_as", "%", "share"),
+        ("show", "both", "both"),
+        ("display", "les deux", "both"),
+    ],
+)
+def test_pie_labels_mode_is_read_from_loose_names(key, raw, mode):
+    chart = PlanChart.model_validate({**PIE, key: raw})
+    assert (chart.show, chart.asked_show, chart.ignored_fields) == (mode, None, [])
+    assert PlanChart.model_validate(chart.model_dump()).show == mode
+
+
+def test_pie_labels_mode_defaults_to_shares_and_keeps_labels_as_categories():
+    chart = PlanChart.model_validate(
+        {**PIE, "categories": None, "labels": ["A", "B", "C"]}
+    )
+    assert (chart.show, chart.categories) == (None, ["A", "B", "C"])
+    schema = PlanChart.model_json_schema()["properties"]["show"]
+    assert "set show: 'value'" in schema["description"]
+    assert set(schema["anyOf"][0]["enum"]) == {"share", "value", "both"}
+
+
+def test_an_unknown_pie_labels_mode_is_a_named_revision(builtin):
+    _, inventory = builtin
+    chart = PlanChart.model_validate({**PIE, "show": "bubbles"})
+    assert (chart.show, chart.asked_show) == (None, "bubbles")
+    assert PlanChart.model_validate(chart.model_dump()).asked_show == "bubbles"
+    found = _problem(_assigned(inventory, _chart_slide({**PIE, "show": "bubbles"})))
+    assert "chart.show 'bubbles' is not a label mode" in found["problem"]
+
+
+def _labels_xml(built: Any) -> Any:
+    (labels,) = built._chartSpace.iter(qn("c:dLbls"))
+    return labels
+
+
+@pytest.mark.parametrize(
+    "show, value, percent, fmt, linked, separator",
+    [
+        (None, "0", "1", "0%", "0", None),
+        ("share", "0", "1", "0%", "0", None),
+        ("value", "1", "0", '#,##0" collaborateurs"', "0", None),
+        ("both", "1", "1", '#,##0" collaborateurs"', "1", "\n"),
+    ],
+)
+def test_pie_labels_show_what_the_plan_asks(
+    builtin, show, value, percent, fmt, linked, separator
+):
+    template, inventory = builtin
+    chart = {**PIE, "unit": "collaborateurs", **({"show": show} if show else {})}
+    built = _chart(_render(template, inventory, _chart_slide(chart)))
+    labels = _labels_xml(built)
+    assert labels.find(qn("c:showVal")).get("val") == value
+    assert labels.find(qn("c:showPercent")).get("val") == percent
+    number = labels.find(qn("c:numFmt"))
+    assert (number.get("formatCode"), number.get("sourceLinked")) == (fmt, linked)
+    found = labels.find(qn("c:separator"))
+    assert (found.text if found is not None else None) == separator
+    # Linked, the value takes the series' own format: the unit, never "0%".
+    (cache,) = built._chartSpace.iter(qn("c:formatCode"))
+    assert cache.text == '#,##0" collaborateurs"'
+
+
+def test_a_unit_hidden_by_percentages_is_told(builtin):
+    template, inventory = builtin
+    result = _render(
+        template, inventory, _chart_slide({**PIE, "unit": "collaborateurs"})
+    )
+    assert (
+        "Slide 2: the pie's labels show percentages, so unit 'collaborateurs' is not "
+        "shown. To show the numbers with their unit, set chart.show to 'value' "
+        "('both' for the number and its percentage)." in result.report.notes
+    )
+    built = result.report.built[1]
+    assert [n.code for n in built.notes] == ["chart_shows_shares"]
+    shares = _render(template, inventory, _chart_slide({**PIE, "unit": "%"}))
+    assert not any("chart.show" in n for n in shares.report.notes)
+    values = _render(
+        template,
+        inventory,
+        _chart_slide({**PIE, "unit": "collaborateurs", "show": "value"}),
+    )
+    assert not any("chart.show" in n for n in values.report.notes)
+    assert values.report.built[1].notes == []
+
+
+def test_a_labels_mode_on_another_chart_type_is_told(builtin):
+    template, inventory = builtin
+    result = _render(template, inventory, _chart_slide({**REVENUE, "show": "share"}))
+    assert (
+        "Slide 2: chart.show 'share' was not applied: it sets the slice labels of a "
+        "pie or doughnut only; a 'column' chart shows its values. Nothing to do; drop "
+        "chart.show, or set chart.type to 'pie' or 'doughnut'." in result.report.notes
+    )
+    assert result.report.built[1].notes == []
+    plain = _render(template, inventory, _chart_slide(REVENUE))
+    assert not any("chart.show" in n for n in plain.report.notes)
+
+
 def test_a_type_fallback_and_design_keys_are_told(builtin):
     template, inventory = builtin
     result = _render(
@@ -516,6 +630,21 @@ def test_a_chart_value_is_edited_on_the_same_template_slide(builtin):
     assert list(_chart(result).plots[0].series[0].values) == [12, 15, 30, 21]
 
 
+def test_a_pie_is_edited_to_show_its_numbers(builtin):
+    template, inventory = builtin
+    base = _delivered(inventory, _chart_slide({**PIE, "unit": "collaborateurs"}))
+    edit = {"op": "edit", "slide": 2, "field": "chart.show", "value": "value"}
+    plan = _changed(base, edit)
+    assert plan.slides[1].chart is not None and plan.slides[1].chart.show == "value"
+    assignment = assign(inventory, plan, "off")
+    assert not assignment.problems
+    result = render_deck(template, inventory, plan, assignment.patterns)
+    labels = _chart(result).plots[0].data_labels
+    assert (labels.show_value, labels.show_percentage) == (True, False)
+    assert labels.number_format == '#,##0" collaborateurs"'
+    assert not any("chart.show" in n for n in result.report.notes)
+
+
 def test_a_category_added_without_its_values_is_named(builtin):
     _, inventory = builtin
     base = _delivered(inventory, _chart_slide(REVENUE))
@@ -553,8 +682,13 @@ def test_the_tool_offers_charts_only_where_the_template_has_a_place(builtin):
     assert "chart" in schema["$defs"]["BuildSlide"]["properties"]
     description = tools._description(fred, "template_slide", 2)
     assert (
-        "chart {type, categories, series [{name, values}], title, unit}" in description
+        "chart {type, categories, series [{name, values}], title, unit, show}"
+        in description
     )
+    assert "to display numbers instead of percentages on a pie, set show: 'value'" in (
+        description
+    )
+    assert '"chart.show"' in description
     assert "categories max 12" in tools.catalogue(fred)
     none = _chartless(fred)
     schema = tools._args_schema(none).model_json_schema()

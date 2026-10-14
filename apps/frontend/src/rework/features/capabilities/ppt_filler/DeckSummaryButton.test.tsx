@@ -137,7 +137,7 @@ describe("DeckSummaryButton", () => {
     expect(dialog.textContent).not.toContain("capability.ppt_builder");
   });
 
-  it("names a chart built in a content area and a chart type it could not draw", async () => {
+  it("names a chart built in a content area, a chart type it could not draw and hidden numbers", async () => {
     const charts: BuiltSlide[] = [
       {
         number: 1,
@@ -152,6 +152,15 @@ describe("DeckSummaryButton", () => {
         number: 2,
         part: 1,
         parts: 1,
+        title: "Headcount",
+        kind: "chart",
+        template: "Chart",
+        notes: [{ code: "chart_shows_shares" }],
+      },
+      {
+        number: 3,
+        part: 1,
+        parts: 1,
         title: "Shares",
         kind: "bullets",
         template: "Title and Content",
@@ -164,7 +173,8 @@ describe("DeckSummaryButton", () => {
     expect(items[0]).toContain(
       "Le graphique « radar » n'est pas disponible : les données sont affichées en histogramme.",
     );
-    expect(items[1]).toContain("Construite en « Liste à puces » au lieu de « Graphique ».");
+    expect(items[2]).toContain("Construite en « Liste à puces » au lieu de « Graphique ».");
+    expect(items[1]).toContain("Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés.");
   });
 
   it("has a wording for every note code the backend sends", () => {
@@ -184,6 +194,7 @@ describe("DeckSummaryButton", () => {
       "list_continuation",
       "other_kind",
       "chart_type_changed",
+      "chart_shows_shares",
     ];
     for (const locale of [en, fr]) {
       expect(Object.keys(locale.capability.ppt_builder.summary.notes).sort()).toEqual([...codes].sort());
