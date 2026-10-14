@@ -888,6 +888,7 @@ async def test_heavy_job_slot_released_after_successful_fill(no_pdf, monkeypatch
     ctx = _ctx(schema_slides(deck), template_bytes=deck)
 
     import weakref
+
     from fred_capability_ppt_filler import fill as fill_mod
 
     original = fill_mod.Presentation

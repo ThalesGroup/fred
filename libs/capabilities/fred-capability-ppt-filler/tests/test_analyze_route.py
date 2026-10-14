@@ -232,7 +232,7 @@ def test_selection_and_save_each_open_one_reclaimable_presentation(client, monke
     import weakref
 
     from fred_capability_ppt_filler import folder_resolution
-    from fred_capability_ppt_filler.capability import PptFillerConfig, TEMPLATE_SLOT
+    from fred_capability_ppt_filler.capability import TEMPLATE_SLOT, PptFillerConfig
     from fred_sdk.contracts.capability import (
         CapabilityIdentity,
         SaveContext,
@@ -274,6 +274,7 @@ def test_selection_and_save_each_open_one_reclaimable_presentation(client, monke
 
 def test_geometry_failure_reclaims_deck_and_returns_safe_error(client, monkeypatch):
     import weakref
+
     from fred_capability_ppt_filler import folder_resolution
 
     refs = []
