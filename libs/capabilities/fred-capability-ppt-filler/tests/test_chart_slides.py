@@ -19,7 +19,9 @@ native chart drawn in the theme's colours. A few tests are adapted from
 from __future__ import annotations
 
 import io
-from typing import Any, Dict, List
+import re
+import zipfile
+from typing import Any, Dict, List, cast
 
 import pytest
 from builder_decks import (
@@ -39,6 +41,8 @@ from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
 from pptx import Presentation
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.opc.package import Part
 from pptx.oxml.ns import qn
 from pptx.util import Inches
 
@@ -591,6 +595,180 @@ def test_a_type_fallback_and_design_keys_are_told(builtin):
     assert "the chart's color were ignored" in notes
     built = result.report.built[1]
     assert [(n.code, n.kind) for n in built.notes] == [("chart_type_changed", "radar")]
+
+
+# --- the template's own example chart (D11) ---------------------------------------------
+
+# The "Fred Chart" example slide's column chart: one series in a literal colour,
+# with its own value labels.
+DESIGNER_FILL = '<a:srgbClr val="4851C3"/>'
+
+
+def _parts(result: RenderResult) -> List[str]:
+    with zipfile.ZipFile(io.BytesIO(result.pptx)) as archive:
+        return archive.namelist()
+
+
+def test_the_example_chart_keeps_its_design_and_takes_the_plans_data(builtin):
+    template, inventory = builtin
+    money = {
+        **REVENUE,
+        "unit": "M€",
+        "series": [{"name": "R", "values": [1.5, 2, 3, 4]}],
+    }
+    result = _render(template, inventory, _chart_slide(money, bullets=["Q4 leads"]))
+    built = _chart(result)
+    assert built.chart_type == XL_CHART_TYPE.COLUMN_CLUSTERED
+    assert list(built.plots[0].categories) == ["Q1", "Q2", "Q3", "Q4"]
+    assert list(built.plots[0].series[0].values) == [1.5, 2, 3, 4]
+    xml = built._chartSpace.xml
+    assert DESIGNER_FILL in xml and "schemeClr" not in xml.split("<c:ser>")[1]
+    # Its own series labels stay, in the plan's unit.
+    labels = built.plots[0]._element.find(f"{qn('c:ser')}/{qn('c:dLbls')}")
+    assert labels.find(qn("c:numFmt")).get("formatCode") == '#,##0.0" M€"'
+    assert not built.has_legend and not built.has_title
+    assert built.value_axis.tick_labels.number_format == '#,##0.0" M€"'
+
+
+def test_another_type_on_the_example_slide_is_a_fresh_theme_chart(builtin):
+    template, inventory = builtin
+    pie = {**REVENUE, "type": "pie"}
+    result = _render(template, inventory, _chart_slide(pie, bullets=["Q4 leads"]))
+    (frame,) = _charts(result)
+    xml = frame.chart._chartSpace.xml
+    assert frame.chart.chart_type == XL_CHART_TYPE.PIE
+    assert "srgbClr" not in xml and '<a:schemeClr val="accent4"/>' in xml
+
+
+def test_an_example_used_twice_gets_its_own_parts_each_time(builtin):
+    template, inventory = builtin
+    result = _render(
+        template,
+        inventory,
+        _chart_slide(REVENUE, bullets=["Up"]),
+        _chart_slide(
+            {**REVENUE, "series": [{"name": "R", "values": [4, 3, 2, 1]}]},
+            bullets=["Down"],
+        ),
+    )
+    names = _parts(result)
+    assert len(names) == len(set(names))
+    charts = [n for n in names if re.fullmatch(r"ppt/charts/chart\d+\.xml", n)]
+    books = [n for n in names if n.startswith("ppt/embeddings/")]
+    assert len(charts) == 2 and len(books) == 2
+    deck = Presentation(io.BytesIO(result.pptx))
+    frames = _charts(result, 1) + _charts(result, 2)
+    assert len({f.chart.part.partname for f in frames}) == 2
+    assert len({f.chart.part.chart_workbook.xlsx_part.partname for f in frames}) == 2
+    assert [list(f.chart.plots[0].series[0].values) for f in frames] == [
+        [12, 15, 18, 21],
+        [4, 3, 2, 1],
+    ]
+    for i in (1, 2):
+        # Each slide relates its one chart once.
+        rels = deck.slides[i].part.rels
+        assert sum(r.reltype.endswith("/chart") for r in rels.values()) == 1
+
+
+def test_series_beyond_the_examples_take_theme_accents(builtin):
+    template, inventory = builtin
+    two = {
+        **REVENUE,
+        "series": [
+            {"name": "2025", "values": [1, 2, 3, 4]},
+            {"name": "2026", "values": [2, 3, 4, 5]},
+        ],
+    }
+    built = _chart(_render(template, inventory, _chart_slide(two, bullets=["Up"])))
+    first, second = [s._element.xml for s in built.plots[0].series]
+    assert DESIGNER_FILL in first and '<a:schemeClr val="accent2"/>' in second
+    # Several series: a legend, and no value labels.
+    assert built.has_legend and "<c:dLbls>" not in built._chartSpace.xml
+
+
+def test_an_intent_on_the_example_chart_keeps_the_designers_colour(builtin):
+    template, inventory = builtin
+    chart = {**REVENUE, "highlight": "Q3", "sort": "desc"}
+    result = _render(template, inventory, _chart_slide(chart, bullets=["Q4 leads"]))
+    built = _chart(result)
+    assert list(built.plots[0].categories) == ["Q4", "Q3", "Q2", "Q1"]
+    ser = built.plots[0]._element.find(qn("c:ser"))
+    muted = [d.find(qn("c:idx")).get("val") for d in ser.findall(qn("c:dPt"))]
+    assert muted == ["0", "2", "3"] and DESIGNER_FILL in built._chartSpace.xml
+    (label,) = ser.findall(f"{qn('c:dLbls')}/{qn('c:dLbl')}")
+    assert label.find(qn("c:idx")).get("val") == "1"
+    assert [n.code for n in result.report.built[1].notes if n.field] == []
+
+
+_STYLE_REL = "http://schemas.microsoft.com/office/2011/relationships/chartStyle"
+
+
+def _with_chart_style(template: bytes) -> bytes:
+    """The template with a chart style part on each example chart, as PowerPoint saves."""
+    deck = Presentation(io.BytesIO(template))
+    for slide in deck.slides:
+        for shape in slide.shapes:
+            if getattr(shape, "has_chart", False):
+                part = cast(Any, shape).chart.part
+                name = deck.part.package.next_partname("/ppt/charts/style%d.xml")
+                style = Part(
+                    name,
+                    "application/vnd.ms-office.chartstyle+xml",
+                    part.package,
+                    b"<cs/>",
+                )
+                part.relate_to(style, _STYLE_REL)
+    out = io.BytesIO()
+    deck.save(out)
+    return out.getvalue()
+
+
+def test_a_chart_style_part_is_copied_with_its_chart(builtin):
+    template, inventory = builtin
+    result = _render(
+        _with_chart_style(template),
+        inventory,
+        _chart_slide(REVENUE, bullets=["Up"]),
+        _chart_slide(REVENUE, bullets=["Up"]),
+    )
+    styles = {
+        rel.target_part.partname
+        for i in (1, 2)
+        for frame in _charts(result, i)
+        for rel in frame.chart.part.rels.values()
+        if rel.reltype == _STYLE_REL
+    }
+    assert len(styles) == 2
+
+
+def _with_linked_workbook(template: bytes) -> bytes:
+    """The template with its example chart's data linked to an outside workbook,
+    which phase B does not copy."""
+    deck = Presentation(io.BytesIO(template))
+    for slide in deck.slides:
+        for shape in slide.shapes:
+            if getattr(shape, "has_chart", False):
+                cast(Any, shape).chart.part.relate_to(
+                    "file:///data.xlsx", RT.OLE_OBJECT, is_external=True
+                )
+    out = io.BytesIO()
+    deck.save(out)
+    return out.getvalue()
+
+
+def test_a_chart_that_does_not_copy_falls_back_to_a_fresh_one(builtin):
+    template, inventory = builtin
+    result = _render(
+        _with_linked_workbook(template),
+        inventory,
+        _chart_slide(REVENUE, bullets=["Up"]),
+    )
+    (frame,) = _charts(result)
+    xml = frame.chart._chartSpace.xml
+    assert list(frame.chart.plots[0].series[0].values) == [12, 15, 18, 21]
+    assert "srgbClr" not in xml and '<a:schemeClr val="accent1"/>' in xml
+    names = _parts(result)
+    assert len([n for n in names if n.startswith("ppt/charts/chart")]) == 1
 
 
 # --- changes and the tool ---------------------------------------------------------------
