@@ -73,6 +73,7 @@ from pydantic import BaseModel, Field, create_model
 from fred_capability_ppt_filler.concurrency import (
     acquire_heavy_job_slot,
     release_heavy_job_slot,
+    run_heavy_ppt_job,
 )
 from fred_capability_ppt_filler.parser import apply_kept_notes_to_slide
 from fred_capability_ppt_filler.traversal import (
@@ -808,6 +809,7 @@ def build_fill_tools(
             )
         try:
             filled_bytes, fill_error = await asyncio.to_thread(
+                run_heavy_ppt_job,
                 _build_filled_deck,
                 template_bytes,
                 provided,

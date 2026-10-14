@@ -29,6 +29,13 @@ unavailable, never queue: see the acceptance criteria on #2183.
 
 from __future__ import annotations
 
+import gc
+import traceback
+from collections.abc import Callable
+from typing import TypeVar
+
+T = TypeVar("T")
+
 MAX_CONCURRENT_HEAVY_JOBS = 4
 
 _active_jobs = 0
@@ -47,3 +54,27 @@ def release_heavy_job_slot() -> None:
     """Release a slot reserved by a successful :func:`acquire_heavy_job_slot`."""
     global _active_jobs
     _active_jobs = max(0, _active_jobs - 1)
+
+
+def run_heavy_ppt_job(operation: Callable[..., T], *args: object) -> T:
+    """Collect python-pptx cycles in the worker after validation or generation."""
+    try:
+        return operation(*args)
+    except Exception as exc:
+        # Failed worker frames can retain the entire deck through the traceback.
+        pending: list[BaseException] = [exc]
+        seen: set[int] = set()
+        while pending:
+            error = pending.pop()
+            if id(error) in seen:
+                continue
+            seen.add(id(error))
+            traceback.clear_frames(error.__traceback__)
+            pending.extend(
+                linked
+                for linked in (error.__cause__, error.__context__)
+                if linked is not None
+            )
+        raise
+    finally:
+        gc.collect()

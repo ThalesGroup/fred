@@ -225,3 +225,67 @@ def test_analyze_does_not_report_folder_not_found(client):
     assert logo["type"] == "image"
     assert logo["folder"] == "Brand/Logos"
     assert logo.get("folder_tag_id") is None
+
+
+def test_selection_and_save_each_open_one_reclaimable_presentation(client, monkeypatch):
+    import asyncio
+    import weakref
+
+    from fred_capability_ppt_filler import folder_resolution
+    from fred_capability_ppt_filler.capability import TEMPLATE_SLOT, PptFillerConfig
+    from fred_sdk.contracts.capability import (
+        CapabilityIdentity,
+        SaveContext,
+        UploadedFile,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+    from port_fakes import FakeAssets
+
+    original = folder_resolution.Presentation
+    refs = []
+
+    def tracked(*args, **kwargs):
+        presentation = original(*args, **kwargs)
+        refs.append(weakref.ref(presentation))
+        return presentation
+
+    monkeypatch.setattr(folder_resolution, "Presentation", tracked)
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    for _ in range(3):
+        before = len(refs)
+        assert _post_deck(client, deck).json()["errors"] == []
+        assert len(refs) == before + 1
+        assert all(ref() is None for ref in refs)
+        ctx = SaveContext(
+            identity=CapabilityIdentity(user_id="u", session_id="s", team_id="team"),
+            services=RuntimeServices(agent_assets=FakeAssets()),
+        )
+        config = asyncio.run(
+            PptFillerCapability().validate_config(
+                PptFillerConfig(),
+                {TEMPLATE_SLOT: [UploadedFile(filename="a.pptx", content=deck)]},
+                ctx,
+            )
+        )
+        assert config.schema_slides[0].keys[0].key == "name"
+        assert len(refs) == before + 2
+        assert all(ref() is None for ref in refs)
+
+
+def test_validation_failure_reclaims_deck_and_returns_safe_error(client, monkeypatch):
+    import weakref
+
+    from fred_capability_ppt_filler import folder_resolution
+
+    refs = []
+
+    def fail(presentation):
+        refs.append(weakref.ref(presentation))
+        raise ValueError("private internal details")
+
+    monkeypatch.setattr(folder_resolution, "parse_presentation_with_locations", fail)
+    deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
+    body = _post_deck(client, deck).json()
+    assert body["errors"][0]["code"] == "invalid_upload"
+    assert "private" not in str(body)
+    assert refs[0]() is None

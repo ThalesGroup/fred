@@ -3849,6 +3849,9 @@ fields, explain the required markers and slide notes in English and French,
 and link to `/ppt-filler-help`. Fixed slides remain allowed alongside fields.
 The staged file travels with the atomic save (multipart
 `with-assets` endpoints); the preview never persists anything.
+Save transport failures use distinct translated feedback for an unreachable runtime,
+validation timeout, and interrupted communication. These messages avoid internal
+service URLs and do not claim that an interrupted validation means the runtime is stopped.
 
 #### Open UX issues
 

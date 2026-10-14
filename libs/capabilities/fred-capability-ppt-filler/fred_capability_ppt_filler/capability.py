@@ -75,18 +75,19 @@ from pydantic import BaseModel
 from fred_capability_ppt_filler.concurrency import (
     acquire_heavy_job_slot,
     release_heavy_job_slot,
+    run_heavy_ppt_job,
 )
 from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
 from fred_capability_ppt_filler.folder_resolution import (
     CODE_FOLDER_NOT_FOUND,
     FolderResolver,
-    resolve_and_validate_images,
+    analyze_template,
+    resolve_image_folders,
 )
 from fred_capability_ppt_filler.parser import (
     ParseResult,
     SlideSchema,
     TemplateError,
-    parse,
 )
 
 logger = logging.getLogger(__name__)
@@ -223,11 +224,11 @@ def _build_ppt_filler_router() -> APIRouter:
                 ],
             )
         try:
-            result = await asyncio.to_thread(parse, content)
-            # resolver=None: skip the folder→tag lookup (no platform access on
-            # this stateless route) but keep the pure geometry check.
-            return await resolve_and_validate_images(content, result, None)
+            return await asyncio.to_thread(run_heavy_ppt_job, analyze_template, content)
         except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a template error
+            logger.warning(
+                "PowerPoint analysis failed: exception_type=%s", type(exc).__name__
+            )
             return ParseResult(
                 schema=[],
                 errors=[
@@ -235,9 +236,7 @@ def _build_ppt_filler_router() -> APIRouter:
                         slide=0,
                         key="",
                         code=CODE_INVALID_UPLOAD,
-                        message=(
-                            f"The uploaded file could not be read as a .pptx: {exc}"
-                        ),
+                        message="The uploaded file could not be read as a .pptx.",
                     )
                 ],
             )
@@ -379,10 +378,16 @@ class PptFillerCapability(
                 raise RuntimeError(_BUSY_MESSAGE)
             try:
                 try:
-                    result = await asyncio.to_thread(parse, pptx_bytes)
+                    result = await asyncio.to_thread(
+                        run_heavy_ppt_job, analyze_template, pptx_bytes
+                    )
                 except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a 422 reject
+                    logger.warning(
+                        "PowerPoint validation failed: exception_type=%s",
+                        type(exc).__name__,
+                    )
                     raise ValueError(
-                        f"The uploaded file could not be read as a .pptx: {exc}"
+                        "The uploaded file could not be read as a .pptx."
                     ) from exc
 
                 # Space-aware folder resolution + image-location validation. The
@@ -404,7 +409,7 @@ class PptFillerCapability(
                         "available on this save path, but the template declares "
                         "image folders."
                     )
-                result = await resolve_and_validate_images(pptx_bytes, result, resolver)
+                result = await resolve_image_folders(result, resolver)
             finally:
                 release_heavy_job_slot()
             if not result.errors and not any(slide.keys for slide in result.slides):
