@@ -38,7 +38,6 @@ import {
   offeredDraftItems,
   type OverwrittenItem,
   overwrittenItems,
-  REASONING_LABEL_KEY,
   selectedDraft,
 } from "./creationAssistant";
 import styles from "./CreationAssistantDialog.module.css";
@@ -53,8 +52,6 @@ type CreationAssistantDialogProps = {
   capabilities: CapabilityCatalogEntry[];
   /** False when the template has no prompt field: the drafted prompt cannot be applied. */
   hasPromptField: boolean;
-  /** True when the form offers reasoning: the review then always proposes it, ticked. */
-  offersReasoning: boolean;
   /** What the user already wrote ("" when untouched); replacing it needs a confirmation. */
   current: DraftTargets;
   onApply: (draft: AppliedDraft) => void;
@@ -68,7 +65,6 @@ export function CreationAssistantDialog({
   templateId,
   capabilities,
   hasPromptField,
-  offersReasoning,
   current,
   onApply,
   onClose,
@@ -80,7 +76,6 @@ export function CreationAssistantDialog({
   // Everything is ticked by default; the user unticks what they do not want.
   const [ticked, setTicked] = useState<ReadonlySet<DraftItem>>(new Set());
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
-  const [reasoningTicked, setReasoningTicked] = useState(true);
   const [toConfirm, setToConfirm] = useState<OverwrittenItem[] | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -107,11 +102,7 @@ export function CreationAssistantDialog({
   const items = result ? offeredDraftItems(result, hasPromptField) : [];
   const fieldItems = (["name", "role", "description"] as const).filter((item) => items.includes(item));
   const tickedIds = recommendedIds.filter((id) => selectedIds.has(id));
-  const reasoningOn = offersReasoning && reasoningTicked;
-  const draft = result ? selectedDraft(result, ticked, tickedIds, reasoningOn) : {};
-  // The capabilities column: the reasoning tile (when offered) then the recommendations.
-  const columnTotal = recommendedIds.length + (offersReasoning ? 1 : 0);
-  const columnTicked = tickedIds.length + (reasoningOn ? 1 : 0);
+  const draft = result ? selectedDraft(result, ticked, tickedIds) : {};
   const nothingTicked = Object.keys(draft).length === 0;
 
   const runDraft = async () => {
@@ -137,7 +128,6 @@ export function CreationAssistantDialog({
       setResult(drafted);
       setTicked(new Set(offeredDraftItems(drafted, hasPromptField)));
       setSelectedIds(new Set(availableRecommendedIds(drafted.capability_ids ?? [], new Set(capabilityById.keys()))));
-      setReasoningTicked(true);
     } catch (error) {
       if (pending.current !== request) return;
       setErrorKey(agentDraftErrorKey(error));
@@ -171,11 +161,8 @@ export function CreationAssistantDialog({
       return next;
     });
 
-  const toggleCapabilityColumn = () => {
-    const allTicked = columnTicked === columnTotal;
-    setSelectedIds(new Set(allTicked ? [] : recommendedIds));
-    setReasoningTicked(!allTicked);
-  };
+  const toggleCapabilityColumn = () =>
+    setSelectedIds(new Set(tickedIds.length === recommendedIds.length ? [] : recommendedIds));
 
   const tickedFields = fieldItems.filter((item) => ticked.has(item));
   const toggleFields = () =>
@@ -266,22 +253,15 @@ export function CreationAssistantDialog({
                   />
                 </SectionPanel>
               )}
-              {(capabilities.length > 0 || offersReasoning) && (
+              {capabilities.length > 0 && (
                 <SectionPanel
                   title={t(`${KEY}.capabilitiesHeading`)}
-                  state={columnTotal > 0 ? groupState(columnTicked, columnTotal) : null}
+                  state={recommendedIds.length > 0 ? groupState(tickedIds.length, recommendedIds.length) : null}
                   onToggle={toggleCapabilityColumn}
                   className={styles.sideColumn}
                 >
-                  {columnTotal > 0 && (
+                  {recommendedIds.length > 0 && (
                     <ul className={styles.capabilityList}>
-                      {offersReasoning && (
-                        <li>
-                          <SelectableTile checked={reasoningTicked} onToggle={() => setReasoningTicked((on) => !on)}>
-                            {t(REASONING_LABEL_KEY)}
-                          </SelectableTile>
-                        </li>
-                      )}
                       {recommendedIds.map((id) => {
                         const capability = capabilityById.get(id);
                         return (
@@ -294,9 +274,7 @@ export function CreationAssistantDialog({
                       })}
                     </ul>
                   )}
-                  {recommendedIds.length === 0 && capabilities.length > 0 && !offersReasoning && (
-                    <p className={styles.hint}>{t(`${KEY}.noCapabilities`)}</p>
-                  )}
+                  {recommendedIds.length === 0 && <p className={styles.hint}>{t(`${KEY}.noCapabilities`)}</p>}
                 </SectionPanel>
               )}
             </div>

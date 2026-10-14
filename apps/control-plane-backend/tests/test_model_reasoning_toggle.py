@@ -161,6 +161,11 @@ class _FakeDeps:
     def get_agent_instance_store(self) -> Any:
         return object()
 
+    def get_team_routing_policy_store(self) -> Any:
+        from test_main import _FakeRoutingPolicyStore
+
+        return _FakeRoutingPolicyStore()
+
     def get_kpi_writer(self) -> Any:
         return object()
 
@@ -370,145 +375,30 @@ async def _empty_list() -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_no_control_when_the_agent_does_not_offer_reasoning() -> None:
-    # Level 3 lives on the agent itself (`tuning.reasoning_enabled`, set in the
-    # General section of the agent form) — NOT in the capability/tool system:
-    # an agent does not "use" reasoning the way it uses a tool.
-    from control_plane_backend.product.service import _platform_reasoning_control
-
-    assert (
-        _platform_reasoning_control(
-            reasoning_enabled=False,
-            reasoning_default_on=False,
-            reasoning_enabled_model_ids=[THINKING_MODEL],
-        )
-        is None
-    )
-
-
 def test_no_control_when_no_model_reasons_platform_wide() -> None:
-    """§8's diagnosability rule.
-
-    Three of the four gates are invisible from the chat page. If no model's
-    reasoning is on, the toggle provably cannot do anything — so it must be
-    ABSENT, or the predictable support ticket is "I turned reasoning on and
-    nothing happened" with no way to tell which gate blocked.
-    """
+    """§8's diagnosability rule: with no model's reasoning on, the row provably
+    cannot do anything, so it must be ABSENT rather than present-and-inert."""
 
     from control_plane_backend.product.service import _platform_reasoning_control
 
-    assert (
-        _platform_reasoning_control(
-            reasoning_enabled=True,
-            reasoning_default_on=False,
-            reasoning_enabled_model_ids=[],
-        )
-        is None
-    )
+    assert _platform_reasoning_control(reasoning_enabled_model_ids=[]) is None
 
 
-def test_control_is_emitted_when_every_gate_is_open() -> None:
+def test_control_is_emitted_without_an_agent_opt_in() -> None:
+    """The platform activation alone is the gate: there is no per-agent offer
+    any more, and no starting value either — the composer seeds the row from
+    the chosen model's team reasoning default."""
+
     from control_plane_backend.product.service import (
         PLATFORM_CHAT_CONTROL_OWNER,
         _platform_reasoning_control,
     )
 
     control = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
+        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL]
     )
 
     assert control is not None
     assert control.widget == "reasoning_toggle"
-    # No owning capability: reasoning is a platform chat option, so the
-    # descriptor carries the reserved sentinel owner rather than a capability id.
     assert control.capability_id == PLATFORM_CHAT_CONTROL_OWNER
-    # Default OFF is a safety decision, not a style one: Amendment C measured
-    # reasoning re-issuing duplicate tool calls in 10/10 turns on this stack.
-    # Author-settable since Amendment B, but this stays the value an author
-    # who does nothing gets. No model identity rides along any more (#2387) —
-    # see test_params_never_carry_a_model_identity below.
-    assert control.params == {"default": False}
-
-
-def test_params_carry_only_the_starting_value() -> None:
-    """#2387 — the control is a plain on/off switch and says nothing more.
-
-    It used to ship `model_id`/`display_name` (the single reasoning-enabled
-    model's identity, which the composer rendered as its model label) and
-    `effort` (that model's ops-authored `settings.reasoning_effort`). The
-    identity was wrong — it named the model whose REASONING was on, not the one
-    a turn routes to — and the effort went with it when the menu became a plain
-    on/off. The level a turn runs with stays the pod's business: it applies the
-    live settings value either way.
-    """
-
-    from control_plane_backend.product.service import _platform_reasoning_control
-
-    control = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
-    )
-    assert control is not None
-    assert control.params == {"default": False}
-
-    # Several enabled models change nothing — there is no per-model value left
-    # to disagree about, which is the point of removing them.
-    two = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
-    )
-    assert two is not None
-    assert two.params == {"default": False}
-
-
-# ---------------------------------------------------------------------------
-# Amendment B — the author decides where the composer's switch STARTS
-# ---------------------------------------------------------------------------
-
-
-def test_author_can_preselect_reasoning_on_new_conversations() -> None:
-    """`reasoning_default_on` seeds `params.default`, which `useComposerSettings`
-    reads as the composer's initial value for a fresh session."""
-
-    from control_plane_backend.product.service import _platform_reasoning_control
-
-    control = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=True,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
-    )
-
-    assert control is not None
-    assert control.params == {"default": True}
-
-
-def test_preselect_cannot_conjure_a_control_the_gates_refused() -> None:
-    """Amendment B decides where the switch starts, never whether there is one.
-
-    The failure this guards against is an author leaving the default ON, then
-    withdrawing the offer, and reasoning silently staying on for users — §8's
-    gates must still win, and the stored value must stay inert.
-    """
-
-    from control_plane_backend.product.service import _platform_reasoning_control
-
-    assert (
-        _platform_reasoning_control(
-            reasoning_enabled=False,
-            reasoning_default_on=True,
-            reasoning_enabled_model_ids=[THINKING_MODEL],
-        )
-        is None
-    )
-    assert (
-        _platform_reasoning_control(
-            reasoning_enabled=True,
-            reasoning_default_on=True,
-            reasoning_enabled_model_ids=[],
-        )
-        is None
-    )
+    assert control.params is None
