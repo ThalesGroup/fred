@@ -18,6 +18,9 @@ Mermaid, rendered by GitHub.
 
 ## Keeping it true
 
+The [fred-manager branch workflow](../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac)
+defines the implementation, independent review and final documentation pass.
+
 - **Same commit.** A change to code described here updates its chapter in the same
   commit. The dossier describes what is implemented, in the present tense; plans,
   progress and status belong elsewhere.

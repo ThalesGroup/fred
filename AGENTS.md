@@ -106,6 +106,35 @@ set of related files has changed. During implementation, run only the narrow
 check needed to resolve a concrete risk. Honor a developer's request for manual
 feature validation before running tests.
 
+## fred-manager reconstruction on chore/rust-rebac
+
+Rebuild Fred's Python behavior in Rust one complete feature at a time, using
+the organization/team/project model. For each feature, inventory the existing
+roles, permissions, edge cases and configuration, logging and security
+conventions before implementing it. Preserve their meaning in the new model;
+do not silently drop a supported role, accept an ineffective grant, weaken a
+check, or defer a known weakness within the step. Source inconsistencies must
+be resolved explicitly, with regression coverage, rather than copied blindly.
+Feature boundaries do not excuse incomplete behavior within an accepted step.
+
+Each step is one clean, tested and documented commit on this branch. Do not
+push without the developer's explicit agreement. Obtain independent review,
+fix every actionable finding with a regression test, and have the corrections
+reviewed before closing the step. Tests proving an architecture invariant
+carry `// Proves: I<n>`. Never edit an applied migration; add a new migration.
+
+After implementation and the review/correction passes, perform a dedicated
+documentation pass over the arc42 dossier in `docs/architecture/`. Every
+fred-manager change updates the relevant dossier chapters in the same commit.
+Describe only implemented behavior in the present tense: no progress, plans,
+status, or lists of missing features. Planning belongs in OpenSpec. Regenerate
+derived blocks instead of copying code into prose.
+
+Before committing, run `make test`, `make test-integration` and
+`make code-quality` in `apps/fred-manager`, plus
+`make -C docs/architecture check` from the repository root. Validate OpenSpec
+artifacts when the step changes them.
+
 ## Author review before readiness
 
 Before declaring implementation ready or requesting final PR review, apply
