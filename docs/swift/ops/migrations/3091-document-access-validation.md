@@ -12,6 +12,9 @@ Deployments using Knowledge Flow corpus search, including OpenSearch. Explicit
 document selections now respect the requested ownership context. Stale indexed
 library memberships no longer authorize results after a document is unlinked.
 Selecting a corpus document also preserves enabled conversation attachments.
+Search result KPIs now count authorized hits per strategy branch. Rejected
+candidates can therefore lower hit counts and increase empty-result counts;
+metric names and the per-branch sampling unit remain unchanged.
 
 ## Prerequisites
 

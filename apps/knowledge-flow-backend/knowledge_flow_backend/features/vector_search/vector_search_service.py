@@ -411,8 +411,6 @@ class VectorSearchService:
                 dims={**base_dims, "status": "ok"},
                 actor=self._kpi_actor(user=user),
             )
-        hits_count = len(ann_hits)
-        self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
         return ann_hits
 
     async def _strict(
@@ -488,8 +486,6 @@ class VectorSearchService:
                 actor=self._kpi_actor(user=user),
             )
 
-        hits_count = len(hits)
-        self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
         return hits
 
     async def _hybrid(
@@ -565,8 +561,6 @@ class VectorSearchService:
                 actor=self._kpi_actor(user=user),
             )
 
-        hits_count = len(hits)
-        self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
         return hits
 
     # ---------- unified public API -------------------------------------------
@@ -659,6 +653,11 @@ class VectorSearchService:
                 SearchPolicyName.hybrid: self._hybrid,
                 SearchPolicyName.semantic: self._semantic,
             }.get(policy_key, self._hybrid)
+            stats_policy = policy_key
+            if (policy_key == SearchPolicyName.strict and not isinstance(self.vector_store, SupportsFullTextSearch)) or (
+                policy_key == SearchPolicyName.hybrid and not isinstance(self.vector_store, SupportsHybridSearch)
+            ):
+                stats_policy = SearchPolicyName.semantic
 
             async def search_fn(*, question: str, user: KeycloakUser, k: int, library_tags_ids: list[str] | None, metadata_terms_extra: dict[str, Any]) -> list[VectorSearchHit]:
                 candidates = await strategy(question=question, user=user, k=k, library_tags_ids=library_tags_ids, metadata_terms_extra=metadata_terms_extra)
@@ -689,7 +688,10 @@ class VectorSearchService:
                 tag_sets = dict.fromkeys(tuple(doc.metadata["tag_ids"]) for doc, _ in documents)
                 resolved = await asyncio.gather(*(self._tags_meta_from_ids(list(tags), user) for tags in tag_sets))
                 tags_meta = dict(zip(tag_sets, resolved))
-                return [await self._to_hit(doc, score, rank, user, tags_meta[tuple(doc.metadata["tag_ids"])]) for rank, (doc, score) in enumerate(documents, 1)]
+                results = [await self._to_hit(doc, score, rank, user, tags_meta[tuple(doc.metadata["tag_ids"])]) for rank, (doc, score) in enumerate(documents, 1)]
+                # Keep the strategy-call denominator, but count only authorized results.
+                self._record_search_stats(base_dims=self._kpi_search_dims(policy=stats_policy.value), hits_count=len(results), top_k=k, user=user)
+                return results
 
             logger.info(
                 "[OBS][SEARCH] session=%s q=%r policy=%s libs=%d session_scope=%s top_k=%d",

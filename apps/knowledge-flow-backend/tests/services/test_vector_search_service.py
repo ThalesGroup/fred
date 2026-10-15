@@ -84,16 +84,19 @@ class DummyVectorStore:
 
 
 class DummyKPI:
+    def __init__(self):
+        self.events = []
+
     @contextmanager
     def timer(self, *_args, **_kwargs):
         dims = {}
         yield dims
 
-    def count(self, *_args, **_kwargs):
-        return None
+    def count(self, name, value, *, dims, actor):
+        self.events.append((name, value, dims))
 
-    def gauge(self, *_args, **_kwargs):
-        return None
+    def gauge(self, name, value, *, dims, actor):
+        self.events.append((name, value, dims))
 
 
 class DummyTag:
@@ -470,6 +473,63 @@ async def test_authority_failure_never_enriches_candidates(guarded_search):
     svc._to_hit = unexpected
     with pytest.raises(TimeoutError, match="authority unavailable"):
         await run(libraries=["a"])
+    assert not any(name in SEARCH_RESULT_METRICS for name, _, _ in svc.kpi.events)
+
+
+SEARCH_RESULT_METRICS = {"rag.search_hits_total", "rag.search_top_k_total", "rag.search_hit_ratio", "rag.search_empty_total"}
+
+
+def assert_search_stats(svc, policy, counts, top_k):
+    dims = {"policy": policy.value, "backend": type(svc.vector_store).__name__, "index": None, "status": "ok"}
+    expected = []
+    for count in counts:
+        expected.extend([("rag.search_hits_total", count, dims), ("rag.search_top_k_total", top_k, dims)])
+        if top_k > 0:
+            expected.append(("rag.search_hit_ratio", count / top_k, dims))
+        if count == 0:
+            expected.append(("rag.search_empty_total", 1, dims))
+    assert [event for event in svc.kpi.events if event[0] in SEARCH_RESULT_METRICS] == expected
+    assert [event for event in svc.kpi.events if event[0] == "rag.search_total"] == [("rag.search_total", 1, dims)] * len(counts)
+
+
+@pytest.mark.parametrize("policy", list(SearchPolicyName))
+@pytest.mark.parametrize("keep_valid", [False, True])
+async def test_search_stats_count_only_authorized_candidates(guarded_search, policy, keep_valid):
+    svc, store, current, _, run = guarded_search
+    current.tags = {"moved": ["b"], "denied": ["a"], "valid": ["a"]}
+    current.denied = {"denied"}
+    store.hits = [candidate(uid, "a") for uid in ["moved", "denied", "deleted"] + (["valid"] if keep_valid else [])]
+
+    hits = await run(libraries=["a"], policy_name=policy)
+
+    assert [hit.uid for hit in hits] == (["valid"] if keep_valid else [])
+    assert_search_stats(svc, policy, [len(hits)], 100)
+
+
+@pytest.mark.parametrize("policy", [SearchPolicyName.strict, SearchPolicyName.hybrid])
+@pytest.mark.parametrize("keep_valid", [False, True])
+async def test_search_stats_preserve_semantic_fallback_dimensions(guarded_search, policy, keep_valid):
+    svc, _, current, _, run = guarded_search
+    svc.vector_store = DummyVectorStore()
+    current.tags = {"doc-1": ["a"]} if keep_valid else {}
+
+    hits = await run(policy_name=policy)
+
+    assert [hit.uid for hit in hits] == (["doc-1"] if keep_valid else [])
+    assert_search_stats(svc, SearchPolicyName.semantic, [len(hits)], 100)
+
+
+@pytest.mark.parametrize("policy", list(SearchPolicyName))
+async def test_search_stats_keep_one_sample_per_authorized_scope_branch(guarded_search, policy, test_user):
+    svc, store, current, _, run = guarded_search
+    current.tags = {"corpus": ["a"]}
+    store.hits = [candidate("corpus", "a"), candidate("attachment", scope="session", user_id=test_user.uid, session_id="session")]
+
+    hits = await run(libraries=["a"], document_uids=["corpus"], session_id="session", policy_name=policy)
+
+    assert {hit.uid for hit in hits} == {"corpus", "attachment"}
+    # Library and explicit-document branches overlap; final merging deduplicates them.
+    assert_search_stats(svc, policy, [1, 1, 1], 100)
 
 
 @pytest.mark.parametrize("irrelevant", [0, 1000])
