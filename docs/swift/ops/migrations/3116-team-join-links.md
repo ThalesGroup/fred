@@ -121,7 +121,7 @@ leaving it, deletes their join records on that team's Free links: being added
 back by hand or through a team invite link does not restore the Free source,
 only a new Free enrollment does.
 
-Impact level: declared `minor` because the upgrade needs operator actions
-(grants, reviewing Free-team members) but no configuration change. Reviewer
-question: the Free admission change can refuse people who were admitted before
-the upgrade, which may justify `major`.
+Impact level: `minor` because deployments using Free-team admission need a
+targeted review and remediation before upgrading. The change can refuse
+previously admitted members without another access source, but it does not
+replace the admission model or require an incompatible data migration.
