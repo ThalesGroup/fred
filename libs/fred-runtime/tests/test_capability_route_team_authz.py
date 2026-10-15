@@ -101,13 +101,14 @@ def _readiness(client):
     )
 
 
-def _copy(client):
+def _copy(client, asset_files: dict[str, str] | None = None):
     request = CapabilityConfigCopyRequest(
         config=StoredCapabilityConfig(schema_version=_VERSION, config={}),
         source_team_id="team-1",
         source_agent_instance_id="agent-1",
         target_team_id="team-2",
         target_agent_instance_id="agent-2",
+        asset_files=asset_files,
     )
     return client.post(
         "/pod/v1/agents/capabilities/tracer_echo/copy-config",
@@ -154,5 +155,19 @@ def test_a_save_naming_no_team_is_refused(tmp_path, monkeypatch) -> None:
     client, _ = _secured(tmp_path, monkeypatch, member=True)
     try:
         assert _validate(client, team_id=None).status_code == 422
+    finally:
+        client.__exit__(None, None, None)
+
+
+@pytest.mark.usefixtures("_pod_inbound_security")
+def test_a_snapshot_import_checks_the_target_team_only(tmp_path, monkeypatch) -> None:
+    client, rebac = _secured(tmp_path, monkeypatch, member=True)
+    try:
+        assert _copy(client, asset_files={}).status_code == 200
+        checks = [
+            (call.args[1], call.args[2])
+            for call in rebac.check_user_team_permission_or_raise.await_args_list
+        ]
+        assert checks == [(TeamPermission.CAN_UPDATE_AGENTS, "team-2")]
     finally:
         client.__exit__(None, None, None)

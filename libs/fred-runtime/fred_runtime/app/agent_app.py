@@ -6040,8 +6040,10 @@ def _build_agent_router(
         """
 
         capability = _installed_capability(http_request, capability_id)
-        # Control-plane requires agent editing in both teams for a copy.
-        await _require_team(caller, body.source_team_id)
+        # Control-plane requires agent editing in both teams for a copy. A
+        # snapshot import sends its files inline and never reads the source.
+        if body.asset_files is None:
+            await _require_team(caller, body.source_team_id)
         await _require_team(caller, body.target_team_id)
         try:
             return await prepare_capability_copy(
