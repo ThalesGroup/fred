@@ -433,3 +433,38 @@ async def test_free_team_whose_only_joiner_is_deleted_is_no_admission_source(
     assert not (
         await service.state_view(access, await access.state())
     ).has_admission_sources
+
+
+@pytest.mark.asyncio
+async def test_removal_from_a_team_without_free_links_skips_the_policy_lock(
+    access, monkeypatch
+):
+    access.rebac = RemovableMembers()
+    actor, member = user("accepted"), user("accepted")
+    await enabled_token(access)  # a team link is not a Free link
+    access.rebac.members[member.uid] = {"demo"}
+
+    def lock_unavailable(*args, **kwargs):
+        raise HTTPException(503, "platform_access_unavailable")
+
+    monkeypatch.setattr(access.store, "mutation", lock_unavailable)
+    await remove_from_demo(access, monkeypatch, actor, member)
+    assert "demo" not in access.rebac.members[member.uid]
+
+
+@pytest.mark.asyncio
+async def test_removal_does_not_need_platform_access_installed(access, monkeypatch):
+    from fred_core.security.platform_access import access_control
+
+    access.rebac = RemovableMembers()
+    actor, member = user("accepted"), user("accepted")
+    access.rebac.members[member.uid] = {"demo"}
+    original = access_control.forget_free_joins
+
+    async def uninstalled(team_id, user_id):
+        monkeypatch.setattr(access_control, "_installed", None)
+        await original(team_id, user_id)
+
+    monkeypatch.setattr(access_control, "forget_free_joins", uninstalled)
+    await remove_from_demo(access, monkeypatch, actor, member)
+    assert "demo" not in access.rebac.members[member.uid]
