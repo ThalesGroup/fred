@@ -120,16 +120,22 @@ class PlatformAccessStore:
 
     @staticmethod
     def user_filter(query: str) -> list[ColumnElement[bool]]:
-        return [PlatformAccessStore.user_search(query)] if query else []
+        if not query:
+            return []
+        try:
+            return [UserRow.id == UUID(query)]
+        except ValueError:
+            return [PlatformAccessStore.user_search(query)]
 
     async def users_with_exceptions(
         self,
         offset: int,
-        limit: int,
+        limit: int | None,
         query: str = "",
         session: AsyncSession | None = None,
         *,
         exceptions_only: bool = False,
+        identities_only: bool = False,
     ) -> list[tuple[UserRow, PlatformAccessUserRow | None]]:
         """One page of users, each with their individual exception when they hold one."""
         async with self.read(session) as s:
@@ -147,6 +153,8 @@ class PlatformAccessStore:
                 )
                 .where(*self.user_filter(query))
             )
+            if identities_only:
+                statement = statement.where(UserRow.username.is_not(None))
             # The whitelist reads newest grant first; a batch shares one date and stays alphabetical.
             statement = (
                 statement.order_by(
@@ -255,7 +263,11 @@ class PlatformAccessStore:
             return row
 
     async def user_count(
-        self, query: str = "", *, exceptions_only: bool = False
+        self,
+        query: str = "",
+        *,
+        exceptions_only: bool = False,
+        identities_only: bool = False,
     ) -> int:
         async with self.read() as session:
             statement = select(func.count()).select_from(UserRow)
@@ -263,6 +275,8 @@ class PlatformAccessStore:
                 statement = statement.join(
                     PlatformAccessUserRow, PlatformAccessUserRow.user_id == UserRow.id
                 )
+            if identities_only:
+                statement = statement.where(UserRow.username.is_not(None))
             return int(
                 (await session.scalar(statement.where(*self.user_filter(query)))) or 0
             )

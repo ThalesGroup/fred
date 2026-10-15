@@ -27,6 +27,7 @@ Only people holding the existing platform-management permission SHALL read or mo
 - **GIVEN** `user_directory: local`
 - **WHEN** an administrator searches, lists, or grants an individual exception
 - **THEN** Fred's local identities SHALL supply the profile and unknown local identities SHALL be rejected
+- **AND** ID-only rows created as Keycloak exception references SHALL NOT become local identities
 
 #### Scenario: Directory profile changes or disappears
 
@@ -39,6 +40,17 @@ Only people holding the existing platform-management permission SHALL read or mo
 
 - **WHEN** the configured directory is unavailable during a search, grant validation, or initial-import preparation
 - **THEN** the operation SHALL report an availability error and SHALL NOT treat an empty fallback as authoritative or partially grant exceptions
+
+#### Scenario: Keycloak search is too broad
+
+- **WHEN** an add-user query matches more than 1000 raw Keycloak records
+- **THEN** an exact username or email match SHALL remain selectable
+- **AND** otherwise the search SHALL request a narrower query without offering an incomplete result as the full population
+
+#### Scenario: Administrator finds their own sources by identity ID
+
+- **WHEN** an administrator previews their own admission sources from the rule editor
+- **THEN** the lookup SHALL use the connected identity ID rather than a potentially broad username search
 
 #### Scenario: Leaving an allowed or Free team revokes its global source
 
@@ -95,6 +107,7 @@ The system SHALL provide an administrator-triggered preview and one atomic impor
 
 - **WHEN** T0 has completed, one imported exception is removed, and another person registers afterward
 - **THEN** neither a repeated import request nor restart SHALL restore the removed entry or admit the later registration
+- **AND** the completed status SHALL remain readable without scanning the directory again
 
 #### Scenario: Concurrent imports
 

@@ -4022,9 +4022,9 @@
         "searching": "Recherche en cours...",
         "noMatch": "Aucun utilisateur ne correspond à cette recherche.",
         "searchFailed": "La recherche n'a pas abouti. Réessayez.",
+        "searchTooBroad": "Trop de résultats. Précisez la recherche.",
         "alreadyGranted": "Déjà dans la liste blanche",
-        "more_one": "{{count}} autre résultat. Précisez la recherche pour l'afficher.",
-        "more_other": "{{count}} autres résultats. Précisez la recherche pour les afficher."
+        "more": "D'autres résultats sont disponibles. Précisez la recherche pour les afficher."
       },
       "addedOn": "Ajouté le",
       "origin": {

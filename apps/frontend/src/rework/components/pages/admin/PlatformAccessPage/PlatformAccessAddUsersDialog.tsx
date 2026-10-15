@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
 import AddPeopleDialog from "@shared/organisms/AddPeopleDialog/AddPeopleDialog";
 import type { PlatformAccessUser } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePlatformAccessUsersQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -47,6 +48,7 @@ export default function PlatformAccessAddUsersDialog({
 
   const searchable = open && searchQuery.length >= 2;
   const users = usePlatformAccessUsersQuery({ offset: 0, limit: PAGE_SIZE, query: searchQuery }, { skip: !searchable });
+  const searchTooBroad = users.isError && normalizeApiError(users.error).detail === "platform_access_search_too_broad";
   // Only the answer to what is typed right now is offered, never an earlier search.
   const settled = searchable && wanted === searchQuery && !users.isFetching;
   const page = settled && !users.isError ? users.currentData : undefined;
@@ -69,7 +71,7 @@ export default function PlatformAccessAddUsersDialog({
     options.push({
       key: "more-matches",
       value: lastShown,
-      label: t("rework.platformAccess.addDialog.more", { count: page.total - page.items.length }),
+      label: t("rework.platformAccess.addDialog.more"),
       disabled: true,
       description: undefined,
     });
@@ -85,7 +87,9 @@ export default function PlatformAccessAddUsersDialog({
         !settled
           ? "rework.platformAccess.addDialog.searching"
           : users.isError
-            ? "rework.platformAccess.addDialog.searchFailed"
+            ? searchTooBroad
+              ? "rework.platformAccess.addDialog.searchTooBroad"
+              : "rework.platformAccess.addDialog.searchFailed"
             : "rework.platformAccess.addDialog.noMatch",
       )}
       options={options}

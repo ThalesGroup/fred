@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
   users: [] as PlatformAccessUser[],
   total: undefined as number | undefined,
   fetching: false,
-  error: false,
+  error: false as unknown,
   query: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
@@ -23,9 +23,12 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     if (options.skip) return { isFetching: false, isError: false };
     return {
       isFetching: state.fetching,
-      isError: state.error,
+      isError: Boolean(state.error),
+      error: state.error,
       currentData:
-        state.fetching || state.error ? undefined : { total: state.total ?? state.users.length, items: state.users },
+        state.fetching || Boolean(state.error)
+          ? undefined
+          : { total: state.total ?? state.users.length, items: state.users },
     };
   },
 }));
@@ -152,12 +155,12 @@ it("shows a person who already has individual access as such and not selectable"
   expect(option("bob").textContent).not.toContain("alreadyGranted");
 });
 
-it("says how many more people match than the page shows, on a line that cannot be selected", () => {
+it("indicates more people match than the page shows, on a line that cannot be selected", () => {
   state.total = 40;
   show();
   search("al");
   const more = option("rework.platformAccess.addDialog.more");
-  expect(more.textContent).toContain('{"count":38}');
+  expect(more.textContent).toBe("rework.platformAccess.addDialog.more");
   act(() => more.click());
   expect(pendingText()).toBe("");
 });
@@ -176,6 +179,9 @@ it("tells searching, no match and a failed search apart, never showing an earlie
   state.error = true;
   search("alzzz");
   expect(portal().textContent).toContain("rework.platformAccess.addDialog.searchFailed");
+  state.error = { status: 422, data: { detail: "platform_access_search_too_broad" } };
+  search("alzzzz");
+  expect(portal().textContent).toContain("rework.platformAccess.addDialog.searchTooBroad");
   // Typing again hides the previous answer until the new one arrives.
   state.error = false;
   state.users = [alice];
