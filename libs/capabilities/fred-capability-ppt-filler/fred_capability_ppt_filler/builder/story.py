@@ -138,7 +138,9 @@ class Found:
     message or tool result for sums and differences."""
 
     def __init__(self, groups: List[List[Reading]]) -> None:
-        entries = sorted({r for g in groups for r in g if r[0] > 0})[:_MAX_NUMBERS]
+        # The latest sources first: past the cap, the oldest numbers go.
+        latest = dict.fromkeys(r for g in groups for r in g if r[0] > 0)
+        entries = sorted(list(latest)[:_MAX_NUMBERS])
         self.values = [v for v, _ in entries]
         self.decimals = [d for _, d in entries]
         self.groups = [
@@ -197,13 +199,15 @@ def found_numbers(sources: Sequence[str]) -> Found:
     """Numbers of the user's messages and the tool results, latest first
     within the scan's bounds."""
     groups: List[List[Reading]] = []
+    seen: Set[float] = set()
     total = 0
     for text in reversed(sources):
-        if total >= _MAX_TOTAL_CHARS:
+        if total >= _MAX_TOTAL_CHARS or len(seen) >= _MAX_NUMBERS:
             break
         text = text[:_MAX_SOURCE_CHARS]
         total += len(text)
         groups.append([r for readings in numbers_in(text) for r in readings])
+        seen.update(v for v, _ in groups[-1])
     return Found(groups)
 
 
