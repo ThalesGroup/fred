@@ -323,7 +323,8 @@ Coverage includes:
 - Runtime UID scoping and a new library document becoming retrievable on the
   next turn of the same session.
 - A late chat attachment becoming retrievable in an existing session; isolation
-  from other users/sessions, including when a corpus document is selected.
+  from other users/sessions, including when a corpus document is selected, through
+  both a real runtime turn and the direct Knowledge Flow search API.
 
 These tests assert the intended behavior without `xfail`. An affected deployment
 is expected to fail the relevant assertions; these are diagnostic tests, not a

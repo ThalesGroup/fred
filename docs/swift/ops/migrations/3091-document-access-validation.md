@@ -1,14 +1,17 @@
 ---
 schema: 1
-title: "Extend live validation of document access and conversation changes"
+title: "Enforce current document scope in corpus search"
 impact: none
 configuration: none
-configuration_reason: "Only the validation harness, tests and documentation change; deployed service configuration is unchanged."
-no_action_reason: "No runtime behavior, schema or stored data changes are shipped. The new tests run against an existing deployment."
+configuration_reason: "The fix uses existing metadata and authorization services; no chart or service setting changes."
+no_action_reason: "Normal Knowledge Flow deployment applies the search restriction without a schema migration or reindex."
 ---
 ## Applicability
 
-Operators and developers running the live validation campaign.
+Deployments using Knowledge Flow corpus search, including OpenSearch. Explicit
+document selections now respect the requested ownership context. Stale indexed
+library memberships no longer authorize results after a document is unlinked.
+Selecting a corpus document also preserves enabled conversation attachments.
 
 ## Prerequisites
 
@@ -26,19 +29,30 @@ No chart or service configuration changes are required.
 
 ## Upgrade
 
-Deploy normally. No migration or production data repair is included.
+Deploy the updated Knowledge Flow image normally. No migration, reindex or
+production data repair is required for search containment. Requests relying on
+out-of-context document IDs or obsolete library memberships stop returning those
+documents. When stale candidates occupy the retrieval pool, fewer than top_k
+eligible results may be returned.
 
 ## Validation
 
 Run `make validation-report`. Document access, revocation and conversation
-freshness appear as a separate report group. Known defects can produce failures;
-this change adds detection, not the product corrections.
+freshness appear as a separate report group. Run the focused document-access
+campaign with `VALIDATION_ARGS="scenarios/test_document_access.py"` to verify the
+corrected service, including an existing runtime conversation with a new attachment
+and a selected corpus document.
 
 ## Rollback
 
-Revert the validation change. The campaign cleans up its own disposable fixtures;
-it does not change demo memberships or existing documents.
+Reverting the Knowledge Flow image restores the vulnerable search behavior. The
+campaign cleans up its own disposable fixtures; it does not change demo memberships
+or existing documents.
 
 ## Limitations
 
-The HTTP tests do not cover browser upload state or inject OpenFGA outages.
+This fix does not repair partially failed metadata/OpenFGA unlink operations or
+establish active-team confinement for other document tools. Those parts of #3091
+remain open. The live HTTP tests do not cover browser upload state or inject
+OpenFGA outages; offline tests cover search authority failures. No atomic revocation
+guarantee is added for requests already in progress.

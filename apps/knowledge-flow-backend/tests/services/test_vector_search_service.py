@@ -21,13 +21,19 @@ Covers:
 - Mocked vector store and embedder via DummyContext.
 """
 
+import asyncio
+from collections import Counter
 from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
-from fred_core import KeycloakUser
+from fred_core import DocumentPermission, KeycloakUser
+from fred_core.common import OwnerFilter
+from fred_core.security.delegation import DelegationConfig, initialize_delegation, preserved_delegation
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit
+from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.vector_search import vector_search_service
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
@@ -107,6 +113,13 @@ class DummyTagService:
 
 
 class DummyMetadataService:
+    @property
+    def metadata_store(self):
+        return self
+
+    async def get_metadata_by_uids(self, uids):
+        return [SimpleNamespace(identity=SimpleNamespace(document_uid=uid), tags=SimpleNamespace(tag_ids=["tag-1"])) for uid in uids]
+
     async def filter_readable_document_uids(self, _user, document_uids):
         return set(document_uids or [])
 
@@ -245,31 +258,9 @@ async def test_search_mixes_library_scope_and_document_scope_as_union(monkeypatc
         assert question == "What changed?"
         assert k == 5
         if library_tags_ids is not None:
-            return [
-                vector_search_service.VectorSearchHit(
-                    uid="doc-lib",
-                    title="Library doc",
-                    file_name="library.md",
-                    content="library hit",
-                    score=0.91,
-                    tag_ids=["tag-1"],
-                    tag_names=[],
-                    tag_full_paths=[],
-                )
-            ]
+            return [AnnHit(document=Document(page_content="library hit", metadata={"document_uid": "doc-lib", "scope": "corpus"}), score=0.91)]
         if metadata_terms_extra and metadata_terms_extra.get("document_uid") == ["doc-picked"]:
-            return [
-                vector_search_service.VectorSearchHit(
-                    uid="doc-picked",
-                    title="Picked doc",
-                    file_name="picked.md",
-                    content="picked hit",
-                    score=0.87,
-                    tag_ids=[],
-                    tag_names=[],
-                    tag_full_paths=[],
-                )
-            ]
+            return [AnnHit(document=Document(page_content="picked hit", metadata={"document_uid": "doc-picked", "scope": "corpus"}), score=0.87)]
         return []
 
     vector_svc._hybrid = _fake_search_fn  # type: ignore[method-assign]
@@ -305,31 +296,9 @@ async def test_search_document_scope_only_does_not_widen_to_libraries(monkeypatc
     async def _fake_search_fn(*, question, user, k, library_tags_ids=None, metadata_terms_extra=None):
         if library_tags_ids is not None:
             library_branch_calls.append(library_tags_ids)
-            return [
-                vector_search_service.VectorSearchHit(
-                    uid="doc-lib",
-                    title="Library doc",
-                    file_name="library.md",
-                    content="library hit",
-                    score=0.91,
-                    tag_ids=["tag-1"],
-                    tag_names=[],
-                    tag_full_paths=[],
-                )
-            ]
+            return [AnnHit(document=Document(page_content="library hit", metadata={"document_uid": "doc-lib", "scope": "corpus"}), score=0.91)]
         if metadata_terms_extra and metadata_terms_extra.get("document_uid") == ["doc-picked"]:
-            return [
-                vector_search_service.VectorSearchHit(
-                    uid="doc-picked",
-                    title="Picked doc",
-                    file_name="picked.md",
-                    content="picked hit",
-                    score=0.87,
-                    tag_ids=[],
-                    tag_names=[],
-                    tag_full_paths=[],
-                )
-            ]
+            return [AnnHit(document=Document(page_content="picked hit", metadata={"document_uid": "doc-picked", "scope": "corpus"}), score=0.87)]
         return []
 
     vector_svc._hybrid = _fake_search_fn  # type: ignore[method-assign]
@@ -348,3 +317,222 @@ async def test_search_document_scope_only_does_not_widen_to_libraries(monkeypatc
     # ONLY the named document is returned; the library branch never ran.
     assert [hit.uid for hit in results] == ["doc-picked"]
     assert library_branch_calls == []
+
+
+class SnapshotStore:
+    """Apply index predicates to a snapshot that can differ from canonical metadata."""
+
+    def __init__(self):
+        self.hits = []
+        self.calls = []
+
+    def ann_search(self, query, *, k, search_filter):
+        self.calls.append(search_filter)
+        result = []
+        for hit in self.hits:
+            md = hit.document.metadata
+            if search_filter.tag_ids and not set(search_filter.tag_ids).intersection(md.get("tag_ids", [])):
+                continue
+            if any((md.get(key) == "session" if values == ["!session"] else md.get(key) not in values) for key, values in (search_filter.metadata_terms or {}).items()):
+                continue
+            result.append(hit)
+        return result[:k]
+
+    def full_text_search(self, query, top_k, search_filter):
+        return self.ann_search(query, k=top_k, search_filter=search_filter)
+
+    def hybrid_search(self, query, top_k, search_filter):
+        return self.ann_search(query, k=top_k, search_filter=search_filter)
+
+
+class CurrentMetadata:
+    def __init__(self):
+        self.tags = {}
+        self.batches = []
+        self.checks = Counter()
+        self.denied = set()
+        self.error = None
+        self.active = 0
+        self.peak = 0
+
+    async def get_metadata_by_uids(self, uids):
+        self.batches.append(list(uids))
+        return [SimpleNamespace(identity=SimpleNamespace(document_uid=uid), tags=SimpleNamespace(tag_ids=self.tags[uid])) for uid in uids if uid in self.tags]
+
+    async def has_user_permission(self, user, permission, uid):
+        assert permission == DocumentPermission.READ
+        self.checks[uid] += 1
+        self.active += 1
+        self.peak = max(self.peak, self.active)
+        try:
+            await asyncio.sleep(0)
+            if self.error:
+                raise self.error
+            return uid not in self.denied
+        finally:
+            self.active -= 1
+
+
+def candidate(uid, *tags, **metadata):
+    return AnnHit(document=Document(page_content=f"content-{uid}", metadata={"document_uid": uid, "tag_ids": list(tags), "scope": "corpus", "retrievable": True, **metadata}), score=0.9)
+
+
+@pytest.fixture
+def guarded_search(monkeypatch, test_user):
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataService)
+    svc = VectorSearchService()
+    store, current = SnapshotStore(), CurrentMetadata()
+    metadata = MetadataService.__new__(MetadataService)
+    metadata.metadata_store = current
+    metadata.rebac = current
+    svc.vector_store, svc.metadata_service = store, metadata
+    calls = []
+
+    async def authorized_tags(user, owner_filter, team_id):
+        calls.append((owner_filter, team_id))
+        return {"a", "a2"} if owner_filter == OwnerFilter.TEAM else {"a", "a2", "b"}
+
+    svc.tag_service.list_authorized_tags_ids = authorized_tags
+
+    async def run(**kwargs):
+        return await svc.search(
+            question="needle",
+            user=test_user,
+            top_k=100,
+            document_library_tags_ids=kwargs.pop("libraries", None),
+            owner_filter=kwargs.pop("owner_filter", OwnerFilter.TEAM),
+            team_id=kwargs.pop("team_id", "team-a"),
+            **kwargs,
+        )
+
+    return svc, store, current, calls, run
+
+
+@pytest.mark.parametrize("policy", list(SearchPolicyName))
+@pytest.mark.parametrize("libraries", [None, ["a"]])
+async def test_explicit_document_ids_cannot_escape_team(guarded_search, policy, libraries):
+    svc, store, current, calls, run = guarded_search
+    current.tags = {"outside": ["b"], "inside": ["a"], "extra": ["a"]}
+    store.hits = [candidate(uid, *tags) for uid, tags in current.tags.items()]
+    hits = await run(libraries=libraries, document_uids=["outside", "inside"], policy_name=policy)
+    assert {h.uid for h in hits} == ({"inside", "extra"} if libraries else {"inside"})
+    assert "outside" not in current.checks
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("policy", list(SearchPolicyName))
+@pytest.mark.parametrize("read_denied", [False, True])
+async def test_stale_library_membership_is_rejected_before_enrichment(guarded_search, policy, read_denied):
+    svc, store, current, calls, run = guarded_search
+    current.tags = {"moved": ["b"], "valid": ["a", "b"]}
+    store.hits = [candidate("moved", "a", "b"), candidate("valid", "a", "b"), candidate("deleted", "a")]
+    current.denied = {"moved"} if read_denied else set()
+    enriched = []
+    original = svc._to_hit
+
+    async def enrich(doc, *args):
+        enriched.append(doc.metadata["document_uid"])
+        return await original(doc, *args)
+
+    svc._to_hit = enrich
+    hits = await run(libraries=["a"], policy_name=policy)
+    assert [h.uid for h in hits] == enriched == ["valid"]
+    assert hits[0].tag_ids == ["a"]
+    assert current.checks == {"valid": 1}
+    # A caller with access to B still cannot retrieve the moved document via A.
+    assert [h.uid for h in await run(libraries=["a"], owner_filter=None)] == ["valid"]
+    if not read_denied:
+        assert "moved" in {h.uid for h in await run(libraries=["b"], owner_filter=None)}
+
+
+async def test_denied_and_missing_documents_do_not_widen_search(guarded_search):
+    svc, store, current, calls, run = guarded_search
+    current.tags = {"denied": ["a"], "valid": ["a"]}
+    current.denied = {"denied"}
+    store.hits = [candidate("denied", "a"), candidate("valid", "a")]
+    assert await run(document_uids=["missing", "denied"]) == []
+    assert store.calls == []
+    assert [h.uid for h in await run(libraries=["a"])] == ["valid"]
+    assert await run(libraries=["unknown"]) == []
+
+
+async def test_authority_failure_never_enriches_candidates(guarded_search):
+    svc, store, current, calls, run = guarded_search
+    current.tags = {"valid": ["a"]}
+    store.hits = [candidate("valid", "a")]
+    current.error = TimeoutError("authority unavailable")
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("unchecked candidate reached enrichment")
+
+    svc._to_hit = unexpected
+    with pytest.raises(TimeoutError, match="authority unavailable"):
+        await run(libraries=["a"])
+
+
+@pytest.mark.parametrize("irrelevant", [0, 1000])
+async def test_checks_are_bounded_and_deduplicated_across_chunks_and_branches(guarded_search, irrelevant):
+    svc, store, current, calls, run = guarded_search
+    uids = [f"doc-{n}" for n in range(37)]
+    current.tags = {uid: ["a"] for uid in uids} | {f"other-{n}": ["b"] for n in range(irrelevant)}
+    store.hits = [candidate(uid, "a", chunk_index=n) for uid in uids for n in range(2)]
+    hits = await run(libraries=["a"], document_uids=[uids[0]])
+    assert {h.uid for h in hits} == set(uids)
+    assert current.checks == {uid: 1 for uid in uids}
+    assert current.peak <= 10
+    assert sum(map(len, current.batches)) == len(uids)
+    assert len(calls) == 1
+
+
+async def test_request_cache_does_not_survive_membership_change(guarded_search):
+    svc, store, current, calls, run = guarded_search
+    current.tags = {"moved": ["a"]}
+    store.hits = [candidate("moved", "a")]
+    assert len(await run()) == 1
+    current.tags["moved"] = ["b"]
+    assert await run() == []
+
+
+@pytest.mark.parametrize("policy", list(SearchPolicyName))
+async def test_corpus_selection_keeps_only_current_users_session_attachments(guarded_search, policy, test_user):
+    svc, store, current, calls, run = guarded_search
+    current.tags = {"corpus": ["a"]}
+    store.hits = [
+        candidate("corpus", "a"),
+        candidate("attachment", scope="session", user_id=test_user.uid, session_id="session"),
+        candidate("foreign", scope="session", user_id="other", session_id="session"),
+        candidate("other-session", scope="session", user_id=test_user.uid, session_id="elsewhere"),
+    ]
+    hits = await run(document_uids=["corpus"], session_id="session", policy_name=policy)
+    assert {h.uid for h in hits} == {"attachment", "corpus"}
+    assert current.checks == {"corpus": 1}
+    assert {h.uid for h in await run(document_uids=["corpus"], session_id="session", include_session_scope=False)} == {"corpus"}
+    assert {h.uid for h in await run(document_uids=["corpus"], session_id="session", include_corpus_scope=False)} == {"attachment"}
+
+
+@pytest.mark.parametrize("owner_filter", [None, OwnerFilter.PERSONAL])
+async def test_unscoped_and_personal_ownership_resolution_is_preserved(guarded_search, owner_filter):
+    svc, store, current, calls, run = guarded_search
+    current.tags = {"picked": ["b"]}
+    store.hits = [candidate("picked", "b")]
+    assert [h.uid for h in await run(document_uids=["picked"], owner_filter=owner_filter, team_id=None)] == ["picked"]
+    assert calls == [(owner_filter, None)]
+
+
+@pytest.mark.parametrize("delegated", [False, True])
+async def test_service_agent_uses_team_policy_but_delegated_user_still_needs_read(guarded_search, test_user, delegated):
+    svc, store, current, calls, run = guarded_search
+    current.tags = {"team": ["a"], "outside": ["b"]}
+    store.hits = [candidate("team", "a"), candidate("outside", "a")]
+    current.denied = {"team"}
+    test_user.roles = ["service_agent"]
+    if delegated:
+        test_user.client_id = "agents"
+        test_user.caller_roles = frozenset({"delegation_caller"})
+    with preserved_delegation():
+        initialize_delegation(DelegationConfig(accept_delegated_calls=True))
+        hits = await run(libraries=["a"])
+    assert [h.uid for h in hits] == ([] if delegated else ["team"])
+    assert current.checks == ({"team": 1} if delegated else {})

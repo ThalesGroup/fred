@@ -17,27 +17,26 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from fred_sdk.contracts import RuntimeExecuteRequest
-from fred_sdk.contracts.context import RuntimeContext
-
 from document_probe import (
+    PROBE,
     ApiClient,
     ClientFactory,
     Json,
-    PROBE,
     assert_found,
     checked,
     final_event,
-    runtime_events,
     hit_uids,
     ingest,
     library,
+    runtime_events,
     search,
     unlink,
     wait_indexed,
     wait_until,
 )
 from factory_config import RUNTIME_PUBLIC_BASE, TEST_TEAM, USERS
+from fred_sdk.contracts import RuntimeExecuteRequest
+from fred_sdk.contracts.context import RuntimeContext
 
 POLICIES = ["semantic", "hybrid", "strict"]
 
@@ -484,10 +483,15 @@ def test_late_attachment_and_session_isolation(
     uid = attachment["document_uid"]
     try:
         wait_until(
-            lambda: uid
-            in hit_uids(
-                search(
-                    client, team_id=c.team_a, session_id=conv.session_id, corpus=False
+            lambda: (
+                uid
+                in hit_uids(
+                    search(
+                        client,
+                        team_id=c.team_a,
+                        session_id=conv.session_id,
+                        corpus=False,
+                    )
                 )
             ),
             description=f"attachment index visibility for {uid}",
@@ -511,7 +515,13 @@ def test_late_attachment_and_session_isolation(
             == []
         )
         if corpus_selection:
-            # A valid corpus selection must not silently exclude the conversation's own files.
+            sources = conv.turn(
+                attachments=f"- {filename} [{uid}]: conversation document",
+                documents=[c.uid_a],
+            )["sources"]
+            assert_found(sources, uid, marker)
+            assert_found(sources, c.uid_a, c.marker_a)
+            # Also exercise the public search API independently of runtime scope resolution.
             assert_found(
                 search(
                     client,
