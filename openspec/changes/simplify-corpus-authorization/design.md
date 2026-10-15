@@ -7,6 +7,13 @@ folder grants and document-parent tuples; corpus metadata stores `tag_ids`.
 `DocumentScopeControlParams.bound_library_ids` already pins the chat picker
 read-only; preserve existing modes rather than invent a nested-picker feature.
 
+The Python conversion below is a broader, unimplemented plan. On
+`chore/rust-rebac`, manager already supplies organization/team/project ownership
+and direct space roles; its [implemented contracts](../../../docs/architecture/README.md)
+govern those foundations. Decision 3 records the accepted conversation design
+for that POC. It does not authorize implementing the remaining conversion tasks
+or copying their older Python assumptions into manager.
+
 ## Goals / Non-Goals
 
 **Goals:** usable projects within the current organization; uniform space rights;
@@ -68,6 +75,26 @@ resources does not confer write rights at their owning level.
 
 ### 3. Conversation space determines reach; agent configuration narrows it
 
+The Rust POC uses one conversation binding: `conversation_id`, `user_id`,
+`agent_id`, `space_id`. Store the active space once; derive its organization/team
+ancestors from the canonical tree. Keep that space immutable so history and model
+context cannot travel to another space by changing a selector.
+
+All document-consuming tools use one server-bound document access path. The
+server resolves the caller and active space from the conversation; tool/model
+arguments can select a document or folder, never replace that authority. Every
+operation requires both current user read permission on the active space and
+canonical resource containment in its permitted ancestry. OpenFGA decides the
+former; SQL establishes ownership/existence for the latter. Metadata, vectors
+and stored content share the document's owner. A capability enables an action,
+not additional data rights; neither agents nor conversations receive copied roles.
+
+For the Rust model the envelope is exactly the active space and its ancestors:
+organization alone; team plus organization; project plus team plus organization.
+Other memberships, sibling spaces, descendants and a global platform corpus never
+extend that envelope. Configuration and selections can only narrow it.
+
+
 An agent defined at team level can be used in that team's projects without being
 copied. A project-defined agent stays in that project. A conversation has an
 immutable, server-validated space; entering another space starts a new conversation.
@@ -75,7 +102,7 @@ Propagate that context through session metadata/history, execution/delegation,
 attachments, tools and evaluation; a caller-provided project ID is not authority.
 
 For a project conversation, contextual corpus = that project + its parent team's
-common resources + applicable existing organization/platform common resources.
+common resources + its organization's common resources.
 For a team conversation, it excludes all project content, including projects the
 user belongs to. Governance permissions must not silently broaden ordinary chat.
 Intersect this envelope with agent configuration and the current chat selection
@@ -91,6 +118,23 @@ and audit evidence identify user, space, agent/configuration, effective scope an
 source references, reusing existing observability rather than logging content twice.
 
 ### 4. Authorize spaces before searching
+
+For the Rust model, I4 requires parent content access for every child role.
+Checking active-space read can therefore establish eligibility for its ancestry;
+resource containment is still mandatory. The Rust baseline is one active-space
+Check per bounded document operation, reused inside it, including bulk SQL validation of
+its documents. Do not issue a permission check per document. Recheck for each new
+operation, including another tool call or turn; a conversation stores context,
+not a lasting permission. This is a per-operation rule, not a promise of one
+network call for an entire turn or of atomic revocation through response delivery.
+The whole-turn permission cost grows with its document operations, not their
+document counts.
+Before implementing the consumer integration, define the operation boundary and
+trusted cross-service transport with the developer. Do not add portable permission
+tickets, compatibility code or a conversation-wide permission cache by default.
+
+
+**Broader Python conversion, not the Rust operation budget:**
 
 Resolve canonical ancestry and check the required ReBAC permission once per
 relevant distinct space within a request. Then constrain SQL/vector/tabular queries

@@ -9,6 +9,12 @@ architecture that must later be replaced.
 Tracking: [#2938](https://github.com/ThalesGroup/fred/issues/2938);
 organization/project context: [#2921](https://github.com/ThalesGroup/fred/issues/2921).
 
+For `chore/rust-rebac`, the accepted conversation design is recorded here for
+future integration. The implemented organization/team/project and role foundation
+is described in [Fred architecture](../../../docs/architecture/README.md) and
+[manager provisioning](../../specs/fred-manager-provisioning/spec.md). This decision
+does not start the broader Python conversion or claim that conversations use manager.
+
 ## What Changes
 
 - **BREAKING**: corpus folders have one owning space and no independent grants,
@@ -17,7 +23,9 @@ organization/project context: [#2921](https://github.com/ThalesGroup/fred/issues
   membership, scoped roles, project administration and a usable project context.
 - Keep authentication in the IdP and authorization in ReBAC. Team editor/analyst
   roles grant no implicit access to projects; equivalent project roles are explicit.
-- Bind each conversation permanently to its team or project. Reuse team agents
+- Bind each conversation permanently to its owning space (organization, team or
+  project in the Rust model). Give its tools one server-bound document access
+  context; personal memberships and capabilities never widen it. Reuse team agents
   in projects; intersect contextual access with configured and supported chat scope.
 - Authorize spaces before corpus retrieval; remove document authorization lists
   and corpus folder/document ACL duplication. Folder selection includes descendants.

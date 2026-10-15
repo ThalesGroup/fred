@@ -85,11 +85,32 @@ Ordinary membership SHALL NOT make all members' conversations mutually visible.
 
 ### Requirement: Conversations have an immutable execution space
 
-Every conversation SHALL remain bound to its initial team or project. Team agents
+Every conversation SHALL remain bound to its initial owning space: organization,
+team or project in the Rust organization/team/project model. Team agents
 SHALL be reusable in child projects without copying. Their reachable corpus SHALL
 be determined by conversation space and user authorization, not agent authorship
 or the user's membership in other projects. History, generated content and memory
 SHALL NOT flow into another space when navigation changes.
+
+A conversation's document operations SHALL use its server-validated caller and
+active space, independent of tool arguments. Its maximum corpus SHALL be that
+space and its ancestors, never siblings or descendants. Agent configuration,
+capabilities and personal memberships SHALL NOT expand that maximum. Document
+content, metadata and derived representations SHALL obey the same boundary.
+
+#### Scenario: Alice knows a document in another team
+
+- **GIVEN** Alice belongs to A and B and document D belongs only to B
+- **WHEN** any tool in her A conversation searches for or directly requests D,
+  including by explicit UID or folder selection
+- **THEN** it returns neither D's content nor its metadata
+- **AND** D remains accessible in an authorized B conversation
+
+#### Scenario: Tool input tries to change the active space
+
+- **WHEN** a tool or model names another space or user while a conversation runs
+- **THEN** the server-bound conversation context remains authoritative
+- **AND** no such argument grants access outside that context
 
 #### Scenario: Alice uses a team agent in Atlas
 
@@ -141,6 +162,18 @@ continuation; input and retry limits SHALL be enforced. Counts, content, citatio
 and agent tools SHALL obey the same boundary. Folder summaries and label enrichment
 SHALL NOT enumerate contained document IDs or metadata.
 
+Each document operation SHALL check current read authority for its active context
+and SHALL reuse that decision only within the bounded operation. A later tool call
+or turn SHALL obtain a fresh decision. Canonical ownership/existence checks SHALL
+remain distinct from permission evaluation and SHALL support document batches.
+
+#### Scenario: Read access is revoked between operations
+
+- **WHEN** Alice's active-space read permission is revoked before the next
+  document operation starts
+- **THEN** that operation is refused even if the conversation remains open
+- **AND** an earlier decision or cached document does not bypass its authorization
+
 #### Scenario: Atlas gains thousands of folders and documents
 
 - **WHEN** the same scoped or unrestricted Atlas corpus request is repeated
@@ -159,7 +192,8 @@ incompatible legacy archives SHALL be rejected. Retried ingestion and deletion
 SHALL NOT expose orphan corpus content. Execution evidence SHALL identify the user,
 space, agent/configuration, effective scope and sources. Project access removal
 SHALL follow the same access-removal principle as team membership removal; detailed
-revocation timing and active-session mechanisms are outside this change's decisions.
+in-flight revocation timing and active-session mechanisms remain to be scoped
+before implementation; fresh authorization for each document operation is required.
 
 #### Scenario: An attachment or deleted hit is requested
 
