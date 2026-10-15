@@ -134,8 +134,6 @@ class DocumentLabelSearchCapability(
 
     manifest = CapabilityManifest(
         id="document_label_search",
-        # Pre-GA: version stays 0.1.0 while the platform has not shipped —
-        # config-surface changes land without bumps.
         version="0.1.0",
         name="capability.document_label_search.name",
         description="capability.document_label_search.description",

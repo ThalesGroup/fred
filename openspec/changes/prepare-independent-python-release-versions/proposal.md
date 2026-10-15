@@ -8,7 +8,7 @@ Tracking: https://github.com/ThalesGroup/fred/issues/3126
 
 - Prepare one patch increment for `fred-core`, `fred-sdk`, and `fred-runtime` before each paired code/chart release. Keep the application/chart version governed by migration impact; Python package versions are separate coordinates.
 - Identify capability code changed since the previous stable code tag. Advance each affected capability distribution and each affected `CapabilityManifest.version` by one patch after reviewing saved-config compatibility. Leave unchanged distributions and manifests at their existing versions. `fred-pod` advances only when its own package changes.
-- Replace the all-packages version assumption in preparation and publication validation with a reviewed per-package version map. Update dependency floors where a changed distribution needs the newly prepared libraries, and synchronize affected `uv.lock` files.
+- Replace the all-packages version assumption in preparation and publication validation with a reviewed per-package version map. Update dependency floors where a changed distribution needs the newly prepared libraries, synchronize affected `uv.lock` files, and keep the pod chart `appVersion` fields aligned with their SDK/runtime libraries.
 - Update the release skill and release strategy to present the package/manifest version map, lockfile result, and compatibility findings before tag approval. Preserve separate approval for actual PyPI publication.
 
 ## Capabilities

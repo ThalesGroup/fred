@@ -2,7 +2,7 @@
 
 `make libs-version VERSION=...` currently rewrites every package in `PYPI_PACKAGES` to one version, raises their internal floors to that version, relocks consumers, and sets both pod chart `appVersion` values. `scripts/validate_python_release.py` requires one version across all distributions and exact same-version floors. This conflicts with selected capability increments. Some capability distributions own several `CapabilityManifest` values; `fred-capability-mcp` owns none. A manifest version is a saved-config schema version, not the PyPI distribution version. See `docs/swift/capabilities/AUTHORING.md` and `fred_runtime/capabilities/assembly.py`.
 
-The paired `code/v...` and `chart/v...` version is independently set by migration impact. The shared release skill stops for tag approval; `make publish-libs` is a separate manual PyPI operation. The current `fred-pod` chart `appVersion` tracks `fred-pod` package metadata and must not be changed merely because the other libraries advance.
+The paired `code/v...` and `chart/v...` version is independently set by migration impact. The shared release skill stops for tag approval; `make publish-libs` is a separate manual PyPI operation. `deploy/charts/agent-pod/Chart.yaml` identifies `fred-runtime` in `appVersion`, while `deploy/charts/knowledge-base/Chart.yaml` identifies `fred-sdk`; these advance with those libraries, not with `fred-pod`.
 
 ## Goals / Non-Goals
 
@@ -28,7 +28,7 @@ Alternative: bump all packages together as today. This is simpler but contradict
 
 ### 2. Extend the existing version and publication tools around package coordinates
 
-Refactor `scripts/libs_version.py` and the root release target to prepare the three shared libraries plus an explicit reviewed set of changed capability distributions. Derive each next patch from its tagged `[project].version`; apply selected package versions, selected manifest literals, and only necessary internal dependency floors. Read the resulting per-package map from `pyproject.toml` rather than maintaining a second version ledger. Keep package build and upload in existing dependency order. `fred-pod` participates only if changed; update pod chart `appVersion` only when its own version advances.
+Refactor `scripts/libs_version.py` and the root release target to prepare the three shared libraries plus an explicit reviewed set of changed capability distributions. Derive each next patch from its tagged `[project].version`; apply selected package versions, selected manifest literals, and only necessary internal dependency floors. Read the resulting per-package map from `pyproject.toml` rather than maintaining a second version ledger. Keep package build and upload in existing dependency order. `fred-pod` participates only if changed; set the agent-pod and knowledge-base chart `appVersion` values from the prepared runtime and SDK versions respectively.
 
 Refactor `scripts/validate_python_release.py` to validate each selected package against its own manifest and artifact coordinate, and validate internal requirements against the map. An unchanged package with a compatible older floor is valid; an advanced package whose published dependency contract needs a new library must raise that floor. The prepublication target must decide pending packages before any upload and reject missing/stale selected artifacts. Existing PyPI coordinates remain immutable and are skipped only when registry checks confirm them.
 

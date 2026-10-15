@@ -12,10 +12,12 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import validate_python_release as release_validator  # noqa: E402
 from validate_python_release import check_floors, validate  # noqa: E402
 
 
@@ -75,6 +77,7 @@ class PublishLibsTest(unittest.TestCase):
                         common = [
                             "PYPI_PACKAGES=first second",
                             "PYPI_RELEASE_CHECK=true",
+                            "BASE_TAG=code/v1.0.0",
                         ]
                         built = subprocess.run(
                             ["make", *options, "publish-libs-dry-run", *common],
@@ -137,6 +140,7 @@ class PublishLibsTest(unittest.TestCase):
                     "publish-libs",
                     "PYPI_PACKAGES=first",
                     "PYPI_RELEASE_CHECK=false",
+                    "BASE_TAG=code/v1.0.0",
                 ],
                 cwd=project,
                 env={
@@ -208,11 +212,11 @@ class ValidatePythonReleaseTest(unittest.TestCase):
         root: Path,
         name: str,
         *,
+        version: str = "4.5.0",
         project_requirement: str | None = None,
         wheel_requirement: str | None = None,
         sdist_requirement: str | None = None,
     ) -> Path:
-        version = "4.5.0"
         package = root / name
         package.mkdir()
         dependencies = (
@@ -247,29 +251,27 @@ class ValidatePythonReleaseTest(unittest.TestCase):
         errors = check_floors(
             ["fred-core>=4.4.3", "fred-sdk[agents]>=4.5.0"],
             owner="fred-runtime",
-            internal_names={"fred-core", "fred-sdk", "fred-runtime"},
-            version="4.5.0",
+            versions={
+                "fred-core": "4.5.1",
+                "fred-sdk": "4.5.1",
+                "fred-runtime": "4.5.1",
+            },
+            prepared={"fred-core", "fred-sdk", "fred-runtime"},
         )
 
-        self.assertEqual(len(errors), 1)
+        self.assertEqual(len(errors), 2)
         self.assertIn("fred-core", errors[0])
 
-    def test_rejects_mixed_project_versions_before_artifact_checks(self) -> None:
+    def test_accepts_mixed_project_versions_and_skips_unchanged_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            packages = []
-            for name, version in (("fred-core", "4.5.0"), ("fred-sdk", "4.4.3")):
-                package = root / name
-                package.mkdir()
-                _ = (package / "pyproject.toml").write_text(
-                    f'[project]\nname = "{name}"\nversion = "{version}"\n'
-                )
-                packages.append(package)
+            core = self._package(root, "fred-core", version="4.5.1")
+            capability = self._package(root, "fred-capability-x", version="4.5.0")
+            for artifact in (capability / "target" / "dist").iterdir():
+                artifact.unlink()
+            errors = validate([core, capability], pending={core})
 
-            errors = validate(packages)
-
-        self.assertEqual(len(errors), 1)
-        self.assertIn("do not have one version", errors[0])
+        self.assertEqual(errors, [])
 
     def test_rejects_a_stale_sdist_floor(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -286,7 +288,57 @@ class ValidatePythonReleaseTest(unittest.TestCase):
             errors = validate([first, second])
 
         self.assertEqual(len(errors), 1)
-        self.assertIn("fred-second>=4.4.3", errors[0])
+        self.assertIn("sdist internal requirements differ", errors[0])
+
+    def test_tagged_package_map_rejects_omitted_changes_and_stale_floors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Release Test"], cwd=root, check=True
+            )
+            core = root / "libs/fred-core"
+            capability = root / "libs/capabilities/fred-capability-x"
+            core.mkdir(parents=True)
+            capability.mkdir(parents=True)
+            core_project = core / "pyproject.toml"
+            cap_project = capability / "pyproject.toml"
+            core_project.write_text(
+                '[project]\nname = "fred-core"\nversion = "4.5.0"\n'
+            )
+            cap_project.write_text(
+                '[project]\nname = "fred-capability-x"\nversion = "4.5.0"\n'
+                'dependencies = ["fred-core>=4.5.0"]\n'
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "baseline"], cwd=root, check=True)
+            subprocess.run(["git", "tag", "code/v1.0.0"], cwd=root, check=True)
+            core_project.write_text(core_project.read_text().replace("4.5.0", "4.5.1"))
+            (capability / "feature.py").write_text("enabled = True\n")
+            with patch.object(release_validator, "ROOT", root):
+                errors = validate([core, capability], base="code/v1.0.0", pending=set())
+                self.assertTrue(any("version was not prepared" in e for e in errors))
+                cap_project.write_text(
+                    cap_project.read_text().replace(
+                        'version = "4.5.0"', 'version = "4.5.1"'
+                    )
+                )
+                errors = validate([core, capability], base="code/v1.0.0", pending=set())
+                self.assertTrue(any("prepared fred-core floor" in e for e in errors))
+                cap_project.write_text(
+                    cap_project.read_text().replace(
+                        "fred-core>=4.5.0", "fred-core>=4.5.1"
+                    )
+                )
+                self.assertEqual(
+                    validate([core, capability], base="code/v1.0.0", pending=set()),
+                    [],
+                )
 
 
 if __name__ == "__main__":

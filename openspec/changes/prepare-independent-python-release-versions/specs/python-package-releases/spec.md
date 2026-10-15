@@ -55,10 +55,12 @@ Before a manifest version advances, release preparation MUST verify that config 
 
 Release preparation SHALL update internal dependency floors for distributions that require newly prepared versions and synchronize affected `uv.lock` files. It SHALL preserve unrelated package coordinates and dependency floors when no corresponding package or compatibility need changed.
 
+The agent-pod and knowledge-base chart `appVersion` values SHALL match the prepared `fred-runtime` and `fred-sdk` versions respectively.
+
 #### Scenario: Shared library and one capability advance
 
 - **WHEN** the shared libraries and one capability distribution advance
-- **THEN** their own versions, necessary internal floors, and every affected committed lockfile resolve consistently while unchanged capability coordinates remain intact
+- **THEN** their own versions, necessary internal floors, both pod chart `appVersion` fields, and every affected committed lockfile resolve consistently while unchanged capability coordinates remain intact
 
 ### Requirement: Independent package artifacts are validated before publication
 
