@@ -3,7 +3,7 @@ schema: 1
 title: "Organize Fred architecture around domains and user journeys"
 impact: none
 configuration: none
-configuration_reason: "Only architecture documentation and its navigation change; no application or deployment settings change."
+configuration_reason: "Only architecture documentation and its navigation, including the root README, change; no application or deployment settings change."
 no_action_reason: "This documentation reorganization changes no runtime behavior, data or APIs."
 ---
 ## Applicability
@@ -24,7 +24,8 @@ No deployment action. Start reading at `docs/architecture/README.md`.
 
 ## Validation
 
-Run `make -C docs/architecture check` and follow the domain and journey links.
+Follow the architecture link near the top of the root README. Run
+`make -C docs/architecture check` and follow the domain and journey links.
 
 ## Rollback
 

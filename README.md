@@ -37,6 +37,28 @@ party can install the whole thing without us — that is deliberate.**
 
 For local development above deployment-factory, follow the [local delegation and startup guide](scripts/README-local-delegation.md). The shared assistant workflow is the [Fred skill](.claude/skills/fred/SKILL.md).
 
+## Understand and improve Fred's architecture
+
+Start with the **[Fred architecture guide](docs/architecture/README.md)**, readable
+directly on GitHub. Follow the user journeys, then explore security, organizations,
+documents, agents and capabilities. New domain sections remain outlines until documented.
+
+The guide adapts [arc42](https://arc42.org/), a template for explaining a system's
+architecture, to Fred's domains. Keep explanations short, describe implemented
+behavior, and update the relevant chapter with your code change. Every contribution
+helps the next person understand Fred without retracing its design history.
+
+From the repository root (requires Make, Python 3 and Docker):
+
+```bash
+make -C docs/architecture generate  # Refresh source-derived documentation blocks
+make -C docs/architecture check     # Check freshness, invariant references and diagram rendering
+```
+
+Generated blocks cover HTTP routes, SQL schema, OpenFGA, configuration and links
+between invariants and tests. These checks do not run those tests or validate the
+prose; both still need review.
+
 ## How Fred is structured
 
 Fred has two complementary faces:
@@ -57,7 +79,7 @@ It is built around three platform applications and a publishable SDK stack:
 | Libraries  | `libs/fred-runtime`                                         | Pod factory — FastAPI, SSE streaming, checkpointing, CLI (`fred-agents-cli`)          |
 | Libraries  | `libs/fred-core`                                            | Shared infrastructure — SQL, KPI, security, config                                    |
 
-**New to the codebase?** Open [`docs/ARCHITECTURE.html`](docs/ARCHITECTURE.html) in your browser for a guided architecture walkthrough — mental models, a 20-minute reading path, and the design decisions that explain everything else. _(GitHub shows raw HTML; open it locally or via VSCode Live Preview.)_
+For an illustrated walkthrough, open [`docs/ARCHITECTURE.html`](docs/ARCHITECTURE.html) locally in a browser or VS Code Live Preview; GitHub displays its HTML source.
 
 **The key design principle**: the control plane, knowledge flow backend, and frontend are the stable platform. Agent pods — `fred-agents` or any team's own pod built with `fred-sdk` + `fred-runtime` — are independently deployable and register themselves with the control plane. You can ship new agents without touching the platform.
 
@@ -67,6 +89,7 @@ See the project site: <https://site.fredlab.dev>
 
 Contents:
 
+- [Understand and improve Fred's architecture](#understand-and-improve-freds-architecture)
 - [Getting started](#getting-started)
   - [Development environment setup](#development-environment-setup)
     - [Option 1 (recommended): Let the Dev Container do it for you!](#option-1-recommended-let-the-dev-container-do-it-for-you)
