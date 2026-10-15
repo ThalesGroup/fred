@@ -285,8 +285,10 @@ class PlatformAccessStore:
                     PlatformAccessLinkRow.expires_at > now,
                 ),
                 or_(
-                    PlatformAccessLinkRow.kind == "team",
-                    TeamMetadataRow.platform_access_free.is_(True),
+                    (PlatformAccessLinkRow.kind == "team")
+                    & PlatformAccessLinkRow.paused.is_(False),
+                    (PlatformAccessLinkRow.kind == "free")
+                    & TeamMetadataRow.platform_access_free.is_(True),
                 ),
                 ~TeamMetadataRow.id.startswith("personal-"),
             )

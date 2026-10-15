@@ -56,11 +56,10 @@ from control_plane_backend.platform_access.schemas import (
     PlatformEnrollmentLinksPage,
     PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
+    TeamJoinLink,
 )
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import _add_team_member_relation
-
-LinkKind = Literal["free", "team"]
 
 
 async def has_admission_sources(
@@ -467,6 +466,33 @@ def utc(value: datetime | None) -> datetime | None:
     )
 
 
+# Platform administrators manage Free-team links only; team join links are managed
+# by team admins through the single-link functions below.
+FREE_LINKS = PlatformAccessLinkRow.kind == "free"
+
+
+def new_link_row(
+    team_id: str,
+    actor: KeycloakUser,
+    kind: str,
+    note: str | None = None,
+    expires_at: datetime | None = None,
+) -> tuple[str, PlatformAccessLinkRow]:
+    token = secrets.token_urlsafe(32)
+    return token, PlatformAccessLinkRow(
+        id=uuid4(),
+        team_id=team_id,
+        kind=kind,
+        token=token,
+        token_hash=hashlib.sha256(token.encode()).hexdigest(),
+        note=note,
+        created_by=actor.uid,
+        created_at=datetime.now(timezone.utc),
+        expires_at=expires_at,
+        opening_count=0,
+    )
+
+
 def link_view(
     link: PlatformAccessLinkRow, free: bool, now: datetime
 ) -> PlatformEnrollmentLinkInfo:
@@ -498,34 +524,19 @@ async def generate_link_record(
     team_id: str,
     actor: KeycloakUser,
     body: CreatePlatformEnrollmentLink | None = None,
-    kind: LinkKind = "free",
 ) -> tuple[str, UUID]:
     body = body or CreatePlatformEnrollmentLink()
     async with access.store.mutation() as session:
         await access.state(session)
         team = await require_team(access, team_id, session)
-        if kind == "free" and not team.platform_access_free:
+        if not team.platform_access_free:
             raise HTTPException(409, "team_not_free")
         now = datetime.now(timezone.utc)
         if body.expires_at is not None and body.expires_at <= now:
             raise HTTPException(409, "free_enrollment_expiry_past")
-        token = secrets.token_urlsafe(32)
-        link_id = uuid4()
-        session.add(
-            PlatformAccessLinkRow(
-                id=link_id,
-                team_id=team_id,
-                kind=kind,
-                token=token,
-                token_hash=hashlib.sha256(token.encode()).hexdigest(),
-                note=body.note,
-                created_by=actor.uid,
-                created_at=now,
-                expires_at=body.expires_at,
-                opening_count=0,
-            )
-        )
-        return token, link_id
+        token, link = new_link_row(team_id, actor, "free", body.note, body.expires_at)
+        session.add(link)
+        return token, link.id
 
 
 async def generate_link(
@@ -533,9 +544,8 @@ async def generate_link(
     team_id: str,
     actor: KeycloakUser,
     body: CreatePlatformEnrollmentLink | None = None,
-    kind: LinkKind = "free",
 ) -> str:
-    token, _ = await generate_link_record(access, team_id, actor, body, kind)
+    token, _ = await generate_link_record(access, team_id, actor, body)
     return token
 
 
@@ -545,17 +555,12 @@ async def list_links(
     offset: int,
     limit: int,
     status: PlatformEnrollmentLinkStatus | None = None,
-    kind: LinkKind = "free",
 ) -> PlatformEnrollmentLinksPage:
     async with access.store.read() as session:
         await access.state(session)
         team = await require_team(access, team_id, session)
-        # Only Free links depend on the team's Free flag; team links are never suspended.
-        usable = team.platform_access_free if kind == "free" else True
         now = datetime.now(timezone.utc)
-        predicate = (PlatformAccessLinkRow.team_id == team_id) & (
-            PlatformAccessLinkRow.kind == kind
-        )
+        predicate = (PlatformAccessLinkRow.team_id == team_id) & FREE_LINKS
         if status == "revoked":
             predicate &= PlatformAccessLinkRow.revoked_at.is_not(None)
         elif status == "expired":
@@ -569,7 +574,7 @@ async def list_links(
                     PlatformAccessLinkRow.expires_at.is_(None),
                     PlatformAccessLinkRow.expires_at > now,
                 )
-                & (usable == (status == "active"))
+                & (team.platform_access_free == (status == "active"))
             )
         rows = await session.scalars(
             select(PlatformAccessLinkRow)
@@ -581,7 +586,7 @@ async def list_links(
             .limit(limit)
         )
         return PlatformEnrollmentLinksPage(
-            items=[link_view(link, usable, now) for link in rows],
+            items=[link_view(link, team.platform_access_free, now) for link in rows],
             total=int(
                 await session.scalar(
                     select(func.count())
@@ -596,7 +601,7 @@ async def list_links(
                     .select_from(PlatformAccessLinkRow)
                     .where(
                         PlatformAccessLinkRow.team_id == team_id,
-                        PlatformAccessLinkRow.kind == kind,
+                        FREE_LINKS,
                         obsolete_links(now),
                     )
                 )
@@ -606,16 +611,11 @@ async def list_links(
 
 
 async def list_link_joiners(
-    access: PlatformAccess,
-    team_id: str,
-    link_id: UUID,
-    offset: int,
-    limit: int,
-    kind: LinkKind = "free",
+    access: PlatformAccess, team_id: str, link_id: UUID, offset: int, limit: int
 ) -> PlatformEnrollmentJoinersPage:
     async with access.store.read() as session:
         await access.state(session)
-        await owned_link(access, team_id, link_id, session, kind)
+        await owned_link(access, team_id, link_id, session)
         rows = await session.execute(
             select(PlatformAccessLinkJoinerRow, UserRow)
             .outerjoin(UserRow, UserRow.id == PlatformAccessLinkJoinerRow.user_id)
@@ -695,16 +695,14 @@ def obsolete_links(now: datetime) -> ColumnElement[bool]:
     )
 
 
-async def delete_inactive_links(
-    access: PlatformAccess, team_id: str, kind: LinkKind = "free"
-) -> int:
+async def delete_inactive_links(access: PlatformAccess, team_id: str) -> int:
     async with access.store.mutation() as session:
         await access.state(session)
         await require_team(access, team_id, session)
         result = await session.execute(
             delete(PlatformAccessLinkRow).where(
                 PlatformAccessLinkRow.team_id == team_id,
-                PlatformAccessLinkRow.kind == kind,
+                FREE_LINKS,
                 obsolete_links(datetime.now(timezone.utc)),
             )
         )
@@ -712,36 +710,28 @@ async def delete_inactive_links(
 
 
 async def owned_link(
-    access: PlatformAccess,
-    team_id: str,
-    link_id: UUID,
-    session: AsyncSession,
-    kind: LinkKind = "free",
+    access: PlatformAccess, team_id: str, link_id: UUID, session: AsyncSession
 ) -> PlatformAccessLinkRow:
     await require_team(access, team_id, session)
     link = await session.get(PlatformAccessLinkRow, link_id)
-    if link is None or link.team_id != team_id or link.kind != kind:
+    if link is None or link.team_id != team_id or link.kind != "free":
         raise HTTPException(404, "free_enrollment_link_invalid")
     return link
 
 
-async def reveal_link(
-    access: PlatformAccess, team_id: str, link_id: UUID, kind: LinkKind = "free"
-) -> str:
+async def reveal_link(access: PlatformAccess, team_id: str, link_id: UUID) -> str:
     async with access.store.read() as session:
         await access.state(session)
-        link = await owned_link(access, team_id, link_id, session, kind)
+        link = await owned_link(access, team_id, link_id, session)
         if link.token is None:
             raise HTTPException(409, "free_enrollment_link_not_recoverable")
         return link.token
 
 
-async def revoke_link(
-    access: PlatformAccess, team_id: str, link_id: UUID, kind: LinkKind = "free"
-) -> None:
+async def revoke_link(access: PlatformAccess, team_id: str, link_id: UUID) -> None:
     async with access.store.mutation() as session:
         await access.state(session)
-        link = await owned_link(access, team_id, link_id, session, kind)
+        link = await owned_link(access, team_id, link_id, session)
         if link.revoked_at is None:
             link.revoked_at = datetime.now(timezone.utc)
 
@@ -757,6 +747,63 @@ async def require_link(
     if result is None:
         raise HTTPException(404, "free_enrollment_link_invalid")
     return result
+
+
+async def team_link(
+    access: PlatformAccess, team_id: str, session: AsyncSession
+) -> PlatformAccessLinkRow | None:
+    await require_team(access, team_id, session)
+    return await session.scalar(
+        select(PlatformAccessLinkRow).where(
+            PlatformAccessLinkRow.team_id == team_id,
+            PlatformAccessLinkRow.kind == "team",
+        )
+    )
+
+
+def team_link_view(link: PlatformAccessLinkRow | None) -> TeamJoinLink:
+    if link is None:
+        return TeamJoinLink(enabled=False)
+    return TeamJoinLink(enabled=not link.paused, token=link.token)
+
+
+async def get_team_link(access: PlatformAccess, team_id: str) -> TeamJoinLink:
+    async with access.store.read() as session:
+        await access.state(session)
+        return team_link_view(await team_link(access, team_id, session))
+
+
+async def set_team_link(
+    access: PlatformAccess, team_id: str, actor: KeycloakUser, enabled: bool
+) -> TeamJoinLink:
+    """Pausing and resuming keep the same URL; the first enabling creates it."""
+    async with access.store.mutation() as session:
+        await access.state(session)
+        link = await team_link(access, team_id, session)
+        if link is None and enabled:
+            _, link = new_link_row(team_id, actor, "team")
+            session.add(link)
+        elif link is not None:
+            link.paused = not enabled
+        return team_link_view(link)
+
+
+async def regenerate_team_link(
+    access: PlatformAccess, team_id: str, actor: KeycloakUser
+) -> TeamJoinLink:
+    """Replaces the team's link for good: the previous URL becomes invalid."""
+    async with access.store.mutation() as session:
+        await access.state(session)
+        await require_team(access, team_id, session)
+        await session.execute(
+            delete(PlatformAccessLinkRow).where(
+                PlatformAccessLinkRow.team_id == team_id,
+                PlatformAccessLinkRow.kind == "team",
+            )
+        )
+        _, link = new_link_row(team_id, actor, "team")
+        session.add(link)
+        return team_link_view(link)
 
 
 async def require_link_caller(
@@ -853,7 +900,8 @@ async def enroll(
                 access.rebac, TeamId(team.id), user.uid, UserTeamRelation.TEAM_MEMBER
             )
             if (
-                await session.get(
+                link.kind == "free"
+                and await session.get(
                     PlatformAccessLinkJoinerRow, (link.id, UUID(user.uid))
                 )
                 is None

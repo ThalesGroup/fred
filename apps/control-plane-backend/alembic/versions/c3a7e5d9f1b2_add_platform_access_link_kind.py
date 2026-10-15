@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Distinguish team-admin join links from Free-team enrollment links.
+"""Add pausable team join links next to Free-team enrollment links.
 
 Revision ID: c3a7e5d9f1b2
 Revises: 24c2f88374fe
@@ -19,9 +19,16 @@ def upgrade() -> None:
         "platform_access_links",
         sa.Column("kind", sa.String(8), server_default="free", nullable=False),
     )
+    op.add_column(
+        "platform_access_links",
+        sa.Column(
+            "paused", sa.Boolean(), server_default=sa.text("false"), nullable=False
+        ),
+    )
 
 
 def downgrade() -> None:
     op.execute("DELETE FROM platform_access_links WHERE kind = 'team'")
     with op.batch_alter_table("platform_access_links") as batch:
+        batch.drop_column("paused")
         batch.drop_column("kind")

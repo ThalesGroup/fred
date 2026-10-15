@@ -47,6 +47,8 @@ from control_plane_backend.platform_access.schemas import (
     SetPlatformAccessPolicy,
     SetPlatformAccessTeam,
     SetPlatformFiltering,
+    SetTeamJoinLink,
+    TeamJoinLink,
 )
 
 router = APIRouter(tags=["PlatformAccess"])
@@ -257,7 +259,6 @@ async def generate_platform_enrollment_link(
     emit_audit_log(
         "platform.access.link.created",
         actor_uid=user.uid,
-        kind="free",
         team_id=team_id,
         link_id=str(link_id),
     )
@@ -305,7 +306,6 @@ async def delete_inactive_platform_enrollment_links(
     emit_audit_log(
         "platform.access.links.deleted",
         actor_uid=user.uid,
-        kind="free",
         team_id=team_id,
         deleted_count=deleted,
     )
@@ -325,7 +325,6 @@ async def reveal_platform_enrollment_link(
     emit_audit_log(
         "platform.access.link.revealed",
         actor_uid=user.uid,
-        kind="free",
         team_id=team_id,
         link_id=str(link_id),
     )
@@ -342,7 +341,6 @@ async def revoke_platform_enrollment_link(
     emit_audit_log(
         "platform.access.link.revoked",
         actor_uid=user.uid,
-        kind="free",
         team_id=team_id,
         link_id=str(link_id),
     )
@@ -357,118 +355,49 @@ async def require_team_members_admin(
         team_id,
         consistency_token=access.rebac.HIGHER_CONSISTENCY,
     )
+    # The response carries the reusable URL, as the administrators' reveal does.
+    service.require_own_credential(user)
     return user
 
 
 TeamAdmin = Annotated[KeycloakUser, Depends(require_team_members_admin)]
-TEAM_LINKS = "/teams/{team_id}/join-links"
+TEAM_LINK = "/teams/{team_id}/join-link"
 
 
-@router.post(TEAM_LINKS, response_model=PlatformEnrollmentLink, tags=["Teams"])
-async def create_team_join_link(
+@router.get(TEAM_LINK, response_model=TeamJoinLink, tags=["Teams"])
+async def get_team_join_link(
+    team_id: str, access: Access, user: TeamAdmin, response: Response
+) -> TeamJoinLink:
+    response.headers["Cache-Control"] = "no-store"
+    return await service.get_team_link(access, team_id)
+
+
+@router.put(TEAM_LINK, response_model=TeamJoinLink, tags=["Teams"])
+async def set_team_join_link(
     team_id: str,
-    body: CreatePlatformEnrollmentLink,
+    body: SetTeamJoinLink,
     access: Access,
     user: TeamAdmin,
     response: Response,
-) -> PlatformEnrollmentLink:
-    service.require_own_credential(user)
-    token, link_id = await service.generate_link_record(
-        access, team_id, user, body, "team"
-    )
+) -> TeamJoinLink:
+    result = await service.set_team_link(access, team_id, user, body.enabled)
     response.headers["Cache-Control"] = "no-store"
     emit_audit_log(
-        "platform.access.link.created",
+        "team.join_link.enabled" if body.enabled else "team.join_link.paused",
         actor_uid=user.uid,
-        kind="team",
         team_id=team_id,
-        link_id=str(link_id),
     )
-    return PlatformEnrollmentLink(token=token)
+    return result
 
 
-@router.get(TEAM_LINKS, response_model=PlatformEnrollmentLinksPage, tags=["Teams"])
-async def list_team_join_links(
-    team_id: str,
-    access: Access,
-    user: TeamAdmin,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(25, ge=1, le=100),
-    status: PlatformEnrollmentLinkStatus | None = None,
-) -> PlatformEnrollmentLinksPage:
-    return await service.list_links(access, team_id, offset, limit, status, "team")
-
-
-@router.get(
-    TEAM_LINKS + "/{link_id}/joiners",
-    response_model=PlatformEnrollmentJoinersPage,
-    tags=["Teams"],
-)
-async def list_team_join_link_joiners(
-    team_id: str,
-    link_id: UUID,
-    access: Access,
-    user: TeamAdmin,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(25, ge=1, le=100),
-) -> PlatformEnrollmentJoinersPage:
-    return await service.list_link_joiners(
-        access, team_id, link_id, offset, limit, "team"
-    )
-
-
-@router.delete(
-    TEAM_LINKS + "/inactive",
-    response_model=DeletedPlatformEnrollmentLinks,
-    tags=["Teams"],
-)
-async def delete_inactive_team_join_links(
-    team_id: str, access: Access, user: TeamAdmin
-) -> DeletedPlatformEnrollmentLinks:
-    deleted = await service.delete_inactive_links(access, team_id, "team")
-    emit_audit_log(
-        "platform.access.links.deleted",
-        actor_uid=user.uid,
-        kind="team",
-        team_id=team_id,
-        deleted_count=deleted,
-    )
-    return DeletedPlatformEnrollmentLinks(deleted_count=deleted)
-
-
-@router.post(
-    TEAM_LINKS + "/{link_id}/reveal",
-    response_model=PlatformEnrollmentLink,
-    tags=["Teams"],
-)
-async def reveal_team_join_link(
-    team_id: str, link_id: UUID, access: Access, user: TeamAdmin, response: Response
-) -> PlatformEnrollmentLink:
-    service.require_own_credential(user)
-    token = await service.reveal_link(access, team_id, link_id, "team")
+@router.post(TEAM_LINK + "/regenerate", response_model=TeamJoinLink, tags=["Teams"])
+async def regenerate_team_join_link(
+    team_id: str, access: Access, user: TeamAdmin, response: Response
+) -> TeamJoinLink:
+    result = await service.regenerate_team_link(access, team_id, user)
     response.headers["Cache-Control"] = "no-store"
-    emit_audit_log(
-        "platform.access.link.revealed",
-        actor_uid=user.uid,
-        kind="team",
-        team_id=team_id,
-        link_id=str(link_id),
-    )
-    return PlatformEnrollmentLink(token=token)
-
-
-@router.delete(TEAM_LINKS + "/{link_id}", status_code=204, tags=["Teams"])
-async def revoke_team_join_link(
-    team_id: str, link_id: UUID, access: Access, user: TeamAdmin
-) -> None:
-    await service.revoke_link(access, team_id, link_id, "team")
-    emit_audit_log(
-        "platform.access.link.revoked",
-        actor_uid=user.uid,
-        kind="team",
-        team_id=team_id,
-        link_id=str(link_id),
-    )
+    emit_audit_log("team.join_link.regenerated", actor_uid=user.uid, team_id=team_id)
+    return result
 
 
 @router.get("/platform-access/status", response_model=PlatformAccessStatus)

@@ -1410,12 +1410,7 @@ async def test_link_admin_history_and_tokens_are_guarded(access, monkeypatch):
         )
         assert (
             "platform.access.link.created",
-            {
-                "actor_uid": actor.uid,
-                "kind": "free",
-                "team_id": "demo",
-                "link_id": str(created_id),
-            },
+            {"actor_uid": actor.uid, "team_id": "demo", "link_id": str(created_id)},
         ) in events
         assert created.json()["token"] not in str(events)
         history = await client.get("/admin/platform/access/teams/demo/enrollment-links")

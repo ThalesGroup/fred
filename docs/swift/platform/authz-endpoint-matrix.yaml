@@ -707,35 +707,20 @@ operations:
     review_status: approved
     required_permission: can_administer_members
   - service: control-plane
-    method: POST
-    path: /control-plane/v1/teams/{team_id}/join-links
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/join-link
     review_status: approved
     required_permission: can_administer_members_and_own_human_credential
   - service: control-plane
-    method: GET
-    path: /control-plane/v1/teams/{team_id}/join-links
-    review_status: approved
-    required_permission: can_administer_members
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/teams/{team_id}/join-links/{link_id}/joiners
-    review_status: approved
-    required_permission: can_administer_members
-  - service: control-plane
-    method: POST
-    path: /control-plane/v1/teams/{team_id}/join-links/{link_id}/reveal
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/join-link
     review_status: approved
     required_permission: can_administer_members_and_own_human_credential
   - service: control-plane
-    method: DELETE
-    path: /control-plane/v1/teams/{team_id}/join-links/{link_id}
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-link/regenerate
     review_status: approved
-    required_permission: can_administer_members
-  - service: control-plane
-    method: DELETE
-    path: /control-plane/v1/teams/{team_id}/join-links/inactive
-    review_status: approved
-    required_permission: can_administer_members
+    required_permission: can_administer_members_and_own_human_credential
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/members

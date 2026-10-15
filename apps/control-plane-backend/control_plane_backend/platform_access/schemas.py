@@ -151,6 +151,16 @@ class FreeEnrollmentPreview(BaseModel):
     cgu_required: bool
 
 
+class TeamJoinLink(BaseModel):
+    enabled: bool
+    token: str | None = None
+
+
+class SetTeamJoinLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
+
+
 class AcceptFreeEnrollmentCgu(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: str = Field(min_length=1, max_length=64)
