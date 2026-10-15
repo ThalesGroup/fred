@@ -89,7 +89,7 @@ describe.each(surfaces)("%s template validation", (_label, Surface) => {
   it.each(["en", "fr"] as const)("blocks an empty deck with helpful %s text and guide link", async (locale) => {
     const blocking = await render(locale);
     const text = container.textContent ?? "";
-    expect(text).toContain(locale === "en" ? "No template fields found" : "Aucun champ de modèle trouvé");
+    expect(text).toContain(locale === "en" ? "No template fields found" : "Aucun champ de template trouvé");
     expect(text).toContain("{{title}}");
     expect(text).toContain(locale === "en" ? "slide notes" : "notes des diapositives");
     expect(blocking.mock.lastCall?.[0]).toContain(locale === "en" ? "No template fields" : "Aucun champ");
