@@ -17,7 +17,7 @@ from fred_pod.security.structure import (
     Principal,
 )
 from pydantic import ValidationError
-from sqlalchemy import Table
+from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from fred_core.security.models import Resource
@@ -871,8 +871,17 @@ def test_accent_folding_table_and_postgresql_expression():
     assert str(compiled).count("translate(lower(%(") == 4
 
 
+@pytest.fixture
+def fresh_warnings(monkeypatch):
+    from fred_core.security.platform_access import store
+
+    monkeypatch.setattr(store, "_last_warning", {})
+
+
 @pytest.mark.asyncio
-async def test_unreadable_joiner_table_fails_closed_and_logs_the_cause(access, caplog):
+async def test_unreadable_joiner_table_fails_closed_and_logs_the_cause(
+    access, caplog, fresh_warnings
+):
     # A runtime role without SELECT on the joiner table broke the Free source
     # derivation in a live deployment; the cause must reach the logs.
     user = person("other")
@@ -880,15 +889,33 @@ async def test_unreadable_joiner_table_fails_closed_and_logs_the_cause(access, c
         await connection.run_sync(
             cast(Table, PlatformAccessLinkJoinerRow.__table__).drop
         )
-    with caplog.at_level("WARNING", logger="fred_core.security.platform_access.store"):
-        with pytest.raises(HTTPException) as error:
-            await access.admitted(user)
-    assert (error.value.status_code, error.value.detail) == (
-        503,
-        "platform_access_unavailable",
-    )
-    assert any(
-        record.levelname == "WARNING"
-        and "platform_access_link_joiners" in record.getMessage()
-        for record in caplog.records
-    )
+    logger = "fred_core.security.platform_access.store"
+    with caplog.at_level("WARNING", logger=logger):
+        for _ in range(3):
+            with pytest.raises(HTTPException) as error:
+                await access.admitted(user)
+            assert (error.value.status_code, error.value.detail) == (
+                503,
+                "platform_access_unavailable",
+            )
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    # One line per kind and minute, naming the error type, so an outage cannot flood.
+    assert warnings == ["Platform access store unavailable: OperationalError"]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_warning_never_logs_statement_parameters(
+    access, caplog, fresh_warnings
+):
+    secret = "plaintext-link-token-" + "x" * 22
+    async with access.store.engine.begin() as connection:
+        await connection.run_sync(cast(Table, PlatformAccessLinkRow.__table__).drop)
+    with caplog.at_level("WARNING"):
+        with pytest.raises(HTTPException):
+            async with access.store.read() as session:
+                await session.execute(
+                    select(PlatformAccessLinkRow).where(
+                        PlatformAccessLinkRow.token == secret
+                    )
+                )
+    assert caplog.records and secret not in caplog.text

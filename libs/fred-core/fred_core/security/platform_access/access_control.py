@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
-import logging
 import math
 import time
 from collections.abc import AsyncIterator
@@ -21,7 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from fred_core.security.models import Resource
 from fred_core.security.platform_access.models import PlatformAccessSettingsRow
 from fred_core.security.platform_access.rules import allows, evaluate, path_key
-from fred_core.security.platform_access.store import PlatformAccessStore
+from fred_core.security.platform_access.store import (
+    PlatformAccessStore,
+    warn_unavailable,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
@@ -31,8 +33,6 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_core.sql.schema_guard import require_tables
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
-
-logger = logging.getLogger(__name__)
 
 
 def token_time(value: Any) -> float | None:
@@ -138,9 +138,7 @@ class PlatformAccess:
                 consistency_token=self.rebac.HIGHER_CONSISTENCY,
             )
         except Exception as error:
-            logger.warning(
-                "Platform admin check unavailable: %s: %s", type(error).__name__, error
-            )
+            warn_unavailable("admin check", error)
             raise HTTPException(503, "platform_access_unavailable") from None
 
     async def platform_admin(self, user: Principal) -> bool:
@@ -204,11 +202,7 @@ class PlatformAccess:
         except HTTPException:
             raise
         except Exception as error:
-            logger.warning(
-                "Platform access admission unavailable: %s: %s",
-                type(error).__name__,
-                error,
-            )
+            warn_unavailable("admission", error)
             raise HTTPException(503, "platform_access_unavailable") from None
 
 

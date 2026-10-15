@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -26,6 +27,26 @@ from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 
 logger = logging.getLogger(__name__)
+_WARNING_INTERVAL = 60.0
+_last_warning: dict[str, float] = {}
+
+
+def warn_unavailable(kind: str, error: BaseException) -> None:
+    """Log why platform access answered 503, at most once a minute per kind.
+
+    Only the exception type and SQLSTATE: messages and statement parameters
+    can carry link tokens."""
+    now = time.monotonic()
+    if now - _last_warning.get(kind, -_WARNING_INTERVAL) < _WARNING_INTERVAL:
+        return
+    _last_warning[kind] = now
+    code = getattr(getattr(error, "orig", None), "pgcode", None)
+    logger.warning(
+        "Platform access %s unavailable: %s%s",
+        kind,
+        type(error).__name__,
+        f" (SQLSTATE {code})" if code else "",
+    )
 
 
 class PlatformAccessStore:
@@ -54,12 +75,7 @@ class PlatformAccessStore:
         except HTTPException:
             raise
         except Exception as error:
-            # Callers only see 503; keep the cause (e.g. a missing grant) diagnosable.
-            logger.warning(
-                "Platform access store unavailable: %s: %s",
-                type(error).__name__,
-                error,
-            )
+            warn_unavailable("store", error)
             raise HTTPException(503, "platform_access_unavailable") from None
 
     @asynccontextmanager
