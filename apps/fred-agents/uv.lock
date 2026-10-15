@@ -735,7 +735,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-documents"
-version = "4.5.0"
+version = "4.5.1"
 source = { editable = "../../libs/capabilities/fred-capability-documents" }
 dependencies = [
     { name = "fred-core" },
@@ -1044,7 +1044,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.0"
+version = "4.5.1"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -1148,7 +1148,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.5.0"
+version = "4.5.1"
 source = { editable = "../../libs/fred-pod" }
 dependencies = [
     { name = "httpx" },
@@ -1188,7 +1188,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.5.0"
+version = "4.5.1"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1263,7 +1263,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.0"
+version = "4.5.1"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
