@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
@@ -114,7 +115,7 @@ export default function UiSettingsPage() {
           const isOffered = !hidden.includes(theme);
           const isDefault = theme === defaultTheme;
           return (
-            <li key={theme} className={styles.tile}>
+            <li key={theme} className={styles.tile} data-default={isDefault}>
               {/* A wrapper, so the hint also shows on a disabled switch. */}
               <Tooltip
                 text={t(isDefault ? "rework.uiSettings.defaultAvailabilityHint" : "rework.uiSettings.offeredTooltip")}
@@ -135,6 +136,10 @@ export default function UiSettingsPage() {
                   />
                 </span>
               </Tooltip>
+              {/* Only the theme's font and shapes apply here; colors stay those of the page. */}
+              <span className={styles.name} data-ui-theme={theme} data-ui-base-theme={uiThemeBase(theme)} title={label}>
+                {label}
+              </span>
               {/* One preview, light half then dark half; the theme's own tokens resolve inside each half. */}
               <span className={styles.preview}>
                 {MODES.map((mode) => (
@@ -145,26 +150,30 @@ export default function UiSettingsPage() {
                     data-ui-base-theme={uiThemeBase(theme)}
                     data-theme={mode}
                   >
+                    {mode === "light" && <Icon category="outlined" type="light_mode" />}
                     {SWATCHES.map((role) => (
                       <span key={role} className={styles.swatch} style={{ backgroundColor: `var(--${role})` }} />
                     ))}
+                    {mode === "dark" && <Icon category="outlined" type="dark_mode" />}
                   </span>
                 ))}
               </span>
-              {/* Only the theme's font and shapes apply here; colors stay those of the page. */}
-              <span className={styles.name} data-ui-theme={theme} data-ui-base-theme={uiThemeBase(theme)} title={label}>
-                {label}
-              </span>
-              <Button
-                color="primary"
-                variant={isDefault ? "text" : "outlined"}
-                size="small"
-                icon={isDefault ? { category: "outlined", type: "check", filled: false } : undefined}
-                disabled={locked || isDefault || !isOffered}
-                onClick={() => persist(theme, hidden)}
-              >
-                {isDefault ? t("rework.uiSettings.isDefault") : t("rework.uiSettings.setDefault")}
-              </Button>
+              {isDefault ? (
+                <span className={styles.defaultLabel}>
+                  <Icon category="outlined" type="check" />
+                  {t("rework.uiSettings.isDefault")}
+                </span>
+              ) : (
+                <Button
+                  color="primary"
+                  variant="outlined"
+                  size="small"
+                  disabled={locked || !isOffered}
+                  onClick={() => persist(theme, hidden)}
+                >
+                  {t("rework.uiSettings.setDefault")}
+                </Button>
+              )}
             </li>
           );
         })}
