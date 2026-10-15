@@ -19,6 +19,7 @@ flowchart TB
     platform["platform.rs<br/>platform-role administration"]
     roles["roles.rs<br/>roles and capabilities"]
     directory["keycloak.rs<br/>service-account directory"]
+    onboarding["onboarding.rs<br/>personal consent and admission"]
     bootstrap["bootstrap.rs<br/>root platform admin"]
     domain["domain.rs<br/>types, placement rules"]
     db["db.rs<br/>SQL"]
@@ -31,7 +32,8 @@ flowchart TB
     provisioning --> auth & platform & directory & db & fga & spaces
     api --> auth & error & spaces & bootstrap & db & fga & ingestion & logging
     spaces --> domain & db & fga
-    api --> platform & roles & directory
+    api --> platform & roles & directory & onboarding
+    onboarding --> auth & db
     platform --> bootstrap & directory & fga
     fga --> roles
     bootstrap --> fga
@@ -44,6 +46,7 @@ flowchart TB
 | `api` | HTTP surface, one OpenFGA check per content access | handlers stay thin; mutations live in `spaces` and `platform` |
 | `auth` | `CurrentUser` extractor, JWKS cache | chapter 6 |
 | `spaces` | space/role mutations, folder creation and local write authorization | organization lock plus atomic guard (I4, I5) |
+| `onboarding` | versioned consent, admitted/own-human extractors | acceptance is independent of roles and memberships (I19) |
 | `bootstrap` | the one-time root grant | two steps under the bootstrap lock (I9) |
 | `domain` | `Space`, `Folder`, `Document`, roles, parent rules | pure functions, unit-tested (I1, I7) |
 | `db` | content and space SQL | placement columns written by inserts only (I2) |
@@ -66,8 +69,8 @@ tool and registers the slice in the shared Redux store. A handwritten enhancemen
 encodes the import's generated binary argument as FormData; paths, methods and
 response types remain generated.
 The generation target corrects the code generator's required-body typing for the
-optional ingestion request and fails if that upstream output changes. The import
-endpoint disables automatic retry on 401 because expiry can follow committed
+optional ingestion request and fails if that upstream output changes. The bootstrap and import
+endpoints disable automatic retry on 401 because expiry can follow committed
 effects; the shared base query still refreshes before each explicit attempt.
 
 `blueprint::Bundle` validates the bounded ZIP and normalizes declarations without exposing credentials

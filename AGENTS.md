@@ -116,6 +116,8 @@ do not silently drop a supported role, accept an ineffective grant, weaken a
 check, or defer a known weakness within the step. Source inconsistencies must
 be resolved explicitly, with regression coverage, rather than copied blindly.
 Feature boundaries do not excuse incomplete behavior within an accepted step.
+Use the [business journey map](docs/swift/design/FRED-MANAGER-JOURNEY.md) to check
+predecessors and affected successors before exposing each new entry point.
 
 Keep direct roles in OpenFGA and let its model evaluate permissions; do not move
 canonical grants into SQL or duplicate the permission matrix in Rust. For each

@@ -58,7 +58,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
                     assert_eq!(param["required"], true);
                 }
             }
-            if path.ends_with("/healthz") {
+            if path.ends_with("/healthz") || path.ends_with("/frontend/config") {
                 assert_eq!(operation["security"], json!([{}]));
             } else {
                 assert!(operation.get("security").is_none());
@@ -68,6 +68,9 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
     }
     let expected = [
         "get /healthz",
+        "get /frontend/config",
+        "get /me/onboarding",
+        "post /gcu",
         "post /bootstrap/platform-admin",
         "get /me",
         "get /me/spaces",

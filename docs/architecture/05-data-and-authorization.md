@@ -57,6 +57,11 @@ erDiagram
   text active_store
   text model_id
 }
+"terms_acceptance" {
+  text user_id
+  text version
+  timestamp_with_time_zone accepted_at
+}
 ```
 <!-- end generated -->
 
@@ -167,6 +172,14 @@ type guard
 ```
 <!-- end generated -->
 
+## Personal consent
+
+`terms_acceptance` stores one active acceptance per authenticated subject: version
+and server timestamp. Repeating the same version preserves the timestamp; accepting
+a new configured version replaces it. It has no foreign key to a space and stores
+no role. Import leaves this table untouched. The root identity exists in Keycloak;
+platform bootstrap and personal consent do not enroll it in an organization.
+
 ## Invariants
 
 | Id | Invariant | Held by |
@@ -189,6 +202,7 @@ type guard
 | I16 | Every acknowledged role mutation emits a security audit event before SQL commit, independently of application severity and text/JSON format. | `logging::audit_relation`, mutation services |
 | I17 | Provisioning replay preserves existing identities, committed space IDs and undeclared grants, and repairs requested grants without reusing rolled-back space IDs. | `provisioning`, exact directory lookup, SQL uniqueness |
 | I18 | Import requires a verified platform administrator and compatible initialized state; predictable preflight failures cause no provisioning or initialization writes. | CLI read-only initialization, HTTP authority-before-upload, `Importer::preflight`, root guard |
+| I19 | A human personally accepts the active CGU before business access; consent and root bootstrap create no membership, and import accepts for nobody. | `onboarding`, `OwnUser`, `AdmittedUser`, CLI admission |
 
 Roles are cumulative and scoped to one space. Analyst grants content read and the capabilities
 `run_evaluations`, `manage_evaluation_corpus` and `read_conversations_for_evaluation`.

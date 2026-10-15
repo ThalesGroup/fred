@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Browser acceptance of the real manager HTTP handlers and Keycloak login.
-//! The frontend script isolates unrelated control-plane shell reads explicitly.
-use fred_manager::{
-    api, auth::Authenticator, bootstrap, config::Configuration, db, keycloak::Directory,
-};
+//! No control-plane route or prepared root role participates in this journey.
+use fred_manager::{api, auth::Authenticator, config::Configuration, db, keycloak::Directory};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 #[allow(dead_code)]
@@ -21,7 +19,7 @@ impl Drop for Workspace {
     }
 }
 
-// Proves: I1, I4, I8, I17, I18
+// Proves: I1, I4, I8, I17, I18, I19
 #[tokio::test]
 #[ignore = "needs disposable services, frontend dependencies and Chromium: make test-browser"]
 async fn provisioning_browser_journey() {
@@ -32,22 +30,19 @@ async fn provisioning_browser_journey() {
         serde_yaml_ng::from_str(include_str!("../config/configuration.yaml")).unwrap();
     config.security.user.realm_url = realm.clone();
     config.security.m2m = None;
+    config.app.bootstrap_token_env_var = Some("FRED_MANAGER_TEST_BOOTSTRAP_TOKEN".into());
     let auth = Arc::new(
         Authenticator::start(config.security().unwrap())
             .await
             .unwrap(),
     );
-    let token = kc.password_token("app", "app", "root", "it-root").await;
-    let root = auth.authenticate(Some(&token)).await.unwrap();
-    bootstrap::grant_root(&e.pool, &e.fga, &root.uid)
-        .await
-        .unwrap();
     let directory = Directory::new(&realm, "fred-manager", "it-manager".into()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let manager_url = format!("http://{}", listener.local_addr().unwrap());
     let app = axum::Router::new().nest(
         "/fred-manager/v1",
         api::governance_router(api::GovernanceState {
+            onboarding: (&config).into(),
             auth,
             pool: e.pool.clone(),
             fga: e.fga.clone(),

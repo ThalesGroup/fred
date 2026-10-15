@@ -131,7 +131,7 @@ async fn serve(config: Config) -> Result<()> {
         auth: std::sync::Arc::new(auth::Authenticator::start(config.security()?).await?),
         pool,
         fga,
-        bootstrap_token_env_var: config.app.bootstrap_token_env_var.clone(),
+        onboarding: (&config).into(),
         ingestion: ingestion::Ingestion::connect(
             &config.temporal_url(),
             &config.scheduler.temporal.namespace,
@@ -195,6 +195,12 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
                 "initialize the compatible fred-manager schema with serve before import"
             )
         })?;
+        fred_manager::onboarding::require_accepted(
+            &pool,
+            config.app.gcu_version.as_deref(),
+            &caller.uid,
+        )
+        .await?;
         let rebac = &config.security.rebac;
         let fga = Fga::connect(
             &rebac.api_url,
@@ -246,6 +252,7 @@ fn import_setup_error(error: anyhow::Error) -> anyhow::Error {
         "cannot read operator token file"
         | "cannot read provisioning bundle"
         | "invalid or expired operator bearer"
+        | "user_not_accept_gcu"
         | "import requires platform admin"
         | "import requires configured Keycloak service credentials"
         | "import requires enabled Keycloak subject authentication in the directory realm"

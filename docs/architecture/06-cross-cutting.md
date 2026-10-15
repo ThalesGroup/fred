@@ -2,7 +2,19 @@
 
 ## Authentication
 
-The `CurrentUser` extractor authenticates every route but the health probe.
+`CurrentUser` authenticates all routes except health and public frontend configuration.
+`AdmittedUser` also checks the caller's current CGU acceptance before business
+handlers; authenticated CLI import applies the same check. `OwnUser` restricts
+onboarding, consent and root bootstrap to an own human credential: service-account
+markers, the `service_agent` identity role and query parameters are rejected.
+Consent and bootstrap bodies reject unknown fields, including asserted subjects.
+
+`app.gcu_version` is an optional nonempty version of at most 128 UTF-8 bytes, without
+surrounding whitespace or control characters. `null` or disabled authentication
+removes the gate. Public configuration exposes only auth coordinates, version and
+bootstrap state, never secrets. Public and personal onboarding responses use
+`Cache-Control: no-store`. Consent requires the submitted version to equal the
+active one. The frontend serves Fred's existing localized terms assets.
 
 | Aspect | Rule |
 | --- | --- |
@@ -53,6 +65,9 @@ Structured stdout, in the format shared by Fred's services.
   `resource` and `outcome: succeeded`. This stream is always JSON and includes INFO
   even when the application threshold is WARNING or ERROR. Events precede SQL commit:
   an acknowledged FGA write remains auditable when SQL commit fails (I16).
+- A changed personal acceptance emits `terms.accepted` on `fred.security.audit`
+  with `actor_uid`, `version` and `outcome: succeeded`, after SQL persistence.
+  Repeating an existing acceptance emits no new event.
 - A single global filter applies the severity rules; a suppressed dependency probe
   cannot suppress the next application event. A fatal error after startup is one
   ERROR event, `fred-manager stopped`.
@@ -65,9 +80,9 @@ Every error body is `{"detail": "<message>"}`, as FastAPI.
 | --- | --- |
 | 400 | Unknown role name, placement rule broken (I1), malformed multipart import |
 | 401 | Missing or invalid bearer (details above) |
-| 403 | Permission denied (`forbidden`), wrong bootstrap secret |
+| 403 | Permission denied (`forbidden`), wrong bootstrap secret, `user_not_accept_gcu` |
 | 404 | Unknown id |
-| 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, ingestion already running |
+| 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, ingestion already running, `gcu_version_changed` |
 | 413 | Import exceeds 50 MiB compressed or 100 MiB expanded |
 | 422 | Invalid ZIP/declarations, `not_yet_supported` import format; invalid JSON body (optional ones included), short bootstrap token, half a cursor |
 | 503 | Bootstrap or platform-role administration with authentication disabled; grant with no directory or incompatible subject/realm mapping |
@@ -94,6 +109,7 @@ Local reference configuration:
 # Secrets come from config/.env.
 
 app:
+  gcu_version: v1
   name: Fred Manager
   base_url: /fred-manager/v1
   address: 0.0.0.0

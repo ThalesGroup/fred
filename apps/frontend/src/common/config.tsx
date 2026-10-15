@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { createKeycloakInstance } from "../security/KeycloakService";
-import type { FrontendConfig } from "../slices/controlPlane/controlPlaneOpenApi";
+import type { FrontendConfig } from "../slices/fredManager/fredManagerOpenApi";
 import {
   cachePlatformUiThemes,
   setCustomUiThemes,
@@ -22,10 +22,10 @@ import {
   type PlatformUiThemes,
 } from "../app/uiThemes.ts";
 
-/** Public pre-auth control-plane config surface. */
-const FRONTEND_CONFIG_URL = "/control-plane/v1/frontend/config";
+/** Public pre-auth manager configuration. */
+const FRONTEND_CONFIG_URL = "/fred-manager/v1/frontend/config";
 
-/** Minimal auth config needed before the protected control-plane bootstrap call. */
+/** Authentication settings needed before login. */
 export interface UserAuthConfig {
   enabled?: boolean;
   realm_url?: string;
@@ -145,24 +145,7 @@ const ignoreThemeFile =
 
 let config: AppConfig | null = null;
 
-/**
- * Load the small pre-auth frontend configuration.
- *
- * Why this function exists:
- * - the migrated shell still needs a tiny static bootstrap before protected
- *   control-plane requests can run
- * - `frontend_basename` stays in `/config.json` (a pre-network static value),
- *   while the user-auth decision now comes from the public control-plane
- *   endpoint so the backend `security.user` config is the single source of
- *   truth and dev/secure mode no longer requires editing a static asset
- *
- * How to use it:
- * - call once during app startup before rendering React
- * - read the resolved values later through `getConfig()`
- *
- * Example:
- * - `await loadConfig();`
- */
+/** Load deployment branding and manager authentication settings before login. */
 export const loadConfig = async () => {
   const res = await fetch("/config.json");
   if (!res.ok) throw new Error(`Cannot load /config.json: ${res.status} ${res.statusText}`);
@@ -207,22 +190,7 @@ export const loadConfig = async () => {
   }
 };
 
-/**
- * Fetch the public pre-auth control-plane config (`/frontend/config`).
- *
- * Why this function exists:
- * - the frontend must decide whether to initialize Keycloak before any login,
- *   so the auth flag is read from an unauthenticated control-plane endpoint
- *   rather than from a hand-edited `config.json`
- * - the active CGU version must likewise be known before authentication: the
- *   authenticated `/frontend/bootstrap` is GCU-gated (it 403s until the user
- *   accepts), so it cannot be the source of the version that decides whether to
- *   show the acceptance page (chicken-and-egg)
- *
- * How to use it:
- * - called by `loadConfig()` at Stage 0; failures abort startup like a missing
- *   `/config.json`, since the control-plane is required to run the app
- */
+/** Manager is the sole public configuration authority for this experimental entry. */
 const loadPublicConfig = async (): Promise<
   Pick<AppConfig, "user_auth" | "gcu_version" | "root_bootstrap_required" | "ui_themes" | "platform_access_enabled">
 > => {
@@ -237,21 +205,14 @@ const loadPublicConfig = async (): Promise<
       realm_url: payload.user_auth.realm_url ?? undefined,
       client_id: payload.user_auth.client_id ?? undefined,
       provider: payload.user_auth.provider === "oidc" ? "oidc" : "keycloak",
-      scope: payload.user_auth.scope ?? undefined,
-      user_directory: payload.user_auth.user_directory === "local" ? "local" : "keycloak",
+      user_directory: "keycloak",
       uid_claim: payload.user_auth.uid_claim ?? "sub",
       roles_claim: payload.user_auth.roles_claim ?? null,
     },
-    platform_access_enabled: payload.platform_access_enabled ?? false,
+    platform_access_enabled: false,
     gcu_version: payload.gcu_version ?? null,
-    // Rolling-compatibility fallback only: a control-plane deployed before
-    // `root_bootstrap_required` existed omits the field, so this re-derives
-    // the old (incorrect) predicate for that transition window. Once
-    // `root_bootstrap_required` is present, it is always authoritative — the
-    // frontend must not otherwise re-derive ReBAC/auth policy itself.
-    root_bootstrap_required:
-      payload.root_bootstrap_required ?? (payload.user_auth.enabled && !payload.root_bootstrap_completed),
-    ui_themes: payload.ui_themes ?? null,
+    root_bootstrap_required: payload.root_bootstrap_required,
+    ui_themes: null,
   };
 };
 

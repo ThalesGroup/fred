@@ -39,7 +39,9 @@ use crate::{
     fga::Fga,
     ingestion::{DeleteDocument, IngestDocument, Ingestion, Submitted},
     keycloak::Directory,
-    logging, platform,
+    logging,
+    onboarding::{self, AdmissionState, AdmittedUser, Onboarding, OwnUser},
+    platform,
     roles::{PlatformPermission, PlatformRole, SpacePermission},
     spaces,
 };
@@ -49,7 +51,7 @@ pub struct AppState {
     pub auth: Arc<Authenticator>,
     pub pool: PgPool,
     pub fga: Fga,
-    pub bootstrap_token_env_var: Option<String>,
+    pub onboarding: Onboarding,
     pub ingestion: Ingestion,
     pub directory: Option<Directory>,
 }
@@ -60,8 +62,8 @@ impl FromRef<AppState> for Arc<Authenticator> {
     }
 }
 
-/// Every route but the liveness probe takes `CurrentUser`, the `Depends(get_current_user)`
-/// equivalent. CORS mirrors the control-plane: configured origins, bearer and JSON only.
+/// Business routes take `AdmittedUser`, the authenticated and consent-checked equivalent of `Depends(get_current_user)`
+/// in Fred. CORS mirrors the control-plane: configured origins, bearer and JSON only.
 pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) -> Router {
     let origins: Vec<HeaderValue> = authorized_origins
         .iter()
@@ -87,6 +89,7 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         pool: state.pool.clone(),
         fga: state.fga.clone(),
         directory: state.directory.clone(),
+        onboarding: state.onboarding.clone(),
     });
     let api = content_routes()
         .with_state(state)
@@ -108,9 +111,112 @@ async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> 
     }
 }
 
+#[derive(Serialize, utoipa::ToSchema)]
+struct FrontendConfig {
+    user_auth: onboarding::PublicAuth,
+    gcu_version: Option<String>,
+    root_bootstrap_required: bool,
+    root_bootstrap_completed: bool,
+}
+
+#[utoipa::path(get, path = "/frontend/config", security(()), responses(
+    (status = 200, body = FrontendConfig),
+    (status = 500, body = crate::error::ErrorBody)
+))]
+async fn frontend_config(State(s): State<GovernanceState>) -> AppResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    let completed = onboarding::bootstrap_completed(&s.pool).await?;
+    Ok((
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(FrontendConfig {
+            user_auth: s.onboarding.user_auth.clone(),
+            gcu_version: s
+                .onboarding
+                .gcu_version
+                .clone()
+                .filter(|_| s.auth.enabled()),
+            root_bootstrap_required: s.auth.enabled() && !completed,
+            root_bootstrap_completed: completed,
+        }),
+    )
+        .into_response())
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct OnboardingStatus {
+    user_id: String,
+    username: String,
+    gcu_version: Option<String>,
+    acceptance: Option<onboarding::Acceptance>,
+    root_bootstrap_required: bool,
+}
+
+#[utoipa::path(get, path = "/me/onboarding", responses(
+    (status = 200, body = OnboardingStatus),
+    (status = 401, body = crate::error::ErrorBody),
+    (status = 403, body = crate::error::ErrorBody),
+    (status = 500, body = crate::error::ErrorBody)
+))]
+async fn onboarding_status(
+    State(s): State<GovernanceState>,
+    OwnUser(user): OwnUser,
+) -> AppResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    let acceptance = onboarding::acceptance(&s.pool, &user.uid).await?;
+    let completed = onboarding::bootstrap_completed(&s.pool).await?;
+    Ok((
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(OnboardingStatus {
+            user_id: user.uid,
+            username: user.username,
+            gcu_version: s
+                .onboarding
+                .gcu_version
+                .clone()
+                .filter(|_| s.auth.enabled()),
+            acceptance,
+            root_bootstrap_required: s.auth.enabled() && !completed,
+        }),
+    )
+        .into_response())
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+struct TermsRequest {
+    version: String,
+}
+
+#[utoipa::path(post, path = "/gcu", request_body = TermsRequest, responses(
+    (status = 204, description = "Accepted"),
+    (status = 401, body = crate::error::ErrorBody),
+    (status = 403, body = crate::error::ErrorBody),
+    (status = 409, body = crate::error::ErrorBody),
+    (status = 422, body = crate::error::ErrorBody),
+    (status = 500, body = crate::error::ErrorBody)
+))]
+async fn accept_terms(
+    State(s): State<GovernanceState>,
+    OwnUser(user): OwnUser,
+    ApiJson(req): ApiJson<TermsRequest>,
+) -> AppResult<StatusCode> {
+    onboarding::accept(
+        &s.pool,
+        s.onboarding
+            .gcu_version
+            .as_deref()
+            .filter(|_| s.auth.enabled()),
+        &user.uid,
+        &req.version,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 // ---------------------------------------------------------------- platform
 
 #[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
 struct BootstrapRequest {
     token: String,
 }
@@ -138,8 +244,8 @@ struct BootstrapResponse {
     )
 )]
 async fn bootstrap_platform_admin(
-    State(s): State<AppState>,
-    user: CurrentUser,
+    State(s): State<GovernanceState>,
+    OwnUser(user): OwnUser,
     ApiJson(req): ApiJson<BootstrapRequest>,
 ) -> AppResult<Json<BootstrapResponse>> {
     if req.token.chars().count() < bootstrap::MIN_TOKEN_LENGTH {
@@ -147,13 +253,14 @@ async fn bootstrap_platform_admin(
             "token: at least 16 characters".into(),
         ));
     }
-    let configured = bootstrap::configured_token(s.bootstrap_token_env_var.as_deref());
+    let configured = bootstrap::configured_token(s.onboarding.bootstrap_token_env_var.as_deref());
     if !configured.is_some_and(|t| bootstrap::same_secret(&t, &req.token)) {
         return Err(AppError::Denied(bootstrap::INVALID.into()));
     }
     if !s.auth.enabled() {
         return Err(AppError::Unavailable(bootstrap::AUTH_DISABLED.into()));
     }
+    onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
     bootstrap::grant_root(&s.pool, &s.fga, &user.uid).await?;
     tracing::info!(
         user_id = user.uid,
@@ -177,10 +284,14 @@ struct Me {
     responses(
         (status = 200, description = "Success", body = Me),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
-async fn me(State(s): State<GovernanceState>, user: CurrentUser) -> AppResult<Json<Me>> {
+async fn me(
+    State(s): State<GovernanceState>,
+    AdmittedUser(user): AdmittedUser,
+) -> AppResult<Json<Me>> {
     Ok(Json(Me {
         platform_roles: s.fga.effective_platform_roles(&user.uid).await?,
         user_id: user.uid,
@@ -202,12 +313,13 @@ struct MySpace {
     responses(
         (status = 200, description = "Success", body = [MySpace]),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
 async fn my_spaces(
     State(s): State<GovernanceState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
 ) -> AppResult<Json<Vec<MySpace>>> {
     let roles = s.fga.roles_of(&user).await?;
     let mut ids: Vec<Uuid> = roles.iter().map(|(id, _)| *id).collect();
@@ -254,7 +366,7 @@ struct CreateSpace {
 )]
 async fn create_space(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreateSpace>,
 ) -> AppResult<(StatusCode, Json<Space>)> {
     let space = spaces::create_space(
@@ -291,7 +403,7 @@ struct CreatePersonalSpace {
 )]
 async fn create_personal_space(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreatePersonalSpace>,
 ) -> AppResult<(StatusCode, Json<Space>)> {
     let space = spaces::create_personal_space(&s.pool, &s.fga, &user, req.organization_id).await?;
@@ -317,7 +429,7 @@ fn parse_role(role: &str) -> AppResult<Role> {
 )]
 async fn grant(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path((id, role, target)): Path<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
     spaces::grant(&s.pool, &s.fga, &user, id, parse_role(&role)?, &target).await?;
@@ -339,7 +451,7 @@ async fn grant(
 )]
 async fn revoke(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path((id, role, target)): Path<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
     spaces::revoke(&s.pool, &s.fga, &user, id, parse_role(&role)?, &target).await?;
@@ -366,7 +478,7 @@ struct FolderQuery {
 )]
 async fn list_folders(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(space): Path<Uuid>,
     Query(q): Query<FolderQuery>,
 ) -> AppResult<Json<Vec<Folder>>> {
@@ -397,7 +509,7 @@ struct CreateFolder {
 )]
 async fn create_folder(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreateFolder>,
 ) -> AppResult<(StatusCode, Json<Folder>)> {
     let folder = spaces::create_folder(
@@ -434,7 +546,7 @@ struct Rename {
 )]
 async fn rename_folder(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(id): Path<Uuid>,
     ApiJson(req): ApiJson<Rename>,
 ) -> AppResult<StatusCode> {
@@ -460,7 +572,7 @@ async fn rename_folder(
 )]
 async fn delete_folder(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
@@ -495,7 +607,7 @@ struct DocumentQuery {
 )]
 async fn list_documents(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(space): Path<Uuid>,
     Query(q): Query<DocumentQuery>,
 ) -> AppResult<Json<Vec<Document>>> {
@@ -548,7 +660,7 @@ struct CreatedDocument {
 )]
 async fn create_document(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreateDocument>,
 ) -> AppResult<(StatusCode, Json<CreatedDocument>)> {
     let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, req.space_id).await?;
@@ -591,7 +703,7 @@ async fn create_document(
 )]
 async fn get_document(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Document>> {
     let document = db::document(&s.pool, id).await?;
@@ -616,7 +728,7 @@ async fn get_document(
 )]
 async fn rename_document(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(id): Path<Uuid>,
     ApiJson(req): ApiJson<Rename>,
 ) -> AppResult<StatusCode> {
@@ -644,7 +756,7 @@ async fn rename_document(
 )]
 async fn delete_document(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     let document = db::document(&s.pool, id).await?;
@@ -691,7 +803,7 @@ fn ingest_request(body: &[u8]) -> AppResult<IngestRequest> {
 )]
 async fn ingest_document(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(id): Path<Uuid>,
     body: axum::body::Bytes,
 ) -> AppResult<StatusCode> {
@@ -740,6 +852,7 @@ struct Allowed {
     responses(
         (status = 200, description = "Success", body = Allowed),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
@@ -747,7 +860,7 @@ struct Allowed {
 )]
 async fn authorize_document(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<AuthorizeDocument>,
 ) -> AppResult<Json<Allowed>> {
     let document = db::document(&s.pool, req.document_id).await?;
@@ -784,7 +897,7 @@ struct Scope {
 )]
 async fn authorize_scope(
     State(s): State<AppState>,
-    CurrentUser { uid: user, .. }: CurrentUser,
+    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<AuthorizeScope>,
 ) -> AppResult<Json<Scope>> {
     let space = db::space(&s.pool, req.space_id).await?;
@@ -836,7 +949,7 @@ fn require_directory_actor(s: &GovernanceState) -> AppResult<()> {
 )]
 async fn list_platform_roles(
     State(s): State<GovernanceState>,
-    user: CurrentUser,
+    AdmittedUser(user): AdmittedUser,
 ) -> AppResult<Json<Vec<platform::Grant>>> {
     require_directory_actor(&s)?;
     Ok(Json(platform::list(&s.fga, &user.uid).await?))
@@ -861,7 +974,7 @@ fn platform_role(name: &str) -> AppResult<PlatformRole> {
 )]
 async fn grant_platform_role(
     State(s): State<GovernanceState>,
-    user: CurrentUser,
+    AdmittedUser(user): AdmittedUser,
     Path((target, role)): Path<(String, String)>,
 ) -> AppResult<StatusCode> {
     require_directory_actor(&s)?;
@@ -901,7 +1014,7 @@ async fn grant_platform_role(
 )]
 async fn revoke_platform_role(
     State(s): State<GovernanceState>,
-    user: CurrentUser,
+    AdmittedUser(user): AdmittedUser,
     Path((target, role)): Path<(String, String)>,
 ) -> AppResult<StatusCode> {
     require_directory_actor(&s)?;
@@ -918,13 +1031,14 @@ struct PlatformCheck {
     responses(
         (status = 200, description = "Success", body = Allowed),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
 async fn authorize_platform(
     State(s): State<GovernanceState>,
-    user: CurrentUser,
+    AdmittedUser(user): AdmittedUser,
     ApiJson(req): ApiJson<PlatformCheck>,
 ) -> AppResult<Json<Allowed>> {
     Ok(Json(Allowed {
@@ -942,6 +1056,7 @@ struct SpaceCheck {
     responses(
         (status = 200, description = "Success", body = Allowed),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
@@ -949,7 +1064,7 @@ struct SpaceCheck {
 )]
 async fn authorize_space(
     State(s): State<GovernanceState>,
-    user: CurrentUser,
+    AdmittedUser(user): AdmittedUser,
     ApiJson(req): ApiJson<SpaceCheck>,
 ) -> AppResult<Json<Allowed>> {
     db::space(&s.pool, req.space_id).await?;
@@ -977,7 +1092,7 @@ struct RegistryQuery {
 )]
 async fn team_registry(
     State(s): State<GovernanceState>,
-    user: CurrentUser,
+    AdmittedUser(user): AdmittedUser,
     Query(query): Query<RegistryQuery>,
 ) -> AppResult<Json<Vec<Space>>> {
     if !s
@@ -992,25 +1107,50 @@ async fn team_registry(
         .bind(query.after).fetch_all(&s.pool).await?))
 }
 
-/// Governance routes are usable without an ingestion client; all require CurrentUser.
+/// Governance routes are usable without an ingestion client. Public configuration
+/// and personal onboarding are separate from consent-gated business operations.
 #[derive(Clone)]
 pub struct GovernanceState {
     pub auth: Arc<Authenticator>,
     pub pool: PgPool,
     pub fga: Fga,
     pub directory: Option<Directory>,
+    pub onboarding: Onboarding,
 }
 impl FromRef<GovernanceState> for Arc<Authenticator> {
     fn from_ref(state: &GovernanceState) -> Self {
         state.auth.clone()
     }
 }
+impl FromRef<GovernanceState> for AdmissionState {
+    fn from_ref(s: &GovernanceState) -> Self {
+        Self {
+            auth: s.auth.clone(),
+            pool: s.pool.clone(),
+            version: s.onboarding.gcu_version.clone(),
+        }
+    }
+}
+impl FromRef<AppState> for AdmissionState {
+    fn from_ref(s: &AppState) -> Self {
+        Self {
+            auth: s.auth.clone(),
+            pool: s.pool.clone(),
+            version: s.onboarding.gcu_version.clone(),
+        }
+    }
+}
+
 pub fn governance_router(state: GovernanceState) -> Router {
     governance_routes().with_state(state).split_for_parts().0
 }
 
 fn governance_routes() -> OpenApiRouter<GovernanceState> {
     OpenApiRouter::new()
+        .routes(routes!(frontend_config))
+        .routes(routes!(onboarding_status))
+        .routes(routes!(accept_terms))
+        .routes(routes!(bootstrap_platform_admin))
         .routes(routes!(me))
         .routes(routes!(my_spaces))
         .routes(
@@ -1029,7 +1169,6 @@ fn governance_routes() -> OpenApiRouter<GovernanceState> {
 fn content_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(health))
-        .routes(routes!(bootstrap_platform_admin))
         .routes(routes!(create_personal_space))
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
@@ -1123,7 +1262,7 @@ struct ProvisioningUpload {
 )]
 async fn import_blueprint(
     State(s): State<GovernanceState>,
-    user: CurrentUser,
+    AdmittedUser(user): AdmittedUser,
     request: axum::extract::Request,
 ) -> axum::response::Response {
     use crate::{

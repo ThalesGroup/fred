@@ -38,6 +38,9 @@ pub struct Configuration {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
+    /// Active terms version; null disables consent gating.
+    #[serde(default, deserialize_with = "terms_version")]
+    pub gcu_version: Option<String>,
     pub base_url: String,
     #[serde(default = "default_address")]
     pub address: String,
@@ -142,6 +145,18 @@ pub struct TemporalConfig {
     #[serde(default = "default_namespace")]
     pub namespace: String,
     pub task_queue: String,
+}
+
+fn terms_version<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    let version = Option::<String>::deserialize(d)?;
+    if version.as_ref().is_some_and(|v| {
+        v.is_empty() || v.len() > 128 || v.trim() != v || v.chars().any(char::is_control)
+    }) {
+        return Err(serde::de::Error::custom(
+            "gcu_version must be null or a nonblank version of at most 128 bytes",
+        ));
+    }
+    Ok(version)
 }
 
 fn yes() -> bool {
@@ -273,6 +288,26 @@ impl Configuration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Proves: I19
+    #[test]
+    fn active_terms_version_is_explicit_and_validated() {
+        let shipped = include_str!("../config/configuration.yaml");
+        for invalid in ["", " v1", "v1 ", "v1\n", &"x".repeat(129)] {
+            let mut config: serde_json::Value = serde_yaml_ng::from_str(shipped).unwrap();
+            config["app"]["gcu_version"] = invalid.into();
+            assert!(serde_json::from_value::<Configuration>(config).is_err());
+        }
+        let mut config: serde_json::Value = serde_yaml_ng::from_str(shipped).unwrap();
+        config["app"]["gcu_version"] = serde_json::Value::Null;
+        assert!(
+            serde_json::from_value::<Configuration>(config)
+                .unwrap()
+                .app
+                .gcu_version
+                .is_none()
+        );
+    }
 
     #[test]
     fn parses_the_shipped_configuration() {

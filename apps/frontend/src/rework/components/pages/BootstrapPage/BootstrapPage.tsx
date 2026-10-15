@@ -16,7 +16,7 @@ import { KeyboardEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import { useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { useBootstrapPlatformAdminMutation } from "../../../../slices/fredManager/fredManagerApiEnhancements";
 import styles from "./BootstrapPage.module.css";
 
 /** Mirrors the backend's `BootstrapPlatformAdminRequest.token` `min_length=16`. */
@@ -38,14 +38,16 @@ const parseBootstrapError = (error: unknown): { status?: number; detail?: string
 export default function BootstrapPage() {
   const { t } = useTranslation();
   const [token, setToken] = useState("");
-  const [trigger, { isLoading, isSuccess, data, error, reset }] =
-    useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation();
+  const [trigger, { isLoading, isSuccess, data, error, reset }] = useBootstrapPlatformAdminMutation();
 
   const { status, detail } = error ? parseBootstrapError(error) : { status: undefined, detail: undefined };
   // 409 means someone else (or another tab) completed bootstrap moments ago —
   // the flag is now global and permanent, so the only sane next step is to
-  // reload: this page will stop being reachable once `BootstrapGuard` re-reads it.
+  // reload: this page will stop being reachable once manager onboarding state is read again.
   const isAlreadyCompleted = status === 409;
+  useEffect(() => {
+    if (detail === "user_not_accept_gcu") window.location.reload();
+  }, [detail]);
 
   // An invalid secret must not linger in the field: clear it so the user
   // can't accidentally resubmit the same wrong value, but keep the form on
@@ -60,7 +62,7 @@ export default function BootstrapPage() {
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    trigger({ bootstrapPlatformAdminRequest: { token } });
+    trigger({ bootstrapRequest: { token } });
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {

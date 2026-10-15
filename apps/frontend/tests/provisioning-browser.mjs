@@ -1,9 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-// Full Fred UI + real OIDC login, manager, PostgreSQL and OpenFGA. Only the
-// unrelated control-plane shell reads below are fixtures; no manager response,
-// Keycloak token, generated slice or provisioning action is mocked.
+// Real first-user journey; any control-plane or knowledge-flow dependency fails.
 import assert from "node:assert/strict";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
@@ -28,66 +26,59 @@ const expect = baseExpect.configure({ timeout: 60_000 });
 
 async function login(username, password, path = "/admin/provisioning") {
   const context = await browser.newContext({ locale: "en", viewport: { width: 1280, height: 900 } });
-  // Neutral admitted shell with no control-plane administrative authority.
-  // Listing these endpoints explicitly makes unexpected dependencies fail the test.
-  await context.route("**/control-plane/v1/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    let value;
-    switch (path) {
-      case "/control-plane/v1/frontend/config":
-        value = {
-          user_auth: { enabled: true, realm_url: realm, client_id: "app", provider: "keycloak" },
-          gcu_version: null,
-          root_bootstrap_required: false,
-          platform_access_enabled: false,
-        };
-        break;
-      case "/control-plane/v1/frontend/bootstrap":
-        value = {
-          current_user: {
-            id: username,
-            username,
-            first_name: username,
-            last_name: "",
-            email: `${username}@example.com`,
-          },
-          active_team: { id: "shell-personal", name: "Personal", permissions: [], my_relations: [] },
-          available_teams: [],
-          feature_flags: {},
-          permissions: { platform_roles: [] },
-          team_admin_charter_enabled: false,
-        };
-        break;
-      case "/control-plane/v1/announcements/active":
-        value = [];
-        break;
-      case "/control-plane/v1/announcements/patch-notes":
-        value = { patch_notes: [], pending_announcement_id: null };
-        break;
-      case "/control-plane/v1/tasks":
-        value = { tasks: [] };
-        break;
-      default:
-        unexpected.push(path);
-        await route.abort();
-        return;
-    }
-    await route.fulfill({ json: value });
+  await context.route(/\/(control-plane|knowledge-flow)\/v1\//, async (route) => {
+    unexpected.push(new URL(route.request().url()).pathname);
+    await route.abort();
   });
-  await context.route("**/knowledge-flow/v1/tasks?*", (route) => route.fulfill({ json: { tasks: [] } }));
+  if (username === "root")
+    await context.route("**/fred-manager/v1/frontend/config", (route) => route.abort(), { times: 1 });
   const page = await context.newPage();
   page.on("pageerror", (error) => pageErrors.push(error.message));
   let bearer;
   page.on("request", (request) => {
-    if (request.url() === `${origin}/fred-manager/v1/me`) bearer = request.headers().authorization;
+    if (request.url() === `${origin}/fred-manager/v1/me/onboarding`) bearer = request.headers().authorization;
   });
   await page.goto(origin + path);
+  if (username === "root") {
+    await expect(page.getByRole("alert")).toContainText("Unable to load your access");
+    await page.getByRole("button", { name: "Reload", exact: true }).click();
+  }
   await page.locator("#username").fill(username);
   await page.locator("#password").fill(password);
   await page.locator("#kc-login").click();
-  await expect(page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
   await expect.poll(() => bearer).toMatch(/^Bearer /);
+  const before = await get(context, bearer, "/me/onboarding");
+  assert.equal(before.acceptance, null, "Import must not accept terms for anyone");
+  const denied = await context.request.get(`${origin}/fred-manager/v1/me/spaces`, {
+    headers: { Authorization: bearer },
+  });
+  assert.equal(denied.status(), 403);
+  await acceptTerms(page);
+  if (username === "root") {
+    const secret = page.getByLabel("Bootstrap secret", { exact: false });
+    await secret.fill("wrong-but-long-enough");
+    await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
+    await expect(page.getByText("This bootstrap secret is not valid. Please try again.")).toBeVisible();
+    await expect(secret).toHaveValue("");
+    await secret.fill(process.env.FRED_MANAGER_TEST_BOOTSTRAP_TOKEN);
+    await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
+    await expect(page.getByText("You are now the platform administrator, root.")).toBeVisible();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page.getByText("You do not belong to any organization or space.")).toBeVisible();
+    assert.deepEqual(await get(context, bearer, "/me/spaces"), []);
+    await page.getByRole("link", { name: "Provisioning", exact: true }).click();
+  }
+  await expect(page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
   return { context, page, bearer };
+}
+
+async function acceptTerms(page) {
+  const accept = page.getByRole("button", { name: "Accept the TOS", exact: true });
+  await expect(accept).toBeVisible();
+  await page.locator('[class*="gcuEnd"]').scrollIntoViewIfNeeded();
+  await expect(accept).toBeEnabled();
+  await accept.click();
+  await expect(accept).toHaveCount(0);
 }
 
 async function importFile(page, file, expectedStatus = 200) {
@@ -199,7 +190,23 @@ try {
   await expect(root.page.getByRole("alert")).toContainText("This bundle format is not yet supported.");
   await expect(root.page.getByRole("alert")).toContainText("Some changes may already be applied.");
 
-  const bob = await login("bob", "Azerty123_");
+  assert.deepEqual(await get(root.context, root.bearer, "/me/spaces"), []);
+  // Switch identities in the same browser, exercising logout and fresh Redux state.
+  let bobBearer;
+  root.page.on("request", (request) => {
+    if (request.url() === `${origin}/fred-manager/v1/me`) bobBearer = request.headers().authorization;
+  });
+  await root.page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await root.page.locator("#username").fill("bob");
+  await root.page.locator("#password").fill("Azerty123_");
+  await root.page.locator("#kc-login").click();
+  await acceptTerms(root.page);
+  await expect(root.page.getByRole("heading", { name: "Your spaces", exact: true })).toBeVisible();
+  await expect(root.page.getByRole("heading", { name: "Demo", exact: true })).toBeVisible();
+  await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toBeVisible();
+  await expect(root.page.getByText("You do not belong to any organization or space.")).toHaveCount(0);
+  const bob = { page: root.page, context: root.context, bearer: bobBearer };
+  await bob.page.goto(origin + "/admin/provisioning");
   await expect(bob.page.getByRole("alert")).toContainText("Provisioning requires a platform administrator role");
   await expect(bob.page.locator('input[type="file"]')).toHaveCount(0);
   await expect(bob.page.getByRole("link", { name: "Provisioning", exact: true })).toHaveCount(0);
@@ -226,7 +233,7 @@ try {
   assert.deepEqual(unexpected, [], "Unexpected control-plane dependency");
   assert.deepEqual(pageErrors, [], "Browser application errors");
   console.log(
-    "Provisioning browser acceptance passed: OIDC login, navigation, multipart import, pending state, reports, replay, project hierarchy/roles, legacy rejection and access refusals.",
+    "Provisioning browser acceptance passed: OIDC login, personal terms, root bootstrap, logout/account switch, empty root memberships, navigation, multipart import, pending state, reports, replay, project hierarchy/roles, legacy rejection and access refusals.",
   );
 } finally {
   await browser?.close();

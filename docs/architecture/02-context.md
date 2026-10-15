@@ -17,7 +17,7 @@ flowchart LR
     client -- "login" --> keycloak
     manager -- "signing keys,<br/>service-account directory lookup/create" --> keycloak
     manager -- "one check per access,<br/>role writes" --> openfga
-    manager -- "spaces, folders, documents" --> postgres
+    manager -- "consent, spaces, folders, documents" --> postgres
     manager -- "IngestDocument,<br/>DeleteDocument" --> temporal
 ```
 
@@ -27,5 +27,5 @@ flowchart LR
 | OpenFGA | `check`, `write`, `read` on its own store | chapter 5, OpenFGA model |
 | Postgres | Its tables in the `fred` database | chapter 5, Schema |
 | Temporal | Starting `IngestDocument` and `DeleteDocument` | chapter 4, Ingestion submission |
-| Clients | Every route; the health probe needs no token | chapters 4 and 6 |
+| Clients | Public configuration and health; authenticated onboarding and business routes | chapters 4 and 6 |
 | Services acting for a user | `/authorize/document`, `/authorize/scope` | chapter 4, Search scope |

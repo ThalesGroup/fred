@@ -68,6 +68,12 @@ const injectedRtkApi = api.injectEndpoints({
     renameFolder: build.mutation<RenameFolderApiResponse, RenameFolderApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/folders/${queryArg.id}`, method: "PATCH", body: queryArg.rename }),
     }),
+    frontendConfig: build.query<FrontendConfigApiResponse, FrontendConfigApiArg>({
+      query: () => ({ url: `/fred-manager/v1/frontend/config` }),
+    }),
+    acceptTerms: build.mutation<AcceptTermsApiResponse, AcceptTermsApiArg>({
+      query: (queryArg) => ({ url: `/fred-manager/v1/gcu`, method: "POST", body: queryArg.termsRequest }),
+    }),
     health: build.query<HealthApiResponse, HealthApiArg>({
       query: () => ({ url: `/fred-manager/v1/healthz` }),
     }),
@@ -80,6 +86,9 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     me: build.query<MeApiResponse, MeApiArg>({
       query: () => ({ url: `/fred-manager/v1/me` }),
+    }),
+    onboardingStatus: build.query<OnboardingStatusApiResponse, OnboardingStatusApiArg>({
+      query: () => ({ url: `/fred-manager/v1/me/onboarding` }),
     }),
     createPersonalSpace: build.mutation<CreatePersonalSpaceApiResponse, CreatePersonalSpaceApiArg>({
       query: (queryArg) => ({
@@ -204,6 +213,12 @@ export type RenameFolderApiArg = {
   id: string;
   rename: Rename;
 };
+export type FrontendConfigApiResponse = /** status 200 undefined */ FrontendConfig;
+export type FrontendConfigApiArg = void;
+export type AcceptTermsApiResponse = unknown;
+export type AcceptTermsApiArg = {
+  termsRequest: TermsRequest;
+};
 export type HealthApiResponse = /** status 200 undefined */ Health;
 export type HealthApiArg = void;
 export type ImportBlueprintApiResponse = /** status 200 Success */ Report;
@@ -212,6 +227,8 @@ export type ImportBlueprintApiArg = {
 };
 export type MeApiResponse = /** status 200 Success */ Me;
 export type MeApiArg = void;
+export type OnboardingStatusApiResponse = /** status 200 undefined */ OnboardingStatus;
+export type OnboardingStatusApiArg = void;
 export type CreatePersonalSpaceApiResponse = /** status 201 Success */ Space;
 export type CreatePersonalSpaceApiArg = {
   createPersonalSpace: CreatePersonalSpace;
@@ -362,6 +379,23 @@ export type CreateFolder = {
   parent_id?: string | null;
   space_id: string;
 };
+export type PublicAuth = {
+  client_id: string;
+  enabled: boolean;
+  provider: string;
+  realm_url: string;
+  roles_claim?: string[] | null;
+  uid_claim: string;
+};
+export type FrontendConfig = {
+  gcu_version?: string | null;
+  root_bootstrap_completed: boolean;
+  root_bootstrap_required: boolean;
+  user_auth: PublicAuth;
+};
+export type TermsRequest = {
+  version: string;
+};
 export type Health = {
   status: string;
 };
@@ -382,6 +416,17 @@ export type PlatformRole =
   | "prompt_editor";
 export type Me = {
   platform_roles: PlatformRole[];
+  user_id: string;
+  username: string;
+};
+export type Acceptance = {
+  accepted_at: string;
+  version: string;
+};
+export type OnboardingStatus = {
+  acceptance?: Acceptance | null;
+  gcu_version?: string | null;
+  root_bootstrap_required: boolean;
   user_id: string;
   username: string;
 };
@@ -420,11 +465,16 @@ export const {
   useCreateFolderMutation,
   useDeleteFolderMutation,
   useRenameFolderMutation,
+  useFrontendConfigQuery,
+  useLazyFrontendConfigQuery,
+  useAcceptTermsMutation,
   useHealthQuery,
   useLazyHealthQuery,
   useImportBlueprintMutation,
   useMeQuery,
   useLazyMeQuery,
+  useOnboardingStatusQuery,
+  useLazyOnboardingStatusQuery,
   useCreatePersonalSpaceMutation,
   useMySpacesQuery,
   useLazyMySpacesQuery,

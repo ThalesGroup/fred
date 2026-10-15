@@ -20,7 +20,8 @@ import "./styles/index.css";
 import "./index.scss";
 import "katex/dist/katex.min.css";
 import { createRoot } from "react-dom/client";
-import FredUi from "./app/App.tsx";
+import StartupFailure from "./app/StartupFailure.tsx";
+import FredUi from "./app/ManagerApp.tsx";
 import { store } from "./common/store.tsx";
 import { KeyCloakService } from "./security/KeycloakService.ts";
 import { getPlatformUiThemes, loadConfig } from "./common/config.tsx";
@@ -81,7 +82,7 @@ const startApp = async () => {
     });
   } catch (error) {
     console.error("Failed to load config:", error);
-    // Optionally render a fatal error page
+    createRoot(document.getElementById("root")).render(<StartupFailure />);
   }
 };
 

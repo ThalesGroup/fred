@@ -24,8 +24,6 @@ make -C ../../docs/architecture check # the dossier still matches the code
 
 ```
 make run
-make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>
-make create-org ORG_NAME=TSN ORG_ADMIN=<your user_id, from GET /me>
 ```
 
 **In the cluster, after `make k3d-up`**, from fred-deployment-factory:
@@ -37,16 +35,22 @@ make k3d-logs SVC=fred-manager
 make k3d-app-uninstall DIR=../fred/apps/fred-manager
 ```
 
-Then, from apps/fred-manager, bootstrap the pod with the cluster's secret, regenerated
-by every new cluster, and a token issued at `keycloak:8080`:
+Deploy the frontend from this branch as well. Open Fred, sign in with your own
+Keycloak account, read and accept the CGU, then enter the deployment bootstrap
+secret in the UI. The local service uses `FRED_BOOTSTRAP_TOKEN` from `config/.env`.
+The k3d manager overlay reads the cluster secret `fred-secrets` key
+`CONTROL_PLANE_BOOTSTRAP_TOKEN`; use the value supplied by your deployment.
 
-```
-make bootstrap-local BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw> \
-  FRED_MANAGER_BASE_URL=http://localhost:8088/fred-manager/v1 \
-  KEYCLOAK_REALM_URL=http://keycloak:8080/realms/app \
-  FRED_BOOTSTRAP_TOKEN="$(kubectl --context k3d-fred -n fred get secret fred-secrets \
-    -o jsonpath='{.data.CONTROL_PLANE_BOOTSTRAP_TOKEN}' | base64 -d)"
-```
+The root has platform authority and no organization membership. Open
+**Provisioning**, import the ZIP built below, then sign out and sign in as an
+imported user. That person accepts their own CGU and sees their declared spaces.
+There is no automatic personal space or default-team enrollment.
+
+`app.gcu_version: v1` enables this step in the reference and k3d configurations.
+Changing the version requires everyone, including root, to accept again. Publish
+the corresponding frontend `gcu.<language>.md`/`gcu.md` assets with the version;
+`null` disables the gate. Existing Python consent and bootstrap records are not
+manager consent or bootstrap records.
 
 ## Changing it
 
@@ -67,7 +71,7 @@ Generation runs without configuration, credentials or services. The frontend's
 never edit it by hand. The slice uses the shared bearer/refresh base query and
 Redux store. Its enhancement encodes the generated import argument as multipart
 FormData, retaining the generated URL, method and completed-report type.
-Import never retries automatically on 401; expiry can follow committed effects.
+Bootstrap and import never retry automatically on 401; expiry can follow committed effects.
 The generation target also corrects the code generator's required-body typing for
 the optional ingestion request. Frontend consumers use `fredManagerApiEnhancements`.
 
@@ -109,7 +113,7 @@ array. Demo passwords are test credentials. The
 defines explicit parent references and roles, including projects. Old JSON and
 Python version-1 ZIPs return `not_yet_supported`; no conversion is performed.
 
-After compatible initialization and root bootstrap, save a platform administrator's
+After compatible initialization, personal CGU acceptance and root bootstrap, save a platform administrator's
 access token in a private file and run:
 
 ```sh
@@ -141,11 +145,12 @@ imports a variant with a project.
 
 ## Import through the frontend
 
-The administration console exposes **Provisioning** at `/admin/provisioning` to
+The experimental manager entry exposes **Provisioning** at `/admin/provisioning` to
 manager platform administrators. Select the ZIP produced by `make build-demo-bundle`.
 The page displays the completed server counts or an error with explicit replay
 guidance. The demo declares a platform admin and therefore requires the bootstrap
-root. Control-plane Migration remains a separate page.
+root. The entry mounts only onboarding, own memberships and provisioning; legacy
+control-plane pages are not part of this journey.
 
 From `apps/frontend`, automate this journey without touching development data:
 
@@ -156,10 +161,11 @@ make test-provisioning-browser
 
 The test needs Docker, Node/npm and the Rust/protoc prerequisites above. It starts
 throwaway PostgreSQL, OpenFGA and Keycloak plus the real manager governance router
-and Vite frontend, then removes its services. It performs OIDC login, imports the
-actual Make ZIP, replays it, imports a project variant, and checks persisted roles,
-hierarchy, reports and refusals. Control-plane shell reads are explicit fixtures;
-this test does not validate control-plane admission policies. Screenshots are
+and Vite frontend, then removes its services. Starting with no root or consent,
+it accepts CGU, bootstraps through the UI, imports the actual Make ZIP, replays it,
+imports a project variant, then switches accounts in the same browser. It checks
+consent isolation, empty root memberships, persisted hierarchy/roles, reports and
+refusals. Any control-plane or knowledge-flow call fails the test. Screenshots are
 written under the frontend's ignored `target/` directory. The manager's
 `make test-browser` invokes the same journey and integration suite when frontend
 dependencies and Chromium are already installed.

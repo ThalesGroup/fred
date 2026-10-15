@@ -26,6 +26,7 @@ import {
   THEME_MODE_STORAGE_KEY,
   UI_THEME_STORAGE_KEY,
   UiTheme,
+  type PlatformUiThemes,
 } from "./uiThemes.ts";
 
 /**
@@ -41,6 +42,17 @@ const getSystemDarkMode = (): boolean => {
 };
 
 export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
+  const { data: publicConfig, refetch } = useFrontendConfigQuery(undefined, crossSessionRefreshOptions(false));
+  useRefetchOnWindowFocus(refetch, false);
+  const platformUiThemes = publicConfig ? (publicConfig.ui_themes ?? null) : getPlatformUiThemes();
+  return <ApplicationThemeProvider platformUiThemes={platformUiThemes}>{props.children}</ApplicationThemeProvider>;
+};
+
+/** Presentation state shared by shells; this provider performs no API requests. */
+export const ApplicationThemeProvider = ({
+  children,
+  platformUiThemes,
+}: PropsWithChildren<{ platformUiThemes: PlatformUiThemes | null }>) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorageState(
     "ApplicationContextProvider.isSidebarCollapsed",
     false,
@@ -50,9 +62,6 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>(THEME_MODE_STORAGE_KEY, "system");
   // null = no choice yet, so the platform default can apply (see resolveUiTheme).
   const [storedUiTheme, setUiTheme] = useLocalStorageState<UiTheme | null>(UI_THEME_STORAGE_KEY, null);
-  const { data: publicConfig, refetch } = useFrontendConfigQuery(undefined, crossSessionRefreshOptions(false));
-  useRefetchOnWindowFocus(refetch, false);
-  const platformUiThemes = publicConfig ? (publicConfig.ui_themes ?? null) : getPlatformUiThemes();
   useEffect(() => cachePlatformUiThemes(platformUiThemes), [platformUiThemes]);
   const uiTheme = resolveUiTheme(storedUiTheme, platformUiThemes);
   const offered = offeredUiThemes(platformUiThemes);
@@ -85,5 +94,5 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
     setUiTheme,
   };
 
-  return <ApplicationContext.Provider value={contextValue}>{props.children}</ApplicationContext.Provider>;
+  return <ApplicationContext.Provider value={contextValue}>{children}</ApplicationContext.Provider>;
 };

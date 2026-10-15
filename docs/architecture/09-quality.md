@@ -39,13 +39,19 @@ ZIP, replays without changing space IDs, imports a project variant, checks hiera
 and roles, rejects a member and a non-root admin for a root-only bundle, and displays
 legacy-format refusal. Desktop and narrow screenshots exercise the shared layout.
 
-Only unrelated control-plane shell reads and the knowledge-flow task list are
-explicit fixtures. Unexpected control-plane requests fail the journey. This boundary
-does not exercise control-plane admission policies or Temporal. Each run owns its
-database, FGA store and Keycloak container. The frontend command
+The journey starts without root grants or consent. It exercises initial configuration
+failure/reload, personal terms, wrong secret, successful bootstrap, empty root
+memberships, import/replay, and same-browser logout/login as an imported person.
+The second person accepts independently and sees their declared spaces. No manager
+or Python response is fabricated; any control-plane or knowledge-flow call fails.
+Each run owns its database, FGA store and Keycloak container. The frontend command
 `make test-provisioning-browser` invokes this journey and the integration suite.
-Nginx smoke tests verify the same canonical path, multipart body and bearer through
-the production proxy, and frontend startup without the optional manager service.
+Nginx smoke tests verify canonical paths, multipart bodies and bearer forwarding.
+
+Frontend regressions prove that unavailable onboarding fails closed, stale consent
+never advances the journey, and a changed version reloads the displayed legal text.
+Integration regressions exercise version changes, timestamp-preserving retry,
+service/delegation refusal, CLI admission and absence of membership side effects.
 
 ## OpenFGA request costs
 
@@ -57,11 +63,17 @@ parents. A fixed number of HTTP calls does not specify OpenFGA's datastore work,
 latency or throughput.
 
 The frontend navigation and provisioning guard share one cached `/me` query.
-Mounting a subscriber refetches data older than 60 seconds; concurrent subscribers
+The admitted entry refetches `/me` when mounted; the provisioning guard refetches
+data older than 60 seconds. Concurrent subscribers
 deduplicate the request. Each network fetch performs the five concurrent Checks
 listed below. There is no polling or additional import-specific FGA query. The
 browser fixture (15 imported users, one organization, three teams and one project,
 one active import at a time) proves behavior, not throughput or scalability.
+
+With CGU enabled, each business HTTP request and CLI import adds one indexed SQL
+acceptance read by subject, without an OpenFGA call or authorization lock. Bootstrap
+checks consent before its existing lock. Personal onboarding reads acceptance and
+bootstrap completion; it does not enumerate spaces or roles.
 
 The following source-derived successful-path counts exclude startup, authentication, SQL and
 Keycloak calls. `C` is one Check; `W(n)` is one Write with `n` total inserts and deletes.
@@ -88,6 +100,7 @@ one request, even for an empty result. The client does not specify `page_size`.
 | Create team using platform delegation | `2 R_g + 3 C + W(5)` | Adds platform creation permission |
 | Create personal space | `1 R_g + 1 C + W(4)` | Caller reads organization; member/editor grants |
 | Operator create organization | `W(2) + 1 R_g + W(4)` | Initialize guard, then initial admin/member grants |
+| Public configuration, personal onboarding and consent | `0` | SQL bootstrap/acceptance reads or consent upsert only |
 | Root bootstrap | `1 R_g + W(3)` | Bearer/secret and SQL marker govern admission |
 
 `d` is 1 when the revoked role exists, otherwise 0. A successful absent space-role
@@ -186,7 +199,7 @@ Generated from the `// Proves:` markers.
 | I6 | `apps/fred-manager/tests/integration.rs::a_member_with_a_personal_space_can_leave_the_organization`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed` |
 | I7 | `apps/fred-manager/src/domain.rs::search_scope_is_ancestors_then_self` |
 | I8 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::admin_roles_grant_no_content_access`<br>`apps/fred-manager/tests/integration.rs::complete_role_permission_matrix_and_space_isolation`<br>`apps/fred-manager/tests/integration.rs::delegated_creation_is_team_only_and_never_grants_caller_membership`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::offline_cutover_preserves_roles_and_pins_the_published_store`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_changed_permissions_and_inconsistent_hierarchy`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors` |
-| I9 | `apps/fred-manager/tests/integration.rs::bootstrap_promotes_one_person_once`<br>`apps/fred-manager/tests/integration.rs::a_finished_bootstrap_stays_closed_after_its_admin_is_removed`<br>`apps/fred-manager/tests/integration.rs::concurrent_retries_finish_a_bootstrap_once`<br>`apps/fred-manager/tests/integration.rs::an_interrupted_bootstrap_is_finished_by_its_caller_only`<br>`apps/fred-manager/tests/integration.rs::offline_cutover_preserves_roles_and_pins_the_published_store` |
+| I9 | `apps/fred-manager/tests/integration.rs::bootstrap_promotes_one_person_once`<br>`apps/fred-manager/tests/integration.rs::a_finished_bootstrap_stays_closed_after_its_admin_is_removed`<br>`apps/fred-manager/tests/integration.rs::concurrent_retries_finish_a_bootstrap_once`<br>`apps/fred-manager/tests/integration.rs::an_interrupted_bootstrap_is_finished_by_its_caller_only`<br>`apps/fred-manager/tests/integration.rs::offline_cutover_preserves_roles_and_pins_the_published_store`<br>`apps/fred-manager/tests/integration.rs::consent_and_root_bootstrap_are_personal_and_do_not_create_memberships` |
 | I10 | `apps/fred-manager/src/auth.rs::rejects_expired_and_overlong_tokens`<br>`apps/fred-manager/src/auth.rs::lifetime_ceiling_cannot_be_skipped`<br>`apps/fred-manager/src/auth.rs::rejects_missing_kid_and_bad_signature`<br>`apps/fred-manager/src/auth.rs::strict_mode_checks_issuer_and_audience` |
 | I11 | `apps/fred-manager/src/blueprint.rs::invalid_declarations_and_duplicate_json_keys_fail_without_echoing_input`<br>`apps/fred-manager/src/keycloak.rs::directory_failures_do_not_echo_credentials_or_payloads`<br>`apps/fred-manager/src/logging.rs::sensitive_and_reserved_fields_never_leak`<br>`apps/fred-manager/src/logging.rs::dependencies_get_a_fixed_message_without_their_fields`<br>`apps/fred-manager/tests/integration.rs::directory_creation_conflict_pagination_preservation_and_failures` |
 | I12 | `apps/fred-manager/tests/integration.rs::pagination_survives_deleting_the_cursor_row` |
@@ -196,6 +209,7 @@ Generated from the `// Proves:` markers.
 | I16 | `apps/fred-manager/src/logging.rs::audit_records_survive_warning_application_threshold`<br>`apps/fred-manager/tests/integration.rs::durable_grants_are_audited_even_when_sql_commit_fails` |
 | I17 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::directory_creation_conflict_pagination_preservation_and_failures`<br>`apps/fred-manager/tests/integration.rs::provisioning_replay_after_identity_and_sql_failures_reuses_committed_state`<br>`apps/fred-manager/tests/integration.rs::simultaneous_imports_reuse_usernames_and_space_names`<br>`apps/fred-manager/tests/integration.rs::provisioning_batches_large_parent_and_child_grants_and_rejects_personal_collision`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments`<br>`apps/fred-manager/tests/integration.rs::cancellation_after_fga_write_rolls_back_new_space_and_replays`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors` |
 | I18 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::provisioning_preflight_failures_have_no_identity_space_or_role_writes`<br>`apps/fred-manager/tests/integration.rs::provisioning_waiter_rechecks_revoked_or_expired_operator`<br>`apps/fred-manager/tests/integration.rs::import_cli_is_read_only_until_authorized_and_requires_initialized_state`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::import_rejects_incompatible_model_without_syncing_it`<br>`apps/fred-manager/tests/integration.rs::offline_cutover_preserves_roles_and_pins_the_published_store`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_invalid_source_and_replays_ambiguous_copies`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_changed_permissions_and_inconsistent_hierarchy`<br>`apps/fred-manager/tests/integration.rs::competing_empty_initializers_converge_on_the_published_binding`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock` |
+| I19 | `apps/fred-manager/src/config.rs::active_terms_version_is_explicit_and_validated`<br>`apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::import_cli_is_read_only_until_authorized_and_requires_initialized_state`<br>`apps/fred-manager/tests/integration.rs::consent_and_root_bootstrap_are_personal_and_do_not_create_memberships` |
 <!-- end generated -->
 
 Provisioning tests inject failures before/after real FGA writes, fail deferred SQL commits,

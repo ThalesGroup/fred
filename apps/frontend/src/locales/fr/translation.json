@@ -1927,7 +1927,8 @@
       "backToApp": "Retourner à l'application",
       "lockInformation": "Lire les CGU avant de pouvoir les accepter",
       "title": "Conditions Générales d'Utilisation (CGU)",
-      "validate": "Accepter les CGU"
+      "validate": "Accepter les CGU",
+      "unavailable": "Les CGU ne peuvent pas être chargées. Rechargez la page pour réessayer."
     },
     "hitlPrompt": {
       "answerSummary": "Question et réponse",
@@ -4164,6 +4165,24 @@
         "marketplace_entry_not_found": "Cet agent n'est pas publié.",
         "marketplace_runtime_unavailable": "Le service qui exécute cet agent est injoignable. La version publiée est inchangée ; réessayez plus tard.",
         "marketplace_capability_not_exportable": "La capacité « {{capability}} » ne peut pas être préparée pour la marketplace. La version publiée est inchangée."
+      }
+    },
+    "manager": {
+      "spaces": "Vos espaces",
+      "empty": "Vous n'appartenez à aucune organisation ni à aucun espace.",
+      "unavailable": "Impossible de charger vos accès. Réessayez ou rechargez cette page.",
+      "navigation": "Navigation plateforme",
+      "logout": "Se déconnecter",
+      "kinds": {
+        "organization": "Organisation",
+        "team": "Équipe",
+        "project": "Projet"
+      },
+      "roles": {
+        "admin": "Administrateur",
+        "member": "Membre",
+        "editor": "Éditeur",
+        "analyst": "Analyste"
       }
     }
   },

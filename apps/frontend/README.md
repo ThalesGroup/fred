@@ -1,5 +1,9 @@
 # Fred Frontend
 
+On `chore/rust-rebac`, the entry is limited to the [manager first-user journey](#manager-provisioning).
+It requires fred-manager and does not mount the legacy product shell described in
+the source overview below.
+
 Fred frontend is a node React/Typescript application. It uses vite.js.
 
 A makefile is available to help you compile package and run, with or without docker.
@@ -174,22 +178,23 @@ For teams using this structure, onboarding is faster, testing is easier, and fea
 
 ## Configuration Surfaces
 
+This branch starts the limited manager journey described below. The legacy product
+router and page catalog above remain source references, not mounted entry points.
 The frontend reads two configuration surfaces during startup:
 
-| Surface                             | Owner                                           | Purpose                                                                                                                                                                                |
-| ----------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/config.json`                      | frontend static asset / Helm frontend ConfigMap | Router base path, backend URLs, and static branding `properties` such as `siteDisplayName`, `siteTitle`, logos, favicons, agent nicknames, support links, and default avatars/banners. |
-| `/control-plane/v1/frontend/config` | control-plane backend                           | Public pre-auth runtime settings derived from backend config: `user_auth` and `gcu_version`.                                                                                           |
+| Surface                            | Owner                                           | Purpose                                                                                                                                                                                |
+| ---------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/config.json`                     | frontend static asset / Helm frontend ConfigMap | Router base path, backend URLs, and static branding `properties` such as `siteDisplayName`, `siteTitle`, logos, favicons, agent nicknames, support links, and default avatars/banners. |
+| `/fred-manager/v1/frontend/config` | fred-manager                                    | Public pre-auth runtime settings derived from backend config: `user_auth` and `gcu_version`.                                                                                           |
 
-Authenticated product state is separate: `/control-plane/v1/frontend/bootstrap`
-returns current user, active team, visible teams, permissions, feature flags, and
-the post-auth `gcu_version` mirror. It does **not** carry branding labels; do not
-reintroduce `ui_settings` there. Branding belongs in `config.json.properties`.
+Authenticated manager state comes from `/me/onboarding`, then `/me` and
+`/me/spaces` after consent. The former control-plane product bootstrap is not
+called by this entry. Branding remains in frontend assets.
 
 ### Security Configuration
 
 The frontend decides whether to use real Keycloak or local dev tokens from the
-public control-plane `/frontend/config` response **before** React renders:
+public manager `/frontend/config` response **before** React renders:
 
 ```json
 {
@@ -207,7 +212,7 @@ public control-plane `/frontend/config` response **before** React renders:
 | `user_auth.enabled: false` | No Keycloak. A local dev token is minted with `admin` role using `VITE_DEV_USERNAME` (defaults to your Unix username via `make run`). All auth code paths still execute — the app runs production-shaped. |
 | `user_auth.enabled: true`  | Full Keycloak OIDC PKCE flow. `realm_url` and `client_id` must match your deployment.                                                                                                                     |
 
-**Important:** this is no longer a hand-edited frontend flag. The control-plane
+**Important:** this is no longer a hand-edited frontend flag. The manager
 derives it from backend `security.user`, the same configuration that drives API
 JWT validation. For local dev it can be disabled there; for secure deployments it
 must match the Keycloak/OIDC deployment.
@@ -357,7 +362,7 @@ Behaviour to keep in mind:
   than overwriting a file in place. Theme CSS and properties are requested with
   `no-cache`; translation JSON and Markdown are fetched with `no-cache` too.
 - A new `gcu.md` does not re-prompt users. Bump `gcu_version` in the
-  control-plane configuration alongside it.
+  manager configuration alongside it.
 - The archive is applied at container start. After replacing the zip under the
   same name, restart the pods; pointing the URL at a new name rolls them.
 - nginx does not listen until the fetch returns, so it gives up after ~16s to
@@ -526,12 +531,17 @@ If you need to update one of them, just run one of the command while the corresp
 
 ## Manager provisioning
 
-`/admin/provisioning` uses the generated manager slice and its `/me` authority.
-Manager platform admins see the Provisioning entry independently of control-plane
-admin roles; the existing shell login and admission guards still apply. The page
-imports a ZIP synchronously and shows server counts only after completion. Errors
-retain explicit replay guidance because effects can survive failure. Migration,
-export and reset remain control-plane features.
+This experimental branch starts `ManagerApp`: manager public configuration,
+Keycloak login, personal CGU acceptance, root bootstrap, own memberships and
+`/admin/provisioning`. The generated manager slice is the authority for each step.
+The legacy `App`/control-plane shell is not mounted. Root has no implicit space;
+imported users accept their own terms and see their declared organizations, teams
+and projects. The terms assets and `app.gcu_version` are deployed together.
+
+Provisioning imports a ZIP synchronously and shows server counts only after
+completion. Errors retain explicit replay guidance because effects can survive
+failure. The browser test starts without a prepared root and forbids Python API
+calls; it also switches accounts in the same browser.
 
 ```sh
 make update-fred-manager-api       # offline Rust OpenAPI + generated RTK client
@@ -544,6 +554,8 @@ Browser-test prerequisites and isolation are documented in the
 For interactive development, Vite proxies `/fred-manager` to `http://localhost:8400`;
 `VITE_BACKEND_URL_FRED_MANAGER` overrides this target. Production nginx uses
 `FRONTEND_FRED_MANAGER_UPSTREAM` and resolves that optional service at request time,
-so an absent manager does not prevent the frontend from starting. `make docker-run`
+so nginx can start before manager DNS is available. The application itself
+requires manager and shows an explicit reload action when startup configuration
+is unavailable. `make docker-run`
 uses `http://host.docker.internal:8400` by default. Both preserve the canonical
 `/fred-manager/v1` path and the bearer header.

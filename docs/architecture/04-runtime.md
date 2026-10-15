@@ -2,7 +2,8 @@
 
 ## fred-manager HTTP surface
 
-Every route but the health probe requires a bearer token (chapter 6).
+Health and frontend configuration are public. Other routes require a bearer token
+(chapter 6); business routes also require current personal CGU acceptance.
 
 <!-- generated: routes apps/fred-manager/src/api.rs /fred-manager/v1 -->
 | Method | Path | Handler |
@@ -21,9 +22,12 @@ Every route but the health probe requires a bearer token (chapter 6).
 | POST | `/fred-manager/v1/folders` | `create_folder` |
 | DELETE | `/fred-manager/v1/folders/{id}` | `delete_folder` |
 | PATCH | `/fred-manager/v1/folders/{id}` | `rename_folder` |
+| GET | `/fred-manager/v1/frontend/config` | `frontend_config` |
+| POST | `/fred-manager/v1/gcu` | `accept_terms` |
 | GET | `/fred-manager/v1/healthz` | `health` |
 | POST | `/fred-manager/v1/import-export/import` | `import_blueprint` |
 | GET | `/fred-manager/v1/me` | `me` |
+| GET | `/fred-manager/v1/me/onboarding` | `onboarding_status` |
 | POST | `/fred-manager/v1/me/personal-space` | `create_personal_space` |
 | GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
 | POST | `/fred-manager/v1/spaces` | `create_space` |
@@ -54,6 +58,7 @@ sequenceDiagram
         M->>KC: GET realm certs
     end
     Note over M: RS256, exp, iat, lifetime ceiling, then user_id bound
+    M->>PG: check current personal CGU acceptance
     M->>PG: select document
     M->>FGA: check user can_read space:{document.space_id}
     alt allowed
@@ -281,11 +286,20 @@ remote effects have the dispatch boundary described by I5 in chapter 5.
 
 ## Provisioning browser journey
 
-An admitted user reaches `/admin/provisioning` through the administration sidebar.
-The page waits for manager `/me`, hides the upload on denial, and offers an explicit
-authority retry on service failure. A manager admin can enter administration even
-without a control-plane admin role; existing control-plane destinations retain
-their own guards.
+The experimental frontend reads public `/frontend/config`, authenticates through
+Keycloak and reads `/me/onboarding`. It displays the terms when their active version
+differs from the caller's acceptance. `POST /gcu {version}` records only that caller's
+acceptance. A changed version reloads the legal document and resets the reading
+state; a stale submission returns 409. Failure to load configuration, onboarding
+state or legal text offers an explicit retry and keeps business screens closed.
+
+After consent, an incomplete bootstrap opens the existing secret form. Root has
+platform authority without any organization, team or personal space creation.
+The navigation exposes own memberships from `/me/spaces` and, for manager admins,
+`/admin/provisioning`. No control-plane shell is mounted. The provisioning page
+waits for manager `/me`, hides upload on denial and offers an authority retry on
+failure. Logging out and logging in again starts a fresh application session;
+an imported person accepts their own CGU before seeing their memberships.
 
 Selecting a file clears the previous report. Submission sends one multipart `file`
 with the shared session bearer. While pending, file selection and submission are

@@ -58,7 +58,7 @@ run without directory-based role grants.
 ## Running provisioning
 
 Start the compatible service once to initialize SQL migrations and the extended FGA
-model, then complete root bootstrap. CLI import itself never migrates SQL, creates a store
+model, then accept CGU and complete root bootstrap in the UI. CLI import itself never migrates SQL, creates a store
 or synchronizes a model. It needs Postgres, OpenFGA and Keycloak; it does not need the
 HTTP server or Temporal to remain running. It loads the published store/model IDs.
 
@@ -115,3 +115,14 @@ inactive. Late writes to the legacy store cannot change active permissions.
 Existing bindings pin the exact model even when a newer model exists. Missing or
 incompatible pinned state fails closed. Changing the configured logical store name
 does not select a different authorization source behind an existing binding.
+
+## First-user application entry
+
+Manager and frontend from this branch are deployed together. Migration 0005 adds
+personal consent storage at manager startup; existing migrations remain intact.
+The reference and k3d manager configurations require CGU version `v1`. Legal assets
+in the frontend match the configured version; a version change requires renewed
+personal acceptance. The frontend depends on manager public configuration before
+login and displays a reload action if it is unavailable. Root bootstrap uses the
+configured secret and grants no organization membership. The Make ZIP builder and
+the UI provisioning page populate explicitly declared memberships.

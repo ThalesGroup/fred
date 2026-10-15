@@ -140,6 +140,7 @@ applications:
     dotenv: {}                             # secrets come from extraEnvVars above
     configuration:
       app:
+        gcu_version: v1
         name: "Fred Manager"
         base_url: "/fred-manager/v1"
         address: "0.0.0.0"

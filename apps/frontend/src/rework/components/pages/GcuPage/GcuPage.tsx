@@ -22,7 +22,7 @@ import {
   useValidateGcuControlPlaneV1GcuPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
-import { useLegalMarkdown } from "@hooks/useLegalMarkdown.ts";
+import { useLegalMarkdownState } from "@hooks/useLegalMarkdown.ts";
 import styles from "./GcuPage.module.css";
 
 export default function GcuPage() {
@@ -46,14 +46,16 @@ export function GcuPageContent({
   accepted = false,
   isLoading,
   onAccept,
+  version,
 }: {
+  version?: string | null;
   accepted?: boolean;
   isLoading: boolean;
   onAccept: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const { gcuVersion } = useFrontendProperties();
-  const gcuMarkdown = useLegalMarkdown("gcu");
+  const { markdown: gcuMarkdown, failed } = useLegalMarkdownState("gcu");
   const [hasReachedBottom, setHasReachedBottom] = useState(false);
   const bottomRef = useRef(null);
 
@@ -83,6 +85,14 @@ export function GcuPageContent({
   return (
     <div className={styles.gcuContainer}>
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
+      {failed && (
+        <div role="alert">
+          <p>{t("rework.gcu.unavailable")}</p>
+          <Button color="primary" variant="outlined" size="medium" onClick={() => window.location.reload()}>
+            {t("rework.bootstrap.reload")}
+          </Button>
+        </div>
+      )}
       <div className={styles.gcuContent}>
         <MarkdownRenderer text={gcuMarkdown} />
         <div ref={bottomRef} className={styles.gcuEnd} />
@@ -104,7 +114,9 @@ export function GcuPageContent({
               color={"primary"}
               variant={"filled"}
               size={"medium"}
-              disabled={!gcuVersion || !gcuMarkdown || !hasReachedBottom || isLoading}
+              disabled={
+                !(version === undefined ? gcuVersion : version) || !gcuMarkdown || !hasReachedBottom || isLoading
+              }
               onClick={onAccept}
             >
               {t("rework.gcu.validate")}

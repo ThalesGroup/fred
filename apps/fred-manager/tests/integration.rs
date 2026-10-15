@@ -864,6 +864,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         .await
         .unwrap();
     let app = governance_router(GovernanceState {
+        onboarding: Default::default(),
         auth: Arc::new(server.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -974,6 +975,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
             config.security.user.claims.uid = Some("preferred_username".into());
         }
         let app = governance_router(GovernanceState {
+            onboarding: Default::default(),
             auth: Arc::new(
                 Authenticator::start(config.security().unwrap())
                     .await
@@ -1469,7 +1471,7 @@ async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
     }
 }
 
-// Proves: I18
+// Proves: I18, I19
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state() {
@@ -1499,6 +1501,12 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
     config["storage"]["postgres"]["database"] = database.into();
     let _: Configuration = serde_json::from_value(config.clone()).unwrap();
     std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member"]}}],"teams":[],"projects":[]}"#)).unwrap();
+    fred_manager::onboarding::accept(&e.pool, Some("v1"), "root", "v1")
+        .await
+        .unwrap();
+    fred_manager::onboarding::accept(&e.pool, Some("v1"), "observer", "v1")
+        .await
+        .unwrap();
     let http = reqwest::Client::new();
     let store_id = e.fga.store_id();
     let model_url = format!("{}/stores/{store_id}/authorization-models", e.openfga);
@@ -1511,6 +1519,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
         .await
         .unwrap();
     for case in [
+        "no-consent",
         "invalid",
         "expired",
         "observer",
@@ -1533,6 +1542,9 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
             "observer" => server.token("observer"),
             _ => server.token("root"),
         };
+        if case == "no-consent" {
+            current["app"]["gcu_version"] = "v2".into();
+        }
         if case == "disabled" {
             current["security"]["profile"] = serde_json::Value::Null;
             current["security"]["user"]["enabled"] = false.into();
@@ -1631,6 +1643,9 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
                 .execute(&e.pool)
                 .await
                 .unwrap();
+        }
+        if case == "no-consent" {
+            assert!(text.contains("user_not_accept_gcu"));
         }
         if case != "valid" {
             assert!(
@@ -1971,6 +1986,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     .unwrap();
     proxy.fault.lock().await.calls.clear();
     let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+        onboarding: Default::default(),
         auth: std::sync::Arc::new(auth),
         pool: e.pool.clone(),
         fga: observed_fga,
@@ -3470,6 +3486,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         .await
         .unwrap();
     let app = governance_router(GovernanceState {
+        onboarding: Default::default(),
         auth: auth.clone(),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -3670,6 +3687,7 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
     .await
     .unwrap();
     let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+        onboarding: Default::default(),
         auth: std::sync::Arc::new(server.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -3689,4 +3707,290 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
     assert!(body["detail"].as_str().unwrap().contains("preflight"));
     assert!(!server.users.lock().await.contains_key("tail"));
     assert!(server.control.lock().await.created.is_empty());
+}
+
+// Proves: I9, I19
+#[tokio::test]
+#[ignore = "needs disposable services: make test-integration"]
+async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships() {
+    use axum::{
+        body::{Body, to_bytes},
+        http::Request,
+    };
+    use fred_manager::{
+        api::{GovernanceState, governance_router},
+        onboarding::{self, Onboarding},
+    };
+    use serde_json::{Value, json};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let state = GovernanceState {
+        auth: Arc::new(server.auth().await),
+        pool: e.pool.clone(),
+        fga: e.fga.clone(),
+        directory: None,
+        onboarding: Onboarding {
+            gcu_version: Some("v1".into()),
+            bootstrap_token_env_var: Some("FRED_MANAGER_TEST_BOOTSTRAP_TOKEN".into()),
+            ..Default::default()
+        },
+    };
+    let app = governance_router(state.clone());
+    let request = |method: &str, path: &str, token: Option<String>, body: Value| {
+        let mut req = Request::builder()
+            .method(method)
+            .uri(path)
+            .header("content-type", "application/json");
+        if let Some(token) = token {
+            req = req.header("authorization", format!("Bearer {token}"));
+        }
+        req.body(Body::from(body.to_string())).unwrap()
+    };
+    let secret = json!({"token": std::env::var("FRED_MANAGER_TEST_BOOTSTRAP_TOKEN").unwrap()});
+    let public = app
+        .clone()
+        .oneshot(request("GET", "/frontend/config", None, Value::Null))
+        .await
+        .unwrap();
+    assert_eq!(public.status(), 200);
+    assert_eq!(public.headers()["cache-control"], "no-store");
+    let config: Value =
+        serde_json::from_slice(&to_bytes(public.into_body(), 65536).await.unwrap()).unwrap();
+    assert_eq!(config["root_bootstrap_required"], true);
+    for (method, path, body, expected) in [
+        ("GET", "/me", Value::Null, 403),
+        ("GET", "/me/spaces", Value::Null, 403),
+        ("POST", "/import-export/import", Value::Null, 403),
+        ("POST", "/bootstrap/platform-admin", secret.clone(), 403),
+        ("POST", "/gcu", json!({"version":"old"}), 409),
+        (
+            "POST",
+            "/gcu",
+            json!({"version":"v1", "user_id":"bob"}),
+            422,
+        ),
+        (
+            "POST",
+            "/gcu?on_behalf_of=bob",
+            json!({"version":"v1"}),
+            403,
+        ),
+    ] {
+        assert_eq!(
+            app.clone()
+                .oneshot(request(method, path, Some(server.token("root")), body))
+                .await
+                .unwrap()
+                .status(),
+            expected,
+            "{path}"
+        );
+    }
+    assert!(!onboarding::bootstrap_completed(&e.pool).await.unwrap());
+    assert!(
+        onboarding::acceptance(&e.pool, "root")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    // Neither an anonymous caller nor a client-credentials principal can consent or claim root.
+    let now = chrono::Utc::now().timestamp();
+    let service = server.sign(json!({"sub":"service", "iss":server.realm,"aud":"app","iat":now,"exp":now+300,"preferred_username":"service-account-manager", "azp":"manager", "client_id":"manager"}));
+    assert!(
+        state
+            .auth
+            .authenticate(Some(&service))
+            .await
+            .unwrap()
+            .service_account
+    );
+    let agent = server.sign(json!({"sub":"agent", "iss":server.realm,"aud":"app","iat":now,"exp":now+300,"resource_access":{"app":{"roles":["service_agent"]}}}));
+    for token in [None, Some(service), Some(agent)] {
+        for (path, body) in [
+            ("/gcu", json!({"version":"v1"})),
+            ("/bootstrap/platform-admin", secret.clone()),
+        ] {
+            assert_eq!(
+                app.clone()
+                    .oneshot(request("POST", path, token.clone(), body))
+                    .await
+                    .unwrap()
+                    .status(),
+                if token.is_some() { 403 } else { 401 }
+            );
+        }
+    }
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                "/gcu",
+                Some(server.token("root")),
+                json!({"version":"v1"})
+            ))
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+    let first = onboarding::acceptance(&e.pool, "root")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                "/gcu",
+                Some(server.token("root")),
+                json!({"version":"v1"})
+            ))
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+    assert_eq!(
+        onboarding::acceptance(&e.pool, "root")
+            .await
+            .unwrap()
+            .unwrap()
+            .accepted_at,
+        first.accepted_at
+    );
+    assert!(
+        e.fga
+            .effective_platform_roles("root")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                "/bootstrap/platform-admin",
+                Some(server.token("root")),
+                json!({"token":"wrong-but-long-enough"})
+            ))
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                "/bootstrap/platform-admin",
+                Some(server.token("root")),
+                secret.clone()
+            ))
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert!(onboarding::bootstrap_completed(&e.pool).await.unwrap());
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                "/bootstrap/platform-admin",
+                Some(server.token("root")),
+                secret
+            ))
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    assert!(
+        onboarding::acceptance(&e.pool, "bob")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from space")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    let mut next = state.clone();
+    next.onboarding.gcu_version = Some("v2".into());
+    let upgraded = governance_router(next);
+    assert_eq!(
+        upgraded
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/me",
+                Some(server.token("root")),
+                Value::Null
+            ))
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        upgraded
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/gcu",
+                Some(server.token("root")),
+                json!({"version":"v1"})
+            ))
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    assert_eq!(
+        upgraded
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/gcu",
+                Some(server.token("root")),
+                json!({"version":"v2"})
+            ))
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+    assert_eq!(
+        upgraded
+            .oneshot(request(
+                "GET",
+                "/me",
+                Some(server.token("root")),
+                Value::Null
+            ))
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    let mut disabled = state;
+    disabled.onboarding.gcu_version = None;
+    assert_eq!(
+        governance_router(disabled)
+            .oneshot(request(
+                "GET",
+                "/me",
+                Some(server.token("bob")),
+                Value::Null
+            ))
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
 }

@@ -23,7 +23,9 @@ vi.mock("../../../common/dynamicBaseQuery", () => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("../../../hooks/useFrontendProperties", () => ({ useFrontendProperties: () => ({ gcuVersion: "v1" }) }));
-vi.mock("@hooks/useLegalMarkdown.ts", () => ({ useLegalMarkdown: () => "Terms of use" }));
+vi.mock("@hooks/useLegalMarkdown.ts", () => ({
+  useLegalMarkdownState: () => ({ markdown: "Terms of use", failed: false }),
+}));
 vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({ MarkdownRenderer: () => <p>Terms of use</p> }));
 import { enhancedControlPlaneApi } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import PlatformAdmissionGuard from "./PlatformAdmissionGuard";

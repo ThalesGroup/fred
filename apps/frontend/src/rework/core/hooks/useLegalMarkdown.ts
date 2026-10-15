@@ -45,20 +45,25 @@ export async function loadLegalMarkdown(candidates: string[], base: string): Pro
   return null;
 }
 
-export function useLegalMarkdown(name: string): string {
+export function useLegalMarkdownState(name: string): { markdown: string; failed: boolean } {
   const { i18n } = useTranslation();
-  const [markdown, setMarkdown] = useState("");
+  const [state, setState] = useState({ markdown: "", failed: false });
 
   useEffect(() => {
     let cancelled = false;
+    setState({ markdown: "", failed: false });
     const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
     loadLegalMarkdown(legalMarkdownCandidates(name, i18n.language, getProperty("releaseBrand")), base).then((text) => {
-      if (text && !cancelled) setMarkdown(text);
+      if (!cancelled) setState({ markdown: text ?? "", failed: !text });
     });
     return () => {
       cancelled = true;
     };
   }, [name, i18n.language]);
 
-  return markdown;
+  return state;
+}
+
+export function useLegalMarkdown(name: string): string {
+  return useLegalMarkdownState(name).markdown;
 }

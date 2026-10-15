@@ -26,6 +26,7 @@ pub mod fga;
 pub mod ingestion;
 pub mod keycloak;
 pub mod logging;
+pub mod onboarding;
 pub mod platform;
 pub mod roles;
 pub mod spaces;

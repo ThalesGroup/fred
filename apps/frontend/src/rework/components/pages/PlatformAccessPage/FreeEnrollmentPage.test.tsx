@@ -19,7 +19,10 @@ vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn(), useParams: () =
 vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({
   MarkdownRenderer: ({ text }: { text: string }) => <p>{text}</p>,
 }));
-vi.mock("@hooks/useLegalMarkdown", () => ({ useLegalMarkdown: () => state.markdown }));
+vi.mock("@hooks/useLegalMarkdown", () => ({
+  useLegalMarkdown: () => state.markdown,
+  useLegalMarkdownState: () => ({ markdown: state.markdown, failed: false }),
+}));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ gcuVersion: "v1", contactSupportLink: state.support, siteDisplayName: "Acme" }),
 }));
