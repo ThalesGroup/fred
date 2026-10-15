@@ -47,6 +47,9 @@ _FOLLOWUP_CALL = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,256})\s*(?=\{
 # Mistral can over-close the JSON it writes as text; a residue of closers alone
 # after a recovered call is not prose and must not reach the user as content.
 _CLOSER_RESIDUE = re.compile(r"\s*[\]}][\s\]}]*")
+# Keys that carry no visible content: streaming leaves `{}` or bare typed
+# markers (e.g. `{"type": "signature"}`) between deltas.
+_PAYLOADLESS_KEYS = frozenset({"type", "index", "id"})
 
 
 def _without_closer_residue(text: str) -> str:
@@ -163,6 +166,12 @@ def _anchored_text(
             isinstance(block, dict)
             and block.get("type") == "thinking"
             and marked_name is None
+        ):
+            continue
+        elif (
+            isinstance(block, dict)
+            and block.get("type") not in ("text", "reference")
+            and block.keys() <= _PAYLOADLESS_KEYS
         ):
             continue
         elif is_tool_call_recovery_reference_block(block):
