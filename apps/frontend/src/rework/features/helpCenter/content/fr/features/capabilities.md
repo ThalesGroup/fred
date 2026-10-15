@@ -169,7 +169,7 @@ suivante, sans relire le template.
 contient : il n'en dessine pas de nouvelles. Quand un contenu ne tient dans
 aucune diapositive (trop d'éléments, par exemple), il le découpe ou le
 raccourcit. Si la lecture du template échoue, l'agent reste indisponible : le
-formulaire en donne la raison, avec un bouton **Relancer l'analyse**.
+formulaire en donne la raison ; enregistrez l'agent pour le relire.
 
 **Un exemple** — « Prépare une présentation de dix diapositives sur nos
 résultats trimestriels pour le comité de direction. »

@@ -94,10 +94,7 @@ function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> =
     hasPersistedTemplate: true,
     error: null,
     canRerun: false,
-    outdatedVision: false,
-    isRerunning: false,
     refreshing: false,
-    rerun: vi.fn(async () => {}),
     effective: null,
     summary: null,
     droppedOverrides: [],
@@ -123,7 +120,7 @@ describe("analysisPhase", () => {
     );
   });
 
-  it("offers a re-run only for failed, interrupted or outdated analyses", () => {
+  it("asks for a re-run only for failed, interrupted or outdated analyses", () => {
     expect(canRerun("failed", undefined)).toBe(true);
     expect(canRerun("interrupted", undefined)).toBe(true);
     expect(canRerun("succeeded", status({}))).toBe(false);
@@ -135,53 +132,40 @@ describe("analysisPhase", () => {
 describe("AnalysisStatus", () => {
   it("says the analysis is in progress while pending or running", () => {
     for (const phase of ["pending", "running"] as const) {
-      render(<AnalysisStatus analysis={analysis(phase)} disabled={false} />);
+      render(<AnalysisStatus analysis={analysis(phase)} />);
       expect(container.textContent).toContain("capability.ppt_builder.analysis.inProgress");
       expect(container.querySelector("button")).toBeNull();
     }
   });
 
   it("says an outdated analysis is being read again while it is refreshed", () => {
-    render(<AnalysisStatus analysis={analysis("succeeded", { refreshing: true })} disabled={false} />);
+    render(<AnalysisStatus analysis={analysis("succeeded", { refreshing: true })} />);
     expect(container.textContent).toContain("capability.ppt_builder.analysis.refreshing");
     expect(container.querySelector("button")).toBeNull();
   });
 
-  it("shows the error and a re-run action when the analysis failed", () => {
-    const rerun = vi.fn(async () => {});
-    render(
-      <AnalysisStatus
-        analysis={analysis("failed", { error: "The file has no slide.", canRerun: true, rerun })}
-        disabled={false}
-      />,
-    );
+  it("shows the error and no action of its own: a save re-runs the analysis", () => {
+    render(<AnalysisStatus analysis={analysis("failed", { error: "The file has no slide.", canRerun: true })} />);
     expect(container.textContent).toContain("capability.ppt_builder.analysis.failed");
     expect(container.textContent).toContain("The file has no slide.");
-    const button = container.querySelector("button") as HTMLButtonElement;
-    expect(button.textContent).toContain("capability.ppt_builder.analysis.rerun");
-    act(() => button.click());
-    expect(rerun).toHaveBeenCalled();
+    expect(container.querySelector("button")).toBeNull();
   });
 
-  it("tells the author a save refreshes a vision-labelled outdated analysis", () => {
-    render(<AnalysisStatus analysis={analysis("succeeded", { canRerun: true })} disabled={false} />);
+  it("tells the author a save refreshes an outdated analysis", () => {
+    render(<AnalysisStatus analysis={analysis("succeeded", { canRerun: true })} />);
     expect(container.textContent).toContain("capability.ppt_builder.analysis.outdated");
-    render(
-      <AnalysisStatus analysis={analysis("succeeded", { canRerun: true, outdatedVision: true })} disabled={false} />,
-    );
-    expect(container.textContent).toContain("capability.ppt_builder.analysis.outdatedVision");
-    expect(container.querySelector("button")?.textContent).toContain("capability.ppt_builder.analysis.rerun");
+    expect(container.querySelector("button")).toBeNull();
   });
 
   it("names an interruption", () => {
-    render(<AnalysisStatus analysis={analysis("interrupted", { canRerun: true })} disabled={false} />);
+    render(<AnalysisStatus analysis={analysis("interrupted", { canRerun: true })} />);
     expect(container.textContent).toContain("capability.ppt_builder.analysis.interrupted");
   });
 
   it("stays silent once succeeded, and explains a staged file", () => {
-    render(<AnalysisStatus analysis={analysis("succeeded")} disabled={false} />);
+    render(<AnalysisStatus analysis={analysis("succeeded")} />);
     expect(container.textContent).toBe("");
-    render(<AnalysisStatus analysis={analysis("staged")} disabled={false} />);
+    render(<AnalysisStatus analysis={analysis("staged")} />);
     expect(container.textContent).toContain("capability.ppt_builder.analysis.staged");
   });
 });

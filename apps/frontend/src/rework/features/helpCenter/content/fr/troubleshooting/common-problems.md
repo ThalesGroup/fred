@@ -61,8 +61,8 @@ Il est **suspendu**. Trois causes :
 - Il est **en préparation** : une fonction se prépare encore, par exemple la
   lecture du template PowerPoint d'un agent qui génère des présentations. L'agent
   devient disponible tout seul quand c'est terminé. Si la préparation a échoué,
-  la carte de l'agent en donne la raison ; ouvrez l'agent et utilisez
-  **Relancer l'analyse**, ou déposez un autre template.
+  la carte de l'agent en donne la raison ; ouvrez l'agent et enregistrez-le
+  pour relire le template, ou déposez un autre template.
 
 Cas voisin : un agent **copié dans une autre équipe** perd ses choix propres à
 l'équipe d'origine (bibliothèques, dossiers, documents) et les capacités que

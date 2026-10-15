@@ -59,8 +59,8 @@ It is **suspended**. Three causes:
 - It is **preparing**: a function is still getting ready, for example reading
   the PowerPoint template of an agent that generates presentations. The agent
   becomes available on its own when that is done. If the preparation failed,
-  the agent card says why; open the agent and use **Re-run analysis**, or
-  upload another template.
+  the agent card says why; open the agent and save it to read the template
+  again, or upload another template.
 
 A related case: an agent **copied to another team** loses the choices that
 belonged to its origin team (libraries, folders, documents) and the

@@ -100,7 +100,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
           )}
         </div>
 
-        <AnalysisStatus analysis={analysis} disabled={disabled} />
+        <AnalysisStatus analysis={analysis} />
 
         {analysis.droppedOverrides.length > 0 && (
           <p className={styles.summary}>
@@ -172,7 +172,7 @@ export function TemplateGuideLink() {
 }
 
 /** The line under the upload row: what happens to the template next. */
-export function AnalysisStatus({ analysis, disabled }: { analysis: PptBuilderAnalysis; disabled: boolean }) {
+export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
   const { t } = useTranslation();
   const { phase } = analysis;
 
@@ -198,25 +198,11 @@ export function AnalysisStatus({ analysis, disabled }: { analysis: PptBuilderAna
       ? t("capability.ppt_builder.analysis.failed")
       : phase === "interrupted"
         ? t("capability.ppt_builder.analysis.interrupted")
-        : analysis.outdatedVision
-          ? t("capability.ppt_builder.analysis.outdatedVision")
-          : t("capability.ppt_builder.analysis.outdated");
+        : t("capability.ppt_builder.analysis.outdated");
   return (
     <div className={styles.failure} role={phase === "succeeded" ? undefined : "alert"}>
       <p className={phase === "succeeded" ? styles.status : styles.error}>{message}</p>
       {analysis.error && <p className={styles.error}>{analysis.error}</p>}
-      {analysis.canRerun && (
-        <Button
-          color="primary"
-          variant="outlined"
-          size="small"
-          disabled={disabled || analysis.isRerunning}
-          icon={{ category: "outlined", type: "refresh" }}
-          onClick={() => void analysis.rerun()}
-        >
-          {t("capability.ppt_builder.analysis.rerun")}
-        </Button>
-      )}
     </div>
   );
 }

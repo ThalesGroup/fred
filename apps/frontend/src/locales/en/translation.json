@@ -437,12 +437,10 @@
         "staged": "The template will be read once you save the agent. The agent becomes available when that is done.",
         "inProgress": "Reading the template… The agent becomes available when it is done; you can close this window.",
         "unknown": "The template's status is not available right now.",
-        "failed": "The template could not be read. The agent stays unavailable until it is.",
-        "interrupted": "Reading the template was interrupted. The agent stays unavailable until it is read again.",
-        "outdated": "This template was read with an older version. Read it again to benefit from the latest improvements.",
-        "outdatedVision": "This template was read with an older version. The agent keeps using it; save the agent to read it again with its vision model and benefit from the latest improvements.",
-        "refreshing": "Reading the template again… The agent keeps using the previous reading until it is done.",
-        "rerun": "Re-run analysis"
+        "failed": "The template could not be read. The agent stays unavailable until it is; save the agent to read it again.",
+        "interrupted": "Reading the template was interrupted. The agent stays unavailable until you save it to read the template again.",
+        "outdated": "This template was read with an older version. The agent keeps using it; save the agent to read it again and benefit from the latest improvements.",
+        "refreshing": "Reading the template again… The agent keeps using the previous reading until it is done."
       },
       "review": {
         "title": "Template slides",

@@ -156,7 +156,7 @@ without reading the template again.
 **Its limits** — the agent only uses slides the template holds: it does not
 draw new ones. When the content does not fit any slide (too many items, for
 instance), it splits or shortens it. If reading the template fails, the agent
-stays unavailable: the form shows why, with a **Re-run analysis** button.
+stays unavailable: the form shows why; save the agent to read it again.
 
 **An example** — "Prepare a ten-slide presentation of our quarterly results for
 the executive committee."

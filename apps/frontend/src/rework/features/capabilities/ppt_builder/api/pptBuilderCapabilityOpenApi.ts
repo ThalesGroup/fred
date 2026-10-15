@@ -19,9 +19,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/analysis/${queryArg.instanceId}/patterns.pdf` }),
     }),
-    rerunPptBuilderAnalysis: build.mutation<RerunPptBuilderAnalysisApiResponse, RerunPptBuilderAnalysisApiArg>({
-      query: (queryArg) => ({ url: `/analysis/${queryArg.instanceId}/rerun`, method: "POST" }),
-    }),
   }),
   overrideExisting: false,
 });
@@ -36,10 +33,6 @@ export type GetPptBuilderAnalysisApiArg = {
 };
 export type GetPptBuilderAnalysisPatternsApiResponse = /** status 200 Successful Response */ any;
 export type GetPptBuilderAnalysisPatternsApiArg = {
-  instanceId: string;
-};
-export type RerunPptBuilderAnalysisApiResponse = /** status 200 Successful Response */ AnalysisStatusResponse;
-export type RerunPptBuilderAnalysisApiArg = {
   instanceId: string;
 };
 export type Box = {
@@ -193,5 +186,4 @@ export const {
   useLazyGetPptBuilderAnalysisQuery,
   useGetPptBuilderAnalysisPatternsQuery,
   useLazyGetPptBuilderAnalysisPatternsQuery,
-  useRerunPptBuilderAnalysisMutation,
 } = injectedRtkApi;

@@ -1174,9 +1174,10 @@ built-in template.
   `GET /analysis/{instance_id}` and polled every 3 s while pending/running
   (a failed poll keeps the last answer on screen and polling goes on):
   spinner + "Reading the template…" while in progress; on failure or
-  interruption an `error`-coloured line, the backend's message, and an
-  outlined "Re-run analysis" button (`refresh`, `POST …/rerun`); an analysis
-  made by older rules offers the same button with a neutral line. When the
+  interruption an `error`-coloured line and the backend's message, both
+  telling the author to save the agent to read the template again (no
+  button: only the save carries the labelling model); an analysis made by
+  older rules says the same in a neutral line. When the
   analysis ends, the widget calls control-plane `readiness-check` once, so the
   agent leaves "preparing" without another save.
 - **Summary line** ("12 slides ready to use, 3 set aside") next to a text

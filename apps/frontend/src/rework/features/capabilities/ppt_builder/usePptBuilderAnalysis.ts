@@ -16,12 +16,12 @@
 // pack options. The template is analysed in the background after a save: this
 // hook polls that analysis, asks control-plane to re-check the agent once it
 // ends (so the agent leaves "preparing"), and writes the author's overrides.
+// A re-run is a save too: only the save carries the labelling model.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useGetPptBuilderAnalysisQuery,
   useGetPptBuilderBuiltinQuery,
-  useRerunPptBuilderAnalysisMutation,
   type AnalysisStatusResponse,
   type TemplateInventory,
 } from "./api/pptBuilderCapabilityOpenApi";
@@ -69,7 +69,7 @@ export function isInProgress(phase: AnalysisPhase): boolean {
   return phase === "pending" || phase === "running";
 }
 
-/** Failed, interrupted, or produced by older analysis rules: worth a re-run. */
+/** Failed, interrupted, or produced by older analysis rules: worth a save that re-runs it. */
 export function canRerun(phase: AnalysisPhase, status: AnalysisStatusResponse | undefined): boolean {
   return phase === "failed" || phase === "interrupted" || (phase === "succeeded" && status?.current === false);
 }
@@ -92,12 +92,8 @@ export interface PptBuilderAnalysis {
   /** The analysis error, or the interruption notice, as the backend words it. */
   error: string | null;
   canRerun: boolean;
-  /** Outdated and labelled by a vision model: only a save refreshes it with that model. */
-  outdatedVision: boolean;
-  isRerunning: boolean;
   /** An outdated analysis is being re-read; its old inventory is shown meanwhile. */
   refreshing: boolean;
-  rerun: () => Promise<void>;
   /** The inventory with the overrides applied (what the agent will see). */
   effective: TemplateInventory | null;
   summary: InventorySummary | null;
@@ -153,18 +149,6 @@ export function usePptBuilderAnalysis({
     readinessCheck({ teamId, agentInstanceId }).catch(() => {});
   }, [teamId, agentInstanceId, status, phase, readinessCheck]);
 
-  const [rerunMutation, { isLoading: isRerunning }] = useRerunPptBuilderAnalysisMutation();
-  const rerun = async () => {
-    if (!agentInstanceId) return;
-    try {
-      await rerunMutation({ instanceId: agentInstanceId }).unwrap();
-    } catch {
-      // A 409 means another run is already going: the refetch shows it.
-    } finally {
-      statusQuery.refetch();
-    }
-  };
-
   const inventory: TemplateInventory | null =
     phase === "succeeded" ? (status?.inventory ?? null) : usesBuiltin ? (builtin?.inventory ?? null) : null;
   const effective = useMemo(
@@ -189,10 +173,7 @@ export function usePptBuilderAnalysis({
     hasPersistedTemplate: templateSha !== null,
     error: phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null,
     canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
-    outdatedVision: phase === "succeeded" && status?.current === false && status.labelling_key.startsWith("vision:"),
-    isRerunning,
     refreshing,
-    rerun,
     effective,
     summary: effective ? summarize(effective) : null,
     droppedOverrides,

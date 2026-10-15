@@ -437,12 +437,10 @@
         "staged": "Le template sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
         "inProgress": "Lecture du template en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
         "unknown": "L'état du template n'est pas disponible pour le moment.",
-        "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas.",
-        "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à une nouvelle lecture.",
-        "outdated": "Ce template a été lu avec une version plus ancienne. Relancez la lecture pour profiter des dernières améliorations.",
-        "outdatedVision": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire avec son modèle de vision et profiter des dernières améliorations.",
-        "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin.",
-        "rerun": "Relancer l'analyse"
+        "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas ; enregistrez l'agent pour le relire.",
+        "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire et profiter des dernières améliorations.",
+        "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin."
       },
       "review": {
         "title": "Slides du template",

@@ -32,7 +32,6 @@ const analysis = vi.hoisted(() => ({
   options: [] as { skip?: boolean; pollingInterval?: number }[],
   refetch: vi.fn(),
   readinessCheck: vi.fn(),
-  rerun: vi.fn(),
 }));
 
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
@@ -41,7 +40,6 @@ vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
     return { ...analysis.state, refetch: analysis.refetch };
   },
   useGetPptBuilderBuiltinQuery: () => ({ data: undefined }),
-  useRerunPptBuilderAnalysisMutation: () => [analysis.rerun, { isLoading: false }],
 }));
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => true }));
@@ -104,7 +102,6 @@ beforeEach(() => {
   analysis.options = [];
   analysis.readinessCheck.mockReset().mockReturnValue(Promise.resolve());
   analysis.refetch.mockReset();
-  analysis.rerun.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -170,14 +167,5 @@ describe("usePptBuilderAnalysis", () => {
     expect(result.refreshing).toBe(false);
     expect(result.effective?.patterns?.[0].id).toBe("new");
     expect(polling()).toBe(0);
-  });
-
-  it("refetches the status after a re-run, even a refused one", async () => {
-    show({ data: status({ status: "failed" }) });
-    expect(result.canRerun).toBe(true);
-    analysis.rerun.mockReturnValue({ unwrap: () => Promise.reject(new Error("409")) });
-    await act(() => result.rerun());
-    expect(analysis.rerun).toHaveBeenCalledWith({ instanceId: "agent" });
-    expect(analysis.refetch).toHaveBeenCalledTimes(1);
   });
 });
