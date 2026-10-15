@@ -86,6 +86,9 @@
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
 }
+.conditionLabels > :nth-child(5) {
+  text-align: center;
+}
 .condition {
   display: flex;
   flex-direction: column;
@@ -122,7 +125,7 @@
 }
 .conditionToggle {
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   min-height: 2rem;
 }
 .ruleEditor {
