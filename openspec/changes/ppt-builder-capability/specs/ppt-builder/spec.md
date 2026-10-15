@@ -183,6 +183,7 @@ The system SHALL complete the agent save without waiting for the template analys
 
 - **WHEN** an agent's template analysis is pending or running
 - **THEN** the agent is shown as unavailable, with the reason, on the team agents page and cannot be selected in the chat agent picker
+- **AND** the agent card and the agent form say the template is being read and that the agent will be available again automatically in a few minutes, in the user's language; an agent whose preparing capability cannot be told apart (several capabilities declare what they prepare) gets the generic text that the agent will be available again in a few minutes with nothing to do
 
 #### Scenario: Agent available when analysis succeeds
 

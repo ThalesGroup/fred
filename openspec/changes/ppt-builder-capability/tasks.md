@@ -520,3 +520,13 @@ Owns: `analysis_job.py` (`recover_interrupted`, `run_analysis`, `restart_from_st
 - [x] 47.3 A job that runs a vision key without a port logs a WARNING and stores `rules`. Test: forced refresh without the port
 - [x] 47.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; frontend tsc, prettier, eslint, the folder's vitest; `openspec validate --strict`
 - Not covered: a live save-based re-run in the browser
+
+## WP48. The preparing banner says what is being prepared (owner decision 2026-10-15)
+
+Owns: the shared `capabilityPreparingKey` helper, `AgentCard`, `AgentFormBody` (pending message), fr/en `rework.agentCard.preparing*`, `rework.teams.formAgent.suspended.pending*`, `capability.ppt_builder.preparing`, Help Center wording, `COMPONENT-UX.md`, `AUTHORING.md`, the SDK `readiness` docstring, delta spec, tests, `verification.md`.
+
+- [x] 48.1 A capability with a readiness hook names its pending work under the frontend locale key `capability.<id>.preparing`; ppt_builder ships "reading the PowerPoint template." No backend change: `suspension_detail` stays the failed-only message (its null is the pending/failed discriminant for the listing re-check and the UI), and which capability is pending is not persisted
+- [x] 48.2 The card and the form show "Preparing — {detail} The agent will be available again automatically in a few minutes." when exactly one of the agent's capabilities declares a key, else the generic "Preparing — … Nothing to do on your side."; the form title becomes "This agent is temporarily unavailable." Tests: helper, card with detail and fallback
+- [x] 48.3 Frontend tsc, prettier, eslint, vitest on the touched files; `openspec validate --strict`
+- Not covered: the banner in the browser
+

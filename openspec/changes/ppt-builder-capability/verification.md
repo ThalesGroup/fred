@@ -1532,3 +1532,16 @@ Root cause of the rules labelling seen in WP46: the model port only reaches the 
 Commands: package `make test`: 713 passed, 5 skipped; `ruff check`, `--select I`, `format --check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` warning). Client regenerated with `make update-ppt-builder-capability-api` (the rerun mutation removed). Frontend (no make target): `tsc --noEmit` clean, prettier and eslint clean on touched files, `vitest run` on the ppt_builder folder: 6 files, 42 tests passed. `openspec validate ppt-builder-capability --strict` valid.
 
 Not covered: a live save-based re-run in the browser.
+
+## Results: WP48 (the preparing banner says what is being prepared)
+
+Path chosen: a frontend locale key per capability, `capability.<id>.preparing`, like the manifest's `capability.<id>.name`. `CapabilityReadiness.pending()` was not given a detail: `suspension_detail` being null is how the listing re-check and the UI tell pending from failed, and which capability is pending is not stored, so carrying it would need a new column and a contract change. The text is shown only when exactly one of the agent's capabilities declares a key; otherwise the generic text. No backend, OpenAPI or frozen-contract change.
+
+| Rule | Evidence |
+| --- | --- |
+| One declaring capability gives its key; a deselected slice is ignored; two or none give nothing | `capabilityPreparingKey` (3 tests) |
+| The card names the pending work, else falls back to the generic text; a failure still shows its message | `AgentCard capability readiness` (4 tests) |
+
+Commands (apps/frontend, no make target): `tsc --noEmit` clean; prettier and eslint clean on touched files (locales and Help Center pages included); `vitest run` on the helper, `AgentCard` and the `AgentFormModal` folder: 14 files, 136 tests passed. fred-sdk `ruff check` / `ruff format --check` clean on the docstring change. `openspec validate ppt-builder-capability --strict` valid.
+
+Not covered: the banner and the form message in the browser.
