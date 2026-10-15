@@ -94,6 +94,7 @@ export class OidcBrowserSession {
     return this.user.expires_in ?? null;
   }
 
+  /** Restore OIDC login state, or request fresh local login with ?keycloak-login=true. */
   async login(onAuthenticated: () => void): Promise<void> {
     const generation = this.generation;
     const query = new URLSearchParams(window.location.search);
