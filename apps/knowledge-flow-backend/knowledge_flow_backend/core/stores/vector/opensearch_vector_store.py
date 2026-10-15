@@ -1303,15 +1303,6 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             text = src.get("text", "")
             cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
 
-            logger.debug(
-                "[VECTOR][OPENSEARCH] hit rank=%d doc_uid=%s chunk_uid=%s retrievable=%s score=%.4f",
-                rank,
-                meta.get("document_uid"),
-                cid,
-                meta.get("retrievable"),
-                float(h.get("_score", 0.0)),
-            )
-
             doc = Document(
                 page_content=text,
                 metadata={
@@ -1334,19 +1325,19 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
     def _build_ann_hits(self, hits_data: List) -> List[AnnHit]:
         hits = self._build_hits(hits_data, AnnHit)
         if DEBUG and hits:
-            logger.debug("[VECTOR][OPENSEARCH][ANN] built hits count=%d sample=%s", len(hits), hits[:3])
+            logger.debug("[VECTOR][OPENSEARCH][ANN] built hits count=%d", len(hits))
         return hits
 
     def _build_hybrid_hits(self, hits_data: List) -> List[HybridHit]:
         hits = self._build_hits(hits_data, HybridHit)
         if DEBUG and hits:
-            logger.debug("[VECTOR][OPENSEARCH][HYBRID] built hits count=%d sample=%s", len(hits), hits[:3])
+            logger.debug("[VECTOR][OPENSEARCH][HYBRID] built hits count=%d", len(hits))
         return hits
 
     def _build_fulltext_hits(self, hits_data: list) -> List[FullTextHit]:
         hits = self._build_hits(hits_data, FullTextHit)
         if DEBUG and hits:
-            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] built hits count=%d sample=%s", len(hits), hits[:3])
+            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] built hits count=%d", len(hits))
         return hits
 
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
@@ -1395,36 +1386,6 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 res = self._client.search(index=self._index, body=bool_knn_body)
             hits_data = res.get("hits", {}).get("hits", [])
             logger.debug("[VECTOR][OPENSEARCH][ANN] search returned %d hits", len(hits_data))
-            if hits_data:
-                sample = [
-                    {
-                        "chunk_id": h["_source"].get("chunk_id"),
-                        "score": h.get("_score"),
-                        "metadata": h["_source"].get("metadata", {}),
-                    }
-                    for h in hits_data[:3]
-                ]
-                logger.debug("[VECTOR][OPENSEARCH][ANN] top hits sample=%s", sample)
-            else:
-                filter_only = {"size": 3, "query": {"bool": {"filter": filters}}} if filters else {"size": 3, "query": {"match_all": {}}}
-                try:
-                    debug_res = self._client.search(index=self._index, body=filter_only)
-                    debug_hits = debug_res.get("hits", {}).get("hits", [])
-                    sample = [
-                        {
-                            "chunk_id": h["_source"].get("chunk_id"),
-                            "has_vector": "vector_field" in h["_source"],
-                            "metadata": h["_source"].get("metadata", {}),
-                        }
-                        for h in debug_hits
-                    ]
-                    logger.debug(
-                        "[VECTOR][OPENSEARCH][ANN] 0 KNN hits; filter-only match count=%d sample=%s",
-                        len(debug_hits),
-                        sample,
-                    )
-                except Exception as e:
-                    logger.warning("[VECTOR][OPENSEARCH][ANN] filter-only debug query failed: %s", e)
         except Exception as e:
             logger.warning("[VECTOR][OPENSEARCH][ANN] query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
@@ -1491,16 +1452,6 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             response = self._client.search(index=self._index, body=search_body, params={"search_pipeline": HYBRID_SEARCH_PIPELINE_NAME})
             hits_data = response.get("hits", {}).get("hits", [])
             logger.debug("[VECTOR][OPENSEARCH][HYBRID] search returned %d hits", len(hits_data))
-            if DEBUG and hits_data:
-                sample = [
-                    {
-                        "chunk_id": h["_source"].get("chunk_id"),
-                        "score": h.get("_score"),
-                        "metadata": h["_source"].get("metadata", {}),
-                    }
-                    for h in hits_data[:3]
-                ]
-                logger.debug("[VECTOR][OPENSEARCH][HYBRID] top hits sample=%s", sample)
         except Exception as e:
             logger.warning("[VECTOR][OPENSEARCH][HYBRID] query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
@@ -1538,16 +1489,6 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             response = self._client.search(index=self._index, body=search_body)
             hits_data = response.get("hits", {}).get("hits", [])
             logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] search returned %d hits", len(hits_data))
-            if DEBUG and hits_data:
-                sample = [
-                    {
-                        "chunk_id": h["_source"].get("chunk_id"),
-                        "score": h.get("_score"),
-                        "metadata": h["_source"].get("metadata", {}),
-                    }
-                    for h in hits_data[:3]
-                ]
-                logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] top hits sample=%s", sample)
         except Exception as e:
             logger.warning("[VECTOR][OPENSEARCH][FULLTEXT] query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e

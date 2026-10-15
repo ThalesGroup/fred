@@ -4023,6 +4023,7 @@
         "searching": "Searching...",
         "noMatch": "No user matches this search.",
         "searchFailed": "The search could not be completed. Try again.",
+        "searchTooBroad": "Too many results. Refine the search.",
         "alreadyGranted": "Already on the whitelist",
         "more_one": "{{count}} more result. Refine the search to see it.",
         "more_other": "{{count}} more results. Refine the search to see them."

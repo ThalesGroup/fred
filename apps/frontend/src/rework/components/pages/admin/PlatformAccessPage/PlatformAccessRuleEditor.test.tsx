@@ -680,7 +680,7 @@ it("colours the access banner by its own outcome, whatever the rule banner says"
 
 it("names what keeps the access: none known, one source, several sources", async () => {
   expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe("rework.platformAccess.rule.accessKept");
-  expect(hooks.users.mock.lastCall).toEqual([{ offset: 0, limit: 100, query: "me" }, { skip: false }]);
+  expect(hooks.users.mock.lastCall).toEqual([{ offset: 0, limit: 1, query: "me-id" }, { skip: false }]);
   hooks.ownSources = [{ kind: "manual" }];
   expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe(kept("manual"));
   hooks.ownSources = [

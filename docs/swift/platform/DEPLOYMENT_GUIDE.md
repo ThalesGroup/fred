@@ -497,15 +497,24 @@ Local laptop foreground profile (`configuration.yaml`):
 | `ingestion.document_duration_ms` | timer   | `file_type`, `status`, `source`            | Per-document end-to-end ingestion time |
 | `rag.search_latency_ms`          | timer   | `index`, `user_id`, `agent_id` (dims vary) | Latency of RAG search                  |
 | `rag.search_total`               | counter | `status` (implicit via dims)               | Count of RAG searches                  |
-| `rag.search_hits_total`          | counter | —                                          | Documents returned across searches     |
+| `rag.search_hits_total`          | counter | —                                          | Authorized hits returned by search branches |
 | `rag.search_hit_ratio`           | gauge   | —                                          | Hit ratio for searches                 |
-| `rag.search_empty_total`         | counter | —                                          | Searches with no results               |
+| `rag.search_empty_total`         | counter | —                                          | Authorized search branches with no results |
 | `rag.search_error_total`         | counter | —                                          | Failed searches                        |
-| `rag.search_top_k_total`         | counter | —                                          | Top-K docs retrieved                   |
+| `rag.search_top_k_total`         | counter | —                                          | Requested top-K summed across search branches |
 | `rag.rerank_latency_ms`          | timer   | —                                          | Latency of reranking step              |
 | `rag.rerank_total`               | counter | —                                          | Rerank operations                      |
 | `rag.rerank_docs_total`          | counter | —                                          | Docs evaluated in rerank               |
 | `rag.rerank_top_r_total`         | counter | —                                          | Docs selected after rerank             |
+
+Search metrics retain one sample per executed strategy branch (session attachments,
+libraries or explicit documents). Result statistics are emitted after authorization
+and enrichment: rejected candidates do not contribute to hits or the hit ratio,
+and a branch with no authorized results increments `rag.search_empty_total`.
+The final merge can deduplicate or limit these branch results, so their sum is not
+the final API result count. `rag.search_total`, latency and error metrics describe
+backend strategy execution; an authorization or enrichment failure emits no result
+statistics. Semantic fallback keeps the semantic policy dimension.
 
 Bench-mode summary logging can also be enabled for knowledge-flow via the same `app` settings as above (use non-zero values in a bench YAML; keep 0 in production).
 

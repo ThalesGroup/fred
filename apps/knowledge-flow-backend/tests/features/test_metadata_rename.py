@@ -57,6 +57,9 @@ def _document(*, uid: str, name: str, tag_ids: list[str] | None = None, vectoriz
 
 
 class _FakeRebac:
+    async def has_user_permission(self, user, permission, document_uid):
+        return True
+
     async def check_user_permission_or_raise(self, user, permission, document_uid):
         del user, permission, document_uid
 
