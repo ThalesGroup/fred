@@ -1,7 +1,9 @@
 # Documentation Index
 
 Entry point for all Fred platform documentation.
-Start here, then follow the links to the relevant section.
+Start with the [Fred architecture dossier](../architecture/README.md) for user
+journeys and domain explanations. Follow the index below for detailed contracts,
+developer guides and proposals.
 
 ---
 
@@ -16,7 +18,7 @@ Start here, then follow the links to the relevant section.
 | **A UX designer** reviewing component rendering            | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) then [`design/CHAT-COMPONENT-SPECS.md`](design/CHAT-COMPONENT-SPECS.md) |
 | **A product manager** tracking progress                    | GitHub Issues/Milestones                                                                                            |
 | **Anyone** validating a checkout or a release candidate    | [`TESTING.md`](TESTING.md) — four steps, each ending in a clear pass/fail answer                                   |
-| **An architect** reviewing or proposing a change           | [`rfc/`](#rfc--technical-proposals) → [`design/`](#design--architecture-contracts)                                 |
+| **An architect** reviewing or proposing a change           | [Fred architecture](../architecture/README.md), then [`design/`](#design--architecture-contracts) and [`rfc/`](#rfc--technical-proposals) |
 | **Writing an agent** with the SDK                          | [`authoring/`](#authoring--agent-sdk)                                                                              |
 | **Choosing how to run Fred** (standalone vs teams)         | [`platform/OPERATING_MODES.md`](platform/OPERATING_MODES.md)                                                       |
 | **Deploying** the platform                                 | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md)                                                     |
@@ -44,7 +46,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 
 | I want to…                                            | Go to                                                              |
 | ----------------------------------------------------- | ------------------------------------------------------------------ |
-| Understand the system architecture                    | [`design/`](#design--architecture-contracts)                       |
+| Understand the system architecture                    | [Fred architecture](../architecture/README.md)                       |
 | Set up a dev environment                              | [`platform/DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) |
 | Choose standalone vs full-stack mode                  | [`platform/OPERATING_MODES.md`](platform/OPERATING_MODES.md)       |
 | Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md)         |
@@ -66,8 +68,8 @@ reference documents in the same folder or in `design/`. This prevents circular r
 Frozen contracts between components. Read these before touching any API boundary,
 execution path, or session/team concern.
 
-> **Note**: this folder will be renamed `architecture/` in a future cleanup commit
-> once all cross-references in `CLAUDE.md` and backlogs are updated.
+These detailed contracts support the [Fred architecture dossier](../architecture/README.md);
+the dossier links to their rules without copying their specifications.
 
 | File                                                                            | What it defines                                                                                                        |
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |

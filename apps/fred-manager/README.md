@@ -86,13 +86,13 @@ with `GET /users/platform-roles`, and grant/revoke with
 Space roles are `member`, `editor`, `analyst` and `admin`. They are cumulative;
 admin alone does not read content. The last admin of a non-personal space cannot be
 revoked. Capability checks and their contracts are in the
-[runtime chapter](../../docs/architecture/04-runtime.md#platform-administration-and-self-checks).
+[runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
 
 Directory-backed platform grants require the manager's service client. The factory
 consumes `deploy/k3d/identities.yaml` during `k3d-app`; copy its generated
 `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` from `fred-secrets` to the host `.env` when
 running locally against that realm. `docker-up` alone does not provision this client.
-The [deployment chapter](../../docs/architecture/07-deployment.md) describes configuration.
+The [deployment chapter](../../docs/architecture/A3-manager-operations.md) describes configuration.
 
 ## Import a provisioning bundle
 
@@ -109,7 +109,7 @@ The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
 `users_schema_version: 2`, `source_platform: "swift"`. The four data files are arrays.
 The demo contains 15 identities, one organization, three teams and an empty project
 array. Demo passwords are test credentials. The
-[declaration contract](../../docs/architecture/05-data-and-authorization.md#provisioning-declarations)
+[declaration contract](../../docs/architecture/A2-manager-contracts.md#provisioning-declarations)
 defines explicit parent references and roles, including projects. Old JSON and
 Python version-1 ZIPs return `not_yet_supported`; no conversion is performed.
 
@@ -178,7 +178,7 @@ nonempty installations refuse automatic cutover during `serve`. The command
 preserves supported roles, permissions, space IDs and bootstrap state in a fresh
 OpenFGA store and publishes its IDs in SQL; replay never recopies a published store.
 Invalid legacy models, hierarchy or grants require repair before cutover. The
-[deployment chapter](../../docs/architecture/07-deployment.md#offline-authorization-cutover)
+[deployment chapter](../../docs/architecture/A3-manager-operations.md#offline-authorization-cutover)
 defines the offline precondition and failure behavior.
 
 A role mutation that loses its authorization revision returns a conflict; replay

@@ -1,4 +1,32 @@
-# 9. Quality
+# 9. Quality and invariants
+
+The guarantees below apply to the named manager mechanisms and first-user journey.
+They do not certify every Fred component. Invariant IDs remain stable when the
+explanations move between chapters.
+
+## Invariants
+
+| Id | Invariant | Held by |
+| --- | --- | --- |
+| I1 | An organization is a root, a team's parent is an organization, a project's parent is a non-personal team. | `domain::check_parent`, schema checks |
+| I2 | Placement never changes: a space's parent and path, a folder's space, parent and path, a document's space and folder. Names may change. | triggers |
+| I3 | A document's folder, and a sub-folder's parent, belong to the same space. | composite foreign keys |
+| I4 | Holding a role on a space requires a content role on its parent, under any concurrency. | `spaces`, organization lock and atomic OpenFGA guard |
+| I5 | Role and SQL mutations cannot publish a decision invalidated by an earlier successful revocation. External operations are authorized at dispatch. | checks after guard capture, atomic fence, SQL lock through commit |
+| I6 | A personal space never gains a member, and its organization can always remove its owner. | `spaces::grant`, `spaces::revoke` |
+| I7 | A space's search scope is its ancestors and itself, never its descendants. | `space.path` |
+| I8 | Space admin and platform admin roles read no content. | OpenFGA `can_read = member or editor or analyst` |
+| I9 | Root bootstrap promotes one caller, once; it never reopens, not even for its own admin after removal. | `bootstrap::grant_root`, marker |
+| I10 | Only an RS256 token from the realm, unexpired, with an integer past `iat` and a lifetime within the ceiling, authenticates. | `auth` |
+| I11 | Log lines never carry credential- or content-named fields; dependencies never log their own text. | `logging` |
+| I12 | A document page continues after its cursor's sort values, even when that document is gone. | keyset cursor |
+| I13 | Every line of a request carries its request id, and the request ends with one `http` event. | `logging::request_logging` |
+| I14 | Every non-personal space retains at least one administrator after role revocation. | `spaces::revoke`, organization lock |
+| I15 | Only the completed bootstrap root changes platform-admin grants; its own grant is protected. New platform grants target an existing Keycloak subject. | `platform`, platform lock, directory lookup |
+| I16 | Every acknowledged role mutation emits a security audit event before SQL commit, independently of application severity and text/JSON format. | `logging::audit_relation`, mutation services |
+| I17 | Provisioning replay preserves existing identities, committed space IDs and undeclared grants, and repairs requested grants without reusing rolled-back space IDs. | `provisioning`, exact directory lookup, SQL uniqueness |
+| I18 | Import requires a verified platform administrator and compatible initialized state; predictable preflight failures cause no provisioning or initialization writes. | CLI read-only initialization, HTTP authority-before-upload, `Importer::preflight`, root guard |
+| I19 | A human personally accepts the active CGU before business access; consent and root bootstrap create no membership, and import accepts for nobody. | `onboarding`, `OwnUser`, `AdmittedUser`, CLI admission |
 
 ## fred-manager tests
 

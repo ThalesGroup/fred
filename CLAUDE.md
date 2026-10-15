@@ -487,8 +487,8 @@ Do not silently expand scope. Do not silently delete content.
 | Technical proposals — open questions, or work too broad for one OpenSpec change, only (settled/scoped decisions move to OpenSpec or design docs, 2026-08-01) | `docs/swift/rfc/` |
 | Scoped, buildable slices of agreed work (in-flight) | `openspec/changes/<name>/` |
 | Per-capability current spec (folded in on archive) | `openspec/specs/<capability>/spec.md` |
-| Architecture entry point                 | `docs/ARCHITECTURE.html`                              |
-| Architecture of `fred-manager`, as implemented | `docs/architecture/` (arc42 dossier, present tense only; generated blocks, invariants proved by tests) |
+| Fred architecture entry point           | `docs/architecture/README.md` (domain chapters, user journeys, present-tense implementation references and proved invariants) |
+| Illustrated architecture overview        | `docs/ARCHITECTURE.html` |
 | Platform topology detail                 | `docs/swift/platform/PLATFORM_RUNTIME_MAP.md`         |
 | Coding style, typing, testing rules      | `docs/CONVENTIONS.md`                                 |
 | Chat UI UX status                        | `docs/swift/ux/COMPONENT-UX.md`                       |

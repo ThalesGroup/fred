@@ -1,33 +1,10 @@
-# Fred business journey and organization boundaries
+# Fred reconstruction checklist
 
-This map is the checklist for reconstructing Fred one complete business journey
-at a time. It identifies decisions that must be resolved before exposing an entry
-point, not a promise that the whole Python product runs through manager. Current
-manager behavior and proofs have one home: [the architecture dossier](../../architecture/README.md).
-Buildable deltas belong in OpenSpec; work tracking belongs in issue #3092 and its
-follow-ups. Before each slice, trace its predecessors and affected successors here.
-
-## First journey
-
-1. An operator deploys manager and the matching frontend, auth configuration,
-   legal text/version and a bootstrap secret. A failed startup is visible and retryable.
-2. A person authenticates with their own Keycloak credential. This creates neither
-   organization membership nor platform authority.
-3. The person explicitly accepts the active CGU. Consent records only subject,
-   version and time. It never enrolls in default teams or accepts for somebody else.
-4. On a fresh platform the person supplies the bootstrap secret and becomes root.
-   No organization, team or personal space is created. Root is not an organization admin.
-5. Root imports the Make-generated provisioning ZIP. The declared identities,
-   organizations, teams, projects and roles are reconciled; the UI reports server
-   acknowledgments. Errors preserve explicit repair/replay rather than claim rollback.
-6. Root signs out. An imported person signs in, personally accepts CGU, and sees
-   only their own declared memberships. Import does not pre-accept their terms.
-
-Acceptance is automated with `make -C apps/frontend test-provisioning-browser`:
-real UI, OIDC, manager, PostgreSQL and OpenFGA, empty initial state, no fabricated
-Python shell. Unit/contract/integration checks exercise failures and concurrency
-before this complete journey. A human can then repeat this same journey in k3d;
-a one-off curl is not the feature acceptance criterion.
+Questions to resolve when scoping a feature on the organization/team/project model.
+This is a scoping checklist, not the account of current behavior. The implemented
+[first-user journey](../../architecture/02-user-journeys.md) has its single home in
+the Fred architecture dossier. Buildable deltas belong in OpenSpec and work tracking
+belongs in GitHub issues.
 
 ## Product inventory to examine before extending the journey
 

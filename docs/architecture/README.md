@@ -1,40 +1,48 @@
-# Fred architecture dossier
+# Fred architecture
 
-The architecture of Fred's `fred-manager` service, as implemented. Structure follows
-[arc42](https://arc42.org), reduced to the chapters that carry decisions. Diagrams are
-Mermaid, rendered by GitHub.
+A compact explanation of Fred: its user journeys, domain boundaries, security
+rules and runtime interactions. The structure adapts arc42's context, building
+blocks, runtime, cross-cutting concepts and quality views to Fred's domains.
+Read the journeys first, then follow the relevant domain chapter.
 
-| # | Chapter | Answers |
-| --- | --- | --- |
-| 1 | [Introduction and goals](01-goals-and-scope.md) | Responsibilities, constraints, vocabulary |
-| 2 | [Context](02-context.md) | Who talks to whom |
-| 3 | [Building blocks](03-building-blocks.md) | Modules and their dependencies |
-| 4 | [Runtime](04-runtime.md) | The flows that matter, step by step |
-| 5 | [Data and authorization](05-data-and-authorization.md) | Schema, OpenFGA model, invariants |
-| 6 | [Cross-cutting](06-cross-cutting.md) | Authentication, logging, errors, configuration |
-| 7 | [Deployment](07-deployment.md) | Host run and k3d |
-| 8 | [Decisions](08-decisions.md) | Why, one entry per decision |
-| 9 | [Quality](09-quality.md) | Invariants and the tests proving them |
+| Chapter | Reader's question |
+| --- | --- |
+| [1. System overview](01-system-overview.md) | What makes up Fred, and where are its boundaries? |
+| [2. User journeys](02-user-journeys.md) | How do the architectural rules work together in practice? |
+| [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
+| [4. Organizations and provisioning](04-organizations.md) | How are people, spaces and their relationships organized? |
+| [5. Documents and knowledge](05-documents.md) | How does knowledge enter, circulate and leave Fred? |
+| [6. Agents and conversations](06-agents.md) | How does a conversation become an agent execution? |
+| [7. Capabilities and integrations](07-capabilities.md) | How do agents acquire tools and interact with other systems? |
+| [8. Operations](08-operations.md) | How is Fred configured, deployed and observed? |
+| [9. Quality and invariants](09-quality.md) | Which guarantees are proved, and what do they cost? |
 
-## Keeping it true
+Empty sections define the editorial structure only. They make no implementation
+claim. Populated sections name their execution context: in particular, the
+organization/team/project journey uses this branch's manager entry. A rule
+implemented there does not imply that every Python product surface uses it.
 
-The [fred-manager branch workflow](../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac)
-defines the implementation, independent review and final documentation pass.
+## Technical references
 
-- **Same commit.** A change to code described here updates its chapter in the same
-  commit. The dossier describes what is implemented, in the present tense; plans,
-  progress and status belong elsewhere.
-- **Generated, never copied.** Anything derivable from code sits in a generated block
-  (`<!-- generated: ... -->`): routes, the SQL schema (tbls, from the migrations), the
-  OpenFGA model, the reference configuration, the invariant-to-test table.
-- **Invariants are proved.** Chapter 5 numbers them (`I1`, `I2`, ...). A test proving
-  one carries `// Proves: I<n>` above it; chapter 9 lists them.
-- **Checked.** From this directory:
+Exact implementation detail is available without making it the main reading path:
+[manager runtime](A1-manager-runtime.md), [schemas and contracts](A2-manager-contracts.md),
+and [manager operations](A3-manager-operations.md). Generated blocks remain tied to
+source code; they are references, not another handwritten API specification.
 
-  ```
-  make generate   # rewrite generated blocks (Docker: Postgres + tbls)
-  make check      # stale block, unproved invariant, unknown citation, unrenderable diagram
-  ```
+## Keeping one useful account
 
-Write concrete statements: names, values, rules, consequences. A sentence that would
-stay true for any system does not belong here.
+- Explain current behavior and the reason for its boundaries, in the present tense.
+  Describe a rule in its domain chapter; journeys illustrate it and link back.
+- RFCs hold unresolved choices; active OpenSpec changes hold proposed deltas;
+  capability specs hold acceptance contracts; issues track work. Link to those
+  sources when needed, without importing their plans or histories here.
+- Component READMEs contain developer commands. This dossier explains how Fred's
+  parts fit together. An implementation change updates its relevant chapters.
+- Define each invariant once in chapter 9. Tests cite `// Proves: I<n>`; the proof
+  table, route tables, SQL diagram, model and configuration are generated.
+- Run `make -C docs/architecture generate` after source changes and
+  `make -C docs/architecture check` to verify sources, proofs and diagrams.
+
+The [branch workflow](../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac)
+sets review and commit requirements. New domain chapters start with headings;
+verified explanations replace the headings' empty bodies as their scope is documented.

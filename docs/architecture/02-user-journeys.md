@@ -1,0 +1,68 @@
+# 2. User journeys
+
+Journeys explain architecture through observable actions. Each one names its
+execution context, the authority making each decision and the resulting state.
+Rules live in their domain chapters; this chapter shows their composition.
+
+## From an empty platform to an organization's first user
+
+Execution context: the experimental frontend entry and fred-manager on
+`chore/rust-rebac`, using Keycloak, PostgreSQL and OpenFGA. This entry exposes
+onboarding, memberships and provisioning. It does not mount the Python product shell.
+
+| Step | What the person sees or does | Architectural effect |
+| --- | --- | --- |
+| 1. Open Fred | Sign in with a personal Keycloak account. | Public configuration identifies the login authority. The bearer identifies the caller; it grants no organization membership. |
+| 2. Accept the CGU | Read the active terms and explicitly accept. | Manager records that person's subject, version and time in SQL. No role or space is created. |
+| 3. Initialize administration | On an unclaimed platform, enter the deployment bootstrap secret. | Manager reserves this caller as root, writes platform administration in OpenFGA and records completion. |
+| 4. Open the platform | Root sees an empty membership view and the Provisioning entry. | Platform governance grants no organization membership or content access. |
+| 5. Import the ZIP | Select the Make-generated bundle and read the completed report. | Manager uses its own Keycloak service identity to resolve/create users and reconciles declared organizations, teams, projects and direct roles. |
+| 6. Change accounts | Sign out, then sign in as an imported person. | The browser starts a fresh session; the previous person's data is not retained. |
+| 7. Enter the organization | Accept personal CGU, then view the declared organization and spaces. | Import has not accepted terms for this person. Membership comes from the bundle's roles, not from accepting terms or logging in. |
+
+```mermaid
+sequenceDiagram
+    actor Root as First person
+    participant UI as Fred UI
+    participant KC as Keycloak
+    participant M as fred-manager
+    participant PG as PostgreSQL
+    participant FGA as OpenFGA
+    Root->>UI: Open Fred and sign in
+    UI->>KC: Personal authentication
+    KC-->>UI: Caller bearer
+    Root->>UI: Accept displayed CGU
+    UI->>M: Own bearer and terms version
+    M->>PG: Record personal consent
+    Root->>UI: Enter bootstrap secret
+    UI->>M: Own bearer and deployment secret
+    M->>PG: Reserve root claimant
+    M->>FGA: Grant platform administration
+    M->>PG: Record bootstrap completion
+    Root->>UI: Import provisioning ZIP
+    UI->>M: ZIP and operator bearer
+    M->>KC: Resolve or create identities with service credentials
+    M->>PG: Reconcile declared spaces
+    M->>FGA: Apply declared direct roles
+    M-->>UI: Completed acknowledgment counts
+```
+
+Unavailable configuration, onboarding state or legal text keeps the protected
+journey closed and offers retry. A wrong secret grants nothing. A completed
+bootstrap never opens again. Import failures show an error and repair/replay
+instructions: a failure does not imply rollback of remote effects.
+
+See [personal consent and bootstrap](03-security.md),
+[organizations and provisioning](04-organizations.md), and
+[automated journey acceptance](09-quality.md#provisioning-ui-acceptance).
+Deployment commands remain in the [manager README](../../apps/fred-manager/README.md).
+
+## Joining and governing organizations, teams and projects
+
+## From a document upload to an authorized answer
+
+## Creating an agent and equipping it with capabilities
+
+## Running a conversation and inspecting its results
+
+## Evaluating, administering and operating the platform

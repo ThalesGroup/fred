@@ -1,4 +1,48 @@
-# 5. Data and authorization
+# Reference: manager schemas and contracts
+
+Exact source-derived references for the organization/team/project implementation.
+Read [Security](03-security.md) and [Organizations](04-organizations.md) for meaning.
+
+## fred-manager HTTP surface
+
+Health and frontend configuration are public. Other routes require a bearer token
+([security](03-security.md)); business routes also require current personal CGU acceptance.
+
+<!-- generated: routes apps/fred-manager/src/api.rs /fred-manager/v1 -->
+| Method | Path | Handler |
+| --- | --- | --- |
+| GET | `/fred-manager/v1/admin/teams` | `team_registry` |
+| POST | `/fred-manager/v1/authorize/document` | `authorize_document` |
+| POST | `/fred-manager/v1/authorize/platform` | `authorize_platform` |
+| POST | `/fred-manager/v1/authorize/scope` | `authorize_scope` |
+| POST | `/fred-manager/v1/authorize/space` | `authorize_space` |
+| POST | `/fred-manager/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
+| POST | `/fred-manager/v1/documents` | `create_document` |
+| DELETE | `/fred-manager/v1/documents/{id}` | `delete_document` |
+| GET | `/fred-manager/v1/documents/{id}` | `get_document` |
+| PATCH | `/fred-manager/v1/documents/{id}` | `rename_document` |
+| POST | `/fred-manager/v1/documents/{id}/ingest` | `ingest_document` |
+| POST | `/fred-manager/v1/folders` | `create_folder` |
+| DELETE | `/fred-manager/v1/folders/{id}` | `delete_folder` |
+| PATCH | `/fred-manager/v1/folders/{id}` | `rename_folder` |
+| GET | `/fred-manager/v1/frontend/config` | `frontend_config` |
+| POST | `/fred-manager/v1/gcu` | `accept_terms` |
+| GET | `/fred-manager/v1/healthz` | `health` |
+| POST | `/fred-manager/v1/import-export/import` | `import_blueprint` |
+| GET | `/fred-manager/v1/me` | `me` |
+| GET | `/fred-manager/v1/me/onboarding` | `onboarding_status` |
+| POST | `/fred-manager/v1/me/personal-space` | `create_personal_space` |
+| GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
+| POST | `/fred-manager/v1/spaces` | `create_space` |
+| GET | `/fred-manager/v1/spaces/{id}/documents` | `list_documents` |
+| GET | `/fred-manager/v1/spaces/{id}/folders` | `list_folders` |
+| DELETE | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `revoke` |
+| PUT | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `grant` |
+| GET | `/fred-manager/v1/users/platform-roles` | `list_platform_roles` |
+| DELETE | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `revoke_platform_role` |
+| PUT | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `grant_platform_role` |
+<!-- end generated -->
+
 
 ## fred-manager schema
 
@@ -79,31 +123,6 @@ What the schema enforces by itself:
 | Placement never changes | `before update` triggers on `space`, `folder`, `document` |
 | One root bootstrap, ever | `platform_bootstrap` single row (`singleton` key) |
 
-## Space tree
-
-The tree is in SQL; OpenFGA has no parent relation. `path` holds ancestors then self.
-
-```mermaid
-flowchart TB
-    tsn["TSN<br/>organization<br/>path: tsn"]
-    bid["BID<br/>team<br/>path: tsn, bid"]
-    alice["alice<br/>personal team<br/>path: tsn, alice"]
-    p1["Bid 2026<br/>project<br/>path: tsn, bid, p1"]
-    tsn --> bid & alice
-    bid --> p1
-```
-
-| Conversation in | Search scope (`space_id` in) |
-| --- | --- |
-| BID | TSN, BID |
-| Bid 2026 | TSN, BID, Bid 2026 |
-| alice | TSN, alice |
-
-Folders classify only and carry no rights. A document's artefacts have no
-authorization identity of their own: they are stored under its storage prefix
-`<space_id>/<document_id>/`, and `IngestDocument` hands over `space_id`, `document_id`
-and `folder_path`, ids only, so indexed content is filtered by scope and a rename
-changes nothing outside the row.
 
 ## OpenFGA model
 
@@ -172,55 +191,6 @@ type guard
 ```
 <!-- end generated -->
 
-## Personal consent
-
-`terms_acceptance` stores one active acceptance per authenticated subject: version
-and server timestamp. Repeating the same version preserves the timestamp; accepting
-a new configured version replaces it. It has no foreign key to a space and stores
-no role. Import leaves this table untouched. The root identity exists in Keycloak;
-platform bootstrap and personal consent do not enroll it in an organization.
-
-## Invariants
-
-| Id | Invariant | Held by |
-| --- | --- | --- |
-| I1 | An organization is a root, a team's parent is an organization, a project's parent is a non-personal team. | `domain::check_parent`, schema checks |
-| I2 | Placement never changes: a space's parent and path, a folder's space, parent and path, a document's space and folder. Names may change. | triggers |
-| I3 | A document's folder, and a sub-folder's parent, belong to the same space. | composite foreign keys |
-| I4 | Holding a role on a space requires a content role on its parent, under any concurrency. | `spaces`, organization lock and atomic OpenFGA guard |
-| I5 | Role and SQL mutations cannot publish a decision invalidated by an earlier successful revocation. External operations are authorized at dispatch. | checks after guard capture, atomic fence, SQL lock through commit |
-| I6 | A personal space never gains a member, and its organization can always remove its owner. | `spaces::grant`, `spaces::revoke` |
-| I7 | A space's search scope is its ancestors and itself, never its descendants. | `space.path` |
-| I8 | Space admin and platform admin roles read no content. | OpenFGA `can_read = member or editor or analyst` |
-| I9 | Root bootstrap promotes one caller, once; it never reopens, not even for its own admin after removal. | `bootstrap::grant_root`, marker |
-| I10 | Only an RS256 token from the realm, unexpired, with an integer past `iat` and a lifetime within the ceiling, authenticates. | `auth` |
-| I11 | Log lines never carry credential- or content-named fields; dependencies never log their own text. | `logging` |
-| I12 | A document page continues after its cursor's sort values, even when that document is gone. | keyset cursor |
-| I13 | Every line of a request carries its request id, and the request ends with one `http` event. | `logging::request_logging` |
-| I14 | Every non-personal space retains at least one administrator after role revocation. | `spaces::revoke`, organization lock |
-| I15 | Only the completed bootstrap root changes platform-admin grants; its own grant is protected. New platform grants target an existing Keycloak subject. | `platform`, platform lock, directory lookup |
-| I16 | Every acknowledged role mutation emits a security audit event before SQL commit, independently of application severity and text/JSON format. | `logging::audit_relation`, mutation services |
-| I17 | Provisioning replay preserves existing identities, committed space IDs and undeclared grants, and repairs requested grants without reusing rolled-back space IDs. | `provisioning`, exact directory lookup, SQL uniqueness |
-| I18 | Import requires a verified platform administrator and compatible initialized state; predictable preflight failures cause no provisioning or initialization writes. | CLI read-only initialization, HTTP authority-before-upload, `Importer::preflight`, root guard |
-| I19 | A human personally accepts the active CGU before business access; consent and root bootstrap create no membership, and import accepts for nobody. | `onboarding`, `OwnUser`, `AdmittedUser`, CLI admission |
-
-Roles are cumulative and scoped to one space. Analyst grants content read and the capabilities
-`run_evaluations`, `manage_evaluation_corpus` and `read_conversations_for_evaluation`.
-Admin grants space management and the first two evaluation capabilities, without
-content read or evaluation-conversation read.
-No space or platform role propagates to another space.
-
-Platform admin implies all platform capabilities. Team manager grants team creation and listing;
-feature manager grants `manage_capabilities` and team registry listing; prompt editor grants
-`edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply space membership or content access.
-I5 orders role publication and local SQL commits, not the arrival of HTTP responses.
-Keycloak creation and Temporal submission are authorized before dispatch under the
-relevant lock and guard fence. Their remote completion can follow cancellation or
-revocation; neither a timeout nor revocation rolls back already dispatched work.
-Read-only checks report permission at evaluation time, not a lease on future access.
-
-`openfga/model.fga` is the authoritative permission matrix; `make model` compiles its
-supported direct/union expressions to `model.json`, and `make check-model` checks parity.
 
 ## Provisioning declarations
 
