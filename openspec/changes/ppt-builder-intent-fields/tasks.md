@@ -51,9 +51,10 @@
 
 Needs `SlidePlan.takeaway` from `ppt-builder-storytelling` (field, checks, notes, `changes` path).
 
-- [ ] 6.1 `render.py` `_assign_text`: the takeaway into the assigned slide's takeaway zone when it fits; bullets no longer fall into that zone then; otherwise today's filling, no note
-- [ ] 6.2 `tools.py` catalogue: `takeaway zone ≤N words` on patterns holding the zone
-- Verification: `test_takeaway.py` — built-in chart slide with a short takeaway in the card, a takeaway longer than the card left in the notes only with bullets filling the card as before, bullets slide without a zone unchanged, edit of `takeaway` refills the card
+- [ ] 6.1 `plan.py` `DeckPlan.show_takeaways: bool = False` (top-level build argument, one schema line, kept from the base by `changes`); `lexicon.py` `SHOW_TAKEAWAY_WORDS` (fr/en), matched through the storytelling change's user-message lexicon helper; the flag without a matching user message ignored with one agent note
+- [ ] 6.2 `render.py` `_assign_text`: with the flag honoured, the takeaway into the assigned slide's takeaway zone when it fits, bullets no longer fall into that zone then; otherwise (default) today's filling, no note
+- [ ] 6.3 `tools.py` catalogue: `takeaway zone ≤N words` on patterns holding the zone
+- Verification: `test_takeaway.py` — default (no flag): built-in chart slide's card filled from the bullets as before and the takeaway in the notes only; flag + "affiche les messages clés" in a user message: a short takeaway in the card; flag without such a message: card as before plus the agent note; a takeaway longer than the card left in the notes only with bullets filling the card; bullets slide without a zone unchanged; edit of `takeaway` refills the card when the flag is honoured
 
 ## Phase D — chart target (after a spike)
 

@@ -17,7 +17,7 @@ One cross-cutting rule, then nine optional fields in four phases, all on one bra
   - `table.highlight_row` / `table.highlight_column`: an index or the row's first-cell / the column's header text; bold and a light tint of the table style's accent.
   - `items[i].trend: up | down | flat`: a ▲ ▼ ► glyph before the figure, in the figure's own text style; no colour.
 - **Phase C — slide takeaway** (re-analysis):
-  - the slide's `takeaway` (field owned by `ppt-builder-storytelling`) placed in the template's takeaway zone (shape name or vision purpose) when the chosen slide has one and it fits; otherwise it stays in the speaker notes only (owner, 2026-10-15).
+  - the slide's `takeaway` (field owned by `ppt-builder-storytelling`) placed in the template's takeaway zone (shape name or vision purpose) only when the user explicitly asked to show key messages (`show_takeaways`, checked against the user's words) and it fits; by default the zone is filled from the slide's content as before and the takeaway stays in the speaker notes only (owner, 2026-10-15).
   - `Zone.takeaway` flag; `ANALYSIS_VERSION` 12 → 13.
 - **Phase D — chart target** (gated on a spike):
   - `chart.target: number | {value, label}`: a dashed reference line built natively (an extra series moved into a line plot sharing the axes: a combo chart, editable in PowerPoint); `column`, `stacked_column`, `line`, `area` only.

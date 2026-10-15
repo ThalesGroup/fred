@@ -2,12 +2,17 @@
 
 ### Requirement: Every content slide has a takeaway
 
-The system SHALL require a `takeaway` on every plan slide whose kind is not `cover`, `agenda`, `section`, `closing` or `quote`: the conclusion the audience draws from the slide, as a sentence. The system SHALL return `needs_revision` for that slide when the takeaway is missing or shorter than four words, and SHALL NOT judge it further. The system SHALL NOT derive the slide's title from the takeaway: it SHALL use the `title` the model sent, and leave the title unfilled when none is sent. The system MUST write the takeaway as the first line of the slide's speaker notes. The system SHALL return `needs_revision` for a title or subtitle holding three or more numbers (years not counted), offering a figures slide. These checks SHALL run before the slide assignment, and a `changes` call SHALL be checked on the slides it touches only.
+The system SHALL require a `takeaway` on every plan slide whose kind is not `cover`, `agenda`, `section`, `closing` or `quote`: the conclusion the audience draws from the slide, as a sentence. The system SHALL return `needs_revision` for that slide when the takeaway is missing, shorter than four words, ends with a question mark, or equals the slide's title once normalised, and SHALL NOT judge it further. The system SHALL NOT write the takeaway on the slide unless the user explicitly asked for key messages to be shown (`ppt-builder-intent-fields`, requirement "Slide takeaway"). The system SHALL NOT derive the slide's title from the takeaway: it SHALL use the `title` the model sent, and leave the title unfilled when none is sent. The system MUST write the takeaway as the first line of the slide's speaker notes. The system SHALL return `needs_revision` for a title or subtitle holding three or more numbers (years not counted), offering a figures slide. These checks SHALL run before the slide assignment, and a `changes` call SHALL be checked on the slides it touches only.
 
 #### Scenario: Topic label as takeaway
 
 - **WHEN** the model sends a bullets slide with `takeaway: "Présentation générale"`
 - **THEN** no deck is built and the `needs_revision` entry for that slide asks for what the audience should conclude, as a sentence
+
+#### Scenario: Takeaway that repeats the title
+
+- **WHEN** the model sends a bullets slide with `title: "Our results in 2025"` and `takeaway: "Our results in 2025"`
+- **THEN** no deck is built and the slide's problem asks for the conclusion the audience draws, the title pointing to it
 
 #### Scenario: Takeaway shapes the slide, title stays short
 
@@ -31,12 +36,18 @@ The system SHALL require a `takeaway` on every plan slide whose kind is not `cov
 
 ### Requirement: A chart holds one measure
 
-The system SHALL return `needs_revision` for a chart whose values are written with two different units, and for a `column`, `bar`, `line`, `area` or `stacked_column` chart without `unit` whose non-zero values span a ratio of 100 or more. The revision SHALL offer a figures slide for values that measure different things and a `unit` for values that are one measure. Pie and doughnut charts SHALL be exempt from the spread rule.
+The system SHALL return `needs_revision` for a chart whose values are written with two different units, every time it is sent. The system SHALL return `needs_revision` once for a `column`, `bar`, `line`, `area` or `stacked_column` chart without `unit` whose non-zero values span a ratio of 100 or more, asking whether the values measure the same thing and offering a `unit` for one measure or a figures slide for different ones; when the same chart is sent again unchanged, the system SHALL build it and record a `wide_range_chart` note in "What was built". Pie and doughnut charts SHALL be exempt from the spread rule.
 
 #### Scenario: Mixed measures on one axis
 
 - **WHEN** the model sends a column chart with categories "Years", "Employees", "Sites" and values 45, 2800, 9 and no unit
-- **THEN** no deck is built and the slide's options are a figures slide or a unit naming the one measure
+- **THEN** no deck is built and the slide's problem asks whether the values measure the same thing, with a figures slide or a unit naming the one measure as options
+
+#### Scenario: Wide-range chart confirmed by a resend
+
+- **GIVEN** a column chart refused for its spread
+- **WHEN** the model sends the same chart again unchanged
+- **THEN** the deck is built and the summary holds `wide_range_chart`
 
 #### Scenario: One wide-range measure
 
@@ -46,7 +57,7 @@ The system SHALL return `needs_revision` for a chart whose values are written wi
 #### Scenario: Two written units
 
 - **WHEN** a series holds "12 %" and "3 M€"
-- **THEN** no deck is built and the problem names both units
+- **THEN** no deck is built and the problem names both units; **WHEN** the same chart is sent again **THEN** it is refused again
 
 ### Requirement: Figures are sourced
 

@@ -29,6 +29,16 @@ Not covered today: what a slide is meant to make the audience conclude, whether 
 - **O10.** With the setting on, the plan is skipped only when the user explicitly asks; default stays plan first.
 - **O11.** Deck-level optional `audience` and main message: confirmed, the latter named `main_message`.
 
+### Owner decisions (2026-10-15, final answers)
+
+- **O12.** Takeaway as the unlabelled first notes line, other notes lines (`Source:`, illustrative, unverified) in the plan's language: confirmed (D2, D6).
+- **O13.** The takeaway is a real sentence, the conclusion the audience draws, not a topic label. The four-word floor stays the cheap guard; one light extra check only where it is reliable across languages (D2). Detecting a verbless noun phrase is not attempted.
+- **O14.** Figures crammed into a title or subtitle: refused, a figures slide offered — confirmed (D2).
+- **O15.** Spot-check: 1 % tolerance and sums/differences only from one message or tool result — confirmed (D4).
+- **O16.** `skip_plan` needs the argument and an explicit skip request in the latest user message — confirmed (D5).
+- **O17.** The takeaway is not shown on the slide by default. A template's takeaway zone keeps today's filling (slide content); the takeaway goes into it only when the user explicitly asks for key messages to be shown (deck flag checked against the user's words, `ppt-builder-intent-fields` phase C, its D9).
+- **O18.** The 100× spread rule refused real charts: softened to refused once with an actionable question, the same chart resent unchanged is built with a note (D3). Two written units in one series stay a refusal.
+
 ### D1. Checks before the assignment, as `needs_revision` problems
 
 A new `story.py` runs on the plan before `assign.py` (no template fetch, no render) and returns problems in the assigner's shape (`index`, `problem`, `options`), merged into the same `needs_revision` list. So the model sees one revision per call, the D27 next-call rule, the "repeated" flag and the identical-call guard apply unchanged. Checks run on every slide of `slides`, and on the slides a `changes` call inserts, replaces or edits only: an edit is never refused over a slide it does not touch.
@@ -37,10 +47,10 @@ A new `story.py` runs on the plan before `assign.py` (no template fetch, no rend
 
 - `SlidePlan.takeaway: str`, first in the slide schema so the model decides it before the content: "what the audience concludes when they look at this slide, as a full sentence ('Italy weighs twice Spain in headcount, so the hiring plan should start there'). It shapes the slide; it is not the title and need not appear on it." Aliases: `message`, `key_message`, `key_takeaway`.
 - Exempt kinds: `cover`, `agenda`, `section`, `closing`, `quote`. The kind is the one the assigner works with (`kind`, else inferred from content).
-- Problems (minimal): no takeaway on a non-exempt slide; a takeaway under four words, i.e. a topic label ("Présentation générale"), not a sentence. The option names the remedy with an example built from the slide's own content. Nothing else is judged: not whether it asserts, not its length otherwise, not its relation to the title.
+- Problems (minimal): no takeaway on a non-exempt slide; a takeaway under four words, i.e. a topic label ("Présentation générale"), not a sentence; a takeaway ending with `?` (a question is a topic, not a conclusion); a takeaway equal to the slide's title once normalised (the title points to the takeaway, it is not one) (O13). The option names the remedy with an example built from the slide's own content. **Checked:** presence, word count, final `?`, equality with the title. **Not checked:** whether it holds a verb or asserts anything (no reliable cross-language test for a verbless noun phrase), its length beyond the floor, its truth, its relevance to the slide.
 - **Title.** `title` stays the model's: short, written from the takeaway, fitted by the existing title fit check. The code never derives a title from the takeaway. A user who asks for no titles is followed by the model omitting `title` (already optional; the zone stays unfilled). A deck field would only certify the same model decision, so none is added.
 - **Speaker notes.** The takeaway is always the first line of the notes, unlabelled, before `Source:` and the model's notes. It also feeds the plan outline (D5).
-- **On-slide placement** belongs to `ppt-builder-intent-fields` phase C (its D9, amended 2026-10-15): the takeaway fills a template's takeaway zone when the chosen slide has one and it fits; otherwise it is on the slide nowhere but the notes. No fallback, no refusal for it.
+- **On-slide placement** belongs to `ppt-builder-intent-fields` phase C (its D9, amended 2026-10-15): by default the takeaway is on the slide nowhere but the notes, and a template's takeaway zone is filled as before from the slide's content. Only when the user explicitly asks for key messages to be shown (O17) does the takeaway fill that zone, when the chosen slide has one and it fits. No fallback, no refusal for it.
 - **Figures crammed into a title.** A title or subtitle holding three or more numbers (years 1900–2099 not counted) is a problem whose option is a `figures` slide (items `number` + `label`), else a table. It is about titles carrying data, so it stays.
 
 **Prompt guidance** (working rules, always, one paragraph): decide the deck's main message, then each slide's takeaway before its content. Let the takeaway design the slide: the kind that shows it (a comparison → a chart; one striking number → a figures slide with that number big; a trend → a line), only the content that supports it, and the emphasis that proves it (`chart.highlight`, `chart.sort`, `table.total_row`, `items[].trend`). Then write a short title, a few words that point to the takeaway, not the takeaway itself. Leave titles out only when the user asked. Every figure from the documents or the user, with `source`; never invent figures unless the user asked for illustrative data.
@@ -49,10 +59,10 @@ A new `story.py` runs on the plan before `assign.py` (no template fetch, no rend
 
 Deterministic, per chart:
 
-1. **Written units.** Two different non-empty units among a chart's written values (`45 ans`, `9 sites`; `%` and `M€`) → problem. A bare number does not conflict.
-2. **Spread.** On `column`, `bar`, `line`, `area`, `stacked_column`, a chart without `unit` whose non-zero absolute values span 100× or more → problem: "values from 9 to 2 800 on one axis: if they measure different things, show them as figures (items: number + label); if they are one measure, set `unit`". `pie`/`doughnut` exempt (small slices are normal).
+1. **Written units.** Two different non-empty units among a chart's written values (`45 ans`, `9 sites`; `%` and `M€`) → problem, every time. A bare number does not conflict.
+2. **Spread (refused once, O18).** On `column`, `bar`, `line`, `area`, `stacked_column`, a chart without `unit` whose non-zero absolute values span 100× or more → problem the first time, worded as a question: "values from 9 to 2 800 on one axis: do they measure the same thing? If yes, set `unit` (or send the chart again unchanged); if not, split them into a figures slide (items: number + label)". The same chart sent again unchanged (same categories and values, still no `unit`) is built, with a `wide_range_chart` note in "What was built". The "sent before" memory is the one of `figures_unverified` (D4): the previous call's refused slides, read from `history()`. `pie`/`doughnut` exempt (small slices are normal).
 
-The repro chart (45, 2 800, 9, no unit) fails rule 2. Setting `unit` is the escape for a real wide-range measure; a model can also misuse it — not verified.
+The repro chart (45, 2 800, 9, no unit) is refused once by rule 2; a weak model that resends it unchanged gets it built with the note, the user sees the note. Setting `unit` is the escape for a real wide-range measure; a model can also misuse it — not verified.
 
 ### D4. Sourced figures (O1, O8, O9)
 
@@ -90,13 +100,13 @@ Rejected:
 
 - `DeckPlan.audience`, `DeckPlan.main_message` (optional; alias `message` at deck level; the outline shows them, `—` when absent); top-level build arguments, kept from the base when a `changes` call omits them (as `file_name`).
 - `changes.py`: `takeaway`, `source` in `_FIELDS`, `takeaway` in `_SLIDE_KEYS` and `CLEARABLE`; `unchanged` compares them. An edit of `takeaway` re-renders the notes only.
-- `BuildNoteCode` gains `illustrative_data`, `figures_unverified`; frontend `types.ts`, `DeckSummaryButton.tsx`, locales.
+- `BuildNoteCode` gains `illustrative_data`, `figures_unverified`, `wide_range_chart`; frontend `types.ts`, `DeckSummaryButton.tsx`, locales.
 - Notes lines (`Source:`, illustrative, unverified) are written in the plan's language, like the caption suffix.
 
 ## Risks / Trade-offs
 
 - [More revision rounds on weak models] → checks run before the assignment and share one revision; each option is a concrete edit; measured in the eval (first-call success, rounds per deck).
-- [False refusals: wide-range real data, computed figures] → `unit` escape (D3); lenient matching and second send built with a note (D4).
+- [False refusals: wide-range real data, computed figures] → `unit` escape and second send built with a note (D3); lenient matching and second send built with a note (D4).
 - [Takeaway written but not used to design the slide] → not verifiable; the eval compares kind and emphasis choices with and without takeaways.
 - [Schema growth: `takeaway`, `source`, `audience`, `main_message`, `skip_plan`] → one-line descriptions; tool-schema size measured.
 - [Allowance or skip lexicon misses a wording] → illustrative: the revision tells the agent to ask the user; skip: the user gets the outline and can answer "build it".
@@ -107,4 +117,4 @@ No table or setting migration: `validate_plan` defaults off, `proposed` is a JSO
 
 ## Open Questions
 
-None blocking. To confirm by the owner: D2 (four-word floor as the only quality check on a takeaway; takeaway unlabelled as the first notes line; crammed-title rule stays a refusal), D3 (100× threshold), D4 (1 % tolerance; derived pairs limited to one message or tool result), D5 (`skip_plan` honoured only with a lexicon match in the latest user message).
+None: the owner's answers of 2026-10-15 (O12–O18) closed D2, D3, D4 and D5.

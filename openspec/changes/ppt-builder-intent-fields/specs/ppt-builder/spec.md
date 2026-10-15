@@ -88,13 +88,25 @@ For `table.total_row: true`, the system SHALL apply the table style's own total-
 
 ### Requirement: Slide takeaway
 
-The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. When the template slide assigned to a plan slide has a takeaway zone and the slide's `takeaway` fits its room, the system SHALL write the takeaway there and SHALL NOT fill that zone from `bullets`. Otherwise the system SHALL fill the zone as before this change and SHALL leave the takeaway in the speaker notes only, without a refusal or a summary note. The takeaway SHALL NOT change which template slide is assigned.
+The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. By default the system SHALL fill a takeaway zone as before this change, from the slide's content, and SHALL leave the takeaway in the speaker notes only. The system SHALL write the takeaway into the zone only when the plan sets `show_takeaways`, a user message of the conversation explicitly asks for key messages or takeaways to be shown, the assigned template slide has a takeaway zone and the takeaway fits its room; it SHALL then NOT fill that zone from `bullets`. In every other case the zone SHALL be filled as before and the takeaway SHALL stay in the speaker notes only, without a refusal or a summary note; `show_takeaways` without such a user message SHALL be ignored with an agent note. The takeaway SHALL NOT change which template slide is assigned.
 
-#### Scenario: Takeaway in the template's zone
+#### Scenario: Takeaway kept off the slide by default
 
-- **GIVEN** the built-in template
-- **WHEN** the model sends a chart slide with `takeaway: "Q3 is our best quarter"`
+- **GIVEN** the built-in template and no user message asking to show key messages
+- **WHEN** the model sends a chart slide with one bullet and `takeaway: "Q3 is our best quarter"`
+- **THEN** the takeaway card holds the bullet as before this change and the takeaway is in the speaker notes only
+
+#### Scenario: Takeaway in the template's zone on request
+
+- **GIVEN** the built-in template and a user message "affiche les messages clés sur les slides"
+- **WHEN** the model sends `show_takeaways: true` and a chart slide with `takeaway: "Q3 is our best quarter"`
 - **THEN** the slide is built on the chart slide with the takeaway card, and the card holds that sentence
+
+#### Scenario: Flag without the user's request
+
+- **GIVEN** no user message asking to show key messages
+- **WHEN** the model sends `show_takeaways: true`
+- **THEN** the deck is built as without the flag and the agent is told the takeaways stay in the notes
 
 #### Scenario: Takeaway without a zone
 
@@ -110,5 +122,5 @@ The analysis SHALL mark at most one text zone per pattern as a takeaway zone whe
 
 #### Scenario: Takeaway longer than the zone
 
-- **WHEN** the model sends a chart slide with one bullet and a takeaway longer than the built-in template's takeaway card holds
+- **WHEN** the user asked to show key messages and the model sends `show_takeaways: true` with a chart slide holding one bullet and a takeaway longer than the built-in template's takeaway card holds
 - **THEN** the bullet fills the takeaway card as before this change and the takeaway is in the speaker notes only
