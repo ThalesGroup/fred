@@ -66,7 +66,6 @@ let root: Root;
 // Each tile is an <li> holding the theme label key.
 const tile = (label: string) =>
   Array.from(container.querySelectorAll("li")).find((li) => li.textContent?.includes(label))!;
-const defaultBadge = (label: string) => tile(label).querySelector('[class*="defaultBadge"]') as HTMLElement;
 const offeredSwitch = (label: string) => tile(label).querySelector('input[type="checkbox"]') as HTMLInputElement;
 const defaultButton = (label: string) => tile(label).querySelector("button") as HTMLButtonElement;
 const alertText = () => container.querySelector('[role="alert"]')?.textContent ?? null;
@@ -126,24 +125,19 @@ describe("UiSettingsPage", () => {
   });
   it("shows the stored settings without saving anything", () => {
     render();
-    expect(defaultBadge("themeCobalt").textContent).toContain("rework.uiSettings.isDefault");
+    expect(defaultButton("themeCobalt").textContent).toContain("rework.uiSettings.isDefault");
     expect(defaultButton("themePebble").textContent).toContain("rework.uiSettings.setDefault");
     expect(offeredSwitch("themeCloud").checked).toBe(true);
     const previews = Array.from(tile("themeCloud").querySelectorAll('[data-ui-theme="cloud"][data-theme]'));
     expect(previews.map((el) => el.getAttribute("data-theme"))).toEqual(["light", "dark"]);
-    expect(container.querySelectorAll('[data-default="true"]')).toHaveLength(1);
-    expect(tile("themeCobalt").getAttribute("data-default")).toBe("true");
-    expect(defaultButton("themeCobalt")).toBeNull();
-    expect(tile("themeCobalt").textContent).toContain("rework.userSettings.app.light");
-    expect(tile("themeCobalt").textContent).toContain("rework.userSettings.app.dark");
     expect(h.save).not.toHaveBeenCalled();
   });
 
   it("shows Pebble as the default when nothing was saved", () => {
     h.settings.data = { default_theme: null, hidden_themes: [], updated_by: null, updated_at: null };
     render();
-    expect(defaultButton("themePebble")).toBeNull();
-    expect(defaultBadge("themePebble").textContent).toContain("rework.uiSettings.isDefault");
+    expect(defaultButton("themePebble").disabled).toBe(true);
+    expect(defaultButton("themePebble").textContent).toContain("rework.uiSettings.isDefault");
   });
 
   it("saves as soon as a theme is withdrawn or set as default", async () => {
@@ -206,7 +200,7 @@ describe("UiSettingsPage", () => {
     };
     render();
     expect(offeredSwitch("themeCobalt").checked).toBe(true);
-    expect(defaultBadge("themePebble").textContent).toContain("rework.uiSettings.isDefault");
+    expect(defaultButton("themePebble").textContent).toContain("rework.uiSettings.isDefault");
     await act(async () => offeredSwitch("themeCloud").click());
     expect(h.save).toHaveBeenCalledWith({
       setPlatformUiSettingsRequest: { default_theme: "pebble", hidden_themes: ["aurora", "cloud"] },

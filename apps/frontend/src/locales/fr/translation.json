@@ -3323,8 +3323,6 @@
       "hint": "Un thème retiré disparaît du profil. Les utilisateurs qui l'utilisent passent au thème par défaut ; leur préférence est conservée si ce thème est proposé à nouveau. Le thème par défaut reste toujours disponible.",
       "offeredLabel": "Proposer le thème {{theme}} aux utilisateurs",
       "offeredTooltip": "Proposé aux utilisateurs",
-      "available": "Disponible",
-      "hidden": "Masqué",
       "defaultAvailabilityHint": "Le thème par défaut doit rester disponible aux utilisateurs.",
       "setDefault": "Définir par défaut",
       "isDefault": "Par défaut",

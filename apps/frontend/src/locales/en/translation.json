@@ -3323,8 +3323,6 @@
       "hint": "A withdrawn theme disappears from the profile. Users on that theme switch to the default; their preference is retained if the theme is offered again. The default theme stays available.",
       "offeredLabel": "Offer the {{theme}} theme to users",
       "offeredTooltip": "Offered to users",
-      "available": "Available",
-      "hidden": "Hidden",
       "defaultAvailabilityHint": "The default theme must stay available to users.",
       "setDefault": "Set as default",
       "isDefault": "Default",

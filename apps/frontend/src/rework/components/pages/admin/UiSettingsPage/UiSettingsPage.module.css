@@ -33,7 +33,7 @@
 .themes {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-m);
+  gap: var(--spacing-xs);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -41,48 +41,32 @@
 
 .tile {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-m);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-ms);
   background-color: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
-  min-width: 0;
+  min-width: 500px;
 }
 
-.tile[data-default="true"] {
-  box-shadow: inset 0 0 0 1px var(--primary);
-  border-color: var(--primary);
+/* The switch: L after it, while the tile's gap keeps M between the other items. */
+/* Only the name gives way when the tile is narrow. */
+.tile > :not(.name) {
+  flex-shrink: 0;
 }
 
 .toggle {
   display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  min-width: 115px;
-  color: var(--on-surface);
-  font: var(--font-label-medium);
 }
 
-.defaultAction {
-  display: flex;
-  justify-content: flex-end;
-  min-width: 150px;
-}
-
-.defaultBadge {
-  border-radius: var(--radius-ms);
-  background: var(--primary);
-  padding: var(--spacing-xs) var(--spacing-m);
-  color: var(--on-primary);
-  font: var(--font-label-large);
+.tile > :first-child {
+  margin-inline-end: calc(var(--spacing-l) - var(--spacing-m));
 }
 
 .name {
   flex: 1;
-  order: -1;
-  min-width: 120px;
+  min-width: 0;
   overflow: hidden;
   color: var(--on-surface);
   font: var(--font-body-large);
@@ -94,27 +78,24 @@
 
 .preview {
   display: flex;
-  gap: var(--spacing-xs);
-}
-
-.previewMode {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-}
-
-.previewLabel {
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
 }
 
 .swatches {
   display: flex;
   gap: var(--spacing-2xs);
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-ms);
   background-color: var(--surface-container);
   padding: var(--spacing-xs);
+}
+
+.swatches:first-child {
+  border-right: none;
+  border-radius: var(--radius-ms) 0 0 var(--radius-ms);
+}
+
+.swatches:last-child {
+  border-left: none;
+  border-radius: 0 var(--radius-ms) var(--radius-ms) 0;
 }
 
 .swatch {
@@ -134,19 +115,4 @@
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-}
-
-@media (max-width: 600px) {
-  .name {
-    flex-basis: 100%;
-  }
-
-  .preview {
-    flex: 1;
-  }
-
-  .defaultAction {
-    flex-basis: 100%;
-    justify-content: flex-start;
-  }
 }
