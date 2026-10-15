@@ -30,10 +30,32 @@ FRED_RUNTIME_SRC ?= ../libs/fred-runtime
 FRED_CONTROL_PLANE_URL   ?= http://localhost:8222/control-plane/v1
 FRED_RUNTIME_PUBLIC_BASE ?= http://localhost:8000
 FRED_KNOWLEDGE_FLOW_URL  ?= http://localhost:8111/knowledge-flow/v1
+FRED_REALM_URL           ?= http://localhost:8080/realms/app
 
 VALIDATION_REPORT    ?= report.md
 VALIDATION_JUNIT_XML ?= report.xml
 VALIDATION_ARGS      ?=
+
+.PHONY: integration-test-docker integration-test-k3d
+# Select a complete profile even after another profile's URLs were exported.
+# Explicit command-line FRED_* assignments still take precedence.
+integration-test-docker: FRED_REALM_URL = http://localhost:8080/realms/app
+integration-test-docker: FRED_CONTROL_PLANE_URL = http://localhost:8222/control-plane/v1
+integration-test-docker: FRED_KNOWLEDGE_FLOW_URL = http://localhost:8111/knowledge-flow/v1
+integration-test-docker: FRED_RUNTIME_PUBLIC_BASE = http://localhost:8000
+integration-test-k3d: FRED_REALM_URL = http://keycloak:8080/realms/app
+integration-test-k3d: FRED_CONTROL_PLANE_URL = http://localhost:8088/control-plane/v1
+integration-test-k3d: FRED_KNOWLEDGE_FLOW_URL = http://localhost:8088/knowledge-flow/v1
+integration-test-k3d: FRED_RUNTIME_PUBLIC_BASE = http://localhost:8088
+
+integration-test-docker: ## Validate running Docker-backed services and local Fred apps through direct ports
+integration-test-k3d: ## Validate running k3d apps through localhost:8088 and the trusted Keycloak issuer
+integration-test-docker integration-test-k3d:
+	$(MAKE) validation-report \
+	  FRED_REALM_URL="$(FRED_REALM_URL)" \
+	  FRED_CONTROL_PLANE_URL="$(FRED_CONTROL_PLANE_URL)" \
+	  FRED_KNOWLEDGE_FLOW_URL="$(FRED_KNOWLEDGE_FLOW_URL)" \
+	  FRED_RUNTIME_PUBLIC_BASE="$(FRED_RUNTIME_PUBLIC_BASE)"
 
 .PHONY: validation-report
 validation-report: ## Run the full live validation suite (no -x) and write a short claims-grouped Markdown report - requires infra + running apps, see README.md
@@ -46,6 +68,7 @@ validation-report: ## Run the full live validation suite (no -x) and write a sho
 	@$(VALIDATION_VENV)/bin/pip install -q -e $(FRED_POD_SRC) -e $(FRED_CORE_SRC) -e $(FRED_SDK_SRC) -e $(FRED_RUNTIME_SRC) -e .
 	@echo "▶ running the full suite (no -x, so one failure doesn't hide the rest)"
 	@set +e; \
+	  FRED_REALM_URL="$(FRED_REALM_URL)" \
 	  FRED_CONTROL_PLANE_URL="$(FRED_CONTROL_PLANE_URL)" \
 	  FRED_RUNTIME_PUBLIC_BASE="$(FRED_RUNTIME_PUBLIC_BASE)" \
 	  FRED_KNOWLEDGE_FLOW_URL="$(FRED_KNOWLEDGE_FLOW_URL)" \

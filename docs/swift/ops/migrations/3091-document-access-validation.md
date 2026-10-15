@@ -37,8 +37,13 @@ eligible results may be returned.
 
 ## Validation
 
-Run `make validation-report`. Document access, revocation and conversation
-freshness appear as a separate report group. Run the focused document-access
+Run `make integration-test-k3d` for the local cluster or
+`make integration-test-docker` for the local Docker-backed setup with direct app
+ports. Both call the existing `make validation-report`, which remains available
+for custom endpoint configuration. These targets configure URLs only; the running
+services, demo import and test authorizations remain prerequisites.
+
+Document access, revocation and conversation freshness appear as a separate report group. Run the focused document-access
 campaign with `VALIDATION_ARGS="scenarios/test_document_access.py"` to verify the
 corrected service, including an existing runtime conversation with a new attachment
 and a selected corpus document.

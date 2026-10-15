@@ -108,9 +108,10 @@ addition to runtime authorization.
 
 ### Mode C - an existing k3d deployment
 
-Use `make validation-report` with the k3d ingress and realm coordinates documented
-below. The cluster and demo import must already exist. A command that creates
-the cluster and deploys the applications as part of validation remains future work.
+Use `make integration-test-k3d` with the default k3d ingress and trusted realm
+coordinates documented below. The cluster and demo import must already exist. A
+command that creates the cluster and deploys the applications as part of validation
+remains future work.
 
 ## Prerequisites
 
@@ -197,12 +198,35 @@ From **this directory** (`fred/validation`), or from the `fred` repo root via
 hide the rest) and writes a short claims-grouped report:
 
 ```bash
-make validation-report
+# Docker-backed local infrastructure and running Fred apps on direct ports:
+make integration-test-docker
+
+# Existing local k3d deployment:
+make integration-test-k3d
 ```
 
-The target defaults to:
+Both targets run the same validation suite and generate `validation/report.md`
+and `validation/report.xml`. They do not start, rebuild or redeploy services,
+import demo data or change Keycloak/Fred permissions. Complete the prerequisites
+above before running either target.
+
+| Target | Control Plane | Knowledge Flow | Runtime origin | Keycloak realm |
+| --- | --- | --- | --- | --- |
+| `integration-test-docker` | `localhost:8222/control-plane/v1` | `localhost:8111/knowledge-flow/v1` | `localhost:8000` | `localhost:8080/realms/app` |
+| `integration-test-k3d` | `localhost:8088/control-plane/v1` | `localhost:8088/knowledge-flow/v1` | `localhost:8088` | `keycloak:8080/realms/app` |
+
+All these default URLs use HTTP. A named profile replaces previously exported
+endpoint variables so stale Docker ports cannot affect a k3d run. Explicit Make
+command-line assignments override the profile, for example
+`make integration-test-k3d FRED_RUNTIME_PUBLIC_BASE=http://localhost:9088`.
+`VALIDATION_ARGS`, `VALIDATION_REPORT` and `VALIDATION_JUNIT_XML` work with either
+profile. The targets are also available via `make -C validation`.
+
+`make validation-report` remains the configurable entry point: it honors exported
+`FRED_*` variables and command-line assignments. Without overrides it defaults to:
 
 ```text
+FRED_REALM_URL=http://localhost:8080/realms/app
 FRED_CONTROL_PLANE_URL=http://localhost:8222/control-plane/v1
 FRED_RUNTIME_PUBLIC_BASE=http://localhost:8000
 FRED_KNOWLEDGE_FLOW_URL=http://localhost:8111/knowledge-flow/v1
@@ -360,17 +384,19 @@ setup failure, not evidence of document isolation.
 From the repository root, for that default local k3d installation:
 
 ```bash
-export FRED_REALM_URL=http://keycloak:8080/realms/app
-export FRED_CONTROL_PLANE_URL=http://localhost:8088/control-plane/v1
-export FRED_KNOWLEDGE_FLOW_URL=http://localhost:8088/knowledge-flow/v1
-export FRED_RUNTIME_PUBLIC_BASE=http://localhost:8088
+# Full campaign (endpoints and realm are selected by the target):
+make integration-test-k3d
 
-# Focused first run, with separate evidence from the full campaign:
-make validation-report VALIDATION_ARGS="scenarios/test_document_access.py" \
+# Focused run, with separate evidence from the full campaign:
+make integration-test-k3d VALIDATION_ARGS="scenarios/test_document_access.py" \
   VALIDATION_REPORT=document-access-report.md VALIDATION_JUNIT_XML=document-access-report.xml
 
-# Full campaign:
-make validation-report
+# Equivalent invocation of the original configurable target:
+make validation-report \
+  FRED_REALM_URL=http://keycloak:8080/realms/app \
+  FRED_CONTROL_PLANE_URL=http://localhost:8088/control-plane/v1 \
+  FRED_KNOWLEDGE_FLOW_URL=http://localhost:8088/knowledge-flow/v1 \
+  FRED_RUNTIME_PUBLIC_BASE=http://localhost:8088
 ```
 
 For another deployment, adapt the addresses to its trusted issuer and public
