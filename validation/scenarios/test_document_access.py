@@ -69,8 +69,8 @@ def corpus(cp: ClientFactory, kf: ClientFactory) -> Iterator[Corpus]:
         if other != TEST_TEAM and user.is_team_editor_in(other)
         for reader, member in USERS.items()
         if TEST_TEAM in member.teams and other not in member.teams
-        for other_reader, member in USERS.items()
-        if other in member.teams and TEST_TEAM not in member.teams
+        for other_reader, other_member in USERS.items()
+        if other in other_member.teams and TEST_TEAM not in other_member.teams
     ]
     assert candidates, (
         "Demo fixtures need a two-team editor and one exclusive reader in each team"
