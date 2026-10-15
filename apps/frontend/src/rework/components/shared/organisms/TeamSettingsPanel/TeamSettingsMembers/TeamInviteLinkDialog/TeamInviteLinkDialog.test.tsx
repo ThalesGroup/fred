@@ -57,7 +57,7 @@ it("turns the invitation on through the switch, with nothing to copy before", as
   render();
   expect(toggle().checked).toBe(false);
   expect(urlInput()).toBeNull();
-  expect(button("regenerate")!.disabled).toBe(true);
+  expect(button("regenerate")).toBeUndefined();
   await act(async () => toggle().click());
   expect(h.setEnabled).toHaveBeenCalledWith({ teamId: "demo", setTeamJoinLink: { enabled: true } });
 });

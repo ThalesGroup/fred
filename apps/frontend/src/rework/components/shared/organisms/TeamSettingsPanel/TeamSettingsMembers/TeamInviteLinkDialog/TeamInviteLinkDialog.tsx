@@ -67,7 +67,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
     <Dialog
       open
       title={t("rework.teamSettings.members.inviteLink.title")}
-      maxWidth={640}
+      maxWidth={560}
       hideCancel
       confirmLabel={t("common.close")}
       onConfirm={onClose}
@@ -81,7 +81,10 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
           aria-disabled={toggleDisabled}
           onClick={() => toggle(!enabled)}
         >
-          <span id={labelId}>{t("rework.teamSettings.members.inviteLink.enable")}</span>
+          <span className={styles.toggleText}>
+            <span id={labelId}>{t("rework.teamSettings.members.inviteLink.enable")}</span>
+            <span className={styles.hint}>{t("rework.teamSettings.members.inviteLink.hint")}</span>
+          </span>
           <span onClick={(event) => event.stopPropagation()}>
             <Switch
               checked={enabled}
@@ -91,7 +94,6 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
             />
           </span>
         </div>
-        <p className={styles.hint}>{t("rework.teamSettings.members.inviteLink.hint")}</p>
         <div className={styles.link} aria-disabled={!enabled}>
           {url && (
             <div className={styles.urlRow}>
@@ -99,7 +101,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
                 <TextInput
                   ref={urlRef}
                   className={styles.urlInput}
-                  label={t("rework.teamSettings.members.inviteLink.urlLabel")}
+                  aria-label={t("rework.teamSettings.members.inviteLink.urlLabel")}
                   value={url}
                   readOnly
                   disabled={!enabled}
@@ -119,6 +121,16 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
                     : "rework.teamSettings.members.inviteLink.copy",
                 )}
               </Button>
+              <Button
+                color="primary"
+                variant="text"
+                size="small"
+                disabled={!enabled || busy}
+                icon={{ category: "outlined", type: "refresh" }}
+                onClick={() => void run(() => regenerate({ teamId }).unwrap())}
+              >
+                {t("rework.teamSettings.members.inviteLink.regenerate")}
+              </Button>
             </div>
           )}
           <span className={styles.screenReaderOnly} role="status">
@@ -129,18 +141,6 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
               {t("rework.teamSettings.members.inviteLink.copyFailed")}
             </p>
           )}
-          <div>
-            <Button
-              color="primary"
-              variant="text"
-              size="small"
-              disabled={!enabled || busy}
-              icon={{ category: "outlined", type: "refresh" }}
-              onClick={() => void run(() => regenerate({ teamId }).unwrap())}
-            >
-              {t("rework.teamSettings.members.inviteLink.regenerate")}
-            </Button>
-          </div>
         </div>
         {(failed || link.isError) && (
           <p className={styles.message} role="alert">
