@@ -56,10 +56,23 @@ has none.
   data. The type mapping, chart data, legend rule and length check are
   adapted from `fred-capability-pptx-generator` (PR #3058, by Shuigami).
 
+- **Storytelling** (`story.py`, `notes.py`): before the assignment, every
+  content slide needs a `takeaway` (what the audience concludes, as a
+  sentence; written as the first line of the speaker notes, never on the
+  slide), a title or subtitle holding three figures or more is refused for a
+  figures slide, a chart holds one measure (two written units refused; a 100×
+  spread without `unit` refused once), and a slide with figures states its
+  `source` (`illustrative` only when the user asked). A lenient spot-check
+  relates one figure per slide to a number of the user's messages or tool
+  results; nothing found is refused once, then built with a
+  `figures_unverified` note. The `validate_plan` setting turns a
+  conversation's first build into an outline the user answers first.
+
 Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
 Design: `openspec/changes/ppt-builder-capability/`, charts:
-`openspec/changes/ppt-builder-charts/`.
+`openspec/changes/ppt-builder-charts/`, storytelling:
+`openspec/changes/ppt-builder-storytelling/`.
 
 ### Evaluation (opt-in)
 

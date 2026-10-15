@@ -165,6 +165,24 @@ d'une conversation, l'agent est invité à revoir celles qui se répètent trop.
 Interrupteur coupé : aucune limite. Le changement vaut dès la présentation
 suivante, sans relire le template.
 
+**Le fil de la présentation** — pour chaque diapositive, l'agent décide
+d'abord ce que le public doit en retenir, en une phrase, puis choisit ce qu'il
+montre pour le prouver. Cette phrase n'apparaît pas sur la diapositive : elle
+ouvre les notes de l'orateur, et le titre reste court. Les chiffres viennent de
+vos documents ou de ce que vous avez écrit dans la conversation, et les notes
+disent d'où ils viennent. L'agent n'invente des chiffres que si vous demandez
+des données d'exemple ou fictives ; le graphique l'indique alors
+(« illustratif »). Un chiffre qu'il n'a pas retrouvé dans les documents lus, ou
+un graphique qui mélange des valeurs très différentes, est signalé dans **Ce
+qui a été construit** : vérifiez-le avant de présenter.
+
+**Valider le plan avant de construire** — désactivé par défaut. Activé, l'agent
+montre d'abord son plan pour la première présentation d'une conversation : le
+public, le message principal et une ligne par diapositive. Il attend votre
+réponse : validez-le ou dites ce qu'il faut changer, et il construit. Pour
+passer cette étape une fois, demandez-lui de construire directement, sans plan.
+Les modifications d'une présentation déjà livrée n'attendent jamais.
+
 **Ses limites** — l'agent n'utilise que les diapositives que le template
 contient : il n'en dessine pas de nouvelles. Quand un contenu ne tient dans
 aucune diapositive (trop d'éléments, par exemple), il le découpe ou le

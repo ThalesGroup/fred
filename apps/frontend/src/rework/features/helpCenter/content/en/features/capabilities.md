@@ -153,6 +153,23 @@ of a conversation, the agent is asked to revise the slides that repeat too
 much. Switch off: no limit. A change applies from the next presentation,
 without reading the template again.
 
+**The thread of the presentation** — for each slide, the agent first decides
+what the audience should take away, in one sentence, then chooses what to show
+to prove it. That sentence is not on the slide: it opens the speaker notes, and
+the title stays short. Figures come from your documents or from what you wrote
+in the conversation, and the notes say where they come from. The agent only
+makes figures up when you ask for sample or made-up data; the chart then says
+so ("illustrative"). A figure it could not find in the documents read, or a
+chart that mixes very different values, is flagged in **What was built**: check
+it before presenting.
+
+**Validate the plan before building** — off by default. When on, the agent
+first shows its plan for the first presentation of a conversation: the
+audience, the main message and one line per slide. It waits for your answer:
+approve it or say what to change, and it builds. To skip this step once, ask it
+to build directly, without a plan. Changes to a presentation already delivered
+never wait.
+
 **Its limits** — the agent only uses slides the template holds: it does not
 draw new ones. When the content does not fit any slide (too many items, for
 instance), it splits or shortens it. If reading the template fails, the agent

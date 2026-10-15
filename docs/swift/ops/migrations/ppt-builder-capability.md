@@ -50,6 +50,10 @@ package, so every fred-agents pod that installs that package registers it.
    analysed keep working and are read again in the background (the agent form
    says when a save is needed), at the cost of an upload; until then their
    chart slides stay set aside. The built-in template ships already analysed.
+5. Storytelling checks (takeaway per slide, one measure per chart, sourced
+   figures) are always on and need no action. The agent setting "Validate the
+   plan before building" is off by default; a proposed plan is stored in the
+   existing `cap_ppt_builder_deck_plan` row, with no schema change.
 
 ## Validation
 
