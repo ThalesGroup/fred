@@ -104,6 +104,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
                   ref={urlRef}
                   className={styles.urlInput}
                   size="small"
+                  compact
                   aria-label={t("rework.teamSettings.members.inviteLink.urlLabel")}
                   value={url}
                   readOnly
