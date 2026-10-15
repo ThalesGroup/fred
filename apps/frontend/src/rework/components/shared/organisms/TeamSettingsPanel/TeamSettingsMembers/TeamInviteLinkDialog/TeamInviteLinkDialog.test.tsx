@@ -108,3 +108,16 @@ it("reports a failed update", async () => {
   await act(async () => toggle().click());
   expect(document.querySelector('[role="alert"]')?.textContent).toBe("rework.teamSettings.members.inviteLink.failed");
 });
+
+it("toggles once from anywhere on the card, and once from the switch itself", async () => {
+  render();
+  const label = [...document.querySelectorAll("span")].find(
+    (node) => node.textContent === "rework.teamSettings.members.inviteLink.enable",
+  )!;
+  await act(async () => label.click());
+  expect(h.setEnabled).toHaveBeenCalledTimes(1);
+  expect(h.setEnabled).toHaveBeenLastCalledWith({ teamId: "demo", setTeamJoinLink: { enabled: true } });
+  await act(async () => toggle().click());
+  expect(h.setEnabled).toHaveBeenCalledTimes(2);
+  expect(toggle().getAttribute("aria-labelledby")).toBe(label.id);
+});

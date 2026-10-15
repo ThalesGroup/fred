@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The team's single invite link: a switch pauses or resumes the same URL, and
 // "Generate a new link" replaces it for good. Joining requires platform access.
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Switch from "@shared/atoms/Switch/Switch";
@@ -30,6 +30,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
   const [failed, setFailed] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const urlRef = useRef<HTMLInputElement>(null);
+  const labelId = useId();
   const busy = link.isFetching || setting.isLoading || regenerating.isLoading;
   const enabled = link.data?.enabled ?? false;
   const url = link.data?.token
@@ -44,6 +45,10 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
     } catch {
       setFailed(true);
     }
+  };
+  const toggleDisabled = busy || link.isError;
+  const toggle = (next: boolean) => {
+    if (!toggleDisabled) void run(() => setEnabled({ teamId, setTeamJoinLink: { enabled: next } }).unwrap());
   };
   const copy = async () => {
     setCopyFailed(false);
@@ -69,17 +74,23 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
       onCancel={onClose}
     >
       <div className={styles.body}>
-        <label className={styles.toggle}>
-          <span>{t("rework.teamSettings.members.inviteLink.enable")}</span>
-          <Switch
-            checked={enabled}
-            disabled={busy || link.isError}
-            onChange={(event) => {
-              const next = event.target.checked;
-              void run(() => setEnabled({ teamId, setTeamJoinLink: { enabled: next } }).unwrap());
-            }}
-          />
-        </label>
+        {/* The whole card toggles; the switch stays the single focusable control. */}
+        <div
+          className={styles.toggle}
+          data-enabled={enabled}
+          aria-disabled={toggleDisabled}
+          onClick={() => toggle(!enabled)}
+        >
+          <span id={labelId}>{t("rework.teamSettings.members.inviteLink.enable")}</span>
+          <span onClick={(event) => event.stopPropagation()}>
+            <Switch
+              checked={enabled}
+              disabled={toggleDisabled}
+              aria-labelledby={labelId}
+              onChange={(event) => toggle(event.target.checked)}
+            />
+          </span>
+        </div>
         <p className={styles.hint}>{t("rework.teamSettings.members.inviteLink.hint")}</p>
         <div className={styles.link} aria-disabled={!enabled}>
           {url && (
@@ -113,12 +124,16 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
           <span className={styles.screenReaderOnly} role="status">
             {copied ? t("rework.teamSettings.members.inviteLink.copied") : ""}
           </span>
-          {copyFailed && <p role="alert">{t("rework.teamSettings.members.inviteLink.copyFailed")}</p>}
+          {copyFailed && (
+            <p className={styles.message} role="alert">
+              {t("rework.teamSettings.members.inviteLink.copyFailed")}
+            </p>
+          )}
           <div>
             <Button
               color="primary"
               variant="text"
-              size="medium"
+              size="small"
               disabled={!enabled || busy}
               icon={{ category: "outlined", type: "refresh" }}
               onClick={() => void run(() => regenerate({ teamId }).unwrap())}
@@ -127,7 +142,11 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
             </Button>
           </div>
         </div>
-        {(failed || link.isError) && <p role="alert">{t("rework.teamSettings.members.inviteLink.failed")}</p>}
+        {(failed || link.isError) && (
+          <p className={styles.message} role="alert">
+            {t("rework.teamSettings.members.inviteLink.failed")}
+          </p>
+        )}
       </div>
     </Dialog>
   );
