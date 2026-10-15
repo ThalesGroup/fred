@@ -15,7 +15,7 @@
 - [x] 3.2 Extend existing validation coverage for folder listing/removal; provide an explicit opt-in large-corpus campaign using disposable fixtures and store/quota postconditions. Do not seed or run a live campaign before the developer's agreed validation session.
 - [x] 3.3 Update existing integration-test/deployment guidance and add the required migration note; verify no schema/configuration change and clearly distinguish remaining #2845 scope from completed work.
 - [x] 3.4 Run affected offline suites and root make code-quality, obtain independent full-branch and performance reviews, fix and re-review actionable findings, and record actual evidence in this task file/PR.
-- [ ] 3.5 Reconcile and validate the specification artifacts, sync/archive the completed change, and publish the reviewed draft PR with #2845 remaining open for explicitly deferred scope.
+- [x] 3.5 Reconcile and validate the specification artifacts, sync/archive the completed change, and publish the reviewed draft PR with #2845 remaining open for explicitly deferred scope.
 
 ## Verification evidence
 
@@ -25,3 +25,5 @@
 - Validation harness: 54 offline tests passed with the local deployment-factory checkout supplied. Root `make code-quality` passed after correcting one formatting failure. Migration declaration validation passed. OpenSpec strict change validation and all 28 main specs passed.
 - Measured offline SDK-boundary budget: 37 unique candidates produce 37 Checks with peak ten; duplicates/irrelevant documents add none. Deleting 20 documents in two same-owner folders (40 memberships) produces 105 Checks, 40 writes and 60 ownership ListUsers calls. The real quota resolver yields 40 applications totaling -400 bytes, consistent with existing per-membership accounting; counter writes and artifact stores are mocked. Admission account-status checks are covered separately by route tests.
 - Exclusions: no live PostgreSQL/OpenFGA, k3d, embeddings or concurrency/load campaign run. The new live scenario verifies persisted store counts and quota when the developer runs it on the deployed image. General discovery, historical repair, external-store recovery and concurrent ingestion/deletion remain outside this change.
+
+Draft PR: https://github.com/ThalesGroup/fred/pull/3124 (targets swift; #2845 remains open).
