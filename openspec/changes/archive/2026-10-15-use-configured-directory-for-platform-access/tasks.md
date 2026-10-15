@@ -21,6 +21,6 @@
 ## 5. Verification and close-out
 
 - [x] 5.1 Run targeted checks, root `make code-quality`, relevant offline tests, a read-only local Keycloak smoke check, and local-directory focused tests; record actual results in this task or the PR.
-- [ ] 5.2 Review the full branch against its target, obtain an independent read-only review, reconcile findings and specs, sync and archive the change, and verify the draft PR describes the final behavior.
+- [x] 5.2 Review the full branch against its target, obtain an independent read-only review, reconcile findings and specs, sync and archive the change, and verify the draft PR describes the final behavior.
 
 Verification: 52 focused backend tests passed (10 PostgreSQL tests skipped without an isolated database); 85 focused frontend tests passed; targeted basedpyright passed; root `make code-quality` passed with ignored generated `target/company-jwt-provisioning` temporarily moved and restored. A read-only local Keycloak check verified paged search and UUID lookup. The independent branch reviewer found and rechecked bounded search, completed-import reads, mode-switch reference rows, exact-identity lookup, and operator guidance; all actionable findings were corrected.
