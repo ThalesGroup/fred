@@ -105,6 +105,24 @@ PROMPTS: dict[str, str] = {
         "mensuelles de janvier à juin (120, 135, 128, 150, 162, 171 unités) et un graphique des "
         "parts de marché (nous 34 %, concurrent A 28 %, concurrent B 21 %, autres 17 %)."
     ),
+    # Storytelling: the 2026-10-14 repro (mixed measures, crammed subtitle), made-up
+    # data allowed, no titles, figures typed by the user.
+    "story_group_profile": (
+        "Présente le groupe au comité : 45 ans d'histoire, 2 800 salariés, 9 sites, et la "
+        "répartition des effectifs (Italie 1 200, France 1 000, Espagne 600). 5 slides."
+    ),
+    "story_illustrative": (
+        "Fais un deck de 4 slides pour présenter notre futur tableau de bord commercial, avec "
+        "des données indicatives fictives pour les graphiques."
+    ),
+    "story_no_titles": (
+        "Make a 4-slide deck on our hiring plan, without any slide titles: Italy 80 hires, "
+        "France 40, Spain 20, total budget 6.2 M€."
+    ),
+    "story_user_figures": (
+        "On a fait 12,5 % de croissance et 3,2 M€ de chiffre d'affaires cette année, avec 14 "
+        "nouveaux clients. Prépare 3 slides de bilan."
+    ),
 }
 
 # A second user turn per prompt, asking to change the delivered deck: an
@@ -149,4 +167,8 @@ EDITS: dict[str, str] = {
     ),
     "sales_charts": "Q4 2026 was 23 M€, not 22: fix the chart.",
     "market_shares": "Les ventes de juin sont de 175 unités, pas 171 : corrige le graphique.",
+    "story_group_profile": "Ajoute une slide de conclusion avec la décision attendue.",
+    "story_illustrative": "Remplace le graphique de la slide 3 par un camembert.",
+    "story_no_titles": "Add a closing slide, still without a title.",
+    "story_user_figures": "Le chiffre d'affaires est de 3,4 M€, pas 3,2 : corrige-le.",
 }
