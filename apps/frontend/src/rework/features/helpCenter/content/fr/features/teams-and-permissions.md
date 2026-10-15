@@ -48,11 +48,28 @@ la marketplace.
 
 La **marketplace** liste les équipes visibles de votre organisation. Une équipe
 **publique** y figure et se rejoint d'un clic si elle est ouverte ; sinon un
-Admin de l'équipe doit vous ajouter. Une équipe **privée** n'apparaît pas du
-tout, et ne se rejoint jamais seul : demandez à un de ses membres.
+Admin de l'équipe doit vous ajouter ou vous envoyer un lien d'invitation. Une
+équipe **privée** n'apparaît pas du tout, et ne se rejoint jamais seul :
+demandez à un de ses membres.
 
 À noter : une équipe privée **ne peut pas** être ouverte à l'adhésion libre.
-On y entre uniquement sur ajout par l'un de ses membres.
+On y entre quand l'un de ses Admins vous ajoute ou vous envoie un lien
+d'invitation.
+
+### Liens d'invitation
+
+Un Admin de l'équipe peut créer des liens d'invitation depuis **Réglages →
+Membres → Lien d'invitation** et les partager comme il le souhaite (messagerie,
+e-mail…). Ouvrir un lien valide puis choisir **Rejoindre l'équipe** vous rend
+**Membre** ; un Admin peut ensuite vous donner d'autres rôles.
+
+Un lien d'invitation ne fonctionne que pour les personnes qui ont déjà accès à
+la plateforme. Il ne donne pas accès à la plateforme elle-même : sans cet
+accès, le lien mène à la page qui explique comment le demander.
+
+Chaque lien peut avoir une note et une date d'expiration. L'Admin peut le
+copier à nouveau, le révoquer et voir qui l'a utilisé pour rejoindre l'équipe.
+Révoquer un lien ne retire pas les personnes déjà entrées.
 
 ## Qui crée les équipes
 
@@ -71,7 +88,8 @@ de l'administration de la plateforme, animer une équipe relève de l'équipe.
 La page **Réglages** rassemble ce qui gouverne l'équipe. L'accès à chaque
 section dépend de votre rôle.
 
-- **Membres** — ajouter, retirer, changer les rôles (**Admin**).
+- **Membres** — ajouter, retirer, changer les rôles, partager des liens
+  d'invitation (**Admin**).
 - **Paramètres** — la description de l'équipe, sa visibilité sur la marketplace,
   son mode d'adhésion, et le délai de **rétention** après lequel les
   conversations supprimées sont définitivement effacées (**Admin**).

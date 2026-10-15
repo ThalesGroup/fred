@@ -2285,9 +2285,8 @@ visibility PATCH — the resulting `joining_mode`, if it changes, comes back
 from the server on refetch.
 
 **Joining mode while private — one disabled button, no toggle (#2398,
-2026-08-20).** A `private` team can never be `open`, and the product has no
-invitation flow at all (there is no invite endpoint — a team admin adds
-members by hand from `TeamSettingsMembers`). So while
+2026-08-20).** A `private` team can never be `open`; a team admin adds
+members by hand or shares an invite link from `TeamSettingsMembers`. So while
 `visibility === "private"` the joining-mode row renders no `ButtonGroup`:
 the control slot holds a single **disabled** `Button` (`secondary` /
 `outlined` / `small`, `lock` icon) reading "Manual only", and the row's
@@ -2414,6 +2413,20 @@ closing gives focus back to the element that opened it. A Dialog or
 - Not yet design-reviewed. First functional pass only.
 
 ---
+
+### Team invite links — Members tab (2026-10-15, #3116)
+
+`TeamSettingsMembers` shows an **Invite link** button (`primary` / `outlined` /
+`medium`) to the left of **Add members**, for team admins only. It opens the
+same invitation manager as the platform administrators' Free-team links
+(`PlatformAccessLinkManager`, `scope="team"`): list with status filter, create
+(note, expiry), copy, joiners, revoke, cleanup. The team scope has no Link
+access notice or suspended rows, and its hint says only people who already have
+platform access can use the link. On `/join/:token`, a team link opened by a
+person without platform access replaces the location with the existing
+`/platform-access-denied` page; no invitation card is shown. The private-team
+joining-mode support line now mentions invite links; the "Manual only" button
+is unchanged.
 
 ### `DataTable` — opt-in pagination, `TeamSettingsMembers` full-height layout (#2108)
 
