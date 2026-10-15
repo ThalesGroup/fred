@@ -152,7 +152,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
       },
       {
         id: "presentation_builder",
-        kind: "capabilities",
         icon: "co_present",
         titleKey: "rework.teams.formAgent.capabilities.packs.presentationBuilder.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.presentationBuilder.description",
