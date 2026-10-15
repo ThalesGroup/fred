@@ -4024,7 +4024,8 @@
         "searchFailed": "The search could not be completed. Try again.",
         "searchTooBroad": "Too many results. Refine the search.",
         "alreadyGranted": "Already on the whitelist",
-        "more": "More results are available. Refine the search to see them."
+        "more_one": "{{count}} more result. Refine the search to see it.",
+        "more_other": "{{count}} more results. Refine the search to see them."
       },
       "addedOn": "Added on",
       "origin": {

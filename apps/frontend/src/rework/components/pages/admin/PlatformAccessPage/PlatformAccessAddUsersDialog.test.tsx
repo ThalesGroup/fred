@@ -160,7 +160,7 @@ it("indicates more people match than the page shows, on a line that cannot be se
   show();
   search("al");
   const more = option("rework.platformAccess.addDialog.more");
-  expect(more.textContent).toBe("rework.platformAccess.addDialog.more");
+  expect(more.textContent).toBe('rework.platformAccess.addDialog.more {"count":38}');
   act(() => more.click());
   expect(pendingText()).toBe("");
 });

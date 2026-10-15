@@ -71,7 +71,7 @@ export default function PlatformAccessAddUsersDialog({
     options.push({
       key: "more-matches",
       value: lastShown,
-      label: t("rework.platformAccess.addDialog.more"),
+      label: t("rework.platformAccess.addDialog.more", { count: page.total - page.items.length }),
       disabled: true,
       description: undefined,
     });
