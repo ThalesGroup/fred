@@ -11,9 +11,9 @@ from fred_core.common import TeamId
 from fred_core.security.platform_access.access_control import get_platform_access
 from fred_core.security.rebac.rebac_engine import RelationType, TeamPermission
 from httpx import ASGITransport, AsyncClient
-from test_platform_access import MembershipEngine, draft, user
+from test_platform_access import MembershipEngine, draft, free_joiner, user
 from test_platform_access import access as access_fixture
-from tests.test_team_member_roles import _deps
+from test_team_member_roles import _deps
 
 access = access_fixture
 
@@ -385,5 +385,51 @@ async def test_free_team_without_joiners_is_no_admission_source(access):
         access, user(), await service.generate_link(access, "demo", actor), None
     )
     assert (
+        await service.state_view(access, await access.state())
+    ).has_admission_sources
+
+
+@pytest.mark.asyncio
+async def test_free_join_racing_the_removal_is_forgotten(access, monkeypatch):
+    actor = await admin_with_exception(access)
+    await service.set_team(access, actor, "demo", False, True)
+    joiner = user()
+    await service.enroll(
+        access, joiner, await service.generate_link(access, "demo", actor), None
+    )
+
+    class RacingEnrollment(RemovableMembers):
+        async def delete_relations(self, relations):
+            await super().delete_relations(relations)
+            # A Free enrollment commits between the first cleanup and the end.
+            await free_joiner(access, joiner.uid)
+
+    racing = RacingEnrollment()
+    racing.members = access.rebac.members
+    access.rebac = racing
+    await remove_from_demo(access, monkeypatch, actor, joiner)
+    assert not (await access.store.free_joined_teams(UUID(joiner.uid))).get(
+        UUID(joiner.uid)
+    )
+
+
+@pytest.mark.asyncio
+async def test_free_team_whose_only_joiner_is_deleted_is_no_admission_source(
+    access,
+):
+    actor = user()
+    async with access.store.mutation() as session:
+        state = await access.store.settings(session)
+        state.policy, state.revision = None, 0
+    await service.set_team(access, actor, "demo", False, True)
+    joiner = user()
+    await service.enroll(
+        access, joiner, await service.generate_link(access, "demo", actor), None
+    )
+    assert (
+        await service.state_view(access, await access.state())
+    ).has_admission_sources
+    await service.mark_user_join_history_deleted(access.store, joiner.uid)
+    assert not (
         await service.state_view(access, await access.state())
     ).has_admission_sources
