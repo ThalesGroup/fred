@@ -766,7 +766,7 @@ async def require_link_caller(
     async with access.store.read() as session:
         link, _ = await require_link(access, token, session)
     if link.kind == "team" and not await access.admitted(user):
-        raise HTTPException(403, "platform_access_denied")
+        raise HTTPException(403, "team_link_requires_platform_access")
 
 
 async def record_opening(

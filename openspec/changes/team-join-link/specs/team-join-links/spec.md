@@ -24,7 +24,7 @@ A person holding `can_administer_members` on a non-personal team SHALL be able t
 
 ### Requirement: Team join links never admit a person to the platform
 
-Preview, opening, terms acceptance and enrollment through a join link SHALL check that the caller is admitted by platform access before any other effect, and before the membership is written. A non-admitted caller SHALL receive the existing `403 platform_access_denied` without the team name, and SHALL NOT gain membership, admission, or an opening count. The join page SHALL then send them to the existing platform-access refusal screen. An admitted caller SHALL be granted `team_member` only, for themselves only, with existing CGU and suspension checks. A caller already holding a role on the team SHALL succeed without change or join event. A successful new join SHALL be recorded in the link's joiners and emit one audit event without the token.
+Preview, opening, terms acceptance and enrollment through a join link SHALL check that the caller is admitted by platform access before any other effect, and before the membership is written. A non-admitted caller SHALL receive `403 team_link_requires_platform_access` without the team name, and SHALL NOT gain membership, admission, or an opening count. The join page SHALL then send them to the existing platform-access refusal screen. An admitted caller SHALL be granted `team_member` only, for themselves only, with existing CGU and suspension checks. A caller already holding a role on the team SHALL succeed without change or join event. A successful new join SHALL be recorded in the link's joiners and emit one audit event without the token.
 
 #### Scenario: Admitted person joins
 

@@ -74,7 +74,7 @@ async def test_non_admitted_caller_is_refused_before_anything(access):
             await operation()
         assert (error.value.status_code, error.value.detail) == (
             403,
-            "platform_access_denied",
+            "team_link_requires_platform_access",
         )
     assert access.rebac.writes == []
     assert not await access.admitted(outsider)
