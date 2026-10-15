@@ -34,8 +34,9 @@ _last_warning: dict[str, float] = {}
 def warn_unavailable(kind: str, error: BaseException) -> None:
     """Log why platform access answered 503, at most once a minute per kind.
 
-    Only the exception type and SQLSTATE: messages and statement parameters
-    can carry link tokens."""
+    The limit is per kind: another cause of the same kind inside the window is
+    not logged. Only the exception type and SQLSTATE: messages and statement
+    parameters can carry link tokens."""
     now = time.monotonic()
     if now - _last_warning.get(kind, -_WARNING_INTERVAL) < _WARNING_INTERVAL:
         return
