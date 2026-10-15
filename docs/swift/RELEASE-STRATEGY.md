@@ -164,20 +164,38 @@ or expected.
 ## Publishing the Python libraries
 
 Release tags build the images and the chart only. The shared libraries and
-first-party capability packages reach PyPI **by hand**. Give every package the
-same version and update all internal floors and lockfiles from the repository
-root. The root targets require `uv` on `PATH` and pass that stable executable to
-each package build:
+first-party capability packages reach PyPI **by hand**, with versions independent
+of the Fred code/chart tag. Before every Fred release, prepare one patch increment
+for `fred-core`, `fred-sdk` and `fred-runtime`. Bump a capability distribution
+only when it changed since the previous stable code tag; bump each affected
+`CapabilityManifest.version` separately after checking saved-config compatibility.
+`fred-pod` advances only when its own package changed. The root targets require
+`uv` on `PATH` and synchronize affected lockfiles:
 
 ```bash
-make libs-version VERSION=X.Y.Z
-make publish-libs-dry-run
-# Inspect target/dist artifacts here. The publish command validates and uploads
-# these exact files; it does not rebuild them.
+make python-release-plan BASE_TAG=code/vX.Y.Z
+# Review the changed packages and manifests, then select the affected ones.
+make prepare-python-release BASE_TAG=code/vX.Y.Z \
+  CAPABILITY_PACKAGES="fred-capability-documents" \
+  CAPABILITY_MANIFESTS="libs/capabilities/fred-capability-documents/fred_capability_documents/document_summarize/capability.py"
+make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
+# Inspect the target/dist artifacts. Publication uses these exact files.
 
 export PYPI_TOKEN=...
-make publish-libs
+make publish-libs BASE_TAG=code/vX.Y.Z
 ```
+
+Use the actual previous stable code tag from `make release-plan`, not the
+placeholder above. Repeat `--capability` and `--manifest` selections through
+the Make variables as needed, or leave them empty when no capability changed.
+Set `POD_CHANGED=true` only when `fred-pod` changed. Preparation stops if a
+changed package is omitted. It increments selected versions at most once for
+that release, updates the shared-library dependency floors of selected packages,
+and relocks projects resolving the new local versions. Review the `uv.lock` diff
+for unrelated dependency churn. The agent-pod chart `appVersion` follows
+`fred-runtime`; the knowledge-base chart `appVersion` follows `fred-sdk`.
+Neither chart `version` is the Python package version. Python package publication
+needs separate explicit approval after the Fred tag approval.
 
 The order is **mandatory** and is defined by `PYPI_PACKAGES` in the root
 `Makefile`:
@@ -196,24 +214,25 @@ The order is **mandatory** and is defined by `PYPI_PACKAGES` in the root
 12. `fred-capability-web-research`
 13. `fred-capability-writable-document`
 
-Each package floors the FRED packages below it at the same version. Publishing
-out of order can therefore resolve against a release that does not exist yet.
+Selected packages floor newly prepared FRED dependencies at their corresponding
+versions; unchanged packages retain compatible older floors. Publishing out of
+order can therefore resolve against a release that does not exist yet.
 The root target skips coordinates already present on PyPI, but any other PyPI
 response stops the release. Before running it, confirm that the release
 credential can create every package name that does not yet exist on PyPI; do
 not discover missing project-creation authority after existing packages have
-been updated. The target validates the coordinated version, internal floors and
-prebuilt artifact metadata before the first upload. It then uploads each pending
+been updated. The target validates the independent version map, internal floors and
+prebuilt artifact metadata for pending packages before the first upload. It then uploads each pending
 package in the order above without rebuilding it;
 after it completes, wait for every
 `https://pypi.org/pypi/<name>/<version>/json` endpoint to return 200 before any
-consumer resolves the coordinated release because the index is not immediate.
+consumer resolves the new package coordinates because the index is not immediate.
 Before publication, inspect each wheel's `METADATA` and contents under
 `target/dist/`.
 
 External consumers such as `fred-samples`, DT Agents and Aegis may install with
 local sources disabled, so every referenced FRED coordinate must exist on PyPI
-before their lockfiles can resolve the coordinated release.
+before their lockfiles can resolve the new versions.
 
 ---
 

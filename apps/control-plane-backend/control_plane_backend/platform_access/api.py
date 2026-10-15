@@ -18,6 +18,7 @@ from fred_core.security.platform_access.access_control import (
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
+    TeamPermission,
 )
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
@@ -30,6 +31,7 @@ from control_plane_backend.platform_access.schemas import (
     AcceptFreeEnrollmentCgu,
     CreatePlatformEnrollmentLink,
     DeletedPlatformEnrollmentLinks,
+    EnrollmentResult,
     FreeEnrollmentPreview,
     GrantPlatformAccessUsers,
     PlatformAccessActivationPreview,
@@ -47,6 +49,8 @@ from control_plane_backend.platform_access.schemas import (
     SetPlatformAccessPolicy,
     SetPlatformAccessTeam,
     SetPlatformFiltering,
+    SetTeamJoinLink,
+    TeamJoinLink,
 )
 from control_plane_backend.users.dependencies import (
     UserServiceDependencies,
@@ -362,6 +366,60 @@ async def revoke_platform_enrollment_link(
     )
 
 
+async def require_team_members_admin(
+    team_id: str, access: Access, user: KeycloakUser = Depends(get_current_user)
+) -> KeycloakUser:
+    await access.rebac.check_user_permission_or_raise(
+        user,
+        TeamPermission.CAN_ADMINISTER_MEMBERS,
+        team_id,
+        consistency_token=access.rebac.HIGHER_CONSISTENCY,
+    )
+    # The response carries the reusable URL, as the administrators' reveal does.
+    service.require_own_credential(user)
+    return user
+
+
+TeamAdmin = Annotated[KeycloakUser, Depends(require_team_members_admin)]
+TEAM_LINK = "/teams/{team_id}/join-link"
+
+
+@router.get(TEAM_LINK, response_model=TeamJoinLink, tags=["Teams"])
+async def get_team_join_link(
+    team_id: str, access: Access, user: TeamAdmin, response: Response
+) -> TeamJoinLink:
+    response.headers["Cache-Control"] = "no-store"
+    return await service.get_team_link(access, team_id)
+
+
+@router.put(TEAM_LINK, response_model=TeamJoinLink, tags=["Teams"])
+async def set_team_join_link(
+    team_id: str,
+    body: SetTeamJoinLink,
+    access: Access,
+    user: TeamAdmin,
+    response: Response,
+) -> TeamJoinLink:
+    result = await service.set_team_link(access, team_id, user, body.enabled)
+    response.headers["Cache-Control"] = "no-store"
+    emit_audit_log(
+        "team.join_link.enabled" if body.enabled else "team.join_link.paused",
+        actor_uid=user.uid,
+        team_id=team_id,
+    )
+    return result
+
+
+@router.post(TEAM_LINK + "/regenerate", response_model=TeamJoinLink, tags=["Teams"])
+async def regenerate_team_join_link(
+    team_id: str, access: Access, user: TeamAdmin, response: Response
+) -> TeamJoinLink:
+    result = await service.regenerate_team_link(access, team_id, user)
+    response.headers["Cache-Control"] = "no-store"
+    emit_audit_log("team.join_link.regenerated", actor_uid=user.uid, team_id=team_id)
+    return result
+
+
 @router.get("/platform-access/status", response_model=PlatformAccessStatus)
 async def get_platform_access_status(
     access: Access, config: Config, user: OwnUser
@@ -380,7 +438,7 @@ async def preview_free_enrollment(
 async def record_free_enrollment_opening(
     token: str, access: Access, user: OwnUser
 ) -> None:
-    await service.record_opening(access, token)
+    await service.record_opening(access, token, user)
 
 
 @router.post("/platform-access/free/{token}/gcu", status_code=204)
@@ -394,10 +452,8 @@ async def accept_free_enrollment_cgu(
     await service.accept_cgu(access, user, token, body.version, config.app.gcu_version)
 
 
-@router.post(
-    "/platform-access/free/{token}/enroll", response_model=PlatformAccessStatus
-)
+@router.post("/platform-access/free/{token}/enroll", response_model=EnrollmentResult)
 async def enroll_free_team(
     token: str, access: Access, config: Config, user: OwnUser
-) -> PlatformAccessStatus:
+) -> EnrollmentResult:
     return await service.enroll(access, user, token, config.app.gcu_version)

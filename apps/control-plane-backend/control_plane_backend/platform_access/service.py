@@ -42,6 +42,7 @@ from control_plane_backend.platform_access.directory import PlatformAccessDirect
 from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
     CreatePlatformEnrollmentLink,
+    EnrollmentResult,
     FreeEnrollmentPreview,
     PlatformAccessActivationPreview,
     PlatformAccessActivationUser,
@@ -58,6 +59,7 @@ from control_plane_backend.platform_access.schemas import (
     PlatformEnrollmentLinksPage,
     PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
+    TeamJoinLink,
 )
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import _add_team_member_relation
@@ -80,8 +82,23 @@ async def has_admission_sources(
                     select(TeamMetadataRow.id)
                     .where(
                         ~TeamMetadataRow.id.startswith("personal-"),
+                        # A Free team only admits its Free-link joiners.
                         TeamMetadataRow.platform_access_allowed
-                        | TeamMetadataRow.platform_access_free,
+                        | (
+                            TeamMetadataRow.platform_access_free
+                            & select(PlatformAccessLinkJoinerRow.user_id)
+                            .join(
+                                PlatformAccessLinkRow,
+                                PlatformAccessLinkRow.id
+                                == PlatformAccessLinkJoinerRow.link_id,
+                            )
+                            .where(
+                                PlatformAccessLinkRow.team_id == TeamMetadataRow.id,
+                                PlatformAccessLinkRow.kind == "free",
+                                PlatformAccessLinkJoinerRow.deleted_at.is_(None),
+                            )
+                            .exists()
+                        ),
                     )
                     .exists()
                 )
@@ -369,14 +386,14 @@ async def users_page(
                         granted_at=exception.granted_at,
                     )
                 )
-            for team in await access.team_sources(uid):
-                if team.platform_access_allowed:
+            for team, allowed, free in await access.team_sources(uid):
+                if allowed:
                     sources.append(
                         AdmissionSource(
                             kind="team", team_id=team.id, team_name=team.name
                         )
                     )
-                if team.platform_access_free:
+                if free:
                     sources.append(
                         AdmissionSource(
                             kind="free", team_id=team.id, team_name=team.name
@@ -412,6 +429,7 @@ async def activation_preview(
             for row in (await session.scalars(select(PlatformAccessUserRow))).all()
         }
         teams = await access.store.teams(session, eligible_only=True)
+        free_joined = await access.store.free_joined_teams(session=session)
     if directory_profiles is None:
         entries = [
             (
@@ -482,8 +500,15 @@ async def activation_preview(
                         if outcome == "allowed":
                             sources.append(AdmissionSource(kind="attribute"))
                 if outcome != "allowed":
-                    for start in range(0, len(teams), 8):
-                        batch = teams[start : start + 8]
+                    # Free admits only people who joined through that team's Free link.
+                    joined = free_joined.get(UUID(uid), set())
+                    candidates = [
+                        team
+                        for team in teams
+                        if team.platform_access_allowed or team.id in joined
+                    ]
+                    for start in range(0, len(candidates), 8):
+                        batch = candidates[start : start + 8]
                         memberships = await access.rebac.has_team_memberships(
                             uid, [team.id for team in batch]
                         )
@@ -497,6 +522,7 @@ async def activation_preview(
                                     AdmissionSource(
                                         kind="free"
                                         if team.platform_access_free
+                                        and team.id in joined
                                         else "team",
                                         team_id=team.id,
                                         team_name=team.name,
@@ -693,6 +719,33 @@ def utc(value: datetime | None) -> datetime | None:
     )
 
 
+# Platform administrators manage Free-team links only; team join links are managed
+# by team admins through the single-link functions below.
+FREE_LINKS = PlatformAccessLinkRow.kind == "free"
+
+
+def new_link_row(
+    team_id: str,
+    actor: KeycloakUser,
+    kind: str,
+    note: str | None = None,
+    expires_at: datetime | None = None,
+) -> tuple[str, PlatformAccessLinkRow]:
+    token = secrets.token_urlsafe(32)
+    return token, PlatformAccessLinkRow(
+        id=uuid4(),
+        team_id=team_id,
+        kind=kind,
+        token=token,
+        token_hash=hashlib.sha256(token.encode()).hexdigest(),
+        note=note,
+        created_by=actor.uid,
+        created_at=datetime.now(timezone.utc),
+        expires_at=expires_at,
+        opening_count=0,
+    )
+
+
 def link_view(
     link: PlatformAccessLinkRow, free: bool, now: datetime
 ) -> PlatformEnrollmentLinkInfo:
@@ -734,22 +787,9 @@ async def generate_link_record(
         now = datetime.now(timezone.utc)
         if body.expires_at is not None and body.expires_at <= now:
             raise HTTPException(409, "free_enrollment_expiry_past")
-        token = secrets.token_urlsafe(32)
-        link_id = uuid4()
-        session.add(
-            PlatformAccessLinkRow(
-                id=link_id,
-                team_id=team_id,
-                token=token,
-                token_hash=hashlib.sha256(token.encode()).hexdigest(),
-                note=body.note,
-                created_by=actor.uid,
-                created_at=now,
-                expires_at=body.expires_at,
-                opening_count=0,
-            )
-        )
-        return token, link_id
+        token, link = new_link_row(team_id, actor, "free", body.note, body.expires_at)
+        session.add(link)
+        return token, link.id
 
 
 async def generate_link(
@@ -773,7 +813,7 @@ async def list_links(
         await access.state(session)
         team = await require_team(access, team_id, session)
         now = datetime.now(timezone.utc)
-        predicate = PlatformAccessLinkRow.team_id == team_id
+        predicate = (PlatformAccessLinkRow.team_id == team_id) & FREE_LINKS
         if status == "revoked":
             predicate &= PlatformAccessLinkRow.revoked_at.is_not(None)
         elif status == "expired":
@@ -814,6 +854,7 @@ async def list_links(
                     .select_from(PlatformAccessLinkRow)
                     .where(
                         PlatformAccessLinkRow.team_id == team_id,
+                        FREE_LINKS,
                         obsolete_links(now),
                     )
                 )
@@ -914,6 +955,7 @@ async def delete_inactive_links(access: PlatformAccess, team_id: str) -> int:
         result = await session.execute(
             delete(PlatformAccessLinkRow).where(
                 PlatformAccessLinkRow.team_id == team_id,
+                FREE_LINKS,
                 obsolete_links(datetime.now(timezone.utc)),
             )
         )
@@ -925,7 +967,7 @@ async def owned_link(
 ) -> PlatformAccessLinkRow:
     await require_team(access, team_id, session)
     link = await session.get(PlatformAccessLinkRow, link_id)
-    if link is None or link.team_id != team_id:
+    if link is None or link.team_id != team_id or link.kind != "free":
         raise HTTPException(404, "free_enrollment_link_invalid")
     return link
 
@@ -960,7 +1002,77 @@ async def require_link(
     return result
 
 
-async def record_opening(access: PlatformAccess, token: str) -> None:
+async def team_link(
+    access: PlatformAccess, team_id: str, session: AsyncSession
+) -> PlatformAccessLinkRow | None:
+    await require_team(access, team_id, session)
+    return await session.scalar(
+        select(PlatformAccessLinkRow).where(
+            PlatformAccessLinkRow.team_id == team_id,
+            PlatformAccessLinkRow.kind == "team",
+        )
+    )
+
+
+def team_link_view(link: PlatformAccessLinkRow | None) -> TeamJoinLink:
+    if link is None:
+        return TeamJoinLink(enabled=False)
+    return TeamJoinLink(enabled=not link.paused, token=link.token)
+
+
+async def get_team_link(access: PlatformAccess, team_id: str) -> TeamJoinLink:
+    async with access.store.read() as session:
+        await access.state(session)
+        return team_link_view(await team_link(access, team_id, session))
+
+
+async def set_team_link(
+    access: PlatformAccess, team_id: str, actor: KeycloakUser, enabled: bool
+) -> TeamJoinLink:
+    """Pausing and resuming keep the same URL; the first enabling creates it."""
+    async with access.store.mutation() as session:
+        await access.state(session)
+        link = await team_link(access, team_id, session)
+        if link is None and enabled:
+            _, link = new_link_row(team_id, actor, "team")
+            session.add(link)
+        elif link is not None:
+            link.paused = not enabled
+        return team_link_view(link)
+
+
+async def regenerate_team_link(
+    access: PlatformAccess, team_id: str, actor: KeycloakUser
+) -> TeamJoinLink:
+    """Replaces the team's link for good: the previous URL becomes invalid."""
+    async with access.store.mutation() as session:
+        await access.state(session)
+        await require_team(access, team_id, session)
+        await session.execute(
+            delete(PlatformAccessLinkRow).where(
+                PlatformAccessLinkRow.team_id == team_id,
+                PlatformAccessLinkRow.kind == "team",
+            )
+        )
+        _, link = new_link_row(team_id, actor, "team")
+        session.add(link)
+        return team_link_view(link)
+
+
+async def require_link_caller(
+    access: PlatformAccess, user: KeycloakUser, token: str
+) -> None:
+    """A team link never admits: its caller must already have platform access."""
+    async with access.store.read() as session:
+        link, _ = await require_link(access, token, session)
+    if link.kind == "team" and not await access.admitted(user):
+        raise HTTPException(403, "team_link_requires_platform_access")
+
+
+async def record_opening(
+    access: PlatformAccess, token: str, user: KeycloakUser
+) -> None:
+    await require_link_caller(access, user, token)
     async with access.store.mutation() as session:
         await access.state(session)
         link, _ = await require_link(access, token, session)
@@ -995,6 +1107,7 @@ async def preview_link(
     access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
 ) -> FreeEnrollmentPreview:
     await access.observe(user)
+    await require_link_caller(access, user, token)
     async with access.store.read() as session:
         _, team = await require_link(access, token, session)
         return FreeEnrollmentPreview(
@@ -1011,6 +1124,7 @@ async def accept_cgu(
     current: str | None,
 ) -> None:
     await access.observe(user)
+    await require_link_caller(access, user, token)
     async with access.store.mutation() as session:
         await access.state(session)
         await require_link(access, token, session)
@@ -1024,8 +1138,9 @@ async def accept_cgu(
 
 async def enroll(
     access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
-) -> PlatformAccessStatus:
+) -> EnrollmentResult:
     await access.observe(user)
+    await require_link_caller(access, user, token)
     joined = False
     async with access.store.mutation() as session:
         await require_active_subject(user)
@@ -1037,31 +1152,40 @@ async def enroll(
             await _add_team_member_relation(
                 access.rebac, TeamId(team.id), user.uid, UserTeamRelation.TEAM_MEMBER
             )
-            if (
-                await session.get(
-                    PlatformAccessLinkJoinerRow, (link.id, UUID(user.uid))
+            joined = True
+        # The joiner row is the Free admission source, so a member who enrolls
+        # through a Free link gets it too; team links never record one.
+        if (
+            link.kind == "free"
+            and await session.get(
+                PlatformAccessLinkJoinerRow, (link.id, UUID(user.uid))
+            )
+            is None
+        ):
+            session.add(
+                PlatformAccessLinkJoinerRow(
+                    link_id=link.id,
+                    user_id=UUID(user.uid),
+                    joined_at=datetime.now(timezone.utc),
+                    username_snapshot=user.username,
+                    first_name_snapshot=user.first_name,
+                    last_name_snapshot=user.last_name,
                 )
-                is None
-            ):
-                session.add(
-                    PlatformAccessLinkJoinerRow(
-                        link_id=link.id,
-                        user_id=UUID(user.uid),
-                        joined_at=datetime.now(timezone.utc),
-                        username_snapshot=user.username,
-                        first_name_snapshot=user.first_name,
-                        last_name_snapshot=user.last_name,
-                    )
-                )
+            )
             joined = True
     if joined:
         emit_audit_log(
-            "platform.access.free.enrolled",
+            "team.join_link.joined"
+            if link.kind == "team"
+            else "platform.access.free.enrolled",
             actor_uid=user.uid,
             team_id=team.id,
             link_id=str(link.id),
         )
-    return await self_status(access, user, version)
+    status = await self_status(access, user, version)
+    return EnrollmentResult(
+        **status.model_dump(), team_id=team.id if status.admitted else None
+    )
 
 
 def require_own_credential(actor: KeycloakUser) -> None:

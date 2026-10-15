@@ -24,6 +24,13 @@ const isInvalidLink = (error: unknown) => {
   return status === 404 && detail === "free_enrollment_link_invalid";
 };
 
+// A team join link answers this to a person without platform access: show the refusal page.
+const isPlatformAccessDenied = (error: unknown) => {
+  const { status, detail } = normalizeApiError(error);
+  return status === 403 && detail === "team_link_requires_platform_access";
+};
+const showRefusal = () => window.location.replace(platformPath("platform-access-denied"));
+
 export default function FreeEnrollmentPage() {
   const { token = "" } = useParams();
   const { t } = useTranslation();
@@ -47,6 +54,10 @@ export default function FreeEnrollmentPage() {
     };
   }, [token, preview.isSuccess, record]);
   const [failure, setFailure] = useState<"invalid" | "failed" | null>(null);
+  const denied = preview.isError && isPlatformAccessDenied(preview.error);
+  useEffect(() => {
+    if (denied) showRefusal();
+  }, [denied]);
   const busy = acceptance.isLoading || enrollment.isLoading || preview.isFetching;
   const acceptTerms = async () => {
     if (!gcuVersion) return;
@@ -54,19 +65,25 @@ export default function FreeEnrollmentPage() {
       await accept({ token, acceptFreeEnrollmentCgu: { version: gcuVersion } }).unwrap();
       await preview.refetch().unwrap();
     } catch (error) {
-      setFailure(isInvalidLink(error) ? "invalid" : "failed");
+      if (isPlatformAccessDenied(error)) showRefusal();
+      else setFailure(isInvalidLink(error) ? "invalid" : "failed");
     }
   };
   const join = async () => {
     setFailure(null);
     try {
       const status = await enroll({ token }).unwrap();
-      if (status.admitted) window.location.replace(platformPath("/"));
+      if (status.admitted)
+        window.location.replace(
+          platformPath(status.team_id ? `team/${encodeURIComponent(status.team_id)}/agents` : "/"),
+        );
       else setFailure("failed");
     } catch (error) {
-      setFailure(isInvalidLink(error) ? "invalid" : "failed");
+      if (isPlatformAccessDenied(error)) showRefusal();
+      else setFailure(isInvalidLink(error) ? "invalid" : "failed");
     }
   };
+  if (denied) return null;
   if (failure === "invalid" || (preview.isError && isInvalidLink(preview.error)))
     return (
       <PlatformAccessCard title={t("rework.platformAccess.join.invalidTitle")}>

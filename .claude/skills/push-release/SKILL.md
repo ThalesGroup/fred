@@ -41,8 +41,11 @@ interactions. Step 5 remains the explicit approval gate before tags or publicati
   `adapters`, `vectors`, `map-reduce`, `SSE`, class names, or file paths in the summary/bullets.
   Describe what the user can now *do* or what stopped breaking. Match the voice of the existing
   entries in `apps/frontend/public/release.md`.
-- **Notes are committed, then tagged.** The tag must point at a commit that already contains the
-  new `release.md` entry, source migration notes and generated operator guide. Order: edit → commit → tag both → push.
+- **Release inputs are committed, then tagged.** The tag must point at a commit that already contains
+  the new `release.md` entry, source migration notes, generated operator guide, prepared Python
+  versions, affected capability manifest versions and synchronized locks. Order: edit, review,
+  commit, tag both, push.
+- **Python package publication is separate.** Tag approval does not authorize PyPI uploads.
 - Tags are **annotated** (`git tag -a`), created on `HEAD` of the release branch. No promotion to
   `main` — tags live on the branch they were cut from.
 
@@ -116,6 +119,47 @@ counts as minor even when default-off upgrades need none. Validate a requested
 version through `plan --version X.Y.Z`; do not accept a version below the minimum.
 A deliberately larger version must be explicit at sign-off. For release candidates,
 compare to the preceding stable tag and preserve the eligible core on promotion.
+
+### Prepare Python package and capability versions
+
+Use the same stable `code/vX.Y.Z` baseline reported by `make release-plan`:
+
+```bash
+make python-release-plan BASE_TAG=code/vX.Y.Z
+```
+
+Review the changed paths for each candidate package. `fred-core`, `fred-sdk` and
+`fred-runtime` each take one patch increment independent of the Fred code/chart
+version. Select every changed capability distribution, but only its affected
+`CapabilityManifest` files. A package containing several manifests may change
+only one. A changed package with no manifest still takes a package patch.
+Select `fred-pod` only if its own package changed. New manifests keep their
+initial declared version. The preparation command refuses an omitted changed
+package or unexplained version drift:
+
+```bash
+make prepare-python-release BASE_TAG=code/vX.Y.Z \
+  CAPABILITY_PACKAGES="fred-capability-documents" \
+  CAPABILITY_MANIFESTS="libs/capabilities/fred-capability-documents/fred_capability_documents/document_summarize/capability.py"
+```
+
+Use the actual reviewed selections; leave either list empty when appropriate.
+Set `POD_CHANGED=true` when `fred-pod` changed. For every bumped manifest,
+exercise config saved under its previous version through `resolve_stored_config`.
+The default `upgrade_config` validates compatible shapes; a breaking shape needs
+a tested upgrade path before release. Review the resulting package/manifest map,
+dependency floors, chart `appVersion` values and all changed `uv.lock` files.
+Unexpected lock dependency churn needs an explanation or correction.
+
+Build and validate the package artifacts without uploading:
+
+```bash
+make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
+```
+
+The dry run builds every package, including unchanged ones. `make publish-libs`
+later validates and uploads only coordinates absent from PyPI, in dependency order,
+after a separate publication authorization. Do not publish during tag preparation.
 
 ## Step 4 — write the release notes
 
@@ -199,6 +243,9 @@ Show the developer the **full new entry** verbatim, plus:
 
 - the branch, the ancestry-based baseline, maximum migration impact and proposed version,
 - the generated operator guide, its ordered procedures and remaining deployment limitations,
+- the prepared shared-library versions, changed and unchanged capability packages,
+  selected manifest versions, saved-config compatibility evidence, chart `appVersion`
+  values, lockfile diff and Python artifact validation result,
 - the Trivy report location and per-image critical findings, including whether
   Trivy lists a fixed package version,
 - the two tags that will be created (`code/vX.Y.Z`, `chart/vX.Y.Z`) and what each publishes,
@@ -221,6 +268,9 @@ uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides
 git add apps/frontend/public/release.md "docs/swift/ops/releases/v$V/migration.md"
 # Stage only the new/updated source notes reviewed above, by explicit path.
 git add docs/swift/ops/migrations/<reviewed-note>.md
+# Stage only the reviewed Python pyproject.toml, capability manifest, uv.lock and
+# pod Chart.yaml paths from Step 3 by explicit path.
+git add <reviewed-python-release-paths>
 git commit -m "docs: release notes for v$V"
 
 uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --version "$V"

@@ -121,7 +121,7 @@ operations:
     method: POST
     path: /control-plane/v1/platform-access/free/{token}/opening
     review_status: approved
-    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_or_admitted_for_team_link
   - service: control-plane
     method: GET
     path: /control-plane/v1/platform-access/status
@@ -131,17 +131,17 @@ operations:
     method: GET
     path: /control-plane/v1/platform-access/free/{token}
     review_status: approved
-    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_or_admitted_for_team_link
   - service: control-plane
     method: POST
     path: /control-plane/v1/platform-access/free/{token}/gcu
     review_status: approved
-    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_or_admitted_for_team_link
   - service: control-plane
     method: POST
     path: /control-plane/v1/platform-access/free/{token}/enroll
     review_status: approved
-    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_and_cgu
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_or_admitted_for_team_link_and_cgu
   - service: control-plane
     method: GET
     path: /control-plane/v1/evaluation-campaigns
@@ -706,6 +706,21 @@ operations:
     path: /control-plane/v1/teams/{team_id}/candidate-members
     review_status: approved
     required_permission: can_administer_members
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/join-link
+    review_status: approved
+    required_permission: can_administer_members_and_own_human_credential
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/join-link
+    review_status: approved
+    required_permission: can_administer_members_and_own_human_credential
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-link/regenerate
+    review_status: approved
+    required_permission: can_administer_members_and_own_human_credential
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/members

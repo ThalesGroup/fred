@@ -4,7 +4,7 @@ import math
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -20,7 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from fred_core.security.models import Resource
 from fred_core.security.platform_access.models import PlatformAccessSettingsRow
 from fred_core.security.platform_access.rules import allows, evaluate, path_key
-from fred_core.security.platform_access.store import PlatformAccessStore
+from fred_core.security.platform_access.store import (
+    PlatformAccessStore,
+    warn_unavailable,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
@@ -40,6 +43,12 @@ def token_time(value: Any) -> float | None:
         and math.isfinite(value)
         else None
     )
+
+
+class TeamSource(NamedTuple):
+    team: TeamMetadataRow
+    allowed: bool  # authorized team: every member is admitted
+    free: bool  # Free team the person joined through one of its Free links
 
 
 class PlatformAccess:
@@ -92,16 +101,32 @@ class PlatformAccess:
 
     async def team_sources(
         self, uid: str, session: AsyncSession | None = None
-    ) -> list[TeamMetadataRow]:
-        teams = await self.store.teams(session, eligible_only=True)
-        memberships = await self.rebac.has_team_memberships(
-            uid, [team.id for team in teams]
+    ) -> list[TeamSource]:
+        """Current team-derived admission: membership plus a current team flag.
+
+        Free counts only for people who joined through that team's Free link, so
+        team admins adding members (by hand or team link) never grant admission.
+        """
+        joined = (await self.store.free_joined_teams(UUID(uid), session)).get(
+            UUID(uid), set()
         )
-        if len(memberships) != len(teams) or any(
+        candidates = [
+            TeamSource(
+                team,
+                team.platform_access_allowed,
+                team.platform_access_free and team.id in joined,
+            )
+            for team in await self.store.teams(session, eligible_only=True)
+        ]
+        candidates = [source for source in candidates if source.allowed or source.free]
+        memberships = await self.rebac.has_team_memberships(
+            uid, [source.team.id for source in candidates]
+        )
+        if len(memberships) != len(candidates) or any(
             type(value) is not bool for value in memberships
         ):
             raise RuntimeError("Incomplete membership authority response")
-        return [team for team, member in zip(teams, memberships) if member]
+        return [source for source, member in zip(candidates, memberships) if member]
 
     async def platform_admin_uid(self, uid: str) -> bool:
         """Resolve the current platform-admin permission for a person's UID."""
@@ -112,7 +137,8 @@ class PlatformAccess:
                 RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
                 consistency_token=self.rebac.HIGHER_CONSISTENCY,
             )
-        except Exception:
+        except Exception as error:
+            warn_unavailable("admin check", error)
             raise HTTPException(503, "platform_access_unavailable") from None
 
     async def platform_admin(self, user: Principal) -> bool:
@@ -159,8 +185,8 @@ class PlatformAccess:
         if await self.store.exception(uid, session) is not None:
             return True
         return any(
-            team.id != excluding_team
-            for team in await self.team_sources(user.uid, session)
+            source.team.id != excluding_team
+            for source in await self.team_sources(user.uid, session)
         )
 
     async def admitted(self, user: Principal) -> bool:
@@ -175,7 +201,8 @@ class PlatformAccess:
             )
         except HTTPException:
             raise
-        except Exception:
+        except Exception as error:
+            warn_unavailable("admission", error)
             raise HTTPException(503, "platform_access_unavailable") from None
 
 
@@ -230,11 +257,9 @@ async def initialize_platform_access(
             "platform_access_users",
             "users",
             "teammetadata",
-            *(
-                ["platform_access_links", "platform_access_link_joiners"]
-                if authority
-                else []
-            ),
+            # Free admission is derived from Free-link joins on every backend.
+            "platform_access_links",
+            "platform_access_link_joiners",
         ],
         component="platform-access",
         migrate_command="make db-upgrade (apps/control-plane-backend)",
@@ -256,6 +281,9 @@ async def initialize_platform_access(
     await access.state()
     await access.store.teams(eligible_only=True)
     await access.store.users(0, 1)
+    # Free admission reads the joiner table on every filtered request: fail at
+    # startup, not per request, when this role cannot read it.
+    await access.store.free_joined_teams(UUID(int=0))
     _installed = access
 
 
@@ -276,6 +304,23 @@ async def enforce_platform_access(subject: Principal) -> None:
         return
     if not await get_platform_access().admitted(subject):
         raise HTTPException(403, "platform_access_denied")
+
+
+async def forget_free_joins(team_id: str, user_id: str) -> None:
+    """Call around removing a person from a team, so a later re-add by hand
+    or team link cannot revive the Free admission source. Teams without Free
+    links skip the policy lock, so their removals never depend on it."""
+    if not _available or _installed is None:
+        return
+    try:
+        uid = UUID(user_id)
+    except ValueError:
+        return  # not a person account: it can hold no Free join
+    store = _installed.store
+    if not await store.has_free_links(team_id):
+        return
+    async with store.mutation() as session:
+        await store.forget_free_joins(team_id, uid, session)
 
 
 @asynccontextmanager

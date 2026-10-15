@@ -218,6 +218,28 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGet: build.query<
+      GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiResponse,
+      GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join-link` }),
+    }),
+    setTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPut: build.mutation<
+      SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiResponse,
+      SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/join-link`,
+        method: "PUT",
+        body: queryArg.setTeamJoinLink,
+      }),
+    }),
+    regenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePost: build.mutation<
+      RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiResponse,
+      RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join-link/regenerate`, method: "POST" }),
+    }),
     getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: build.query<
       GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse,
       GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg
@@ -2263,6 +2285,22 @@ export type RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTe
     teamId: string;
     linkId: string;
   };
+export type GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiArg = {
+  teamId: string;
+};
+export type SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiArg = {
+  teamId: string;
+  setTeamJoinLink: SetTeamJoinLink;
+};
+export type RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiArg = {
+  teamId: string;
+};
 export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse =
   /** status 200 Successful Response */ PlatformAccessStatus;
 export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg = void;
@@ -2281,7 +2319,7 @@ export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostA
   acceptFreeEnrollmentCgu: AcceptFreeEnrollmentCgu;
 };
 export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiResponse =
-  /** status 200 Successful Response */ PlatformAccessStatus;
+  /** status 200 Successful Response */ EnrollmentResult;
 export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiArg = {
   token: string;
 };
@@ -3720,6 +3758,13 @@ export type PlatformEnrollmentJoinersPage = {
 export type DeletedPlatformEnrollmentLinks = {
   deleted_count: number;
 };
+export type TeamJoinLink = {
+  enabled: boolean;
+  token?: string | null;
+};
+export type SetTeamJoinLink = {
+  enabled: boolean;
+};
 export type PlatformAccessStatus = {
   admitted: boolean;
   cgu_required: boolean;
@@ -3730,6 +3775,11 @@ export type FreeEnrollmentPreview = {
 };
 export type AcceptFreeEnrollmentCgu = {
   version: string;
+};
+export type EnrollmentResult = {
+  admitted: boolean;
+  cgu_required: boolean;
+  team_id?: string | null;
 };
 export type UserSummary = {
   id: string;
@@ -5799,6 +5849,10 @@ export const {
   useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation,
   useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation,
   useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation,
+  useGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery,
+  useLazyGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery,
+  useSetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutMutation,
+  useRegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostMutation,
   useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
   useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
   usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
