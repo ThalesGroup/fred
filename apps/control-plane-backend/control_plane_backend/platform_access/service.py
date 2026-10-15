@@ -79,8 +79,22 @@ async def has_admission_sources(
                     select(TeamMetadataRow.id)
                     .where(
                         ~TeamMetadataRow.id.startswith("personal-"),
+                        # A Free team only admits its Free-link joiners.
                         TeamMetadataRow.platform_access_allowed
-                        | TeamMetadataRow.platform_access_free,
+                        | (
+                            TeamMetadataRow.platform_access_free
+                            & select(PlatformAccessLinkJoinerRow.user_id)
+                            .join(
+                                PlatformAccessLinkRow,
+                                PlatformAccessLinkRow.id
+                                == PlatformAccessLinkJoinerRow.link_id,
+                            )
+                            .where(
+                                PlatformAccessLinkRow.team_id == TeamMetadataRow.id,
+                                PlatformAccessLinkRow.kind == "free",
+                            )
+                            .exists()
+                        ),
                     )
                     .exists()
                 )

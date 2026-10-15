@@ -370,3 +370,20 @@ async def test_authorized_team_still_admits_every_member(access):
     assert team_sources(await service.users_page(access, 0, 25, ""), member.uid) == {
         ("team", "demo")
     }
+
+
+@pytest.mark.asyncio
+async def test_free_team_without_joiners_is_no_admission_source(access):
+    actor = user()
+    async with access.store.mutation() as session:
+        state = await access.store.settings(session)
+        state.policy, state.revision = None, 0
+    await service.set_team(access, actor, "demo", False, True)
+    view = await service.state_view(access, await access.state())
+    assert not view.has_admission_sources
+    await service.enroll(
+        access, user(), await service.generate_link(access, "demo", actor), None
+    )
+    assert (
+        await service.state_view(access, await access.state())
+    ).has_admission_sources
