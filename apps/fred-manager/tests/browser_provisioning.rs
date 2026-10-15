@@ -3,12 +3,13 @@
 
 //! Browser acceptance of the real manager HTTP handlers and Keycloak login.
 //! No control-plane route or prepared root role participates in this journey.
-use fred_manager::{api, auth::Authenticator, config::Configuration, db, keycloak::Directory};
+use fred_manager::{api, auth::Authenticator, config::Configuration, keycloak::Directory};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 #[allow(dead_code)]
 #[path = "support/environment.rs"]
 mod environment;
+use environment::named_space;
 #[path = "support/real_keycloak.rs"]
 mod real_keycloak;
 
@@ -99,15 +100,15 @@ async fn provisioning_browser_journey() {
         String::from_utf8_lossy(&output.stderr)
     );
     println!("{}", String::from_utf8_lossy(&output.stdout));
-    let org = db::named_space(&e.pool, None, "Demo")
+    let org = named_space(&e.pool, &e.fga, None, "Demo")
         .await
         .unwrap()
         .unwrap();
-    let north = db::named_space(&e.pool, Some(org.id), "northbridge")
+    let north = named_space(&e.pool, &e.fga, Some(org.id), "northbridge")
         .await
         .unwrap()
         .unwrap();
-    let project = db::named_space(&e.pool, Some(north.id), "Browser project")
+    let project = named_space(&e.pool, &e.fga, Some(north.id), "Browser project")
         .await
         .unwrap()
         .unwrap();

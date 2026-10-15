@@ -129,6 +129,7 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
         parent_id: None,
         personal_owner: None,
         path: vec![Uuid::nil()],
+        organization: Uuid::nil(),
     };
     let wire = serde_json::to_value(space).unwrap();
     let required: BTreeSet<_> = schemas["Space"]["required"]

@@ -17,12 +17,12 @@
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domain::{Document, Folder, Space};
+use crate::domain::{Document, Folder, Space, SpaceRow};
 
 // Macros rather than consts: sqlx only accepts compile-time SQL strings.
 macro_rules! space {
     () => {
-        "select id, kind, name, parent_id, personal_owner, path from space"
+        "select id, kind, name, personal_owner from space"
     };
 }
 macro_rules! folder {
@@ -66,57 +66,46 @@ pub async fn require_initialized(pool: &PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn named_space<'e>(
+/// Organizations are the only spaces resolved by name alone.
+pub async fn organization_named<'e>(
     ex: impl sqlx::PgExecutor<'e>,
-    parent: Option<Uuid>,
     name: &str,
-) -> sqlx::Result<Option<Space>> {
+) -> sqlx::Result<Option<SpaceRow>> {
     sqlx::query_as(concat!(
         space!(),
-        " where parent_id is not distinct from $1 and name = $2"
+        " where kind = 'organization' and name = $1"
     ))
-    .bind(parent)
     .bind(name)
     .fetch_optional(ex)
     .await
 }
 
-pub async fn space(pool: &PgPool, id: Uuid) -> sqlx::Result<Space> {
+pub async fn space<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<SpaceRow> {
     sqlx::query_as(concat!(space!(), " where id = $1"))
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(ex)
         .await
 }
 
-pub async fn spaces(pool: &PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<Space>> {
-    sqlx::query_as(concat!(space!(), " where id = any($1) order by path"))
-        .bind(ids)
-        .fetch_all(pool)
-        .await
-}
-
-pub async fn child_space_ids<'e>(
+/// Committed rows only: ids that OpenFGA links to but SQL never committed are absent.
+pub async fn spaces<'e>(
     ex: impl sqlx::PgExecutor<'e>,
-    parent: Uuid,
-) -> sqlx::Result<Vec<Uuid>> {
-    sqlx::query_scalar("select id from space where parent_id = $1")
-        .bind(parent)
+    ids: &[Uuid],
+) -> sqlx::Result<Vec<SpaceRow>> {
+    sqlx::query_as(concat!(space!(), " where id = any($1) order by id"))
+        .bind(ids)
         .fetch_all(ex)
         .await
 }
 
 pub async fn insert_space(tx: &mut Transaction<'_, Postgres>, s: &Space) -> sqlx::Result<()> {
-    sqlx::query(
-        "insert into space (id, kind, name, parent_id, personal_owner, path) values ($1, $2, $3, $4, $5, $6)",
-    )
-    .bind(s.id)
-    .bind(s.kind)
-    .bind(&s.name)
-    .bind(s.parent_id)
-    .bind(&s.personal_owner)
-    .bind(&s.path)
-    .execute(&mut **tx)
-    .await?;
+    sqlx::query("insert into space (id, kind, name, personal_owner) values ($1, $2, $3, $4)")
+        .bind(s.id)
+        .bind(s.kind)
+        .bind(&s.name)
+        .bind(&s.personal_owner)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 

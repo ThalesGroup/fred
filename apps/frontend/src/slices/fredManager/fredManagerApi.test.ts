@@ -147,6 +147,7 @@ describe("generated fred-manager client", () => {
         personal_owner: null,
         path: ["org-id"],
         roles: ["admin", "analyst"],
+        inherited_roles: [],
       },
     ];
     fetch.mockImplementationOnce(

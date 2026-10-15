@@ -30,7 +30,7 @@ use uuid::Uuid;
 
 #[path = "support/environment.rs"]
 mod environment;
-use environment::{Env, env};
+use environment::{Env, env, named_space};
 
 /// Removes a tuple behind fred-manager's back, as another admin or an operator would.
 async fn delete_tuple(e: &Env, user: &str, relation: &str, object: &str) {
@@ -341,7 +341,11 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
     db::insert_document(&e.pool, &doc).await.unwrap();
 
     let moves = [
-        format!("update space set parent_id = null where id = '{}'", team.id),
+        format!("update space set kind = 'project' where id = '{}'", team.id),
+        format!(
+            "update space set personal_owner = 'alice' where id = '{}'",
+            team.id
+        ),
         format!(
             "update folder set space_id = '{}' where id = '{}'",
             org.id, folder.id
@@ -355,7 +359,11 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
         let refused = sqlx::query(AssertSqlSafe(statement.clone()))
             .execute(&e.pool)
             .await;
-        assert!(refused.is_err(), "{statement} must be refused");
+        let error = refused.expect_err(&statement).to_string();
+        assert!(
+            error.contains("placement is immutable"),
+            "{statement}: {error}"
+        );
     }
     let elsewhere = document(org.id, Some(folder.id), "wrong-space.pdf");
     assert!(db::insert_document(&e.pool, &elsewhere).await.is_err());
@@ -1126,11 +1134,11 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
     };
     let first = importer.run(&bundle).await.unwrap();
     assert_eq!(first.identities_created, 3);
-    let org = db::named_space(&e.pool, None, "Provisioned")
+    let org = named_space(&e.pool, &e.fga, None, "Provisioned")
         .await
         .unwrap()
         .unwrap();
-    let team = db::named_space(&e.pool, Some(org.id), "BID")
+    let team = named_space(&e.pool, &e.fga, Some(org.id), "BID")
         .await
         .unwrap()
         .unwrap();
@@ -1185,7 +1193,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
     assert_eq!(body["enabled"], true);
     assert_eq!(body["credentials"][0]["temporary"], false);
     assert_eq!(
-        db::named_space(&e.pool, Some(org.id), "BID")
+        named_space(&e.pool, &e.fga, Some(org.id), "BID")
             .await
             .unwrap()
             .unwrap()
@@ -1372,7 +1380,7 @@ async fn provisioning_replay_after_identity_and_sql_failures_reuses_committed_st
     assert!(!format!("{error:?}").contains("private-password"));
     assert_eq!(server.users.lock().await.len(), 3);
     assert!(
-        db::named_space(&e.pool, None, "Provisioned")
+        named_space(&e.pool, &e.fga, None, "Provisioned")
             .await
             .unwrap()
             .is_none()
@@ -1675,7 +1683,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
     )
     .unwrap();
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_fred-manager"))
-        .arg("migrate-authorization")
+        .arg("serve")
         .env("CONFIG_FILE", temp.join("configuration.yaml"))
         .env("ENV_FILE", temp.join("absent.env"))
         .env("FRED_POSTGRES_PASSWORD", "it")
@@ -1704,7 +1712,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
 // Proves: I17
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn provisioning_batches_large_parent_and_child_grants_and_rejects_personal_collision() {
+async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_spaces_apart() {
     use fred_manager::provisioning::Importer;
     let e = env().await;
     let server = support::IdentityServer::start().await;
@@ -1771,19 +1779,26 @@ async fn provisioning_batches_large_parent_and_child_grants_and_rejects_personal
                     + body["deletes"]["tuple_keys"].as_array().map_or(0, Vec::len)
             })
             .collect();
-        assert_eq!(operations.iter().sum::<usize>(), 548);
+        // Plus one `parent` link for the new team.
+        assert_eq!(operations.iter().sum::<usize>(), 549);
         assert_eq!(operations.iter().max(), Some(&100));
     }
-    let org = db::named_space(&e.pool, None, "Many")
+    let org = named_space(&e.pool, &e.fga, None, "Many")
         .await
         .unwrap()
         .unwrap();
-    spaces::create_personal_space(&e.pool, &e.fga, "user-0", org.id)
+    let personal = spaces::create_personal_space(&e.pool, &e.fga, "user-0", org.id)
         .await
         .unwrap();
-    let collision=parse_blueprint(br#"{"users":[{"username":"new","password":"private-password"}],"organizations":[{"ref":"org","name":"Many","roles":{"new":["admin","member"]}}],"teams":[{"ref":"user-0","name":"user-0","organization":"org","roles":{"new":["admin"]}}],"projects":[]}"#).unwrap();
-    assert!(importer.run(&collision).await.is_err());
-    assert!(directory.find_username("new").await.unwrap().is_none());
+    // A personal space is not a child: a team may share its name and stays distinct.
+    let homonym=parse_blueprint(br#"{"users":[{"username":"new","password":"private-password"}],"organizations":[{"ref":"org","name":"Many","roles":{"new":["admin","member"]}}],"teams":[{"ref":"user-0","name":"user-0","organization":"org","roles":{"new":["admin"]}}],"projects":[]}"#).unwrap();
+    importer.run(&homonym).await.unwrap();
+    let team = named_space(&e.pool, &e.fga, Some(org.id), "user-0")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(team.personal_owner.is_none() && team.id != personal.id);
+    assert_eq!(team.parent_id, Some(org.id));
 }
 
 // Proves: I5, I17, I18
@@ -1906,11 +1921,11 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(report.identities_created, 3);
     let alice = directory.find_username("alice").await.unwrap().unwrap();
     let bob = directory.find_username("bob").await.unwrap().unwrap();
-    let org = db::named_space(&e.pool, None, "Provisioned")
+    let org = named_space(&e.pool, &e.fga, None, "Provisioned")
         .await
         .unwrap()
         .unwrap();
-    let team = db::named_space(&e.pool, Some(org.id), "BID")
+    let team = named_space(&e.pool, &e.fga, Some(org.id), "BID")
         .await
         .unwrap()
         .unwrap();
@@ -1998,7 +2013,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(report["spaces_reconciled"], 4);
     {
         let fault = proxy.fault.lock().await;
-        // Actual Make artifact: U=15, O=1, B=4, G=5; HTTP adds one admin Check.
+        // Actual Make artifact: U=15, O=1, B=4, G=5, C=3; HTTP adds one admin Check.
         assert_eq!(fault.calls.get("check"), Some(&29));
         assert_eq!(fault.calls.get("read"), Some(&18));
         assert_eq!(fault.calls.get("write"), Some(&25));
@@ -2010,13 +2025,13 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
                     + body["deletes"]["tuple_keys"].as_array().map_or(0, Vec::len)
             })
             .sum();
-        assert_eq!(operations, 89);
+        assert_eq!(operations, 92);
     }
-    let demo = db::named_space(&e.pool, None, "Demo")
+    let demo = named_space(&e.pool, &e.fga, None, "Demo")
         .await
         .unwrap()
         .unwrap();
-    let north = db::named_space(&e.pool, Some(demo.id), "northbridge")
+    let north = named_space(&e.pool, &e.fga, Some(demo.id), "northbridge")
         .await
         .unwrap()
         .unwrap();
@@ -2062,7 +2077,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(status, 200, "{report}");
     assert_eq!(report["identities_created"], 0);
     assert_eq!(
-        db::named_space(&e.pool, None, "Demo")
+        named_space(&e.pool, &e.fga, None, "Demo")
             .await
             .unwrap()
             .unwrap()
@@ -2119,12 +2134,13 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(status, 200, "{report}");
     {
         let fault = proxy.fault.lock().await;
-        // U=2, O=1, B=2, H=2 existing-parent fallbacks, N=G=Z=0; HTTP adds C=1.
-        assert_eq!(fault.calls.get("check"), Some(&15));
-        assert_eq!(fault.calls.get("read"), Some(&4));
+        // U=2, O=1, B=2, H=2 existing-parent fallbacks, E=2 existing parents whose
+        // children resolve names, N=G=Z=0; HTTP adds one admin Check.
+        assert_eq!(fault.calls.get("check"), Some(&9));
+        assert_eq!(fault.calls.get("read"), Some(&14));
         assert_eq!(fault.calls.get("write"), Some(&4));
     }
-    let project = db::named_space(&e.pool, Some(north.id), "Project")
+    let project = named_space(&e.pool, &e.fga, Some(north.id), "Project")
         .await
         .unwrap()
         .unwrap();
@@ -2198,7 +2214,7 @@ async fn provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgm
             .expect_err("injected write failure");
         assert!(!format!("{error:?}").contains("private-password"));
         assert!(
-            db::named_space(&e.pool, None, "Provisioned")
+            named_space(&e.pool, &e.fga, None, "Provisioned")
                 .await
                 .unwrap()
                 .is_none()
@@ -2220,7 +2236,7 @@ async fn provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgm
         proxy.fault.lock().await.fail_at = 0;
         let report = importer.run(&provisioning_bundle()).await.unwrap();
         assert_eq!(report.identities_resolved, 3);
-        let org = db::named_space(&e.pool, None, "Provisioned")
+        let org = named_space(&e.pool, &e.fga, None, "Provisioned")
             .await
             .unwrap()
             .unwrap();
@@ -2228,7 +2244,7 @@ async fn provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgm
             !old.contains(&format!("space:{}", org.id)),
             "never reuse rolled-back UUID"
         );
-        let team = db::named_space(&e.pool, Some(org.id), "BID")
+        let team = named_space(&e.pool, &e.fga, Some(org.id), "BID")
             .await
             .unwrap()
             .unwrap();
@@ -2324,7 +2340,7 @@ async fn cancellation_after_fga_write_rolls_back_new_space_and_replays() {
     pending.abort();
     assert!(pending.await.unwrap_err().is_cancelled());
     assert!(
-        db::named_space(&e.pool, None, "Provisioned")
+        named_space(&e.pool, &e.fga, None, "Provisioned")
             .await
             .unwrap()
             .is_none()
@@ -2343,7 +2359,7 @@ async fn cancellation_after_fga_write_rolls_back_new_space_and_replays() {
     .run(&provisioning_bundle())
     .await
     .unwrap();
-    let org = db::named_space(&e.pool, None, "Provisioned")
+    let org = named_space(&e.pool, &e.fga, None, "Provisioned")
         .await
         .unwrap()
         .unwrap();
@@ -2416,7 +2432,7 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
     pending.await.unwrap().unwrap();
     // Import explicitly regrants the parent before granting the child, preserving I4.
     assert!(e.fga.check("bob", Permission::Read, org.id).await.unwrap());
-    let team = db::named_space(&e.pool, Some(org.id), "New")
+    let team = named_space(&e.pool, &e.fga, Some(org.id), "New")
         .await
         .unwrap()
         .unwrap();
@@ -2458,7 +2474,7 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
         .await
         .unwrap();
     assert_eq!(
-        db::named_space(&e.pool, Some(org.id), "New")
+        named_space(&e.pool, &e.fga, Some(org.id), "New")
             .await
             .unwrap()
             .unwrap()
@@ -2848,243 +2864,6 @@ async fn openfga_strict_guard_delete_rejects_an_entire_delayed_write() {
     assert!(actual["condition"].is_null());
 }
 
-/// Build a legacy installation with every supported role, then discard only the
-/// publication pointer. The old-style store contains no protocol tuples.
-async fn legacy_installation() -> (Env, Fga, Space, Space) {
-    let e = env().await;
-    let (org, team) = org_and_team(&e).await;
-    bootstrap::grant_root(&e.pool, &e.fga, "alice")
-        .await
-        .unwrap();
-    for role in [Role::Admin, Role::Member, Role::Editor, Role::Analyst] {
-        grant(&e, org.id, role, "alice").await;
-        grant(&e, team.id, role, "alice").await;
-    }
-    for role in fred_manager::roles::PlatformRole::ALL {
-        e.fga
-            .write_platform(
-                &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
-                "alice",
-                role,
-                true,
-            )
-            .await
-            .unwrap();
-    }
-    for role in [Role::Admin, Role::Member, Role::Editor, Role::Analyst] {
-        let user = format!("space-{}", role.as_str());
-        grant(&e, org.id, Role::Member, &user).await;
-        grant(&e, team.id, role, &user).await;
-    }
-    for role in fred_manager::roles::PlatformRole::ALL {
-        e.fga
-            .write_platform(
-                &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
-                &format!("platform-{}", role.relation()),
-                role,
-                true,
-            )
-            .await
-            .unwrap();
-    }
-    let users: Vec<_> = (0..105).map(|i| format!("migrated-{i}")).collect();
-    let tuples: Vec<_> = users
-        .iter()
-        .map(|user| fred_manager::fga::Tuple {
-            user,
-            role: Role::Member,
-            space: org.id,
-        })
-        .collect();
-    let mut guard = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
-    for batch in tuples.chunks(98) {
-        e.fga.write(&mut guard, batch, &[]).await.unwrap();
-    }
-    let source = Fga::connect(
-        &e.openfga,
-        &e.store,
-        false,
-        false,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap();
-    let http = reqwest::Client::new();
-    let mut old_model: serde_json::Value =
-        serde_json::from_str(include_str!("../openfga/model.json")).unwrap();
-    old_model["type_definitions"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|t| t["type"] != "guard" && t["type"] != "revision");
-    http.post(format!(
-        "{}/stores/{}/authorization-models",
-        e.openfga,
-        source.store_id()
-    ))
-    .json(&old_model)
-    .send()
-    .await
-    .unwrap()
-    .error_for_status()
-    .unwrap();
-    let mut token = String::new();
-    loop {
-        let reply: serde_json::Value = http.post(format!("{}/stores/{}/read", e.openfga, e.fga.store_id()))
-            .json(&serde_json::json!({"continuation_token":token,"page_size":100,"consistency":"HIGHER_CONSISTENCY"}))
-            .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
-        let keys: Vec<_> = reply["tuples"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|t| &t["key"])
-            .filter(|k| !k["object"].as_str().unwrap().starts_with("guard:"))
-            .collect();
-        if !keys.is_empty() {
-            http.post(format!("{}/stores/{}/write", e.openfga, source.store_id()))
-                .json(&serde_json::json!({"writes":{"tuple_keys":keys}}))
-                .send()
-                .await
-                .unwrap()
-                .error_for_status()
-                .unwrap();
-        }
-        token = reply["continuation_token"]
-            .as_str()
-            .unwrap_or_default()
-            .into();
-        if token.is_empty() {
-            break;
-        }
-    }
-    sqlx::query("delete from authorization_store")
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    (e, source, org, team)
-}
-
-// Proves: I4, I8, I9, I18
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn offline_cutover_preserves_roles_and_pins_the_published_store() {
-    let (e, legacy, org, team) = legacy_installation().await;
-    let old_roles = legacy.roles_of("alice").await.unwrap();
-    let old_platform = legacy.platform_grants().await.unwrap();
-    assert!(
-        legacy.clone().initialize(&e.pool, false).await.is_err(),
-        "serve refuses nonempty unbound state"
-    );
-    assert!(
-        legacy.clone().load(&e.pool).await.is_err(),
-        "import cannot initialize"
-    );
-    let active = legacy.clone().initialize(&e.pool, true).await.unwrap();
-    assert_ne!(active.store_id(), legacy.store_id());
-    assert_eq!(active.roles_of("alice").await.unwrap(), old_roles);
-    assert_eq!(active.platform_grants().await.unwrap(), old_platform);
-    for space in [org.id, team.id] {
-        for permission in [Permission::Read, Permission::Write, Permission::Manage] {
-            assert_eq!(
-                active.check("alice", permission, space).await.unwrap(),
-                legacy.check("alice", permission, space).await.unwrap()
-            );
-        }
-    }
-    for role in [Role::Admin, Role::Member, Role::Editor, Role::Analyst] {
-        let user = format!("space-{}", role.as_str());
-        for permission in fred_manager::roles::SpacePermission::ALL {
-            assert_eq!(
-                active
-                    .check_space(&user, permission, team.id)
-                    .await
-                    .unwrap(),
-                legacy
-                    .check_space(&user, permission, team.id)
-                    .await
-                    .unwrap()
-            );
-        }
-    }
-    for role in fred_manager::roles::PlatformRole::ALL {
-        let user = format!("platform-{}", role.relation());
-        for permission in fred_manager::roles::PlatformPermission::ALL {
-            assert_eq!(
-                active.check_platform(&user, permission).await.unwrap(),
-                legacy.check_platform(&user, permission).await.unwrap()
-            );
-        }
-    }
-    assert!(
-        active
-            .check("migrated-104", Permission::Read, org.id)
-            .await
-            .unwrap(),
-        "last migrated page/batch preserved"
-    );
-    assert!(
-        bootstrap::grant_root(&e.pool, &active, "alice")
-            .await
-            .is_err()
-    );
-    assert_eq!(
-        legacy
-            .clone()
-            .initialize(&e.pool, true)
-            .await
-            .unwrap()
-            .store_id(),
-        active.store_id(),
-        "replay never recopies legacy data"
-    );
-    // A late legacy request cannot alter the active destination, including on restart.
-    reqwest::Client::new().post(format!("{}/stores/{}/write", e.openfga, legacy.store_id()))
-        .json(&serde_json::json!({"writes":{"tuple_keys":[{"user":"user:late","relation":"admin","object":"platform:root"}]}}))
-        .send().await.unwrap().error_for_status().unwrap();
-    let restarted = legacy.load(&e.pool).await.unwrap();
-    assert!(!restarted.is_platform_admin("late").await.unwrap());
-    assert!(restarted.is_platform_admin("alice").await.unwrap());
-}
-
-// Proves: I4, I18
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn cutover_rejects_invalid_source_and_replays_ambiguous_copies() {
-    for nth in 1..=4 {
-        let (e, legacy, _, _) = legacy_installation().await;
-        let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
-        let through_proxy = Fga::connect(
-            &proxy.base,
-            &e.store,
-            false,
-            false,
-            None,
-            Some(Duration::from_secs(5)),
-        )
-        .await
-        .unwrap();
-        {
-            let mut fault = proxy.fault.lock().await;
-            fault.fail_at = nth;
-            fault.after = true;
-        }
-        assert!(through_proxy.initialize(&e.pool, true).await.is_err());
-        assert!(
-            legacy.clone().load(&e.pool).await.is_err(),
-            "partial store is never published"
-        );
-        let active = legacy.initialize(&e.pool, true).await.unwrap();
-        assert!(active.is_platform_admin("alice").await.unwrap());
-        assert!(active.guard(&[Scope::Platform]).await.is_ok());
-    }
-    let (e, legacy, _, team) = legacy_installation().await;
-    reqwest::Client::new().post(format!("{}/stores/{}/write",e.openfga,legacy.store_id()))
-        .json(&serde_json::json!({"writes":{"tuple_keys":[{"user":"user:orphan","relation":"member","object":format!("space:{}",team.id)}]}}))
-        .send().await.unwrap().error_for_status().unwrap();
-    assert!(legacy.clone().initialize(&e.pool, true).await.is_err());
-    assert!(legacy.load(&e.pool).await.is_err());
-}
-
 // Proves: I4, I5
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
@@ -3275,82 +3054,6 @@ async fn folder_creation_keeps_one_connection_through_placement_and_write() {
     assert_eq!(db::space(&pool, org.id).await.unwrap().id, org.id);
 }
 
-// Proves: I1, I4, I8, I18
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn cutover_rejects_changed_permissions_and_inconsistent_hierarchy() {
-    for invalid in ["model", "path", "kind"] {
-        let (e, source, org, _team) = legacy_installation().await;
-        match invalid {
-            "model" => {
-                let mut model: serde_json::Value =
-                    serde_json::from_str(include_str!("../openfga/model.json")).unwrap();
-                model["type_definitions"][2]["relations"]["can_read"] =
-                    serde_json::json!({"computedUserset":{"relation":"admin"}});
-                reqwest::Client::new()
-                    .post(format!(
-                        "{}/stores/{}/authorization-models",
-                        e.openfga,
-                        source.store_id()
-                    ))
-                    .json(&model)
-                    .send()
-                    .await
-                    .unwrap()
-                    .error_for_status()
-                    .unwrap();
-            }
-            "path" | "kind" => {
-                let id = Uuid::new_v4();
-                let space = Space {
-                    id,
-                    kind: if invalid == "kind" {
-                        SpaceKind::Project
-                    } else {
-                        SpaceKind::Team
-                    },
-                    name: "invalid".into(),
-                    parent_id: Some(org.id),
-                    personal_owner: None,
-                    path: vec![
-                        if invalid == "path" {
-                            Uuid::new_v4()
-                        } else {
-                            org.id
-                        },
-                        id,
-                    ],
-                };
-                let mut tx = e.pool.begin().await.unwrap();
-                db::insert_space(&mut tx, &space).await.unwrap();
-                tx.commit().await.unwrap();
-                reqwest::Client::new().post(format!("{}/stores/{}/write",e.openfga,source.store_id()))
-                    .json(&serde_json::json!({"writes":{"tuple_keys":[{"user":"user:alice","relation":"admin","object":format!("space:{id}")}]}}))
-                    .send().await.unwrap().error_for_status().unwrap();
-            }
-            _ => unreachable!(),
-        }
-        let error = source
-            .clone()
-            .initialize(&e.pool, true)
-            .await
-            .err()
-            .expect("invalid source cannot publish");
-        let expected = match invalid {
-            "model" => "legacy authorization model changes permission semantics",
-            "path" => "legacy space path disagrees",
-            "kind" => "a project must have a non-personal team",
-            _ => unreachable!(),
-        };
-        assert!(
-            error.to_string().contains(expected),
-            "unexpected error: {error}"
-        );
-        assert!(source.load(&e.pool).await.is_err());
-        assert_eq!(db::space(&e.pool, org.id).await.unwrap().id, org.id);
-    }
-}
-
 // Proves: I18
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
@@ -3401,13 +3104,10 @@ async fn competing_empty_initializers_converge_on_the_published_binding() {
     .await
     .unwrap();
     assert!(
-        ambiguous.clone().initialize(&e.pool, false).await.is_err(),
+        ambiguous.clone().initialize(&e.pool).await.is_err(),
         "unbound ambiguity requires repair"
     );
-    let (a, b) = tokio::join!(
-        source_a.initialize(&e.pool, false),
-        source_b.initialize(&e.pool, false)
-    );
+    let (a, b) = tokio::join!(source_a.initialize(&e.pool), source_b.initialize(&e.pool));
     let (a, b) = (a.unwrap(), b.unwrap());
     assert_eq!(a.store_id(), b.store_id());
     assert_eq!(
@@ -3608,12 +3308,15 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     let bob = directory.find_username("bob").await.unwrap().unwrap().id;
     let mut ids = Vec::new();
     for (name, subject, other) in [("A", &alice, &bob), ("B", &bob, &alice)] {
-        let org = db::named_space(&e.pool, None, name).await.unwrap().unwrap();
-        let team = db::named_space(&e.pool, Some(org.id), "Team")
+        let org = named_space(&e.pool, &e.fga, None, name)
             .await
             .unwrap()
             .unwrap();
-        let project = db::named_space(&e.pool, Some(team.id), "Project")
+        let team = named_space(&e.pool, &e.fga, Some(org.id), "Team")
+            .await
+            .unwrap()
+            .unwrap();
+        let project = named_space(&e.pool, &e.fga, Some(team.id), "Project")
             .await
             .unwrap()
             .unwrap();
@@ -3673,19 +3376,28 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         .unwrap();
     let mut held = hold_organization_lock(&e, org.id).await;
     let id = Uuid::new_v4();
-    db::insert_space(
-        &mut held,
-        &fred_manager::domain::Space {
-            id,
-            kind: SpaceKind::Team,
-            name: "Collision".into(),
-            parent_id: Some(org.id),
-            personal_owner: Some("personal-owner".into()),
-            path: vec![org.id, id],
-        },
-    )
-    .await
-    .unwrap();
+    // An incompatible child kind, linked and inserted while the organization is locked.
+    let row = fred_manager::domain::SpaceRow {
+        id,
+        kind: SpaceKind::Project,
+        name: "Collision".into(),
+        personal_owner: None,
+    };
+    db::insert_space(&mut held, &Space::placed(row, &[org.id], None))
+        .await
+        .unwrap();
+    let mut guard = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
+    e.fga
+        .write_created(
+            &mut guard,
+            &[fred_manager::fga::Link::Parent {
+                child: id,
+                parent: org.id,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
     let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
         onboarding: Default::default(),
         auth: std::sync::Arc::new(server.auth().await),
@@ -3993,4 +3705,369 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             .status(),
         200
     );
+}
+
+/// TSN > BID > project P, all administered by alice, who is a member of TSN and BID.
+async fn tree(e: &Env) -> (Space, Space, Space) {
+    let (org, team) = org_and_team(e).await;
+    let project = spaces::create_space(
+        &e.pool,
+        &e.fga,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "P".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    (org, team, project)
+}
+
+// Proves: I6, I8, I20
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn descending_roles_reach_projects_and_member_stays_local() {
+    use fred_manager::roles::SpacePermission as P;
+    let e = env().await;
+    let (org, team, project) = tree(&e).await;
+    for (user, role) in [
+        ("bob", Role::Editor),
+        ("ana", Role::Analyst),
+        ("max", Role::Member),
+        ("claire", Role::Member),
+        ("pat", Role::Member),
+    ] {
+        grant(&e, org.id, role, user).await;
+    }
+    for space in [org.id, team.id, project.id] {
+        assert!(reads(&e, "bob", space).await);
+        assert!(e.fga.check("bob", Permission::Write, space).await.unwrap());
+        assert!(reads(&e, "ana", space).await);
+        assert!(!e.fga.check("ana", Permission::Write, space).await.unwrap());
+        for p in [
+            P::RunEvaluations,
+            P::ManageEvaluationCorpus,
+            P::ReadConversationsForEvaluation,
+        ] {
+            assert!(e.fga.check_space("ana", p, space).await.unwrap());
+            assert!(!e.fga.check_space("bob", p, space).await.unwrap());
+        }
+    }
+    assert!(reads(&e, "max", org.id).await);
+    assert!(!reads(&e, "max", team.id).await && !reads(&e, "max", project.id).await);
+
+    // A team administrator manages its projects and reads none of their content.
+    grant(&e, team.id, Role::Admin, "claire").await;
+    assert!(
+        e.fga
+            .check("claire", Permission::Manage, project.id)
+            .await
+            .unwrap()
+    );
+    assert!(!reads(&e, "claire", team.id).await && !reads(&e, "claire", project.id).await);
+
+    // A personal space inherits nothing, and its organization still manages it.
+    let personal = spaces::create_personal_space(&e.pool, &e.fga, "pat", org.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        (personal.parent_id, personal.path.clone()),
+        (None, vec![personal.id])
+    );
+    for user in ["bob", "ana", "alice"] {
+        assert!(!reads(&e, user, personal.id).await);
+    }
+    assert!(
+        !e.fga
+            .check("bob", Permission::Write, personal.id)
+            .await
+            .unwrap()
+    );
+    let again = spaces::create_personal_space(&e.pool, &e.fga, "pat", org.id).await;
+    assert!(matches!(again, Err(AppError::Conflict(_))));
+    spaces::revoke(&e.pool, &e.fga, "alice", personal.id, Role::Editor, "pat")
+        .await
+        .unwrap();
+}
+
+// Proves: I4
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn inherited_access_does_not_replace_parent_membership() {
+    let e = env().await;
+    let (org, team, project) = tree(&e).await;
+    grant(&e, org.id, Role::Editor, "bob").await;
+    assert!(reads(&e, "bob", team.id).await);
+    let refused = spaces::grant(&e.pool, &e.fga, "alice", project.id, Role::Member, "bob").await;
+    assert!(matches!(refused, Err(AppError::Conflict(_))));
+    let nominated = spaces::create_space(
+        &e.pool,
+        &e.fga,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Q".into(),
+        "bob",
+    )
+    .await;
+    assert!(matches!(nominated, Err(AppError::Conflict(_))));
+
+    grant(&e, team.id, Role::Member, "bob").await;
+    grant(&e, project.id, Role::Member, "bob").await;
+    // Editor is bob's only content role on TSN while he holds a role in BID.
+    let blocked = spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Editor, "bob").await;
+    assert!(matches!(blocked, Err(AppError::Conflict(_))));
+    grant(&e, org.id, Role::Member, "bob").await;
+    spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Editor, "bob")
+        .await
+        .unwrap();
+    assert!(reads(&e, "bob", project.id).await);
+    assert!(
+        !e.fga
+            .check("bob", Permission::Write, project.id)
+            .await
+            .unwrap()
+    );
+}
+
+// Proves: I20
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn memberships_list_inherited_spaces_with_their_paths() {
+    let e = env().await;
+    let (org, team, project) = tree(&e).await;
+    grant(&e, org.id, Role::Analyst, "ana").await;
+    let personal = spaces::create_personal_space(&e.pool, &e.fga, "ana", org.id)
+        .await
+        .unwrap();
+    let listed: std::collections::BTreeMap<Uuid, spaces::Membership> =
+        spaces::memberships(&e.pool, &e.fga, "ana")
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|m| (m.space.id, m))
+            .collect();
+    assert_eq!(listed.len(), 4);
+    let expect = |id: Uuid, path: Vec<Uuid>, roles: Vec<Role>, inherited: Vec<Role>| {
+        let m = &listed[&id];
+        assert_eq!(m.space.path, path);
+        assert_eq!(
+            m.space.parent_id,
+            path.len().checked_sub(2).map(|i| path[i])
+        );
+        assert_eq!((&m.roles, &m.inherited_roles), (&roles, &inherited));
+    };
+    expect(org.id, vec![org.id], vec![Role::Analyst], vec![]);
+    expect(
+        team.id,
+        vec![org.id, team.id],
+        vec![Role::Analyst],
+        vec![Role::Analyst],
+    );
+    expect(
+        project.id,
+        vec![org.id, team.id, project.id],
+        vec![Role::Analyst],
+        vec![Role::Analyst],
+    );
+    expect(
+        personal.id,
+        vec![personal.id],
+        vec![Role::Member, Role::Editor],
+        vec![],
+    );
+
+    // Direct and inherited admin collapse into one effective, non-inherited role.
+    let alice = spaces::memberships(&e.pool, &e.fga, "alice").await.unwrap();
+    let on_team = alice.iter().find(|m| m.space.id == team.id).unwrap();
+    assert_eq!(on_team.roles, vec![Role::Member, Role::Admin]);
+    assert!(on_team.inherited_roles.is_empty());
+}
+
+// Proves: I7
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn scope_follows_ancestors_and_levels_only_narrow_it() {
+    use SpaceKind::*;
+    let e = env().await;
+    let (org, team, project) = tree(&e).await;
+    for space in [org.id, team.id, project.id] {
+        grant(&e, space, Role::Member, "bob").await;
+    }
+    let scope = |space: Uuid, levels: Option<Vec<SpaceKind>>| {
+        let (pool, fga) = (e.pool.clone(), e.fga.clone());
+        async move { spaces::scope(&pool, &fga, "bob", space, levels.as_deref()).await }
+    };
+    assert_eq!(
+        scope(project.id, None).await.unwrap(),
+        vec![org.id, team.id, project.id]
+    );
+    assert_eq!(scope(team.id, None).await.unwrap(), vec![org.id, team.id]);
+    assert_eq!(
+        scope(project.id, Some(vec![Project])).await.unwrap(),
+        vec![project.id]
+    );
+    assert_eq!(
+        scope(project.id, Some(vec![Organization, Project]))
+            .await
+            .unwrap(),
+        vec![org.id, project.id]
+    );
+    let personal = spaces::create_personal_space(&e.pool, &e.fga, "bob", org.id)
+        .await
+        .unwrap();
+    assert_eq!(scope(personal.id, None).await.unwrap(), vec![personal.id]);
+    assert!(
+        scope(personal.id, Some(vec![Organization]))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let denied = spaces::scope(&e.pool, &e.fga, "eve", project.id, None).await;
+    assert!(matches!(denied, Err(AppError::Forbidden)));
+}
+
+// Proves: I1
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn sibling_names_are_unique_and_uncommitted_links_are_ignored() {
+    use fred_manager::fga::{Link, Tuple};
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let duplicate = spaces::create_space(
+        &e.pool,
+        &e.fga,
+        "alice",
+        SpaceKind::Team,
+        org.id,
+        "BID".into(),
+        "alice",
+    )
+    .await;
+    assert!(matches!(duplicate, Err(AppError::Conflict(_))));
+    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "alice")
+        .await
+        .unwrap();
+    spaces::create_space(
+        &e.pool,
+        &e.fga,
+        "alice",
+        SpaceKind::Team,
+        other.id,
+        "BID".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    assert!(
+        spaces::create_organization(&e.pool, &e.fga, "TSN", "bob")
+            .await
+            .is_err()
+    );
+
+    // A creation whose OpenFGA write succeeded but whose SQL commit failed.
+    let ghost = Uuid::new_v4();
+    let mut guard = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
+    e.fga
+        .write_created(
+            &mut guard,
+            &[Link::Parent {
+                child: ghost,
+                parent: org.id,
+            }],
+            &[Tuple {
+                user: "bob",
+                role: Role::Member,
+                space: ghost,
+            }],
+        )
+        .await
+        .unwrap();
+    grant(&e, org.id, Role::Member, "bob").await;
+    let listed = spaces::memberships(&e.pool, &e.fga, "bob").await.unwrap();
+    assert_eq!(
+        listed.iter().map(|m| m.space.id).collect::<Vec<_>>(),
+        vec![org.id]
+    );
+    spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Member, "bob")
+        .await
+        .unwrap();
+}
+
+// Proves: I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn startup_refuses_existing_state_without_a_publication() {
+    let e = env().await;
+    spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+        .await
+        .unwrap();
+    sqlx::query("delete from authorization_store")
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let fresh = Fga::connect(
+        &e.openfga,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap();
+    let error = fresh.initialize(&e.pool).await.err().unwrap().to_string();
+    assert!(error.contains("reset local Fred data"), "{error}");
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn hierarchy_reads_have_fixed_request_budgets() {
+    let e = env().await;
+    let (org, team, project) = tree(&e).await;
+    grant(&e, org.id, Role::Analyst, "ana").await;
+    spaces::create_personal_space(&e.pool, &e.fga, "ana", org.id)
+        .await
+        .unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let fga = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    let budget = || async {
+        let mut fault = proxy.fault.lock().await;
+        let get = |name: &str| fault.calls.get(name).copied().unwrap_or(0);
+        let counts = (get("check"), get("read"));
+        fault.calls.clear();
+        counts
+    };
+    budget().await;
+    // Direct roles, the personal space's organization, then TSN's and BID's children.
+    assert_eq!(
+        spaces::memberships(&e.pool, &fga, "ana")
+            .await
+            .unwrap()
+            .len(),
+        4
+    );
+    assert_eq!(budget().await, (0, 4));
+    // One Check, then the project's two parent links.
+    spaces::scope(&e.pool, &fga, "ana", project.id, None)
+        .await
+        .unwrap();
+    assert_eq!(budget().await, (1, 2));
+    spaces::scope(&e.pool, &fga, "ana", team.id, None)
+        .await
+        .unwrap();
+    assert_eq!(budget().await, (1, 1));
 }

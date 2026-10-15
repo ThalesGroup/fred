@@ -28,7 +28,17 @@ pub enum SpaceKind {
     Project,
 }
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
+/// What SQL stores about a space. Its placement lives in OpenFGA links.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SpaceRow {
+    pub id: Uuid,
+    pub kind: SpaceKind,
+    pub name: String,
+    pub personal_owner: Option<String>,
+}
+
+/// A space with its placement read from OpenFGA.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct Space {
     pub id: Uuid,
     pub kind: SpaceKind,
@@ -37,7 +47,28 @@ pub struct Space {
     pub parent_id: Option<Uuid>,
     #[schema(required = true)]
     pub personal_owner: Option<String>,
+    /// Ancestors then self: the search scope. A personal space's path is itself.
     pub path: Vec<Uuid>,
+    /// The organization whose lock serializes this space's mutations.
+    #[serde(skip)]
+    pub organization: Uuid,
+}
+
+impl Space {
+    /// `ancestors` from the organization down; `organization` only for a personal space.
+    pub fn placed(row: SpaceRow, ancestors: &[Uuid], organization: Option<Uuid>) -> Space {
+        let mut path = ancestors.to_vec();
+        path.push(row.id);
+        Space {
+            organization: organization.unwrap_or(path[0]),
+            parent_id: ancestors.last().copied(),
+            path,
+            id: row.id,
+            kind: row.kind,
+            name: row.name,
+            personal_owner: row.personal_owner,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
@@ -64,7 +95,9 @@ pub struct Document {
 }
 
 /// Direct roles stored in OpenFGA.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     Member,
@@ -96,6 +129,11 @@ impl Role {
     /// Admin is governance only: it grants no access to content.
     pub fn grants_content(self) -> bool {
         matches!(self, Role::Member | Role::Editor | Role::Analyst)
+    }
+
+    /// Roles the model extends to every descendant space.
+    pub fn descends(self) -> bool {
+        !matches!(self, Role::Member)
     }
 }
 
@@ -144,12 +182,6 @@ pub fn check_parent(kind: SpaceKind, parent: Option<&Space>) -> Result<(), RuleE
     }
 }
 
-pub fn space_path(parent: Option<&Space>, id: Uuid) -> Vec<Uuid> {
-    let mut path = parent.map(|p| p.path.clone()).unwrap_or_default();
-    path.push(id);
-    path
-}
-
 pub fn folder_path(parent: Option<&Folder>, id: Uuid) -> String {
     let base = parent.map(|p| p.path.as_str()).unwrap_or("/");
     format!("{base}{id}/")
@@ -174,14 +206,15 @@ mod tests {
     use super::*;
 
     fn space(kind: SpaceKind, parent: Option<&Space>, personal: bool) -> Space {
-        let id = Uuid::new_v4();
-        Space {
-            id,
+        let row = SpaceRow {
+            id: Uuid::new_v4(),
             kind,
             name: "x".into(),
-            parent_id: parent.map(|p| p.id),
             personal_owner: personal.then(|| "bob".into()),
-            path: space_path(parent, id),
+        };
+        match (personal, parent) {
+            (true, Some(org)) => Space::placed(row, &[], Some(org.id)),
+            _ => Space::placed(row, parent.map_or(&[], |p| &p.path), None),
         }
     }
 
@@ -211,8 +244,14 @@ mod tests {
         let tsn = space(SpaceKind::Organization, None, false);
         let bid = space(SpaceKind::Team, Some(&tsn), false);
         let proj = space(SpaceKind::Project, Some(&bid), false);
+        let alice = space(SpaceKind::Team, Some(&tsn), true);
         assert_eq!(bid.path, vec![tsn.id, bid.id]);
         assert_eq!(proj.path, vec![tsn.id, bid.id, proj.id]);
+        assert_eq!(proj.organization, tsn.id);
+        assert_eq!(
+            (alice.path.clone(), alice.organization),
+            (vec![alice.id], tsn.id)
+        );
     }
 
     #[test]

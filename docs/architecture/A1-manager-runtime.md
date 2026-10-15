@@ -83,12 +83,12 @@ flowchart TB
 | --- | --- | --- |
 | `api` | HTTP surface, one OpenFGA check per content access | handlers stay thin; mutations live in `spaces` and `platform` |
 | `auth` | `CurrentUser` extractor, JWKS cache | [security](03-security.md) |
-| `spaces` | space/role mutations, folder creation and local write authorization | organization lock plus atomic guard (I4, I5) |
+| `spaces` | placement from OpenFGA links, space/role mutations, memberships, search scope, folder creation and local write authorization | organization lock plus atomic guard (I4, I5) |
 | `onboarding` | versioned consent, admitted/own-human extractors | acceptance is independent of roles and memberships (I19) |
 | `bootstrap` | the one-time root grant | two steps under the bootstrap lock (I9) |
 | `domain` | `Space`, `Folder`, `Document`, roles, parent rules | pure functions, unit-tested (I1, I7) |
 | `db` | content and space SQL | placement columns written by inserts only (I2) |
-| `fga` | pinned store/model, check, read, guarded write; offline cutover | roles stay in OpenFGA; SQL publishes only the store/model binding |
+| `fga` | pinned store/model, check, role and link reads, guarded write; empty-store publication | roles and the space tree stay in OpenFGA; SQL publishes only the store/model binding |
 | `ingestion` | `IngestDocument`, `DeleteDocument` submission | one workflow id per document and operation |
 | `logging` | output format, request span, completion event | [logging](A3-manager-operations.md#logging) (I11, I13) |
 | `error` | status codes, `{"detail": ...}` bodies | [errors](A3-manager-operations.md#errors) |
@@ -166,9 +166,11 @@ sequenceDiagram
 ## Search scope
 
 A service acting for a user calls with that user's own token. The scope is the space
-and its ancestors, never its descendants (I7): from a team, a project's content is out
-of scope. The caller filters indexed content with `space_id` in the returned ids, and
-narrows to a folder with a `folder_path` prefix.
+and its ancestors, organization first, never its descendants (I7): from a team, a
+project's content is out of scope. A personal space's scope is itself. An optional
+`levels` list keeps only the organization, team or project levels it names; it never
+adds a space. The caller filters indexed content with `space_id` in the returned ids,
+and narrows to a folder with a `folder_path` prefix.
 
 ```mermaid
 sequenceDiagram
@@ -176,19 +178,38 @@ sequenceDiagram
     participant M as fred-manager
     participant PG as Postgres
     participant FGA as OpenFGA
-    S->>M: POST /authorize/scope {space_id}, user's token
+    S->>M: POST /authorize/scope {space_id, levels?}, user's token
     M->>PG: select space
     M->>FGA: check user can_read space:{space_id}
-    M-->>S: {space_ids: path of the space}
+    M->>FGA: read parent links up to the organization
+    M-->>S: {space_ids: ancestors then self, filtered by levels}
 ```
+
+
+## Memberships
+
+`GET /me/spaces` lists every space where the caller holds a direct role or one
+descending from an ancestor, with its path. `roles` holds the effective roles and
+`inherited_roles` those held only through an ancestor. Manager reads the caller's
+direct roles, each directly granted space's `parent` (or a personal space's
+`organization`) link, then the children of each organization and team where the
+caller holds a descending role. It does not use `ListObjects`, whose server-side
+result limit truncates silently. The computed roles serve display only; every
+decision remains a Check (I20).
 
 
 ## Role and space mutations
 
 `grant`, `revoke`, `create_space` and `create_personal_space` take a transaction-scoped
 advisory lock keyed by the organization, capture its guard revision, then check and
-write under it (I4, I5). SQL locks order live callers; OpenFGA guard consumption
+write under it (I4, I5). The organization comes from the space's immutable links,
+read before locking. SQL locks order live callers; OpenFGA guard consumption
 rejects stale remote writes that outlive their caller or transaction.
+
+Creation writes the new space's `parent` link (or a personal space's `organization`
+link) in the same Write as its initial grants, after checking that no committed
+sibling has the same name, or that the owner has no personal space in that
+organization. Children whose SQL row never committed are ignored.
 
 ```mermaid
 sequenceDiagram
@@ -198,18 +219,19 @@ sequenceDiagram
     participant FGA as OpenFGA
     C->>M: PUT /spaces/{id}/roles/{role}/{user}
     M->>PG: select space
+    M->>FGA: read parent links up to the organization
     M->>PG: begin, pg_advisory_xact_lock(organization)
     M->>FGA: read organization guard revision
     M->>FGA: check caller can_manage space
-    M->>FGA: check target can_read parent
+    M->>FGA: read target's direct roles on the parent
     M->>FGA: atomic role write and guard replacement, strict old-guard delete
     M->>PG: commit, lock released
     M-->>C: 204
 ```
 
-Revocation also reads the target's roles and the space's children under the lock, and
-refuses with 409 when the target would keep a role in a child without reading its
-parent. Removing the last administrator of a non-personal space is refused with 409 (I14).
+Revocation also reads the target's roles and the space's children under the lock
+(and, for an organization, the personal spaces it manages), and refuses with 409
+when the target would keep a role there without a direct content role here. Removing the last administrator of a non-personal space is refused with 409 (I14).
 Removing a role never grants a replacement content role. A personal space is managed from its organization: an organization admin may
 revoke its owner's roles, nobody may grant any (I6).
 
@@ -303,12 +325,13 @@ capabilities are defined in `roles.rs` and the model in [model and contracts](A2
 resolve the space, returning 404 for an unknown id.
 
 `GET /admin/teams` requires `can_list_all_teams` and returns at most 100 non-personal
-team metadata records ordered by UUID. `?after=<uuid>` continues after the last id;
-it confers no content access.
+team metadata records ordered by UUID, each placed by one concurrent `parent` Read.
+`?after=<uuid>` continues after the last id; it confers no content access.
 
 Team creation accepts either management of the parent organization or the platform
 `can_create_team` capability. It takes the platform lock before the organization lock,
-then checks authorization. The nominated team administrator must read the parent.
+then checks authorization. The nominated team administrator must hold a direct
+content role on the parent, and no sibling may have the same name.
 The caller receives no implicit role; project creation still requires local governance.
 
 
@@ -334,8 +357,9 @@ sequenceDiagram
     C->>PG: lock platform, verify root-only declarations, release
     C->>KC: preflight every exact username and missing password
     C->>PG: lock platform, resolve roots, lock organizations in UUID order
-    C->>PG: resolve children, validate collisions and new-space admins
-    C->>FGA: check existing parent content when not declared
+    C->>FGA: read children of existing parents
+    C->>PG: resolve child names, validate collisions and new-space admins
+    C->>FGA: read existing direct parent roles when not declared
     C->>PG: release read-only locks
     loop each identity
         C->>PG: lock platform
@@ -349,7 +373,7 @@ sequenceDiagram
         C->>FGA: initialize new guard, capture platform and organization revisions
         C->>FGA: recheck authority and subtree parent requirements
         C->>PG: insert missing rows in parent-first order
-        C->>FGA: guarded parent-first role batches, audit acknowledgments
+        C->>FGA: guarded parent-first batches: a new space's parent link with its first grants, audit acknowledgments
     end
     C->>FGA: capture platform guard, recheck authority and grant platform roles
     C->>PG: commit space rows, release locks
@@ -361,13 +385,14 @@ errors fail whole-bundle preflight before provisioning writes (I18). Directory
 traversal holds no mutation lock. Child names are read only after acquiring all
 organization locks. Reconciliation retains those locks and the platform lock through
 SQL commit. It captures revisions before rechecking authority and parent access,
-then carries acknowledged revisions through batches of at most 96 space-role tuples
-plus four guard operations (I4, I5). A subtree with no role writes consumes its guard
+then carries acknowledged revisions through batches of at most 96 link and space-role
+tuples plus four guard operations (I4, I5). A subtree with no role writes consumes its guard
 explicitly. Platform grants use the platform guard and recheck identity existence.
 
-Organizations resolve by root name, teams by organization/name, projects by team/name.
-Existing committed IDs are reused; incompatible-kind and personal-space collisions
-are refused. Bundle references only identify declarations within that input.
+Organizations resolve by root name, teams by organization/name, projects by team/name,
+among the committed children linked to the parent in OpenFGA. Personal spaces are not
+children and take no part in name resolution. Existing committed IDs are reused;
+incompatible-kind collisions are refused. Bundle references only identify declarations within that input.
 Exact username lookup is paginated and rejects ambiguous/inexact replies; a creation
 conflict triggers a fresh lookup. Existing profiles and credentials are preserved.
 
@@ -388,22 +413,22 @@ remote effects have the dispatch boundary described by I5 in [invariants](09-qua
 
 | Id | Decision | Because | Consequence |
 | --- | --- | --- | --- |
-| D1 | The space tree lives in SQL; OpenFGA holds direct roles only, no parent relation. | A parent relation in OpenFGA makes each check traverse the tree and each move rewrite tuples. | One check per access; fred-manager enforces the parent rule (I4). |
-| D2 | Organization > team > project; a personal space is a one-member team. | One model for every container. | Personal spaces have their own management rule (I6). |
+| D1 | The space tree lives only in OpenFGA as immutable `parent` links; editor, admin and analyst descend, member does not. | One authority answers who may do what where, including roles reaching descendants. | One Check per access, evaluated through at most two parents; placement and structure operations read links (I20). |
+| D2 | Organization > team > project; a personal space is a one-member team without parent. | One model for every container; a personal space stays private to its owner. | Personal spaces inherit nothing and have their own management rule (I6). |
 | D3 | Folders carry no rights. | Rights per folder bring back traversal and per-item lists. | Access granularity is the space. |
 | D4 | Placement is immutable; a move is a re-import. | Storage keys and indexed content carry placement. | Renames are free; a move costs a re-ingestion. |
-| D5 | A space's search scope is its ancestors and itself. | Content of a project stays out of its team's scope. | A project reads its team's and organization's content. |
+| D5 | A space's search scope is its ancestors and itself; levels only narrow it. | Content of a project stays out of its team's scope. | A project reads its team's and organization's content unless the caller removes those levels. |
 | D6 | Admin roles grant no content access. | Governing is not reading. | An admin who reads also holds a content role. |
 | D7 | Organization mutations hold a Postgres advisory lock and consume an OpenFGA guard captured before checks. | SQL locks alone cannot stop a remote write after cancellation. | Live callers serialize; stale remote writes fail atomically. |
 | D8 | Root bootstrap in two steps under one lock: reservation committed, then grant and completion. | No double promotion, no reopening. | A failed grant can only be finished by its claimant. |
 | D9 | Configuration, secrets and log output follow Fred's service conventions. | One way to operate every Fred service. | `sourceLocation.function` holds the module path. |
 | D10 | Shared infrastructure, own OpenFGA store. | No dedicated infrastructure to run. | Table names are unique in `fred`; `fred-manager` is the logical store name; SQL pins its active store/model IDs. |
 | D11 | Deployed with fred's chart as a separate release. | One chart for every Fred service. | The release references the chart without its `values.schema.json` ([operations reference](A3-manager-operations.md)). |
-| D12 | All assignable Fred roles have explicit typed equivalents; space admin and content roles remain orthogonal. | Silent role loss and implicit content grants change authorization meaning. | Analyst is a content role; revocation never adds a fallback role. |
+| D12 | All assignable Fred roles have explicit typed equivalents; space admin and content roles remain orthogonal. A child role requires a direct parent content role. | Silent role loss and implicit content grants change authorization meaning. | Analyst is a content role; revocation never adds a fallback role. |
 | D13 | Platform mutations and delegated team creation share the bootstrap lock, acquired before the organization lock. | Platform revocation must serialize with dependent writes. | A revoked administrator cannot finish a waiting mutation; the root grant is protected. |
 | D14 | Directory operations use a dedicated service client and raw Keycloak subjects in the same realm as callers. | Caller tokens do not carry directory administration privileges. | Grants validate identity existence; revocation tolerates deleted identities. |
 | D15 | Import uses authenticated, read-only initialization and a distinct Keycloak service identity. | Service-client credentials must not substitute for Fred operator authority. | Bootstrap and compatible schema/model initialization precede import; Temporal is not involved. |
 | D16 | Provisioning is additive and replayable, with identity phases separate from the space transaction. | Keycloak, SQL and OpenFGA do not share a transaction. | Partial effects remain; replay preserves committed IDs and repairs grants. Rolled-back space IDs are not reused. |
 | D17 | Strict guard deletion and role changes share one OpenFGA Write. | A consumed revision rejects stale decisions without copying the role set. | One guard Read and two additional tuple operations per guarded scope; conflicting attempts reauthorize on replay. |
-| D18 | Existing authorization migrates offline into a fresh store, published once in SQL. | Legacy unguarded writes cannot safely share the new destination. | Source quiescence is an operator precondition; failed destinations stay unpublished and are never reused. |
+| D18 | Startup publishes a fresh store only for an empty installation, once, in SQL. | Existing state cannot be converted safely into a different model. | Existing state without a matching publication requires a data reset. |
 | D19 | One version-2 ZIP with explicit organizations, teams, projects and direct roles serves CLI and HTTP. | Reconciliation needs unambiguous parent scope and complete preflight. | Legacy formats are explicitly unsupported; bundle-local references do not add persistent identity or imply content grants. |

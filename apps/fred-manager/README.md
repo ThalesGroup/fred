@@ -84,7 +84,8 @@ with `GET /users/platform-roles`, and grant/revoke with
 `feature_manager` and `prompt_editor` are also supported.
 
 Space roles are `member`, `editor`, `analyst` and `admin`. They are cumulative;
-admin alone does not read content. The last admin of a non-personal space cannot be
+admin alone does not read content. Editor, admin and analyst also apply to every
+descendant space; member stays local, and a personal space inherits nothing. The last admin of a non-personal space cannot be
 revoked. Capability checks and their contracts are in the
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
 
@@ -133,7 +134,7 @@ the demo includes such a declaration. Archive limits are 50 MiB compressed and
 
 Existing identities keep their profile and password; new identities need a
 nonempty password. All space roles are explicit: admin alone grants no content
-access, and every child-role holder needs parent content membership. Replay
+access, and every child-role holder needs a direct parent content role. Replay
 preserves committed space IDs and undeclared grants and repairs requested grants.
 Success returns JSON counts only after completion. A failed run reports a safe
 phase and acknowledgment counts; correct the cause and replay with a valid token.
@@ -175,14 +176,12 @@ dependencies and Chromium are already installed.
 
 ## Upgrade existing authorization
 
-Stop legacy manager writers and settle pending requests, then run
-`make migrate-authorization` with the normal operator configuration. Existing
-nonempty installations refuse automatic cutover during `serve`. The command
-preserves supported roles, permissions, space IDs and bootstrap state in a fresh
-OpenFGA store and publishes its IDs in SQL; replay never recopies a published store.
-Invalid legacy models, hierarchy or grants require repair before cutover. The
-[deployment chapter](../../docs/architecture/A3-manager-operations.md#offline-authorization-cutover)
-defines the offline precondition and failure behavior.
+Manager publishes a fresh OpenFGA store only for an empty installation and never
+converts existing data. When `serve` refuses existing state or a changed model,
+reset local Fred data (`make k3d-app-reset DIR=<fred checkout> CONFIRM=reset` from
+the factory), then repeat CGU acceptance, bootstrap and import. The
+[deployment chapter](../../docs/architecture/A3-manager-operations.md#authorization-store-publication)
+describes the publication rules.
 
 A role mutation that loses its authorization revision returns a conflict; replay
 rechecks current authority. Timeout is not rollback. Roles and permission evaluation

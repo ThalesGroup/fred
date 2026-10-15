@@ -21,7 +21,7 @@ use fred_manager::{
     api, auth, config::Configuration as Config, fga::Fga, ingestion, logging, spaces,
 };
 
-const USAGE: &str = "usage: fred-manager [serve | generate-openapi | migrate-authorization | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: fred-manager [serve | generate-openapi | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -71,17 +71,6 @@ async fn main() -> Result<()> {
         .as_slice()
     {
         [] | ["serve"] => serve(config).await,
-        ["migrate-authorization"] => {
-            async {
-                let pool = pool(&config).await?;
-                fga(&config)
-                    .await?
-                    .initialize(&pool, true)
-                    .await
-                    .map(|_| ())
-            }
-            .await
-        }
         ["create-org", name, admin] => create_org(config, name, admin).await,
         ["import-provisioning", bundle, "--token-file", token] => {
             import(config, bundle, token).await
@@ -122,7 +111,7 @@ async fn fga(config: &Config) -> Result<Fga> {
 async fn serve(config: Config) -> Result<()> {
     let pool = pool(&config).await?;
     let fga = if config.security.rebac.sync_schema_on_init {
-        fga(&config).await?.initialize(&pool, false).await?
+        fga(&config).await?.initialize(&pool).await?
     } else {
         fga(&config).await?.load(&pool).await?
     };

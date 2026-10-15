@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the direct-role/union subset used by this service; refuse other DSL."""
+"""Compile the direct-role, union and parent-inheritance subset used by this service; refuse other DSL."""
 import argparse
 import json
 import re
@@ -23,9 +23,14 @@ for raw in (root / 'openfga/model.fga').read_text().splitlines():
         children = []
         direct = None
         for term in match[2].split(' or '):
-            if direct_type := re.fullmatch(r'\[(user|revision)\]', term):
+            if direct_type := re.fullmatch(r'\[(user|revision|space)\]', term):
                 direct = direct_type[1]
                 children.append({'this': {}})
+            elif inherited := re.fullmatch(r'(\w+) from (\w+)', term):
+                children.append({'tupleToUserset': {
+                    'tupleset': {'relation': inherited[2]},
+                    'computedUserset': {'relation': inherited[1]},
+                }})
             elif re.fullmatch(r'\w+', term):
                 children.append({'computedUserset': {'relation': term}})
             else:

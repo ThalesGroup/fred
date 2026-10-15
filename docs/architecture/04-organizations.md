@@ -6,33 +6,48 @@ Authentication, consent and role authority are defined in [Security](03-security
 ## Spaces and memberships
 
 An organization is a root. A team belongs to one organization; a project belongs
-to one non-personal team. A personal space is a team with one owner and no project.
-Names are unique within the parent; identically named teams in different organizations
-remain different spaces. Placement is immutable; names can change.
+to one non-personal team. A personal space is a team with one owner, no parent and
+no project; its organization manages it. Names are unique among siblings and among
+organizations; identically named teams in different organizations remain different
+spaces. Placement is immutable; names can change.
 
-A role on a child requires a content role on its parent. Management and content
-roles remain separate: a team administrator still needs parent content access,
-and receives no implicit content role on the team. Roles do not propagate between
-spaces. A personal space accepts no additional member; its organization can revoke
-its owner's access. Every non-personal space retains an administrator.
+Editor, admin and analyst reach every descendant space; member stays local. An
+analyst of an organization therefore sees all its teams and projects, and a
+project cannot be hidden from its team's editors, administrators or analysts.
+Management and content roles remain separate: an administrator manages the space
+and its descendants and reads none of their content without a content role.
 
-The tree is in SQL; OpenFGA has no parent relation. `path` holds ancestors then self.
+A role on a child requires a direct content role on its parent: a person is a
+member of a team before holding a project role, even when an ancestor role already
+lets them read the team. A personal space accepts no additional member and inherits
+nothing; its organization can revoke its owner's access, and the owner leaves the
+organization only after leaving the personal space. Every non-personal space
+retains an administrator.
+
+The tree lives in OpenFGA as `parent` links; SQL stores only each space's identity,
+kind, name and personal owner. A personal space has an `organization` link instead,
+which no permission uses. A space's path holds its ancestors then itself.
 
 ```mermaid
 flowchart TB
     tsn["TSN<br/>organization<br/>path: tsn"]
     bid["BID<br/>team<br/>path: tsn, bid"]
-    alice["alice<br/>personal team<br/>path: tsn, alice"]
+    alice["alice<br/>personal team<br/>path: alice"]
     p1["Bid 2026<br/>project<br/>path: tsn, bid, p1"]
-    tsn --> bid & alice
-    bid --> p1
+    tsn -- parent --> bid
+    bid -- parent --> p1
+    tsn -. organization .-> alice
 ```
 
 | Scope requested from | Search scope (`space_id` in) |
 | --- | --- |
 | BID | TSN, BID |
 | Bid 2026 | TSN, BID, Bid 2026 |
-| alice | TSN, alice |
+| Bid 2026, levels `project` | Bid 2026 |
+| alice | alice |
+
+A caller may restrict a scope to some of the organization, team and project levels;
+levels only remove spaces from it.
 
 Folders classify only and carry no rights. A document's artefacts have no
 authorization identity of their own: they are stored under its storage prefix

@@ -285,6 +285,7 @@ export type Space = {
   kind: SpaceKind;
   name: string;
   parent_id: string | null;
+  /** Ancestors then self: the search scope. A personal space's path is itself. */
   path: string[];
   personal_owner: string | null;
 };
@@ -314,11 +315,14 @@ export type PlatformCheck = {
   permission: PlatformPermission;
 };
 export type Scope = {
-  /** Filter for chunks and metadata: `space_id` must be one of these. Ancestors only,
-    never descendants: a team conversation never sees its projects' content. */
+  /** Filter for chunks and metadata: `space_id` must be one of these. The space and its
+    ancestors, never descendants: a team conversation never sees its projects' content.
+    A personal space's scope is itself. */
   space_ids: string[];
 };
 export type AuthorizeScope = {
+  /** Keep only spaces of these kinds; omitted keeps every level. Never adds a space. */
+  levels?: SpaceKind[] | null;
   space_id: string;
 };
 export type SpacePermission =
@@ -435,6 +439,9 @@ export type CreatePersonalSpace = {
 };
 export type Role = "member" | "editor" | "admin" | "analyst";
 export type MySpace = Space & {
+  /** The subset of `roles` held only through an ancestor. */
+  inherited_roles: Role[];
+  /** Effective roles, including those descending from an ancestor. */
   roles: Role[];
 };
 export type CreateSpace = {

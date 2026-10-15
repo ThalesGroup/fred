@@ -253,27 +253,17 @@ name to exist. Local frontend `make docker-run` supplies
 `http://host.docker.internal:8400`. Access logs use the bounded `fred-manager`
 route family without exposing paths, tokens or upload contents.
 
-## Offline authorization cutover
+## Authorization store publication
 
-An unbound installation with spaces, bootstrap state or legacy tuples refuses
-normal startup initialization. The operator stops all legacy manager writers and
-settles their pending requests before running `make migrate-authorization` from
-`apps/fred-manager`. The command uses the same configuration and local operator
-trust boundary as `create-org`. It does not detect source quiescence; its paginated
-capture requires that precondition.
-
-The command validates the source model's permission semantics, raw direct tuples,
-SQL parent/path consistency, personal roles, administrators and parent access. It
-copies the validated snapshot into a fresh store, initializes guards and publishes
-its store/model IDs in one SQL commit. Space IDs and bootstrap state remain intact.
-A replay reads an existing publication or starts a fresh unpublished attempt;
-it never resumes writing a partially copied store. Unpublished stores remain
-inactive. Late writes to the legacy store cannot change active permissions.
-
-`sync_schema_on_init` allows initialization of an entirely empty installation.
-Existing bindings pin the exact model even when a newer model exists. Missing or
-incompatible pinned state fails closed. Changing the configured logical store name
-does not select a different authorization source behind an existing binding.
+`sync_schema_on_init` allows initialization of an entirely empty installation: manager
+creates a fresh store, writes its model, initializes the platform guard and publishes
+the store/model IDs in one SQL commit. Existing bindings pin the exact model even
+when a newer model exists. An installation with spaces, bootstrap state or tuples but
+no binding, or a binding whose model differs from the built model, refuses startup:
+manager never converts existing authorization data. On a dedicated local k3d, the
+[local data reset](08-operations.md) clears manager data and authorization together.
+Changing the configured logical store name does not select a different
+authorization source behind an existing binding.
 
 ## First-user application entry
 

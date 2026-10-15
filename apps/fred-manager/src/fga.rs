@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Minimal OpenFGA HTTP client: check, write, and read a user's direct roles.
+//! Minimal OpenFGA HTTP client: check, write, and read direct roles and the space tree.
 //! Startup follows fred-core's engine: find the store by name, create it if allowed,
 //! then write the model when `sync_schema_on_init` is set.
 
@@ -86,6 +86,25 @@ impl Tuple<'_> {
             "relation": self.role.as_str(),
             "object": format!("space:{}", self.space),
         })
+    }
+}
+
+/// Placement of a new space, written once with its creation grants and never removed.
+pub enum Link {
+    Parent { child: Uuid, parent: Uuid },
+    Organization { personal: Uuid, organization: Uuid },
+}
+
+impl Link {
+    fn key(&self) -> Value {
+        let (relation, object, user) = match self {
+            Self::Parent { child, parent } => ("parent", child, parent),
+            Self::Organization {
+                personal,
+                organization,
+            } => ("organization", personal, organization),
+        };
+        json!({ "user": format!("space:{user}"), "relation": relation, "object": format!("space:{object}") })
     }
 }
 
@@ -202,6 +221,25 @@ impl Fga {
             guard,
             writes.iter().map(Tuple::key).collect(),
             deletes.iter().map(Tuple::key).collect(),
+        )
+        .await
+    }
+
+    /// Links and grants land in one Write, so a placed space never lacks its creator's grants.
+    pub async fn write_created(
+        &self,
+        guard: &mut Guard,
+        links: &[Link],
+        grants: &[Tuple<'_>],
+    ) -> Result<()> {
+        self.write_guarded(
+            guard,
+            links
+                .iter()
+                .map(Link::key)
+                .chain(grants.iter().map(Tuple::key))
+                .collect(),
+            vec![],
         )
         .await
     }
@@ -397,6 +435,87 @@ impl Fga {
             .collect())
     }
 
+    /// A user's direct roles on one space.
+    pub async fn direct_roles_on(&self, user: &str, space: Uuid) -> Result<Vec<Role>> {
+        Ok(self
+            .read_keys(
+                json!({ "user": format!("user:{user}"), "object": format!("space:{space}") }),
+            )
+            .await?
+            .iter()
+            .filter_map(|k| Role::parse(&k.relation))
+            .collect())
+    }
+
+    /// The space a `parent` or `organization` link of `space` points to.
+    pub async fn link_of(&self, space: Uuid, organization: bool) -> Result<Option<Uuid>> {
+        let relation = if organization {
+            "organization"
+        } else {
+            "parent"
+        };
+        let keys = self
+            .read_keys(json!({ "object": format!("space:{space}"), "relation": relation }))
+            .await?;
+        anyhow::ensure!(keys.len() <= 1, "space has several {relation} links");
+        keys.first().map(|k| space_id(&k.user)).transpose()
+    }
+
+    /// Spaces linked to `space` as their parent, or as their organization for personal spaces.
+    pub async fn linked_to(&self, space: Uuid, organization: bool) -> Result<Vec<Uuid>> {
+        let relation = if organization {
+            "organization"
+        } else {
+            "parent"
+        };
+        self.read_keys(
+            json!({ "user": format!("space:{space}"), "relation": relation, "object": "space:" }),
+        )
+        .await?
+        .iter()
+        .map(|k| space_id(&k.object))
+        .collect()
+    }
+
+    /// One concurrent `parent` (or `organization`) Read per space.
+    pub async fn links_of(
+        &self,
+        spaces: &[Uuid],
+        organization: bool,
+    ) -> Result<Vec<(Uuid, Option<Uuid>)>> {
+        self.concurrently(spaces, move |fga, id| async move {
+            fga.link_of(id, organization).await
+        })
+        .await
+    }
+
+    /// One concurrent children Read per space.
+    pub async fn children_of(&self, spaces: &[Uuid]) -> Result<Vec<(Uuid, Vec<Uuid>)>> {
+        self.concurrently(
+            spaces,
+            |fga, id| async move { fga.linked_to(id, false).await },
+        )
+        .await
+    }
+
+    async fn concurrently<T, F, Fut>(&self, spaces: &[Uuid], read: F) -> Result<Vec<(Uuid, T)>>
+    where
+        T: Send + 'static,
+        F: Fn(Fga, Uuid) -> Fut,
+        Fut: std::future::Future<Output = Result<T>> + Send + 'static,
+    {
+        let mut reads = tokio::task::JoinSet::new();
+        for &id in spaces {
+            let pending = read(self.clone(), id);
+            reads.spawn(async move { pending.await.map(|value| (id, value)) });
+        }
+        let mut out = Vec::with_capacity(spaces.len());
+        while let Some(result) = reads.join_next().await {
+            out.push(result??);
+        }
+        Ok(out)
+    }
+
     async fn read_keys(&self, key: Value) -> Result<Vec<StoredKey>> {
         #[derive(Deserialize)]
         struct Item {
@@ -436,6 +555,14 @@ impl Fga {
             body["authorization_model_id"] = json!(model);
         }
     }
+}
+
+fn space_id(subject: &str) -> Result<Uuid> {
+    subject
+        .strip_prefix("space:")
+        .context("link is not a space")?
+        .parse()
+        .context("invalid space id")
 }
 
 #[derive(Clone, Deserialize, Serialize)]

@@ -92,21 +92,25 @@ platform-admin grants, and its own grant is protected (I9, I15).
 
 ## Roles, permissions and ReBAC
 
-Roles are cumulative and scoped to one space. Member grants content read; editor
+Roles are cumulative and granted on one space. Member grants content read; editor
 grants content read and write. Analyst grants content read and the capabilities
 `run_evaluations`, `manage_evaluation_corpus` and `read_conversations_for_evaluation`.
 Admin grants space management and the first two evaluation capabilities, without
 content read or evaluation-conversation read.
-No space or platform role propagates to another space.
+Editor, admin and analyst also apply to every descendant space; member applies to
+its own space only (I20). A personal space has no parent and inherits nothing.
+No platform role reaches a space.
 
 Platform admin implies all platform capabilities. Team manager grants team creation and listing;
 feature manager grants `manage_capabilities` and team registry listing; prompt editor grants
 `edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply space membership or content access.
 
-Direct role tuples are canonical in OpenFGA. The organization tree lives in SQL;
-a parent link is not an inherited OpenFGA role. The model evaluates permissions,
-and manager enforces the parent-membership rule when changing roles. This keeps
-checks local to one space without duplicating the permission matrix in SQL.
+Direct role tuples and the space tree are canonical in OpenFGA: each space carries
+one immutable `parent` link. The model evaluates permissions, including roles
+descending from ancestors; manager stores no inherited grant and computes no
+permission. Manager enforces the parent-membership rule when changing roles: a role
+on a child requires a direct content role on its parent, which inherited access
+does not satisfy. Every decision remains one Check on the owning space.
 
 See the [space rules](04-organizations.md#spaces-and-memberships),
 [generated model](A2-manager-contracts.md#openfga-model),
@@ -118,8 +122,9 @@ and [request costs](09-quality.md#openfga-request-costs).
 An organization lock serializes live callers. Each authorized mutation also
 consumes an OpenFGA guard revision captured before its checks; a delayed remote
 write cannot reuse a consumed revision. Platform operations acquire the platform
-lock before organization locks. Role revocation cannot silently leave a child role
-without parent content access or remove a non-personal space's last administrator.
+lock before organization locks. Role revocation cannot silently leave a child role,
+or a personal space role in an organization, without a direct parent content role,
+nor remove a non-personal space's last administrator.
 
 I5 orders role publication and SQL commits, not HTTP response arrival. Keycloak
 creation and Temporal submission are authorized at dispatch; cancellation or later

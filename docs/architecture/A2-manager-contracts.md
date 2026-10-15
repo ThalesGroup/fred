@@ -54,7 +54,6 @@ never edited: sqlx checksums each file.
 ```mermaid
 erDiagram
 
-"space" }o--o| "space" : "parent_id"
 "folder" }o--|| "space" : "space_id"
 "folder" }o--|| "folder" : "parent_id, space_id"
 "document" }o--|| "space" : "space_id"
@@ -64,9 +63,7 @@ erDiagram
   uuid id
   space_kind kind
   text name
-  uuid parent_id FK
   text personal_owner
-  uuid_array path
   timestamp_with_time_zone created_at
 }
 "folder" {
@@ -109,19 +106,22 @@ erDiagram
 ```
 <!-- end generated -->
 
+The space tree is not in SQL: it lives in OpenFGA `parent` and `organization` links.
 What the schema enforces by itself:
 
 | Rule | Mechanism |
 | --- | --- |
-| Organization has no parent, others have one | `check ((kind = 'organization') = (parent_id is null))` |
 | A personal space is a team | `check (personal_owner is null or kind = 'team')` |
-| One personal space per owner and organization | `unique (parent_id, personal_owner)` |
-| Unique names among siblings | `unique nulls not distinct` on `(parent, name)` |
+| Unique organization names | unique index on `name` where `kind = 'organization'` |
 | A document's folder is in the document's space | composite foreign key `(folder_id, space_id)` |
 | A sub-folder is in its parent's space | composite foreign key `(parent_id, space_id)` |
 | A non-empty folder cannot be deleted | foreign keys, answered 409 |
-| Placement never changes | `before update` triggers on `space`, `folder`, `document` |
+| Placement never changes | `before update` triggers on `space` kind and owner, `folder`, `document` |
 | One root bootstrap, ever | `platform_bootstrap` single row (`singleton` key) |
+
+Manager enforces under the organization lock, after reading links: a team's parent
+is an organization and a project's parent a non-personal team; sibling names are
+unique; one personal space per owner and organization.
 
 
 ## OpenFGA model
@@ -166,20 +166,27 @@ type platform
     define can_manage_capabilities: feature_manager
     define can_edit_platform_prompt: prompt_editor
 
-# One type, direct roles only, no parent relation: the tree lives in SQL.
-# A role on a space requires a content role on its parent (enforced by fred-manager).
+# The space tree lives here only, written once at creation. A personal space has no
+# parent; `organization` records who manages it and grants nothing.
+# A role on a space requires a direct content role on its parent (enforced by fred-manager).
 type space
   relations
+    define parent: [space]
+    define organization: [space]
     define member: [user]
     define editor: [user]
     define admin: [user]
     define analyst: [user]
-    define can_read: member or editor or analyst
-    define can_write: editor
-    define can_manage: admin
-    define can_run_evaluations: analyst or admin
-    define can_manage_evaluation_corpus: analyst or admin
-    define can_read_conversations_for_evaluation: analyst
+    # Editor, admin and analyst reach every descendant; member stays local.
+    define effective_editor: editor or effective_editor from parent
+    define effective_admin: admin or effective_admin from parent
+    define effective_analyst: analyst or effective_analyst from parent
+    define can_read: member or effective_editor or effective_analyst
+    define can_write: effective_editor
+    define can_manage: effective_admin
+    define can_run_evaluations: effective_analyst or effective_admin
+    define can_manage_evaluation_corpus: effective_analyst or effective_admin
+    define can_read_conversations_for_evaluation: effective_analyst
 
 # Mutation ordering only; these relations grant no permission.
 type revision
@@ -208,8 +215,8 @@ other files are arrays:
 A roles object maps declared usernames to arrays of `member`, `editor`, `analyst`,
 `admin`. Roles accumulate and equivalent grants are deduplicated. Admin confers no
 implicit content role. Every new space requires a declared admin. Every child-role
-holder requires declared or existing parent content access. Existing access is
-checked by OpenFGA; no space grant is synthesized. The demo explicitly declares
+holder requires a declared or existing direct parent content role; inherited access
+does not count. Existing direct roles are read from OpenFGA; no space grant is synthesized. The demo explicitly declares
 organization membership for team-role holders.
 
 References are nonempty and unique across the entire bundle. Parents and role

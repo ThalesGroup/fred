@@ -22,20 +22,27 @@ type platform
     define can_manage_capabilities: feature_manager
     define can_edit_platform_prompt: prompt_editor
 
-# One type, direct roles only, no parent relation: the tree lives in SQL.
-# A role on a space requires a content role on its parent (enforced by fred-manager).
+# The space tree lives here only, written once at creation. A personal space has no
+# parent; `organization` records who manages it and grants nothing.
+# A role on a space requires a direct content role on its parent (enforced by fred-manager).
 type space
   relations
+    define parent: [space]
+    define organization: [space]
     define member: [user]
     define editor: [user]
     define admin: [user]
     define analyst: [user]
-    define can_read: member or editor or analyst
-    define can_write: editor
-    define can_manage: admin
-    define can_run_evaluations: analyst or admin
-    define can_manage_evaluation_corpus: analyst or admin
-    define can_read_conversations_for_evaluation: analyst
+    # Editor, admin and analyst reach every descendant; member stays local.
+    define effective_editor: editor or effective_editor from parent
+    define effective_admin: admin or effective_admin from parent
+    define effective_analyst: analyst or effective_analyst from parent
+    define can_read: member or effective_editor or effective_analyst
+    define can_write: effective_editor
+    define can_manage: effective_admin
+    define can_run_evaluations: effective_analyst or effective_admin
+    define can_manage_evaluation_corpus: effective_analyst or effective_admin
+    define can_read_conversations_for_evaluation: effective_analyst
 
 # Mutation ordering only; these relations grant no permission.
 type revision

@@ -8,14 +8,14 @@ explanations move between chapters.
 
 | Id | Invariant | Held by |
 | --- | --- | --- |
-| I1 | An organization is a root, a team's parent is an organization, a project's parent is a non-personal team. | `domain::check_parent`, schema checks |
-| I2 | Placement never changes: a space's parent and path, a folder's space, parent and path, a document's space and folder. Names may change. | triggers |
+| I1 | An organization is a root, a team's parent is an organization, a project's parent is a non-personal team, a personal space has no parent. Sibling names and organization names are unique. | `domain::check_parent`, `spaces` under the organization lock, organization-name index |
+| I2 | Placement never changes: a space's kind, owner and links, a folder's space, parent and path, a document's space and folder. Names may change. | triggers; links written once with the creation grants |
 | I3 | A document's folder, and a sub-folder's parent, belong to the same space. | composite foreign keys |
-| I4 | Holding a role on a space requires a content role on its parent, under any concurrency. | `spaces`, organization lock and atomic OpenFGA guard |
+| I4 | Holding a role on a space requires a direct content role on its parent, and a personal-space role a direct content role on its organization, under any concurrency. Inherited access does not satisfy it. | `spaces`, organization lock and atomic OpenFGA guard |
 | I5 | Role and SQL mutations cannot publish a decision invalidated by an earlier successful revocation. External operations are authorized at dispatch. | checks after guard capture, atomic fence, SQL lock through commit |
 | I6 | A personal space never gains a member, and its organization can always remove its owner. | `spaces::grant`, `spaces::revoke` |
-| I7 | A space's search scope is its ancestors and itself, never its descendants. | `space.path` |
-| I8 | Space admin and platform admin roles read no content. | OpenFGA `can_read = member or editor or analyst` |
+| I7 | A space's search scope is its ancestors and itself, never its descendants; a personal space's scope is itself; levels only remove spaces. | `spaces::scope` |
+| I8 | Space admin and platform admin roles read no content. | OpenFGA `can_read = member or effective_editor or effective_analyst` |
 | I9 | Root bootstrap promotes one caller, once; it never reopens, not even for its own admin after removal. | `bootstrap::grant_root`, marker |
 | I10 | Only an RS256 token from the realm, unexpired, with an integer past `iat` and a lifetime within the ceiling, authenticates. | `auth` |
 | I11 | Log lines never carry credential- or content-named fields; dependencies never log their own text. | `logging` |
@@ -27,6 +27,7 @@ explanations move between chapters.
 | I17 | Provisioning replay preserves existing identities, committed space IDs and undeclared grants, and repairs requested grants without reusing rolled-back space IDs. | `provisioning`, exact directory lookup, SQL uniqueness |
 | I18 | Import requires a verified platform administrator and compatible initialized state; predictable preflight failures cause no provisioning or initialization writes. | CLI read-only initialization, HTTP authority-before-upload, `Importer::preflight`, root guard |
 | I19 | A human personally accepts the active CGU before business access; consent and root bootstrap create no membership, and import accepts for nobody. | `onboarding`, `OwnUser`, `AdmittedUser`, CLI admission |
+| I20 | Editor, admin and analyst reach every descendant space, member stays local, and a personal space inherits nothing. | OpenFGA `effective_*` relations over `parent` links |
 
 ## fred-manager tests
 
@@ -90,12 +91,12 @@ service/delegation refusal, CLI admission and absence of membership side effects
 
 ## OpenFGA request costs
 
-Direct roles live in OpenFGA. The client uses `Check`, paginated `Read` and `Write`;
-it does not issue `ListObjects`, `ListUsers`, `Expand` or `BatchCheck`.
+Direct roles and the space tree live in OpenFGA. The client uses `Check`, paginated
+`Read` and `Write`; it does not issue `ListObjects`, `ListUsers`, `Expand` or `BatchCheck`.
 `Check` and `Read` request `HIGHER_CONSISTENCY`. A content check addresses one
-user, permission and space; the model combines direct roles without traversing
-parents. A fixed number of HTTP calls does not specify OpenFGA's datastore work,
-latency or throughput.
+user, permission and space; the model evaluates descending roles through at most two
+`parent` links inside OpenFGA. A fixed number of HTTP calls does not specify OpenFGA's
+datastore work, latency or throughput.
 
 The frontend navigation and provisioning guard share one cached `/me` query.
 Navigation and page subscribers refetch `/me` data older than 60 seconds when
@@ -103,7 +104,7 @@ they mount; this threshold does not schedule periodic refresh.
 Concurrent subscribers deduplicate the request. Home and the space navigation
 share `/me/spaces`; Home requests a fresh result on mount, and selection within
 Home uses that result without per-space requests. Each `/me` network fetch performs
-the five concurrent Checks listed below; `/me/spaces` uses paginated tuple Reads. There is no polling or additional import-specific FGA query. The
+the five concurrent Checks listed below; `/me/spaces` uses the tuple and link Reads listed below. There is no polling or additional import-specific FGA query. The
 browser fixture (15 imported users, one organization, three teams and one project,
 one active import at a time) proves behavior, not throughput or scalability.
 
@@ -118,56 +119,63 @@ Keycloak calls. `C` is one Check; `W(n)` is one Write with `n` total inserts and
 `P_u`, `P_p` and `P_a(s)` are the actual Read page counts for a user's direct space
 roles, all platform grants, and the admins of space `s`. Each includes at least
 one request, even for an empty result. The client does not specify `page_size`.
+`L` is the number of link Reads placing a space: 0 for an organization, 1 for a team
+or personal space, 2 for a project. `R_c` is one Read of a space's children; `R_d`
+one Read of a user's direct roles on one space.
 
 | Operation | OpenFGA calls | Read filter or decision scope |
 | --- | --- | --- |
-| Content access; authorize document/scope/space/platform | `1 C` | Exact user, permission, object |
+| Content access; authorize document/space/platform | `1 C` | Exact user, permission, object |
+| Authorize scope | `1 C + L Read` | Read check, then the parent links |
 | `GET /me` | `5 C`, concurrent | Caller's five effective platform roles |
-| `GET /me/spaces` | `P_u Read` | Caller + object type `space:` across organizations |
-| Team registry page | `1 C` | Platform registry permission; SQL returns at most 100 teams |
+| `GET /me/spaces` | `P_u + D + O_d + T_d Read` | Direct roles; one link per directly granted team, project or personal space (`D`, concurrent); children of each organization (`O_d`) and team (`T_d`) reached by a descending role, concurrent per level |
+| Team registry page | `1 C + t Read` | Platform registry permission; one concurrent `parent` Read per returned team, `t ≤ 100` |
 | List platform grants | `1 C + P_p Read` | Admin check, then all subjects/roles on `platform:root` |
 | Grant platform role | `1 R_g + 1 C + W(3)` | Actor admin; separate Keycloak subject lookup |
 | Revoke platform role | `1 R_g + 1 C + P_p Read + W(3)` | All platform grants are read to locate one direct grant |
 | Grant organization role | `1 R_g + 1 C + W(3)` | Actor manages organization |
-| Grant team/project role | `1 R_g + 2 C + W(3)` | Actor manages space; target reads parent |
-| Revoke space role | `1 R_g + 1 C + P_u Read + W(2 + d)` | Target's direct roles across all spaces |
+| Grant team/project role | `L Read + 1 R_g + 1 C + 1 R_d + W(3)` | Actor manages space; target's direct parent roles |
+| Revoke space role | `L Read + 1 R_g + 1 C + P_u Read + 1 R_c + W(2 + d)` | Target's direct roles across all spaces; children (an organization adds one Read of its personal spaces) |
 | Revoke a held admin role on a non-personal space | Previous row + `P_a(s) Read` | All direct admins of that space |
-| Create team using local authority | `2 R_g + 2 C + W(5)` | Actor manages parent; nominated admin reads parent |
-| Create project | `1 R_g + 2 C + W(3)` | Actor manages parent; nominated admin reads parent |
-| Create team using platform delegation | `2 R_g + 3 C + W(5)` | Adds platform creation permission |
-| Create personal space | `1 R_g + 1 C + W(4)` | Caller reads organization; member/editor grants |
+| Create team using local authority | `L_p Read + 2 R_g + 1 C + 1 R_d + 1 R_c + W(6)` | Actor manages parent; nominated admin's direct parent roles; sibling names; link and admin in one Write |
+| Create project | `L_p Read + 1 R_g + 1 C + 1 R_d + 1 R_c + W(4)` | Same, under a team |
+| Create team using platform delegation | Local-authority row `+ 1 C` | Adds platform creation permission |
+| Create personal space | `1 R_g + 1 C + 1 Read + W(5)` | Caller reads organization; existing personal spaces; link, member and editor in one Write |
 | Operator create organization | `W(2) + 1 R_g + W(4)` | Initialize guard, then initial admin/member grants |
 | Public configuration, personal onboarding and consent | `0` | SQL bootstrap/acceptance reads or consent upsert only |
 | Root bootstrap | `1 R_g + W(3)` | Bearer/secret and SQL marker govern admission |
 
 `d` is 1 when the revoked role exists, otherwise 0. A successful absent space-role
 revocation still advances its guard. A platform-role revoke returns 404 when absent.
-SQL folder/document mutations and Temporal dispatch use `1 R_g + 1 C + W(2)`;
+`L_p` places the parent. SQL folder/document mutations and Temporal dispatch use `L Read + 1 R_g + 1 C + W(2)`;
 the fence contains no role change. Each successful guard replacement adds two
 operations per scope, independent of the number of existing roles.
 
 Sources: [client](../../apps/fred-manager/src/fga.rs),
-[space mutations](../../apps/fred-manager/src/spaces.rs),
+[space mutations, memberships and scope](../../apps/fred-manager/src/spaces.rs),
 [platform mutations](../../apps/fred-manager/src/platform.rs), and
 [HTTP handlers](../../apps/fred-manager/src/api.rs).
 
 For the ZIP importer, let `U` be users, `O` organizations, `N` new organizations,
-`G` normalized platform grants, `D` space-role tuples, and
-`B = sum_s ceil(role_tuples(s) / 96)` over all declared spaces. `Z` counts organization
-subtrees with no declared role tuples. `H` counts child/subject pairs lacking a
-declared parent content role and therefore requiring an existing-parent Check;
-siblings with the same subject each contribute a Check. On a successful attempt:
+`G` normalized platform grants, `D` space-role tuples, `C` new teams and projects,
+and `B = sum_s ceil((role_tuples(s) + new(s)) / 96)` over all declared spaces. `Z`
+counts organization subtrees with no declared role tuples. `H` counts child/subject
+pairs lacking a declared parent content role and therefore requiring an existing
+direct-parent-role Read; siblings with the same subject each contribute a Read. `E`
+counts existing parents whose children resolve declared names. On a successful attempt:
 
-- `U + 3 + O + B + G + 3H` Checks;
-- `U + 2O + (G > 0 ? 1 : 0)` exact guard Reads;
+- `U + 3 + O + B + G` Checks;
+- `U + 2O + (G > 0 ? 1 : 0)` exact guard Reads, plus `3H + 2E` tree Reads;
 - `U + N + B + G + Z` Writes;
-- `D + 2U + 2N + 4B + 3G + 4Z` tuple operations across those Writes.
+- `D + C + 2U + 2N + 4B + 3G + 4Z` tuple operations across those Writes.
 
-Parent Checks use `user:<subject>`, `can_read`, `space:<parent>` in whole-bundle
-preflight, whole-bundle reconciliation and the guarded subtree check. Authority
-Checks use `admin` on `platform:root`. Guard Reads use the exact `guard:<scope>`
-object/revision relation; no role enumeration is needed by import. Space batches
-contain at most 96 role inserts plus four guard operations. Platform grants contain
+Direct-parent-role Reads use `user:<subject>` and `space:<parent>` in whole-bundle
+preflight, whole-bundle reconciliation and the guarded subtree check. Children
+Reads use `space:<parent>`, relation `parent`, in preflight and reconciliation.
+Authority Checks use `admin` on `platform:root`. Guard Reads use the exact
+`guard:<scope>` object/revision relation; no role enumeration is needed by import. Space batches
+contain at most 96 link and role inserts plus four guard operations; a new space's
+`parent` link shares its first batch. Platform grants contain
 three operations, with only the platform guard. Calls are sequential.
 HTTP adds one admin Check before upload reading. CLI adds that Check plus two GETs
 (configured-store discovery and pinned-model verification). Model evaluation remains
@@ -184,32 +192,27 @@ so its application work includes `O(O * (S + D))`; it retains `O(U + S + D)` dat
 Documents do not contribute to these cardinalities.
 
 The actual Make demo artifact (15 users, one new organization, three teams,
-26 space grants, five platform grants, four batches, `H=Z=0`) exercises HTTP with
-29 Checks, 18 Reads and 25 Writes: 89 tuple operations. The batch-boundary fixture
-(105 users, 106 organization grants, 210 team grants, one new organization,
-no platform grants, `H=Z=0`) checks 114 Checks, 107 Reads and 111 Writes: 548 tuple
-operations and at most 100 per Write. These are wire-count assertions in disposable
+26 space grants, five platform grants, four batches, `C=3`, `H=Z=E=0`)
+exercises HTTP with 29 Checks, 18 Reads and 25 Writes: 92 tuple operations. The
+batch-boundary fixture (105 users, 106 organization grants, 210 team grants, one new
+organization and team, no platform grants, `H=Z=E=0`) checks 114 Checks, 107 Reads
+and 111 Writes: 549 tuple operations and at most 100 per Write. Its replay variant
+(`U=2`, `H=2`, `E=2`) checks 9 Checks and 14 Reads. The hierarchy fixture (one
+organization, team and project, an organization analyst with a personal space)
+checks 4 Reads for `/me/spaces`, and `1 C + 2 Read` and `1 C + 1 Read` for project
+and team scopes. These are wire-count assertions in disposable
 integration environments, not latency, throughput or scalability measurements.
 
-For offline cutover, `K` is source tuples, `P_K` their Read pages, `O` organizations
-and `H` distinct parent/subject pairs. Including discovery, the successful path uses
-`1 GET + P_K Reads + (K > 0 ? 1 GET : 0) + 2 POSTs + ceil(K / 100) Writes + H Checks
-+ (O + 1) Writes`. The GETs discover the configured source and verify its legacy
-model; POSTs create the destination and model. Copy and guard initialization total
-`K + 2(O + 1)` tuple operations. SQL publication adds no FGA request.
-
-Cutover holds `O(K + S + H)` application memory for `S` SQL spaces and uses ordered
-indexes for hierarchy, administrators and distinct parent checks; local processing
-is `O((K + S) log(S + 1) + K log(H + 1))`, apart from model normalization. It is an
-offline operation. Existing-binding startup uses discovery GET plus pinned-model
-GET, without recopying roles. Failed unpublished attempts are never reused.
+Startup with a published binding uses the discovery GET plus the pinned-model GET.
+An empty installation adds one full tuple Read, two POSTs (store and model) and the
+platform guard initialization Write; existing state without a binding is refused.
 
 Read pagination bounds each response, not the operation's memory: `read_keys`
-accumulates all matching tuples. With `R` role tuples and `S` returned spaces,
-`/me/spaces` uses `O(R + S)` application memory and
-`O(R log R + S * R)` processing for sorting and per-space role selection.
-Space revocation tests child membership in `O(R * D)` worst-case application
-work for `D` immediate children. These costs concern Fred's processing of returned
+accumulates all matching tuples. With `R` direct role tuples and `S` returned spaces,
+`/me/spaces` uses `O(R + S)` application memory and `O(S log S + S * R)` processing
+for ordering, path walks and per-space role selection; its concurrent Reads are
+unbounded within one level. Space revocation tests child membership in `O(R * D)`
+worst-case application work for `D` children and personal spaces. These costs concern Fred's processing of returned
 tuples, not OpenFGA's internal query plan.
 
 Organization-scoped role/space/content mutations retain a SQL connection and advisory lock across remote
@@ -228,15 +231,15 @@ Generated from the `// Proves:` markers.
 <!-- generated: invariants -->
 | Invariant | Proved by |
 | --- | --- |
-| I1 | `apps/fred-manager/src/domain.rs::parent_rules`<br>`apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_changed_permissions_and_inconsistent_hierarchy`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock` |
+| I1 | `apps/fred-manager/src/domain.rs::parent_rules`<br>`apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock`<br>`apps/fred-manager/tests/integration.rs::sibling_names_are_unique_and_uncommitted_links_are_ignored` |
 | I2 | `apps/fred-manager/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space` |
 | I3 | `apps/fred-manager/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space` |
-| I4 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::concurrent_revocations_keep_parent_access`<br>`apps/fred-manager/tests/integration.rs::concurrent_grant_and_revoke_keep_the_invariant`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::a_timed_out_child_grant_cannot_arrive_after_parent_revocation`<br>`apps/fred-manager/tests/integration.rs::a_cancelled_child_grant_is_fenced_after_client_restart`<br>`apps/fred-manager/tests/integration.rs::offline_cutover_preserves_roles_and_pins_the_published_store`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_invalid_source_and_replays_ambiguous_copies`<br>`apps/fred-manager/tests/integration.rs::noop_revocation_and_multiple_scopes_fence_stale_attempts`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_changed_permissions_and_inconsistent_hierarchy`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors` |
+| I4 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::concurrent_revocations_keep_parent_access`<br>`apps/fred-manager/tests/integration.rs::concurrent_grant_and_revoke_keep_the_invariant`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::a_timed_out_child_grant_cannot_arrive_after_parent_revocation`<br>`apps/fred-manager/tests/integration.rs::a_cancelled_child_grant_is_fenced_after_client_restart`<br>`apps/fred-manager/tests/integration.rs::noop_revocation_and_multiple_scopes_fence_stale_attempts`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::inherited_access_does_not_replace_parent_membership` |
 | I5 | `apps/fred-manager/tests/integration.rs::a_revoked_admin_cannot_finish_a_waiting_request`<br>`apps/fred-manager/tests/integration.rs::revoked_platform_actor_cannot_complete_waiting_role_or_team_creation`<br>`apps/fred-manager/tests/integration.rs::simultaneous_imports_reuse_usernames_and_space_names`<br>`apps/fred-manager/tests/integration.rs::provisioning_waiter_rechecks_revoked_or_expired_operator`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::a_timed_out_platform_grant_cannot_arrive_after_actor_revocation`<br>`apps/fred-manager/tests/integration.rs::noop_revocation_and_multiple_scopes_fence_stale_attempts`<br>`apps/fred-manager/tests/integration.rs::sql_mutation_loses_to_a_delayed_revocation_after_its_check`<br>`apps/fred-manager/tests/integration.rs::folder_creation_keeps_one_connection_through_placement_and_write` |
-| I6 | `apps/fred-manager/tests/integration.rs::a_member_with_a_personal_space_can_leave_the_organization`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed` |
-| I7 | `apps/fred-manager/src/domain.rs::search_scope_is_ancestors_then_self` |
-| I8 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::admin_roles_grant_no_content_access`<br>`apps/fred-manager/tests/integration.rs::complete_role_permission_matrix_and_space_isolation`<br>`apps/fred-manager/tests/integration.rs::delegated_creation_is_team_only_and_never_grants_caller_membership`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::offline_cutover_preserves_roles_and_pins_the_published_store`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_changed_permissions_and_inconsistent_hierarchy`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors` |
-| I9 | `apps/fred-manager/tests/integration.rs::bootstrap_promotes_one_person_once`<br>`apps/fred-manager/tests/integration.rs::a_finished_bootstrap_stays_closed_after_its_admin_is_removed`<br>`apps/fred-manager/tests/integration.rs::concurrent_retries_finish_a_bootstrap_once`<br>`apps/fred-manager/tests/integration.rs::an_interrupted_bootstrap_is_finished_by_its_caller_only`<br>`apps/fred-manager/tests/integration.rs::offline_cutover_preserves_roles_and_pins_the_published_store`<br>`apps/fred-manager/tests/integration.rs::consent_and_root_bootstrap_are_personal_and_do_not_create_memberships` |
+| I6 | `apps/fred-manager/tests/integration.rs::a_member_with_a_personal_space_can_leave_the_organization`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed`<br>`apps/fred-manager/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local` |
+| I7 | `apps/fred-manager/src/domain.rs::search_scope_is_ancestors_then_self`<br>`apps/fred-manager/tests/integration.rs::scope_follows_ancestors_and_levels_only_narrow_it` |
+| I8 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::admin_roles_grant_no_content_access`<br>`apps/fred-manager/tests/integration.rs::complete_role_permission_matrix_and_space_isolation`<br>`apps/fred-manager/tests/integration.rs::delegated_creation_is_team_only_and_never_grants_caller_membership`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local` |
+| I9 | `apps/fred-manager/tests/integration.rs::bootstrap_promotes_one_person_once`<br>`apps/fred-manager/tests/integration.rs::a_finished_bootstrap_stays_closed_after_its_admin_is_removed`<br>`apps/fred-manager/tests/integration.rs::concurrent_retries_finish_a_bootstrap_once`<br>`apps/fred-manager/tests/integration.rs::an_interrupted_bootstrap_is_finished_by_its_caller_only`<br>`apps/fred-manager/tests/integration.rs::consent_and_root_bootstrap_are_personal_and_do_not_create_memberships` |
 | I10 | `apps/fred-manager/src/auth.rs::rejects_expired_and_overlong_tokens`<br>`apps/fred-manager/src/auth.rs::lifetime_ceiling_cannot_be_skipped`<br>`apps/fred-manager/src/auth.rs::rejects_missing_kid_and_bad_signature`<br>`apps/fred-manager/src/auth.rs::strict_mode_checks_issuer_and_audience` |
 | I11 | `apps/fred-manager/src/blueprint.rs::invalid_declarations_and_duplicate_json_keys_fail_without_echoing_input`<br>`apps/fred-manager/src/keycloak.rs::directory_failures_do_not_echo_credentials_or_payloads`<br>`apps/fred-manager/src/logging.rs::sensitive_and_reserved_fields_never_leak`<br>`apps/fred-manager/src/logging.rs::dependencies_get_a_fixed_message_without_their_fields`<br>`apps/fred-manager/tests/integration.rs::directory_creation_conflict_pagination_preservation_and_failures` |
 | I12 | `apps/fred-manager/tests/integration.rs::pagination_survives_deleting_the_cursor_row` |
@@ -244,9 +247,10 @@ Generated from the `// Proves:` markers.
 | I14 | `apps/fred-manager/tests/integration.rs::concurrent_admin_revocations_leave_one_admin_at_every_level` |
 | I15 | `apps/fred-manager/tests/integration.rs::platform_roles_enforce_root_identity_and_direct_grant_semantics`<br>`apps/fred-manager/tests/integration.rs::provisioning_preflight_failures_have_no_identity_space_or_role_writes`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors` |
 | I16 | `apps/fred-manager/src/logging.rs::audit_records_survive_warning_application_threshold`<br>`apps/fred-manager/tests/integration.rs::durable_grants_are_audited_even_when_sql_commit_fails` |
-| I17 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::directory_creation_conflict_pagination_preservation_and_failures`<br>`apps/fred-manager/tests/integration.rs::provisioning_replay_after_identity_and_sql_failures_reuses_committed_state`<br>`apps/fred-manager/tests/integration.rs::simultaneous_imports_reuse_usernames_and_space_names`<br>`apps/fred-manager/tests/integration.rs::provisioning_batches_large_parent_and_child_grants_and_rejects_personal_collision`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments`<br>`apps/fred-manager/tests/integration.rs::cancellation_after_fga_write_rolls_back_new_space_and_replays`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors` |
-| I18 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::provisioning_preflight_failures_have_no_identity_space_or_role_writes`<br>`apps/fred-manager/tests/integration.rs::provisioning_waiter_rechecks_revoked_or_expired_operator`<br>`apps/fred-manager/tests/integration.rs::import_cli_is_read_only_until_authorized_and_requires_initialized_state`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::import_rejects_incompatible_model_without_syncing_it`<br>`apps/fred-manager/tests/integration.rs::offline_cutover_preserves_roles_and_pins_the_published_store`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_invalid_source_and_replays_ambiguous_copies`<br>`apps/fred-manager/tests/integration.rs::cutover_rejects_changed_permissions_and_inconsistent_hierarchy`<br>`apps/fred-manager/tests/integration.rs::competing_empty_initializers_converge_on_the_published_binding`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock` |
+| I17 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::directory_creation_conflict_pagination_preservation_and_failures`<br>`apps/fred-manager/tests/integration.rs::provisioning_replay_after_identity_and_sql_failures_reuses_committed_state`<br>`apps/fred-manager/tests/integration.rs::simultaneous_imports_reuse_usernames_and_space_names`<br>`apps/fred-manager/tests/integration.rs::provisioning_batches_large_parent_and_child_grants_and_keeps_personal_spaces_apart`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments`<br>`apps/fred-manager/tests/integration.rs::cancellation_after_fga_write_rolls_back_new_space_and_replays`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors` |
+| I18 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::provisioning_preflight_failures_have_no_identity_space_or_role_writes`<br>`apps/fred-manager/tests/integration.rs::provisioning_waiter_rechecks_revoked_or_expired_operator`<br>`apps/fred-manager/tests/integration.rs::import_cli_is_read_only_until_authorized_and_requires_initialized_state`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::import_rejects_incompatible_model_without_syncing_it`<br>`apps/fred-manager/tests/integration.rs::competing_empty_initializers_converge_on_the_published_binding`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock`<br>`apps/fred-manager/tests/integration.rs::startup_refuses_existing_state_without_a_publication` |
 | I19 | `apps/fred-manager/src/config.rs::active_terms_version_is_explicit_and_validated`<br>`apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::import_cli_is_read_only_until_authorized_and_requires_initialized_state`<br>`apps/fred-manager/tests/integration.rs::consent_and_root_bootstrap_are_personal_and_do_not_create_memberships` |
+| I20 | `apps/fred-manager/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local`<br>`apps/fred-manager/tests/integration.rs::memberships_list_inherited_spaces_with_their_paths` |
 <!-- end generated -->
 
 Provisioning tests inject failures before/after real FGA writes, fail deferred SQL commits,

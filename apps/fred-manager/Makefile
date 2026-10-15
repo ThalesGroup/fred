@@ -57,10 +57,6 @@ import-provisioning: dev ## Import a bundle as platform admin (BUNDLE=<zip path>
 	@test -n "$$BUNDLE" && test -n "$$TOKEN_FILE" || { echo 'Usage: make import-provisioning BUNDLE=<path> TOKEN_FILE=<path>'; exit 1; }
 	$(CARGO) run -- import-provisioning "$$BUNDLE" --token-file "$$TOKEN_FILE"
 
-.PHONY: migrate-authorization
-migrate-authorization: dev ## Offline cutover: stop legacy writers and settle pending writes before running
-	$(CARGO) run -- migrate-authorization
-
 DEMO_PROVISIONING_FIXTURE_DIR ?= tests/fixtures/import_export/demo_provisioning
 DEMO_BUNDLE_FILE ?= target/demo-provisioning-bundle.zip
 export DEMO_PROVISIONING_FIXTURE_DIR DEMO_BUNDLE_FILE

@@ -34,7 +34,7 @@ use uuid::Uuid;
 use crate::{
     auth::{Authenticator, CurrentUser},
     bootstrap, db,
-    domain::{self, Document, Folder, Permission, Role, Space, SpaceKind},
+    domain::{self, Document, Folder, Permission, Role, Space, SpaceKind, SpaceRow},
     error::{ApiJson, AppError, AppResult},
     fga::Fga,
     ingestion::{DeleteDocument, IngestDocument, Ingestion, Submitted},
@@ -305,7 +305,10 @@ async fn me(
 struct MySpace {
     #[serde(flatten)]
     space: Space,
+    /// Effective roles, including those descending from an ancestor.
     roles: Vec<Role>,
+    /// The subset of `roles` held only through an ancestor.
+    inherited_roles: Vec<Role>,
 }
 
 #[utoipa::path(
@@ -321,21 +324,14 @@ async fn my_spaces(
     State(s): State<GovernanceState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
 ) -> AppResult<Json<Vec<MySpace>>> {
-    let roles = s.fga.roles_of(&user).await?;
-    let mut ids: Vec<Uuid> = roles.iter().map(|(id, _)| *id).collect();
-    ids.sort();
-    ids.dedup();
-    let spaces = db::spaces(&s.pool, &ids).await?;
     Ok(Json(
-        spaces
+        spaces::memberships(&s.pool, &s.fga, &user)
+            .await?
             .into_iter()
-            .map(|space| MySpace {
-                roles: roles
-                    .iter()
-                    .filter(|(id, _)| *id == space.id)
-                    .map(|(_, r)| *r)
-                    .collect(),
-                space,
+            .map(|m| MySpace {
+                space: m.space,
+                roles: m.roles,
+                inherited_roles: m.inherited_roles,
             })
             .collect(),
     ))
@@ -874,12 +870,16 @@ async fn authorize_document(
 #[derive(Deserialize, utoipa::ToSchema)]
 struct AuthorizeScope {
     space_id: Uuid,
+    /// Keep only spaces of these kinds; omitted keeps every level. Never adds a space.
+    #[serde(default)]
+    levels: Option<Vec<SpaceKind>>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct Scope {
-    /// Filter for chunks and metadata: `space_id` must be one of these. Ancestors only,
-    /// never descendants: a team conversation never sees its projects' content.
+    /// Filter for chunks and metadata: `space_id` must be one of these. The space and its
+    /// ancestors, never descendants: a team conversation never sees its projects' content.
+    /// A personal space's scope is itself.
     space_ids: Vec<Uuid>,
 }
 
@@ -900,10 +900,9 @@ async fn authorize_scope(
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<AuthorizeScope>,
 ) -> AppResult<Json<Scope>> {
-    let space = db::space(&s.pool, req.space_id).await?;
-    require(&s.fga, &user, Permission::Read, space.id).await?;
     Ok(Json(Scope {
-        space_ids: space.path,
+        space_ids: spaces::scope(&s.pool, &s.fga, &user, req.space_id, req.levels.as_deref())
+            .await?,
     }))
 }
 
@@ -1103,8 +1102,21 @@ async fn team_registry(
         return Err(AppError::Forbidden);
     }
     // Registry metadata only, bounded independently of content and FGA memberships.
-    Ok(Json(sqlx::query_as("select id, kind, name, parent_id, personal_owner, path from space where kind = 'team' and personal_owner is null and ($1::uuid is null or id > $1) order by id limit 100")
-        .bind(query.after).fetch_all(&s.pool).await?))
+    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner from space where kind = 'team' and personal_owner is null and ($1::uuid is null or id > $1) order by id limit 100")
+        .bind(query.after).fetch_all(&s.pool).await?;
+    let ids: Vec<Uuid> = teams.iter().map(|t| t.id).collect();
+    let orgs: std::collections::BTreeMap<Uuid, Option<Uuid>> =
+        s.fga.links_of(&ids, false).await?.into_iter().collect();
+    Ok(Json(
+        teams
+            .into_iter()
+            .map(|team| {
+                let org =
+                    orgs[&team.id].ok_or_else(|| anyhow::anyhow!("team has no organization"))?;
+                Ok(Space::placed(team, &[org], None))
+            })
+            .collect::<AppResult<_>>()?,
+    ))
 }
 
 /// Governance routes are usable without an ingestion client. Public configuration

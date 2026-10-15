@@ -1,6 +1,5 @@
 erDiagram
 
-"space" }o--o| "space" : "parent_id"
 "folder" }o--|| "space" : "space_id"
 "folder" }o--|| "folder" : "parent_id, space_id"
 "document" }o--|| "space" : "space_id"
@@ -10,9 +9,7 @@ erDiagram
   uuid id
   space_kind kind
   text name
-  uuid parent_id FK
   text personal_owner
-  uuid_array path
   timestamp_with_time_zone created_at
 }
 "folder" {

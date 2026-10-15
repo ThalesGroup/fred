@@ -19,19 +19,18 @@
 use crate::{
     auth::Authenticator,
     bootstrap, db,
-    domain::{Role, Space, SpaceKind},
-    fga::{Fga, Guard, Scope, Tuple},
+    domain::{Role, Space, SpaceKind, SpaceRow},
+    fga::{Fga, Guard, Link, Scope, Tuple},
     keycloak::Directory,
     logging, platform, spaces,
 };
 use anyhow::{Result, ensure};
 use serde::Serialize;
 use sqlx::{PgPool, Postgres, Transaction};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map};
 use uuid::Uuid;
 
 pub use crate::blueprint::Bundle;
-use crate::domain::Permission;
 use crate::error::AppError;
 
 #[derive(Debug, thiserror::Error)]
@@ -177,14 +176,16 @@ impl Importer<'_> {
         Ok(())
     }
 
-    /// Resolve names under the platform lock, then lock every organization in UUID
-    /// order. The returned IDs are candidates until the enclosing SQL commit.
+    /// Resolve organization names under the platform lock, then lock every organization
+    /// in UUID order and resolve children among their parent's OpenFGA children. The
+    /// returned IDs are candidates until the enclosing SQL commit.
     async fn resolve_spaces(
         &self,
         tx: &mut Transaction<'_, Postgres>,
         bundle: &Bundle,
     ) -> Result<Vec<(Space, bool)>> {
         let mut resolved: Vec<(Space, bool)> = Vec::new();
+        let mut children: BTreeMap<Uuid, Vec<SpaceRow>> = BTreeMap::new();
         for organizations in [true, false] {
             for declaration in bundle
                 .spaces
@@ -193,31 +194,38 @@ impl Importer<'_> {
             {
                 let parent = declaration.parent.map(|p| &resolved[p].0);
                 let parent_new = declaration.parent.is_some_and(|p| resolved[p].1);
-                let existing = if parent_new {
-                    None
-                } else {
-                    db::named_space(&mut **tx, parent.map(|p| p.id), &declaration.name).await?
+                let existing = match parent {
+                    _ if parent_new => None,
+                    None => db::organization_named(&mut **tx, &declaration.name).await?,
+                    Some(parent) => {
+                        if let btree_map::Entry::Vacant(slot) = children.entry(parent.id) {
+                            let ids = self.fga.linked_to(parent.id, false).await?;
+                            slot.insert(db::spaces(&mut **tx, &ids).await?);
+                        }
+                        children[&parent.id]
+                            .iter()
+                            .find(|c| c.name == declaration.name)
+                            .cloned()
+                    }
                 };
                 let is_new = existing.is_none();
-                let space = if let Some(existing) = existing {
-                    if existing.kind != declaration.kind || existing.personal_owner.is_some() {
-                        return Err(conflict("incompatible or personal space collision"));
+                let row = if let Some(existing) = existing {
+                    if existing.kind != declaration.kind {
+                        return Err(conflict("incompatible space collision"));
                     }
                     existing
                 } else {
                     if !declaration.roles.values().any(|r| r.contains(&Role::Admin)) {
                         return Err(invalid("new space requires a declared admin"));
                     }
-                    let id = Uuid::new_v4();
-                    Space {
-                        id,
+                    SpaceRow {
+                        id: Uuid::new_v4(),
                         name: declaration.name.clone(),
                         kind: declaration.kind,
-                        parent_id: parent.map(|p| p.id),
                         personal_owner: None,
-                        path: crate::domain::space_path(parent, id),
                     }
                 };
+                let space = Space::placed(row, parent.map_or(&[], |p| &p.path), None);
                 resolved.push((space, is_new));
             }
             if !organizations {
@@ -244,7 +252,7 @@ impl Importer<'_> {
         organization: Option<Uuid>,
     ) -> Result<()> {
         for (i, child) in bundle.spaces.iter().enumerate() {
-            if organization.is_some_and(|o| resolved[i].0.path[0] != o) {
+            if organization.is_some_and(|o| resolved[i].0.organization != o) {
                 continue;
             }
             let Some(p) = child.parent else {
@@ -254,8 +262,8 @@ impl Importer<'_> {
                 if roles.is_empty() {
                     continue;
                 }
-                // This domain predicate describes declared direct roles. Existing
-                // effective access is always evaluated by the pinned OpenFGA model.
+                // Declared or existing, the parent role must be direct: inherited access
+                // does not satisfy the parent/child invariant.
                 if bundle.spaces[p]
                     .roles
                     .get(username)
@@ -266,8 +274,10 @@ impl Importer<'_> {
                 let allowed =
                     if let Some(subject) = subjects.get(username).filter(|_| !resolved[p].1) {
                         self.fga
-                            .check(subject, Permission::Read, resolved[p].0.id)
+                            .direct_roles_on(subject, resolved[p].0.id)
                             .await?
+                            .iter()
+                            .any(|r| r.grants_content())
                     } else {
                         false
                     };
@@ -354,10 +364,15 @@ impl Importer<'_> {
                 .spaces
                 .iter()
                 .zip(&resolved)
-                .filter(|(_, (s, _))| s.path[0] == org.id)
+                .filter(|(_, (s, _))| s.organization == org.id)
             {
+                let mut link = None;
                 if *is_new {
                     db::insert_space(&mut tx, space).await?;
+                    link = space.parent_id.map(|parent| Link::Parent {
+                        child: space.id,
+                        parent,
+                    });
                 }
                 let grants: Vec<_> = declaration
                     .roles
@@ -371,8 +386,8 @@ impl Importer<'_> {
                         })
                     })
                     .collect();
-                wrote |= !grants.is_empty();
-                self.grant_spaces(&mut tx, &mut guard, bundle, &actor, &grants, report)
+                wrote |= link.is_some() || !grants.is_empty();
+                self.grant_spaces(&mut tx, &mut guard, bundle, &actor, link, &grants, report)
                     .await?;
             }
             if !wrote {
@@ -415,14 +430,21 @@ impl Importer<'_> {
         guard: &mut Guard,
         bundle: &Bundle,
         actor: &str,
+        mut link: Option<Link>,
         tuples: &[Tuple<'_>],
         report: &mut Report,
     ) -> Result<()> {
         // Two scopes consume four operations in OpenFGA's 100-operation transaction.
-        // Acknowledged revisions carry forward; any failed batch invalidates the attempt.
-        for batch in tuples.chunks(96) {
+        // A new space's link shares its first batch. Acknowledged revisions carry
+        // forward; any failed batch invalidates the attempt.
+        let mut rest = tuples;
+        while link.is_some() || !rest.is_empty() {
+            let room = 96 - usize::from(link.is_some());
+            let (batch, tail) = rest.split_at(room.min(rest.len()));
+            rest = tail;
             self.authorize(tx, bundle).await?;
-            self.fga.write(guard, batch, &[]).await?;
+            let links: Vec<Link> = link.take().into_iter().collect();
+            self.fga.write_created(guard, &links, batch).await?;
             report.grants_acknowledged += batch.len();
             for tuple in batch {
                 logging::audit_relation(
