@@ -19,7 +19,7 @@ from typing import List
 
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory, use_session
-from sqlalchemy import select
+from sqlalchemy import case, or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import (
@@ -59,6 +59,24 @@ class PostgresTagStore(BaseTagStore):
 
     async def list_all_tags(self, session: AsyncSession | None = None) -> List[Tag]:
         return await self.list_all(session=session)
+
+    async def list_subtree(self, root: Tag) -> List[Tag]:
+        full_path = case((or_(TagRow.path.is_(None), TagRow.path == ""), TagRow.name), else_=TagRow.path + "/" + TagRow.name)
+        async with use_session(self._sessions) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(TagRow).where(
+                            TagRow.owner_id == root.owner_id,
+                            TagRow.type == root.type.value,
+                            or_(full_path == root.full_path, full_path.startswith(root.full_path + "/", autoescape=True)),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return [self._row_to_tag(row) for row in rows]
 
     async def get_tag_by_id(self, tag_id: str, session: AsyncSession | None = None) -> Tag:
         async with use_session(self._sessions, session) as s:
