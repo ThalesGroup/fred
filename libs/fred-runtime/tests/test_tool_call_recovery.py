@@ -842,6 +842,59 @@ async def test_streamed_call_with_one_block_per_delta_is_recovered() -> None:
 
 
 @pytest.mark.asyncio
+async def test_streamed_call_with_empty_blocks_between_deltas_is_recovered() -> None:
+    args = '{"file_name": "fake_deck", "slides": [{"kind": "cover", "title": "Fake"}]}'
+    content = _streamed_content(
+        [
+            {"type": "text", "text": "build_"},
+            {},
+            {"type": "text", "text": "presentation"},
+            {"type": "signature"},
+            {"type": "reference", "reference_ids": []},
+            {},
+            *(
+                {"type": "text", "text": args[i : i + 8]}
+                for i in range(0, len(args), 8)
+            ),
+            {},
+        ]
+    )
+
+    response, _ = await _recover_message(
+        AIMessage(
+            content=content, response_metadata={"model_name": "mistral-medium-latest"}
+        ),
+        tools=[build_presentation],
+    )
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [(call["name"], call["args"]) for call in recovered.tool_calls] == [
+        ("build_presentation", json.loads(args))
+    ]
+
+
+@pytest.mark.asyncio
+async def test_plain_answer_with_literal_braces_stays_text() -> None:
+    content = _streamed_content(
+        [
+            {"type": "text", "text": "Pass an empty object to reset the deck:\n"},
+            {},
+            {"type": "text", "text": "```python\nbuild_presentation({})\n```"},
+        ]
+    )
+    original = AIMessage(
+        content=content, response_metadata={"model_name": "mistral-medium-latest"}
+    )
+
+    response, _ = await _recover_message(original, tools=[build_presentation])
+
+    assert response.result[0] is original
+    assert original.tool_calls == []
+
+
+@pytest.mark.asyncio
 async def test_repeated_exact_markers_recover_four_valid_calls() -> None:
     args = [
         {"sql": f"SELECT {index}", "dataset_uids": ["fake-dataset"]}
