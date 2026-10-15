@@ -42,6 +42,7 @@ class FgaClient:
     def __init__(self):
         self.calls = Counter()
         self.writes = 0
+        self.owner_lookups = Counter()
         self.denied = set()
         self.failure = None
         self.active = self.peak = 0
@@ -62,6 +63,10 @@ class FgaClient:
     async def list_objects(self, body, options):
         self.calls[("list_objects", body.type)] += 1
         return SimpleNamespace(objects=self.global_documents[:1000])
+
+    async def list_users(self, body, options):
+        self.owner_lookups[body.object.id] += 1
+        return SimpleNamespace(users=[SimpleNamespace(object=SimpleNamespace(type="team", id="team-a"))])
 
     async def write(self, body, options):
         self.writes += 1
@@ -166,8 +171,7 @@ async def deletion(tmp_path, monkeypatch):
     md = MetadataService.__new__(MetadataService)
     md.metadata_store, md.rebac = store, rebac
     md.vector_store, md.content_store = Mock(), Mock()
-    # Both fixture folders have the same owner; only the final unlink releases bytes.
-    md._resolve_storage_deltas = AsyncMock(side_effect=lambda **kw: ({"team-a": -kw["old_size"]}, {}) if kw["new_size"] == 0 else ({}, {}))
+    md._resolve_storage_deltas = AsyncMock(wraps=md._resolve_storage_deltas)
     md._apply_storage_deltas = AsyncMock()
     ctx = SimpleNamespace(get_pg_async_engine=lambda: sql, get_tag_store=lambda: tags, get_kpi_writer=NoOpKPIWriter)
     monkeypatch.setattr(tag_module.ApplicationContext, "get_instance", lambda: ctx)
@@ -199,11 +203,14 @@ async def test_delete_uses_complete_subtree_and_preserves_other_owners(deletion)
     releases = [call.kwargs for call in md._resolve_storage_deltas.await_args_list if call.kwargs["new_size"] == 0]
     assert len(releases) == 20
     assert all(call["old_tags"] == {"root"} for call in releases)
-    assert sum(call.args[0].get("team-a", 0) for call in md._apply_storage_deltas.await_args_list) == -200
+    # Existing quota accounting charges each membership, including same-owner folders.
+    assert md._apply_storage_deltas.await_count == 40
+    assert sum(call.args[0].get("team-a", 0) for call in md._apply_storage_deltas.await_args_list) == -400
     assert client.peak <= 10
     # F=2 folders, N=20 documents, M=40 memberships; admission is tested separately.
     assert sum(client.calls.values()) == 1 + 2 * 2 + 20 + 2 * 40
     assert client.writes == 40
+    assert client.owner_lookups == {"root": 40, "child": 20}
 
 
 @pytest.mark.parametrize("denied", ["tag:child", "document:d-1"])

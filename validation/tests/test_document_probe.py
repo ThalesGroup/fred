@@ -156,3 +156,22 @@ def test_unlink_preserves_every_other_document() -> None:
 def test_visibility_wait_has_a_deadline() -> None:
     with pytest.raises(AssertionError, match="Timed out"):
         wait_until(lambda: False, description="fixture indexing", timeout=0)
+
+
+@pytest.mark.parametrize("status", [404, 403, 500])
+def test_cleanup_tolerates_only_an_already_deleted_fixture(status: int) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "owned"})
+        return httpx.Response(status if request.method == "DELETE" else 404)
+
+    with httpx.Client(
+        base_url="https://fixture.invalid", transport=httpx.MockTransport(handler)
+    ) as client:
+        if status == 404:
+            with library(client, "team"):
+                pass
+        else:
+            with pytest.raises(AssertionError):
+                with library(client, "team"):
+                    pass

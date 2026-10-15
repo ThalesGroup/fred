@@ -57,7 +57,9 @@ def library(client: ApiClient, team_id: str) -> Iterator[Json]:
     try:
         yield tag
     finally:
-        checked(client.delete(f"/tags/{tag['id']}"))
+        response = client.delete(f"/tags/{tag['id']}", timeout=180)
+        if response.status_code != 404:
+            checked(response)
         assert client.get(f"/tags/{tag['id']}").status_code in (403, 404), (
             f"Fixture library {tag['id']} is still accessible after cleanup"
         )
