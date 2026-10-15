@@ -465,7 +465,19 @@ def _sent(slide: Any) -> SlidePlan:
     """A slide as the model wrote it: a design pin it sent would bypass the
     fit and variety checks, so the fields only the tool sets are dropped."""
     plain = slide.model_dump() if isinstance(slide, BaseModel) else slide
-    return without_hidden(SlidePlan.model_validate(plain))
+    sent = without_hidden(SlidePlan.model_validate(plain))
+    # The units written beside the values are not dumped: kept from the call
+    # itself so the one-measure check sees them.
+    chart = getattr(slide, "chart", None)
+    if isinstance(chart, PlanChart) and sent.chart is not None:
+        series = [
+            mine.model_copy(update={"units": written.units})
+            for mine, written in zip(sent.chart.series, chart.series)
+        ]
+        sent = sent.model_copy(
+            update={"chart": sent.chart.model_copy(update={"series": series})}
+        )
+    return sent
 
 
 def _to_plan(validated: Any) -> DeckPlan:

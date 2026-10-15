@@ -385,8 +385,9 @@ def _crammed(slide: SlidePlan) -> List[Tuple[str, str]]:
             found.append(
                 (
                     f"the {name} holds {len(figures)} figures ({', '.join(figures)})",
-                    f"show them on a figures slide: items [{{number, label}}], one per "
-                    f"figure, and keep the {name} short (else a table)",
+                    f"show them on a figures slide, one item per figure (its number, and "
+                    f"what it counts in the field the catalogue lists), and keep the {name} "
+                    "short (else a table)",
                 )
             )
     return found
@@ -401,8 +402,8 @@ def _units(chart: PlanChart) -> List[Tuple[str, str]]:
     return [
         (
             f"chart mixes units ({', '.join(units)}): a chart shows one measure",
-            "show values of different measures on a figures slide: items [{number, label}]; "
-            "or keep one measure and set `unit`",
+            "show values of different measures on a figures slide, one item per figure; or "
+            "keep one measure and set `unit`",
         )
     ]
 

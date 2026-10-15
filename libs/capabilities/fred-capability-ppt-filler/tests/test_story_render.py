@@ -212,3 +212,21 @@ async def test_an_edit_is_not_refused_over_a_slide_it_does_not_touch(monkeypatch
         changes=[{"op": "edit", "slide": 3, "field": "title", "value": "Effectifs"}]
     )
     assert text.startswith("Delivered"), text
+
+
+@pytest.mark.asyncio
+async def test_two_written_units_are_refused_through_the_tool(monkeypatch):
+    """The call's written units survive the plan's coercion."""
+    mixed = {
+        **CHART,
+        "chart": {
+            "type": "column",
+            "categories": ["Marge", "CA"],
+            "series": [{"name": "2025", "values": ["12 %", "3 M€"]}],
+        },
+        "source": "user",
+    }
+    text, _, workspace = await _built(
+        monkeypatch, [COVER, mixed], user="Marge 12 %, chiffre d'affaires 3 M€"
+    )
+    assert "chart mixes units (%, m€)" in text and not workspace.writes
