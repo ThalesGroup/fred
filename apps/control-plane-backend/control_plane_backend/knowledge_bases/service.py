@@ -75,11 +75,10 @@ async def publish_definition(
 ) -> KnowledgeBasePublicationResult:
     """Record what an image declares about itself, at deployment time.
 
-    A contributor owns a prefix and publishes as many names under it as it
-    wants. The first publication claims that prefix for the calling client;
-    every later one must present the same client, so nobody writes under
-    another's prefix. The claim itself is enforced in the store, by a row whose
-    primary key is the prefix — checking it here would be racy.
+    Only a client the operator listed in `knowledge_bases.publishers` may
+    publish, under the one prefix listed for it, as many names as it wants.
+    The store still binds the prefix to that client, by a row whose primary key
+    is the prefix, and refuses any other client under it.
     """
 
     # A workload identity, not a person: without this an ordinary signed-in
@@ -104,6 +103,22 @@ async def publish_definition(
     if not subject:
         raise KnowledgeBaseClientMismatch(
             "Publishing requires an identity with a subject"
+        )
+
+    registered = {
+        publisher.prefix
+        for publisher in deps.configuration.knowledge_bases.publishers
+        if publisher.client_id == caller
+    }
+    if not registered:
+        raise KnowledgeBaseClientMismatch(
+            f"Client {caller!r} is not registered to publish Knowledge Bases; "
+            "list it with its prefix under knowledge_bases.publishers"
+        )
+    if prefix not in registered:
+        raise KnowledgeBaseClientMismatch(
+            f"Client {caller!r} is registered under knowledge_bases.publishers "
+            f"for {sorted(registered)}, not for prefix {prefix!r}"
         )
 
     if not prefix_covers(prefix, declaration.id):

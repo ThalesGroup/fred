@@ -79,10 +79,10 @@ the calling client's headers or live token getter; the client that owns the
 person token handles its refresh.
 
 **Naming.** Everything a pod contributes has a dotted name under a prefix its
-contributor owns: `fred.samples.local-folder`, `acme.support.router`. Fred
-claims the prefix for the first client that publishes under it, so no central
-registry is needed. `require_contributed_name` and `prefix_covers` check the
-rule.
+contributor owns: `fred.samples.local-folder`, `acme.support.router`. The
+operator assigns each prefix to one client in Fred's configuration (for a
+Knowledge Base, the Control Plane's `knowledge_bases.publishers`).
+`require_contributed_name` and `prefix_covers` check the rule.
 
 ## Why a separate package
 

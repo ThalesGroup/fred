@@ -2259,6 +2259,14 @@ applications:
         #       en: "Demand forecasting for the selected team."
         #       fr: "Prévision de la demande pour l'équipe sélectionnée."
         #     enabled: true
+      # Knowledge Base clients allowed to publish their definitions, each with
+      # the one prefix it owns; client_id is the token's `azp`. Empty by
+      # default: nobody publishes. A prefix is registered once and may not
+      # cover another. A platform admin still enables each definition per team.
+      # knowledge_bases:
+      #   publishers:
+      #     - client_id: kb-acme
+      #       prefix: acme.kb
       policies:
         purge_catalog_path: /app/config/conversation_policy_catalog.yaml
 
