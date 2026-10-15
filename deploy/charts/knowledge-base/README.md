@@ -39,9 +39,9 @@ configuration:
       host: temporal:7233
 ```
 
-The pod registers itself: nothing to add to Fred's values. The chart's `appVersion` is the
-version of Fred's libraries whose configuration model it validates: build the pod on that
-version.
+The pod registers itself: nothing to add to Fred's values. The chart's
+`appVersion` identifies the `fred-sdk` version used to generate its
+configuration schema. Build the pod with a compatible `fred-sdk` version.
 
 ## What it deploys
 
