@@ -26,7 +26,7 @@ Paginated browsing checks only the returned SQL page, retaining existing sort/of
 
 ### Separate deletion inventory from read filtering
 
-For document folders, select the canonical subtree using stored owner, type and path boundaries, without the UI listing's authorization enumeration or pagination. Reuse the tag store; add a scoped query if necessary, without new tables. Require DELETE permission on the selected folders before mutation. Never widen to an identically named path under another owner.
+For document folders, select the canonical subtree using stored owner, type and path boundaries, without the UI listing's authorization enumeration or pagination. Reuse the tag store; add a scoped query if necessary, without new tables. Require DELETE permission on the selected folders before mutation, using batches of ten independent checks. Never widen to an identically named path under another owner.
 
 Read canonical document IDs for that subtree through the existing metadata store and require READ on all candidates before mutation. A denial or failed check refuses the operation instead of silently omitting an item. Existing per-item mutation checks remain authoritative. Do not substitute folder permission for document permission.
 
