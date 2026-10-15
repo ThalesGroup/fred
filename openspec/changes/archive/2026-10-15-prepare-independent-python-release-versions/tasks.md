@@ -19,4 +19,4 @@
 ## 4. Review and close out
 
 - [x] 4.1 Run focused affected tests and one root `make code-quality` near commit, then apply the branch review procedure against the actual target branch and obtain independent read-only review; record findings and verification in the PR.
-- [ ] 4.2 Reconcile the OpenSpec artifacts with implementation, sync and archive the change, then push the topic branch and open a draft PR; verify the PR links its issue and includes the migration note.
+- [x] 4.2 Reconcile the OpenSpec artifacts with implementation, sync and archive the change, then push the topic branch and open a draft PR; verify the PR links its issue and includes the migration note.
