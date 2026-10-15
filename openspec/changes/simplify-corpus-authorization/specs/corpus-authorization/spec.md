@@ -47,9 +47,10 @@ be resolved server-side, never trusted from a caller or index.
 
 Team administrators SHALL be able to govern project structure and habilitations
 without implicit permission to read project documents, conversations or evaluation
-datasets. Corpus reading SHALL require explicit project membership; evaluation
-access to project conversations and datasets SHALL require an explicit project
-analyst role. Governance authority SHALL NOT bypass these content checks.
+datasets. Corpus reading SHALL require project membership or a team editor or
+analyst role, which descends to the team's projects; evaluation access to project
+conversations and datasets SHALL require a project or team analyst role.
+Governance authority SHALL NOT bypass these content checks.
 
 #### Scenario: Claire administers the team but has no Atlas role
 
@@ -69,17 +70,19 @@ Session attachments SHALL retain their distinct owner/session isolation.
   an existing document's folder or space
 - **THEN** it is rejected before content or membership mutation
 
-### Requirement: Editor and analyst authority is local and traceable
+### Requirement: Editor and analyst authority descends and is traceable
 
-Project editing and analysis SHALL require the corresponding explicit project
-roles. Project analysts SHALL be able to analyze project conversation history,
+Project editing and analysis SHALL require the corresponding role on the project or
+on one of its ancestors: editor and analyst roles descend to every descendant space,
+and a project cannot be hidden from them. Project analysts SHALL be able to analyze project conversation history,
 including history predating their appointment; derived datasets SHALL remain in
 that project. Grants and removals SHALL record actor, subject, role, space and time.
 Ordinary membership SHALL NOT make all members' conversations mutually visible.
 
 #### Scenario: An analyst works across two projects
 
-- **WHEN** Antoine has analyst roles in Atlas and Boreal but not a third project
+- **WHEN** Antoine has analyst roles in Atlas and Boreal but not in a third project
+  of the same team, nor on that team or its organization
 - **THEN** he can analyze the first two histories independently, cannot inspect the
   third, and cannot publish either project's datasets into the team via that role
 

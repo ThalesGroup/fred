@@ -56,11 +56,13 @@ redesign is included. Preserve existing personal and platform resource policies.
 | Role | Team scope | Project scope |
 | --- | --- | --- |
 | Member | Reads common team corpus | Reads all corpus of projects joined |
-| Editor | Manages team corpus/agents | Requires explicit project editor role |
-| Analyst | Analyzes team conversations/datasets | Requires explicit project analyst role |
-| Admin | Team/project governance and habilitations | No implicit content access; explicit project roles required |
+| Editor | Manages team corpus/agents | Descends: edits every project of the team |
+| Analyst | Analyzes team conversations/datasets | Descends: analyzes every project of the team |
+| Admin | Team/project governance and habilitations | Descends as governance only; no implicit content access |
 
-Project roles have the corresponding scoped responsibilities; being a project
+Editor, analyst and admin descend to every descendant space (decided 2026-10-15,
+see `move-space-tree-to-openfga`); member does not. Project roles have the
+corresponding scoped responsibilities; being a project
 member does not make every conversation visible to every other member. Project
 analysts can analyze project history, including conversations predating their
 appointment; derived datasets remain in that project. One person can be analyst
