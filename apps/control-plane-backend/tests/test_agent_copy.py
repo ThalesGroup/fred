@@ -603,7 +603,7 @@ async def test_graph_agent_saved_with_an_empty_selection_copies_its_included_def
     )
     copied: list[str] = []
 
-    async def _fake_copy(*, base_url, capability_id, request, authorization):
+    async def _fake_copy(*, base_url, capability_id, request, authorization, **_):
         copied.append(capability_id)
         return {"schema_version": "0.1.0", "config": {}}
 

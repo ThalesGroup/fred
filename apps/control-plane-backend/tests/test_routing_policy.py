@@ -2279,6 +2279,7 @@ async def test_effective_model_is_empty_for_a_deleted_instance(
         "reasoning_enabled": False,
         "selectable_models": [],
         "choice_locked": False,
+        "supports_vision": False,
     }
 
 
