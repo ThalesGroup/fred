@@ -115,7 +115,7 @@
 }
 /* Per-condition labels only show once the shared heading line is dropped (narrow widths). */
 .conditionCell > span,
-.conditionCell > label {
+.conditionToggle > label:first-child {
   display: none;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
@@ -196,7 +196,7 @@
     grid-column: 2 / 4;
   }
   .conditionCell > span,
-  .conditionCell > label {
+  .conditionToggle > label:first-child {
     display: block;
   }
   .conditionToggle {
