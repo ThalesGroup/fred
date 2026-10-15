@@ -68,6 +68,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
       open
       title={t("rework.teamSettings.members.inviteLink.title")}
       maxWidth={560}
+      dense
       hideCancel
       confirmLabel={t("common.close")}
       onConfirm={onClose}
@@ -87,6 +88,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
           </span>
           <span onClick={(event) => event.stopPropagation()}>
             <Switch
+              size="small"
               checked={enabled}
               disabled={toggleDisabled}
               aria-labelledby={labelId}
@@ -101,6 +103,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
                 <TextInput
                   ref={urlRef}
                   className={styles.urlInput}
+                  size="small"
                   aria-label={t("rework.teamSettings.members.inviteLink.urlLabel")}
                   value={url}
                   readOnly
@@ -110,7 +113,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
               <Button
                 color="primary"
                 variant="outlined"
-                size="medium"
+                size="small"
                 disabled={!enabled || busy}
                 icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
                 onClick={() => void copy()}
@@ -121,6 +124,10 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
                     : "rework.teamSettings.members.inviteLink.copy",
                 )}
               </Button>
+            </div>
+          )}
+          {url && (
+            <div>
               <Button
                 color="primary"
                 variant="text"
