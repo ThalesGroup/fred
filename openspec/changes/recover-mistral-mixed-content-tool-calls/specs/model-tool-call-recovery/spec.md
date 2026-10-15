@@ -19,6 +19,16 @@ The runtime SHALL convert a completed Mistral assistant response into native too
 - **WHEN** a streamed Mistral response is aggregated into hundreds of reasoning blocks followed by text blocks forming a registered tool name, the exact empty sentinel, and valid calls
 - **THEN** the runtime emits each validated call once, as for the same content in a few blocks
 
+#### Scenario: Streamed response holds empty blocks between deltas
+
+- **WHEN** a streamed Mistral response interleaves blocks without any content (`{}`, or a bare typed marker such as `{"type": "signature"}`) with the text blocks forming a registered tool name, the exact empty sentinel, and valid arguments
+- **THEN** the runtime ignores the content-less blocks and emits the validated call once
+
+#### Scenario: Plain answer containing literal braces
+
+- **WHEN** a Mistral answer contains a literal `{}` (for example a code snippet) with no exact sentinel after a registered tool name
+- **THEN** the response stays assistant text, unchanged, and no call is reconstructed
+
 #### Scenario: Repeated exact markers encode valid calls
 
 - **WHEN** a Mistral response contains several exact empty sentinels, each immediately following a registered tool name and preceding valid JSON arguments

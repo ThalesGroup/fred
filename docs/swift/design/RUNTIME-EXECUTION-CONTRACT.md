@@ -7074,7 +7074,8 @@ The §8.92 recovery no longer caps the number of content blocks. A streamed
 response is aggregated with one block per provider delta, so a long reasoning
 turn ends with hundreds of `thinking` blocks and the former 256-block cap
 rejected it before parsing. The 16k-character cap on recovered text and the
-16-call cap remain the bounds; thinking blocks before the tool name are skipped.
+16-call cap remain the bounds; thinking blocks before the tool name are skipped,
+as are blocks with no content (`{}` or a bare typed marker) anywhere in the message.
 
 `content_to_text` (transcript, history and replay rendering) no longer renders
 the `reference` sentinel or tool-call blocks (`tool_use`, `tool_call`,
