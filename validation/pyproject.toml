@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["factory_config", "generate_report"]
+py-modules = ["factory_config", "generate_report", "document_probe"]
 
 [tool.pytest.ini_options]
 testpaths = ["scenarios"]

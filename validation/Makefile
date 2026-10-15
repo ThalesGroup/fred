@@ -33,6 +33,7 @@ FRED_KNOWLEDGE_FLOW_URL  ?= http://localhost:8111/knowledge-flow/v1
 
 VALIDATION_REPORT    ?= report.md
 VALIDATION_JUNIT_XML ?= report.xml
+VALIDATION_ARGS      ?=
 
 .PHONY: validation-report
 validation-report: ## Run the full live validation suite (no -x) and write a short claims-grouped Markdown report - requires infra + running apps, see README.md
@@ -48,7 +49,7 @@ validation-report: ## Run the full live validation suite (no -x) and write a sho
 	  FRED_CONTROL_PLANE_URL="$(FRED_CONTROL_PLANE_URL)" \
 	  FRED_RUNTIME_PUBLIC_BASE="$(FRED_RUNTIME_PUBLIC_BASE)" \
 	  FRED_KNOWLEDGE_FLOW_URL="$(FRED_KNOWLEDGE_FLOW_URL)" \
-	  $(VALIDATION_VENV)/bin/pytest --junitxml=$(VALIDATION_JUNIT_XML); \
+	  $(VALIDATION_VENV)/bin/pytest $(VALIDATION_ARGS) --junitxml=$(VALIDATION_JUNIT_XML); \
 	  rc=$$?; \
 	  $(VALIDATION_VENV)/bin/python generate_report.py $(VALIDATION_JUNIT_XML) | tee $(VALIDATION_REPORT); \
 	  echo ""; \
@@ -56,7 +57,7 @@ validation-report: ## Run the full live validation suite (no -x) and write a sho
 	  exit $$rc
 
 .PHONY: validation-unit-tests
-validation-unit-tests: ## Offline unit tests for the validation harness itself (factory_config.py, tests/test_swift_clean_no_groups.py) - no running stack required
+validation-unit-tests: ## Offline tests for the validation harness, document probes and factory configuration - no running stack required
 	@test -x $(VALIDATION_VENV)/bin/python || { \
 	  echo "▶ creating venv $(VALIDATION_VENV) (python3 -m venv)"; \
 	  $(PYTHON_BIN) -m venv $(VALIDATION_VENV) && \

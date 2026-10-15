@@ -147,7 +147,7 @@ for this harness.
 | `FRED_CONFIG_PATH` | `../apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/users.json` | Source of truth for users/roles |
 | `FRED_TEST_TEAM` | `fredlab` | Collaborative team used for isolation checks |
 | `FRED_TEST_AGENT_ID` | `fred.github.test_assistant` | Public no-LLM agent used for deterministic runtime execution |
-| `FRED_KNOWLEDGE_FLOW_URL` | `http://localhost:8111/knowledge-flow/v1` | knowledge-flow-backend base, started manually like the other apps. Only required by `test_content_scope_bypass.py`; checked lazily, not at session start. |
+| `FRED_KNOWLEDGE_FLOW_URL` | `http://localhost:8111/knowledge-flow/v1` | knowledge-flow-backend base, started manually like the other apps. Required by `test_document_access.py`; checked lazily, not at session start. |
 
 ## The complete-matrix demo users
 
@@ -244,12 +244,12 @@ shape:
 | PASS | alice holds only a platform role and sees zero collaborative teams. |
 | PASS | gabriel holds only a platform role and cannot read fredlab's catalog. |
 
-## Content-scope team isolation
+## Document access, revocation and conversation freshness
 
 | Result | Claim |
 |---|---|
-| PASS | Corpus capabilities requires an explicit team_id instead of falling back to organization scope. |
-| PASS | A platform-only user cannot read a collaborative team's corpus capabilities. [username=alice] |
+| PASS | A personally readable B document selected by UID is excluded in active team A. [policy=semantic] |
+| PASS | A second turn in the same session retrieves a document ingested after the first turn. |
 ```
 
 This is the minimal version of the tag-bound evidence report already specced in
@@ -277,10 +277,10 @@ more. Attaching it to a git tag/commit with signed, retained artifacts
 - **Platform-role isolation**: `platform_admin` (`alice`) and `platform_observer`
   (`gabriel`) grant platform authority only; they do not grant collaborative team
   visibility or team content access.
-- **Content-scope team isolation**: knowledge-flow `corpus/capabilities` requires
-  an explicit `team_id`; members of that team are allowed, platform-only users and
-  members of other teams are denied. Requires knowledge-flow-backend running (see
-  `FRED_KNOWLEDGE_FLOW_URL` above).
+- **Document access and lifecycle**: real document retrieval stays within the
+  active team and selected documents; unlinking a shared document revokes access;
+  newly ingested documents reach an existing conversation. See the detailed
+  coverage and prerequisites below.
 - **AUTHZ-06 cumulative team roles** (`scenarios/test_cumulative_team_roles.py`):
   marc/bob/elena each hold exactly one of `team_admin`/`team_editor`/`team_analyst` on
   `fredlab` and only that role's capabilities; priya holds all three at once and gets
@@ -295,3 +295,75 @@ Offline unit tests for the harness itself (`factory_config.py`'s role-resolution
 simple role, cumulative role, the `teams[]` -> `team_member` fallback, admin/editor/analyst
 distinction, a neutral identity with no role) live in `tests/`, not `scenarios/`, and need no
 running stack: `make validation-unit-tests`.
+
+
+## Document access and conversation changes
+
+`scenarios/test_document_access.py` adds live checks for issue
+[#3091](https://github.com/ThalesGroup/fred/issues/3091). It selects an existing
+editor of two demo teams, plus an exclusive reader in each team, from `USERS`.
+With the default fixture these are Bob, Zoe and Phil (the first eligible
+Northbridge reader). No identities, roles or existing documents are modified.
+User credentials are refreshed through the existing CLI session manager during long campaigns; its
+temporary session files are removed when pytest exits.
+
+The campaign creates uniquely named libraries, small Markdown documents,
+managed diagnostic agents and sessions. Cleanup targets their returned IDs,
+including when an assertion fails. It uploads real documents, waits for ingestion
+tasks and initial index visibility, and exercises the configured vector backend.
+A working embedding service and Knowledge Flow worker are required. The runtime
+checks also require the public `fred.github.test_assistant` template and enabled
+`document_access` capability. No chat LLM is used: the diagnostic agent returns
+the actual search hits. The driver confirms
+only its fixed `test_document_confirm` pause, preserving the same session and
+selection on resume; unexpected pauses or failed tools fail the test.
+
+Coverage includes:
+
+- Library scope and explicit document selection across two readable teams, for
+  semantic, hybrid and strict search; positive controls prove retrieval works.
+- Rejected library/document selections do not widen to the authorized corpus.
+- Direct metadata and chunk reads reject a reader outside the owning team.
+- A single UID is indexed in two team libraries, then unlinked from one. The
+  remaining team can still retrieve it; the removed team's reader must lose
+  library-search, explicit-search, metadata and chunk access. Negative assertions
+  are immediate after successful removal, not retried until a leak disappears.
+- Runtime UID scoping and a new library document becoming retrievable on the
+  next turn of the same session.
+- A late chat attachment becoming retrievable in an existing session; isolation
+  from other users/sessions, including when a corpus document is selected.
+
+These tests assert the intended behavior without `xfail`. An affected deployment
+is expected to fail the relevant assertions; these are diagnostic tests, not a
+product fix. A failed positive control is a failed setup, never proof of isolation.
+
+### Run against the existing k3d deployment
+
+Use the deployed ingress endpoints (not the localhost backend defaults). Set
+`FRED_REALM_URL`, `FRED_CONTROL_PLANE_URL`, `FRED_KNOWLEDGE_FLOW_URL` and
+`FRED_RUNTIME_PUBLIC_BASE` to that deployment. The first three include their
+API/realm path; the runtime value is the public origin used to resolve the
+prepare-execution URL. Keep normal TLS verification enabled.
+
+From the repository root, with those endpoint variables exported:
+
+```bash
+# Focused first run, with separate evidence from the full campaign:
+make validation-report VALIDATION_ARGS="scenarios/test_document_access.py" \
+  VALIDATION_REPORT=document-access-report.md VALIDATION_JUNIT_XML=document-access-report.xml
+
+# Full campaign:
+make validation-report
+```
+
+The command runs the local validation code against the deployed services; it
+does not rebuild or redeploy k3d. Report paths are relative to `validation/`.
+Record the deployed image revision separately from the validation checkout SHA.
+
+Limits: this exercises HTTP/runtime contracts, not the browser composer's upload
+and cache-refresh sequence or a ReAct model's interpretation. OpenFGA failure
+injection/retry, concurrent add/remove operations, label search and exhaustive
+coverage of all document tools need separate targeted tests. The former README's
+`corpus/capabilities` claims referred to a missing `test_content_scope_bypass.py`;
+that endpoint's authorization matrix is still a coverage gap. No live failure
+injection is performed against the shared deployment.
