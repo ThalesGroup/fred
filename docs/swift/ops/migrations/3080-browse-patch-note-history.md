@@ -20,9 +20,10 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy the control-plane backend and the frontend together. Two control-plane
-Alembic revisions run with the normal migration step; no backfill or manual
-step is needed.
+Treat the control-plane backend and frontend as one coordinated rollout: run
+the release's control-plane migration chain before starting the updated backend,
+then update the frontend. These two revisions require no separate backfill or
+manual step.
 
 `e5ff6d80cc9f` (parent `9f6d3c2a1b08`):
 

@@ -101,9 +101,17 @@ export function usePptTemplateAnalysis({
 
   const blockingError = useMemo(() => {
     if (!stagedFile && !hasPersistedTemplate) return t("capability.ppt_filler.form.templateRequired");
+    if (
+      stagedFile &&
+      analysis !== null &&
+      previewErrors.length === 0 &&
+      !analysis.schema.some((slide) => slide.keys?.length)
+    ) {
+      return t("capability.ppt_filler.form.templateNoFields", { placeholder: "{{title}}" });
+    }
     if (stagedFile && previewErrors.length > 0) return t("capability.ppt_filler.form.templateInvalid");
     return null;
-  }, [stagedFile, hasPersistedTemplate, previewErrors.length, t]);
+  }, [stagedFile, hasPersistedTemplate, analysis, previewErrors.length, t]);
 
   useEffect(() => {
     onBlockingErrorChange(blockingError);
@@ -114,7 +122,7 @@ export function usePptTemplateAnalysis({
 
   // Only true right after a staged file analyzes with no errors — lets a caller
   // (the pack options) fire a one-shot "upload succeeded" toast.
-  const stagedAnalyzedClean = Boolean(stagedFile) && analysis !== null && (analysis?.errors ?? []).length === 0;
+  const stagedAnalyzedClean = Boolean(stagedFile) && analysis !== null && blockingError === null;
 
   const handlePick = async (file: File) => {
     onAssetFileChange(TEMPLATE_SLOT, file);

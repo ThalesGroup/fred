@@ -18,7 +18,7 @@ accordés séparément.
 | Rôle         | Peut                                                                                | Ne peut pas, sans autre rôle                           |
 | ------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | **Membre**   | Utiliser les agents, lire les conversations et les fichiers de l'équipe, la quitter | Modifier quoi que ce soit de partagé                   |
-| **Éditeur**  | Créer et modifier agents, prompts, ressources et routage des modèles                | Gérer les membres ou les réglages de l'équipe          |
+| **Éditeur**  | Créer et modifier agents, prompts et ressources                                     | Gérer les membres ou les réglages de l'équipe          |
 | **Admin**    | Gérer les membres et leurs rôles, les réglages et la politique de l'équipe          | **Créer ou modifier un agent, un prompt, un document** |
 | **Analyste** | Créer et lancer des campagnes d'évaluation, gérer les corpus d'évaluation           | Toucher au corpus général, aux membres, aux réglages   |
 
@@ -30,6 +30,19 @@ accordés séparément.
 
 **Membre** est la base : automatique dès qu'on porte un rôle au-dessus. Et une
 équipe garde toujours **au moins un Admin** — retirer le dernier est refusé.
+
+## Publier des agents
+
+Tout **Éditeur** peut partager les agents de l'équipe avec toute l'organisation
+grâce à la marketplace des agents. Un **Admin** de l'équipe peut retirer un
+agent de la marketplace sans être Éditeur. Le fonctionnement de la publication
+est expliqué sur la page
+[Les agents](/help/fr/features/agents#la-marketplace-des-agents).
+
+La publication est **activée pour chaque équipe par l'administrateur de la
+plateforme**, qui fixe aussi le nombre d'agents qu'une équipe peut publier. Si
+l'administrateur la désactive plus tard, les agents publiés de l'équipe quittent
+la marketplace.
 
 ## Entrer dans une équipe
 
@@ -62,9 +75,14 @@ section dépend de votre rôle.
 - **Paramètres** — la description de l'équipe, sa visibilité sur la marketplace,
   son mode d'adhésion, et le délai de **rétention** après lequel les
   conversations supprimées sont définitivement effacées (**Admin**).
-- **Routage des modèles** — quel profil de modèle les agents de l'équipe
-  utilisent, par défaut et selon l'opération. Laissé vide, le profil du
-  déploiement s'applique (**Éditeur**).
+- **Modèles** — parmi les modèles de langage que la plateforme ouvre à
+  l'équipe : ceux que les membres peuvent utiliser, celui par défaut, et si le
+  raisonnement démarre activé pour chacun (**Admin** ; les Éditeurs et
+  Analystes le consultent). Le modèle par défaut ne peut pas être désactivé.
+  Désactiver un modèle affiche d'abord les agents qui le conseillaient : ils
+  suivent alors le modèle par défaut de l'équipe. Les conversations qui
+  l'utilisaient reviennent au modèle conseillé de l'agent. Un modèle
+  nouvellement ouvert par la plateforme arrive activé.
 
 ## L’application d’évaluation
 

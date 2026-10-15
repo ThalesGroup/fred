@@ -24,6 +24,7 @@ import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/Platf
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import ProvisioningPage from "@components/pages/admin/ProvisioningPage/ProvisioningPage";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
@@ -36,6 +37,7 @@ import HomePage from "@components/pages/HomePage/HomePage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
+import MarketplaceAgents from "@components/pages/marketplace/MarketplaceAgents/MarketplaceAgents.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import KnowledgeBaseDocumentsPage from "@components/pages/TeamKnowledgeBasesPage/KnowledgeBaseDocumentsPage.tsx";
@@ -209,6 +211,10 @@ export const routes: RouteObject[] = [
         element: <MarketplacePrompts />,
       },
       {
+        path: "marketplace/agents",
+        element: <MarketplaceAgents />,
+      },
+      {
         path: "admin",
         element: <AdminIndexRoute />,
       },
@@ -296,6 +302,16 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <UiSettingsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Agents marketplace settings; same platform-admin gate as the backend's
+        // `can_manage_platform` on /admin/marketplace-settings.
+        path: "admin/marketplaces",
+        element: (
+          <Protected requires="admin">
+            <MarketplacesPage />
           </Protected>
         ),
       },

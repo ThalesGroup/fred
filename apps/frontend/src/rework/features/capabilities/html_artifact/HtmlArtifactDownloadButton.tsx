@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Download menu for one artifact — HTML (self-contained file), PDF (via the
-// browser's print dialog), PNG (rasterized). Shared by the in-chat card and the
-// pane header so the two stay DRY. The markup rides inline on the chat part, so
-// HTML/PNG are plain client-side saves — no network, no bearer.
+// Download menu for one artifact — HTML (self-contained file), PNG (rasterized) and
+// PDF (one-page image PDF from the same raster). Shared by the in-chat card and the
+// pane header. The markup rides inline on the chat part: client-side saves only.
 
 import { useTranslation } from "react-i18next";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
@@ -63,12 +62,14 @@ export default function HtmlArtifactDownloadButton({ html, css, title }: { html:
       } else {
         await downloadHtmlArtifactPng(html, css, title);
       }
-    } catch {
+    } catch (error) {
+      console.error(`HTML artifact ${format} export failed`, error);
       showError({
         summary: t("capability.html_artifact.exportFailed", {
           format: format.toUpperCase(),
           defaultValue: "Could not export the {{format}}.",
         }),
+        detail: String(error),
       });
     }
   };

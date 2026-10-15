@@ -130,9 +130,11 @@ inside Dialog, and option selection does not confirm the Dialog. Escape, Tab and
 Enter belong to the topmost modal only (`isTopmostModal` in `utils/Portal.tsx`,
 any `dialog` or `alertdialog` with `aria-modal`): a `ConfirmationDialog` opened
 over a Dialog gets the keyboard, and an Escape already handled is ignored.
-Opt-in props:
+Width comes from `maxWidth` (px, capped at 90vw). Opt-in props:
 `actionsAddon` (e.g. a checkbox) renders in the action bar before the buttons;
-`dividers` rules off the header and action bar with `outline-variant`;
+`footerStart` puts content (a hint, a loading row, a secondary action such as
+a removal) at the far left of the action bar, opposite cancel/confirm, first in
+Tab order but never the opening focus; `dividers` rules off the header and action bar with `outline-variant`;
 `initialFocus="dialog"` focuses the dialog itself rather than its first
 control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
@@ -322,11 +324,9 @@ over a scrolling body (`--spacing-xs` padding). The header is a full-width `butt
 on `--surface-container` (`--spacing-xs` `--spacing-s` padding, `--font-title-small`, top corners
 following the panel) that selects or clears the whole section: tri-state icon right (`check_circle`,
 `remove_circle` with `aria-checked="mixed"` when partly selected, `radio_button_unchecked`), inset
-state-layer hover, 2px `--primary` focus ring. Wherever the Simple view offers its reasoning pack,
-the capabilities column always starts with a reasoning tile (the pack's title), selected by default
-and counted in the header's tri-state; applied, it turns reasoning on with conversations starting
-in it, unticked it leaves the form's reasoning alone. The hint shows when no capability is
-recommended and no reasoning tile is offered; the header is a plain title only when the column has no tile at all. **Apply** is disabled when nothing is ticked and writes only ticked items
+state-layer hover, 2px `--primary` focus ring. The column proposes no reasoning tile: reasoning
+follows the conversation's model, not the agent. The hint shows when no capability is
+recommended; the header is then a plain title. **Apply** is disabled when nothing is ticked and writes only ticked items
 (capabilities replace the selection, document access through the resource pack). If a ticked item
 would replace a value the user wrote (on create, template seeds count as empty; capabilities compare
 what Apply would write, selection and document sources), a critical `ConfirmationDialog` lists
@@ -395,6 +395,11 @@ radius, padding) plus an optional header and groups of rows separated by thin di
 it does **not** position itself (consumers place it). `MenuPopoverItem` is one homogeneous
 row: leading icon + label + optional inline muted value + optional badge + optional trailing
 affordance (e.g. `chevron_right` for sub-rows, `add` for actions), with a `danger` variant.
+Opt-in `dense` (2026-10-09, used by the composer model chip only) tightens the surface
+padding, the rows' side padding (vertical stays `--spacing-xs`) and dividers; every other
+menu keeps the default rhythm. Opt-in `quietUnselected` (same chip only): unselected labels in
+`--on-surface-retreat`, the selected and the hovered row's label in `--on-surface`
+(the accent state layer and check stay).
 Sub-menu rows are rows with a chevron whose anchored panel is rendered by the parent as a
 sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface*`,
 `--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`.
@@ -435,67 +440,9 @@ Uppercase section labels are gone (sentence case: "Recherche", "Portée"). Searc
 only owns its box width and the anchored sub-menus; the surface and row grammar come from the
 shared molecule.
 
-As of REASON-01 (#2166) the platform contributed its first non-capability control: a
-`Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
-**gone from the tune menu**: reasoning is now a **plain text button + chevron**
-(`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
-edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
-reference. The button leads with the MODEL IDENTITY, followed by the reasoning
-MODE: "Mistral Small · Boost" when on, "Mistral Small · Rapide" when off (bare
-"Raisonnement"/mode labels when no model resolves at all); its menu opens
-above, right-aligned, with the effort/latency explainer as a muted header and
-the two modes as check-circle rows.
-
-**Two modes, not an on/off switch (#2387).** "Mistral Small · Désactivé" read
-as though the MODEL were disabled — the state word sat beside the model name
-with nothing tying it to reasoning. Naming both modes removes that reading:
-neither describes anything as off. EN uses Fast / Boost.
-
-`Boost` also wears the Chat button's spectrum (`.state[data-on]`), so the one
-"the AI is doing more" signal reads the same on the agent card and in the
-composer. Two departures from that border: linear rather than conic (a conic
-sweep across ~40px of text smears), and no white stops (white travels a border
-but is a hole in text, invisible on the light theme) — leaving cyan → violet →
-pink. A solid `--primary` sits underneath as the fallback for engines that
-ignore `background-clip: text`, and `forced-colors` drops the gradient for the
-system palette. The WORD carries the state either way, so colour is
-reinforcement, never the only signal. 2026-08-21: the shared stops were
-saturated and moderately darkened (same hues) in both places — the original
-pastels were near-invisible on the light surface, a fully darkened pass sank
-into the dark one; the retained stops sit halfway between, so the single
-gradient reads on both themes.
-
-Deliberately NOT a low/medium/high picker — a same-day effort picker was
-withdrawn (providers 400 on values they don't support,
-`RUNTIME-EXECUTION-CONTRACT.md` §8.48) — and since #2387 not a level DISPLAY
-either. The level a reasoning turn runs with is the model's ops-authored
-`settings.reasoning_effort`, applied live by the pod; showing it implied a
-per-question choice that never existed, and it took two snapshot columns to
-reach the composer at all (§8.54). The wire stays the on/off tri-state.
-
-**Superseded in part by #2387 — see "Composer model label" below.** Until then
-the model identity came from `params.model_id` on this very control, i.e. the
-single model whose REASONING was enabled platform-wide, which is unrelated to
-routing; and the chip as a whole was gated on the reasoning control existing.
-Both changed: the identity now comes from
-`GET /teams/{team_id}/routing-policy/effective-chat-model`, the model shows even
-when no reasoning is offered, and the reasoning MENU additionally requires the
-routed model to be reasoning-enabled. The author/admin gates below still decide
-whether the control is emitted at all — a closed upstream gate removes it
-entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
-section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
-through the same `CapabilityCard` component every real capability uses (generalized
-to a plain `name`/`description`/`subForm` API for this) even though the reasoning
-offer still isn't a capability underneath.
-
-As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
-constant: the reasoning card grows a second switch nested under `Reasoning` in its own
-sub-form area — visible only while `Reasoning` is on, matching how a real capability's
-own boolean config field renders — and it seeds the composer row's initial state for
-every new conversation. Nothing about the row itself changes: still a per-question
-choice the user can flip, still removed entirely when an upstream gate is closed. The
-form hint carries the cost of the opt-in (slower, may repeat tool calls on tool-using
-agents) so the decision is informed at the point it is made.
+Reasoning is not a tune-menu row: since 2026-08-12 it lives in the composer's
+right-edge model control, `ReasoningChip` (see "Composer model and reasoning
+control" below).
 
 #### Open UX issues
 
@@ -1157,6 +1104,9 @@ The name `small` is scoped to this component. On the shared scale, 24px is
   caller classes alongside generated classes and now has a visible two-pixel
   `:focus-visible` outline. Its neutral tonal colors use defined on-surface and
   on-surface-retreat state layers for hover and press.
+  An optional `iconSize` keeps a smaller glyph tier in a larger button, e.g. the
+  `AgentCard` more menu: a 40px target around the 20px glyph, offset so the glyph
+  stays where the 32px button had it.
 - Material and custom icons are decorative by default. A standalone informative icon
   receives only an explicit caller-owned accessible name; glyph identifiers no longer
   become user-facing labels. The unsupported legacy `infos` name was corrected to
@@ -2139,13 +2089,15 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
 - Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
-- Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
+- Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission; a plain 20px `on-surface-muted` icon, focusable, aligned with the card content — not a button) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
 - The origin/template line that used to sit under the agent name (#2076) is gone from the card body entirely — it only lives in the info tooltip now.
 - **Duplicate** opens `DuplicateAgentDialog` (name field prefilled with the source's name); confirming rebuilds a `CreateAgentInstanceRequest` from the source instance via the same `buildAgentFormSubmitPayload`/`extractCapabilityConfigValues` helpers the edit form uses (correct capability filtering against the live template), then calls the normal create endpoint — no backend change.
 - **Delete** reuses `TeamAgentsPage`'s existing `handleDelete` (previously only reachable from inside the edit modal) via the same `ConfirmationDialog`, with the same inverted emphasis as the "Leave team" dialog: Cancel is `filled`/primary (visually dominant, the safe choice), Delete is `text`/error (low emphasis).
 - The `Tooltip` atom gained an optional `content: ReactNode` prop (alongside the existing `text: string`) for this rich variant — sizes to content instead of forcing a single nowrap line, same hover/`:focus-within`/above-anchor positioning as every other tooltip in the app.
 - Disabled cards render with muted colours, driven by the existing `data-enabled` CSS custom-property cascade (unchanged by #2096).
 - The Chat button's hover treatment (rotating conic-gradient border) is unchanged from #2076.
+- **Marketplace (agents marketplace, 2026-10-12).** The more menu renders when the user can edit **or** remove the agent from the marketplace: a team admin who is not an editor gets a menu with **Remove from the marketplace** only. Editors get **Publish to the marketplace** / **Update on the marketplace** (never in the personal space), greyed with the reason as the item's tooltip for an administrator-only agent type, a private team, or a reached quota (updating an existing publication ignores the quota). Deactivating or deleting a published agent goes through the `criticalAction` confirmation and says it leaves the marketplace. The marketplace state sits in the shared `AgentMarketplaceBar`, pinned under the footer row (below). The description block grows (`flex-grow`) so the footer and bar stay at the bottom and cards in one grid row keep equal heights; the suspension banner is anchored to the footer row, not the card, so it never covers the bar.
+- **Menu item tooltips (2026-10-12).** `OptionModel.tooltip` renders the shared `Tooltip` over the whole row (`placement="left"`, new `fill` prop) instead of a native `title`, so a greyed item's reason always shows on hover — e.g. Publish blocked by a private team, the quota or an administrator-only agent type. Keyboard and screen-reader users get the same text through `aria-describedby` on the `<li>`, pointing at an always-rendered `hidden` span: the menu keeps DOM focus on the list (`aria-activedescendant`), so the Tooltip itself never receives focus.
 
 #### Open UX issues
 
@@ -2159,6 +2111,55 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 ---
 
+### `AgentMarketplaceBar` and the team card's marketplace state
+
+**Location:** `src/rework/components/shared/molecules/AgentMarketplaceBar/AgentMarketplaceBar.tsx` (bar, `MarketplaceCounter`, `formatMarketplaceDate`), `src/rework/components/shared/organisms/AgentCard/TeamMarketplaceState.tsx`
+**Status:** `Functional`
+
+One bar for both agent cards: the card's last child, flush with its bottom edge at full width, its bottom corners inheriting the card's radius; `surface-container-high` background (one step above the card's `surface-container`, no divider), `font-label-large`, `on-surface-retreat` text, 2.5rem minimum height. `MarketplaceCounter` is an icon plus a number with a full sentence as `aria-label`; given `onClick` it becomes a toggle button with `aria-pressed` and a filled icon (the marketplace card's Like). On the team card the bar appears only for a visible publication state while the team can publish (switch on, public team, not the personal space):
+
+- **Not published / hidden** (`dismissed`): no bar, background or reserved space; editors publish from the more menu.
+- **Published:** like and import counters (`spacing-2xs` icon gap, `spacing-s` between them), then the published chip pushed right — the same `success-container` chip as a published prompt card, in `label-large-emphasized` with an 18px icon.
+- **Marketplace update needed:** the bar switches to the `warning` tone, counters kept; a tooltip on the label says the marketplace still shows the previous version.
+- **Removed:** a pill button "Removed from the marketplace" opening a small popover upward (`surface-floating`, `shadow-m`): reason, locale date, the platform admin's message if any, and **Hide** for editors and the team admin only.
+- Members who are not editors only ever see Published; Modified and Removed are hidden even if sent, leaving no bar for Removed.
+
+#### Open UX issues
+
+- Not yet design-reviewed. The `favorite` icon was added to `materialIcons` for likes.
+
+---
+
+### `PublishAgentDialog` and `RepublishProposalDialog`
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/PublishAgentDialog/`, `src/rework/components/pages/TeamAgentsPage/RepublishProposalDialog/`
+**Status:** `Functional`
+
+- **Publish dialog** (shared `Dialog`): every publication and republication. Visibility warning, "Anyone who imports this agent receives a copy of its files (…)" when a selected capability declares file slots (named by capability, file names are not known before publication), "3 of 5 published", the feature's only Help Center link (the Agents page's marketplace heading, by anchor), and an "I understand" checkbox gating the confirm button.
+- **Republish proposal** (`ConfirmationDialog` with `dismissible={false}`: neither the scrim nor Escape closes it): after an editor's save that actually changed a published agent, offer "Update" / "Ignore"; after reactivating an agent removed by its deactivation, offer "Publish" / "Ignore". The confirm action opens the publication warning dialog; at the quota, it is disabled (`confirmDisabled`) and the reason is shown under the message.
+
+#### Open UX issues
+
+- Not yet design-reviewed.
+
+---
+
+### `MarketplaceAgents`, `MarketplaceAgentCard`, ID card and import dialog
+
+**Location:** `src/rework/components/pages/marketplace/MarketplaceAgents/` (page, `MarketplaceAgentDialog/`, `ImportAgentDialog/`), `src/rework/components/shared/organisms/AgentCard/MarketplaceAgentCard.tsx`
+**Status:** `Functional`
+
+- **Page** (`/marketplace/agents`, `MarketplaceNavbar` entry with the deployment's agent nickname and icon): same header as the prompts marketplace with a single `SearchInput` (name, role, description and team name, case- and accent-insensitive). Clicking a card's team name filters on that team; the active filter shows as a removable `Chip` ("Team: <name>") in a flex chips row under the header, meant to hold category chips later. Both run client-side so the page tells the two empty states apart; the chip stays visible on the no-result state. Server order is kept (newest first publication). Empty states use `PageEmptyState` with its optional `description` line: storefront "No agent shared yet" with what the page is for, and search_off "No agent matches" with a hint.
+- **Card:** the `AgentCard` shell and styles, always in the enabled palette, without chat, enable toggle, more menu or info tooltip. A top band in `surface-container-high` reads "By <team>" (live name, never a person); the team name is a text-styled button (underlined on hover and focus, `aria-label` "Filter by team <name>") that filters the page and stops propagation. An outlined "View details" button sits above the shared bar, which is pinned at the bottom as on the team card and holds the Like toggle (`aria-pressed`, filled heart in `primary`, self-like allowed, disabled while in flight), the Import counter as a button opening the import dialog, and "Updated on <date>" pushed right.
+- **ID card** (`Dialog` at `maxWidth` 960 with `dividers`, titled with the agent name, confirm **Import**, cancel **Close**): two columns, one below 720px. Left: an `outline-variant` summary card (`radius-s`, `spacing-s` padding; the capability section below it has no divider, its own padding-top spaces it) opening with a "Published by <team> · updated on <date>" line, then the icon tile beside the agent name with its role below (same styles as an active `AgentCard`), description and counter pills ("N likes", with "including M since the update of <date>" in a tooltip once republished; imports), then sections divided by `outline-muted`, each titled by a quiet `label-medium` / `on-surface-retreat` label (also on the instructions column): what it can do (capability names and descriptions), configuration files (name and size, no link). Right: the instructions (`prompts.system`), coloured like the agent form's prompt field through `PromptHighlight` (read-only spans from `PromptEditor`'s own parser and highlight style, text selectable). The Dialog runs with `scrollMode="children"`: the instructions take the height left and scroll on their own once the dialog reaches its max-height, the left column scrolls separately if needed; below 720px the whole card scrolls. Platform admins also get a text **Remove from the marketplace** in error colour in the Dialog's `footerStart` (far left of the action bar), opening a second `Dialog` with an optional message (500 characters) sent as the removal reason.
+- **Import** (`CopyToTeamsDialog` with the new `excludedTeamIds`, which drops the publishing team from the list): per team readiness from `import-targets` (agent type not enabled: disabled; missing capabilities: warning with the list in its tooltip), an info tooltip on what is imported / to choose again / recreated / not imported, the independence sentence as explanation. After confirming, a result `Dialog` lists one bordered block per destination: "Imported into <team>" with the new name when it was numbered, what to reconfigure there, dropped capabilities and capability notices; or "Not imported into <team>" with a localized reason.
+
+#### Open UX issues
+
+- Not yet design-reviewed.
+
+---
+
 ### `TeamCard`
 
 **Location:** `src/rework/components/shared/organisms/TeamCard/TeamCard.tsx`
@@ -2169,7 +2170,7 @@ so enabling the charter keeps nominated contacts visible before acceptance.
 These avatars do not indicate administrator authority; the charter gate uses
 the accepted administrator roster from the per-team detail response.
 
-Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
+Displays one team in the marketplace (`MarketplaceTeams`). Corner radius `radius-ms`, like `AgentCard` and `PromptCard`. The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
 the team's `joining_mode`, gated on `!team.is_member`:
 
@@ -2268,6 +2269,13 @@ supports the `color` override prop, but no shipped consumer uses it — the
 plain group-level color pattern is what every `ButtonGroup` consumer
 follows now.
 
+2026-10-12: the track color of a `ButtonGroup` is the typed `surface` prop
+(`surface-container-lowest` to `-highest`, default `surface-container`), which
+replaces the free `backgroundColor` string and its inline custom property.
+Unselected items are transparent, so the track shows through on any surface.
+Both groups here use `surface-container-lowest`, because their `form-section`
+is already `surface-container`.
+
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
 (`public`/`private`; default `public` at the time — new teams default to
 `private` since 2026-08-26, #2433) gating marketplace discoverability
@@ -2321,6 +2329,13 @@ hardcoded class — same escape-hatch pattern as `DataTable`'s own
 `var(--surface-container-lowest)`, since they already sit inside a
 `surface-container` `form-section` and the default pill color would
 otherwise blend into it.
+
+**`ButtonGroupItem` — `selectedColor` (2026-10-12).** Optional per-item
+`selectedColor: "success" | "error"` fills the item with `--success` /
+`--on-success` or `--error` / `--on-error` while it is selected
+(`data-selected-color`); items without it keep `secondary-container`. Used by
+the admin Marketplaces page: Enabled/On reads success, Disabled/Off error,
+Default stays neutral.
 
 ### `TeamSettingsParameters` — team banner upload
 
@@ -2667,7 +2682,9 @@ closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
 text, default (inactive) border `1px solid outline` — was `0.5px
 outline-variant`, a size/color pair that didn't match any other chip-style
 control in the app. Chip padding-left/right `spacing-s` (`12px`, was
-`spacing-xs`/`8px`). That geometry now lives in one `%pill` placeholder
+`spacing-xs`/`8px`). Optional `size="small"` (2026-10-12) is used by the members
+table: height `1.5rem`, `label-small`, padding `spacing-xs`, gap `spacing-2xs`; the
+dialog keeps the default. That geometry now lives in one `%pill` placeholder
 `@extend`ed by both the toggles and the baseline badge below, so the two
 cannot drift apart in the same row.
 
@@ -3827,8 +3844,14 @@ The ppt_filler capability's custom agent-form widget (rendered inside its
 upload/replace control, instant per-slide schema preview through the
 capability's stateless `/analyze` pod route, slide-numbered template errors
 i18n'd by stable code, and Save gating while the mandatory template is missing
-or invalid. The staged file travels with the atomic save (multipart
+or invalid. Both Simple and Advanced forms reject analyzed decks with no template
+fields, explain the required markers and slide notes in English and French,
+and link to `/ppt-filler-help`. Fixed slides remain allowed alongside fields.
+The staged file travels with the atomic save (multipart
 `with-assets` endpoints); the preview never persists anything.
+Save transport failures use distinct translated feedback for an unreachable runtime,
+validation timeout, and interrupted communication. These messages avoid internal
+service URLs and do not claim that an interrupted validation means the runtime is stopped.
 
 #### Open UX issues
 
@@ -4034,6 +4057,10 @@ first), and while any ingestion is live the 3s status poll also covers the
 folder being viewed — a subfolder opened before its files' uploads (or fresh
 ReBAC tuples) landed used to freeze forever on its first empty snapshot,
 hiding the live "processing" rows (found live 2026-08-12).
+The first folder browse shows loading until it succeeds and a retry hint if it
+fails. Later refreshes keep visible rows, and only the newest request for a
+folder may replace its page; an older response cannot restore an empty snapshot
+during ingestion.
 
 Quota (#2360, 2026-08-13): Save first asks the server's `/quota/precheck`
 with the batch's declared total, so a whole over-quota batch is rejected in
@@ -4659,48 +4686,101 @@ _Priority order for the next UX session. Update before each session._
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
 24. **HitlPrompt — focus management** — closed 2026-10-10 without autofocus; keyboard answers replace it (see component section).
 
-## Composer model label (#2387, 2026-08-17)
+## Composer model and reasoning control (2026-10-09)
 
 ### `ReasoningChip`
 
 **Location:** `src/rework/features/capabilities/ReasoningChip.tsx`
 **Status:** `Functional`
 
-The composer's right-edge chip. Two concerns, now independent:
+A text button + chevron at the composer's right edge, before the mic: the
+current model's name, then the reasoning mode one step fainter
+(`--on-surface-retreat`; Faible / Élevé, EN Low / High). Its menu opens above,
+right-aligned, with two sections:
 
-- **Model identity** — the model the next turn will actually route to, from
-  `GET /teams/{team_id}/routing-policy/effective-chat-model`. Read-only; the
-  choice lives in the team routing policy and the platform binding.
-- **Reasoning toggle** — still emitted only when the agent's author enabled
-  reasoning and a platform-enabled reasoning model exists (REASON-01 §8's
-  diagnosability rule: a control that can do nothing must be absent).
+- **Models** — `EffectiveChatModel.selectable_models` as check-circle rows.
+  Picking one sets the conversation's `chat_profile_id`
+  (`useComposerSettings`, session storage `chat.composer.{sessionId}`); picking
+  the recommended model clears it. A new conversation starts on the
+  recommended model.
+- **Effort** — Faible / Élevé (Raisonnement), no hint line (removed
+  2026-10-09: it took too much room). For a model without reasoning the section
+  stays, with a muted "Aucun niveau d'effort disponible" line. Rows shown only
+  when the platform emitted the `reasoning_toggle` control and the current
+  model's `reasoning_enabled` is true. The row starts in that model's
+  `reasoning_default_on` (the team's default), at conversation start and on
+  every model switch. Never an effort level (`RUNTIME-EXECUTION-CONTRACT.md`
+  §8.48).
 
-Previously the model identity rode on the `reasoning_toggle` control's own
-`params`, i.e. the single model whose _reasoning_ an admin had enabled
-platform-wide. That is unrelated to routing, so the chip contradicted any
-platform binding or team override in force. The name is kept (`ReasoningChip`)
-because the reasoning menu is still what makes it interactive.
+| Condition                                            | Renders                                                                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- |
+| Two or more selectable models, or a reasoning row    | Interactive button and menu                                                 |
+| `choice_locked` (platform binding, pod override)     | No model rows; the menu keeps only the reasoning row, if any                |
+| One model and no reasoning row                       | Static `<span>` with the model name, same metrics, not a disabled button    |
+| Nothing resolved and no reasoning row                | Nothing (`null`)                                                            |
 
-Three render states:
+**Stale choice.** When a refetch no longer lists the chosen model, or the user
+switches to a conversation whose stored choice the current list does not offer,
+the choice is dropped and a snackbar names it ("… is no longer available"). An
+empty `selectable_models` (locked, pod down) keeps the choice: the pod ignores
+an invalid one anyway. The page reads the agent's `currentData`, so another
+agent's list never judges this agent's choice.
+The page re-reads the list on mount, on window focus and when another
+conversation opens, so an admin change made in another browser lands without a
+reload (no polling). Mount and focus skip the read within 30 s of the last one:
+each read also fetches the pod catalog.
 
-| Condition                                                   | Renders                                                                                                                                                                                                                           |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reasoning control present **and** `reasoning_enabled`       | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click.                                                                                                    |
-| Reasoning control present but `reasoning_enabled === false` | Static label only. The toggle would be inert — the pod strips reasoning for this model — so it is hidden rather than shown as a no-op. `undefined` (not resolved yet, or an older backend) keeps the control the platform served. |
-| No reasoning control at all, model resolved                 | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable.                          |
-| Neither                                                     | Nothing (`null`). An empty chip would be worse than none.                                                                                                                                                                         |
+**Menu name.** The popover's accessible name follows its sections: "Model and
+reasoning" with both, "Models" or "Reasoning" with one.
 
-**Unavailable model.** When `enabled_for_team` is `false` the turn will fail
-with `ModelNotUsableError` before the LLM call. The model name takes
-`--error` + `line-through` via `.model[data-unavailable]`, an `error_outline`
-icon sits beside it, and the reason reaches the accessible name and `title` —
-colour alone would leave a colour-blind reader with no signal.
+**Unavailable model.** When `enabled_for_team` is `false` the model name takes
+`--error` + `line-through` (`.model[data-unavailable]`), with an
+`error_outline` icon, and the reason reaches the accessible name and `title`.
 
-**Label fallback**: `modelLabel(display_name, name, capability_id)` prefers the
-ops-authored `model_display_name`, then prettifies the real model `name`, then
-falls back to splitting the capability id. The `name` step matters because
-`model_capability_id` normalizes non-id-safe characters — derived from the id,
-`mistral:latest` would read "Mistral Latest".
+**Label fallback:** `modelLabel(display_name, name, capability_id)` prefers the
+ops-authored `model_display_name`, then prettifies the model `name`, then the
+capability id.
+
+### `TeamSettingsRouting` — team Models section
+
+**Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsRouting/`
+**Status:** `Functional`
+
+Team settings "Models" entry. One row per model the platform allows the team,
+following the admin UI themes page grammar: a "Default" badge or a "Set as
+default" `Button`, an "enabled for the team" `Switch` (disabled on the
+default), and a "Reasoning on by default" `Switch` only when
+`reasoning_available`. The default row says, in visible helper text tied to its
+switch by `aria-describedby`, that the default cannot be disabled (a tooltip on
+a disabled switch is unreachable by keyboard). Disabling a model opens a
+critical `ConfirmationDialog` (filled primary Cancel, text error confirm, like
+deleting an agent; confirm does nothing until the impact is loaded) listing the
+agents that use it as their recommended model (disable-impact read), naming the
+model that takes over (the team default; body-medium text)
+and the conversation fallback line: those conversations go back to the agent's
+recommended model; cancel writes nothing. Editable by team admins and a
+personal space's owner; read-only for editors and analysts.
+
+Writes are locked while a save or a refetch is in flight; each save sends the
+policy `version` it was built on, and its response is written straight into the
+cache so a switch never snaps back. A 409 (someone saved meanwhile) reloads the
+policy and shows a warning toast. A failed read of the policy or of the
+available models shows a `ServiceNotice` and no controls, never the
+"platform allows no model" empty state. A stored default no longer served
+shows a generic "no longer available" line.
+
+### `RecommendedModelField` — agent form
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/RecommendedModelField/`
+**Status:** `Functional`
+
+"Recommended model" `Select` in the agent form's General section. First option
+"Team default model" (helper line: "Currently <name>. Follows changes made by
+the team admin.") saves `null`; then every team-enabled model, today's default
+included, which pins it. If the stored model is no longer selectable, the
+form selects the team default and saves `null` when edited. The form's former
+Reasoning card is removed. Saving waits for model reads when a recommendation
+is stored; a failed read is shown explicitly and leaves that value unchanged.
 
 ### `ProvisioningPage` (`/admin/provisioning`, #3092)
 

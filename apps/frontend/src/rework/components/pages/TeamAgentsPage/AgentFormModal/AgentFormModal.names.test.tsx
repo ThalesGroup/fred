@@ -44,6 +44,11 @@ vi.mock("@shared/organisms/SettingsModal/SettingsModal.tsx", () => ({
     </div>
   ),
 }));
+// These form-only tests have no Redux provider; model selection is outside their scope.
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useTeamRoutingPolicyQuery: () => ({ currentData: undefined }),
+  useAvailableModelProfilesQuery: () => ({ currentData: undefined }),
+}));
 vi.mock("./TemplateBrowser/TemplateBrowser.tsx", () => ({
   TemplateBrowser: ({ onSelect }: { onSelect: (id: string) => void }) => (
     <button data-testid="pick-template" onClick={() => onSelect("tpl")} />

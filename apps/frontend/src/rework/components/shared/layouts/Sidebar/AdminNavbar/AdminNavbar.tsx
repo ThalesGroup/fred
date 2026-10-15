@@ -92,6 +92,13 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
+      label: t("rework.sidebar.admin.menu.marketplaces"),
+      icon: { category: "outlined", type: "storefront", filled: false },
+      linkProps: { to: "/admin/marketplaces" },
+      requires: "admin",
+    },
+    {
+      type: "link",
       label: t("rework.sidebar.admin.menu.migration"),
       icon: { category: "outlined", type: "sync_alt", filled: false },
       linkProps: { to: "/admin/migration" },

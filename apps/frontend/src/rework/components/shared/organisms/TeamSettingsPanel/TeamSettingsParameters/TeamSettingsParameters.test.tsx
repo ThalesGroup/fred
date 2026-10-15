@@ -213,6 +213,30 @@ describe("TeamSettingsParameters visibility", () => {
       updateTeamRequest: { visibility: "private" },
     });
   });
+
+  it("going private with published agents first states how many leave the marketplace", () => {
+    const team = {
+      ...baseTeam("invite_only", "public"),
+      marketplace: { agents_publishing_enabled: true, agents_publish_quota: 5, published_count: 3 },
+    };
+    render(<TeamSettingsParameters team={team} />);
+
+    act(() => {
+      visibilityRadios()[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(h.updateTeam).not.toHaveBeenCalled();
+    const dialog = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain("rework.teamSettings.parameters.visibility.privateConfirm.message");
+
+    const confirm = Array.from(dialog?.querySelectorAll("button") ?? []).find((b) =>
+      b.textContent?.includes("privateConfirm.confirm"),
+    );
+    act(() => confirm?.click());
+    expect(h.updateTeam).toHaveBeenCalledWith({
+      teamId: "team-1",
+      updateTeamRequest: { visibility: "private" },
+    });
+  });
 });
 
 describe("TeamSettingsParameters avatar preview", () => {

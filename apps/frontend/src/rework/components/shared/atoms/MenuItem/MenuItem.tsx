@@ -15,6 +15,7 @@
 import { ComponentPropsWithRef, memo, ReactNode, useId } from "react";
 import styles from "./MenuItem.module.scss";
 import Icon, { type IconProps } from "../Icon/Icon.tsx";
+import { Tooltip } from "../Tooltip/Tooltip.tsx";
 
 export interface MenuItemProps extends ComponentPropsWithRef<"li"> {
   label?: string;
@@ -27,6 +28,8 @@ export interface MenuItemProps extends ComponentPropsWithRef<"li"> {
   disabled?: boolean;
   /** Renders the label/icon in the error color (e.g. a "Delete" action). */
   destructive?: boolean;
+  /** Shown on hover over the whole row, e.g. why the item is disabled. */
+  tooltip?: string;
 }
 
 function MenuItem({
@@ -39,6 +42,7 @@ function MenuItem({
   focused = false,
   disabled = false,
   destructive = false,
+  tooltip,
   onClick,
   id: providedId,
   ref, // La ref arrive ici
@@ -46,6 +50,28 @@ function MenuItem({
 }: MenuItemProps) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
+  const tooltipId = `${id}-tooltip`;
+
+  const content = (
+    <div className={styles["state-layer"]}>
+      {icon && (
+        <span className={styles["icon-wrapper"]} aria-hidden="true">
+          <Icon {...icon} />
+        </span>
+      )}
+
+      {children ? (
+        children
+      ) : description ? (
+        <span className={styles["content"]}>
+          <span className={styles["label"]}>{label}</span>
+          <span className={styles["description"]}>{description}</span>
+        </span>
+      ) : (
+        <span className={styles["label"]}>{label}</span>
+      )}
+    </div>
+  );
 
   return (
     <li
@@ -56,6 +82,7 @@ function MenuItem({
       role={role}
       aria-selected={role === "option" ? selected : undefined}
       aria-disabled={disabled}
+      aria-describedby={tooltip ? tooltipId : undefined}
       data-selected={selected}
       data-focused={focused}
       data-disabled={disabled}
@@ -79,24 +106,20 @@ function MenuItem({
             }
       }
     >
-      <div className={styles["state-layer"]}>
-        {icon && (
-          <span className={styles["icon-wrapper"]} aria-hidden="true">
-            <Icon {...icon} />
+      {tooltip ? (
+        <>
+          <Tooltip text={tooltip} placement="left" fill>
+            {content}
+          </Tooltip>
+          {/* Focus stays on the list (aria-activedescendant), so the hover
+              Tooltip never reaches assistive tech: describe the row itself. */}
+          <span id={tooltipId} hidden>
+            {tooltip}
           </span>
-        )}
-
-        {children ? (
-          children
-        ) : description ? (
-          <span className={styles["content"]}>
-            <span className={styles["label"]}>{label}</span>
-            <span className={styles["description"]}>{description}</span>
-          </span>
-        ) : (
-          <span className={styles["label"]}>{label}</span>
-        )}
-      </div>
+        </>
+      ) : (
+        content
+      )}
     </li>
   );
 }

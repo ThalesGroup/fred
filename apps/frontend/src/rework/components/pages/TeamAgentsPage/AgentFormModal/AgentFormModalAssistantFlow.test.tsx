@@ -19,9 +19,19 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentTemplateSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  AgentTemplateSummary,
+  AvailableModelProfileList,
+  ManagedAgentInstanceSummary,
+  TeamRoutingPolicy,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const draftAgent = vi.fn();
+const modelRead = vi.hoisted(() => ({
+  policy: undefined as TeamRoutingPolicy | undefined,
+  models: undefined as AvailableModelProfileList | undefined,
+  modelsError: false,
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -39,10 +49,14 @@ vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useDraftAgentMutation: () => [draftAgent],
   useUsersByIdsQuery: () => ({ data: [] }),
+  useTeamRoutingPolicyQuery: () => ({ currentData: modelRead.policy }),
+  useAvailableModelProfilesQuery: () => ({ currentData: modelRead.models, isError: modelRead.modelsError }),
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
   useDraftAgentMutation: () => [draftAgent],
   useUsersByIdsQuery: () => ({ data: [] }),
+  useTeamRoutingPolicyQuery: () => ({ currentData: modelRead.policy }),
+  useAvailableModelProfilesQuery: () => ({ currentData: modelRead.models, isError: modelRead.modelsError }),
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi.ts", () => ({
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({ data: [] }),
@@ -78,8 +92,6 @@ const TEMPLATE = {
   template_id: "runtime:agent",
   display_name: "Template name",
   description: "Template description",
-  reasoning_enabled: false,
-  reasoning_default_on: false,
   default_capability_ids: [],
   available_capabilities: [
     { id: "team_wiki", name: "Wiki", description: "", route_base_url: "" },
@@ -102,6 +114,9 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  modelRead.policy = undefined;
+  modelRead.models = undefined;
+  modelRead.modelsError = false;
   draftAgent.mockReset();
   draftAgent.mockReturnValue({ unwrap: () => Promise.resolve(DRAFT), abort: vi.fn() });
   container = document.createElement("div");
@@ -156,6 +171,32 @@ function renderModal(takenNames: ReadonlySet<string> = new Set()) {
   return onSubmit;
 }
 
+const EDIT_INSTANCE = {
+  agent_instance_id: "agent-1",
+  template_id: TEMPLATE.template_id,
+  display_name: "Existing agent",
+  role: "Existing agent",
+  usage_statement: "Internal use only.",
+  recommended_chat_profile_id: "chat.stored",
+} as ManagedAgentInstanceSummary;
+
+function renderEditModal(onSubmit: (payload: unknown) => Promise<void>) {
+  act(() => {
+    root.render(
+      <AgentFormModal
+        isOpen
+        isSubmitting={false}
+        mode="edit"
+        teamId="team-1"
+        templates={[TEMPLATE]}
+        editInstance={EDIT_INSTANCE}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+  });
+}
+
 async function applyDraftThroughDialog() {
   await click(`${KEY}.open`);
   const dialogs = document.querySelectorAll('[role="dialog"]');
@@ -165,6 +206,52 @@ async function applyDraftThroughDialog() {
 }
 
 describe("AgentFormModal + creation assistant (real body and dialog)", () => {
+  it("waits for model reads and clears an unavailable recommendation even after switching tabs", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderEditModal(onSubmit);
+
+    expect(buttonWith("rework.save").disabled).toBe(true);
+    await click("rework.teams.formAgent.sections.prompts");
+    modelRead.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
+    modelRead.models = {
+      profiles: [{ profile_id: "chat.default", capability_id: "model__default", name: "default" }],
+      effective_default_profile_id: "chat.default",
+    };
+    renderEditModal(onSubmit);
+
+    expect(buttonWith("rework.save").disabled).toBe(false);
+    await click("rework.save");
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ recommendedChatProfileId: null }));
+  });
+
+  it("keeps a selectable recommendation pinned when saving the agent", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    modelRead.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
+    modelRead.models = {
+      profiles: [{ profile_id: "chat.stored", capability_id: "model__available", name: "available" }],
+      effective_default_profile_id: "chat.stored",
+    };
+    renderEditModal(onSubmit);
+
+    await click("rework.save");
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ recommendedChatProfileId: "chat.stored" }));
+  });
+
+  it("keeps the stored recommendation when models cannot be checked", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    modelRead.modelsError = true;
+    modelRead.policy = { team_id: "team-1", version: 1, disabled_model_ids: [] };
+    modelRead.models = {
+      profiles: [{ profile_id: "chat.default", capability_id: "model__default", name: "default" }],
+      effective_default_profile_id: "chat.default",
+    };
+    renderEditModal(onSubmit);
+
+    expect(document.body.textContent).toContain("rework.teams.formAgent.fields.recommendedModel.loadError");
+    await click("rework.save");
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ recommendedChatProfileId: "chat.stored" }));
+  });
+
   it("shows the applied draft in the visible form fields", async () => {
     renderModal();
     await click("Template name");
@@ -204,7 +291,7 @@ describe("AgentFormModal + creation assistant (real body and dialog)", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("keeps reasoning on when capabilities are applied with it", async () => {
+  it("submits the applied name and capabilities", async () => {
     const onSubmit = renderModal();
     await click("Template name");
     await applyDraftThroughDialog();
@@ -219,8 +306,6 @@ describe("AgentFormModal + creation assistant (real body and dialog)", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0]).toMatchObject({
       displayName: DRAFT.name,
-      reasoningEnabled: true,
-      reasoningDefaultOn: true,
       selectedCapabilityIds: ["team_wiki"],
     });
   });

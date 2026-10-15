@@ -116,6 +116,7 @@ interface PageState {
   total: number;
   offset: number;
   loading: boolean;
+  loaded: boolean;
 }
 
 interface DocumentWorkspaceProps {
@@ -432,6 +433,7 @@ function DocumentWorkspace({
   const [ordering, setOrdering] = useState<DocumentOrdering>(DEFAULT_ORDERING);
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
+  const latestPageRequest = useRef(new Map<string, symbol>());
   const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
   const [deleteTag] = useDeleteTagMutation();
@@ -448,19 +450,29 @@ function DocumentWorkspace({
 
   const loadTagPage = useCallback(
     async (tagId: string, offset: number, limit: number = rowsPerPage, sort: DocumentOrdering = ordering) => {
+      const request = Symbol();
+      latestPageRequest.current.set(tagId, request);
       setPerTag((prev) => ({
         ...prev,
-        [tagId]: { docs: prev[tagId]?.docs ?? [], total: prev[tagId]?.total ?? 0, offset, loading: true },
+        [tagId]: {
+          docs: prev[tagId]?.docs ?? [],
+          total: prev[tagId]?.total ?? 0,
+          offset,
+          loading: true,
+          loaded: prev[tagId]?.loaded ?? false,
+        },
       }));
       try {
         const res = await browseDocumentsByTag({
           browseDocumentsByTagRequest: { tag_id: tagId, offset, limit, sort_by: sort.by, sort_order: sort.order },
         }).unwrap();
+        if (latestPageRequest.current.get(tagId) !== request) return;
         setPerTag((prev) => ({
           ...prev,
-          [tagId]: { docs: res.documents ?? [], total: res.total ?? 0, offset, loading: false },
+          [tagId]: { docs: res.documents ?? [], total: res.total ?? 0, offset, loading: false, loaded: true },
         }));
       } catch {
+        if (latestPageRequest.current.get(tagId) !== request) return;
         setPerTag((prev) => ({ ...prev, [tagId]: { ...prev[tagId], loading: false } as PageState }));
       }
     },
@@ -1668,7 +1680,17 @@ function DocumentWorkspace({
     return segments;
   }, [currentFull, baseFull, t, navigateTo]);
 
-  const isEmpty = !tagsLoading && !page?.loading && childFolders.length === 0 && (page?.docs.length ?? 0) === 0;
+  const failedInitialLoad = Boolean(currentTag && page && !page.loading && !page.loaded);
+  const isEmpty =
+    !tagsLoading &&
+    childFolders.length === 0 &&
+    (failedInitialLoad || (currentTag ? page?.loaded && page.docs.length === 0 : true));
+  // "Create a library" belongs to the corpus root alone.
+  const emptyMessage = failedInitialLoad
+    ? t("rework.resources.empty.loadError")
+    : currentFull === baseFull && !baseFull
+      ? t("rework.resources.empty.createLibrary")
+      : t("rework.resources.empty.folder");
 
   // The upload drawer targets whichever folder triggered it: a drop target
   // (dropTargetNode) when opened by dragging files onto a folder row, or the
@@ -1780,6 +1802,11 @@ function DocumentWorkspace({
           }))}
         />
       </Dialog>
+      {failedInitialLoad && childFolders.length > 0 && (
+        <div className={styles.loadError} role="alert">
+          {t("rework.resources.empty.loadError")}
+        </div>
+      )}
       <ResourceExplorer<Row>
         breadcrumb={{
           segments: breadcrumbSegments,
@@ -1872,15 +1899,10 @@ function DocumentWorkspace({
             </>
           )
         }
-        loading={tagsLoading}
+        loading={tagsLoading || Boolean(currentTag && (!page || (page.loading && !page.loaded)))}
         loadingMessage={t("rework.resources.loading")}
         empty={isEmpty}
-        emptyMessage={
-          // "Create a library" belongs to the corpus root alone: an empty
-          // library, or an empty folder inside one, is not an invitation to
-          // create anything here.
-          atRoot && !baseFull ? t("rework.resources.empty.createLibrary") : t("rework.resources.empty.folder")
-        }
+        emptyMessage={emptyMessage}
         columns={columns}
         rows={filteredRows}
         rowKey={rowKey}

@@ -109,6 +109,8 @@ from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
     CapabilityConfigCopyRequest,
     CapabilityConfigCopyResult,
+    CapabilityConfigExportRequest,
+    CapabilityConfigExportResult,
     CapabilityIdentity,
     ChatControlsRequest,
     ChatControlsResponse,
@@ -189,6 +191,7 @@ from fred_runtime.capabilities import (
 from fred_runtime.capabilities.copy import (
     CapabilityCopyRejectedError,
     prepare_capability_copy,
+    prepare_capability_export,
 )
 from fred_runtime.capabilities.errors import (
     CapabilityError,
@@ -633,13 +636,6 @@ def _definition_to_agent_tuning(
         description=definition.description,
         tags=list(definition.tags),
         fields=list(definition.fields),
-        # REASON-01 level 3 + Amendment B (#2473). Projected so a template can
-        # seed the agent form's Reasoning card, the same way
-        # `default_mcp_servers` seeds the capability ticks. Both stayed False
-        # here until #2473, which is why a template could not express "this
-        # agent's job needs reasoning" at all.
-        reasoning_enabled=definition.reasoning_enabled,
-        reasoning_default_on=definition.reasoning_default_on,
     )
 
 
@@ -1561,6 +1557,9 @@ class _ResolvedAgentInstance(BaseModel):
     # `_ResolvedExecutionTarget.reasoning_enabled_model_ids` for why this
     # replaced reading the same field off the caller-supplied context.
     reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
+    # Models the team disabled, resolved on this same call. Defaults empty so
+    # an older control plane that does not send it stays compatible.
+    team_disabled_model_ids: list[str] = Field(default_factory=list)
     # Platform-operator `chat` model binding, resolved fresh by control-plane
     # on this same call — see
     # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
@@ -1598,6 +1597,9 @@ class _ResolvedExecutionTarget:
     # control — this one is, so it's worth a fresh check. Empty for direct
     # template execution, same as `tuning`.
     reasoning_enabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
+    # Models the team disabled, resolved on the same per-turn call and for the
+    # same reason: the pod must not trust a client-forwarded copy.
+    team_disabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
     # Platform-operator `chat` model binding (V1 platform-binding hardening).
     # Resolved by control-plane on the SAME per-turn call as
     # `reasoning_enabled_model_ids` above, for the same reason — never read
@@ -1906,6 +1908,7 @@ async def _resolve_agent_instance(
         tuning=resolution.tuning,
         team_settings=resolution.team_capability_settings,
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
+        team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
         platform_prompt=resolution.platform_prompt,
     )
@@ -3712,6 +3715,7 @@ async def _stream(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
+    team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -3761,6 +3765,7 @@ async def _stream(
         capability_registry=capability_registry,
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
+        team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
@@ -4354,6 +4359,7 @@ async def _iterate_runtime_event_payloads(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
+    team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -4376,6 +4382,7 @@ async def _iterate_runtime_event_payloads(
         capability_registry=capability_registry,
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
+        team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
@@ -4463,6 +4470,7 @@ async def _iterate_runtime_event_payloads_inner(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
+    team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -4616,45 +4624,23 @@ async def _iterate_runtime_event_payloads_inner(
         # When the final file is deleted this is absent, so the per-turn runtime
         # notice disappears without leaving a checkpointed system message behind.
         attachments_markdown=ctx.get("attachments_markdown"),
-        # Team routing policy snapshot: control-plane resolves it once at
-        # prepare-execution and the frontend forwards it unchanged, same
-        # channel as context_prompt_text above — but it was also silently
-        # dropped here, so resolve_team_override in
-        # fred_runtime.model_routing.provider always saw None and no team's
-        # routing policy ever took effect on a real chat turn. Already a
-        # plain `{agent_id: profile_id}` dict from to_legacy_context()'s
-        # model_dump(exclude_none=True), so it passes through as-is.
+        # Team default: client-forwarded from prepare-execution, bounded by the
+        # per-turn `can_use` gate. The user's per-conversation choice rides the
+        # same channel and is validated in `RoutedChatModelFactory.select`; it
+        # applies to managed instances only, so direct template runs drop it.
         chat_default_profile_id=ctx.get("chat_default_profile_id"),
-        agent_profile_overrides=ctx.get("agent_profile_overrides"),
-        # Which models currently have reasoning switched on. Resolved
-        # control-plane-side on THIS turn's own runtime-binding call and
-        # threaded through as the `reasoning_enabled_model_ids` parameter — NOT
-        # read from the caller-supplied `ctx`, unlike `chat_default_profile_id`/
-        # `agent_profile_overrides` above. Those two stay client-forwarded
-        # because they are a frugality/comfort lever already bounded by the
-        # per-turn model `can_use` check; this one is the admin's incident
-        # lever (switch reasoning off platform-wide), so a stale or spoofed
-        # client-forwarded copy could keep it on past the moment an admin
-        # turned it off. Downstream model routing strips the reasoning
-        # settings for every model absent from this list, so an empty list
-        # here pins reasoning permanently OFF and makes the admin toggle
-        # decorative.
-        #
-        # Intersected with the agent's own reasoning switch rather than taken
-        # as-is: an agent whose author did not enable reasoning must not
-        # reason whatever the platform allows. Absent tuning (agent-to-agent
-        # invocation, no managed instance) means no author ever enabled it:
-        # off by default.
+        chat_profile_id=(
+            ctx.get("chat_profile_id")
+            if request.agent_instance_id is not None
+            else None
+        ),
+        # TRUSTED: the platform list from this turn's runtime-binding call, never
+        # `ctx`. No managed instance (agent-to-agent invocation) means no ceiling.
         reasoning_enabled_model_ids=(
-            list(reasoning_enabled_model_ids or ())
-            if tuning is not None and tuning.reasoning_enabled
-            else []
+            list(reasoning_enabled_model_ids or ()) if tuning is not None else []
         ),
         ask_user=ctx.get("ask_user"),
-        # The user's per-question reasoning choice (REASON-01 level 4). Same
-        # trap as every field above: unnamed here means silently dropped. Kept
-        # tri-state on purpose — `ctx.get` yielding None means "the agent never
-        # offered the choice", which is NOT the same as the user answering no.
+        # Only an explicit True reasons; None (non-composer callers) does not.
         reasoning=ctx.get("reasoning"),
     )
 
@@ -4666,9 +4652,13 @@ async def _iterate_runtime_event_payloads_inner(
         # runtime-binding call (see the `platform_chat_model_binding`
         # parameter's caller), never read from caller-supplied `ctx`. A
         # request-body field can never set this: unlike
-        # chat_default_profile_id/agent_profile_overrides above, there is no
-        # ctx.get(...) for it at all.
+        # chat_default_profile_id above, there is no ctx.get(...) for it at all.
         platform_chat_model_binding=platform_chat_model_binding,
+        # TRUSTED, same channel: no ctx.get(...) exists for either field.
+        team_disabled_model_ids=tuple(team_disabled_model_ids),
+        recommended_chat_profile_id=(
+            tuning.recommended_chat_profile_id if tuning is not None else None
+        ),
         # TRUSTED, same channel and same reasoning as the binding above: no
         # `ctx.get(...)` exists for it, so a request body can never prepend
         # text ahead of every agent on this deployment.
@@ -5532,6 +5522,39 @@ def _build_agent_router(
             config=stored.model_dump(mode="json"),
         )
 
+    def _installed_capability(http_request: Request, capability_id: str):
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None or capability_id not in capability_registry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Capability '{capability_id}' is not installed on this pod.",
+            )
+        return capability_registry.capability(capability_id)
+
+    def _copy_save_ctx(
+        http_request: Request,
+        caller: KeycloakUser | None,
+        capability_id: str,
+        team_id: str,
+        agent_instance_id: str,
+    ) -> SaveContext:
+        user_id = (caller.uid if caller is not None else None) or "anonymous"
+        auth = http_request.headers.get("Authorization", "")
+        return SaveContext(
+            identity=CapabilityIdentity(
+                user_id=user_id,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+            ),
+            services=_build_capability_save_services(
+                capability_id=capability_id,
+                user_id=user_id,
+                team_id=team_id,
+                access_token=auth.removeprefix("Bearer ").strip() or None,
+                agent_instance_id=agent_instance_id,
+            ),
+        )
+
     @router.post("/capabilities/{capability_id}/copy-config")
     async def copy_capability_config(
         capability_id: str,
@@ -5544,7 +5567,8 @@ def _build_agent_router(
 
         POST <base_url>/agents/capabilities/{capability_id}/copy-config
         Body: CapabilityConfigCopyRequest — the source envelope, the source and
-        target team and agent instance.
+        target team and agent instance, and optionally the configuration files
+        inline (`asset_files`, from `export-config`) instead of the source's.
 
         Why this endpoint exists:
         - only the pod knows a capability's hidden and nested settings, so the
@@ -5556,39 +5580,62 @@ def _build_agent_router(
           without it. `notices` says what an editor must redo in the target.
         """
 
-        capability_registry = _capability_registry_of(http_request)
-        if capability_registry is None or capability_id not in capability_registry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Capability '{capability_id}' is not installed on this pod.",
-            )
-        capability = capability_registry.capability(capability_id)
-        user_id = (caller.uid if caller is not None else None) or "anonymous"
-        auth = http_request.headers.get("Authorization", "")
-        access_token = auth.removeprefix("Bearer ").strip() or None
-
-        def save_ctx(team_id: str, agent_instance_id: str) -> SaveContext:
-            return SaveContext(
-                identity=CapabilityIdentity(
-                    user_id=user_id,
-                    team_id=team_id,
-                    agent_instance_id=agent_instance_id,
-                ),
-                services=_build_capability_save_services(
-                    capability_id=capability_id,
-                    user_id=user_id,
-                    team_id=team_id,
-                    access_token=access_token,
-                    agent_instance_id=agent_instance_id,
-                ),
-            )
-
+        capability = _installed_capability(http_request, capability_id)
         try:
             return await prepare_capability_copy(
                 capability,
                 body,
-                source_ctx=save_ctx(body.source_team_id, body.source_agent_instance_id),
-                target_ctx=save_ctx(body.target_team_id, body.target_agent_instance_id),
+                source_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.source_team_id,
+                    body.source_agent_instance_id,
+                ),
+                target_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.target_team_id,
+                    body.target_agent_instance_id,
+                ),
+            )
+        except CapabilityCopyRejectedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.post("/capabilities/{capability_id}/export-config")
+    async def export_capability_config(
+        capability_id: str,
+        body: CapabilityConfigExportRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> CapabilityConfigExportResult:
+        """
+        Export one capability's stored config as it would leave its team.
+
+        POST <base_url>/agents/capabilities/{capability_id}/export-config
+        Body: CapabilityConfigExportRequest — the envelope, its team and agent
+        instance. Response: the upgraded envelope with scope-private settings
+        reset and every `AssetKey` file base64-encoded, so a later `copy-config`
+        with `asset_files` never reads that team. 404 when the capability is not
+        installed here, 422 when the config or one of its files cannot be read.
+        """
+
+        capability = _installed_capability(http_request, capability_id)
+        try:
+            return await prepare_capability_export(
+                capability,
+                body,
+                source_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.team_id,
+                    body.agent_instance_id,
+                ),
             )
         except CapabilityCopyRejectedError as exc:
             raise HTTPException(
@@ -6215,6 +6262,7 @@ def _build_agent_router(
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+                team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
@@ -6322,6 +6370,7 @@ def _build_agent_router(
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+                team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
@@ -6450,6 +6499,7 @@ def _build_agent_router(
             capability_registry=_capability_registry_of(http_request),
             team_settings=target.team_settings,
             reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+            team_disabled_model_ids=target.team_disabled_model_ids,
             platform_chat_model_binding=target.platform_chat_model_binding,
             platform_prompt=target.platform_prompt,
             credential_provider=provider,

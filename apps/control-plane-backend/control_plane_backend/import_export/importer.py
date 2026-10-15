@@ -25,7 +25,7 @@ behind.
 
 Scope (current snapshot):
 - Agents   → agent_instance rows, imported verbatim (idempotent skip-if-present),
-             a name taken in the team renamed `<name>_imported-N`
+             a name taken in the team renamed `<name> (N)`
 - Tags     → tag rows (preserving tag_id, owner_id, doc JSON)
 - Metadata → metadata rows (preserving document_uid and doc JSON;
              content/vectors are not transported by this import — see
@@ -74,6 +74,7 @@ Scope (current snapshot):
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -106,7 +107,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.agent_instances.names import (
-    free_imported_name,
+    free_numbered_name,
     normalize_agent_name,
 )
 from control_plane_backend.import_export.bundle import KBundle
@@ -245,6 +246,9 @@ class MigrationReport:
     platform_roles_granted: int = 0
     routing_policies_imported: int = 0
     routing_policies_skipped: int = 0
+    # Instances that took a recommendation from an old bundle's per-template
+    # overrides (`agent_profile_overrides_json`, removed from the policy).
+    legacy_overrides_mapped: int = 0
     warnings: list[str] = field(default_factory=list)
 
 
@@ -374,6 +378,56 @@ async def _emit(
             ),
         )
     )
+
+
+async def _map_legacy_template_overrides(
+    session: AsyncSession,
+    *,
+    policies: list[dict[str, Any]],
+    imported_agent_ids: set[str],
+) -> int:
+    """Map an old bundle's per-template overrides onto the instances this
+    import created, as the upgrade migration does for stored rows: only where
+    the instance has no recommendation yet. Returns how many were mapped."""
+
+    if not imported_agent_ids:
+        return 0
+    mapped = 0
+    for policy in policies:
+        try:
+            overrides = json.loads(policy.get("agent_profile_overrides_json") or "{}")
+        except ValueError:
+            continue
+        if not isinstance(overrides, dict) or not overrides:
+            continue
+        rows = (
+            (
+                await session.execute(
+                    select(AgentInstanceRow).where(
+                        AgentInstanceRow.team_id == policy["team_id"],
+                        AgentInstanceRow.agent_instance_id.in_(imported_agent_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for row in rows:
+            profile_id = overrides.get(row.source_agent_id)
+            if not isinstance(profile_id, str) or not profile_id:
+                continue
+            try:
+                tuning = json.loads(row.tuning_json) if row.tuning_json else None
+            except ValueError:
+                continue
+            if not isinstance(tuning, dict) or tuning.get(
+                "recommended_chat_profile_id"
+            ):
+                continue
+            tuning["recommended_chat_profile_id"] = profile_id
+            row.tuning_json = json.dumps(tuning)
+            mapped += 1
+    return mapped
 
 
 async def _run_phase(
@@ -1026,8 +1080,9 @@ async def _run_import_body(
     async with session_factory() as session:
         async with session.begin():
             # --- agents ---
+            inserted_agent_ids: set[str] = set()
             # Normalised names per team, so an imported agent never collides
-            # with the unique name index: a taken name becomes `_imported-N`.
+            # with the unique name index: a taken name becomes `<name> (N)`.
             team_agent_names: dict[str, set[str]] = {}
 
             async def _taken_agent_names(team_id: str, s: AsyncSession) -> set[str]:
@@ -1052,10 +1107,11 @@ async def _run_import_body(
                     if await s.get(AgentInstanceRow, aid) is not None:
                         return False
                 taken = await _taken_agent_names(row["team_id"], s)
-                display_name = free_imported_name(
+                display_name = free_numbered_name(
                     str(row["display_name"]).strip(), taken
                 )
                 taken.add(normalize_agent_name(display_name))
+                inserted_agent_ids.add(aid)
                 s.add(
                     AgentInstanceRow(
                         agent_instance_id=aid,
@@ -1218,7 +1274,7 @@ async def _run_import_body(
                 session=session,
             )
 
-            # --- team routing policy (agent_profile_overrides) ---
+            # --- team routing policy (model settings) ---
             async def _import_team_routing_policy(
                 row: dict[str, Any], s: AsyncSession
             ) -> bool:
@@ -1234,10 +1290,12 @@ async def _run_import_body(
                         if row.get("version") is not None
                         else 1,
                         chat_default_profile_id=row.get("chat_default_profile_id"),
-                        agent_profile_overrides_json=row.get(
-                            "agent_profile_overrides_json"
+                        disabled_model_ids_json=row.get("disabled_model_ids_json")
+                        or "[]",
+                        reasoning_default_off_model_ids_json=row.get(
+                            "reasoning_default_off_model_ids_json"
                         )
-                        or "{}",
+                        or "[]",
                         updated_by=row.get("updated_by"),
                         updated_at=_coerce_dt(row.get("updated_at")),
                     )
@@ -1255,6 +1313,17 @@ async def _run_import_body(
                 import_fn=_import_team_routing_policy,
                 session=session,
             )
+            mapped = await _map_legacy_template_overrides(
+                session,
+                policies=raw_team_routing_policy,
+                imported_agent_ids=inserted_agent_ids,
+            )
+            if mapped:
+                report.legacy_overrides_mapped = mapped
+                report.warnings.append(
+                    f"{mapped} agent(s) received a recommended model from the "
+                    "bundle's former per-template team overrides"
+                )
 
     # ── Phase 4bis: organization structural relation ──────────────────────────
     # (#2065) `_import_team_metadata` above writes `TeamMetadataRow`s directly

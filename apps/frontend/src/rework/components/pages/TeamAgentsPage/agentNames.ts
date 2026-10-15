@@ -39,13 +39,14 @@ export function isAgentNameTaken(name: string, taken: ReadonlySet<string>): bool
   return normalized !== "" && taken.has(normalized);
 }
 
-/** `name` when free, else the first free `name (n)` from 2 — the duplicate's starting name. */
-export function freeAgentName(name: string, taken: ReadonlySet<string>): string {
+/** `name` when free, else the first free `name (<word> n)` from 1 — the duplicate's starting
+ *  name, in the same form as the server's copies ("copie" / "copy" from the UI language). */
+export function freeAgentName(name: string, taken: ReadonlySet<string>, word: string): string {
   const base = name.trim();
   if (!isAgentNameTaken(base, taken)) return base;
-  let n = 2;
-  while (isAgentNameTaken(`${base} (${n})`, taken)) n += 1;
-  return `${base} (${n})`;
+  let n = 1;
+  while (isAgentNameTaken(`${base} (${word} ${n})`, taken)) n += 1;
+  return `${base} (${word} ${n})`;
 }
 
 /** True for the server's name conflict, on a create or rename error body. */

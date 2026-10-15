@@ -35,6 +35,11 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "agent" }),
 }));
+// These form-only tests have no Redux provider; model selection is outside their scope.
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useTeamRoutingPolicyQuery: () => ({ currentData: undefined }),
+  useAvailableModelProfilesQuery: () => ({ currentData: undefined }),
+}));
 vi.mock("./AgentFormBody.tsx", () => ({
   AgentFormBody: (props: Record<string, unknown>) => {
     h.body(props);
@@ -122,7 +127,6 @@ const lastBodyProps = () => h.body.mock.lastCall?.[0] as Record<string, unknown>
 const lastDialogProps = () =>
   h.dialog.mock.lastCall?.[0] as {
     open: boolean;
-    offersReasoning: boolean;
     capabilities: unknown[];
     onApply: (draft: unknown) => void;
     current: unknown;
@@ -187,21 +191,5 @@ describe("AgentFormModal creation assistant", () => {
     expect(lastBodyProps().displayName).toBe("Graph helper");
     expect(lastBodyProps().selectedCapabilityIds).toEqual([]);
     expect(lastBodyProps().capabilityConfigValues).toEqual({ document_access: config.document_access.config });
-  });
-
-  it("turns reasoning on, starting conversations with it, only when the draft carries it", () => {
-    render("edit");
-    act(() => assistantButton().click());
-    expect(lastDialogProps().offersReasoning).toBe(true);
-
-    act(() => lastDialogProps().onApply({ name: "New name" }));
-    expect(lastBodyProps().reasoningEnabled).toBe(false);
-    expect(lastBodyProps().reasoningDefaultOn).toBe(false);
-
-    act(() => assistantButton().click());
-    act(() => lastDialogProps().onApply({ reasoning: true }));
-    expect(lastBodyProps().reasoningEnabled).toBe(true);
-    expect(lastBodyProps().reasoningDefaultOn).toBe(true);
-    expect(lastBodyProps().displayName).toBe("New name");
   });
 });

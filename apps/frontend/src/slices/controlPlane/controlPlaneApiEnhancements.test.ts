@@ -164,6 +164,75 @@ describe("capability enablement invalidation", () => {
   });
 });
 
+describe("agent marketplace listing invalidation", () => {
+  const marketplacePath = "/control-plane/v1/marketplace/agents";
+
+  const loadMarketplace = async (store: ReturnType<typeof makeStore>) => {
+    const sub = store.dispatch(api.endpoints.getMarketplaceAgentsControlPlaneV1MarketplaceAgentsGet.initiate({}));
+    await sub;
+    return () => sub.unsubscribe();
+  };
+
+  // Suspended agents leave the marketplace server-side.
+  it("refetches the listing after a capability disable", async () => {
+    const store = makeStore();
+    const release = await loadMarketplace(store);
+
+    await store.dispatch(
+      api.endpoints.deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete.initiate({
+        capabilityId: "html_artifact",
+        teamId: "team-a",
+        mode: "disable",
+      }),
+    );
+
+    await vi.waitFor(() => expect(callsTo(marketplacePath)).toBe(2));
+    release();
+  });
+
+  it("refetches the listing after a team's publishing is switched off", async () => {
+    const store = makeStore();
+    const release = await loadMarketplace(store);
+
+    await store.dispatch(
+      api.endpoints.setTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPut.initiate({
+        teamId: "team-a",
+        setTeamMarketplaceSettingsRequest: { agents_publishing_enabled: false, agents_publish_quota: null },
+      }),
+    );
+
+    await vi.waitFor(() => expect(callsTo(marketplacePath)).toBe(2));
+    release();
+  });
+});
+
+describe("agent marketplace like", () => {
+  it("writes the answer into the cached listing without refetching it", async () => {
+    const entry = { entry_id: "a", liked_by_me: false, like_count: 2 };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string) => {
+        const url = typeof input === "string" ? input : input.url;
+        requested.push(url);
+        if (new URL(url).pathname.endsWith("/like")) return json({ ...entry, liked_by_me: true, like_count: 3 });
+        return json([entry]);
+      }),
+    );
+    const store = makeStore();
+    const listing = api.endpoints.getMarketplaceAgentsControlPlaneV1MarketplaceAgentsGet;
+    const sub = store.dispatch(listing.initiate({}));
+    await sub;
+
+    await store.dispatch(
+      api.endpoints.putMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePut.initiate({ entryId: "a" }),
+    );
+
+    expect(listing.select({})(store.getState()).data).toEqual([{ entry_id: "a", liked_by_me: true, like_count: 3 }]);
+    expect(callsTo("/control-plane/v1/marketplace/agents")).toBe(1);
+    sub.unsubscribe();
+  });
+});
+
 describe("creation assistant model activation invalidation", () => {
   it("refreshes offered models after a platform activation change", async () => {
     const settingsPath = "/control-plane/v1/admin/platform/creation-assistant";
@@ -347,5 +416,58 @@ describe("team creation admission invalidation", () => {
       admission.unsubscribe();
       store.dispatch(api.util.resetApiState());
     }
+  });
+});
+
+describe("team models save", () => {
+  const policyPath = "/control-plane/v1/teams/team-a/routing-policy";
+  const agentsPath = "/control-plane/v1/teams/team-a/agent-instances";
+
+  it("writes the saved policy into the cache and refetches the team's agent list", async () => {
+    let policyReads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string) => {
+        const request = typeof input === "string" ? new Request(input) : input;
+        requested.push(request.url);
+        const { pathname } = new URL(request.url);
+        if (pathname === policyPath && request.method === "PATCH") {
+          return json({ team_id: "team-a", version: 2, disabled_model_ids: ["model__b"] });
+        }
+        if (pathname === policyPath) {
+          policyReads += 1;
+          // The refetch never answers: only the PATCH response can update the cache.
+          if (policyReads > 1) return new Promise<Response>(() => {});
+          return json({ team_id: "team-a", version: 1, disabled_model_ids: [] });
+        }
+        return json([]);
+      }),
+    );
+    const store = makeStore();
+    const policy = store.dispatch(
+      api.endpoints.getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet.initiate({ teamId: "team-a" }),
+    );
+    const agents = store.dispatch(
+      api.endpoints.getTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGet.initiate({ teamId: "team-a" }),
+    );
+    await Promise.all([policy, agents]);
+
+    await store.dispatch(
+      api.endpoints.updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch.initiate({
+        teamId: "team-a",
+        updateTeamRoutingPolicyRequest: { disabled_model_ids: ["model__b"], expected_version: 1 },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(
+        api.endpoints.getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet.select({ teamId: "team-a" })(
+          store.getState(),
+        ).data?.version,
+      ).toBe(2),
+    );
+    await vi.waitFor(() => expect(callsTo(agentsPath)).toBe(2));
+    policy.unsubscribe();
+    agents.unsubscribe();
   });
 });

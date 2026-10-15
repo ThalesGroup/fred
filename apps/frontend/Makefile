@@ -26,6 +26,17 @@ FRONTEND_ENABLE_APPLICATIONS_ENV_VALUE := $(value FRONTEND_ENABLE_APPLICATIONS)
 FRONTEND_APPLICATIONS_JSON_ENV_ORIGIN := $(origin FRONTEND_APPLICATIONS_JSON)
 FRONTEND_APPLICATIONS_JSON_ENV_VALUE := $(value FRONTEND_APPLICATIONS_JSON)
 
+FRONTEND_THEME_URL_ENV_ORIGIN := $(origin FRONTEND_THEME_URL)
+FRONTEND_THEME_URL_ENV_VALUE := $(value FRONTEND_THEME_URL)
+FRONTEND_THEME_S3_ACCESS_KEY_ENV_ORIGIN := $(origin FRONTEND_THEME_S3_ACCESS_KEY)
+FRONTEND_THEME_S3_ACCESS_KEY_ENV_VALUE := $(value FRONTEND_THEME_S3_ACCESS_KEY)
+FRONTEND_THEME_S3_SECRET_KEY_ENV_ORIGIN := $(origin FRONTEND_THEME_S3_SECRET_KEY)
+FRONTEND_THEME_S3_SECRET_KEY_ENV_VALUE := $(value FRONTEND_THEME_S3_SECRET_KEY)
+FRONTEND_THEME_S3_REGION_ENV_ORIGIN := $(origin FRONTEND_THEME_S3_REGION)
+FRONTEND_THEME_S3_REGION_ENV_VALUE := $(value FRONTEND_THEME_S3_REGION)
+FRONTEND_THEME_REQUIRED_ENV_ORIGIN := $(origin FRONTEND_THEME_REQUIRED)
+FRONTEND_THEME_REQUIRED_ENV_VALUE := $(value FRONTEND_THEME_REQUIRED)
+
 -include $(FRONTEND_ENV_FILE)
 
 ifeq ($(FRONTEND_ENABLE_APPLICATIONS_ENV_ORIGIN),environment)
@@ -34,6 +45,24 @@ endif
 ifeq ($(FRONTEND_APPLICATIONS_JSON_ENV_ORIGIN),environment)
 override FRONTEND_APPLICATIONS_JSON := $(FRONTEND_APPLICATIONS_JSON_ENV_VALUE)
 endif
+
+ifeq ($(FRONTEND_THEME_URL_ENV_ORIGIN),environment)
+override FRONTEND_THEME_URL := $(FRONTEND_THEME_URL_ENV_VALUE)
+endif
+ifeq ($(FRONTEND_THEME_S3_ACCESS_KEY_ENV_ORIGIN),environment)
+override FRONTEND_THEME_S3_ACCESS_KEY := $(FRONTEND_THEME_S3_ACCESS_KEY_ENV_VALUE)
+endif
+ifeq ($(FRONTEND_THEME_S3_SECRET_KEY_ENV_ORIGIN),environment)
+override FRONTEND_THEME_S3_SECRET_KEY := $(FRONTEND_THEME_S3_SECRET_KEY_ENV_VALUE)
+endif
+ifeq ($(FRONTEND_THEME_S3_REGION_ENV_ORIGIN),environment)
+override FRONTEND_THEME_S3_REGION := $(FRONTEND_THEME_S3_REGION_ENV_VALUE)
+endif
+ifeq ($(FRONTEND_THEME_REQUIRED_ENV_ORIGIN),environment)
+override FRONTEND_THEME_REQUIRED := $(FRONTEND_THEME_REQUIRED_ENV_VALUE)
+endif
+
+# Vite parses theme file values as dotenv; do not export raw Makefile values.
 
 ##@ Common workflows
 ##> The commands you actually use day to day:
@@ -171,7 +200,7 @@ application-container-smoke: ## Verify /apps and /app-services routing in an alr
 theme-container-smoke: ## Verify the deployment theme overlay (FRONTEND_THEME_URL) in an already-built frontend image
 	FRONTEND_IMAGE=$(IMAGE_FULL) sh tests/theme-container-smoke.sh
 
-# theme/ is a complete, working example laid out like public/. Point THEME_SRC
+# theme/ is a complete, working example with per-theme and shared folders. Point THEME_SRC
 # at your own directory to bundle a real one.
 THEME_SRC ?= theme
 THEME_ZIP ?= theme.zip

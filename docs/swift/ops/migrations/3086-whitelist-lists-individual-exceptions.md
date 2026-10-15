@@ -4,7 +4,7 @@ title: "Platform access whitelist lists individual exceptions and adds people th
 impact: none
 configuration: none
 configuration_reason: "One optional query parameter and a new sort order on an existing administration endpoint, plus frontend changes; no configuration key, default or chart value changes."
-no_action_reason: "The new query parameter is optional and defaults to the previous behaviour, no schema or stored data changes, and the control-plane backend and the frontend are deployed together as usual."
+no_action_reason: "The new query parameter is optional and defaults to the previous behaviour; no schema or stored data changes, and the control-plane backend and frontend follow the coordinated release rollout."
 ---
 ## Applicability
 

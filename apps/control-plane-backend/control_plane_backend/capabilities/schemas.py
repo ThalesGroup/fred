@@ -299,6 +299,13 @@ class CapabilityImpactPreview(BaseModel):
         default=0,
         description="Selecting instances whose pod is unreachable (impact unknown).",
     )
+    published_instances: int = Field(
+        default=0,
+        description=(
+            "Of the agents that would be suspended, those published to the "
+            "marketplace: suspension removes them from it."
+        ),
+    )
     instances: list[ImpactedInstanceSummary] = Field(
         default_factory=list,
         description="The affected agents, for the admin drill-down.",

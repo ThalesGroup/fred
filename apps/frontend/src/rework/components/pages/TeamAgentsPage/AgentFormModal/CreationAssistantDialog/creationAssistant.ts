@@ -20,7 +20,7 @@ import type {
   ManagedAgentFieldSpec,
   CapabilityCatalogEntry,
 } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { applyPackToggle, type CapabilitySelectionState, derivePackChecked, isPackSelectable } from "../toolPackLogic";
+import { applyPackToggle, type CapabilitySelectionState, derivePackChecked } from "../toolPackLogic";
 import { CAP_DOCUMENT_ACCESS, TOOL_PACK_SECTIONS } from "../toolPacks";
 
 export const DRAFT_DESCRIPTION_MAX_LENGTH = 4000;
@@ -72,9 +72,9 @@ export function availableRecommendedIds(recommended: string[], availableIds: Rea
 const DOCUMENT_PACKS = TOOL_PACK_SECTIONS.flatMap((section) => section.packs).filter((pack) => pack.documentSource);
 
 /**
- * Replace the capability selection with the recommendation. Reasoning and the
- * existing per-capability settings are kept. A recommended document access does
- * not say which source, so both document packs are turned on (full rationale:
+ * Replace the capability selection with the recommendation. The existing
+ * per-capability settings are kept. A recommended document access does not say
+ * which source, so both document packs are turned on (full rationale:
  * add-agent-creation-assistant design.md).
  */
 export function applyRecommendedCapabilities(
@@ -90,16 +90,6 @@ export function applyRecommendedCapabilities(
   return DOCUMENT_PACKS.reduce((acc, pack) => applyPackToggle(pack, true, acc, availableIds), next);
 }
 
-const REASONING_PACK = TOOL_PACK_SECTIONS.flatMap((section) => section.packs).find((pack) => pack.kind === "reasoning");
-
-/** i18n key of the reasoning tile: the Simple view's reasoning pack title. */
-export const REASONING_LABEL_KEY = REASONING_PACK?.titleKey ?? "";
-
-/** The assistant always proposes reasoning wherever the Simple view offers its reasoning pack. */
-export function isReasoningOffered(availableIds: ReadonlySet<string>): boolean {
-  return !!REASONING_PACK && isPackSelectable(REASONING_PACK, availableIds);
-}
-
 /** A proposal the user can tick in the review step, besides capabilities. */
 export type DraftItem = "systemPrompt" | "name" | "role" | "description";
 export const DRAFT_ITEMS: DraftItem[] = ["systemPrompt", "name", "role", "description"];
@@ -111,7 +101,6 @@ export type AppliedDraft = {
   role?: string;
   description?: string;
   capabilityIds?: string[];
-  reasoning?: true;
 };
 
 /** Form values the draft could replace; "" (or []) when the user has not written one. */
@@ -139,7 +128,6 @@ export function selectedDraft(
   result: AgentDraftResult,
   ticked: ReadonlySet<DraftItem>,
   tickedCapabilityIds: string[],
-  reasoningTicked = false,
 ): AppliedDraft {
   const draft: AppliedDraft = {};
   if (ticked.has("systemPrompt")) draft.systemPrompt = result.system_prompt;
@@ -148,14 +136,10 @@ export function selectedDraft(
     if (ticked.has(item) && value) draft[item] = value;
   }
   if (tickedCapabilityIds.length > 0) draft.capabilityIds = tickedCapabilityIds;
-  if (reasoningTicked) draft.reasoning = true;
   return draft;
 }
 
-/**
- * Ticked items that would replace a value the user already has, which Apply must confirm first.
- * Reasoning is never listed: switching it on adds an option, it erases nothing the user wrote.
- */
+/** Ticked items that would replace a value the user already has, which Apply must confirm first. */
 export function overwrittenItems(
   draft: AppliedDraft,
   current: DraftTargets,
@@ -180,7 +164,6 @@ function capabilitiesChange(recommended: string[], current: DraftTargets, availa
   const before: CapabilitySelectionState = {
     selectedCapabilityIds: current.capabilityIds,
     capabilityConfigValues: current.capabilityConfigValues,
-    reasoningEnabled: false,
   };
   const after = applyRecommendedCapabilities(recommended, before, availableIds);
   const ids = new Set(after.selectedCapabilityIds);

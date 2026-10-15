@@ -105,6 +105,17 @@
   }
 }
 
+.roleChips[data-size="small"] {
+  gap: var(--spacing-2xs);
+
+  .baselineChip,
+  .roleChip {
+    padding: 0 var(--spacing-xs);
+    height: 1.5rem;
+    font: var(--font-label-small);
+  }
+}
+
 .pendingIcon {
   display: flex;
   font-size: 1rem;

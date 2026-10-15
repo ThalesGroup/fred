@@ -1988,6 +1988,11 @@ config) and 4 (composer control) are phase 2 and not implemented here.
 Levels 3-4 of REASON-01 (per-agent and per-question reasoning), plus its three
 tool-loop-safety preconditions. Builds on §8.29 (levels 1-2); read that first.
 
+**2026-10-09 — superseded in part by §8.114.** Level 3 (the agent offer,
+`AgentTuning.reasoning_enabled`) is removed: the platform activation alone is
+the ceiling. The tri-state below is redefined: only `True` reasons, `None`
+no longer defers to the ceiling.
+
 **Reasoning is not a capability** (RFC §15, Amendment A). It was built as one, as
 §7 specified, and withdrawn before release: an agent does not *use* reasoning the
 way it uses a tool, so the Tools tab was the wrong place to enable it. What ships:
@@ -2106,6 +2111,11 @@ model — see §C.9 and the note below.
 ---
 
 ### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
+
+**2026-10-09 — `agent_profile_overrides` and `resolve_team_override` removed
+(§8.114).** The user's choice (`chat_profile_id`) and the instance
+recommendation now sit between the pod override and the team default;
+`chat_default_profile_id` below is unchanged.
 
 **2026-08-16 — chat-only drift enforcement (#2365).** A team-selected profile
 whose declared capability is not `chat` now raises
@@ -2703,6 +2713,9 @@ persisted before this fix.
 ---
 
 ### 8.42 ✅ Tool error claims the final response only when the whole round failed (issue #2244, 2026-08-05)
+
+> **Final-response half superseded by §8.115 (2026-10-14):** a wholly-failed
+> round's error is now only the fallback when the model writes no answer.
 
 **Refines §8.27's runtime half.** Since the v2 loop shipped, any
 `is_error=True` tool result made the ReAct stream surface that error text
@@ -5694,7 +5707,7 @@ is_error = status_is_error or artifact_is_error
 
 The text shown to the user for a failed call comes from the same trust
 boundary and feeds both `ToolResultRuntimeEvent.content` and
-`FinalRuntimeEvent.content`:
+`FinalRuntimeEvent.content` (the latter only as a fallback since §8.115):
 
 - A typed `is_error=True` `ToolInvocationResult` that reaches this boundary
   is Fred-owned: its text is rendered fresh from the artifact via
@@ -6938,3 +6951,119 @@ typed. A pod rolled back after such rows were written keeps serving their
 list. Deploy runtime pods before the web client to avoid that rendering for
 the turns sent in between. Acceptance:
 `openspec/specs/platform-agent-skills/spec.md`.
+
+### 8.113 Capability config export and inline copy files (2026-10-11)
+
+Additive, extends §8.102. `POST /agents/capabilities/{id}/export-config` (body
+`CapabilityConfigExportRequest`: envelope, team and agent instance) returns
+`CapabilityConfigExportResult`: the upgraded envelope with scope-private settings reset
+and every `AssetKey` file as `files` (asset key → base64), read with the caller's token.
+404 when the capability is not installed, 422 when the config or a file cannot be read.
+`CapabilityConfigCopyRequest` gains optional `asset_files` (same shape): when set, the
+pod takes the files from it instead of reading the source instance (a key missing or
+not valid base64 → 422). Together they let a copy be prepared from a stored snapshot
+without access to the source team. Acceptance: `openspec/changes/add-agent-marketplace/`.
+
+### 8.114 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
+
+Supersedes the team per-agent level of §8.32 and the agent gate and tri-state
+of §8.30. OpenSpec change `chat-model-and-reasoning-picker`; product side in
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 / §41 (2026-10-09 entries).
+
+**Chat model precedence**, highest first. `resolve_effective_chat_profile`
+(fred-sdk) stays the one shared implementation, used by the pod and by the
+control-plane effective-chat-model read:
+
+1. platform binding (`BoundRuntimeContext.platform_chat_model_binding`, §8.55),
+   short-circuited by the caller;
+2. pod per-agent override (`models_catalog.yaml` `agent_profile_overrides`);
+3. user's per-conversation choice — new `RuntimeContext.chat_profile_id`;
+4. instance recommendation — new `AgentTuning.recommended_chat_profile_id`;
+5. team default (`RuntimeContext.chat_default_profile_id`);
+6. pod default.
+
+`RuntimeContext.agent_profile_overrides`, `resolve_team_override` and
+`ChatProfileOrigin.TEAM_AGENT_OVERRIDE` are removed. `ChatProfileOrigin` and
+`ModelSelectionSource` gain `user_choice` and `instance_recommendation`; both
+are logged at info on `[V2][MODEL_ROUTING]`. No KPI label changes.
+`chat_profile_id` is bound on managed-instance turns only: a direct template
+run (`agent_id`, no `agent_instance_id`) drops it.
+
+**Trust boundary.**
+
+- `chat_profile_id` is client-forwarded. `RoutedChatModelFactory.select`
+  accepts it, and the recommendation, only when the profile is a known chat
+  profile, its model is in `usable_model_ids` (`can_use`; `None` = ReBAC off)
+  and not in `team_disabled_model_ids`. Otherwise it logs
+  `[V2][MODEL_ROUTING] <level> ignored: … reason=…` at debug (it runs on every
+  model call and names client input) and falls through. A stale or spoofed
+  choice never fails the turn. The resolver stays pure: the caller
+  passes `None` for an invalid level.
+- `BoundRuntimeContext.team_disabled_model_ids` and
+  `BoundRuntimeContext.recommended_chat_profile_id` are TRUSTED: filled from
+  the per-turn `ManagedAgentRuntimeBinding` (the disabled set) and the
+  server-resolved instance tuning (the recommendation). No `ctx.get` exists
+  for either, so a request body cannot set them. Empty / `None` outside
+  managed turns; an older control plane that omits the disabled set stays
+  compatible.
+- The team default keeps failing closed: unknown or non-chat →
+  `TeamRoutingProfileDriftError`; model team-disabled → `ModelNotUsableError`
+  (never a silent substitution). The team-disabled set narrows the user,
+  instance and team levels only; the pod default stays gated by `can_use`.
+- The choice applies to the top-level agent only. Registry children get a
+  `PortableContext` without it and keep their own resolution; native Deep
+  sub-agents reuse the parent's client.
+
+**Reasoning.**
+
+- Ceiling: on a managed instance turn, `reasoning_enabled_model_ids` is the
+  platform list from the runtime binding, with no agent gate
+  (`AgentTuning.reasoning_enabled` / `reasoning_default_on` are removed; the
+  `AgentDefinition` fields are deprecated no-ops). A turn without a managed
+  instance binds `[]`.
+- Tri-state redefined: only `reasoning is True` reasons, within the ceiling.
+  `False` and `None` both strip, so callers that send nothing
+  (OpenAI-compatible router, evaluation) never reason by accident. The field
+  stays `bool | None` for wire compatibility. `build_for_chat` strips unless
+  `reasoning is True`; the composer always sends an explicit value while its
+  row is shown.
+- The effort picker stays withdrawn (§8.48).
+
+**Deprecated for pod authors (design Q1, decided 2026-10-09).**
+`AgentDefinition.reasoning_enabled` / `reasoning_default_on` stay for one SDK
+minor as deprecated, inert fields: a definition setting them (class attribute
+or constructor) still loads, logs one deprecation warning per definition
+class, and changes nothing. They will be removed in a later minor. `AgentTuning`
+no longer has them and ignores them in stored payloads.
+Migration note: `docs/swift/ops/migrations/chat-model-and-reasoning-picker.md`.
+
+### 8.115 A model answer after a failed tool round is the final response (2026-10-14, #2588)
+
+**Supersedes the final-response half of §8.42 and §8.74.** Until now, when
+every tool call of a round failed, `react_runtime.py` suppressed the model's
+assistant deltas and replaced its final answer with the failed call's
+user-facing error text (often the generic "This step failed unexpectedly and
+could not be completed."). Honest answers were lost: Deep's filesystem gate
+(#2588), the per-turn tool-call cap (`ToolCallLimitMiddleware`, contrary to
+`tool_pacing.py`'s "a normal answer, never a crash"), and a tool's revision
+request flagged `is_error`.
+
+**Rule.** `FinalRuntimeEvent.content` is the model's non-empty answer written
+after the last error that claimed the final response; its deltas stream
+normally. The claimed error text (§8.74 boundary, unchanged) is used only when
+the model wrote nothing after the failure — a blank answer, or no model turn at
+all; the runtime logs `event=final_from_tool_error` then. The round rules of
+§8.42 still decide which error, if any, is the fallback.
+
+**Trust boundary.** The original override guarded against a model misreporting
+a failure. The same safeguards that already applied to partial failures since
+§8.42 now cover a wholly-failed round: every failed call keeps `is_error=True`
+and its bounded text on its tool row, and the read-only platform instructions
+forbid claiming a call not made or pasting a raw tool error. No policy-refusal
+marker is needed: refusals and genuine failures follow the same rule.
+
+**Scope.** `react_runtime.py` only (shared by ReAct and Deep). No event, SDK,
+OpenAPI or configuration change. Tests:
+`libs/fred-runtime/tests/test_react_tool_error_final_2244.py`.
+OpenSpec: `openspec/changes/keep-model-answer-after-failed-tool-round/`.
+Migration note: `docs/swift/ops/migrations/2588-keep-model-answer-after-failed-tool-round.md`.

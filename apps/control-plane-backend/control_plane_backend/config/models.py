@@ -29,6 +29,7 @@ from fred_core.common import (
     TemporalSchedulerConfig,
 )
 from fred_core.scheduler import SchedulerBackend
+from fred_pod.common.naming import PREFIX_PATTERN, prefix_covers
 from fred_pod.common.structures import LogOutputFormat
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -228,36 +229,15 @@ class ManagedAgentTuning(BaseModel):
     )
     tags: list[str] = Field(default_factory=list)
     fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
-    reasoning_enabled: bool = Field(
-        default=False,
+    recommended_chat_profile_id: str | None = Field(
+        default=None,
         description=(
-            "Does this agent OFFER per-question reasoning (REASON-01 level 3, "
-            "`MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent "
-            "property, deliberately NOT a capability: reasoning is a property "
-            "of how the model is called, not a tool the agent can use, so it "
-            "belongs next to role/description rather than in the tool picker.\n\n"
-            "True only means the chat composer OFFERS the toggle — it never "
-            "turns reasoning on by itself. The user still has to flip it per "
-            "question (level 4, default off), and a platform admin still has "
-            "to have enabled the model's reasoning (level 2, a ceiling)."
-        ),
-    )
-    reasoning_default_on: bool = Field(
-        default=False,
-        description=(
-            "When this agent offers reasoning, does a NEW conversation start "
-            "with the composer toggle already ON (REASON-01 Amendment B)? "
-            "Seeds `params.default` on the emitted `reasoning_toggle` control; "
-            "the user can still flip it off per question — this decides where "
-            "the switch starts, never where it stays.\n\n"
-            "Meaningless unless `reasoning_enabled` is True: with the offer "
-            "off no control is emitted at all, so no default can apply. The "
-            "value is kept rather than reset in that case, so an author who "
-            "turns the offer back on recovers their choice.\n\n"
-            "Defaults to False, matching the hardcoded default this field "
-            "replaces: `AGENT-THINKING-API-RFC.md` Amendment C measured "
-            "reasoning re-issuing duplicate tool calls on this stack, so "
-            "starting ON is an opt-in an author makes deliberately."
+            "Chat profile this instance's conversations start on, above the "
+            "team default. None follows the team default, including later "
+            "changes. Validated on write against the team's usable and enabled "
+            "models on the instance's pod; the pod re-checks it every turn. "
+            "Legacy `reasoning_enabled` / `reasoning_default_on` keys in stored "
+            "rows are ignored."
         ),
     )
 
@@ -369,6 +349,27 @@ class SchedulerConfig(BaseModel):
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 
+class KnowledgeBasePublisher(BaseModel):
+    """A client allowed to publish Knowledge Base definitions, and the one
+    prefix it owns."""
+
+    client_id: str = Field(
+        min_length=1,
+        description="The publishing client, as the token's `azp` names it.",
+    )
+    # The publication request's own constraints: a registration it would refuse
+    # must fail at startup, not at every publication.
+    prefix: str = Field(
+        min_length=1,
+        max_length=256,
+        pattern=PREFIX_PATTERN,
+        description=(
+            "The prefix this client owns: it may publish only definitions "
+            "named under it, and must present exactly it when publishing."
+        ),
+    )
+
+
 class KnowledgeBasesConfig(BaseModel):
     """What Fred decides about running a Knowledge Base, wherever its image
     came from.
@@ -378,6 +379,14 @@ class KnowledgeBasesConfig(BaseModel):
     new image belongs here rather than in the SDK.
     """
 
+    publishers: list[KnowledgeBasePublisher] = Field(
+        default_factory=list,
+        description=(
+            "The clients allowed to publish Knowledge Base definitions, each "
+            "with the prefix it owns. Empty by default: nobody may publish. "
+            "A prefix appears once, and no registered prefix may cover another."
+        ),
+    )
     run_max_attempts: int = Field(
         default=2,
         ge=1,
@@ -390,6 +399,24 @@ class KnowledgeBasesConfig(BaseModel):
             "retry."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_disjoint_publisher_prefixes(self) -> "KnowledgeBasesConfig":
+        # Two overlapping registrations would make one name publishable by two
+        # clients; the store would then hand it to whichever publishes first.
+        for index, first in enumerate(self.publishers):
+            for second in self.publishers[index + 1 :]:
+                if prefix_covers(first.prefix, second.prefix) or prefix_covers(
+                    second.prefix, first.prefix
+                ):
+                    raise ValueError(
+                        "knowledge_bases.publishers overlap: "
+                        f"{first.prefix!r} ({first.client_id}) and "
+                        f"{second.prefix!r} ({second.client_id}). "
+                        "Each prefix must be registered once, and none may "
+                        "cover another."
+                    )
+        return self
 
 
 class PolicyConfig(BaseModel):

@@ -438,7 +438,7 @@ def _answer_text(chunks: list[dict[str, Any]]) -> str:
 def test_chat_completions_delivers_final_content_that_was_never_streamed(
     monkeypatch, tmp_path
 ) -> None:
-    """A failed tool round suppresses the model's deltas; the error text exists
+    """A failed tool round with no model answer after it: the error text exists
     only in the final event and must still reach an OpenAI client."""
     model = ToolFriendlyFakeChatModel(
         responses=[
@@ -446,7 +446,7 @@ def test_chat_completions_delivers_final_content_that_was_never_streamed(
                 content="",
                 tool_calls=[{"id": "call-1", "name": "demo.broken", "args": {}}],
             ),
-            AIMessage(content="ignored synthesis"),
+            AIMessage(content=""),
         ]
     )
     monkeypatch.setattr(
@@ -478,7 +478,6 @@ def test_chat_completions_delivers_final_content_that_was_never_streamed(
     assert any(c["choices"][0]["delta"].get("tool_calls") for c in chunks)
     answer = _answer_text(chunks)
     assert answer
-    assert "ignored synthesis" not in answer
     assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
     assert chunks[-1]["choices"][0]["delta"]["content"] == answer
 

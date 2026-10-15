@@ -2169,6 +2169,10 @@ freshness treatment — see `RUNTIME-EXECUTION-CONTRACT.md` §8.55.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 
+**2026-10-09 — retired by §63.** The per-agent offer and default below, and
+the Amendment B, Capabilities-tab and #2473 addenda, no longer apply: the
+platform activation alone gates reasoning, and the team sets per-model defaults.
+
 Levels 3-4 shipped (`RUNTIME-EXECUTION-CONTRACT.md` §8.30). Reasoning is **not**
 a capability (RFC §15, Amendment A) — it was built as one and withdrawn before
 release, because an agent does not _use_ reasoning the way it uses a tool.
@@ -2523,6 +2527,12 @@ values inside `series`/`rows`.
 
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118; simplified 2026-08, `llm-routing-simplify`)
 
+**2026-10-09 — amended by §63.** Per-agent overrides removed, team disabled
+models and reasoning defaults added, write gate narrowed to `team_admin`. The
+data model, resolution, authorization and frontend paragraphs below describe
+the pre-§63 policy where they mention `agent_profile_overrides` or
+`team_editor` writes.
+
 **2026-08-16 — chat profile typing (#2365).** The pod catalog now projects
 `model_chat_profile_ids` explicitly alongside the complete
 `model_profile_ids` inventory. Team picker, universal multi-pod intersection,
@@ -2605,9 +2615,10 @@ panel with every input disabled (read-only), not a second component.
 **Explicit non-goals (V1):** per-user routing inside a shared multi-member
 team (distinct from personal-space support, which is just a team routing
 policy scoped to a one-member team), model temperature/timeout tuning, a
-per-message composer picker, direct `models_catalog.yaml` editing from the
-product. Per-agent routing (`agent_profile_overrides`) is in scope, not a
-non-goal.
+per-message composer picker (**reversed 2026-10-09, §63**), direct
+`models_catalog.yaml` editing from the product. Per-agent routing
+(`agent_profile_overrides`) was in scope until §63 replaced it with the
+instance recommended model.
 
 ## 38. Contract Notes — team image renamed banner → avatar (2026-08-08, #2300)
 
@@ -2822,7 +2833,7 @@ deciding level is visible.
 elevated-role gate** §37's policy reads use. Anyone entitled to hold a
 conversation with an agent is entitled to know which model answers them, and
 that is safe precisely because the response carries no policy detail (above).
-Editing the policy stays `team_editor`-only.
+Editing the policy is `team_admin`-only since §63.
 
 **`reasoning_enabled` and the reasoning toggle.** The `reasoning_toggle` control
 on `ExecutionPreparation` answers "the platform enabled reasoning on _some_
@@ -2878,7 +2889,8 @@ error — the same diagnosability rule REASON-01 §8 applies to the reasoning
 control. Always `true` when a platform binding decided, which bypasses team
 enablement by design (§40's ReBAC exemption).
 
-**Explicit non-goals:** making the chip a model _picker_ (it stays read-only),
+**Explicit non-goals:** making the chip a model _picker_ (**reversed
+2026-10-09, §63**: the chip lists `selectable_models`),
 surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
@@ -4230,7 +4242,7 @@ about prompts.
 
 **What it is.** A platform admin sets the UI theme users get by default and the
 themes withdrawn from their choice. Theme ids are opaque to the control plane:
-the frontend owns the theme catalog and ignores ids it does not ship.
+the frontend owns the theme catalog (shipped themes plus valid deployment ZIP entries) and ignores ids outside it.
 
 **Model.** One `platform_ui_settings` row at most (`id = 'default'`, CHECK
 constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
@@ -4252,8 +4264,10 @@ constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
 `hidden_themes`) on the unauthenticated `GET /frontend/config`, omitted while
 no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
 admin-authored content. The frontend caches it so its boot script can apply the
-theme before the next load's config arrives; a change applies to each user at
-their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
+theme before the next load's config arrives. A running client refreshes the
+public config after its own admin save, on window focus and every 60 seconds,
+keeping the last good settings on failure. Full behavior: OpenSpec
+`platform-ui-theme-settings`.
 
 ## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
 
@@ -4269,7 +4283,7 @@ the audit event.
   `template_enabled` and `missing_capabilities` (`id`, `name` i18n key).
   Advisory; the copy re-checks everything.
 - `POST …/agent-instances/{id}/copy` with `AgentCopyRequest`
-  (`target_team_ids`, optional `display_name`) → `AgentCopyResponse`, one
+  (`target_team_ids`, optional `display_name` and `locale`) → `AgentCopyResponse`, one
   `AgentCopyResult` per distinct target (`agent` or `error`, plus
   `dropped_capabilities` and `notices`, each naming the capability by `id` and
   `name` i18n key; a notice says what an editor must redo there). Each target needs `team.can_update_agents` and is
@@ -4280,7 +4294,7 @@ the audit event.
   `error_code: "agent_name_conflict"` on its result (§60).
 
 **What a copy carries.** Name (kept when free in the destination, else the
-first free `<name>_imported-<n>`), description, template, tuning values and
+first free `<name> (copy <n>)`, n from 1, see §65 Names), description, template, tuning values and
 reasoning settings. Each selected capability the destination can use goes
 through the pod's `copy-config` (`RUNTIME-EXECUTION-CONTRACT.md` §8.102):
 scope-private settings are reset when the team changes, configuration files
@@ -4333,9 +4347,10 @@ the unique index `uq_agent_instance_team_name` on
 agent's own name in another case is accepted. A Duplicate reports the same
 code as `AgentCopyResult.error_code`. Create checks before any pod call.
 
-**Resolutions.** A copy to another team keeps `<name>_imported-<n>`, compared
-the same way, and retries once with the next free name if a concurrent copy
-took it. A platform import renames a conflicting agent the same way.
+**Resolutions.** A copy to another team takes the first free `<name> (copy <n>)`
+(n from 1, word per §65 Names; `<name>_imported-<n>` before #3044), compared the same way, and
+retries once with the next free name if a concurrent copy took it. A platform
+import renames a conflicting agent the same way.
 
 **Upgrade.** Migration `a4d85307ea0e` trims every name and renames later
 duplicates `<name> (2)`, `<name> (3)`… in creation order (the oldest keeps its
@@ -4524,6 +4539,279 @@ preset `creation_assistant_usage` (`can_observe_platform`, no `team_id`)
 returns `CreationAssistantUsageResponse`: `total_tokens`, `input_tokens`,
 `output_tokens` and `drafts` (calls the provider answered, usable or not) for
 the period, read from `agent.creation_assistant_completed` only.
+
+## 63. Contract Notes — team model settings, recommended model and composer model choice (2026-10-09, #3029)
+
+Amends §33 (per-agent reasoning), §37 (team routing policy) and §41 (effective
+chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.114. OpenSpec
+change `chat-model-and-reasoning-picker`.
+
+### §37 amended — the team policy becomes the team's Models section
+
+**Policy shape** (`TeamRoutingPolicy`, `PATCH` still a full typed replacement):
+
+| Field                             | Meaning                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `chat_default_profile_id`         | Unchanged: the team default, `null` = pod default                          |
+| `disabled_model_ids`              | Model capability ids the team disabled for its members (exceptions)        |
+| `reasoning_default_off_model_ids` | Model capability ids whose composer reasoning row starts OFF (exceptions)  |
+
+Both lists are stored as **exceptions**, keyed by model capability id (as
+`can_use` and the reasoning store are), in the new
+`disabled_model_ids_json` / `reasoning_default_off_model_ids_json` columns. So a
+model the platform newly allows arrives enabled, with reasoning on by default,
+with no team write.
+
+**`agent_profile_overrides` is removed** from the policy, its schemas,
+`ExecutionPreparation` and the runtime. Alembic revision `e9026d8e4db6` copies
+each override into `recommended_chat_profile_id` of the team's instances of that
+template that have none, then drops the column (lossy downgrade). An imported
+old bundle is mapped the same way; `legacy_overrides_mapped` counts it in the
+import report.
+
+**Write validation.** The default's model must be usable and not disabled
+(`ModelDisabledForTeamError`, 422). The default model, explicit or effective,
+cannot be disabled (`DefaultModelNotDisableableError`, 422). Exception ids the
+team can no longer use are pruned silently. Newly disabled models clear the
+team's agent recommendations naming them in the same transaction. A write that
+disables models is refused with 503 (`ModelCatalogUnavailableError`) when one
+of the team's pod catalogs cannot be read and either no default is stored (the
+pod defaults it must protect are unknown) or a model is newly disabled (the
+recommendations to clear are unknown): it never fails open.
+
+**Optimistic concurrency.** The request takes an optional `expected_version`
+(the `version` last read, 0 before any write). When set and the stored
+version differs, the write is refused with 409
+(`RoutingPolicyVersionConflictError`); the Models section reloads and warns.
+Omitted, the write is unconditional as before.
+
+**Write gate narrowed: `team_editor` → `team_admin`** (`can_update_info`,
+owner decision 2026-10-09). Every remaining field belongs to the Models section.
+A personal space's owner keeps the write through the system-team bypass. Team
+editors and analysts get a read-only view and keep steering models per agent
+through the recommended model. Reads (`GET …/routing-policy`,
+`…/available-models`) keep their elevated-role gate.
+
+**New read.** `GET /teams/{team_id}/routing-policy/disable-impact?capability_id=`
+(`team_admin`, it exposes agent names) → `DisableImpact { agents:
+[{agent_instance_id, display_name}] }`: the instances whose recommendation maps
+to that model. One instance query plus the shared catalog aggregation.
+
+**`available-models`** gains `display_name` and `reasoning_available` per
+profile, and `effective_default_profile_id`: the stored default, else the pod
+default of the team's pods when they agree. It now carries the routing-policy
+cache tag, invalidated by an agent `PATCH`.
+
+**Platform revocation.** When a model loses `can_use` for a team (grant removal,
+personal-space scope revoke) or platform-wide (default-on switched off, for
+teams without an explicit grant), `capabilities/service.py` clears the matching
+recommendations and prunes the team exception lists. A stored team default on
+that model is cleared too, so the pod default takes over and turns keep
+working; the Models section then shows the pod default as the default. No team
+dialog.
+
+**Disable fallback.** Agents recommending a disabled model follow the team
+default. A conversation whose member chose that model goes back to the agent's
+recommended model (itself the team default when the agent has none) on its
+next refresh.
+
+**Agent save vs disable.** An agent create or update re-checks its
+recommendation against the team policy inside its own write transaction, under
+a shared lock on the policy row, and an update that does not set
+`recommended_chat_profile_id` keeps the stored value rather than the one loaded
+before the write, so a recommendation a concurrent disable cleared is never
+written back.
+
+**Non-goal reversed.** "A per-message composer picker" (§37 V1 non-goals) is
+now in scope: see §41 below. Per-user routing *policy* stays out: the user's
+choice is per conversation and never stored server-side.
+
+### Agent instance — `recommended_chat_profile_id`
+
+On `ManagedAgentTuning` (inside `tuning_json`, no schema change),
+`CreateAgentInstanceRequest`, `UpdateAgentInstanceRequest` (absent = unchanged,
+`null` = follow the team) and `ManagedAgentInstanceSummary`. Validated on write
+against `can_use` ∩ team-enabled ∩ the instance pod's chat profiles (422). It
+reaches the pod on the trusted runtime binding, never on request content.
+
+### §33 amended — per-agent reasoning retired
+
+`reasoning_enabled` / `reasoning_default_on` leave `ManagedAgentTuning`, the
+create/update requests, `ManagedAgentInstanceSummary`, `AgentTemplateSummary`
+and the agent form. Stored rows and old bundles still load, with the keys
+ignored. The two Amendment B and #2473 addenda above no longer apply.
+
+`_platform_reasoning_control` keeps one gate: the descriptor is emitted whenever
+at least one model has reasoning enabled platform-wide, for every agent, without
+`params.default`. The composer seeds the row from the chosen model's team
+default. `ManagedAgentRuntimeBinding` gains `team_disabled_model_ids`, read
+with the policy row. The call's short reads run on two concurrent sessions
+(instance, team settings, policy / reasoning, platform binding, platform
+prompt): at most 2 pooled connections per turn instead of 5.
+
+`ExecutionPreparation.chat_profile_id` replaces `agent_profile_overrides`. It
+is set only from the evaluator's `agent_model_override` (service identity
+only, validated like a recommendation) and forwarded as
+`RuntimeContext.chat_profile_id`. The chat UI does not forward it.
+
+### §41 amended — the composer reads the selectable models
+
+`EffectiveChatModel` gains:
+
+| Field               | Meaning                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selectable_models` | `SelectableChatModel { profile_id, capability_id, name, display_name, reasoning_enabled, reasoning_default_on }`: chat models served by the instance's pod, `can_use`, not team-disabled. One row per model; the resolved model's row is keyed by the resolved profile |
+| `choice_locked`     | `true` when a platform binding or a pod per-agent override fixes the model; `selectable_models` is then empty                                                                    |
+
+The resolution now includes the instance recommendation (validated like the
+pod does) and no user level, so `name` names what a new conversation starts on.
+No I/O is added. Unreachable pod: empty, as before. Still members-readable;
+still no precedence level revealed.
+
+**Non-goal reversed.** "Making the chip a model picker" is now in scope: the
+composer's model control lists `selectable_models` and keeps the choice per
+conversation in browser session storage (`chat.composer.{sessionId}`), sent as
+`runtime_context.chat_profile_id` on each turn. The page re-reads this route on
+mount, window focus (both at most once per 30 s) and conversation switch; a
+choice missing from a refetch is dropped with a notice. Component: `docs/swift/ux/COMPONENT-UX.md`
+`ReasoningChip`.
+
+## 64. Contract Notes — agents marketplace publication settings (2026-10-12, #3044)
+
+**Settings.** Whether the team's editors may publish ("publication enabled") and how many agents it may publish. A default every collaborative team follows, `platform_marketplace_settings`
+(one row at most, `id = 'default'`; absent = switch off, quota 5), and two
+nullable overrides on `teammetadata`, `agents_publishing_enabled` and
+`agents_publish_quota` (null = Default; quota `>= 1` by CHECK). Effective value =
+override, else default, per setting; a team created later follows the default.
+
+**Endpoints** (all `organization#can_manage_platform`; team admins get 403):
+
+- `GET /control-plane/v1/admin/marketplace-settings` → `MarketplaceSettings`:
+  `default` (switch, quota, `updated_by`, `updated_at`) and per team its
+  overrides, effective values and `published_count`.
+- `PUT /control-plane/v1/admin/marketplace-settings/default` and
+  `PUT /control-plane/v1/admin/teams/{team_id}/marketplace-settings` (both
+  fields replaced, null = back to Default) → `MarketplaceSettingsUpdateResult`
+  (`settings` + `impact`). Quota below 1 or missing: 422.
+- `GET …/marketplace-settings/default/impact?agents_publishing_enabled=` and
+  `GET /control-plane/v1/admin/teams/{team_id}/marketplace-settings/impact?agents_publishing_enabled=`
+  (omitted = Default) → `MarketplaceSettingsImpact` (`affected_team_ids`,
+  `removed_published_agents`), read-only.
+- Any change turning a team's effective switch from on to off removes the
+  team's published agents in the same request (§65, reason `switch_off`); the
+  write response reports the count. Audit events
+  `marketplace.settings.default_updated` and `marketplace.settings.team_updated`.
+  `published_count` and `removed_published_agents` count marketplace entries in
+  state `published`.
+- A switch-off always wins over a concurrent publication: the publish write
+  re-reads the switch and the team's visibility under share locks on the
+  `platform_marketplace_settings` row then the `teammetadata` row, which the
+  Default, override and visibility writes lock (Postgres only).
+
+**Permissions.** No dedicated role: `TeamPermission` gains
+`can_publish_marketplace_agents` (`team_editor`) and
+`can_unpublish_marketplace_agents` (`team_editor or team_admin`).
+`TeamWithPermissions.marketplace` (null for personal spaces) carries the
+effective switch and quota and `published_count`. ReBAC detail: `REBAC.md`
+§Team editor.
+
+## 65. Contract Notes — agents marketplace (2026-10-12, #3044)
+
+**Storage** (revision `24c2f88374fe`). `agent_marketplace_entry`: one row per
+agent (unique `agent_instance_id`, FK cascade), `state` `published | removed |
+dismissed`, removal reason, optional platform admin message and date, the
+snapshot (template, name, description, `tuning_json`, captured capabilities
+with their i18n name, description and icon), `version`, `first_published_at`
+(listing order), `published_at`, `snapshot_source_updated_at`.
+`agent_marketplace_entry_file` holds the snapshot's configuration files keyed by
+`(entry_id, capability_id, asset_key)`. `agent_marketplace_like` (soft unlike
+`removed_at`, one active like per user and entry by partial unique index) and
+`agent_marketplace_import` (destination, importer, resulting agent `SET NULL`)
+are dated rows kept across removal and republication; everything cascades with
+the agent, and team deletion now deletes the team's agents, first keeping each
+agent's name on its sessions (`agent_display_name`) as a single deletion does,
+then emitting one `agent.deleted_total` KPI per agent (same dims as a single
+deletion) and one audit `agent.unpublished` with reason `team_deleted` per
+published entry.
+
+**Version.** `version` grows on every publication and every removal; publish,
+republish and unpublish send `expected_version` (absent for a first
+publication) and get **409** `marketplace_version_conflict` on a mismatch. A
+team's publications are serialized (row lock plus a per-team advisory lock).
+
+**Team endpoints** (`/control-plane/v1/teams/{team_id}/agent-instances/{id}/…`):
+
+- `POST …/publish` `{expected_version}` → `AgentMarketplaceState`. Requires
+  `can_publish_marketplace_agents` (403), not a personal space (403), an
+  enabled and unsuspended agent, a public team, the effective switch on, a
+  public agent type and, for a new publication (first one or after a
+  removal), a published count below the quota (409 with codes
+  `marketplace_agent_inactive`, `marketplace_team_private`,
+  `marketplace_switch_off`, `marketplace_template_not_public`,
+  `marketplace_quota_reached`). For a template without free selection the
+  selection is its included defaults usable by the team, whatever is stored
+  (older saves kept `[]`); Copy to… resolves it the same way. Each
+  selected capability goes through the pod's `export-config` (runtime §8.113)
+  with the caller's token; any failure keeps the previous snapshot: 422
+  `marketplace_capability_not_exportable` (with `capability_id`) or 503
+  `marketplace_runtime_unavailable`. Audit `agent.published`. Values of a
+  field typed `secret` (by the agent's stored fields or its template's) are
+  left out of the snapshot, so the detail never shows them and an import
+  leaves them unset.
+- `POST …/unpublish` `{expected_version, reason?}` → 204. Editors and the
+  team admin (`can_unpublish_marketplace_agents`) set `dismissed`; a platform
+  admin (`can_manage_platform`) sets `removed` with reason
+  `removed_by_platform_admin` and the optional message, which only they may
+  send (403 otherwise). Audit `agent.unpublished`.
+- `POST …/marketplace-dismiss` → 204: hides a `removed` state for the team
+  (editors and team admin).
+
+**Automatic removal** (state `removed`, files deleted, likes and imports kept,
+audit `agent.unpublished`): suspension (`AgentInstanceStore.set_suspension`,
+reason `suspended`), deactivation (status update to disabled, `deactivated`),
+team made private (`team_private`), effective switch turned off
+(`switch_off`). Team deletion audits `team_deleted` and a single agent deletion `deleted` before the entries cascade.
+Reactivation never republishes.
+
+**Team card.** `ManagedAgentInstanceSummary.marketplace` (`state`, `version`,
+`published_at`, `modified`, removal reason, message and date, `like_count`,
+`import_count`) on `GET /teams/{team_id}/agent-instances`. `modified` compares
+the agent's `updated_at` with `snapshot_source_updated_at`; a save that changes
+nothing no longer moves `updated_at`, a real save stamps it to the
+microsecond. Members without `can_unpublish_marketplace_agents` only get
+`published` (never `modified`);
+other states are omitted for them. `CapabilityImpactPreview.published_instances`
+counts the published agents a revoke would suspend.
+
+**Marketplace endpoints** (`/control-plane/v1/marketplace/agents`, any
+authenticated user, published entries only, else 404):
+
+- `GET /marketplace/agents?q=&team_id=` → `MarketplaceAgentSummary[]`, newest
+  first publication first (a republication keeps its place), with the team's
+  current name, `like_count`, `import_count`, `liked_by_me`, `published_at`.
+- `GET /marketplace/agents/{entry_id}` → `MarketplaceAgentDetail`: adds
+  `agent_instance_id` (the published agent, which a platform admin's removal
+  addresses through the team-scoped `…/unpublish`), `likes_since_update`
+  (likes on the current version), tuning values, capabilities and files as
+  capability, name and size. No endpoint returns a file's content.
+- `PUT | DELETE /marketplace/agents/{entry_id}/like` → summary; idempotent,
+  own team included.
+- `GET /marketplace/agents/{entry_id}/import-targets` → the copy readiness
+  (§58) for the personal space and teams where the caller updates agents,
+  publishing team excluded.
+- `POST /marketplace/agents/{entry_id}/import` `{target_team_ids, locale?}` →
+  `AgentCopyResult[]`: the agent copy (§58) from the snapshot, files passed
+  inline as `asset_files` so the publishing team is never read; the publishing
+  team is refused per destination (`error_code` `marketplace_publishing_team`);
+  one import row per success. Both import routes answer 409
+  `marketplace_template_not_public` to a caller other than a platform admin
+  when the agent type is no longer public, as Copy to… refuses it.
+
+**Names.** A free name is kept. On a conflict, Copy to… and marketplace import
+take the first free `<name> (<word> <n>)`, n from 1, `<word>` from a fixed
+server map of the optional `locale` field of the copy and import bodies
+(`fr` → `copie`, `en` → `copy`; absent → `copy`). A platform import keeps `<name> (2)`, n from 2.
+The frontend sends its UI language (OpenSpec `agent-names`, `agent-copy`).
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 

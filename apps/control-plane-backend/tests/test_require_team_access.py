@@ -241,7 +241,17 @@ async def test_product_route_no_longer_triggers_full_projection(
     list_instances = AsyncMock(return_value=expected_instances)
     monkeypatch.setattr(product_api, "list_managed_agent_instances", list_instances)
 
-    deps = cast(Any, SimpleNamespace(team_dependencies=team_deps))
+    class _NoMarketplaceEntries:
+        async def list_for_team(self, team_id):
+            return []
+
+    deps = cast(
+        Any,
+        SimpleNamespace(
+            team_dependencies=team_deps,
+            get_agent_marketplace_store=_NoMarketplaceEntries,
+        ),
+    )
     result = await product_api.get_team_agent_instances(
         TeamId("fredlab"), deps, _user()
     )

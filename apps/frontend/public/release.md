@@ -1,3 +1,35 @@
+**v3.5.0** - 2026-10-14
+
+- **Summary**
+
+  Discover and share agents, choose a model for each conversation, and use several saved prompts in one message. Administrators gain clearer access controls and a browsable history of update announcements.
+
+- **Features**
+
+  - Explore shared agents, like them, and import them into your team when publishing is enabled (#3044)
+  - Choose a model for each conversation while teams control available models and reasoning defaults (#3029)
+  - Find team, personal, and platform commands by section and use several prompts in one message (#3073)
+  - Reopen announcements and browse the update history (#3080)
+  - Choose additional branded themes supplied by your organization (#3027)
+
+- **Improvements**
+
+  - Manage access exceptions and invitation links in clearer screens without losing rules when filtering is off (#3061, #3085, #3086, #3087)
+  - Use GPT-6 Astra with tools when your organization enables it (#3097)
+
+- **Bug Fixes**
+
+  - Agents keep their answer when a tool fails, including in compatible chat integrations (#2588, #3003)
+  - CSV and Excel questions with missing date cells return results instead of failing (#3059)
+  - Plain-text and Markdown files with Windows-1252 characters or byte-order marks open correctly (#3004)
+  - HTML artifacts download as PNG or PDF in Chrome and Edge (#3102)
+  - PowerPoint template setup catches files without fields and reports validation failures clearly (#3093, #3094)
+  - Resource folders keep their document list visible while ingestion runs (#3106)
+
+- **Deployment note**
+
+  Follow the operator guide for database migrations and a staged deployment. Replace any file whitelist with Platform access rules before upgrading. Marketplace publishing, GPT-6 Astra and custom themes need separate activation; no document re-ingestion is required.
+
 **v3.4.0** - 2026-10-12
 
 - **Summary**

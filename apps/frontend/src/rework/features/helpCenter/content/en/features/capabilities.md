@@ -131,11 +131,13 @@ to PDF."
 
 ### Reasoning
 
-**What it does** — opens a mode, in the conversation options, where the agent
-takes the time to break the problem down before answering.
+**What it does** — a mode where the agent takes the time to break the problem
+down before answering. It is not a capability you enable on the agent: it
+follows the chosen language model and is set in the conversation (see
+[Conversations](/help/en/features/chat#choosing-the-model-and-reasoning)).
 
-**Its limits** — this mode depends on the model in use and is not offered with
-all of them. Answers are slower and more expensive. It adds little to a simple
+**Its limits** — it is only offered with the models the administrator enabled
+it for. Answers are slower and more expensive. It adds little to a simple
 lookup, more to a multi-step analysis.
 
 **An example** — comparing two offers across a dozen criteria and justifying a

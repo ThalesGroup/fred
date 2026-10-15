@@ -15,6 +15,7 @@
 // NOT GENERATED. Safe to edit.
 import {
   controlPlaneApi as api,
+  MarketplaceAgentSummary,
   UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg,
   UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg,
 } from "./controlPlaneOpenApi";
@@ -44,6 +45,33 @@ async function patchFavorite({ teamId, promptId }: FavoriteArg, favorite: boolea
   }
 }
 
+type LikeLifecycle = {
+  dispatch: (action: unknown) => unknown;
+  getState: () => unknown;
+  queryFulfilled: Promise<{ data: MarketplaceAgentSummary }>;
+};
+
+/** Writes the like answer (the full entry) into every cached listing, so the
+ * heart and count are current before the next click instead of after a refetch. */
+async function patchLike(lifecycle: LikeLifecycle) {
+  let entry: MarketplaceAgentSummary;
+  try {
+    entry = (await lifecycle.queryFulfilled).data;
+  } catch {
+    return;
+  }
+  const endpoint = "getMarketplaceAgentsControlPlaneV1MarketplaceAgentsGet" as const;
+  const state = lifecycle.getState() as Parameters<typeof api.util.selectCachedArgsForQuery>[0];
+  for (const args of api.util.selectCachedArgsForQuery(state, endpoint)) {
+    lifecycle.dispatch(
+      api.util.updateQueryData(endpoint, args, (draft) => {
+        const index = draft.findIndex((agent) => agent.entry_id === entry.entry_id);
+        if (index >= 0) draft[index] = entry;
+      }),
+    );
+  }
+}
+
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
   addTagTypes: [
     "ControlPlaneTeam",
@@ -59,6 +87,8 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformPrompt",
     "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
+    "ControlPlaneMarketplaceSettings",
+    "ControlPlaneAgentMarketplace",
     "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
@@ -274,35 +304,46 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
-    // Enablement changes suspend or revive agents server-side, so the agent
-    // lists must be read again: one team's list, or every list for the
-    // platform-wide switches.
+    // Enablement changes agent state, marketplace entries and usable models.
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
       invalidatesTags: [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: "ALL" },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        "ControlPlaneTeam",
+        "ControlPlaneRoutingPolicy",
       ],
     },
     putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: {
       invalidatesTags: [
         { type: "ControlPlaneCapability", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: "ALL" },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        "ControlPlaneTeam",
+        "ControlPlaneRoutingPolicy",
       ],
     },
+    // Reasoning availability shows in every team's Models section and composer.
     patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }, "ControlPlaneRoutingPolicy"],
     },
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
@@ -422,6 +463,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamControlPlaneV1TeamsTeamIdGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneTeam", id: arg.teamId }],
     },
+    // A deleted team's published agents leave the marketplace with it.
+    deleteTeamControlPlaneV1TeamsTeamIdDelete: {
+      invalidatesTags: [
+        { type: "ControlPlaneTeam", id: "LIST" },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+      ],
+    },
     createTeamControlPlaneV1TeamsPost: {
       invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }, "PlatformAccess"],
     },
@@ -438,6 +486,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: "LIST" },
         // A rename changes the names the default-teams query echoes.
         { type: "ControlPlanePlatformDefaultTeams", id: "LIST" },
+        // Going private removes the team's agents from the marketplace.
+        ...(arg.updateTeamRequest.visibility
+          ? [
+              { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
+            ]
+          : []),
       ],
     },
     // TEAM-09: self-service join — same tags as updateTeam so the marketplace
@@ -556,18 +611,31 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        // Deactivation removes a published agent: the team's published count moves.
+        ...(arg.updateAgentInstanceRequest.status
+          ? [
+              { type: "ControlPlaneTeam" as const, id: arg.teamId },
+              { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
+            ]
+          : []),
+        // The recommended model may change, and the composer names it.
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        // The recommended model may change, and the composer names it.
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
       ],
     },
     deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
       ],
     },
     // A copy lands in every target team: refresh each team's list it reached.
@@ -703,8 +771,31 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
     },
+    // A disable clears agents' recommended models, which the agent list shows.
+    // The response goes straight into the cache so switches never snap back.
     updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy", id: arg.teamId }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+      onQueryStarted: async ({ teamId }, { dispatch, queryFulfilled }) => {
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(
+            api.util.updateQueryData(
+              "getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet",
+              { teamId },
+              () => data,
+            ),
+          );
+        } catch {
+          // The caller reports the failed write.
+        }
+      },
+    },
+    // Its effective default follows the stored policy, so a save refetches it.
+    getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
     },
     // The composer's model label (#2387). Tagged under the same
     // ControlPlaneRoutingPolicy/teamId entity the policy read and write already
@@ -747,12 +838,88 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: {
       invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
     },
+    getFrontendConfigControlPlaneV1FrontendConfigGet: {
+      providesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
+    },
     // Platform UI theme settings: a single row, one LIST tag.
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: {
       providesTags: [{ type: "ControlPlanePlatformUiSettings" as const, id: "LIST" }],
     },
     putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: {
       invalidatesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
+    },
+    // Agents marketplace settings: a switch-off removes published agents (listing
+    // and card states) and changes every team's effective settings.
+    getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: {
+      providesTags: [{ type: "ControlPlaneMarketplaceSettings" as const, id: "LIST" }],
+    },
+    setMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPut: {
+      invalidatesTags: [
+        { type: "ControlPlaneMarketplaceSettings", id: "LIST" },
+        "ControlPlaneTeam",
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: "ALL" },
+      ],
+    },
+    setTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPut: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneMarketplaceSettings", id: "LIST" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+    },
+    // Agents marketplace: publishing changes the team's card states, published
+    // count (TeamWithPermissions, admin page) and the marketplace listing.
+    postAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneAgentMarketplace", id: "DETAIL" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneMarketplaceSettings", id: "LIST" },
+      ],
+    },
+    postAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneAgentMarketplace", id: "DETAIL" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneMarketplaceSettings", id: "LIST" },
+      ],
+    },
+    postAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+    },
+    getMarketplaceAgentsControlPlaneV1MarketplaceAgentsGet: {
+      providesTags: [{ type: "ControlPlaneAgentMarketplace" as const, id: "LIST" }],
+    },
+    getMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGet: {
+      // "DETAIL" too: publish/unpublish only know the agent, not the entry id.
+      providesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentMarketplace" as const, id: arg.entryId },
+        { type: "ControlPlaneAgentMarketplace" as const, id: "DETAIL" },
+      ],
+    },
+    // The listing is patched from the answer; only the detail refetches.
+    putMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePut: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentMarketplace", id: arg.entryId }],
+      onQueryStarted: (_, lifecycle) => patchLike(lifecycle),
+    },
+    deleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDelete: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentMarketplace", id: arg.entryId }],
+      onQueryStarted: (_, lifecycle) => patchLike(lifecycle),
+    },
+    // An import lands in every target team and counts on the entry.
+    postMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPost: {
+      invalidatesTags: (result, __, arg) => [
+        { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
+        { type: "ControlPlaneAgentMarketplace" as const, id: arg.entryId },
+        ...(result?.results ?? [])
+          .filter((r) => r.agent)
+          .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
+      ],
     },
     // Read-only and shipped with the platform: it can only change on deploy, so
     // it carries no cache tag — nothing in this app can invalidate it.
@@ -761,6 +928,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery: useFrontendConfigQuery,
   useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
   useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:
     useRemovePromptFavoriteMutation,
@@ -811,6 +979,8 @@ export const {
     useAvailableModelProfilesQuery,
   // The model a chat turn will actually route to — the composer label (#2387).
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
+  useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery:
+    useLazyDisableImpactQuery,
   useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
@@ -899,6 +1069,30 @@ export const {
   // Platform UI theme settings (default theme, hidden themes).
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,
+  // Agents marketplace settings (admin "Marketplaces" page).
+  useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery: useMarketplaceSettingsQuery,
+  useLazyPreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery:
+    useLazyMarketplaceDefaultImpactQuery,
+  useSetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutMutation: useSetMarketplaceDefaultMutation,
+  useLazyPreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetQuery:
+    useLazyTeamMarketplaceSettingsImpactQuery,
+  useSetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutMutation:
+    useSetTeamMarketplaceSettingsMutation,
+  // Agents marketplace: publication from the team card, listing, likes, import.
+  usePostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostMutation: usePublishAgentMutation,
+  usePostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostMutation:
+    useUnpublishAgentMutation,
+  usePostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostMutation:
+    useDismissAgentMarketplaceRemovalMutation,
+  useGetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetQuery: useMarketplaceAgentsQuery,
+  useGetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetQuery: useMarketplaceAgentQuery,
+  usePutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutMutation: useLikeMarketplaceAgentMutation,
+  useDeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteMutation:
+    useUnlikeMarketplaceAgentMutation,
+  useGetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetQuery:
+    useMarketplaceAgentImportTargetsQuery,
+  usePostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostMutation:
+    useImportMarketplaceAgentMutation,
   // Read-only platform operating instructions, shown under the editable prompt.
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
   // Team wiki (WIKI-01/02), and whether the team has one at all (WIKI-03).

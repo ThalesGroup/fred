@@ -17,6 +17,10 @@ import SettingsModal from "@shared/organisms/SettingsModal/SettingsModal.tsx";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
+import {
+  useAvailableModelProfilesQuery,
+  useTeamRoutingPolicyQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import type {
   AgentTemplateSummary,
   ManagedAgentFieldSpec,
@@ -29,7 +33,6 @@ import {
   applyRecommendedCapabilities,
   type DraftTargets,
   findSystemPromptField,
-  isReasoningOffered,
 } from "./CreationAssistantDialog/creationAssistant.ts";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
@@ -44,15 +47,8 @@ export type AgentFormPayload = {
   role: string;
   description: string;
   usageStatement: string;
-  /** REASON-01 level 3: does this agent offer the composer's reasoning toggle? */
-  reasoningEnabled: boolean;
-  /**
-   * REASON-01 Amendment B: does a new conversation start with that toggle
-   * already on? Always submitted, including while `reasoningEnabled` is false —
-   * the value is then inert backend-side, which is what lets an author withdraw
-   * the offer and restore it later without losing their default.
-   */
-  reasoningDefaultOn: boolean;
+  /** Chat profile new conversations start on; null follows the team default. */
+  recommendedChatProfileId: string | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -95,8 +91,7 @@ type FormState = {
   role: string;
   description: string;
   usageStatement: string;
-  reasoningEnabled: boolean;
-  reasoningDefaultOn: boolean;
+  recommendedChatProfileId: string | null;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
@@ -153,34 +148,6 @@ function activeCapabilityIds(selectedIds: string[], template: AgentTemplateSumma
 export function defaultCapabilitySelection(template: AgentTemplateSummary | undefined): string[] {
   const advertised = advertisedCapabilityIds(template);
   return (template?.default_capability_ids ?? []).filter((capabilityId) => advertised.has(capabilityId));
-}
-
-/**
- * The reasoning settings a NEW instance of `template` starts with (#2473):
- * whether its Reasoning card is pre-ticked (REASON-01 level 3) and whether the
- * nested "start conversations in Boost" switch is pre-set (Amendment B).
- *
- * Deliberately NOT narrowed by platform state, mirroring the card it seeds.
- * The Reasoning card is rendered unconditionally in `AgentFormBody` and the
- * form never reads `reasoning_enabled_model_ids`; levels 1-2 are enforced live
- * on the send path, where an agent that offers reasoning on a deployment with
- * no reasoning-enabled model simply gets no composer control. Suppressing the
- * pre-tick here instead would make it vanish based on platform state invisible
- * from this form — the "I turned it on and nothing happened" confusion the
- * absent-not-inert rule exists to prevent.
- *
- * A seed, not a lock: the operator can untick either before saving, and both
- * are submitted explicitly on create, so this is what makes a template's
- * declared reasoning defaults actually reach a new instance.
- */
-export function defaultReasoningSelection(template: AgentTemplateSummary | undefined): {
-  reasoningEnabled: boolean;
-  reasoningDefaultOn: boolean;
-} {
-  return {
-    reasoningEnabled: template?.reasoning_enabled ?? false,
-    reasoningDefaultOn: template?.reasoning_default_on ?? false,
-  };
 }
 
 /** Tuning values a NEW instance of `template` starts with, in the UI language. */
@@ -261,8 +228,7 @@ export function buildAgentFormSubmitPayload(
     role: form.role.trim(),
     description: form.description.trim(),
     usageStatement: form.usageStatement.trim(),
-    reasoningEnabled: form.reasoningEnabled,
-    reasoningDefaultOn: form.reasoningDefaultOn,
+    recommendedChatProfileId: form.recommendedChatProfileId,
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: effectiveCapabilityIds,
     capabilityConfigValues: effectiveCapabilityConfig,
@@ -286,16 +252,6 @@ export function extractCapabilityConfigValues(
       return [id, id === CAP_DOCUMENT_ACCESS ? normalizeDocumentAccessConfig(config) : config];
     }),
   );
-}
-
-/** Turning reasoning on also turns it on by default for new conversations;
- *  the member can still untick that afterwards. */
-export function withReasoning(
-  prev: Pick<FormState, "reasoningEnabled" | "reasoningDefaultOn">,
-  enabled: boolean,
-): Pick<FormState, "reasoningEnabled" | "reasoningDefaultOn"> {
-  const turnedOn = enabled && !prev.reasoningEnabled;
-  return { reasoningEnabled: enabled, reasoningDefaultOn: turnedOn || prev.reasoningDefaultOn };
 }
 
 /** Save-blocking problems reported by config widgets. Only ACTIVE capabilities count. */
@@ -333,8 +289,7 @@ export default function AgentFormModal({
     role: "",
     description: "",
     usageStatement: "",
-    reasoningEnabled: false,
-    reasoningDefaultOn: false,
+    recommendedChatProfileId: null,
     tuningValues: {},
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
@@ -348,6 +303,15 @@ export default function AgentFormModal({
   // The name is checked when the field is left, never while typing; a name the
   // form filled in itself (template, edited agent) counts as checked.
   const [nameChecked, setNameChecked] = useState(false);
+  const skipModelRead = !isOpen || !teamId;
+  const { currentData: routingPolicy, isError: routingPolicyError } = useTeamRoutingPolicyQuery(
+    { teamId: teamId ?? "" },
+    { skip: skipModelRead },
+  );
+  const { currentData: availableModels, isError: availableModelsError } = useAvailableModelProfilesQuery(
+    { teamId: teamId ?? "" },
+    { skip: skipModelRead },
+  );
 
   useEffect(() => {
     setNameChecked(isOpen);
@@ -364,8 +328,7 @@ export default function AgentFormModal({
         role: editInstance.role,
         description: editInstance.description ?? "",
         usageStatement: editInstance.usage_statement ?? "",
-        reasoningEnabled: editInstance.reasoning_enabled ?? false,
-        reasoningDefaultOn: editInstance.reasoning_default_on ?? false,
+        recommendedChatProfileId: editInstance.recommended_chat_profile_id ?? null,
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
         // capability_config stores the {schema_version, config} envelope per id;
@@ -382,8 +345,7 @@ export default function AgentFormModal({
         role: "",
         description: "",
         usageStatement: "",
-        reasoningEnabled: false,
-        reasoningDefaultOn: false,
+        recommendedChatProfileId: null,
         tuningValues: {},
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
@@ -403,10 +365,7 @@ export default function AgentFormModal({
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       usageStatement: "",
-      // #2473: seeded from the template like `selectedCapabilityIds` below,
-      // instead of the hardcoded `false` pair that made a template's declared
-      // reasoning defaults unreachable.
-      ...defaultReasoningSelection(tpl),
+      recommendedChatProfileId: null,
       tuningValues: defaultTuningValues(tpl, lang),
       selectedCapabilityIds: defaultCapabilitySelection(tpl),
       capabilityConfigValues: {},
@@ -470,6 +429,21 @@ export default function AgentFormModal({
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
   const capabilityBlocked = isCapabilityBlocked(form, selectedTemplate);
   const nameTaken = nameChecked && isAgentNameTaken(form.displayName, takenNames);
+  const recommendedProfile = availableModels?.profiles?.find(
+    (profile) => profile.profile_id === form.recommendedChatProfileId,
+  );
+  const recommendationReadComplete =
+    !!routingPolicy && !!availableModels && !routingPolicyError && !availableModelsError;
+  const unavailableRecommendation =
+    recommendationReadComplete &&
+    form.recommendedChatProfileId !== null &&
+    (!recommendedProfile || (routingPolicy?.disabled_model_ids ?? []).includes(recommendedProfile.capability_id));
+  const recommendedChatProfileId = unavailableRecommendation ? null : form.recommendedChatProfileId;
+  const recommendationReadPending =
+    form.recommendedChatProfileId !== null &&
+    !recommendationReadComplete &&
+    !routingPolicyError &&
+    !availableModelsError;
   const isFormValid =
     !!form.templateId &&
     !!form.displayName.trim() &&
@@ -477,7 +451,8 @@ export default function AgentFormModal({
     !missingRequired &&
     reservedTagFields.length === 0 &&
     !capabilityBlocked &&
-    !nameTaken;
+    !nameTaken &&
+    !recommendationReadPending;
   const canSave = isFormValid && !isSubmitting;
 
   // Every section holding a blocking problem, computed once: the tab badges
@@ -500,7 +475,7 @@ export default function AgentFormModal({
       if (firstErrorSection) setActiveSection(firstErrorSection);
       return;
     }
-    await onSubmit(buildAgentFormSubmitPayload(form, selectedTemplate));
+    await onSubmit(buildAgentFormSubmitPayload({ ...form, recommendedChatProfileId }, selectedTemplate));
   };
 
   // The assistant drafts the template's main prompt field and picks among the
@@ -529,15 +504,12 @@ export default function AgentFormModal({
             {
               selectedCapabilityIds: prev.selectedCapabilityIds,
               capabilityConfigValues: prev.capabilityConfigValues,
-              reasoningEnabled: prev.reasoningEnabled,
             },
             advertisedCapabilityIds(selectedTemplate),
           ),
         );
       }
-      // Last and on `next`: the capability step carries the old reasoningEnabled,
-      // and merging from prev would copy every other old field back.
-      return draft.reasoning ? { ...next, ...withReasoning(next, true) } : next;
+      return next;
     });
     setDraftRevision((revision) => revision + 1);
     setAssistantOpen(false);
@@ -587,7 +559,7 @@ export default function AgentFormModal({
               color={submitAttempted && !isFormValid ? "warning" : "primary"}
               variant="filled"
               size="medium"
-              disabled={nameTaken}
+              disabled={nameTaken || recommendationReadPending}
               onClick={handleSubmit}
             >
               {mode === "edit" ? t("rework.save") : t("rework.create")}
@@ -614,8 +586,7 @@ export default function AgentFormModal({
           role={form.role}
           description={form.description}
           usageStatement={form.usageStatement}
-          reasoningEnabled={form.reasoningEnabled}
-          reasoningDefaultOn={form.reasoningDefaultOn}
+          recommendedChatProfileId={recommendedChatProfileId}
           tuningFieldValues={form.tuningValues}
           selectedCapabilityIds={form.selectedCapabilityIds}
           capabilityConfigValues={form.capabilityConfigValues}
@@ -636,8 +607,7 @@ export default function AgentFormModal({
           onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
           onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
           onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
-          onReasoningEnabledChange={(v) => setForm((prev) => ({ ...prev, ...withReasoning(prev, v) }))}
-          onReasoningDefaultOnChange={(v) => setForm((prev) => ({ ...prev, reasoningDefaultOn: v }))}
+          onRecommendedChatProfileIdChange={(v) => setForm((prev) => ({ ...prev, recommendedChatProfileId: v }))}
           onTuningChange={handleTuningChange}
           onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
           onCapabilitySelectionReplace={(next) =>
@@ -645,7 +615,6 @@ export default function AgentFormModal({
               ...prev,
               selectedCapabilityIds: next.selectedCapabilityIds,
               capabilityConfigValues: next.capabilityConfigValues,
-              ...withReasoning(prev, next.reasoningEnabled),
             }))
           }
           onCapabilityConfigChange={handleCapabilityConfigChange}
@@ -661,7 +630,6 @@ export default function AgentFormModal({
           templateId={form.templateId}
           capabilities={templateCapabilities}
           hasPromptField={!!promptField}
-          offersReasoning={isReasoningOffered(advertisedCapabilityIds(selectedTemplate))}
           current={draftTargets(form, selectedTemplate, lang, promptField?.key, mode)}
           onApply={applyDraft}
           onClose={() => setAssistantOpen(false)}
