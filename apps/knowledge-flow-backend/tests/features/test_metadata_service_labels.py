@@ -84,6 +84,9 @@ class _FakeRebac:
         if resource_id in self._denied:
             raise PermissionError(f"denied: {resource_id}")
 
+    async def has_user_permission(self, user, permission, resource_id):
+        return self._disabled or resource_id in self._readable_uids
+
     async def lookup_user_resources(self, user, permission):
         if self._disabled:
             return RebacDisabledResult()

@@ -445,3 +445,37 @@ coverage of all document tools need separate targeted tests. The former README's
 `corpus/capabilities` claims referred to a missing `test_content_scope_bypass.py`;
 that endpoint's authorization matrix is still a coverage gap. No live failure
 injection is performed against the shared deployment.
+
+## Folder inventory and deletion
+
+`scenarios/test_folder_inventory.py` covers the known-folder part of
+[#2845](https://github.com/ThalesGroup/fred/issues/2845). The default case creates
+three processed documents, checks the folder detail and paginated listing, then
+deletes the folder. Store audit counts and the team's storage counter must first
+increase by the fixture's exact contribution, then return to their baseline.
+An unrelated fixture folder must survive. This requires a platform admin for
+read-only store audits, the demo editor, ingestion/embeddings, and an otherwise
+idle local deployment: concurrent imports/deletions invalidate the count checks.
+No Test Assistant or chat model is required for this focused campaign.
+
+```bash
+make integration-test-k3d VALIDATION_ARGS="scenarios/test_folder_inventory.py"
+
+# Explicitly create 1,001 extra readable documents plus 20 processed target docs:
+FRED_VALIDATION_LARGE_CORPUS=1 make integration-test-k3d \
+  VALIDATION_ARGS="scenarios/test_folder_inventory.py"
+```
+
+The large case is skipped by default. It uploads the background corpus in batches
+of 50 through `/upload-documents`, without scheduling embeddings for it. It then
+checks the small target folder amid more than 1,000 readable documents. Allow time
+for upload, authorization, store audits and cleanup; this is a correctness campaign,
+not a latency benchmark. Use only a disposable local test deployment with sufficient
+quota. The ordering of a real OpenFGA ListObjects result is not guaranteed; the
+offline regression tests separately force the target documents to be omitted.
+
+Fixture libraries have unique names and cleanup targets only their returned IDs.
+Cleanup failures remain test failures. Against an older broken deployment, folder
+deletion can itself orphan fixture documents; inspect the corpus audit and test
+output before rerunning. This campaign does not repair historical orphans or test
+storage outages, concurrent ingestion/deletion, or global discovery completeness.

@@ -446,7 +446,8 @@ def test_a_personal_library_listing_checks_account_status_once(app_context: Appl
     assert store.account_status_checks() == [(_PERSON, "HIGHER_CONSISTENCY")]
     assert len(store.checks) == 1
     # Each lookup keeps its caller's consistency; only the account status check asks for more.
-    assert [consistency for *_, consistency in store.list_objects_calls] == [None] * 9
+    assert [consistency for *_, consistency in store.list_objects_calls] == [None] * 8
+    assert all(resource_type != "document" for _, _, resource_type, _ in store.list_objects_calls)
 
 
 def test_a_suspended_person_lists_no_library(app_context: ApplicationContext) -> None:
