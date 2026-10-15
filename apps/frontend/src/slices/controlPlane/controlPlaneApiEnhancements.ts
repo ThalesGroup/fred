@@ -95,6 +95,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneKnowledgeBase",
     "PlatformAccess",
     "PlatformAccessLinks",
+    "TeamJoinLink",
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
   ],
@@ -130,6 +131,17 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: {
       invalidatesTags: ["PlatformAccessLinks"],
+    },
+    // One join link per team; both mutations return the new state.
+    getTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGet: {
+      providesTags: (_result, _error, arg) => [{ type: "TeamJoinLink", id: arg.teamId }],
+      keepUnusedDataFor: 0,
+    },
+    setTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPut: {
+      invalidatesTags: (_result, _error, arg) => [{ type: "TeamJoinLink", id: arg.teamId }],
+    },
+    regenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePost: {
+      invalidatesTags: (_result, _error, arg) => [{ type: "TeamJoinLink", id: arg.teamId }],
     },
     recordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPost: {
       invalidatesTags: ["PlatformAccessLinks"],
@@ -1174,4 +1186,7 @@ export const {
   useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation:
     useDeleteInactivePlatformLinksMutation,
   useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation: useRecordFreeOpeningMutation,
+  useGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery: useTeamJoinLinkQuery,
+  useSetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutMutation: useSetTeamJoinLinkMutation,
+  useRegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostMutation: useRegenerateTeamJoinLinkMutation,
 } = enhancedControlPlaneApi;

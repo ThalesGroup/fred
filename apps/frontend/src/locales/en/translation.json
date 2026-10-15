@@ -2839,6 +2839,18 @@
           "updateRoleDetail": "Could not update member role.",
           "updateRoleSummary": "Failed to update role"
         },
+        "inviteLink": {
+          "buttonLabel": "Invite link",
+          "copied": "Copied",
+          "copy": "Copy",
+          "copyFailed": "The link could not be copied automatically. It is selected: copy it with your keyboard.",
+          "enable": "Enable invitation by link",
+          "failed": "The invite link could not be updated. Try again.",
+          "hint": "Anyone who already has access to the platform can join the team as a member with this link.",
+          "regenerate": "Generate a new link",
+          "title": "Invite link",
+          "urlLabel": "Link"
+        },
         "moreActions": "More actions",
         "search": {
           "ariaLabel": "Search for a member",
@@ -2915,7 +2927,7 @@
           "open": "Open",
           "inviteOnly": "Invite only",
           "manual": "Manual only",
-          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
+          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link."
         },
         "visibility": {
           "label": "Team visibility",
@@ -3798,7 +3810,7 @@
       "team": "Team",
       "allowTeam": "Allow team",
       "free": "Link access",
-      "freeHint": "Link access admits team members to the platform. Disabling it suspends invitation links and withdraws this access source.",
+      "freeHint": "Link access admits the people who joined through this team's links to the platform. Disabling it suspends invitation links and withdraws this access source.",
       "link": "Invitations",
       "createLink": "Create link",
       "copyLink": "Invitation link",
@@ -3964,7 +3976,7 @@
         "cleanup": "Delete inactive links",
         "cleanupTitle": "Delete inactive links for {{team}}?",
         "cleanupConfirm": "Delete links",
-        "cleanupHint": "{{count}} expired or revoked links for {{team}} will be permanently deleted, with their notes and open counts. Members and active links are kept.",
+        "cleanupHint": "{{count}} expired or revoked links for {{team}} will be permanently deleted, with their notes and open counts. People who joined through them stay team members but lose the platform access these links gave them. Active links are kept.",
         "deleted": "{{count}} inactive links deleted.",
         "loading": "Loading links...",
         "noteColumn": "Note",
