@@ -546,3 +546,18 @@ Important behavior:
 Current recommendation: set `log_store: opensearch` wherever log exploration via OpenSearch Dashboards is needed, and rely on stdout forwarding for the separate operational (Loki/Grafana) path.
 
 ---
+
+### Repeat a first-user test on dedicated k3d
+
+From `fred-deployment-factory`, run `make k3d-app-reset DIR=<fred checkout>` for a
+read-only preview, then add `CONFIRM=reset` to erase Fred's local data. This reuses
+installed images and retains Keycloak accounts and the infrastructure. It includes
+fred-manager when installed. Other applications and custom storage configurations
+are refused. Stop host-side Fred processes first; refresh the browser afterwards.
+The factory's `docs/LOCAL-DEVELOPMENT.md` describes the data scope and failure retry.
+Use `make k3d-app` separately to deploy code changes; reset does not build the checkout.
+
+Developer verification: `make k3d-tests` exercises orchestration without a cluster;
+`make k3d-reset-storage-tests` checks storage deletion on disposable Docker services.
+The latter requires the factory service images and `pgvector/pgvector:pg17` already
+available locally, and never accesses k3d.

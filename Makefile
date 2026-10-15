@@ -379,9 +379,12 @@ include scripts/makefiles/chart-schema.mk
 # (`make k3d-up`, then `make k3d-app DIR=<this checkout>`) from deploy/k3d/:
 # its helmfile, its values, and the build, prepare and finish hooks.
 
-.PHONY: k3d-tests
+.PHONY: k3d-tests k3d-reset-storage-tests
 k3d-tests: ## Test local k3d image preparation and configuration without a cluster
 	python3 -m unittest discover -s deploy/k3d -p 'test_*.py'
+
+k3d-reset-storage-tests: ## Verify reset storage operations on disposable Docker services (no k3d mutation)
+	RESET_STORAGE_TESTS=1 python3 -m unittest discover -s deploy/k3d -p 'test_reset_storage.py'
 
 .PHONY: pod-chart-tests
 pod-chart-tests: ## Render the agent-pod and knowledge-base charts with helm (skipped without helm)
