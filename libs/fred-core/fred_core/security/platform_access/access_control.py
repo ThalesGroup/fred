@@ -307,15 +307,18 @@ async def enforce_platform_access(subject: Principal) -> None:
 
 
 async def forget_free_joins(team_id: str, user_id: str) -> None:
-    """Call before removing a person from a team, so a later re-add by hand
-    or team link cannot revive the Free admission source."""
-    if not _available:
+    """Call around removing a person from a team, so a later re-add by hand
+    or team link cannot revive the Free admission source. Teams without Free
+    links skip the policy lock, so their removals never depend on it."""
+    if not _available or _installed is None:
         return
     try:
         uid = UUID(user_id)
     except ValueError:
         return  # not a person account: it can hold no Free join
-    store = get_platform_access().store
+    store = _installed.store
+    if not await store.has_free_links(team_id):
+        return
     async with store.mutation() as session:
         await store.forget_free_joins(team_id, uid, session)
 

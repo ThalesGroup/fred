@@ -151,6 +151,21 @@ class PlatformAccessStore:
                 joined.setdefault(uid, set()).add(team_id)
             return joined
 
+    async def has_free_links(self, team_id: str) -> bool:
+        async with self.read() as s:
+            return bool(
+                await s.scalar(
+                    select(
+                        select(PlatformAccessLinkRow.id)
+                        .where(
+                            PlatformAccessLinkRow.team_id == team_id,
+                            PlatformAccessLinkRow.kind == "free",
+                        )
+                        .exists()
+                    )
+                )
+            )
+
     async def forget_free_joins(
         self, team_id: str, user_id: UUID, session: AsyncSession | None = None
     ) -> None:
