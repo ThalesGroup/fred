@@ -43,8 +43,9 @@ configuration:
 ```
 
 The install prints the entry that registers the pod in Fred (see
-[Register](#register-in-fred)). The chart's `appVersion` is the version of Fred's
-libraries whose configuration model it validates: build the pod on that version.
+[Register](#register-in-fred)). The chart's `appVersion` identifies the
+`fred-runtime` version used to generate its configuration schema. Build the pod
+with a compatible `fred-runtime` version.
 
 ## What it deploys
 

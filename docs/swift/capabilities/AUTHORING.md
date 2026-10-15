@@ -139,10 +139,9 @@ migrations described under "Registration, boot invariants, tables" below
   `salutation` → `greeting` rename, with its own round-trip test
   (`test_version_mismatch_runs_upgrade_hook_lazily`). Write an equivalent
   test for your own migration; there is no other way to prove it works.
-  Under the pre-GA no-bump policy below, a same-version rename may instead be
-  absorbed by a `model_validator(mode="before")` on the config model, which
-  also covers old keys still arriving in submitted, copied or imported values
-  (`DocumentAccessConfig._upgrade_legacy_slices` is the in-tree example).
+  A `model_validator(mode="before")` may also accept old keys still arriving
+  in submitted, copied or imported values (`DocumentAccessConfig._upgrade_legacy_slices`
+  is the in-tree example), but release preparation still bumps the affected manifest.
 - **If `upgrade_config` is missing or raises** for a real mismatch, the
   failure surfaces as the named `CapabilityConfigInvalidError` → the
   `capability_config_invalid` suspension reason (RFC §3.9) — the agent is
@@ -150,14 +149,13 @@ migrations described under "Registration, boot invariants, tables" below
   never a silent misbehavior or a crash. Still worth avoiding by preferring
   the additive path whenever the change allows it — a suspension is visible
   and disruptive to whoever owns that agent instance.
-- **Current policy, pre-GA:** `manifest.version` stays unbumped ("config-surface
-  changes land without bumps" — see `fred_capability_documents/document_summarize/capability.py`) while
-  the platform has no real production installs to protect. No in-tree
-  capability has ever shipped a non-default `upgrade_config()` — the
-  mechanism is proven by the `GreeterCapability` test fixture, not by real
-  capability code. Before GA, dry-run at least one real breaking change
-  through this path deliberately, rather than discovering rough edges the
-  first time it actually matters.
+- **Release policy:** Before a Fred release, bump each affected
+  `manifest.version` by one patch independently of its PyPI package version.
+  A package with several manifests bumps only those affected by the change.
+  Test an envelope saved under the previous version through
+  `resolve_stored_config`; the default upgrade hook suffices for compatible
+  shapes. A breaking shape needs a tested `upgrade_config` override before
+  release. New manifests start at their declared version.
 
 ---
 
@@ -282,7 +280,7 @@ agent can do" belong outside the capability system.
 | First-party | same package model, installed in the `fred-agents` pod via a `pyproject.toml` dependency (worked example: `libs/capabilities/fred-capability-ppt-filler`, #1903) | the package only |
 
 First-party capabilities (`libs/capabilities/*`) are published to PyPI with the
-libs, at the same version as `fred-runtime`, one package each. A third-party pod
+libs, each under its own version, one package each. A third-party pod
 declares the ones it needs as dependencies, exactly as `fred-agents` does:
 installing a package registers its capabilities, so a pod carries only those.
 

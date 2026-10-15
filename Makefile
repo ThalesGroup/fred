@@ -189,7 +189,7 @@ PYPI_UV ?= $(shell command -v uv 2>/dev/null)
 PYPI_RELEASE_CHECK ?= python3 scripts/validate_python_release.py
 
 # The Python packages published to PyPI, in dependency order: the libs, then
-# the capabilities. All of them carry one version, set by `libs-version`.
+# the capabilities. Each pyproject.toml owns its package version.
 PYPI_PACKAGES := \
 	libs/fred-pod \
 	libs/fred-core \
@@ -208,15 +208,23 @@ PYPI_PACKAGES := \
 # Fred's generic pod charts, released with the fred chart.
 POD_CHARTS := agent-pod knowledge-base
 
-.PHONY: libs-version
-libs-version: ## Set one version on every PyPI package, their floors on each other, and relock (usage: make libs-version VERSION=x.y.z)
-	@test -n "$(VERSION)" || { echo "Usage: make libs-version VERSION=x.y.z"; exit 1; }
-	python3 scripts/libs_version.py --version "$(VERSION)" $(PYPI_PACKAGES)
-	@# The pod charts' appVersion is the libraries' version whose configuration models they embed.
-	sed -i 's/^appVersion: .*/appVersion: "$(VERSION)"/' $(POD_CHARTS:%=deploy/charts/%/Chart.yaml)
+BASE_TAG ?=
+CAPABILITY_PACKAGES ?=
+CAPABILITY_MANIFESTS ?=
+POD_CHANGED ?= false
+PYTHON_RELEASE_ARGS = --base "$(BASE_TAG)" $(foreach name,$(CAPABILITY_PACKAGES),--capability "$(name)") $(foreach path,$(CAPABILITY_MANIFESTS),--manifest "$(path)") $(if $(filter true,$(POD_CHANGED)),--pod,)
+
+.PHONY: python-release-plan prepare-python-release
+python-release-plan: ## Show patch versions and changed capability candidates (BASE_TAG=code/vX.Y.Z)
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+	python3 scripts/libs_version.py plan $(PYTHON_RELEASE_ARGS)
+
+prepare-python-release: ## Patch selected Python packages/manifests and relock affected projects
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+	python3 scripts/libs_version.py apply $(PYTHON_RELEASE_ARGS)
 
 .PHONY: libs-version-tests
-libs-version-tests: ## Test the libs-version rewrite offline
+libs-version-tests: ## Test independent Python release preparation offline
 	python3 -m unittest discover -s scripts/tests -p 'test_libs_version.py'
 
 .PHONY: publish-libs-tests
@@ -225,16 +233,19 @@ publish-libs-tests: ## Test bulk publishing offline with fake packages
 
 .PHONY: publish-libs-dry-run
 publish-libs-dry-run: ## Build every PyPI package in dependency order, stop at the first failure, upload nothing
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
 	@test -n "$(PYPI_UV)" || { echo "uv is required to build the PyPI packages."; exit 1; }
 	@set -e; \
 	for dir in $(PYPI_PACKAGES); do \
 		echo "************ Building $$dir ************"; \
 		env -u VIRTUAL_ENV $(MAKE) -C $$dir UV="$(PYPI_UV)" publish-dry-run; \
-	done
+		done
+	$(MAKE) validate-python-release BASE_TAG="$(BASE_TAG)"
 
 .PHONY: validate-python-release
-validate-python-release: ## Fail unless all coordinated PyPI artifacts have one version and exact internal floors
-	$(PYPI_RELEASE_CHECK) $(PYPI_PACKAGES)
+validate-python-release: ## Validate independently versioned PyPI artifacts and internal floors
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" $(PYPI_PACKAGES)
 
 # The packages whose version is not on PyPI yet, one directory per line; a
 # package already there is reported on stderr. PyPI answers 200 for a release
@@ -255,11 +266,13 @@ _pypi-pending:
 
 .PHONY: publish-libs
 publish-libs: ## Validate and publish prebuilt PyPI artifacts in order, skipping versions already present (requires PYPI_TOKEN)
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
 	@test -n "$(PYPI_UV)" || { echo "uv is required to publish the PyPI packages."; exit 1; }
 	@test -n "$$PYPI_TOKEN" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
-	$(MAKE) validate-python-release
+	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" --pending -- $(PYPI_PACKAGES)
 	@set -e; \
 	pending=$$($(MAKE) --no-print-directory -s _pypi-pending); \
+	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" --pending $$pending -- $(PYPI_PACKAGES); \
 	for dir in $$pending; do \
 		echo "************ Publishing $$dir ************"; \
 		env -u VIRTUAL_ENV $(MAKE) -C $$dir UV="$(PYPI_UV)" publish; \
@@ -267,7 +280,7 @@ publish-libs: ## Validate and publish prebuilt PyPI artifacts in order, skipping
 	echo "Every PyPI package is published."
 
 .PHONY: set-version
-set-version: ## Update the chart and application versions; the PyPI packages have libs-version (usage: make set-version VERSION=x.y.z)
+set-version: ## Update the chart and application versions; Python packages have prepare-python-release (usage: make set-version VERSION=x.y.z)
 	@if [ -z "$(VERSION)" ]; then echo "ERROR: VERSION is required. Usage: make set-version VERSION=x.y.z"; exit 1; fi
 	$(eval PY_VERSION := $(shell echo "$(VERSION)" | sed 's/-/+/'))
 	@echo "Setting version to $(VERSION) (Python: $(PY_VERSION))..."
