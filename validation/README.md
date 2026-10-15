@@ -7,11 +7,10 @@ and `libs/`), that logs in **as the real users** defined in
 (alice, bob, phil, ...) and asserts the **authorization matrix** expected by the
 no-grant runtime authorization model.
 
-The current supported mode is **localhost auth/isolation validation**: backing
-services run in Docker (Keycloak, Postgres, OpenFGA, OpenSearch, Temporal, ...),
-while the Fred applications run in the foreground from this `fred` checkout
-(`apps/control-plane-backend`, `apps/fred-agents`, `apps/knowledge-flow`,
-`apps/frontend`) using their `configuration_prod.yaml`.
+The suite targets an already running deployment: local applications with Docker
+backing services, or a complete k3d installation through its ingress. It does
+not deploy the platform. Set the endpoints and authentication prerequisites for
+the chosen environment before running it.
 
 It reads the user/role/team matrix straight from that fixture, so there is **no
 drift**: change the users there and the assertions follow. That same fixture is
@@ -107,14 +106,12 @@ and `/fred/agents/v2/...`, the validation can target the same public origin as
 the browser. This is closer to the UI path, but it also tests the proxy routing in
 addition to runtime authorization.
 
-### Mode C - future full k3d validation
+### Mode C - an existing k3d deployment
 
-`make validate-auth-isolation-k3d` is reserved for a future mode. It will deploy
-Keycloak/backing services and all Fred apps inside k3d, then run the same
-black-box suite against the k3d ingress. That is the right direction for a more
-deployment-representative C3 evidence path, but it is explicitly **not** required
-for the current revamp validation. Track it as a follow-up task, not as a blocker
-for this harness.
+Use `make integration-test-k3d` with the default k3d ingress and trusted realm
+coordinates documented below. The cluster and demo import must already exist. A
+command that creates the cluster and deploys the applications as part of validation
+remains future work.
 
 ## Prerequisites
 
@@ -122,16 +119,16 @@ for this harness.
    Keycloak and the control-plane database must be seeded with the
    `demo_provisioning` fixture's users/teams/roles (`make build-demo-bundle` +
    Admin > Migration upload - see the intro above).
-2. **Direct-grant on the `app` Keycloak client** (test realm only). The validation
-   logs users in with the *password grant*; the `app` client must allow it.
-   In the realm template (`docker/keycloak/app-realm.json.template`), the
-   `app` client must have:
-   ```json
-   "directAccessGrantsEnabled" : true
-   ```
-   Then re-import the realm (restart Keycloak / re-run the keycloak post-install).
-   **Test/dev only** - do NOT enable ROPC on a real integration / C3 realm.
-3. **No grant signing requirement.** This suite targets RUNTIME-07 rev. 2: the
+2. **Password-grant login on the local test client.** The harness logs in as
+   each demo user without a browser. This requires **Direct access grants** on
+   Keycloak client `app`; a successful browser login does not prove this flow is
+   enabled. See the [k3d preparation procedure](#run-against-the-existing-k3d-deployment)
+   for the setting, its lifetime and failure symptoms.
+3. **Test agent, document capability and model access.** Runtime scenarios need
+   these enabled for the test team, independently of its users' roles. The same
+   [k3d procedure](#run-against-the-existing-k3d-deployment) explains the model
+   prerequisite even for **Test Assistant (no LLM)**.
+4. **No grant signing requirement.** This suite targets RUNTIME-07 rev. 2: the
    control-plane does not issue `ExecutionGrant`; runtime pods validate the user
    JWT and perform pod-side OpenFGA checks.
 
@@ -143,11 +140,11 @@ for this harness.
 | `FRED_CLIENT_ID` | `app` | Public client used for the password grant |
 | `FRED_USER_PASSWORD` | `Azerty123_` | Fallback password, used only for a user the fixture has no per-user password for (each of the 15 fixture users normally carries its own `password` field - see `factory_config.FactoryUser.password`) |
 | `FRED_CONTROL_PLANE_URL` | `http://localhost:8222/control-plane/v1` | Control-plane API base. In localhost auth/isolation mode this is the direct control-plane app, not the runtime/frontend origin. |
-| `FRED_RUNTIME_PUBLIC_BASE` | `http://localhost:8000` via `make validate-auth-isolation-localhost` | Public origin used to resolve ingress-relative runtime URLs returned by `prepare-execution`, e.g. direct `fred-agents` or the frontend origin for proxy-path validation. |
+| `FRED_RUNTIME_PUBLIC_BASE` | `http://localhost:8000` | Public origin used to resolve ingress-relative runtime URLs returned by `prepare-execution`, e.g. direct `fred-agents` or the frontend origin for proxy-path validation. |
 | `FRED_CONFIG_PATH` | `../apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/users.json` | Source of truth for users/roles |
 | `FRED_TEST_TEAM` | `fredlab` | Collaborative team used for isolation checks |
 | `FRED_TEST_AGENT_ID` | `fred.github.test_assistant` | Public no-LLM agent used for deterministic runtime execution |
-| `FRED_KNOWLEDGE_FLOW_URL` | `http://localhost:8111/knowledge-flow/v1` | knowledge-flow-backend base, started manually like the other apps. Only required by `test_content_scope_bypass.py`; checked lazily, not at session start. |
+| `FRED_KNOWLEDGE_FLOW_URL` | `http://localhost:8111/knowledge-flow/v1` | knowledge-flow-backend base, started manually like the other apps. Required by `test_document_access.py`; checked lazily, not at session start. |
 
 ## The complete-matrix demo users
 
@@ -205,12 +202,35 @@ From **this directory** (`fred/validation`), or from the `fred` repo root via
 hide the rest) and writes a short claims-grouped report:
 
 ```bash
-make validation-report
+# Docker-backed local infrastructure and running Fred apps on direct ports:
+make integration-test-docker
+
+# Existing local k3d deployment:
+make integration-test-k3d
 ```
 
-The target defaults to:
+Both targets run the same validation suite and generate `validation/report.md`
+and `validation/report.xml`. They do not start, rebuild or redeploy services,
+import demo data or change Keycloak/Fred permissions. Complete the prerequisites
+above before running either target.
+
+| Target | Control Plane | Knowledge Flow | Runtime origin | Keycloak realm |
+| --- | --- | --- | --- | --- |
+| `integration-test-docker` | `localhost:8222/control-plane/v1` | `localhost:8111/knowledge-flow/v1` | `localhost:8000` | `localhost:8080/realms/app` |
+| `integration-test-k3d` | `localhost:8088/control-plane/v1` | `localhost:8088/knowledge-flow/v1` | `localhost:8088` | `keycloak:8080/realms/app` |
+
+All these default URLs use HTTP. A named profile replaces previously exported
+endpoint variables so stale Docker ports cannot affect a k3d run. Explicit Make
+command-line assignments override the profile, for example
+`make integration-test-k3d FRED_RUNTIME_PUBLIC_BASE=http://localhost:9088`.
+`VALIDATION_ARGS`, `VALIDATION_REPORT` and `VALIDATION_JUNIT_XML` work with either
+profile. The targets are also available via `make -C validation`.
+
+`make validation-report` remains the configurable entry point: it honors exported
+`FRED_*` variables and command-line assignments. Without overrides it defaults to:
 
 ```text
+FRED_REALM_URL=http://localhost:8080/realms/app
 FRED_CONTROL_PLANE_URL=http://localhost:8222/control-plane/v1
 FRED_RUNTIME_PUBLIC_BASE=http://localhost:8000
 FRED_KNOWLEDGE_FLOW_URL=http://localhost:8111/knowledge-flow/v1
@@ -244,12 +264,12 @@ shape:
 | PASS | alice holds only a platform role and sees zero collaborative teams. |
 | PASS | gabriel holds only a platform role and cannot read fredlab's catalog. |
 
-## Content-scope team isolation
+## Document access, revocation and conversation freshness
 
 | Result | Claim |
 |---|---|
-| PASS | Corpus capabilities requires an explicit team_id instead of falling back to organization scope. |
-| PASS | A platform-only user cannot read a collaborative team's corpus capabilities. [username=alice] |
+| PASS | A personally readable B document selected by UID is excluded in active team A. [policy=semantic] |
+| PASS | A second turn in the same session retrieves a document ingested after the first turn. |
 ```
 
 This is the minimal version of the tag-bound evidence report already specced in
@@ -277,10 +297,10 @@ more. Attaching it to a git tag/commit with signed, retained artifacts
 - **Platform-role isolation**: `platform_admin` (`alice`) and `platform_observer`
   (`gabriel`) grant platform authority only; they do not grant collaborative team
   visibility or team content access.
-- **Content-scope team isolation**: knowledge-flow `corpus/capabilities` requires
-  an explicit `team_id`; members of that team are allowed, platform-only users and
-  members of other teams are denied. Requires knowledge-flow-backend running (see
-  `FRED_KNOWLEDGE_FLOW_URL` above).
+- **Document access and lifecycle**: real document retrieval stays within the
+  active team and selected documents; unlinking a shared document revokes access;
+  newly ingested documents reach an existing conversation. See the detailed
+  coverage and prerequisites below.
 - **AUTHZ-06 cumulative team roles** (`scenarios/test_cumulative_team_roles.py`):
   marc/bob/elena each hold exactly one of `team_admin`/`team_editor`/`team_analyst` on
   `fredlab` and only that role's capabilities; priya holds all three at once and gets
@@ -295,3 +315,133 @@ Offline unit tests for the harness itself (`factory_config.py`'s role-resolution
 simple role, cumulative role, the `teams[]` -> `team_member` fallback, admin/editor/analyst
 distinction, a neutral identity with no role) live in `tests/`, not `scenarios/`, and need no
 running stack: `make validation-unit-tests`.
+
+
+## Document access and conversation changes
+
+`scenarios/test_document_access.py` adds live checks for issue
+[#3091](https://github.com/ThalesGroup/fred/issues/3091). It selects an existing
+editor of two demo teams, plus an exclusive reader in each team, from `USERS`.
+With the default fixture these are Bob, Zoe and Phil (the first eligible
+Northbridge reader). No identities, roles or existing documents are modified.
+User credentials are refreshed through the existing CLI session manager during long campaigns; its
+temporary session files are removed when pytest exits.
+
+The campaign creates uniquely named libraries, small Markdown documents,
+managed diagnostic agents and sessions. Cleanup targets their returned IDs,
+including when an assertion fails. It uploads real documents, waits for ingestion
+tasks and initial index visibility, and exercises the configured vector backend.
+A working embedding service and Knowledge Flow worker are required. The runtime
+checks also require the public `fred.github.test_assistant` template and enabled
+`document_access` capability. No chat LLM is used: the diagnostic agent returns
+the actual search hits. The driver confirms
+only its fixed `test_document_confirm` pause, preserving the same session and
+selection on resume; unexpected pauses or failed tools fail the test.
+
+Coverage includes:
+
+- Library scope and explicit document selection across two readable teams, for
+  semantic, hybrid and strict search; positive controls prove retrieval works.
+- Rejected library/document selections do not widen to the authorized corpus.
+- Direct metadata and chunk reads reject a reader outside the owning team.
+- A single UID is indexed in two team libraries, then unlinked from one. The
+  remaining team can still retrieve it; the removed team's reader must lose
+  library-search, explicit-search, metadata and chunk access. Negative assertions
+  are immediate after successful removal, not retried until a leak disappears.
+- Runtime UID scoping and a new library document becoming retrievable on the
+  next turn of the same session.
+- A late chat attachment becoming retrievable in an existing session; isolation
+  from other users/sessions, including when a corpus document is selected, through
+  both a real runtime turn and the direct Knowledge Flow search API.
+
+These tests assert the intended behavior without `xfail`. An affected deployment
+is expected to fail the relevant assertions; these are diagnostic tests, not a
+product fix. A failed positive control is a failed setup, never proof of isolation.
+
+### Run against the existing k3d deployment
+
+The default local factory exposes Fred's ingress on port 8088 and Keycloak
+directly on port 8080. Its pods trust the internal realm authority
+`keycloak:8080`. A token requested through `localhost` has a different issuer
+and is rejected even though login succeeds. Use the realm URL below, with
+`keycloak` resolving to `127.0.0.1` on the workstation, as required by
+`deploy/k3d/finish` for browser login too (`getent hosts keycloak` to check).
+
+A healthy cluster and a working browser login are not sufficient. Prepare the
+following once for your local integration-testing session, before running Make:
+
+1. **Import the demo users, teams and roles** through Fred's **Admin > Migration**
+   with the demo bundle described above. The harness exercises several identities
+   and teams; your own administrator account cannot substitute for them.
+2. **Enable password login for the test client.** Open the Keycloak admin console
+   at `http://keycloak:8080`, select realm **app**, then
+   `Clients > app > Settings > Capability config`. Switch **Direct access grants**
+   **On** and **Save**.
+   Record its previous value. The factory defaults this setting to **Off**. The
+   browser uses an interactive authorization-code flow; the harness instead sends
+   each demo user's credentials to the token endpoint with `grant_type=password`
+   so it can test their individual permissions. Enabling this login flow does not
+   grant a Fred role or bypass JWT/OpenFGA checks. No restart is required.
+3. **Enable the runtime prerequisites in Fred's Admin > Features.** For
+   `FRED_TEST_TEAM` (default `fredlab`), enable **Test Assistant (no LLM)**
+   (`fred.github.test_assistant`), **document_access**, and the runtime's configured
+   default chat model. Use the platform default or an explicit team grant, and
+   record any settings you change. The default k3d model is
+   `openai/mistral-small-latest` (`model__openai__mistral-small-latest`); use the
+   model selected by your deployment if different. A running pod only registers
+   its catalog: team access is still controlled by these grants. The runtime
+   checks model access during graph-agent activation even though this diagnostic
+   agent makes no chat LLM call. Document ingestion still requires working
+   embeddings and a Knowledge Flow worker.
+
+**Keep these settings enabled throughout your manual test iterations.** The Make
+command neither enables them nor restores them afterward. Restore the original
+Keycloak and capability/model settings when you finish the testing session, not
+between commands you intend to rerun. After a fresh cluster or infrastructure
+reprovisioning, check the prerequisites again. These are local test settings;
+leave shared realm templates and production policy unchanged.
+
+**Why the UI self-test can work while Make fails:** the UI uses the signed-in
+browser user's token. It does not perform password-grant logins as all the demo
+users. Agent, capability and model access still apply to its selected team.
+
+| Symptom | Meaning and action |
+| --- | --- |
+| Many setup errors repeat `Keycloak login/refresh failed for 'alice'` and `Keycloak rejected the password grant` | The shared setup cannot log in as the demo admin. Check Direct access grants on client `app` in realm `app`. These are repeated consequences of one prerequisite failure, not separate isolation findings. |
+| Login succeeds, but Fred rejects the token | Check that `FRED_REALM_URL` uses the trusted `keycloak:8080` issuer and that the host alias resolves. |
+| Test Assistant unavailable or `document_access` missing | Check the runtime catalog and the test team's effective grants in Admin > Features. |
+| `ModelNotUsableError` during execution | Enable the configured default chat model for the test team; the no-LLM test agent still goes through model authorization at activation. |
+
+From the repository root, for that default local k3d installation:
+
+```bash
+# Full campaign, after the preparation above (the target selects URLs only):
+make integration-test-k3d
+
+# Focused run, with separate evidence from the full campaign:
+make integration-test-k3d VALIDATION_ARGS="scenarios/test_document_access.py" \
+  VALIDATION_REPORT=document-access-report.md VALIDATION_JUNIT_XML=document-access-report.xml
+
+# Equivalent invocation of the original configurable target:
+make validation-report \
+  FRED_REALM_URL=http://keycloak:8080/realms/app \
+  FRED_CONTROL_PLANE_URL=http://localhost:8088/control-plane/v1 \
+  FRED_KNOWLEDGE_FLOW_URL=http://localhost:8088/knowledge-flow/v1 \
+  FRED_RUNTIME_PUBLIC_BASE=http://localhost:8088
+```
+
+For another deployment, adapt the addresses to its trusted issuer and public
+ingress. Keep TLS verification enabled. The runtime base is the public origin
+resolving `prepare-execution` URLs.
+
+The command runs the local validation code against the deployed services; it
+does not rebuild or redeploy k3d. Report paths are relative to `validation/`.
+Record the deployed image revision separately from the validation checkout SHA.
+
+Limits: this exercises HTTP/runtime contracts, not the browser composer's upload
+and cache-refresh sequence or a ReAct model's interpretation. OpenFGA failure
+injection/retry, concurrent add/remove operations, label search and exhaustive
+coverage of all document tools need separate targeted tests. The former README's
+`corpus/capabilities` claims referred to a missing `test_content_scope_bypass.py`;
+that endpoint's authorization matrix is still a coverage gap. No live failure
+injection is performed against the shared deployment.

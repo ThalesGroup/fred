@@ -46,7 +46,7 @@ CLAIM_GROUPS_FILE = Path(__file__).parent / ".claim_groups.json"
 # section, just an unpolished one, instead of being silently dropped.
 GROUP_LABELS = {
     "test_platform_role_isolation.py": "Platform-role isolation (AUTHZ-05)",
-    "test_content_scope_bypass.py": "Content-scope team isolation",
+    "test_document_access.py": "Document access, revocation and conversation freshness",
     "test_runtime_team_isolation.py": "Team isolation (cross-team + runtime)",
 }
 
