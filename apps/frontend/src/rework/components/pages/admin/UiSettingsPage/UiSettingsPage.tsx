@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
@@ -133,48 +134,46 @@ export default function UiSettingsPage() {
                     }
                     aria-label={t("rework.uiSettings.offeredLabel", { theme: label })}
                   />
-                  <span aria-hidden="true">
-                    {t(isOffered ? "rework.uiSettings.available" : "rework.uiSettings.hidden")}
-                  </span>
                 </span>
               </Tooltip>
-              {/* One preview, light half then dark half; the theme's own tokens resolve inside each half. */}
-              <span className={styles.preview}>
-                {MODES.map((mode) => (
-                  <span key={mode} className={styles.previewMode}>
-                    <span className={styles.previewLabel}>{t(`rework.userSettings.app.${mode}`)}</span>
-                    <span
-                      className={styles.swatches}
-                      data-ui-theme={theme}
-                      data-ui-base-theme={uiThemeBase(theme)}
-                      data-theme={mode}
-                    >
-                      {SWATCHES.map((role) => (
-                        <span key={role} className={styles.swatch} style={{ backgroundColor: `var(--${role})` }} />
-                      ))}
-                    </span>
-                  </span>
-                ))}
-              </span>
               {/* Only the theme's font and shapes apply here; colors stay those of the page. */}
               <span className={styles.name} data-ui-theme={theme} data-ui-base-theme={uiThemeBase(theme)} title={label}>
                 {label}
               </span>
-              <span className={styles.defaultAction}>
-                {isDefault ? (
-                  <span className={styles.defaultBadge}>{t("rework.uiSettings.isDefault")}</span>
-                ) : (
-                  <Button
-                    color="primary"
-                    variant="outlined"
-                    size="small"
-                    disabled={locked || !isOffered}
-                    onClick={() => persist(theme, hidden)}
+              {/* One preview, light half then dark half; the theme's own tokens resolve inside each half. */}
+              <span className={styles.preview}>
+                {MODES.map((mode) => (
+                  <span
+                    key={mode}
+                    className={styles.swatches}
+                    data-ui-theme={theme}
+                    data-ui-base-theme={uiThemeBase(theme)}
+                    data-theme={mode}
                   >
-                    {t("rework.uiSettings.setDefault")}
-                  </Button>
-                )}
+                    {mode === "light" && <Icon category="outlined" type="light_mode" />}
+                    {SWATCHES.map((role) => (
+                      <span key={role} className={styles.swatch} style={{ backgroundColor: `var(--${role})` }} />
+                    ))}
+                    {mode === "dark" && <Icon category="outlined" type="dark_mode" />}
+                  </span>
+                ))}
               </span>
+              {isDefault ? (
+                <span className={styles.defaultLabel}>
+                  <Icon category="outlined" type="check" />
+                  {t("rework.uiSettings.isDefault")}
+                </span>
+              ) : (
+                <Button
+                  color="primary"
+                  variant="outlined"
+                  size="small"
+                  disabled={locked || !isOffered}
+                  onClick={() => persist(theme, hidden)}
+                >
+                  {t("rework.uiSettings.setDefault")}
+                </Button>
+              )}
             </li>
           );
         })}
