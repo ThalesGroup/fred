@@ -21,7 +21,7 @@ pending or after it failed the instance is suspended with
 value.
 
 Revision ID: b8e1f4a2c6d9
-Revises: a6c1d94e27b3
+Revises: c3a7e5d9f1b2
 Create Date: 2026-10-05 00:00:00.000000
 
 """
@@ -34,7 +34,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "b8e1f4a2c6d9"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "a6c1d94e27b3"  # pragma: allowlist secret
+    "c3a7e5d9f1b2"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
