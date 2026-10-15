@@ -907,7 +907,7 @@ async def test_unreadable_joiner_table_fails_closed_and_logs_the_cause(
 async def test_unavailable_warning_never_logs_statement_parameters(
     access, caplog, fresh_warnings
 ):
-    secret = "plaintext-link-token-" + "x" * 22
+    link_token = "plaintext-link-token-" + "x" * 22  # pragma: allowlist secret
     async with access.store.engine.begin() as connection:
         await connection.run_sync(cast(Table, PlatformAccessLinkRow.__table__).drop)
     with caplog.at_level("WARNING"):
@@ -915,7 +915,7 @@ async def test_unavailable_warning_never_logs_statement_parameters(
             async with access.store.read() as session:
                 await session.execute(
                     select(PlatformAccessLinkRow).where(
-                        PlatformAccessLinkRow.token == secret
+                        PlatformAccessLinkRow.token == link_token
                     )
                 )
-    assert caplog.records and secret not in caplog.text
+    assert caplog.records and link_token not in caplog.text
