@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ from fred_core.sql.accent_folding import fold_accents, search_spellings
 from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
+
+logger = logging.getLogger(__name__)
 
 
 class PlatformAccessStore:
@@ -50,7 +53,13 @@ class PlatformAccessStore:
                     yield active
         except HTTPException:
             raise
-        except Exception:
+        except Exception as error:
+            # Callers only see 503; keep the cause (e.g. a missing grant) diagnosable.
+            logger.warning(
+                "Platform access store unavailable: %s: %s",
+                type(error).__name__,
+                error,
+            )
             raise HTTPException(503, "platform_access_unavailable") from None
 
     @asynccontextmanager

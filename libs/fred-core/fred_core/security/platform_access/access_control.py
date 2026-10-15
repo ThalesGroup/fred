@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import logging
 import math
 import time
 from collections.abc import AsyncIterator
@@ -30,6 +31,8 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_core.sql.schema_guard import require_tables
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
+
+logger = logging.getLogger(__name__)
 
 
 def token_time(value: Any) -> float | None:
@@ -134,7 +137,10 @@ class PlatformAccess:
                 RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
                 consistency_token=self.rebac.HIGHER_CONSISTENCY,
             )
-        except Exception:
+        except Exception as error:
+            logger.warning(
+                "Platform admin check unavailable: %s: %s", type(error).__name__, error
+            )
             raise HTTPException(503, "platform_access_unavailable") from None
 
     async def platform_admin(self, user: Principal) -> bool:
@@ -197,7 +203,12 @@ class PlatformAccess:
             )
         except HTTPException:
             raise
-        except Exception:
+        except Exception as error:
+            logger.warning(
+                "Platform access admission unavailable: %s: %s",
+                type(error).__name__,
+                error,
+            )
             raise HTTPException(503, "platform_access_unavailable") from None
 
 
@@ -276,6 +287,9 @@ async def initialize_platform_access(
     await access.state()
     await access.store.teams(eligible_only=True)
     await access.store.users(0, 1)
+    # Free admission reads the joiner table on every filtered request: fail at
+    # startup, not per request, when this role cannot read it.
+    await access.store.free_joined_teams(UUID(int=0))
     _installed = access
 
 

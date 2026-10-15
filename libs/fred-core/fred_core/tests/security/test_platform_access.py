@@ -869,3 +869,26 @@ def test_accent_folding_table_and_postgresql_expression():
     assert "Hé" not in str(compiled)
     assert "%he%" not in compiled.params.values()
     assert str(compiled).count("translate(lower(%(") == 4
+
+
+@pytest.mark.asyncio
+async def test_unreadable_joiner_table_fails_closed_and_logs_the_cause(access, caplog):
+    # A runtime role without SELECT on the joiner table broke the Free source
+    # derivation in a live deployment; the cause must reach the logs.
+    user = person("other")
+    async with access.store.engine.begin() as connection:
+        await connection.run_sync(
+            cast(Table, PlatformAccessLinkJoinerRow.__table__).drop
+        )
+    with caplog.at_level("WARNING", logger="fred_core.security.platform_access.store"):
+        with pytest.raises(HTTPException) as error:
+            await access.admitted(user)
+    assert (error.value.status_code, error.value.detail) == (
+        503,
+        "platform_access_unavailable",
+    )
+    assert any(
+        record.levelname == "WARNING"
+        and "platform_access_link_joiners" in record.getMessage()
+        for record in caplog.records
+    )
