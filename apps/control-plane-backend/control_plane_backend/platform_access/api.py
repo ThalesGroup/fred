@@ -26,6 +26,7 @@ from fred_pod.security.structure import KeycloakUser
 from control_plane_backend.app.dependencies import get_application_configuration
 from control_plane_backend.config.models import Configuration
 from control_plane_backend.platform_access import service
+from control_plane_backend.platform_access.directory import PlatformAccessDirectory
 from control_plane_backend.platform_access.schemas import (
     AcceptFreeEnrollmentCgu,
     CreatePlatformEnrollmentLink,
@@ -51,10 +52,15 @@ from control_plane_backend.platform_access.schemas import (
     SetTeamJoinLink,
     TeamJoinLink,
 )
+from control_plane_backend.users.dependencies import (
+    UserServiceDependencies,
+    get_user_service_dependencies,
+)
 
 router = APIRouter(tags=["PlatformAccess"])
 Access = Annotated[PlatformAccess, Depends(get_platform_access)]
 Config = Annotated[Configuration, Depends(get_application_configuration)]
+UserDeps = Annotated[UserServiceDependencies, Depends(get_user_service_dependencies)]
 OwnUser = Annotated[KeycloakUser, Depends(get_own_user_for_platform_access)]
 
 
@@ -99,12 +105,14 @@ async def set_platform_access_filtering(
     response_model=PlatformAccessActivationPreview,
 )
 async def preview_platform_access_activation(
-    access: Access, user: Admin, response: Response
+    access: Access, user: Admin, response: Response, deps: UserDeps
 ) -> PlatformAccessActivationPreview:
     response.headers["Cache-Control"] = "no-store"
     try:
         async with asyncio.timeout(120):
-            return await service.activation_preview(access)
+            return await service.activation_preview(
+                access, PlatformAccessDirectory(deps)
+            )
     except TimeoutError:
         raise HTTPException(503, "platform_access_unavailable") from None
 
@@ -155,6 +163,7 @@ async def save_platform_access_policy(
 async def list_platform_access_users(
     access: Access,
     user: Admin,
+    deps: UserDeps,
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     query: str = Query("", max_length=200),
@@ -162,14 +171,18 @@ async def list_platform_access_users(
         False, description="Only users holding an individual exception."
     ),
 ) -> PlatformAccessUsersPage:
-    return await service.users_page(access, offset, limit, query, exceptions_only)
+    return await service.users_page(
+        access, offset, limit, query, exceptions_only, PlatformAccessDirectory(deps)
+    )
 
 
 @router.post("/admin/platform/access/users", status_code=204)
 async def grant_platform_access_users(
-    body: GrantPlatformAccessUsers, access: Access, user: Admin
+    body: GrantPlatformAccessUsers, access: Access, user: Admin, deps: UserDeps
 ) -> None:
-    granted_count = await service.grant_users(access, user, body.user_ids)
+    granted_count = await service.grant_users(
+        access, user, body.user_ids, PlatformAccessDirectory(deps)
+    )
     emit_audit_log(
         "platform.access.users.granted",
         actor_uid=user.uid,
@@ -180,9 +193,9 @@ async def grant_platform_access_users(
 
 @router.put("/admin/platform/access/users/{user_id}", status_code=204)
 async def grant_platform_access_user(
-    user_id: UUID, access: Access, user: Admin
+    user_id: UUID, access: Access, user: Admin, deps: UserDeps
 ) -> None:
-    await service.set_user(access, user, user_id, True)
+    await service.set_user(access, user, user_id, True, PlatformAccessDirectory(deps))
     emit_audit_log(
         "platform.access.user.granted", actor_uid=user.uid, target_uid=str(user_id)
     )
@@ -199,13 +212,19 @@ async def revoke_platform_access_user(
 
 
 @router.get("/admin/platform/access/t0-preview", response_model=PlatformT0Preview)
-async def preview_platform_access_t0(access: Access, user: Admin) -> PlatformT0Preview:
-    return await service.t0(access)
+async def preview_platform_access_t0(
+    access: Access, user: Admin, deps: UserDeps
+) -> PlatformT0Preview:
+    return await service.t0(access, directory=PlatformAccessDirectory(deps))
 
 
 @router.post("/admin/platform/access/t0-import", response_model=PlatformT0Preview)
-async def import_platform_access_t0(access: Access, user: Admin) -> PlatformT0Preview:
-    result, imported_count = await service.import_t0(access, user)
+async def import_platform_access_t0(
+    access: Access, user: Admin, deps: UserDeps
+) -> PlatformT0Preview:
+    result, imported_count = await service.import_t0(
+        access, user, directory=PlatformAccessDirectory(deps)
+    )
     if imported_count is not None:
         emit_audit_log(
             "platform.access.t0.imported",

@@ -9,23 +9,22 @@ export default function PlatformAccessError({
   title,
   message,
   retry,
-  hideSignOut = false,
+  hideFooterLinks = false,
 }: {
   title: string;
   message: string;
   retry: () => void;
-  hideSignOut?: boolean;
+  hideFooterLinks?: boolean;
 }) {
   const { t } = useTranslation();
   const { contactSupportLink } = useFrontendProperties();
-  const showLinks = !hideSignOut || Boolean(contactSupportLink);
   return (
     <PlatformAccessCard
       title={title}
       footerStart={
-        showLinks && (
+        !hideFooterLinks && (
           <>
-            {!hideSignOut && <SignOutLink />}
+            <SignOutLink />
             {contactSupportLink && <SupportLink href={contactSupportLink} />}
           </>
         )

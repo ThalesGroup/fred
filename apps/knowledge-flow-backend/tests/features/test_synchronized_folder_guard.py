@@ -24,6 +24,8 @@ guard there would make the base itself undeletable.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fred_core import AuthorizationError, Resource
@@ -289,12 +291,16 @@ async def test_a_person_deletes_a_library_and_its_documents_are_released(monkeyp
     service = _service(_FakeRebac(updatable={"lib", "sub"}), store)
     library, nested = store.tags["lib"], store.tags["sub"]
 
-    async def _subtree(user, tag_type, path_prefix=None, limit=None):
-        return [library, nested]
+    async def inventory(tag_ids):
+        return {tag_id: [uid for uid in ("doc-1", "doc-2") if (uid, tag_id) not in item_service.removed] for tag_id in tag_ids}
 
-    service.list_all_tags_for_user = _subtree
+    store.list_subtree = AsyncMock(return_value=[library, nested])
+    service.document_metadata_service = SimpleNamespace(
+        metadata_store=SimpleNamespace(document_uids_by_tags=inventory),
+        filter_readable_document_uids=AsyncMock(return_value={"doc-1", "doc-2"}),
+    )
 
     await service.delete_tag_for_user("lib", person())
 
-    assert store.deleted == ["lib", "sub"]
+    assert store.deleted == ["sub", "lib"]
     assert ("doc-1", "lib") in item_service.removed

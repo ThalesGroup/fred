@@ -86,6 +86,9 @@
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
 }
+.conditionLabels > :nth-child(5) {
+  text-align: center;
+}
 .condition {
   display: flex;
   flex-direction: column;
@@ -115,14 +118,14 @@
 }
 /* Per-condition labels only show once the shared heading line is dropped (narrow widths). */
 .conditionCell > span,
-.conditionCell > label {
+.conditionToggle > label:first-child {
   display: none;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
 }
 .conditionToggle {
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   min-height: 2rem;
 }
 .ruleEditor {
@@ -196,7 +199,7 @@
     grid-column: 2 / 4;
   }
   .conditionCell > span,
-  .conditionCell > label {
+  .conditionToggle > label:first-child {
     display: block;
   }
   .conditionToggle {

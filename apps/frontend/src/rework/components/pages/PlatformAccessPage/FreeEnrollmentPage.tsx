@@ -14,7 +14,7 @@ import {
   useEnrollFreeTeamMutation,
   useRecordFreeOpeningMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import PlatformAccessCard, { SupportLink } from "./PlatformAccessCard";
+import PlatformAccessCard from "./PlatformAccessCard";
 import styles from "./PlatformAccessCard.module.css";
 import PlatformAccessError from "./PlatformAccessError";
 
@@ -34,7 +34,7 @@ const showRefusal = () => window.location.replace(platformPath("platform-access-
 export default function FreeEnrollmentPage() {
   const { token = "" } = useParams();
   const { t } = useTranslation();
-  const { gcuVersion, contactSupportLink } = useFrontendProperties();
+  const { gcuVersion } = useFrontendProperties();
   const preview = useFreeEnrollmentPreviewQuery({ token });
   const [accept, acceptance] = useAcceptFreeCguMutation();
   const [enroll, enrollment] = useEnrollFreeTeamMutation();
@@ -83,11 +83,10 @@ export default function FreeEnrollmentPage() {
       else setFailure(isInvalidLink(error) ? "invalid" : "failed");
     }
   };
-  const support = contactSupportLink && <SupportLink href={contactSupportLink} />;
   if (denied) return null;
   if (failure === "invalid" || (preview.isError && isInvalidLink(preview.error)))
     return (
-      <PlatformAccessCard title={t("rework.platformAccess.join.invalidTitle")} footerStart={support}>
+      <PlatformAccessCard title={t("rework.platformAccess.join.invalidTitle")}>
         <p className={styles.retreat}>{t("rework.platformAccess.join.invalidMessage")}</p>
       </PlatformAccessCard>
     );
@@ -95,7 +94,7 @@ export default function FreeEnrollmentPage() {
   if (preview.isError || failure)
     return (
       <PlatformAccessError
-        hideSignOut
+        hideFooterLinks
         title={t(
           preview.isError ? "rework.platformAccess.join.uncheckedTitle" : "rework.platformAccess.join.failedTitle",
         )}
@@ -109,7 +108,7 @@ export default function FreeEnrollmentPage() {
   if (preview.data?.cgu_required) return <GcuPageContent isLoading={busy} onAccept={acceptTerms} />;
   if (!preview.data)
     return (
-      <PlatformAccessCard title={t("rework.platformAccess.join.checking")} footerStart={support}>
+      <PlatformAccessCard title={t("rework.platformAccess.join.checking")}>
         <p role="status" className={styles.retreat}>
           {t("rework.platformAccess.loading")}
         </p>
@@ -118,7 +117,6 @@ export default function FreeEnrollmentPage() {
   return (
     <PlatformAccessCard
       title={t("rework.platformAccess.join.title")}
-      footerStart={support}
       actions={
         <Button color="primary" variant="filled" size="medium" disabled={busy} onClick={() => void join()}>
           {t("rework.platformAccess.join.action")}

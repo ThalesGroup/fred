@@ -120,11 +120,14 @@ class MetadataService:
         self.rebac = context.get_rebac_engine()
 
     async def filter_readable_document_uids(self, user: KeycloakUser, document_uids: list[str]) -> set[str]:
-        """Return only the document UIDs the user is allowed to read (individual permission checks)."""
-        if not document_uids:
-            return set()
-        results = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in document_uids))
-        return {uid for uid, allowed in zip(document_uids, results) if allowed}
+        """Check known candidates once each without unbounded authorization fan-out."""
+        unique = list(dict.fromkeys(document_uids))
+        readable: set[str] = set()
+        for start in range(0, len(unique), 10):
+            batch = unique[start : start + 10]
+            results = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in batch))
+            readable.update(uid for uid, allowed in zip(batch, results) if allowed)
+        return readable
 
     async def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
@@ -156,45 +159,31 @@ class MetadataService:
         item_ids, or a label resolution) and only needs their metadata."""
         if not document_uids:
             return []
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
         docs = await self.metadata_store.get_metadata_by_uids(document_uids)
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
-            return docs
-        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        authorized_doc_ids = await self.filter_readable_document_uids(user, [doc.document_uid for doc in docs])
         return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
 
     async def get_document_metadata_in_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
         """
         Return all metadata entries associated with a specific tag.
         """
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-
         try:
             docs = await self.metadata_store.get_metadata_in_tag(tag_id)
-
-            if isinstance(authorized_doc_ref, RebacDisabledResult):
-                # if rebac is disabled, do not filter
-                return docs
-
-            # Filter by permission (todo: use rebac ids to filter at store (DB) level)
-            authorized_doc_ids = [d.id for d in authorized_doc_ref]
-            return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
         except Exception as e:
             logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata for tag {tag_id}: {e}")
+        authorized_doc_ids = await self.filter_readable_document_uids(user, [doc.document_uid for doc in docs])
+        return [doc for doc in docs if doc.document_uid in authorized_doc_ids]
 
     async def get_document_uids_in_tags(self, user: KeycloakUser, tag_ids: list[str]) -> dict[str, list[str]]:
         """
         Uids of the readable documents in each of `tag_ids`.
 
-        One authorization lookup and one store query for the whole batch: the
-        ReBAC answer is per user, not per tag, so resolving it inside a per-tag
-        loop recomputes the same list once per library and throws all but one
-        away.
+        One store query for the batch, then one bounded READ check per unique
+        document, including documents shared between several requested tags.
         """
         if not tag_ids:
             return {}
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
         try:
             uids_by_tag = await self.metadata_store.document_uids_by_tags(tag_ids)
         except Exception as e:
@@ -204,9 +193,7 @@ class MetadataService:
             logger.error(f"Error retrieving document uids for {len(tag_ids)} tags: {e}")
             raise MetadataUpdateError(f"Failed to retrieve document uids for tags: {e}")
 
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
-            return uids_by_tag
-        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        authorized_doc_ids = await self.filter_readable_document_uids(user, [uid for uids in uids_by_tag.values() for uid in uids])
         return {tag_id: [uid for uid in uids if uid in authorized_doc_ids] for tag_id, uids in uids_by_tag.items()}
 
     async def get_documents_metadata_in_tags(self, user: KeycloakUser, tag_ids: list[str]) -> list[DocumentMetadata]:
@@ -219,16 +206,13 @@ class MetadataService:
         """
         if not tag_ids:
             return []
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
         try:
             docs = await self.metadata_store.metadata_in_tags(tag_ids)
         except Exception as e:
             logger.error(f"Error retrieving metadata for {len(tag_ids)} tags: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata for tags: {e}")
 
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
-            return docs
-        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        authorized_doc_ids = await self.filter_readable_document_uids(user, [doc.document_uid for doc in docs])
         return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
 
     async def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
@@ -339,8 +323,6 @@ class MetadataService:
         page is returned, so a client sorting what it received would reorder
         50 rows out of the whole tag and call it a sorted folder.
         """
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-
         docs, total = await self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit, sort_by=sort_by, sort_order=sort_order)
         logger.debug(
             "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
@@ -351,10 +333,7 @@ class MetadataService:
             total,
         )
 
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
-            return docs, total
-
-        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        authorized_doc_ids = await self.filter_readable_document_uids(user, [doc.document_uid for doc in docs])
         filtered = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
 
         # Total reflects store count; computing an authorized-only total would require

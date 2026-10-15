@@ -33,6 +33,7 @@ import base64
 import json
 import tempfile
 from pathlib import Path
+from collections.abc import Generator
 
 import httpx
 import pytest
@@ -63,16 +64,18 @@ def _require_stack() -> None:
     except Exception as exc:  # noqa: BLE001
         pytest.fail(
             f"Control-plane not reachable at {CP_URL}/healthz ({exc}). "
-            f"Start the complete Docker stack before running validation.",
+            "Check FRED_CONTROL_PLANE_URL against your running deployment; "
+            "the default k3d ingress uses http://localhost:8088/control-plane/v1.",
             pytrace=False,
         )
 
 
-_TOKEN_CACHE: dict[str, str] = {}
+_LOGIN_MANAGERS: dict[str, KeycloakUserSessionManager] = {}
+_LOGIN_DIRECTORIES: list[tempfile.TemporaryDirectory] = []
 
 
 def login(username: str) -> str:
-    """Password-grant login for one user (cached). Reuses the CLI session manager.
+    """Login once per user, then let the CLI session manager refresh expiring tokens.
 
     Uses the fixture's own per-user password (`FactoryUser.password`, set by the
     demo_provisioning identity phase - see PLATFORM-IMPORT-RFC.md Part A) when
@@ -81,39 +84,68 @@ def login(username: str) -> str:
     the fixture doesn't carry a password for (e.g. a pre-existing identity the
     suite never provisioned).
     """
-    if username in _TOKEN_CACHE:
-        return _TOKEN_CACHE[username]
     password = (USERS[username].password if username in USERS else None) or PASSWORD
     cfg = KeycloakLoginConfig(realm_url=REALM_URL, client_id=CLIENT_ID)
-    cache_file = Path(tempfile.mkdtemp(prefix=f"fredval-{username}-")) / "session.json"
-    mgr = KeycloakUserSessionManager(
-        config=cfg, cache_file=cache_file, log_prefix=f"[val:{username}]"
-    )
+    mgr = _LOGIN_MANAGERS.get(username)
     try:
-        mgr.login(username=username, password=password)
+        if mgr is None:
+            directory = tempfile.TemporaryDirectory(prefix="fredval-")
+            _LOGIN_DIRECTORIES.append(directory)
+            mgr = KeycloakUserSessionManager(
+                config=cfg,
+                cache_file=Path(directory.name) / "session.json",
+                log_prefix=f"[val:{username}]",
+            )
+            _LOGIN_MANAGERS[username] = mgr
+            mgr.login(username=username, password=password)
         token = mgr.get_access_token()
-    except Exception as exc:  # noqa: BLE001 - turn raw HTTP errors into a clear diagnostic
-        body = ""
-        resp = getattr(exc, "response", None)
-        if resp is not None:
-            body = f"\n  response: {resp.text[:200]}"
+    except Exception as exc:  # noqa: BLE001 - bounded authentication diagnostic
+        failed_manager = _LOGIN_MANAGERS.pop(username, None)
+        if failed_manager is not None:
+            failed_manager.close()
+        hint = "Check demo provisioning and direct-grant configuration in validation/README.md."
+        if isinstance(exc, httpx.HTTPStatusError):
+            try:
+                error = exc.response.json().get("error")
+            except (ValueError, AttributeError):
+                error = None
+            if error == "unauthorized_client":
+                hint = "Keycloak rejected the password grant. Enable Direct access grants on the configured client in the local test realm for this campaign, then restore its original value."
+            elif error == "invalid_grant":
+                hint = "Keycloak rejected the demo credentials or requires an interactive account action. Check the imported demo identities."
         pytest.fail(
-            f"Keycloak password-grant login failed for {username!r} on client "
-            f"{CLIENT_ID!r} at {REALM_URL}:\n  {type(exc).__name__}: {exc}{body}\n"
-            f"→ Most likely the '{CLIENT_ID}' client does not allow direct grants. "
-            f"Set \"directAccessGrantsEnabled\": true on it (TEST realm only) and "
-            f"re-import the realm. See validation/README.md.",
+            f"Keycloak login/refresh failed for {username!r} on client {CLIENT_ID!r}: "
+            f"{type(exc).__name__}. {hint}",
             pytrace=False,
         )
-    finally:
-        mgr.close()
     if not token:
         pytest.fail(
             f"No token returned for {username!r} (client {CLIENT_ID!r}).",
             pytrace=False,
         )
-    _TOKEN_CACHE[username] = token
     return token
+
+
+class UserSessionAuth(httpx.Auth):
+    """Refresh the existing CLI session before each request, including long ingestion runs."""
+
+    def __init__(self, username: str) -> None:
+        self.username = username
+
+    def auth_flow(
+        self, request: httpx.Request
+    ) -> Generator[httpx.Request, httpx.Response, None]:
+        request.headers["Authorization"] = f"Bearer {login(self.username)}"
+        yield request
+
+
+def pytest_sessionfinish() -> None:
+    for manager in _LOGIN_MANAGERS.values():
+        manager.close()
+    _LOGIN_MANAGERS.clear()
+    for directory in _LOGIN_DIRECTORIES:
+        directory.cleanup()
+    _LOGIN_DIRECTORIES.clear()
 
 
 def _jwt_sub(token: str) -> str:
@@ -135,9 +167,7 @@ def _jwt_sub(token: str) -> str:
 
 def _team_identifiers(team_item: dict) -> set[str]:
     return {
-        str(team_item.get(k))
-        for k in ("id", "name", "team_id")
-        if team_item.get(k)
+        str(team_item.get(k)) for k in ("id", "name", "team_id") if team_item.get(k)
     }
 
 
@@ -146,7 +176,9 @@ def _configured_relations(username: str, team_name: str) -> frozenset[str]:
 
 
 def _configured_team_admins(team_name: str) -> list[str]:
-    return sorted(username for username in USERS if USERS[username].is_team_admin_in(team_name))
+    return sorted(
+        username for username in USERS if USERS[username].is_team_admin_in(team_name)
+    )
 
 
 def _platform_admin_username() -> str:
@@ -192,6 +224,14 @@ def _bootstrap_collaborative_teams(_require_stack) -> None:
     )
     try:
         existing_resp = admin_client.get("/teams/all")
+        if existing_resp.status_code == 401:
+            pytest.fail(
+                "Control-plane rejected the Keycloak token (HTTP 401). Check the "
+                "realm issuer and audience trusted by the deployment. For local k3d, "
+                "use FRED_REALM_URL=http://keycloak:8080/realms/app with the host alias "
+                "documented in validation/README.md; do not disable JWT checks.",
+                pytrace=False,
+            )
         existing_resp.raise_for_status()
         existing_items = existing_resp.json()
         if not isinstance(existing_items, list):
@@ -250,7 +290,9 @@ def _bootstrap_collaborative_teams(_require_stack) -> None:
                 for member in members_resp.json():
                     user_id = str((member.get("user") or {}).get("id") or "")
                     if user_id:
-                        current_relations_by_user[user_id] = set(member.get("relations") or [])
+                        current_relations_by_user[user_id] = set(
+                            member.get("relations") or []
+                        )
 
                 # Roles are cumulative (AUTHZ-06): every configured relation for this
                 # user on this team must already be held - not just one.
@@ -276,7 +318,7 @@ def _bootstrap_collaborative_teams(_require_stack) -> None:
 
 @pytest.fixture(scope="session")
 def token_for():
-    """Callable username -> access_token (cached per user)."""
+    """Callable username -> fresh access token from the cached user session."""
     return login
 
 
@@ -287,7 +329,7 @@ class CP:
         self.username = username
         self._client = httpx.Client(
             base_url=CP_URL,
-            headers={"Authorization": f"Bearer {login(username)}"},
+            auth=UserSessionAuth(username),
             timeout=15.0,
         )
 
@@ -337,7 +379,7 @@ class KF:
         self.username = username
         self._client = httpx.Client(
             base_url=KF_URL,
-            headers={"Authorization": f"Bearer {login(username)}"},
+            auth=UserSessionAuth(username),
             timeout=15.0,
         )
 
@@ -346,6 +388,12 @@ class KF:
 
     def post(self, path: str, **kw) -> httpx.Response:
         return self._client.post(path, **kw)
+
+    def put(self, path: str, **kw) -> httpx.Response:
+        return self._client.put(path, **kw)
+
+    def delete(self, path: str, **kw) -> httpx.Response:
+        return self._client.delete(path, **kw)
 
     def close(self) -> None:
         self._client.close()
@@ -430,7 +478,9 @@ def pytest_collection_modifyitems(items) -> None:
         if callspec is not None and callspec.params:
             for key, value in callspec.params.items():
                 desc = desc.replace("{" + key + "}", str(value))
-            desc += " [" + ", ".join(f"{k}={v}" for k, v in callspec.params.items()) + "]"
+            desc += (
+                " [" + ", ".join(f"{k}={v}" for k, v in callspec.params.items()) + "]"
+            )
         claim_groups[desc] = Path(item.location[0]).name
         item._nodeid = desc
     CLAIM_GROUPS_FILE.write_text(json.dumps(claim_groups, indent=2))

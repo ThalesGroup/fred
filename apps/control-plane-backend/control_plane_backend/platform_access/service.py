@@ -27,6 +27,7 @@ from fred_core.security.platform_access.rules import (
     path_key,
 )
 from fred_core.security.platform_access.store import PlatformAccessStore
+from fred_core.sql.accent_folding import fold_text
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import PlatformAccessPolicy
@@ -37,6 +38,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from control_plane_backend.platform_access.directory import PlatformAccessDirectory
 from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
     CreatePlatformEnrollmentLink,
@@ -61,6 +63,7 @@ from control_plane_backend.platform_access.schemas import (
 )
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import _add_team_member_relation
+from control_plane_backend.users.schemas import UserSummary
 
 
 async def has_admission_sources(
@@ -153,20 +156,43 @@ async def set_filtering(
 
 
 async def grant_users(
-    access: PlatformAccess, actor: KeycloakUser, user_ids: list[UUID]
+    access: PlatformAccess,
+    actor: KeycloakUser,
+    user_ids: list[UUID],
+    directory: PlatformAccessDirectory | None = None,
 ) -> int:
     selected = sorted(set(user_ids))
+    profiles = (
+        await directory.by_ids(str(uid) for uid in selected)
+        if directory is not None and not directory.local
+        else None
+    )
+    if profiles is not None and set(profiles) != {str(uid) for uid in selected}:
+        raise HTTPException(404, "user_not_found")
     granted_count = 0
     async with access.store.mutation() as session:
         await access.state(session)
         now = datetime.now(timezone.utc)
         for start in range(0, len(selected), 500):
             batch = selected[start : start + 500]
-            existing = set(
-                await session.scalars(select(UserRow.id).where(UserRow.id.in_(batch)))
+            existing_rows = list(
+                (
+                    await session.scalars(select(UserRow).where(UserRow.id.in_(batch)))
+                ).all()
             )
-            if existing != set(batch):
+            existing = {row.id for row in existing_rows}
+            if profiles is None and (
+                existing != set(batch)
+                or directory is not None
+                and directory.local
+                and any(row.username is None for row in existing_rows)
+            ):
                 raise HTTPException(404, "user_not_found")
+            if profiles is not None:
+                session.add_all(
+                    [UserRow(id=uid) for uid in batch if uid not in existing]
+                )
+                await session.flush()
             granted = set(
                 await session.scalars(
                     select(PlatformAccessUserRow.user_id).where(
@@ -191,12 +217,28 @@ async def grant_users(
 
 
 async def set_user(
-    access: PlatformAccess, actor: KeycloakUser, uid: UUID, grant: bool
+    access: PlatformAccess,
+    actor: KeycloakUser,
+    uid: UUID,
+    grant: bool,
+    directory: PlatformAccessDirectory | None = None,
 ) -> None:
+    profile = None
+    if grant and directory is not None and not directory.local:
+        profile = (await directory.by_ids([str(uid)])).get(str(uid))
+        if profile is None:
+            raise HTTPException(404, "user_not_found")
     async with access.store.mutation() as session:
         await access.state(session)
-        if await access.store.user(uid, session) is None:
+        row = await access.store.user(uid, session)
+        if row is None and profile is None:
             raise HTTPException(404, "user_not_found")
+        if grant and directory is not None and directory.local and row is not None:
+            if row.username is None:
+                raise HTTPException(404, "user_not_found")
+        if row is None and profile is not None:
+            session.add(UserRow(id=uid))
+            await session.flush()
         if grant:
             await access.store.add_exception(uid, actor.uid, "manual", session)
         else:
@@ -214,18 +256,123 @@ async def users_page(
     limit: int,
     query: str,
     exceptions_only: bool = False,
+    directory: PlatformAccessDirectory | None = None,
 ) -> PlatformAccessUsersPage:
     policy = access.policy(await access.state())
-    rows = await access.store.users_with_exceptions(
-        offset, limit, query, exceptions_only=exceptions_only
-    )
+    if directory is not None and not directory.local:
+        if exceptions_only:
+            try:
+                query_id = UUID(query.strip())
+            except ValueError:
+                query_id = None
+            if query_id is not None:
+                rows = await access.store.users_with_exceptions(
+                    offset, limit, str(query_id), exceptions_only=True
+                )
+                total = await access.store.user_count(
+                    str(query_id), exceptions_only=True
+                )
+                resolved = await directory.by_ids(str(row.id) for row, _ in rows)
+            elif query.strip():
+                candidates = await access.store.users_with_exceptions(
+                    0, None, exceptions_only=True
+                )
+                resolved = await directory.by_ids(str(row.id) for row, _ in candidates)
+                needle = fold_text(query.strip())
+                matched = [
+                    (row, exception)
+                    for row, exception in candidates
+                    if (profile := resolved.get(str(row.id))) is not None
+                    and any(
+                        needle in fold_text(value)
+                        for value in (
+                            profile.username,
+                            profile.email,
+                            profile.first_name,
+                            profile.last_name,
+                        )
+                        if value
+                    )
+                ]
+                total = len(matched)
+                rows = matched[offset : offset + limit]
+            else:
+                rows = await access.store.users_with_exceptions(
+                    offset, limit, exceptions_only=True
+                )
+                total = await access.store.user_count(exceptions_only=True)
+                resolved = await directory.by_ids(str(row.id) for row, _ in rows)
+            entries = [
+                (resolved.get(str(row.id), UserSummary(id=str(row.id))), row, exception)
+                for row, exception in rows
+            ]
+        else:
+            selected, total = await directory.search_page(query.strip(), offset, limit)
+            ids = {directory.uuid(profile) for profile in selected}
+            async with access.store.read() as session:
+                local_rows = {
+                    UUID(str(row.id)): row
+                    for row in (
+                        await session.scalars(
+                            select(UserRow).where(UserRow.id.in_(ids))
+                        )
+                    ).all()
+                }
+                exceptions = {
+                    UUID(str(row.user_id)): row
+                    for row in (
+                        await session.scalars(
+                            select(PlatformAccessUserRow).where(
+                                PlatformAccessUserRow.user_id.in_(ids)
+                            )
+                        )
+                    ).all()
+                }
+            entries = [
+                (
+                    profile,
+                    local_rows.get(directory.uuid(profile)),
+                    exceptions.get(directory.uuid(profile)),
+                )
+                for profile in selected
+            ]
+    else:
+        identities_only = (
+            directory is not None and directory.local and not exceptions_only
+        )
+        rows = await access.store.users_with_exceptions(
+            offset,
+            limit,
+            query,
+            exceptions_only=exceptions_only,
+            identities_only=identities_only,
+        )
+        total = await access.store.user_count(
+            query, exceptions_only=exceptions_only, identities_only=identities_only
+        )
+        entries = [
+            (
+                UserSummary(
+                    id=str(row.id),
+                    username=row.username,
+                    email=row.email,
+                    first_name=row.first_name,
+                    last_name=row.last_name,
+                ),
+                row,
+                exception,
+            )
+            for row, exception in rows
+        ]
     slots = asyncio.Semaphore(8)
 
     async def project(
-        row: UserRow, exception: PlatformAccessUserRow | None
+        profile: UserSummary,
+        row: UserRow | None,
+        exception: PlatformAccessUserRow | None,
     ) -> PlatformAccessUser:
         async with slots:
-            uid = str(row.id)
+            uid = profile.id
             sources: list[AdmissionSource] = []
             if await access.platform_admin_uid(uid):
                 sources.append(AdmissionSource(kind="admin"))
@@ -254,21 +401,25 @@ async def users_page(
                     )
             return PlatformAccessUser(
                 user_id=uid,
-                username=row.username,
-                email=row.email,
-                first_name=row.first_name,
-                last_name=row.last_name,
+                username=profile.username or uid,
+                email=profile.email,
+                first_name=profile.first_name,
+                last_name=profile.last_name,
                 sources=sources,
             )
 
-    items = await asyncio.gather(*(project(*row) for row in rows))
-    return PlatformAccessUsersPage(
-        items=items,
-        total=await access.store.user_count(query, exceptions_only=exceptions_only),
+    items = await asyncio.gather(*(project(*entry) for entry in entries))
+    return PlatformAccessUsersPage(items=items, total=total)
+
+
+async def activation_preview(
+    access: PlatformAccess, directory: PlatformAccessDirectory | None = None
+) -> PlatformAccessActivationPreview:
+    directory_profiles = (
+        await directory.search()
+        if directory is not None and not directory.local
+        else None
     )
-
-
-async def activation_preview(access: PlatformAccess) -> PlatformAccessActivationPreview:
     async with access.store.read() as session:
         state = await access.state(session)
         policy, revision = access.policy(state), state.revision
@@ -279,11 +430,33 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
         }
         teams = await access.store.teams(session, eligible_only=True)
         free_joined = await access.store.free_joined_teams(session=session)
+    if directory_profiles is None:
+        entries = [
+            (
+                UserSummary(
+                    id=str(row.id),
+                    username=row.username,
+                    email=row.email,
+                    first_name=row.first_name,
+                    last_name=row.last_name,
+                ),
+                row,
+            )
+            for row in rows
+            if directory is None or row.username is not None
+        ]
+    else:
+        by_id = {UUID(str(row.id)): row for row in rows}
+        entries = [
+            (profile, by_id.get(UUID(profile.id))) for profile in directory_profiles
+        ]
     slots = asyncio.Semaphore(8)
 
-    async def project(row: UserRow) -> PlatformAccessActivationUser:
+    async def project(
+        profile: UserSummary, row: UserRow | None
+    ) -> PlatformAccessActivationUser:
         async with slots:
-            uid = str(row.id)
+            uid = profile.id
             outcome: Literal["allowed", "blocked", "unknown"] = "unknown"
             sources: list[AdmissionSource] = []
             try:
@@ -307,7 +480,8 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
                 elif policy is None:
                     outcome = "blocked"
                 elif (
-                    not row.admission_conflicted
+                    row is not None
+                    and not row.admission_conflicted
                     and row.admission_expires_at is not None
                     and row.admission_expires_at > time.time()
                     and all(
@@ -359,19 +533,21 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
                             break
             return PlatformAccessActivationUser(
                 user_id=uid,
-                username=row.username,
-                email=row.email,
-                first_name=row.first_name,
-                last_name=row.last_name,
+                username=profile.username or uid,
+                email=profile.email,
+                first_name=profile.first_name,
+                last_name=profile.last_name,
                 sources=sources,
                 outcome=outcome,
             )
 
     # Queue work in bounded batches as well as limiting in-flight authority calls.
     items: list[PlatformAccessActivationUser] = []
-    for start in range(0, len(rows), 100):
+    for start in range(0, len(entries), 100):
         items.extend(
-            await asyncio.gather(*(project(row) for row in rows[start : start + 100]))
+            await asyncio.gather(
+                *(project(*entry) for entry in entries[start : start + 100])
+            )
         )
     if (await access.state()).revision != revision:
         raise HTTPException(409, "platform_access_policy_conflict")
@@ -386,17 +562,51 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
 
 
 async def _t0_with_import_count(
-    access: PlatformAccess, actor: KeycloakUser | None = None
+    access: PlatformAccess,
+    actor: KeycloakUser | None = None,
+    directory: PlatformAccessDirectory | None = None,
 ) -> tuple[PlatformT0Preview, int | None]:
+    state = await access.state()
+    if state.t0_completed_at is not None:
+        return (
+            PlatformT0Preview(
+                candidates=0, matching=0, completed_at=state.t0_completed_at
+            ),
+            None,
+        )
+    directory_profiles = (
+        await directory.search()
+        if directory is not None and not directory.local
+        else None
+    )
     async with access.store.read() as session:
         state = await access.state(session)
         rows = list((await session.scalars(select(UserRow))).all())
     revision = state.revision
     policy = access.policy(state)
-    matches = await asyncio.to_thread(
-        lambda: [access.observed_match(row, policy) for row in rows]
+    by_id = {UUID(str(row.id)): row for row in rows}
+    profiles = (
+        directory_profiles
+        if directory_profiles is not None
+        else [
+            UserSummary(
+                id=str(row.id),
+                username=row.username,
+                email=row.email,
+                first_name=row.first_name,
+                last_name=row.last_name,
+            )
+            for row in rows
+            if directory is None or row.username is not None
+        ]
     )
-    matching, candidates = sum(matches), len(rows) - sum(matches)
+    matches = await asyncio.to_thread(
+        lambda: [
+            access.observed_match(by_id.get(UUID(profile.id)), policy)
+            for profile in profiles
+        ]
+    )
+    matching, candidates = sum(matches), len(profiles) - sum(matches)
     if actor is None:
         return (
             PlatformT0Preview(
@@ -426,15 +636,29 @@ async def _t0_with_import_count(
         )
         present = set((await session.scalars(select(UserRow.id))).all())
         now = datetime.now(timezone.utc)
+        selected = [
+            profile
+            for profile, matched in zip(profiles, matches, strict=True)
+            if not matched and UUID(profile.id) not in existing
+        ]
+        if directory_profiles is not None:
+            session.add_all(
+                [
+                    UserRow(id=UUID(profile.id))
+                    for profile in selected
+                    if UUID(profile.id) not in present
+                ]
+            )
+            await session.flush()
         new_rows = [
             PlatformAccessUserRow(
-                user_id=row.id,
+                user_id=UUID(profile.id),
                 source="t0",
                 granted_by=actor.uid,
                 granted_at=now,
             )
-            for row, matched in zip(rows, matches, strict=True)
-            if not matched and row.id in present and row.id not in existing
+            for profile in selected
+            if directory_profiles is not None or UUID(profile.id) in present
         ]
         session.add_all(new_rows)
         state.t0_completed_at = now
@@ -449,16 +673,20 @@ async def _t0_with_import_count(
 
 
 async def t0(
-    access: PlatformAccess, actor: KeycloakUser | None = None
+    access: PlatformAccess,
+    actor: KeycloakUser | None = None,
+    directory: PlatformAccessDirectory | None = None,
 ) -> PlatformT0Preview:
-    result, _ = await _t0_with_import_count(access, actor)
+    result, _ = await _t0_with_import_count(access, actor, directory)
     return result
 
 
 async def import_t0(
-    access: PlatformAccess, actor: KeycloakUser
+    access: PlatformAccess,
+    actor: KeycloakUser,
+    directory: PlatformAccessDirectory | None = None,
 ) -> tuple[PlatformT0Preview, int | None]:
-    return await _t0_with_import_count(access, actor)
+    return await _t0_with_import_count(access, actor, directory)
 
 
 async def require_team(

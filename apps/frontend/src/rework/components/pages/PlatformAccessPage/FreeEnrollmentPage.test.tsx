@@ -141,7 +141,7 @@ it("reports an invalid link without a retry", () => {
   act(() => root.render(<FreeEnrollmentPage />));
   expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.invalidTitle");
   expect(host.textContent).toContain("rework.platformAccess.join.invalidMessage");
-  expect(host.querySelector('a[href="https://support.example.org"]')).not.toBeNull();
+  expect(host.querySelector("footer")).toBeNull();
   expect(host.querySelectorAll("button")).toHaveLength(0);
   expect(host.textContent).not.toContain("Demo");
   expect(state.record).not.toHaveBeenCalled();
@@ -163,6 +163,7 @@ it.each([
   expect(host.querySelector('[role="alert"]')?.textContent).toBe("rework.platformAccess.join.uncheckedMessage");
   expect(host.textContent).not.toContain("rework.platformAccess.join.invalid");
   expect(host.textContent).not.toContain("rework.platformAccess.signOut");
+  expect(host.querySelector('a[href="https://support.example.org"]')).toBeNull();
   act(() => button("rework.platformAccess.retry")!.click());
   expect(state.refetch).toHaveBeenCalledTimes(1);
 });
@@ -178,6 +179,7 @@ it("keeps a retry when joining fails", async () => {
   expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.failedTitle");
   expect(host.querySelector('[role="alert"]')?.textContent).toBe("rework.platformAccess.failed");
   expect(button("rework.platformAccess.retry")).toBeDefined();
+  expect(host.querySelector('a[href="https://support.example.org"]')).toBeNull();
 });
 it("reports a link revoked while the page was open as no longer valid", async () => {
   state.required = false;
@@ -190,6 +192,7 @@ it("reports a link revoked while the page was open as no longer valid", async ()
   await act(async () => button("rework.platformAccess.join.action")!.click());
   expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.invalidTitle");
   expect(button("rework.platformAccess.retry")).toBeUndefined();
+  expect(host.querySelector("footer")).toBeNull();
 });
 it("shows the invitation with the team and a single join action", () => {
   state.required = false;
@@ -201,7 +204,7 @@ it("shows the invitation with the team and a single join action", () => {
   expect(host.querySelector("h2")?.textContent).toBe("Demo");
   expect(host.textContent).toContain("Acme");
   expect(host.querySelectorAll("button")).toHaveLength(1);
-  expect(host.querySelector('a[href="https://support.example.org"]')).not.toBeNull();
+  expect(host.querySelector('a[href="https://support.example.org"]')).toBeNull();
 });
 it("announces that the invitation is being checked", () => {
   state.loading = true;
@@ -209,6 +212,7 @@ it("announces that the invitation is being checked", () => {
   expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.checking");
   expect(host.querySelector('[role="status"]')?.textContent).toBe("rework.platformAccess.loading");
   expect(host.querySelectorAll("button")).toHaveLength(0);
+  expect(host.querySelector("footer")).toBeNull();
 });
 
 it("records one authenticated arrival independently of legal acceptance and enrollment", async () => {

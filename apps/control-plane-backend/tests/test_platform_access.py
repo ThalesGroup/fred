@@ -9,8 +9,13 @@ import pytest
 import pytest_asyncio
 from control_plane_backend.app.dependencies import get_application_configuration
 from control_plane_backend.platform_access import api, service
+from control_plane_backend.platform_access.directory import PlatformAccessDirectory
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import UserTeamRelation
+from control_plane_backend.users.dependencies import (
+    UserServiceDependencies,
+    get_user_service_dependencies,
+)
 from fastapi import FastAPI, HTTPException
 from fred_core.common import TeamId
 from fred_core.security.models import Resource
@@ -162,6 +167,74 @@ def user(attribute="other"):
     )
 
 
+def local_user_deps() -> UserServiceDependencies:
+    return cast(
+        UserServiceDependencies,
+        SimpleNamespace(
+            configuration=SimpleNamespace(
+                security=SimpleNamespace(user_directory="local")
+            ),
+            create_keycloak_admin_client=lambda: None,
+        ),
+    )
+
+
+class FakeDirectoryAdmin:
+    def __init__(self, users):
+        self.users = {item["id"]: item for item in users}
+        self.calls = []
+        self.get_calls = []
+
+    async def a_get_users(self, params):
+        self.calls.append(params)
+        for field in ("username", "email"):
+            if field in params:
+                value = str(params[field]).casefold()
+                matches = [
+                    item
+                    for item in self.users.values()
+                    if str(item.get(field, "")).casefold() == value
+                ]
+                return matches[params["first"] : params["first"] + params["max"]]
+        query = str(params.get("search", "")).casefold()
+        matches = [
+            item
+            for item in self.users.values()
+            if query
+            in " ".join(
+                str(item.get(field, ""))
+                for field in ("username", "firstName", "lastName", "email")
+            ).casefold()
+        ]
+        return matches[params["first"] : params["first"] + params["max"]]
+
+    async def a_users_count(self, params=None):
+        params = params or {}
+        query = str(params.get("search", "")).casefold()
+        return sum(
+            query
+            in " ".join(
+                str(item.get(field, ""))
+                for field in ("username", "firstName", "lastName", "email")
+            ).casefold()
+            for item in self.users.values()
+        )
+
+    async def a_get_user(self, user_id):
+        self.get_calls.append(user_id)
+        return self.users.get(user_id)
+
+
+def keycloak_directory(admin):
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            security=SimpleNamespace(user_directory="keycloak")
+        ),
+        create_keycloak_admin_client=lambda: admin,
+    )
+    return PlatformAccessDirectory(cast(UserServiceDependencies, deps))
+
+
 @pytest.mark.asyncio
 async def test_t0_once_and_deleted_entries_never_return(access):
     actor, existing, matching = user(), user(), user("accepted")
@@ -183,6 +256,199 @@ async def test_t0_once_and_deleted_entries_never_return(access):
 
 
 @pytest.mark.asyncio
+async def test_keycloak_grant_resolves_profile_without_prior_fred_row(access):
+    actor = user()
+    uid = uuid4()
+    missing = uuid4()
+    admin = FakeDirectoryAdmin(
+        [
+            {
+                "id": str(uid),
+                "username": "julien-bouchet",
+                "firstName": "Julien",
+                "lastName": "BOUCHET",
+            }
+        ]
+    )
+    directory = keycloak_directory(admin)
+
+    with pytest.raises(HTTPException, match="user_not_found"):
+        await service.grant_users(access, actor, [uid, missing], directory)
+    assert await access.store.user(uid) is None
+
+    assert await service.grant_users(access, actor, [uid], directory) == 1
+    assert (await access.store.user(uid)).username is None
+    assert (
+        await service.users_page(
+            access, 0, 25, "", directory=PlatformAccessDirectory(local_user_deps())
+        )
+    ).total == 0
+    page = await service.users_page(access, 0, 25, "", True, directory)
+    assert page.total == 1
+    assert (
+        page.items[0].username,
+        page.items[0].first_name,
+        page.items[0].last_name,
+    ) == ("julien-bouchet", "Julien", "BOUCHET")
+
+    admin.users[str(uid)]["firstName"] = "Jules"
+    page = await service.users_page(access, 0, 25, "Jules", True, directory)
+    assert page.total == 1 and page.items[0].first_name == "Jules"
+
+    del admin.users[str(uid)]
+    page = await service.users_page(access, 0, 25, "", True, directory)
+    assert page.items[0].username == str(uid)
+    by_id = await service.users_page(access, 0, 25, str(uid), True, directory)
+    assert by_id.total == 1 and by_id.items[0].username == str(uid)
+    assert [source.kind for source in page.items[0].sources] == ["manual"]
+    await service.set_user(access, actor, uid, False, directory)
+    assert await access.store.exception(uid) is None
+
+    second = uuid4()
+    admin.users[str(second)] = {"id": str(second), "username": "new-account"}
+    await service.set_user(access, actor, second, True, directory)
+    assert await access.store.exception(second) is not None
+
+
+@pytest.mark.asyncio
+async def test_keycloak_t0_imports_directory_humans_not_fred_only_rows(access):
+    actor = user()
+    federated, created, technical = uuid4(), uuid4(), uuid4()
+    admin = FakeDirectoryAdmin(
+        [
+            {"id": str(federated), "username": "federated", "firstName": "Fed"},
+            {"id": str(created), "username": "created-in-keycloak"},
+            {"id": str(uuid4()), "username": "service-account-test"},
+            {"id": "f:provider:unimported", "username": "not-yet-imported"},
+        ]
+    )
+    directory = keycloak_directory(admin)
+    async with access.store.mutation() as session:
+        session.add(UserRow(id=technical))
+
+    preview = await service.t0(access, directory=directory)
+    assert (preview.candidates, preview.matching) == (2, 0)
+    result, count = await service.import_t0(access, actor, directory)
+    assert result.completed_at is not None and count == 2
+    assert await access.store.exception(federated) is not None
+    assert await access.store.exception(created) is not None
+    assert (await access.store.user(created)).username is None
+    assert await access.store.exception(technical) is None
+    reviewed = await service.activation_preview(access, directory)
+    assert {item.user_id for item in reviewed.users} == {
+        str(federated),
+        str(created),
+    }
+
+
+@pytest.mark.asyncio
+async def test_keycloak_directory_paginates_and_fails_when_unavailable(access):
+    admin = FakeDirectoryAdmin(
+        [
+            {"id": str(UUID(int=index + 1)), "username": f"person-{index}"}
+            for index in range(205)
+        ]
+    )
+    directory = keycloak_directory(admin)
+    assert len(await directory.search()) == 205
+    assert len(await directory.search("person-1")) == 111
+    admin.calls.clear()
+    page = await service.users_page(access, 0, 25, "person-1", directory=directory)
+    assert page.total == 111 and len(page.items) == 25
+    assert len(admin.calls) == 1
+    preview = await service.t0(access, directory=directory)
+    assert (preview.candidates, preview.matching) == (205, 0)
+    imported, count = await service.import_t0(access, user(), directory)
+    assert count == 205 and imported.completed_at is not None
+    searched = await service.users_page(access, 0, 25, "person-1", True, directory)
+    assert searched.total == 111 and len(searched.items) == 25
+    assert admin.get_calls == []
+    admin.calls.clear()
+    assert (await service.t0(access, directory=directory)).completed_at is not None
+    assert admin.calls == []
+
+    class UnavailableAdmin:
+        async def a_users_count(self, _params=None):
+            raise RuntimeError("directory down")
+
+        async def a_get_users(self, _params):
+            raise RuntimeError("directory down")
+
+        async def a_get_user(self, _user_id):
+            raise RuntimeError("directory down")
+
+    unavailable = keycloak_directory(UnavailableAdmin())
+    with pytest.raises(HTTPException, match="platform_access_directory_unavailable"):
+        await unavailable.search("person")
+    with pytest.raises(HTTPException, match="platform_access_directory_unavailable"):
+        await unavailable.by_ids([str(uuid4())])
+
+
+@pytest.mark.asyncio
+async def test_keycloak_add_search_counts_only_selectable_people_and_bounds_broad_queries():
+    admin = FakeDirectoryAdmin(
+        [
+            {"id": str(uuid4()), "username": "user-human"},
+            {"id": str(uuid4()), "username": "service-account-user"},
+            {"id": "f:provider:unimported", "username": "user-external"},
+        ]
+    )
+    directory = keycloak_directory(admin)
+    page, total = await directory.search_page("user", 0, 25)
+    assert total == 1 and [person.username for person in page] == ["user-human"]
+    assert await directory.search_page("user", 1, 25) == ([], 1)
+
+    large = FakeDirectoryAdmin(
+        [
+            {"id": str(UUID(int=index + 1)), "username": f"person-{index}"}
+            for index in range(1001)
+        ]
+    )
+    with pytest.raises(HTTPException) as error:
+        await keycloak_directory(large).search_page("person", 0, 25)
+    assert error.value.status_code == 422
+    assert [call.get("exact") for call in large.calls] == [True, True]
+
+    admin_id = uuid4()
+    exact = FakeDirectoryAdmin(
+        [
+            {
+                "id": str(UUID(int=index + 1)),
+                "username": f"person-{index}",
+                "email": f"admin-{index}@example.org",
+            }
+            for index in range(1001)
+        ]
+        + [{"id": str(admin_id), "username": "admin"}]
+    )
+    directory = keycloak_directory(exact)
+    page, total = await directory.search_page("admin", 0, 25)
+    assert total == 1 and page[0].id == str(admin_id)
+    page, total = await directory.search_page(str(admin_id), 0, 1)
+    assert total == 1 and page[0].username == "admin"
+
+
+@pytest.mark.asyncio
+async def test_local_directory_rejects_nonlocal_and_profileless_identities(access):
+    actor = user()
+    unknown = uuid4()
+    profileless, local_id = uuid4(), uuid4()
+    async with access.store.mutation() as session:
+        session.add(UserRow(id=profileless))
+        session.add(UserRow(id=local_id, username="local-person"))
+    directory = PlatformAccessDirectory(local_user_deps())
+
+    with pytest.raises(HTTPException, match="user_not_found"):
+        await service.grant_users(access, actor, [unknown], directory)
+    with pytest.raises(HTTPException, match="user_not_found"):
+        await service.grant_users(access, actor, [profileless], directory)
+    assert (await service.users_page(access, 0, 25, "", directory=directory)).total == 1
+    by_id = await service.users_page(access, 0, 1, str(local_id), directory=directory)
+    assert by_id.total == 1 and by_id.items[0].username == "local-person"
+    assert (await service.t0(access, directory=directory)).candidates == 1
+
+
+@pytest.mark.asyncio
 async def test_t0_audit_reports_actual_import_once(access, monkeypatch):
     actor, candidate, matching = user(), user(), user("accepted")
     for person in (actor, candidate, matching):
@@ -194,6 +460,7 @@ async def test_t0_audit_reports_actual_import_once(access, monkeypatch):
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -378,6 +645,7 @@ async def test_admin_endpoints_reject_nonplatform_admins(access):
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = user
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -425,6 +693,7 @@ async def test_denied_self_status_does_not_provision_team_or_directory(access):
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_own_user_for_platform_access] = lambda: person
     app.dependency_overrides[get_application_configuration] = lambda: SimpleNamespace(
         app=SimpleNamespace(gcu_version="v1")
@@ -703,6 +972,7 @@ async def test_rule_endpoints_permissions_validation_and_retired_catalog(access)
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -828,28 +1098,17 @@ async def test_completed_t0_retry_reports_completion_despite_concurrent_rule_edi
     access, monkeypatch
 ):
     import asyncio
-    import threading
 
     actor = user("accepted")
     await access.observe(actor)
     first = await service.t0(access, actor)
-    entered, release = threading.Event(), threading.Event()
-    original = access.observed_match
 
-    def blocked_match(row, policy):
-        entered.set()
-        released = release.wait(timeout=4)
-        assert released
-        return original(row, policy)
+    def unexpected_match(*_args):
+        raise AssertionError("completed import scanned")
 
-    monkeypatch.setattr(access, "observed_match", blocked_match)
+    monkeypatch.setattr(access, "observed_match", unexpected_match)
     retry = asyncio.create_task(service.t0(access, actor))
-    entered_in_time = await asyncio.to_thread(entered.wait, 2)
-    assert entered_in_time
-    try:
-        await service.save_policy(access, actor, draft("accepted"), 1)
-    finally:
-        release.set()
+    await service.save_policy(access, actor, draft("accepted"), 1)
     assert first.completed_at is not None
     assert (await retry).completed_at == first.completed_at.replace(tzinfo=None)
 
@@ -929,6 +1188,7 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -1164,6 +1424,7 @@ async def test_own_claim_endpoint_requires_admin_own_verified_human_and_disables
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -1409,6 +1670,7 @@ async def test_link_admin_history_and_tokens_are_guarded(access, monkeypatch):
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -1709,6 +1971,7 @@ async def test_population_preview_suspension_overrides_exception_and_requires_ad
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     access.rebac.admin = False
     async with AsyncClient(
@@ -1761,7 +2024,7 @@ async def test_users_listing_restricts_to_individual_exceptions_newest_first(
         "alice",
         "Bob",
         "zoe",
-        None,
+        str(ids[3]),
     ]
     assert everyone.total == 4
     # No exception: no individual source, hence no grant date.
@@ -1800,12 +2063,13 @@ async def test_users_listing_restricts_to_individual_exceptions_newest_first(
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         default = await client.get("/admin/platform/access/users")
-        assert default.status_code == 200 and default.json()["total"] == 4
+        assert default.status_code == 200 and default.json()["total"] == 3
         filtered = await client.get(
             "/admin/platform/access/users",
             params={"exceptions_only": "true", "query": "o", "limit": 1, "offset": 1},
