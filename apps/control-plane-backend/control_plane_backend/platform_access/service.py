@@ -92,6 +92,7 @@ async def has_admission_sources(
                             .where(
                                 PlatformAccessLinkRow.team_id == TeamMetadataRow.id,
                                 PlatformAccessLinkRow.kind == "free",
+                                PlatformAccessLinkJoinerRow.deleted_at.is_(None),
                             )
                             .exists()
                         ),
