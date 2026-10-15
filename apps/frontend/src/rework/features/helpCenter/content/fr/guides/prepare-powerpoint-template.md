@@ -1,6 +1,6 @@
 ---
 title: Préparer son template PowerPoint
-order: 30
+order: 40
 description: Ce qui fait un bon template pour la génération de présentations, et comment le faire comprendre à l'agent.
 icon: slideshow
 ---

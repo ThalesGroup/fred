@@ -1,6 +1,6 @@
 ---
 title: Prepare your PowerPoint template
-order: 30
+order: 40
 description: What makes a good template for generated presentations, and how to make the agent understand it.
 icon: slideshow
 ---
