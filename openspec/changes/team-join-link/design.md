@@ -10,7 +10,7 @@ Team membership writes are gated on `can_administer_members` (`team_admin` only,
 
 **Goals:** a team admin shares one URL; an admitted person who opens it becomes `team_member`; a non-admitted person gets a clear refusal and nothing changes.
 
-**Non-Goals:** e-mail delivery, granting roles above member, usage caps, access requests, changing Free links or the platform-administrator screens beyond filtering by kind, merging the two route families (see Decision 2).
+**Non-Goals:** e-mail delivery, granting roles above member, usage caps, access requests, showing team links to platform administrators, changing Free links or the platform-administrator screens beyond filtering by kind, merging the two route families (see Decision 2).
 
 ## Decisions
 
@@ -19,8 +19,8 @@ Team membership writes are gated on `can_administer_members` (`team_admin` only,
 `platform_access_links.kind` (`free` | `team`, not null, server default `free`). Everything else (token hashing, reveal, revoke, expiry, opening count, joiners, cleanup, log redaction, the `/join/:token` page) is shared.
 
 - Validity: `free` requires the team's Free flag (unchanged); `team` does not.
-- Enrollment: for `team`, call `PlatformAccess.admitted(user)` before writing the membership. The caller is not yet a member, so the check cannot be satisfied by the team being joined, even when that team is authorized or Free. Refusal: `403 team_link_requires_platform_access`.
-- Preview and opening on a `team` link by a non-admitted caller return the same 403 without the team name, so the link reveals nothing to someone who cannot use it.
+- Platform access first: on a `team` link, preview, opening, terms acceptance and enrollment call `PlatformAccess.admitted(user)` right after resolving the token and before anything else (team name, counter, CGU, membership). A non-admitted caller gets the existing `403 platform_access_denied`, the same answer as any other protected request, so no new error code exists. The caller is not yet a member, so the check cannot be satisfied by the team being joined, even when that team is authorized or Free.
+- Frontend: `FreeEnrollmentPage` treats `403 platform_access_denied` as "go to the refusal screen" and replaces the location with `/platform-access-denied` (`PlatformAccessDeniedPage`). The global denial handler does not redirect on `/join/*` because Free links must stay usable there, so the page does it itself. No new screen or state.
 - Kind is fixed at creation and never changes.
 
 Alternative rejected: a separate `team_join_links` table and landing page. It would duplicate token handling, reveal, revocation, expiry, counters, joiners, cleanup, access-log redaction and the landing page, against the prime directive. Cost of reuse: the code stays in `platform_access/`; its service functions already take `team_id`, so team routes call them with a different authorization dependency and an explicit kind filter.
@@ -29,7 +29,7 @@ Alternative rejected: a separate `team_join_links` table and landing page. It wo
 
 `/teams/{team_id}/join-links` (POST create, GET list, GET `{link_id}/joiners`, POST `{link_id}/reveal`, DELETE `{link_id}`, DELETE `inactive`), gated on `can_administer_members` through `_validate_team_and_check_permission`, always `kind=team`. The existing `/admin/platform/access/teams/{team_id}/enrollment-links*` routes stay `CAN_MANAGE_PLATFORM` and become `kind=free`. A link id of the other kind answers 404.
 
-Alternative considered: one route family for both kinds, authorized per kind. Fewer routes, but it breaks the platform-administrator API and generated client in the same change. Left as an open question for a later reduction.
+Alternative considered: one route family for both kinds, authorized per kind. Fewer routes, but it breaks the platform-administrator API and generated client in the same change. Deferred by the owner to a separate cleanup issue.
 
 ### 3. Permissions and lifecycle
 
@@ -46,7 +46,7 @@ Existing `platform.access.link.created|revealed|revoked` and `platform.access.li
 
 ### 5. Frontend
 
-Extract the list/create/copy/revoke/cleanup/joiners UI of `PlatformAccessLinkManager` into one shared manager fed with the generated hooks of either route family; the Free-specific parts (Link access toggle, suspended notice) stay on the admin side. `TeamSettingsMembers` gets an "Invite link" action for team admins. `FreeEnrollmentPage` maps `403 team_link_requires_platform_access` to a card telling the person to ask a platform administrator, with `contactSupportLink` when configured, and no join button.
+Extract the list/create/copy/revoke/cleanup/joiners UI of `PlatformAccessLinkManager` into one shared manager fed with the generated hooks of either route family; the Free-specific parts (Link access toggle, suspended notice) stay on the admin side. `TeamSettingsMembers` gets an "Invite link" action next to "Add members", for team admins only. Join-page behavior: see Decision 1.
 
 ## Risks / Trade-offs
 
@@ -58,13 +58,13 @@ Extract the list/create/copy/revoke/cleanup/joiners UI of `PlatformAccessLinkMan
 
 One Alembic revision on the swift head (`24c2f88374fe` at time of writing; re-parent before merge if swift moves): add `kind` with server default `free`. Rollback drops the column after deleting `team` rows. Migration note: operations impact (schema migration), minor version.
 
-## Open Questions
+## Owner decisions (2026-10-15)
 
-Each has a recommendation; the draft above assumes it.
+1. Platform access is checked before anything; a non-admitted person goes straight to the existing refusal screen, never the invitation page, no team name, no opening counted.
+2. No use cap; expiry optional.
+3. Links survive their creator's demotion or departure.
+4. Platform administrators do not see team links on the admin page.
+5. UI: Members tab, "Invite link" next to "Add members".
+6. Route-family merge: later, separate cleanup issue.
 
-1. Hide the team name from a non-admitted caller? Recommended: yes, 403 with no preview.
-2. Usage cap or mandatory expiry? Recommended: neither, same optional expiry as Free links; revocation and joiners cover misuse.
-3. Do links survive their creator's demotion or departure? Recommended: yes, they belong to the team.
-4. Should platform administrators see every team's `team` links from the admin page? Recommended: no in this slice.
-5. Where in the UI? Recommended: Members tab, an "Invite link" action next to "Add members".
-6. Merge the two route families into one, authorized per kind? Recommended: separate follow-up reduction issue, not this change.
+No open questions remain.
