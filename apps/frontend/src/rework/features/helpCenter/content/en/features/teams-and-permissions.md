@@ -52,18 +52,20 @@ its Admins adds you or sends you an invite link.
 
 ### Invite links
 
-A team Admin can create invite links from **Settings → Members → Invite link**
-and share them however they like (chat, e-mail…). Opening a valid link and
+A team Admin can open **Settings → Members → Invite link** and turn on
+**Enable invitation by link**. The team then has one link, shown in full with a
+**Copy** button, to share however they like (chat, e-mail…). Opening it and
 choosing **Join the team** makes you a **Member**; an Admin can then give you
 other roles.
 
-An invite link only works for people who already have access to the platform.
-It does not give access to the platform itself: without that access, the link
-leads to the page that explains how to request it.
+The link only works for people who already have access to the platform. It does
+not give access to the platform itself: without that access, the link leads to
+the page that explains how to request it.
 
-Each link can have a note and an expiry date. The Admin can copy it again,
-revoke it, and see who joined through it. Revoking a link does not remove the
-people who already joined.
+Turning the switch off pauses the link: it stops working until the switch is
+turned on again, with the same link. **Generate a new link** replaces it for
+good: the previous link no longer works. Neither removes the people who already
+joined.
 
 ## Who creates teams
 

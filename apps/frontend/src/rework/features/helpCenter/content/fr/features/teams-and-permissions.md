@@ -58,18 +58,20 @@ d'invitation.
 
 ### Liens d'invitation
 
-Un Admin de l'équipe peut créer des liens d'invitation depuis **Réglages →
-Membres → Lien d'invitation** et les partager comme il le souhaite (messagerie,
-e-mail…). Ouvrir un lien valide puis choisir **Rejoindre l'équipe** vous rend
-**Membre** ; un Admin peut ensuite vous donner d'autres rôles.
+Un Admin de l'équipe peut ouvrir **Réglages → Membres → Lien d'invitation** et
+activer **Activer l'invitation par lien**. L'équipe dispose alors d'un lien,
+affiché en entier avec un bouton **Copier**, à partager comme il le souhaite
+(messagerie, e-mail…). Ouvrir ce lien puis choisir **Rejoindre l'équipe** vous
+rend **Membre** ; un Admin peut ensuite vous donner d'autres rôles.
 
-Un lien d'invitation ne fonctionne que pour les personnes qui ont déjà accès à
-la plateforme. Il ne donne pas accès à la plateforme elle-même : sans cet
-accès, le lien mène à la page qui explique comment le demander.
+Le lien ne fonctionne que pour les personnes qui ont déjà accès à la
+plateforme. Il ne donne pas accès à la plateforme elle-même : sans cet accès, le
+lien mène à la page qui explique comment le demander.
 
-Chaque lien peut avoir une note et une date d'expiration. L'Admin peut le
-copier à nouveau, le révoquer et voir qui l'a utilisé pour rejoindre l'équipe.
-Révoquer un lien ne retire pas les personnes déjà entrées.
+Désactiver l'interrupteur met le lien en pause : il ne fonctionne plus jusqu'à
+sa réactivation, avec le même lien. **Générer un nouveau lien** le remplace
+définitivement : l'ancien lien ne fonctionne plus. Dans les deux cas, les
+personnes déjà entrées restent membres.
 
 ## Qui crée les équipes
 

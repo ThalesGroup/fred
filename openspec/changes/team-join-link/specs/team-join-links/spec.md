@@ -1,62 +1,61 @@
 ## ADDED Requirements
 
-### Requirement: Team admins manage join links for their own team
+### Requirement: Team admins control one invite link for their team
 
-A person holding `can_administer_members` on a non-personal team SHALL be able to create, list, copy, revoke and bulk-delete obsolete join links for that team, and list the people who joined through each link. Each link SHALL have an optional note and an optional future expiry, and SHALL follow the lifecycle of Free-team links (independent links, irreversible individual revocation, authenticated opening count, recoverable URL for an own human credential only). Join links SHALL NOT depend on the team's Free flag, joining mode or visibility, SHALL have no use cap, and SHALL remain valid when their creator loses the team admin role or leaves the team. Join links and Free-team links SHALL be listed, copied, revoked and cleaned up only through their own administration surface; platform administrators' Free-link history SHALL NOT show join links. A person without `can_administer_members` on the team SHALL NOT manage its join links.
+A person holding `can_administer_members` on a non-personal team SHALL be able to read, enable, pause and regenerate that team's single invite link, using their own human credential. The first enabling SHALL create the link. Pausing and resuming SHALL keep the same URL. Regenerating SHALL make the previous URL permanently invalid and return a new, enabled URL. The link SHALL have no expiry or use cap, SHALL NOT depend on the team's Free flag, joining mode or visibility, and SHALL remain valid when its creator loses the team admin role. Team links SHALL NOT appear in, or be managed through, platform administrators' Free-link administration. A person without `can_administer_members` on the team SHALL NOT read or change its invite link.
 
-#### Scenario: Team admin creates a link
+#### Scenario: Enable, pause and resume
 
-- **GIVEN** a team admin of an `invite_only` private team
-- **WHEN** they create a join link with a note and no expiry
-- **THEN** a usable `/join/:token` URL SHALL be returned with no-store headers
-- **AND** the link SHALL appear in the team's join-link list and not in the platform administrators' Free-link history
+- **GIVEN** a team admin of a private `invite_only` team without an invite link
+- **WHEN** they enable the invitation, pause it, then enable it again
+- **THEN** the first enabling SHALL return a `/join/:token` URL
+- **AND** pausing and resuming SHALL return that same URL, reported as disabled then enabled
 
-#### Scenario: Member without admin role tries to manage links
+#### Scenario: Regenerate
 
-- **GIVEN** a team member who is not team admin
-- **WHEN** they call any join-link administration route for that team
-- **THEN** the request SHALL be refused and no link, token or history SHALL be returned
+- **WHEN** a team admin generates a new link
+- **THEN** a different URL SHALL be returned, enabled
+- **AND** the previous URL SHALL be refused as no longer valid
 
-#### Scenario: Personal team
+#### Scenario: Member without admin role
 
-- **WHEN** a join link is requested for a personal team
-- **THEN** creation SHALL be refused
+- **WHEN** a team member who is not team admin reads or changes the invite link
+- **THEN** the request SHALL be refused without returning a URL
 
-### Requirement: Team join links never admit a person to the platform
+#### Scenario: Free-link administration
 
-Preview, opening, terms acceptance and enrollment through a join link SHALL check that the caller is admitted by platform access before any other effect, and before the membership is written. A non-admitted caller SHALL receive `403 team_link_requires_platform_access` without the team name, and SHALL NOT gain membership, admission, or an opening count. The join page SHALL then send them to the existing platform-access refusal screen. An admitted caller SHALL be granted `team_member` only, for themselves only, with existing CGU and suspension checks. A caller already holding a role on the team SHALL succeed without change or join event. A successful new join SHALL be recorded in the link's joiners and emit one audit event without the token.
+- **WHEN** a platform administrator lists, reveals, revokes or cleans up the team's Free links
+- **THEN** the team invite link SHALL NOT be listed or affected
+
+### Requirement: Team invite links never admit a person to the platform
+
+On a valid team invite link, preview, opening, terms acceptance and enrollment SHALL check that the caller is admitted by platform access before any membership, opening count, terms acceptance or team-name disclosure. A non-admitted caller SHALL receive `403 team_link_requires_platform_access` without the team name, and the join page SHALL send them to the existing platform-access refusal screen. A paused or replaced link SHALL be answered as an invalid link, shown by the join page's existing "no longer valid" state, without the team name or any count. An admitted caller SHALL be granted `team_member` only, for themselves only, with existing terms and suspension checks. A caller already holding a role SHALL succeed without change or join event.
 
 #### Scenario: Admitted person joins
 
-- **GIVEN** a valid join link and an admitted person who is not a member
+- **GIVEN** an enabled invite link and an admitted person who is not a member
 - **WHEN** they open the link and join
-- **THEN** they SHALL become `team_member` of that team and appear in the link's joiners
+- **THEN** they SHALL become `team_member` of that team
 
-#### Scenario: Person without platform access opens the link
+#### Scenario: Person without platform access
 
 - **GIVEN** platform filtering is on and the person is not admitted
-- **WHEN** they open the link
-- **THEN** they SHALL be sent to the existing platform-access refusal screen without seeing the invitation page
+- **WHEN** they open an enabled invite link
+- **THEN** they SHALL be sent to the platform-access refusal screen
 - **AND** no team name, membership, admission or opening count SHALL be produced
 
-#### Scenario: Link to an authorized or Free team does not admit
+#### Scenario: Authorized or Free team does not admit
 
-- **GIVEN** a join link for a team that is authorized or Free in platform access
-- **WHEN** a non-admitted person tries to enroll through it
-- **THEN** enrollment SHALL be refused and the team SHALL NOT become their admission source
+- **GIVEN** an invite link for a team that is authorized or Free in platform access
+- **WHEN** a non-admitted person tries to join through it
+- **THEN** the join SHALL be refused and the team SHALL NOT become their admission source
+
+#### Scenario: Paused link
+
+- **WHEN** someone opens an invite link whose invitation is paused
+- **THEN** the join page SHALL show that the invitation link is no longer valid, without the team name
 
 #### Scenario: Already a member
 
-- **WHEN** an existing member joins through a valid join link
+- **WHEN** an existing member joins through the invite link
 - **THEN** the request SHALL succeed, their roles SHALL be unchanged and no join event SHALL be emitted
-
-#### Scenario: Revoked or expired link
-
-- **WHEN** an admitted person opens a revoked or expired join link
-- **THEN** it SHALL be reported as no longer valid and no membership SHALL be granted
-
-#### Scenario: Creator is no longer team admin
-
-- **GIVEN** a join link created by a team admin who has since lost the role
-- **WHEN** an admitted person joins through it
-- **THEN** the join SHALL succeed and the remaining team admins SHALL still manage the link
