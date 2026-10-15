@@ -17,14 +17,16 @@ Selecting a corpus document also preserves enabled conversation attachments.
 
 Running Fred services, demo identities and teams, Knowledge Flow ingestion and
 embeddings, and the public test assistant with the `document_access` capability.
-See `validation/README.md`.
+See the [local integration-test prerequisites](../../../../validation/README.md#run-against-the-existing-k3d-deployment),
+including password-grant login and model authorization for the no-LLM agent.
 
 ## Configuration
 
 Use the existing validation endpoint variables to target the intended deployment.
 For local k3d, use the realm URL trusted by its pods (`http://keycloak:8080/realms/app`),
 with the workstation's existing `keycloak` host alias. See the README's complete
-command and temporary local direct-grant prerequisite.
+command and local direct-grant prerequisite. Keep test settings enabled across
+manual reruns and restore their original values when the testing session ends.
 No chart or service configuration changes are required.
 
 ## Upgrade

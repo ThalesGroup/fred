@@ -119,12 +119,16 @@ remains future work.
    Keycloak and the control-plane database must be seeded with the
    `demo_provisioning` fixture's users/teams/roles (`make build-demo-bundle` +
    Admin > Migration upload - see the intro above).
-2. **Direct-grant on the `app` Keycloak client** (local test realm only). The
-   validation logs users in with the *password grant*. Temporarily enable Direct
-   access grants on this client in the local Keycloak admin console, then restore
-   its previous value after the campaign. No realm re-import or restart is needed.
-   Do not change shared realm templates or production settings for this test.
-3. **No grant signing requirement.** This suite targets RUNTIME-07 rev. 2: the
+2. **Password-grant login on the local test client.** The harness logs in as
+   each demo user without a browser. This requires **Direct access grants** on
+   Keycloak client `app`; a successful browser login does not prove this flow is
+   enabled. See the [k3d preparation procedure](#run-against-the-existing-k3d-deployment)
+   for the setting, its lifetime and failure symptoms.
+3. **Test agent, document capability and model access.** Runtime scenarios need
+   these enabled for the test team, independently of its users' roles. The same
+   [k3d procedure](#run-against-the-existing-k3d-deployment) explains the model
+   prerequisite even for **Test Assistant (no LLM)**.
+4. **No grant signing requirement.** This suite targets RUNTIME-07 rev. 2: the
    control-plane does not issue `ExecutionGrant`; runtime pods validate the user
    JWT and perform pod-side OpenFGA checks.
 
@@ -136,7 +140,7 @@ remains future work.
 | `FRED_CLIENT_ID` | `app` | Public client used for the password grant |
 | `FRED_USER_PASSWORD` | `Azerty123_` | Fallback password, used only for a user the fixture has no per-user password for (each of the 15 fixture users normally carries its own `password` field - see `factory_config.FactoryUser.password`) |
 | `FRED_CONTROL_PLANE_URL` | `http://localhost:8222/control-plane/v1` | Control-plane API base. In localhost auth/isolation mode this is the direct control-plane app, not the runtime/frontend origin. |
-| `FRED_RUNTIME_PUBLIC_BASE` | `http://localhost:8000` via `make validate-auth-isolation-localhost` | Public origin used to resolve ingress-relative runtime URLs returned by `prepare-execution`, e.g. direct `fred-agents` or the frontend origin for proxy-path validation. |
+| `FRED_RUNTIME_PUBLIC_BASE` | `http://localhost:8000` | Public origin used to resolve ingress-relative runtime URLs returned by `prepare-execution`, e.g. direct `fred-agents` or the frontend origin for proxy-path validation. |
 | `FRED_CONFIG_PATH` | `../apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/users.json` | Source of truth for users/roles |
 | `FRED_TEST_TEAM` | `fredlab` | Collaborative team used for isolation checks |
 | `FRED_TEST_AGENT_ID` | `fred.github.test_assistant` | Public no-LLM agent used for deterministic runtime execution |
@@ -363,28 +367,55 @@ and is rejected even though login succeeds. Use the realm URL below, with
 `keycloak` resolving to `127.0.0.1` on the workstation, as required by
 `deploy/k3d/finish` for browser login too (`getent hosts keycloak` to check).
 
-Before running, enable **Direct access grants** for client `app` in the local
-test realm (Keycloak admin console on port 8080, realm `app`, Clients, `app`,
-Settings, Capability config). The factory disables this password grant by
-default. Restore the original setting after the campaign. This is a local test
-prerequisite, not a change to the shared factory templates or production realms.
-The harness never changes Keycloak settings or turns off JWT validation.
+A healthy cluster and a working browser login are not sufficient. Prepare the
+following once for your local integration-testing session, before running Make:
 
-In Fred's **Admin > Features**, enable **Test Assistant (no LLM)** and
-**document_access** for `FRED_TEST_TEAM` (default `fredlab`), either through the
-platform default or an explicit team grant. A running pod alone does not make
-its templates available to a team. The suite verifies this prerequisite without
-changing capability grants.
-The runtime also checks access to its configured default chat model when it
-activates this graph agent, even though the document scenario makes no LLM call.
-Enable that model for the test team too (the default k3d configuration uses
-`openai/mistral-small-latest`). A `ModelNotUsableError` in the runtime logs is a
-setup failure, not evidence of document isolation.
+1. **Import the demo users, teams and roles** through Fred's **Admin > Migration**
+   with the demo bundle described above. The harness exercises several identities
+   and teams; your own administrator account cannot substitute for them.
+2. **Enable password login for the test client.** Open the Keycloak admin console
+   at `http://keycloak:8080`, select realm **app**, then
+   `Clients > app > Settings > Capability config`. Switch **Direct access grants**
+   **On** and **Save**.
+   Record its previous value. The factory defaults this setting to **Off**. The
+   browser uses an interactive authorization-code flow; the harness instead sends
+   each demo user's credentials to the token endpoint with `grant_type=password`
+   so it can test their individual permissions. Enabling this login flow does not
+   grant a Fred role or bypass JWT/OpenFGA checks. No restart is required.
+3. **Enable the runtime prerequisites in Fred's Admin > Features.** For
+   `FRED_TEST_TEAM` (default `fredlab`), enable **Test Assistant (no LLM)**
+   (`fred.github.test_assistant`), **document_access**, and the runtime's configured
+   default chat model. Use the platform default or an explicit team grant, and
+   record any settings you change. The default k3d model is
+   `openai/mistral-small-latest` (`model__openai__mistral-small-latest`); use the
+   model selected by your deployment if different. A running pod only registers
+   its catalog: team access is still controlled by these grants. The runtime
+   checks model access during graph-agent activation even though this diagnostic
+   agent makes no chat LLM call. Document ingestion still requires working
+   embeddings and a Knowledge Flow worker.
+
+**Keep these settings enabled throughout your manual test iterations.** The Make
+command neither enables them nor restores them afterward. Restore the original
+Keycloak and capability/model settings when you finish the testing session, not
+between commands you intend to rerun. After a fresh cluster or infrastructure
+reprovisioning, check the prerequisites again. These are local test settings;
+leave shared realm templates and production policy unchanged.
+
+**Why the UI self-test can work while Make fails:** the UI uses the signed-in
+browser user's token. It does not perform password-grant logins as all the demo
+users. Agent, capability and model access still apply to its selected team.
+
+| Symptom | Meaning and action |
+| --- | --- |
+| Many setup errors repeat `Keycloak login/refresh failed for 'alice'` and `Keycloak rejected the password grant` | The shared setup cannot log in as the demo admin. Check Direct access grants on client `app` in realm `app`. These are repeated consequences of one prerequisite failure, not separate isolation findings. |
+| Login succeeds, but Fred rejects the token | Check that `FRED_REALM_URL` uses the trusted `keycloak:8080` issuer and that the host alias resolves. |
+| Test Assistant unavailable or `document_access` missing | Check the runtime catalog and the test team's effective grants in Admin > Features. |
+| `ModelNotUsableError` during execution | Enable the configured default chat model for the test team; the no-LLM test agent still goes through model authorization at activation. |
 
 From the repository root, for that default local k3d installation:
 
 ```bash
-# Full campaign (endpoints and realm are selected by the target):
+# Full campaign, after the preparation above (the target selects URLs only):
 make integration-test-k3d
 
 # Focused run, with separate evidence from the full campaign:
