@@ -24,10 +24,10 @@ Facts (drafted at `4d0057e41`; phase A facts re-checked at `25727177d`, phase B�
 
 - **Shape.** Optional, default = today's rendering. Enumerations are short and coerced from common spellings (en/fr: `descending`, `décroissant`, `largest first` → `desc`; `hausse`, `increase`, `↑`, `+` → `up`; `stable` → `flat`); references name content already in the plan (a category, a series name, a header, a row's first cell, an index), compared after `lexicon.normalize`.
 - **Validation never blocks.** An intent is not content: a value that reads as nothing, a reference that matches nothing, or a template that cannot render it leaves the deck built without that intent. This differs on purpose from content (D8/D21 of the base change: refuse rather than drop), because a revision round spent on emphasis costs more than the emphasis is worth, and a weak model would loop on it.
-- **Never silent.** Each such case sends one agent note with the remedy (`Slide 4: highlight 'Nord' matches no category (Q1, Q2, Q3, Q4); built without highlight. To set it, edit chart.highlight to one of those.`) and records a summary note on the slide: `intent_not_shown` (not rendered) or `intent_shown_otherwise` (rendered by a fallback: total row in bold only, takeaway as the body's lead line). `BuildNote` gains `field: Optional[str]` (`highlight`, `sort`, `stacked_as`, `target`, `total_row`, `highlight_row`, `highlight_column`, `trend`, `takeaway`); `DeckReport.note` merges on `(code, field)`; the frontend words each pair for a non-technical reader, with a generic wording for a field it does not know yet. An identical agent note on several slides is one line naming them (`Slides 2, 4: …`). Phase A adds `intent_not_shown` only; `intent_shown_otherwise` arrives with the first fallback (phase B).
+- **Never silent.** Each such case sends one agent note with the remedy (`Slide 4: highlight 'Nord' matches no category (Q1, Q2, Q3, Q4); built without highlight. To set it, edit chart.highlight to one of those.`) and records a summary note on the slide: `intent_not_shown` (not rendered) or `intent_shown_otherwise` (rendered by a fallback: total row in bold only). `BuildNote` gains `field: Optional[str]` (`highlight`, `sort`, `stacked_as`, `target`, `total_row`, `highlight_row`, `highlight_column`, `trend`); `DeckReport.note` merges on `(code, field)`; the frontend words each pair for a non-technical reader, with a generic wording for a field it does not know yet. An identical agent note on several slides is one line naming them (`Slides 2, 4: …`). Phase A adds `intent_not_shown` only; `intent_shown_otherwise` arrives with the first fallback (phase B).
 - **Not style.** Keys that are style (`highlight_color`, `bold`, `emphasis_style`…) stay in `style_fields` (charts) or `ignored_fields` (elsewhere) as today; the intent fields never accept a colour value (`highlight: "red"` matches no category → `intent_not_shown`).
 - **Plan keeps what the model wrote.** Sorting, matching and fallbacks happen at render; the plan (and so every `changes` path and index) stays in the order given.
-- **Schema.** One-line descriptions; each field offered only when the template can use it (`_schema_for`): chart fields with a chart host, table fields with a `table` kind, `trend` when a repeat group holds a `number` zone, `takeaway` always (it has a fallback, D9).
+- **Schema.** One-line descriptions; each field offered only when the template can use it (`_schema_for`): chart fields with a chart host, table fields with a `table` kind, `trend` when a repeat group holds a `number` zone. `takeaway` is offered by `ppt-builder-storytelling` on every slide (D9).
 
 ### D2. `chart.sort: desc | asc | given`
 
@@ -84,21 +84,19 @@ Rejected: **semantic colours** — a theme has no "good/bad" colour (Context), a
 
 The capacity check counts the glyph and space as one character of the figure's size. An item without a `number` zone, or a group that is not shown, gives `intent_not_shown`. Offered on every repeat group with a number zone (figures, and cards that show a number). Effort **S**.
 
-### D9. `takeaway: str` (phase C)
+### D9. Takeaway zone (phase C, amended 2026-10-15)
 
-The slide's key message: one sentence, a content field (it is text the user reads), placed before `notes`.
+`SlidePlan.takeaway` is defined, required and checked by `ppt-builder-storytelling` (its D2): the conclusion the audience draws from the slide, always the first line of the speaker notes, not necessarily on the slide (owner, 2026-10-15). Phase C only lets a template that designed a takeaway zone show it.
 
 - **Detection (analysis).** A text zone (body, caption, subtitle on a non-cover slide) is a takeaway zone (`Zone.takeaway = True`) when (1) its shape name — or for a placeholder, the layout placeholder's name — matches `lexicon.TAKEAWAY_NAMES` (`takeaway`, `key takeaway`, `key message`, `message cle`, `a retenir`, `so what`, `conclusion`), or (2) vision gave it a purpose containing those words; the labelling prompt's slot examples add "key message". Never by geometry alone (Q1). At most one per pattern (the first in reading order). `ANALYSIS_VERSION` 12 → 13; stored analyses refresh in the background (D20 of the base change). The built-in "Fred Chart" pattern gets its takeaway zone from the `takeaway` name; no deck edit needed.
-- **Placement.** Takeaway zone first. Else the bold, unbulleted lead line of the slide's body (the mechanism a subtitle uses without a subtitle zone, `_Line(heading=True)`), counted in the body's fit, with `intent_shown_otherwise`. Else (no body, e.g. a chart-only slide) the candidate does not hold the slide's content: a misfit like any field with no zone; the assignment then prefers a variant that holds it, and only when none does is it a `needs_revision` problem with options (move it into `bullets`, drop it). Takeaway is content: never dropped.
-- **Compatibility.** With no `takeaway` given, a takeaway zone keeps today's behaviour (filled from `bullets`). With both, `bullets` need another body: on "Fred Chart" (whose only body is the takeaway) that is a misfit, so a chart with bullets and a takeaway goes to a variant with both or gets the usual "no place" options.
-- **Assignment.** A pattern whose takeaway zone receives the takeaway earns the same fit point as a filled zone; an empty takeaway zone costs like any empty zone (the wide chart wins for a chart without commentary, unchanged).
-- **Catalogue.** `takeaway ≤N words` on patterns holding the zone; the description says "takeaway: the slide's one key message (optional)". Effort **M**.
+- **Placement.** When the assigned template slide has a takeaway zone and the takeaway fits its room, the zone holds the takeaway and `bullets` do not fall into it. Otherwise the zone keeps today's behaviour (filled from `bullets`, else empty) and the takeaway is in the notes only: no body lead-line fallback, no misfit, no `needs_revision`, no summary note, since the takeaway is not meant to appear on the slide. The assignment does not score the takeaway: slide choice is unchanged.
+- **Catalogue.** `takeaway zone ≤N words` on patterns holding the zone, so the model can keep a takeaway short enough when that template slide suits it. Effort **S**.
 
 ### D10. Edits, validation, summary
 
-- `changes.py` `_FIELDS`: `chart` gains `highlight`, `sort`, `stacked_as` (text), `target` (`{value: number, label: text}`, also settable whole); `table` gains `highlight_row`, `highlight_column` (text or number), `total_row` (flag); `item` gains `trend`; `slide` gains `takeaway`. `_SLIDE_KEYS` and `CLEARABLE` gain `takeaway`. A kind edit clears intent fields with their parent (a cleared `chart` takes its `highlight`). `null` resets a field to its default.
+- `changes.py` `_FIELDS`: `chart` gains `highlight`, `sort`, `stacked_as` (text), `target` (`{value: number, label: text}`, also settable whole); `table` gains `highlight_row`, `highlight_column` (text or number), `total_row` (flag); `item` gains `trend`; the `takeaway` path comes from `ppt-builder-storytelling`. A kind edit clears intent fields with their parent (a cleared `chart` takes its `highlight`). `null` resets a field to its default.
 - `unchanged` (identical-resend check, D26) compares intent fields too: changing only `highlight` rebuilds.
-- Summary codes: `intent_not_shown`, `intent_shown_otherwise` with `field`; added to `BuildNoteCode`, `ppt_filler/types.ts`, `DeckSummaryButton.tsx` and fr/en locales ("Emphasis on Q3 could not be shown", "Key message shown as the first line of the text").
+- Summary codes: `intent_not_shown`, `intent_shown_otherwise` with `field`; added to `BuildNoteCode`, `ppt_filler/types.ts`, `DeckSummaryButton.tsx` and fr/en locales ("Emphasis on Q3 could not be shown").
 
 ### D11. Phasing and order (by user value, then effort)
 
@@ -110,10 +108,10 @@ The slide's key message: one sentence, a content field (it is text the user read
 | 4 | `table.total_row` | medium | S | B |
 | 5 | `items[].trend` | medium | S | B |
 | 6 | `table.highlight_row/column` | medium | M | B |
-| 7 | `takeaway` | high | M | C |
+| 7 | takeaway zone | medium | S | C |
 | 8 | `chart.target` | medium | M, risky | D (spike first) |
 
-`takeaway` has high value but comes third because it alone needs a re-analysis and assignment changes; A and B touch only rendering and plan coercion. Phases land in order on the same branch (`feat/ppt-builder-capability`), each tested by the owner before the next; there is no PR per phase: the owner opens a single PR for the whole capability. One change rather than four because the D1 rule, the note codes and the schema gating are shared.
+The takeaway zone comes third because it alone needs a re-analysis; A and B touch only rendering and plan coercion. Phases land in order on the same branch (`feat/ppt-builder-capability`), each tested by the owner before the next; there is no PR per phase: the owner opens a single PR for the whole capability. One change rather than four because the D1 rule, the note codes and the schema gating are shared.
 
 ## Risks / Trade-offs
 
@@ -121,7 +119,7 @@ The slide's key message: one sentence, a content field (it is text the user read
 - [Weak models fill intents wrongly] → never blocks (D1), coerced spellings, notes name valid values; the eval checks first-call success does not drop.
 - [LibreOffice preview: chart `a:alpha`, combo charts, `lastRow` of predefined styles] → each checked on rendered evidence (tasks); `.pptx` stays authoritative; a failing preview downgrades the decision (alpha → brightness by background luminance; target deferred).
 - [Predefined table-style accent map is data to maintain] → fixed by the OOXML predefined list; unknown GUID → `accent1`.
-- [Takeaway names miss a template's wording] → vision purpose as second signal; the author can rename the shape; the fallback still shows the message.
+- [Takeaway names miss a template's wording] → vision purpose as second signal; the author can rename the shape; the takeaway stays in the notes.
 
 ## Migration Plan
 
@@ -132,7 +130,7 @@ The slide's key message: one sentence, a content field (it is text the user read
 The draft's recommendations were accepted on every open question:
 
 - **Q1** No takeaway detection by geometry: shape or placeholder name and vision purpose only (D9).
-- **Q2** Takeaway fallback without a takeaway zone: the bold, unbulleted lead line of the body, reported as `intent_shown_otherwise`.
+- **Q2** ~~Takeaway fallback: the bold lead line of the body.~~ Superseded 2026-10-15: no on-slide fallback; the takeaway (field of `ppt-builder-storytelling`) is in the notes and fills a takeaway zone only (D9).
 - **Q3** Trend: glyph only; template icons in a later change if a real template asks; never semantic colours.
 - **Q4** `stacked_as` stays separate from `show`: `show` decides pie/doughnut labels, `stacked_as` the stack's geometry (re-checked at `25727177d`: `show: share` applies to pie and doughnut only and builds no 100 % stack).
 - **Q5** Table highlight: bold + light tint of the table style's accent (needs the predefined GUID → accent map).

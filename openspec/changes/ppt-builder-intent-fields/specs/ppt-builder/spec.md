@@ -88,7 +88,7 @@ For `table.total_row: true`, the system SHALL apply the table style's own total-
 
 ### Requirement: Slide takeaway
 
-The system SHALL accept an optional `takeaway` on a plan slide: the slide's key message, as content. The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. The system SHALL place the takeaway in the takeaway zone; else as the bold, unbulleted first line of the slide's body, recorded as `intent_shown_otherwise`; else it SHALL treat the template slide as unable to hold the slide's content. A takeaway SHALL never be dropped. When no takeaway is given, a takeaway zone SHALL be filled as before.
+The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. When the template slide assigned to a plan slide has a takeaway zone and the slide's `takeaway` fits its room, the system SHALL write the takeaway there and SHALL NOT fill that zone from `bullets`. Otherwise the system SHALL fill the zone as before this change and SHALL leave the takeaway in the speaker notes only, without a refusal or a summary note. The takeaway SHALL NOT change which template slide is assigned.
 
 #### Scenario: Takeaway in the template's zone
 
@@ -100,15 +100,15 @@ The system SHALL accept an optional `takeaway` on a plan slide: the slide's key 
 
 - **GIVEN** a template whose bullets slide has no takeaway zone
 - **WHEN** the model sends a bullets slide with a takeaway
-- **THEN** the body starts with the takeaway in bold, unbulleted, followed by the bullets, and the summary holds `intent_shown_otherwise` for `takeaway`
+- **THEN** the body holds the bullets only, the takeaway is in the speaker notes, and the summary holds no note for it
 
 #### Scenario: Takeaway zone detected by name
 
 - **GIVEN** a layout whose body placeholder is named "Key message"
 - **WHEN** the template is analysed
-- **THEN** that zone is a takeaway zone and the catalogue quotes its room for `takeaway`
+- **THEN** that zone is a takeaway zone and the catalogue quotes its room
 
-#### Scenario: Takeaway zone without a takeaway
+#### Scenario: Takeaway longer than the zone
 
-- **WHEN** the model sends a chart slide with one bullet and no takeaway on the built-in template
-- **THEN** the bullet fills the takeaway card as before this change
+- **WHEN** the model sends a chart slide with one bullet and a takeaway longer than the built-in template's takeaway card holds
+- **THEN** the bullet fills the takeaway card as before this change and the takeaway is in the speaker notes only

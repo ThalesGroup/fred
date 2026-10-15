@@ -1,6 +1,6 @@
 ## Why
 
-`ppt_builder` (GitHub issue #2679) builds decks whose look comes from the template, but the model has no way to say what a slide is *about*: which bar matters, that the last table row is a total, that a KPI is rising, what the one message of the slide is. A designer would show each of these; today the deck shows none, and a model that tries (colours, bold) is ignored by design. The owner's rule (2026-10-14): **the model gives data and intent, the code decides the look from the template**. Intent fields express meaning, never style; each is optional with a safe default, a short enumeration or a reference to content already in the plan, validated, editable through `changes`, and never silent.
+`ppt_builder` (GitHub issue #2679) builds decks whose look comes from the template, but the model has no way to say what a slide is *about*: which bar matters, that the last table row is a total, that a KPI is rising, what the slide's takeaway is. A designer would show each of these; today the deck shows none, and a model that tries (colours, bold) is ignored by design. The owner's rule (2026-10-14): **the model gives data and intent, the code decides the look from the template**. Intent fields express meaning, never style; each is optional with a safe default, a short enumeration or a reference to content already in the plan, validated, editable through `changes`, and never silent.
 
 ## What Changes
 
@@ -17,11 +17,11 @@ One cross-cutting rule, then nine optional fields in four phases, all on one bra
   - `table.highlight_row` / `table.highlight_column`: an index or the row's first-cell / the column's header text; bold and a light tint of the table style's accent.
   - `items[i].trend: up | down | flat`: a ▲ ▼ ► glyph before the figure, in the figure's own text style; no colour.
 - **Phase C — slide takeaway** (re-analysis):
-  - `takeaway: str`: the slide's key message, placed in the template's takeaway zone (shape name or vision purpose), else as the bold lead line of the body.
+  - the slide's `takeaway` (field owned by `ppt-builder-storytelling`) placed in the template's takeaway zone (shape name or vision purpose) when the chosen slide has one and it fits; otherwise it stays in the speaker notes only (owner, 2026-10-15).
   - `Zone.takeaway` flag; `ANALYSIS_VERSION` 12 → 13.
 - **Phase D — chart target** (gated on a spike):
   - `chart.target: number | {value, label}`: a dashed reference line built natively (an extra series moved into a line plot sharing the axes: a combo chart, editable in PowerPoint); `column`, `stacked_column`, `line`, `area` only.
-- **Edits** through the existing `changes` paths (`chart.highlight`, `table.total_row`, `items[2].trend`, `takeaway`…).
+- **Edits** through the existing `changes` paths (`chart.highlight`, `table.total_row`, `items[2].trend`…; `takeaway` through `ppt-builder-storytelling`).
 - **Schema cost**: each field is one short line, offered only when the template can use it (chart fields with a chart host, table fields with a table slide, `trend` with a number zone in a group).
 
 Out of scope (owner decisions, 2026-10-14): template trend icons, semantic colours, colour of a takeaway box, a takeaway geometry heuristic. The chart `show` field (pie/doughnut label mode) has landed in `ppt-builder-charts` and is not touched.
@@ -34,10 +34,10 @@ Out of scope (owner decisions, 2026-10-14): template trend icons, semantic colou
 
 ### Modified Capabilities
 
-- `ppt-builder`: requirements "Intent fields express meaning, never style", "Chart emphasis", "Table and key-figure emphasis", "Slide takeaway". Applied and archived after `ppt-builder-capability` and `ppt-builder-charts`.
+- `ppt-builder`: requirements "Intent fields express meaning, never style", "Chart emphasis", "Table and key-figure emphasis", "Slide takeaway". Applied and archived after `ppt-builder-capability` and `ppt-builder-charts`; phase C after `ppt-builder-storytelling` (which owns `takeaway`).
 
 ## Impact
 
-- `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/`: `plan.py` (fields, coercion), `charts.py` (sort, highlight, percent stacking, target), `render.py` (table emphasis, trend glyph, takeaway placement), `assign.py` (takeaway fit), `analysis.py`/`lexicon.py`/`labelling.py` (takeaway zone, phase C), `models.py` (`Zone.takeaway`), `changes.py` (paths), `tools.py` (schema, catalogue, description); `fill.py` (note codes, `BuildNote.field`), `checks.py` (notes keyed on code and field).
+- `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/`: `plan.py` (fields, coercion), `charts.py` (sort, highlight, percent stacking, target), `render.py` (table emphasis, trend glyph, takeaway zone filling), `analysis.py`/`lexicon.py`/`labelling.py` (takeaway zone, phase C), `models.py` (`Zone.takeaway`), `changes.py` (paths), `tools.py` (schema, catalogue, description); `fill.py` (note codes, `BuildNote.field`), `checks.py` (notes keyed on code and field).
 - Frontend: `ppt_filler/types.ts`, `DeckSummaryButton.tsx`, `locales/{en,fr}` (note wording per field); regenerated `pptBuilderCapabilityOpenApi.ts` only if `Zone` is exposed there (phase C).
 - No new dependency. Migration note: impact none (re-analysis automatic; existing charts unchanged) → patch.

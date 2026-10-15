@@ -1,27 +1,27 @@
 ## ADDED Requirements
 
-### Requirement: Every content slide states its key message
+### Requirement: Every content slide has a takeaway
 
-The system SHALL require a `message` on every plan slide whose kind is not `cover`, `agenda`, `section`, `closing` or `quote`, and SHALL return `needs_revision` for that slide when the message is missing or shorter than four words. With the deck's `titles` at its default `message`, the system SHALL write the message as the slide's title and SHALL tell the agent when a sent `title` was not used. With `titles: custom` the system SHALL use the slide's `title`, and with `titles: none` it SHALL leave the title unfilled; in both cases the system MUST write the message at the start of the speaker notes. The system SHALL return `needs_revision` for a title or subtitle holding three or more numbers (years not counted), offering a figures slide. These checks SHALL run before the slide assignment, and a `changes` call SHALL be checked on the slides it touches only.
+The system SHALL require a `takeaway` on every plan slide whose kind is not `cover`, `agenda`, `section`, `closing` or `quote`: the conclusion the audience draws from the slide, as a sentence. The system SHALL return `needs_revision` for that slide when the takeaway is missing or shorter than four words, and SHALL NOT judge it further. The system SHALL NOT derive the slide's title from the takeaway: it SHALL use the `title` the model sent, and leave the title unfilled when none is sent. The system MUST write the takeaway as the first line of the slide's speaker notes. The system SHALL return `needs_revision` for a title or subtitle holding three or more numbers (years not counted), offering a figures slide. These checks SHALL run before the slide assignment, and a `changes` call SHALL be checked on the slides it touches only.
 
-#### Scenario: Topic title
+#### Scenario: Topic label as takeaway
 
-- **WHEN** the model sends a bullets slide with `message: "Présentation générale"`
-- **THEN** no deck is built and the `needs_revision` entry for that slide asks for the slide's point as a sentence
+- **WHEN** the model sends a bullets slide with `takeaway: "Présentation générale"`
+- **THEN** no deck is built and the `needs_revision` entry for that slide asks for what the audience should conclude, as a sentence
 
-#### Scenario: Message becomes the title
+#### Scenario: Takeaway shapes the slide, title stays short
 
-- **WHEN** the model sends a chart slide with `title: "Effectifs"` and `message: "L'Italie pèse deux fois l'Espagne en effectifs"`
-- **THEN** the slide's title reads the message and the agent note says the sent title was not used
+- **WHEN** the model sends a chart slide with `title: "Effectifs par pays"` and `takeaway: "L'Italie pèse deux fois l'Espagne en effectifs, le plan de recrutement doit commencer là"`
+- **THEN** the slide's title reads "Effectifs par pays" and its speaker notes start with the takeaway
 
 #### Scenario: User asked for no titles
 
-- **WHEN** the model sends a deck with `titles: none`
-- **THEN** content slides are built without a title and each slide's speaker notes start with its key message
+- **WHEN** the model sends content slides with takeaways and no `title`
+- **THEN** the slides are built without a title and each slide's speaker notes start with its takeaway
 
 #### Scenario: Exempt kinds
 
-- **WHEN** the model sends a cover and a section slide without `message`
+- **WHEN** the model sends a cover and a section slide without `takeaway`
 - **THEN** neither slide is refused for it
 
 #### Scenario: Figures crammed into a subtitle
@@ -50,7 +50,7 @@ The system SHALL return `needs_revision` for a chart whose values are written wi
 
 ### Requirement: Figures are sourced
 
-The system SHALL require a `source` on every slide holding a chart, a table with a numeric body cell, or an item with a number: a document name, `user`, or `illustrative`, and SHALL write it to the speaker notes. The system SHALL accept `illustrative` only when a user message of the conversation allows illustrative data, and SHALL then say so in the speaker notes, in the chart caption when the slide has a chart, and with an `illustrative_data` note in "What was built". The system SHALL return `needs_revision` once for a non-illustrative slide none of whose figures appears in the user messages or tool results the model received, and SHALL build the same figures sent again with a `figures_unverified` note in "What was built" and in the speaker notes. The system SHALL NOT claim to verify every figure or the named document.
+The system SHALL require a `source` on every slide holding a chart, a table with a numeric body cell, or an item with a number: a document name, `user` (figures the user typed in the conversation), or `illustrative`, and SHALL write it to the speaker notes. The system SHALL accept `illustrative` only when a user message of the conversation allows illustrative data, and SHALL then say so in the speaker notes, in the chart caption when the slide has a chart, and with an `illustrative_data` note in "What was built", and nowhere else on the slide. The system SHALL count a slide's figure as found when it matches a number of any user message or tool result the model received, tolerating thousands separators, comma or dot decimals, units, scale suffixes (k, M, Md, bn) and rounding, or when it is the total of the slide's other values, a share or change of two found numbers, or the sum or difference of two found numbers from one message or tool result; a reading that is ambiguous SHALL count as found. The system SHALL return `needs_revision` once for a non-illustrative slide none of whose figures is found, and SHALL build the same figures sent again with a `figures_unverified` note in "What was built" and in the speaker notes. The system SHALL NOT claim to verify every figure or the named document.
 
 #### Scenario: Missing source
 
@@ -71,7 +71,7 @@ The system SHALL require a `source` on every slide holding a chart, a table with
 
 #### Scenario: Figures found nowhere
 
-- **GIVEN** a document read in the conversation that holds none of the values 30, 45, 25
+- **GIVEN** a conversation whose only numbers are "2 800" and "9"
 - **WHEN** the model sends a pie with those values and `source: "rapport 2025"`
 - **THEN** no deck is built the first time; **WHEN** it sends the same values again **THEN** the deck is built and the summary holds `figures_unverified`
 
@@ -81,9 +81,21 @@ The system SHALL require a `source` on every slide holding a chart, a table with
 - **WHEN** the model sends a figures slide with an item numbered "2800" and `source: "rapport 2025"`
 - **THEN** the slide passes the check
 
+#### Scenario: Figures typed by the user
+
+- **GIVEN** the user wrote "on a fait 12,5 % de croissance et 3,2 M€ de CA"
+- **WHEN** the model sends a figures slide with items `12.5 %` and `3 200 000 €` and `source: "user"`
+- **THEN** the slide passes the check
+
+#### Scenario: Computed share
+
+- **GIVEN** a tool result holding "Italie 1 200" and "total 2 800"
+- **WHEN** the model sends a pie with the value 43 % for Italy
+- **THEN** the slide passes the check
+
 ### Requirement: Plan validation before the first build
 
-The capability SHALL offer one setting, "Validate the plan before building", off by default. When it is off, the system SHALL behave as without it. When it is on and the conversation holds no delivered deck, the system SHALL answer a `build_presentation` call whose plan has no problem with a `plan_proposed` result holding an outline written by the code — audience, main message, and per slide its kind, key message and source — SHALL store that plan, and SHALL NOT build a deck until a user message follows that result. After that message, the system SHALL build a whole plan sent in `slides` or apply `changes` to the proposed plan. A plan with problems SHALL get `needs_revision` instead of an outline. Changes to a delivered deck SHALL NOT wait for validation. The working rules SHALL be the same whatever the setting.
+The capability SHALL offer one setting, "Validate the plan before building", off by default. When it is off, the system SHALL behave as without it. When it is on and the conversation holds no delivered deck, the system SHALL answer a `build_presentation` call whose plan has no problem with a `plan_proposed` result holding an outline written by the code — audience, main message, and per slide its kind, title, takeaway and source — SHALL store that plan, and SHALL NOT build a deck until a user message follows that result. After that message, the system SHALL build a whole plan sent in `slides` or apply `changes` to the proposed plan. A plan with problems SHALL get `needs_revision` instead of an outline. The system SHALL build without an outline when the call carries `skip_plan` and the latest user message explicitly asks to build without a plan, and SHALL return the outline when `skip_plan` is sent without such a request. Changes to a delivered deck SHALL NOT wait for validation. The working rules SHALL be the same whatever the setting.
 
 #### Scenario: Setting off
 
@@ -94,7 +106,7 @@ The capability SHALL offer one setting, "Validate the plan before building", off
 
 - **GIVEN** the setting is on and no deck delivered in the conversation
 - **WHEN** the model sends a sound five-slide plan
-- **THEN** no deck is built, the result's status is `plan_proposed` and the outline lists five lines with kind, key message and source
+- **THEN** no deck is built, the result's status is `plan_proposed` and the outline lists five lines with kind, title, takeaway and source
 
 #### Scenario: Second call before the user answers
 
@@ -106,6 +118,18 @@ The capability SHALL offer one setting, "Validate the plan before building", off
 - **GIVEN** a `plan_proposed` result followed by the user's "remove slide 3"
 - **WHEN** the model sends `changes` deleting slide 3
 - **THEN** the deck is built from the proposed plan without slide 3
+
+#### Scenario: User asked to skip the plan
+
+- **GIVEN** the setting is on and the latest user message says "construis-la directement, sans plan"
+- **WHEN** the model sends a sound plan with `skip_plan` quoting it
+- **THEN** the deck is built in that call
+
+#### Scenario: Skip not asked
+
+- **GIVEN** the setting is on and the latest user message does not ask to skip the plan
+- **WHEN** the model sends a sound plan with `skip_plan`
+- **THEN** no deck is built and the result is `plan_proposed`
 
 #### Scenario: Edit of a delivered deck
 

@@ -49,11 +49,11 @@
 
 ### 6. Plan, assignment, rendering
 
-- [ ] 6.1 `plan.py` `SlidePlan.takeaway: Optional[str]` before `notes`; `has_content` counts it
-- [ ] 6.2 `assign.py`: takeaway placement in the fit (zone, else body lead, else misfit); `needs_revision` options when no candidate holds it
-- [ ] 6.3 `render.py` `_assign_text`: takeaway into its zone; body lead line fallback with `intent_shown_otherwise`; bullets no longer fall into a takeaway zone when a takeaway is given
-- [ ] 6.4 `changes.py`: `takeaway` in `_FIELDS`, `_SLIDE_KEYS`, `CLEARABLE`; `tools.py` catalogue `takeaway ≤N words` and the description line
-- Verification: `test_takeaway.py` — built-in chart slide with takeaway in the card, bullets slide with takeaway as bold lead and the note, chart-only candidate rejected for a takeaway, no takeaway → bullets still fill the zone (compatibility), edit `takeaway` via `changes`
+Needs `SlidePlan.takeaway` from `ppt-builder-storytelling` (field, checks, notes, `changes` path).
+
+- [ ] 6.1 `render.py` `_assign_text`: the takeaway into the assigned slide's takeaway zone when it fits; bullets no longer fall into that zone then; otherwise today's filling, no note
+- [ ] 6.2 `tools.py` catalogue: `takeaway zone ≤N words` on patterns holding the zone
+- Verification: `test_takeaway.py` — built-in chart slide with a short takeaway in the card, a takeaway longer than the card left in the notes only with bullets filling the card as before, bullets slide without a zone unchanged, edit of `takeaway` refills the card
 
 ## Phase D — chart target (after a spike)
 
