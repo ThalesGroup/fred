@@ -40,6 +40,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
     CreatePlatformEnrollmentLink,
+    EnrollmentResult,
     FreeEnrollmentPreview,
     PlatformAccessActivationPreview,
     PlatformAccessActivationUser,
@@ -885,7 +886,7 @@ async def accept_cgu(
 
 async def enroll(
     access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
-) -> PlatformAccessStatus:
+) -> EnrollmentResult:
     await access.observe(user)
     await require_link_caller(access, user, token)
     joined = False
@@ -926,7 +927,10 @@ async def enroll(
             team_id=team.id,
             link_id=str(link.id),
         )
-    return await self_status(access, user, version)
+    status = await self_status(access, user, version)
+    return EnrollmentResult(
+        **status.model_dump(), team_id=team.id if status.admitted else None
+    )
 
 
 def require_own_credential(actor: KeycloakUser) -> None:

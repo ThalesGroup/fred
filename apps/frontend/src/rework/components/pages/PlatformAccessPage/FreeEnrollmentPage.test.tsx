@@ -257,3 +257,20 @@ it("sends a person who lost platform access while the page was open to the refus
   expect(replace).toHaveBeenCalledWith("/platform-access-denied");
   expect(host.textContent).not.toContain("rework.platformAccess.join.failedTitle");
 });
+
+it.each([
+  [
+    "the team page when the join returns the team",
+    { admitted: true, cgu_required: false, team_id: "demo team" },
+    "/team/demo%20team/agents",
+  ],
+  ["the home page when it does not", { admitted: true, cgu_required: false }, "/"],
+])("opens %s", async (_name, result, target) => {
+  const replace = vi.fn();
+  vi.stubGlobal("location", { ...window.location, origin: window.location.origin, replace });
+  state.required = false;
+  state.enroll.mockReturnValue({ unwrap: async () => result as never });
+  act(() => root.render(<FreeEnrollmentPage />));
+  await act(async () => button("rework.platformAccess.join.action")!.click());
+  expect(replace).toHaveBeenCalledWith(target);
+});

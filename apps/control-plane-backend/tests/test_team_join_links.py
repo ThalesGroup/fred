@@ -99,8 +99,10 @@ async def test_admitted_caller_joins_as_member_once(access, monkeypatch):
     newcomer = user("accepted")
     preview = await service.preview_link(access, newcomer, token, None)
     assert preview.team_name == "Demonstration"
-    await service.enroll(access, newcomer, token, None)
-    await service.enroll(access, newcomer, token, None)
+    joined = await service.enroll(access, newcomer, token, None)
+    again = await service.enroll(access, newcomer, token, None)
+    # Both the join and the already-member retry let the page open the team.
+    assert joined.team_id == again.team_id == "demo"
     assert [write.relation for write in access.rebac.writes] == [
         RelationType.TEAM_MEMBER
     ]

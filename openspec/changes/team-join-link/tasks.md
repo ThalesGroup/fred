@@ -12,6 +12,7 @@
 - [x] 2.2 `TeamInviteLinkDialog` (switch, URL, Copy with selection fallback, Generate a new link, disabled while paused); restore `PlatformAccessLinkManager` to its original code.
 - [x] 2.3 Members tab button for team admins when `platform_access_enabled`; `FreeEnrollmentPage` redirect on `team_link_requires_platform_access`; fr+en strings.
 - [x] 2.4 Tests for the dialog, the Members tab button and the join-page redirect.
+- [x] 2.5 Enroll answer carries `team_id` (team and Free links) when the caller is admitted; the join page opens the team's page, `/` without it; backend and frontend tests.
 
 ## 3. Docs and close-out
 

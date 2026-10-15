@@ -146,6 +146,11 @@ class PlatformAccessStatus(BaseModel):
     cgu_required: bool
 
 
+class EnrollmentResult(PlatformAccessStatus):
+    # Set only once the caller is a member and admitted, so the page can open the team.
+    team_id: str | None = None
+
+
 class FreeEnrollmentPreview(BaseModel):
     team_name: str
     cgu_required: bool

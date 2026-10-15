@@ -56,5 +56,6 @@ Revision `c3a7e5d9f1b2` on swift head `24c2f88374fe` adds both columns with serv
 5. UI: Members tab, "Invite link" next to "Add members"; after testing, one link per team behind a switch, Copy, Generate a new link, no lists or counters.
 6. Route-family merge of the admin links: later, separate cleanup issue.
 7. A paused or replaced link shows the existing invalid-link state of the join page.
+8. After a successful join (or an already-member retry) through any invitation link, the person lands on the team's page (`team/{team_id}/agents`): the enroll answer carries `team_id` when the caller is admitted.
 
 No open questions remain.

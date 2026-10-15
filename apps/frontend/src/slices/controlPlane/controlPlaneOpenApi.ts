@@ -2319,7 +2319,7 @@ export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostA
   acceptFreeEnrollmentCgu: AcceptFreeEnrollmentCgu;
 };
 export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiResponse =
-  /** status 200 Successful Response */ PlatformAccessStatus;
+  /** status 200 Successful Response */ EnrollmentResult;
 export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiArg = {
   token: string;
 };
@@ -3775,6 +3775,11 @@ export type FreeEnrollmentPreview = {
 };
 export type AcceptFreeEnrollmentCgu = {
   version: string;
+};
+export type EnrollmentResult = {
+  admitted: boolean;
+  cgu_required: boolean;
+  team_id?: string | null;
 };
 export type UserSummary = {
   id: string;

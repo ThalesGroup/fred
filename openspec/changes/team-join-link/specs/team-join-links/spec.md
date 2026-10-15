@@ -29,13 +29,14 @@ A person holding `can_administer_members` on a non-personal team SHALL be able t
 
 ### Requirement: Team invite links never admit a person to the platform
 
-On a valid team invite link, preview, opening, terms acceptance and enrollment SHALL check that the caller is admitted by platform access before any membership, opening count, terms acceptance or team-name disclosure. A non-admitted caller SHALL receive `403 team_link_requires_platform_access` without the team name, and the join page SHALL send them to the existing platform-access refusal screen. A paused or replaced link SHALL be answered as an invalid link, shown by the join page's existing "no longer valid" state, without the team name or any count. An admitted caller SHALL be granted `team_member` only, for themselves only, with existing terms and suspension checks. A caller already holding a role SHALL succeed without change or join event.
+On a valid team invite link, preview, opening, terms acceptance and enrollment SHALL check that the caller is admitted by platform access before any membership, opening count, terms acceptance or team-name disclosure. A non-admitted caller SHALL receive `403 team_link_requires_platform_access` without the team name, and the join page SHALL send them to the existing platform-access refusal screen. A paused or replaced link SHALL be answered as an invalid link, shown by the join page's existing "no longer valid" state, without the team name or any count. An admitted caller SHALL be granted `team_member` only, for themselves only, with existing terms and suspension checks. A caller already holding a role SHALL succeed without change or join event. A successful enrollment through any invitation link, team or Free, SHALL return the team id when the caller is admitted, and the join page SHALL then open that team's page; previews and refusals SHALL NOT return it.
 
 #### Scenario: Admitted person joins
 
 - **GIVEN** an enabled invite link and an admitted person who is not a member
 - **WHEN** they open the link and join
 - **THEN** they SHALL become `team_member` of that team
+- **AND** the join page SHALL open that team's page instead of the platform home
 
 #### Scenario: Person without platform access
 
@@ -59,3 +60,4 @@ On a valid team invite link, preview, opening, terms acceptance and enrollment S
 
 - **WHEN** an existing member joins through the invite link
 - **THEN** the request SHALL succeed, their roles SHALL be unchanged and no join event SHALL be emitted
+- **AND** the join page SHALL open that team's page

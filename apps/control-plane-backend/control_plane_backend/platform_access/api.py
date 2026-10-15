@@ -30,6 +30,7 @@ from control_plane_backend.platform_access.schemas import (
     AcceptFreeEnrollmentCgu,
     CreatePlatformEnrollmentLink,
     DeletedPlatformEnrollmentLinks,
+    EnrollmentResult,
     FreeEnrollmentPreview,
     GrantPlatformAccessUsers,
     PlatformAccessActivationPreview,
@@ -432,10 +433,8 @@ async def accept_free_enrollment_cgu(
     await service.accept_cgu(access, user, token, body.version, config.app.gcu_version)
 
 
-@router.post(
-    "/platform-access/free/{token}/enroll", response_model=PlatformAccessStatus
-)
+@router.post("/platform-access/free/{token}/enroll", response_model=EnrollmentResult)
 async def enroll_free_team(
     token: str, access: Access, config: Config, user: OwnUser
-) -> PlatformAccessStatus:
+) -> EnrollmentResult:
     return await service.enroll(access, user, token, config.app.gcu_version)

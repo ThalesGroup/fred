@@ -283,7 +283,7 @@ async def test_independent_free_links_suspension_revocation_and_private_enrollme
     assert (await service.preview_link(access, newcomer, token, "next")).cgu_required
     await service.set_filtering(access, actor, True)
     enrolled = await service.enroll(access, newcomer, token, version)
-    assert enrolled.admitted
+    assert enrolled.admitted and enrolled.team_id == "demo"
     assert access.rebac.writes[0].relation == RelationType.TEAM_MEMBER
     await service.enroll(access, newcomer, token, version)
     assert len(access.rebac.writes) == 1

@@ -73,7 +73,10 @@ export default function FreeEnrollmentPage() {
     setFailure(null);
     try {
       const status = await enroll({ token }).unwrap();
-      if (status.admitted) window.location.replace(platformPath("/"));
+      if (status.admitted)
+        window.location.replace(
+          platformPath(status.team_id ? `team/${encodeURIComponent(status.team_id)}/agents` : "/"),
+        );
       else setFailure("failed");
     } catch (error) {
       if (isPlatformAccessDenied(error)) showRefusal();
