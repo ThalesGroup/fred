@@ -660,6 +660,16 @@ const injectedRtkApi = api.injectEndpoints({
           body: queryArg.bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch,
         }),
       }),
+    postTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPost:
+      build.mutation<
+        PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiResponse,
+        PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/readiness-check`,
+          method: "POST",
+        }),
+      }),
     getAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGet: build.query<
       GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse,
       GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg
@@ -2672,6 +2682,13 @@ export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstan
     agentInstanceId: string;
     bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch;
   };
+export type PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary;
+export type PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
+  };
 export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse =
   /** status 200 Successful Response */ AgentCopyTargetsResponse;
 export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg = {
@@ -4434,6 +4451,7 @@ export type CapabilityCatalogEntry = {
   model_chat_profile_ids?: string[];
   model_platform_binding?: ModelBinding | null;
   model_thinking_profile_ids?: string[];
+  model_vision_profile_ids?: string[];
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];
   };
@@ -4467,7 +4485,11 @@ export type AgentTemplateSummary = {
     Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
   default_capability_ids?: string[];
 };
-export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
+export type SuspensionReason =
+  | "capability_unavailable"
+  | "capability_access_revoked"
+  | "capability_config_invalid"
+  | "capability_pending";
 export type AgentMarketplaceState = {
   /** `removed` after an automatic or platform admin removal (shown until hidden); `dismissed` after a removal by the team or Hide. */
   state: "published" | "removed" | "dismissed";
@@ -4497,8 +4519,10 @@ export type ManagedAgentInstanceSummary = {
   /** Chat profile this agent's new conversations start on. Null follows the team default. */
   recommended_chat_profile_id?: string | null;
   status: "enabled" | "disabled";
-  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
+  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid / capability_pending (a capability is still preparing its saved configuration, or failed to). */
   suspension_reason?: SuspensionReason | null;
+  /** Plain-language failure message carried with `suspension_reason=capability_pending` when a capability reported that preparing its configuration failed; null while it is still pending and for every other reason. */
+  suspension_detail?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -5347,6 +5371,8 @@ export type AvailableModelProfile = {
   display_name?: string | null;
   /** Whether a platform admin enabled reasoning for this model: only then can the team set a reasoning default for it. */
   reasoning_available?: boolean;
+  /** Whether this profile declares `supports_vision` in the pod model catalog, so a capability form can offer image reading. */
+  supports_vision?: boolean;
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
@@ -5377,6 +5403,8 @@ export type EffectiveChatModel = {
     
     Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
   reasoning_enabled?: boolean;
+  /** Whether the resolved profile declares `supports_vision`. Always False for a platform binding, which carries no such declaration: image reading then fails closed. */
+  supports_vision?: boolean;
   /** Models a member may pick for this agent: chat models served by the instance's pod, `can_use` for the team and not team-disabled. Empty when the choice is locked or the pod is unreachable. */
   selectable_models?: SelectableChatModel[];
   /** True when a platform binding or a pod per-agent override fixes the model, so no choice is offered. */
@@ -6285,6 +6313,7 @@ export const {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
+  usePostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostMutation,
   useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   useLazyGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
