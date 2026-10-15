@@ -218,67 +218,27 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    createTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksPost: build.mutation<
-      CreateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksPostApiResponse,
-      CreateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksPostApiArg
+    getTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGet: build.query<
+      GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiResponse,
+      GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join-link` }),
+    }),
+    setTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPut: build.mutation<
+      SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiResponse,
+      SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/join-links`,
-        method: "POST",
-        body: queryArg.createPlatformEnrollmentLink,
+        url: `/control-plane/v1/teams/${queryArg.teamId}/join-link`,
+        method: "PUT",
+        body: queryArg.setTeamJoinLink,
       }),
     }),
-    listTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGet: build.query<
-      ListTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGetApiResponse,
-      ListTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGetApiArg
+    regenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePost: build.mutation<
+      RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiResponse,
+      RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiArg
     >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/join-links`,
-        params: {
-          offset: queryArg.offset,
-          limit: queryArg.limit,
-          status: queryArg.status,
-        },
-      }),
-    }),
-    listTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGet: build.query<
-      ListTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGetApiResponse,
-      ListTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/join-links/${queryArg.linkId}/joiners`,
-        params: {
-          offset: queryArg.offset,
-          limit: queryArg.limit,
-        },
-      }),
-    }),
-    deleteInactiveTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksInactiveDelete: build.mutation<
-      DeleteInactiveTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksInactiveDeleteApiResponse,
-      DeleteInactiveTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksInactiveDeleteApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/join-links/inactive`,
-        method: "DELETE",
-      }),
-    }),
-    revealTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdRevealPost: build.mutation<
-      RevealTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdRevealPostApiResponse,
-      RevealTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdRevealPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/join-links/${queryArg.linkId}/reveal`,
-        method: "POST",
-      }),
-    }),
-    revokeTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdDelete: build.mutation<
-      RevokeTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdDeleteApiResponse,
-      RevokeTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdDeleteApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/join-links/${queryArg.linkId}`,
-        method: "DELETE",
-      }),
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join-link/regenerate`, method: "POST" }),
     }),
     getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: build.query<
       GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse,
@@ -2325,43 +2285,21 @@ export type RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTe
     teamId: string;
     linkId: string;
   };
-export type CreateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksPostApiResponse =
-  /** status 200 Successful Response */ PlatformEnrollmentLink;
-export type CreateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksPostApiArg = {
-  teamId: string;
-  createPlatformEnrollmentLink: CreatePlatformEnrollmentLink;
-};
-export type ListTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGetApiResponse =
-  /** status 200 Successful Response */ PlatformEnrollmentLinksPage;
-export type ListTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGetApiArg = {
-  teamId: string;
-  offset?: number;
-  limit?: number;
-  status?: ("active" | "suspended" | "expired" | "revoked") | null;
-};
-export type ListTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGetApiResponse =
-  /** status 200 Successful Response */ PlatformEnrollmentJoinersPage;
-export type ListTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGetApiArg = {
-  teamId: string;
-  linkId: string;
-  offset?: number;
-  limit?: number;
-};
-export type DeleteInactiveTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksInactiveDeleteApiResponse =
-  /** status 200 Successful Response */ DeletedPlatformEnrollmentLinks;
-export type DeleteInactiveTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksInactiveDeleteApiArg = {
+export type GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiArg = {
   teamId: string;
 };
-export type RevealTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdRevealPostApiResponse =
-  /** status 200 Successful Response */ PlatformEnrollmentLink;
-export type RevealTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdRevealPostApiArg = {
+export type SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiArg = {
   teamId: string;
-  linkId: string;
+  setTeamJoinLink: SetTeamJoinLink;
 };
-export type RevokeTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdDeleteApiResponse = unknown;
-export type RevokeTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdDeleteApiArg = {
+export type RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiArg = {
   teamId: string;
-  linkId: string;
 };
 export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse =
   /** status 200 Successful Response */ PlatformAccessStatus;
@@ -3819,6 +3757,13 @@ export type PlatformEnrollmentJoinersPage = {
 };
 export type DeletedPlatformEnrollmentLinks = {
   deleted_count: number;
+};
+export type TeamJoinLink = {
+  enabled: boolean;
+  token?: string | null;
+};
+export type SetTeamJoinLink = {
+  enabled: boolean;
 };
 export type PlatformAccessStatus = {
   admitted: boolean;
@@ -5899,14 +5844,10 @@ export const {
   useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation,
   useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation,
   useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation,
-  useCreateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksPostMutation,
-  useListTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGetQuery,
-  useLazyListTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGetQuery,
-  useListTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGetQuery,
-  useLazyListTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGetQuery,
-  useDeleteInactiveTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksInactiveDeleteMutation,
-  useRevealTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdRevealPostMutation,
-  useRevokeTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdDeleteMutation,
+  useGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery,
+  useLazyGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery,
+  useSetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutMutation,
+  useRegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostMutation,
   useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
   useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
   usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,

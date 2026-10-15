@@ -27,8 +27,6 @@ const hooks = vi.hoisted(() => ({
   linkNote: "Workshop" as string | null,
   teamFree: undefined as boolean | undefined,
   teamQuery: vi.fn(),
-  teamLinksQuery: vi.fn(),
-  teamGenerate: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ frontend_basename: "/" }) }));
@@ -89,16 +87,6 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useRevealPlatformLinkMutation: () => [hooks.reveal, { isLoading: hooks.revealLoading, reset: hooks.reset }],
   useRevokePlatformLinkMutation: () => [hooks.revoke, { isLoading: false }],
   useDeleteInactivePlatformLinksMutation: () => [hooks.cleanup, { isLoading: false }],
-  useTeamJoinLinksQuery: (...args: unknown[]) => {
-    hooks.teamLinksQuery(...args);
-    const data = { items: [], total: 0, inactive_count: 0 };
-    return { data, currentData: data, isFetching: false, isError: false };
-  },
-  useTeamJoinLinkJoinersQuery: () => ({ currentData: undefined, isFetching: false, isError: false }),
-  useCreateTeamJoinLinkMutation: () => [hooks.teamGenerate, { isLoading: false, reset: hooks.reset }],
-  useRevealTeamJoinLinkMutation: () => [vi.fn(), { isLoading: false, reset: hooks.reset }],
-  useRevokeTeamJoinLinkMutation: () => [vi.fn(), { isLoading: false }],
-  useDeleteInactiveTeamJoinLinksMutation: () => [vi.fn(), { isLoading: false }],
 }));
 import PlatformAccessLinkManager from "./PlatformAccessLinkManager";
 import styles from "./PlatformAccessPage.module.css";
@@ -289,7 +277,6 @@ it("keeps history available while Free is suspended and prevents link creation",
 it("refreshes the link access notice when the team's setting changes elsewhere", () => {
   render();
   expect(hooks.teamQuery).toHaveBeenCalledWith(undefined, {
-    skip: false,
     refetchOnMountOrArgChange: true,
     pollingInterval: 30000,
   });
@@ -599,23 +586,4 @@ it("consumes Escape before the parent dialog even when focus has returned to the
   expect(input("links.expiryDate")).toBeUndefined();
   expect(input("links.note")).toBeDefined();
   expect(document.activeElement?.getAttribute("aria-expanded")).toBe("false");
-});
-
-it("manages a team's join links through the team routes, without Link access", async () => {
-  hooks.teamGenerate.mockReturnValue({ unwrap: async () => ({ token: "fixture-team-token" }) });
-  act(() =>
-    root.render(<PlatformAccessLinkManager scope="team" team={{ team_id: "demo", name: "Demo" }} onClose={vi.fn()} />),
-  );
-  expect(hooks.teamQuery).toHaveBeenCalledWith(undefined, expect.objectContaining({ skip: true }));
-  expect(hooks.query).not.toHaveBeenCalled();
-  expect(hooks.teamLinksQuery).toHaveBeenCalledWith(expect.objectContaining({ teamId: "demo" }), expect.anything());
-  expect(document.body.textContent).toContain("rework.teamSettings.members.inviteLink.hint");
-  expect(document.body.textContent).not.toContain("rework.platformAccess.links.suspendedHint");
-  act(() => button("createLink").click());
-  await act(async () => button("createLink").click());
-  expect(hooks.teamGenerate).toHaveBeenCalledWith({
-    teamId: "demo",
-    createPlatformEnrollmentLink: { note: null, expires_at: null },
-  });
-  expect(hooks.generate).not.toHaveBeenCalled();
 });

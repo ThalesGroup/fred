@@ -2841,7 +2841,15 @@
         },
         "inviteLink": {
           "buttonLabel": "Invite link",
-          "hint": "Share these links yourself: anyone who already has access to the platform can use them to join the team as a member."
+          "copied": "Copied",
+          "copy": "Copy",
+          "copyFailed": "The link could not be copied automatically. It is selected: copy it with your keyboard.",
+          "enable": "Enable invitation by link",
+          "failed": "The invite link could not be updated. Try again.",
+          "hint": "Anyone who already has access to the platform can join the team as a member with this link.",
+          "regenerate": "Generate a new link",
+          "title": "Invite link",
+          "urlLabel": "Link"
         },
         "moreActions": "More actions",
         "search": {

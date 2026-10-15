@@ -11,7 +11,7 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ canAdministerMembers: true, manager: vi.fn() }));
+const h = vi.hoisted(() => ({ canAdministerMembers: true, platformAccess: true, dialog: vi.fn() }));
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
@@ -20,10 +20,13 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
 vi.mock("./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx", () => ({ default: () => null }));
 vi.mock("./TeamSettingsMembersMenu/TeamSettingsMembersMenu.tsx", () => ({ default: () => null }));
 vi.mock("./AddTeamMembersDialog/AddTeamMembersDialog.tsx", () => ({ default: () => null }));
-vi.mock("../../../../pages/admin/PlatformAccessPage/PlatformAccessLinkManager", () => ({
-  default: (props: { scope: string; team: { team_id: string; name: string } }) => {
-    h.manager(props);
-    return <div data-testid="link-manager" />;
+vi.mock("../../../../../../common/config", () => ({
+  getConfig: () => ({ platform_access_enabled: h.platformAccess }),
+}));
+vi.mock("./TeamInviteLinkDialog/TeamInviteLinkDialog.tsx", () => ({
+  default: (props: { teamId: string }) => {
+    h.dialog(props);
+    return <div data-testid="invite-link-dialog" />;
   },
 }));
 
@@ -48,25 +51,31 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   h.canAdministerMembers = true;
-  h.manager.mockClear();
+  h.platformAccess = true;
+  h.dialog.mockClear();
 });
 
-it("opens the team's join-link manager next to Add members", () => {
+it("opens the team's invite link dialog next to Add members", () => {
   render();
   const labels = [...container.querySelectorAll("button")].map((node) => node.textContent);
   expect(labels.indexOf("rework.teamSettings.members.inviteLink.buttonLabel")).toBe(
     labels.indexOf("rework.teamSettings.members.addMembersDialog.buttonLabel") - 1,
   );
-  expect(container.querySelector('[data-testid="link-manager"]')).toBeNull();
+  expect(container.querySelector('[data-testid="invite-link-dialog"]')).toBeNull();
   act(() => inviteButton()!.click());
-  expect(container.querySelector('[data-testid="link-manager"]')).not.toBeNull();
-  expect(h.manager).toHaveBeenCalledWith(
-    expect.objectContaining({ scope: "team", team: { team_id: "demo", name: "Demonstration" } }),
-  );
+  expect(container.querySelector('[data-testid="invite-link-dialog"]')).not.toBeNull();
+  expect(h.dialog).toHaveBeenCalledWith(expect.objectContaining({ teamId: "demo" }));
 });
 
 it("hides the invite link from people who cannot administer members", () => {
   h.canAdministerMembers = false;
   render();
   expect(inviteButton()).toBeUndefined();
+});
+
+it("hides the invite link when the deployment has no platform access", () => {
+  h.platformAccess = false;
+  render();
+  expect(inviteButton()).toBeUndefined();
+  expect(container.textContent).toContain("rework.teamSettings.members.addMembersDialog.buttonLabel");
 });

@@ -23,35 +23,8 @@ import {
   useRevokePlatformLinkMutation,
   useDeleteInactivePlatformLinksMutation,
   usePlatformAccessTeamsQuery,
-  useTeamJoinLinksQuery,
-  useTeamJoinLinkJoinersQuery,
-  useCreateTeamJoinLinkMutation,
-  useRevealTeamJoinLinkMutation,
-  useRevokeTeamJoinLinkMutation,
-  useDeleteInactiveTeamJoinLinksMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
-
-// Platform admins manage Free-team links; team admins manage join links of their own
-// team. Both route families share request and response shapes.
-const LINK_HOOKS = {
-  platform: {
-    useLinks: usePlatformEnrollmentLinksQuery,
-    useJoiners: usePlatformEnrollmentJoinersQuery,
-    useGenerate: useGeneratePlatformLinkMutation,
-    useReveal: useRevealPlatformLinkMutation,
-    useRevoke: useRevokePlatformLinkMutation,
-    useDeleteInactive: useDeleteInactivePlatformLinksMutation,
-  },
-  team: {
-    useLinks: useTeamJoinLinksQuery,
-    useJoiners: useTeamJoinLinkJoinersQuery,
-    useGenerate: useCreateTeamJoinLinkMutation,
-    useReveal: useRevealTeamJoinLinkMutation,
-    useRevoke: useRevokeTeamJoinLinkMutation,
-    useDeleteInactive: useDeleteInactiveTeamJoinLinksMutation,
-  },
-};
 
 type LinkStatusFilter = Exclude<PlatformEnrollmentLinkInfo["status"], "suspended"> | "all";
 
@@ -62,40 +35,34 @@ const selectUrlFromStart = (input: HTMLInputElement) => {
 
 export default function PlatformAccessLinkManager({
   team,
-  scope = "platform",
   onClose,
 }: {
-  team: Pick<PlatformAccessTeam, "team_id" | "name"> & Partial<PlatformAccessTeam>;
-  scope?: keyof typeof LINK_HOOKS;
+  team: PlatformAccessTeam;
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const hooks = LINK_HOOKS[scope];
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<LinkStatusFilter>("all");
   const teams = usePlatformAccessTeamsQuery(undefined, {
-    skip: scope === "team",
     refetchOnMountOrArgChange: true,
     pollingInterval: 30000,
   });
-  // Only Free-team links depend on the team's Link access setting.
-  const linkAccessEnabled =
-    scope === "team" || (teams.data?.find((entry) => entry.team_id === team.team_id)?.free ?? !!team.free);
-  const links = hooks.useLinks(
+  const linkAccessEnabled = teams.data?.find((entry) => entry.team_id === team.team_id)?.free ?? team.free;
+  const links = usePlatformEnrollmentLinksQuery(
     { teamId: team.team_id, offset, limit: 25, status: status === "all" ? undefined : status },
     {
       refetchOnMountOrArgChange: true,
       pollingInterval: 30000,
     },
   );
-  const [generate, generating] = hooks.useGenerate();
-  const [reveal] = hooks.useReveal();
-  const [revoke, revoking] = hooks.useRevoke();
-  const [deleteInactive, deleting] = hooks.useDeleteInactive();
+  const [generate, generating] = useGeneratePlatformLinkMutation();
+  const [reveal] = useRevealPlatformLinkMutation();
+  const [revoke, revoking] = useRevokePlatformLinkMutation();
+  const [deleteInactive, deleting] = useDeleteInactivePlatformLinksMutation();
   const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [joinersLink, setJoinersLink] = useState<PlatformEnrollmentLinkInfo>();
   const [joinersOffset, setJoinersOffset] = useState(0);
-  const joiners = hooks.useJoiners(
+  const joiners = usePlatformEnrollmentJoinersQuery(
     { teamId: team.team_id, linkId: joinersLink?.id ?? "", offset: joinersOffset, limit: 25 },
     { skip: !joinersLink, refetchOnMountOrArgChange: true, pollingInterval: 30000 },
   );
@@ -260,9 +227,7 @@ export default function PlatformAccessLinkManager({
       >
         <div className={styles.dialogBody}>
           {copyAnnouncement}
-          <p className={styles.hint}>
-            {t(scope === "team" ? "rework.teamSettings.members.inviteLink.hint" : "rework.platformAccess.links.hint")}
-          </p>
+          <p className={styles.hint}>{t("rework.platformAccess.links.hint")}</p>
           {!linkAccessEnabled && (
             <p className={styles.linkSuspendedNotice} role="status">
               <span className="material-symbols-outlined" aria-hidden="true">

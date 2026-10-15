@@ -22,7 +22,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import PlatformAccessLinkManager from "../../../../pages/admin/PlatformAccessPage/PlatformAccessLinkManager";
+import TeamInviteLinkDialog from "./TeamInviteLinkDialog/TeamInviteLinkDialog.tsx";
+import { getConfig } from "../../../../../../common/config";
 import styles from "./TeamSettingsMembers.module.scss";
 
 interface TeamSettingsMembersProps {
@@ -36,6 +37,8 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isInviteLinkOpen, setIsInviteLinkOpen] = useState(false);
+  // Invite links live in platform access, only available on deployments that enable it.
+  const canShareInviteLink = can_administer_members && (getConfig()?.platform_access_enabled ?? false);
   const [search, setSearch] = useState("");
 
   return (
@@ -55,15 +58,15 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
                 size="small"
               />
             </div>
+            {canShareInviteLink && (
+              <Button color="primary" variant="outlined" size="medium" onClick={() => setIsInviteLinkOpen(true)}>
+                {t("rework.teamSettings.members.inviteLink.buttonLabel")}
+              </Button>
+            )}
             {can_administer_members && (
-              <>
-                <Button color="primary" variant="outlined" size="medium" onClick={() => setIsInviteLinkOpen(true)}>
-                  {t("rework.teamSettings.members.inviteLink.buttonLabel")}
-                </Button>
-                <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
-                  {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
-                </Button>
-              </>
+              <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
+                {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
+              </Button>
             )}
           </>
         }
@@ -74,12 +77,8 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
       {can_administer_members && (
         <AddTeamMembersDialog open={isAddDialogOpen} team={team} onClose={() => setIsAddDialogOpen(false)} />
       )}
-      {can_administer_members && isInviteLinkOpen && (
-        <PlatformAccessLinkManager
-          scope="team"
-          team={{ team_id: team.id, name: team.name }}
-          onClose={() => setIsInviteLinkOpen(false)}
-        />
+      {canShareInviteLink && isInviteLinkOpen && (
+        <TeamInviteLinkDialog teamId={team.id} onClose={() => setIsInviteLinkOpen(false)} />
       )}
     </div>
   );

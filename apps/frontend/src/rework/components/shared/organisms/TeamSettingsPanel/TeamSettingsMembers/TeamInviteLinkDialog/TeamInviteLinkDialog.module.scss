@@ -1,0 +1,54 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  width: 100%;
+}
+
+.toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  font: var(--font-body-large);
+}
+
+.hint {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.urlRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.url {
+  flex: 1;
+  min-width: 0;
+}
+
+.urlInput {
+  font-family: var(--font-family-mono, monospace);
+}
+
+.screenReaderOnly {
+  position: absolute;
+  clip-path: inset(50%);
+  margin: -1px;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+}

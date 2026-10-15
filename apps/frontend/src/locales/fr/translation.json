@@ -2841,7 +2841,15 @@
         },
         "inviteLink": {
           "buttonLabel": "Lien d'invitation",
-          "hint": "Partagez ces liens vous-même : toute personne ayant déjà accès à la plateforme peut s'en servir pour rejoindre l'équipe en tant que membre."
+          "copied": "Copié",
+          "copy": "Copier",
+          "copyFailed": "Le lien n'a pas pu être copié automatiquement. Il est sélectionné : copiez-le avec votre clavier.",
+          "enable": "Activer l'invitation par lien",
+          "failed": "Le lien d'invitation n'a pas pu être mis à jour. Réessayez.",
+          "hint": "Toute personne ayant déjà accès à la plateforme peut rejoindre l'équipe en tant que membre avec ce lien.",
+          "regenerate": "Générer un nouveau lien",
+          "title": "Lien d'invitation",
+          "urlLabel": "Lien"
         },
         "moreActions": "Plus d'actions",
         "search": {
