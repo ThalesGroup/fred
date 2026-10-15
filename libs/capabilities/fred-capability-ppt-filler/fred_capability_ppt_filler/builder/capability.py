@@ -121,7 +121,7 @@ _ANALYSING_MESSAGE = (
 )
 _NOT_READY_MESSAGE = (
     "The presentation template analysis did not succeed, so no deck can be built. Tell the user "
-    "that the agent's owner must re-run the analysis in the agent settings."
+    "that the agent's owner must save the agent again in its settings to re-run the analysis."
 )
 
 
@@ -231,32 +231,6 @@ def _build_router() -> APIRouter:
         if pdf is None:
             raise HTTPException(status_code=404, detail="No thumbnails.")
         return Response(content=pdf, media_type=_PDF_CONTENT_TYPE)
-
-    @router.post(
-        "/analysis/{instance_id}/rerun",
-        response_model=AnalysisStatusResponse,
-        operation_id="rerunPptBuilderAnalysis",
-    )
-    async def analysis_rerun(
-        instance_id: str,
-        authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
-    ) -> AnalysisStatusResponse:
-        """Re-run a failed, interrupted or outdated analysis from the stored template."""
-        record = await _authorised_record(instance_id, authorizer)
-        status = status_response(record).status
-        if status in ("pending", "running"):
-            raise HTTPException(status_code=409, detail="The analysis is running.")
-        if status == "succeeded" and not record.outdated():
-            raise HTTPException(status_code=409, detail="The analysis succeeded.")
-        store = get_analysis_store()
-        if status == "succeeded":  # outdated: the agent keeps it meanwhile
-            await refresh_outdated(store, record, force=True)
-        else:
-            await restart_from_stored(store, record)
-        refreshed = await store.get(instance_id)
-        if refreshed is None:
-            raise HTTPException(status_code=404, detail="No template analysis.")
-        return status_response(refreshed)
 
     return router
 

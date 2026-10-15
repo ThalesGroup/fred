@@ -173,7 +173,9 @@ async def test_interrupted_analysis_is_reported_and_recovered(analysis_db):
     record = await store.get(INSTANCE)
     assert record is not None
     response = status_response(record)
-    assert response.status == "interrupted" and "Re-run" in (response.error or "")
+    assert response.status == "interrupted" and "Save the agent" in (
+        response.error or ""
+    )
 
     readiness = await analysis_readiness(store, INSTANCE, SHA, "rules")
     assert readiness.state == "pending"
@@ -357,7 +359,7 @@ async def test_a_failed_refresh_keeps_the_old_analysis_and_is_not_retried(
     assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None
     await drain()
     assert len(jobs) == 1
-    # The author's re-run still starts one, and the agent stays ready meanwhile.
+    # The author's save still starts one, and the agent stays ready meanwhile.
     assert await analysis_job.refresh_outdated(store, record, force=True)
     assert (await capability.readiness(stored, IDENTITY)).state == "ready"
     await drain()
@@ -451,41 +453,72 @@ async def test_a_refresh_that_lands_here_replaces_the_cached_outdated_inventory(
     assert record is not None and not record.outdated()
 
 
+def _record_ports(monkeypatch) -> list:
+    """The port each job started with, in order."""
+    jobs: list = []
+    original = analysis_job.run_analysis
+
+    async def _recording(store, instance_id, job_id, template, port, key):
+        jobs.append(port)
+        await original(store, instance_id, job_id, template, port, key)
+
+    monkeypatch.setattr(analysis_job, "run_analysis", _recording)
+    return jobs
+
+
 @pytest.mark.asyncio
-async def test_a_recovery_without_the_port_stores_rules_and_a_save_relabels(
-    analysis_db,
+async def test_an_interrupted_vision_analysis_waits_for_a_save_without_the_port(
+    analysis_db, monkeypatch
 ):
-    """An interrupted vision analysis recovered on a pod without the model port
-    labels by rules: the row says so, the agent stays ready, and the next save
-    that brings the port re-runs it with vision."""
+    """After a restart (no cached port) a turn or a readiness check must not
+    recover a vision analysis by rules: it stays interrupted until a save,
+    which brings the port, re-runs it with vision."""
     stored = await _save(PptBuilderConfig(), _uploads())
     await drain()
     await age_row(analysis_db, INSTANCE, status="running", inventory_json=None)
-    analysis_job.clear_caches()  # another pod: no port
+    analysis_job.clear_caches()  # fred-agents restarted: no port
+    jobs = _record_ports(monkeypatch)
     store = get_analysis_store()
-    assert (
-        await analysis_readiness(store, INSTANCE, SHA, "vision:agent-default")
-    ).state == "pending"
+    readiness = await analysis_readiness(store, INSTANCE, SHA, "vision:agent-default")
+    assert readiness.state == "failed" and "interrupted" in (readiness.detail or "")
+    assert await ready_inventory(store, INSTANCE, SHA, stored.labelling_key()) is None
     await drain()
+    assert jobs == []
     record = await store.get(INSTANCE)
-    assert record is not None and record.status == "succeeded"
-    assert record.labelling_key == "rules"
-    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
-    assert await ready_inventory(store, INSTANCE, SHA, stored.labelling_key())
+    assert record is not None and status_response(record).status == "interrupted"
+    assert record.attempts == 1
 
-    await _save(stored, port=None)  # still no port: nothing to gain, no job
-    await drain()
-    record = await store.get(INSTANCE)
-    assert record is not None and record.labelling_key == "rules"
     await _save(stored)
     await drain()
+    assert jobs == [PORT]
     record = await store.get(INSTANCE)
-    assert record is not None and record.labelling_key == "vision:agent-default"
+    assert record is not None and record.status == "succeeded"
+    assert record.labelling_key == "vision:agent-default"
 
 
 @pytest.mark.asyncio
-async def test_a_forced_refresh_without_the_port_is_not_mistaken_for_vision(
-    analysis_db,
+async def test_a_save_after_a_restart_reruns_with_vision(analysis_db, monkeypatch):
+    """The form's re-run is a save: failed and outdated vision analyses come
+    back labelled with the save's port, even with nothing cached on the pod."""
+    stored = await _save(PptBuilderConfig(), _uploads())
+    await drain()
+    store = get_analysis_store()
+    for aged in ({"status": "failed"}, {"analysis_version": ANALYSIS_VERSION - 1}):
+        await age_row(analysis_db, INSTANCE, **aged)
+        analysis_job.clear_caches()
+        jobs = _record_ports(monkeypatch)
+        await _save(stored)
+        await drain()
+        assert jobs == [PORT]
+        record = await store.get(INSTANCE)
+        assert record is not None and record.status == "succeeded"
+        assert record.labelling_key == "vision:agent-default"
+        assert record.analysis_version == ANALYSIS_VERSION
+
+
+@pytest.mark.asyncio
+async def test_a_vision_job_without_the_port_stores_rules_and_warns(
+    analysis_db, caplog
 ):
     stored = await _save(PptBuilderConfig(), _uploads())
     await drain()
@@ -494,8 +527,13 @@ async def test_a_forced_refresh_without_the_port_is_not_mistaken_for_vision(
     store = get_analysis_store()
     record = await store.get(INSTANCE)
     assert record is not None
-    assert await analysis_job.refresh_outdated(store, record, force=True)
-    await drain()
+    with caplog.at_level("WARNING", logger=analysis_job.logger.name):
+        assert await analysis_job.refresh_outdated(store, record, force=True)
+        await drain()
+    assert any(
+        r.levelname == "WARNING" and "labels by rules" in r.getMessage()
+        for r in caplog.records
+    )
     record = await store.get(INSTANCE)
     assert record is not None and record.analysis_version == ANALYSIS_VERSION
     assert record.labelling_key == "rules"

@@ -270,7 +270,6 @@ async def test_a_non_editor_is_refused_everywhere(analysis_db):
         for response in (
             await client.get(_BASE),
             await client.get(f"{_BASE}/patterns.pdf"),
-            await client.post(f"{_BASE}/rerun"),
         ):
             assert response.status_code == 403
 
@@ -289,27 +288,6 @@ async def test_an_editor_sees_status_thumbnails_and_inventory(analysis_db):
         assert (
             await client.get("/capabilities/ppt_builder/analysis/x")
         ).status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_rerun_restarts_a_failed_or_interrupted_analysis_only(analysis_db):
-    await _analysed()
-    async with _async_client({"team-42"}) as client:
-        assert (await client.post(f"{_BASE}/rerun")).status_code == 409
-        await age_row(analysis_db, "inst-7", status="running")
-        body = (await client.post(f"{_BASE}/rerun")).json()
-        assert body["status"] == "pending"
-        assert (await client.post(f"{_BASE}/rerun")).status_code == 409
-        await drain()
-        assert (await client.get(_BASE)).json()["status"] == "succeeded"
-        # An outdated analysis is refreshed in place: it stays succeeded meanwhile.
-        await age_row(analysis_db, "inst-7", analysis_version=0)
-        body = (await client.post(f"{_BASE}/rerun")).json()
-        assert body["status"] == "succeeded" and body["current"] is True
-        assert body["refreshing"] is True
-        await drain()
-        body = (await client.get(_BASE)).json()
-        assert body["analysis_version"] > 0 and body["refreshing"] is False
 
 
 # --- turn wiring -------------------------------------------------------------------------------

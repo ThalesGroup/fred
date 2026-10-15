@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 LEASE_SECONDS = 90
 HEARTBEAT_SECONDS = 30
 # Automatic restarts after an interruption; a template that keeps killing the
-# job then fails instead of looping. A manual re-run starts the count again.
+# job then fails instead of looping. A save that re-runs it starts the count again.
 MAX_ATTEMPTS = 3
 JOB_TIMEOUT_SECONDS = 20 * 60
 # Nobody waits on the job, and a large template's patterns deck exceeds the
@@ -89,7 +89,7 @@ RowStatus = Literal["pending", "running", "succeeded", "failed"]
 ViewStatus = Literal["pending", "running", "succeeded", "failed", "interrupted"]
 
 _INTERRUPTED_DETAIL = (
-    "The template analysis was interrupted. Re-run it from the agent settings."
+    "The template analysis was interrupted. Save the agent to run it again."
 )
 _MISSING_DETAIL = (
     "The template analysis was not found. Save the agent again or upload the "
@@ -181,7 +181,7 @@ class AnalysisRecord:
 
     def matches(self, sha: str, key: str) -> bool:
         # A vision run without the model port labels and stores `rules`: it
-        # serves a vision config until a save with the port re-runs it.
+        # serves a vision config until a save, which brings the port, re-runs it.
         return self.template_sha256 == sha and self.labelling_key in (key, RULES_KEY)
 
     def interrupted(self, now: datetime) -> bool:
@@ -517,8 +517,8 @@ def clear_store_provider() -> None:
 _inventories: ThreadSafeLRUCache[
     Tuple[str, str, str], Tuple[TemplateInventory, Optional[float]]
 ] = ThreadSafeLRUCache(max_size=64)
-# The last save's model port per instance, so a re-run started on this pod can
-# label with vision; elsewhere a re-run labels by rules (marked heuristic).
+# The last save's model port per instance: only a save carries one, so a job
+# this pod starts later (refresh, recovery) labels with vision only while cached.
 _ports: ThreadSafeLRUCache[str, CapabilityModelPort] = ThreadSafeLRUCache(max_size=256)
 _running: set[asyncio.Task[None]] = set()
 _background_slots = 0
@@ -662,7 +662,12 @@ async def run_analysis(
     started = time.monotonic()
     if not await store.heartbeat(instance_id, job_id):
         return  # superseded before it started
-    if port is None:
+    if port is None and key != RULES_KEY:
+        logger.warning(
+            "Analysis of %s labels by rules: no model port for %s on this pod",
+            instance_id,
+            key,
+        )
         key = RULES_KEY  # what the labels really are: a save with the port re-runs
     work = asyncio.ensure_future(_analyse(template, port, key))
     try:
@@ -675,7 +680,7 @@ async def run_analysis(
                 await store.fail(
                     instance_id,
                     job_id,
-                    "The template analysis took too long. Re-run it, or try a smaller template.",
+                    "The template analysis took too long. Save the agent to run it again, or try a smaller template.",
                 )
                 return
             try:
@@ -696,7 +701,7 @@ async def run_analysis(
         await store.fail(
             instance_id,
             job_id,
-            "The template analysis stopped on an internal error. Re-run it; if it fails again, "
+            "The template analysis stopped on an internal error. Save the agent to run it again; if it fails again, "
             "check the template opens in PowerPoint.",
         )
         return
@@ -735,13 +740,13 @@ async def restart_from_stored(
     store: AnalysisStore,
     record: AnalysisRecord,
     *,
-    labelling_key: Optional[str] = None,
+    labelling_key: str,
 ) -> None:
-    """Re-run the analysis from the template already in the row."""
+    """Re-run the analysis from the template already in the row (a save)."""
     template = await store.template(record.agent_instance_id)
     if template is None:
         raise LookupError(f"No stored template for {record.agent_instance_id}.")
-    key = labelling_key or record.labelling_key
+    key = labelling_key
     job_id = await store.start(
         instance_id=record.agent_instance_id,
         team_id=record.team_id,
@@ -754,17 +759,29 @@ async def restart_from_stored(
 
 
 async def recover_interrupted(store: AnalysisStore, instance_id: str) -> bool:
-    """Restart an interrupted analysis if this replica wins the claim."""
+    """Restart an interrupted analysis if this replica wins the claim. A vision
+    one is recovered only where the save left its model port: elsewhere it
+    stays interrupted until a save re-runs it, instead of turning into rules."""
+    record = await store.get(instance_id, with_inventory=False)
+    if record is None or not _port_for(record):
+        return False
     job_id = await store.claim_interrupted(instance_id)
     if job_id is None:
         return False
     template = await store.template(instance_id)
-    record = await store.get(instance_id, with_inventory=False)
-    if template is None or record is None:
+    if template is None:
         return False
     logger.info("Restarting interrupted analysis of %s", instance_id)
     spawn_analysis(store, instance_id, job_id, template, record.labelling_key)
     return True
+
+
+def _port_for(record: AnalysisRecord) -> bool:
+    """Whether a job started here can label the way the row says."""
+    return (
+        record.labelling_key == RULES_KEY
+        or _ports.get(record.agent_instance_id) is not None
+    )
 
 
 async def refresh_outdated(
@@ -780,11 +797,7 @@ async def refresh_outdated(
     if not force and record.attempts >= MAX_ATTEMPTS:
         return False  # checked before the claim: no write on every turn
     # Without this pod's vision port the re-run would label by rules: keep the old one.
-    if (
-        not force
-        and record.labelling_key != RULES_KEY
-        and _ports.get(instance_id) is None
-    ):
+    if not force and not _port_for(record):
         return False
     job_id = await store.claim_refresh(instance_id, force=force)
     if job_id is None:
