@@ -176,8 +176,8 @@ The system SHALL complete the agent save without waiting for the template analys
 #### Scenario: Interrupted analysis recovers
 
 - **WHEN** the replica running an analysis stops before finishing
-- **THEN** the analysis is reported as interrupted once its lease expires and can be re-run
-- **AND** a re-run on a replica without the model port the save left records that it labelled by rules; the agent stays usable on it, and the next save that carries a model port re-runs it with vision
+- **THEN** the analysis is reported as interrupted once its lease expires, and the next readiness check, turn or save restarts it
+- **AND** a vision-labelled analysis is restarted by a readiness check or a turn only on a replica holding the model port the agent's last save left; elsewhere (after a restart, on another replica) it stays interrupted, the agent unavailable, until a save, which carries the port, re-runs it with vision; it never comes back labelled by rules
 
 #### Scenario: Agent unavailable while analysing
 
@@ -193,7 +193,7 @@ The system SHALL complete the agent save without waiting for the template analys
 
 - **WHEN** the analysis succeeds while nobody has the agent form open
 - **THEN** the next listing of the team's agents re-checks the agent and shows it available, and a pod that does not answer in time leaves it unavailable without delaying the listing
-- **AND** a failed analysis is not re-checked by the listing; it changes on a save, a re-run or the form's re-check
+- **AND** a failed analysis is not re-checked by the listing; it changes on a save or the form's re-check
 - **AND** with more than ten preparing agents, each listing checks ten of them, so every one gets its turn
 
 #### Scenario: No readiness answer after a save
@@ -219,7 +219,7 @@ The system SHALL complete the agent save without waiting for the template analys
 #### Scenario: Failed or interrupted analysis
 
 - **WHEN** the analysis fails or is interrupted
-- **THEN** the agent stays unavailable, the agent form shows the error, and an author who can edit the agent may re-run the analysis from the stored template
+- **THEN** the agent stays unavailable, the agent form shows the error and that saving the agent re-runs the analysis, and a save re-runs it from the stored template with the model port the save carries
 
 #### Scenario: Build requested before analysis completes
 
@@ -239,7 +239,7 @@ The system SHALL complete the agent save without waiting for the template analys
 
 #### Scenario: Only agent editors see the analysis
 
-- **WHEN** a user who cannot edit the agent requests its analysis status, thumbnails or a re-run
+- **WHEN** a user who cannot edit the agent requests its analysis status or thumbnails
 - **THEN** the request is refused
 
 #### Scenario: Analysis rules change
@@ -248,15 +248,15 @@ The system SHALL complete the agent save without waiting for the template analys
 - **WHEN** its readiness is checked, a turn reads the analysis, or the agent is saved
 - **THEN** the agent stays available and its turns keep using the stored analysis, and one re-run starts in the background from the stored template, without a user token
 - **AND** concurrent checks on any replica start no second re-run while one is running, and the agent form shows the analysis as being read again meanwhile, without offering a re-run, then shows the new result when it ends, without a reload
-- **AND** once the re-run succeeds its result is used; when it fails, the stored analysis stays in use, no re-run starts automatically again, and the form offers the re-run action, which re-runs it the same way
+- **AND** once the re-run succeeds its result is used; when it fails, the stored analysis stays in use, no re-run starts automatically again, and the form says that saving the agent re-runs it, which a save does
 
 #### Scenario: Vision-labelled analysis refreshed only with its model
 
 - **GIVEN** an outdated succeeded analysis labelled by a vision model
 - **WHEN** its readiness is checked or a turn reads it on a replica that holds no model port remembered from the agent's last save
-- **THEN** no re-run starts, the agent stays available on the stored analysis, and the agent form shows it as outdated with the hint that saving the agent re-reads it with its vision model
-- **AND** on a replica holding that port, one re-run starts as for a rules-labelled analysis, and a save always starts one with the port it remembers
-- **AND** a forced re-run on a replica without the port records the rules labelling it used, so a later save with the port relabels it with vision
+- **THEN** no re-run starts, the agent stays available on the stored analysis, and the agent form shows it as outdated with the hint that saving the agent re-reads it
+- **AND** on a replica holding that port, one re-run starts as for a rules-labelled analysis, and a save always starts one with the port it carries
+- **AND** a job that still runs without the port for a vision labelling (a save on a pod that gives none) logs a warning and records the rules labelling it used, so a later save with the port relabels it with vision
 
 #### Scenario: Background analyses leave room for turns
 

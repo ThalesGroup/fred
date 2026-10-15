@@ -1515,3 +1515,20 @@ Render evidence (no LLM, `assign` then `render_deck` on the Cyan template; a Tha
 Commands (package root): `make test`: 713 passed, 5 skipped; `ruff check`, `ruff check --select I`, `ruff format --check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` `__all__` warning). `openspec validate ppt-builder-capability --strict` valid. The reference-template tests fail on Paintress and the corporate deck before and after alike (they expect a `chart` exclusion neither holds).
 
 Not covered: the vision run itself; the 1-line capacity of Cyan's timeline texts; Cyan's figures slide has no title zone.
+
+## Results: WP47 (re-runs go through the save)
+
+Root cause of the rules labelling seen in WP46: the model port only reaches the capability on a save (`_build_capability_save_services`, fred-runtime) and is cached per process (`analysis_job._ports`). The re-run route had no save context, and turns and readiness checks carry no port either, so after a restart `run_analysis` ran without one and stored `rules`. The route is deleted; the form tells the author to save, and a save re-runs failed, interrupted and outdated analyses with the port it carries.
+
+| Rule | Evidence |
+| --- | --- |
+| A save after a restart re-runs failed and outdated vision analyses with the port | `test_a_save_after_a_restart_reruns_with_vision` |
+| An interrupted vision analysis is not recovered without the port; a save relabels it | `test_an_interrupted_vision_analysis_waits_for_a_save_without_the_port` |
+| A vision job without a port warns and stores `rules` | `test_a_vision_job_without_the_port_stores_rules_and_warns` |
+| Rules-labelled interrupted analyses still recover on readiness | `test_interrupted_analysis_is_reported_and_recovered` |
+| No re-run route, editors still gated on status and thumbnails | `test_a_non_editor_is_refused_everywhere` |
+| The status line has no button; the outdated hint says to save | `shows the error and no action of its own: a save re-runs the analysis`, `tells the author a save refreshes an outdated analysis` |
+
+Commands: package `make test`: 713 passed, 5 skipped; `ruff check`, `--select I`, `format --check` clean; `basedpyright --baseline-file .baseline/basedpyright-baseline.json`: 0 errors (existing `builder_decks.py` warning). Client regenerated with `make update-ppt-builder-capability-api` (the rerun mutation removed). Frontend (no make target): `tsc --noEmit` clean, prettier and eslint clean on touched files, `vitest run` on the ppt_builder folder: 6 files, 42 tests passed. `openspec validate ppt-builder-capability --strict` valid.
+
+Not covered: a live save-based re-run in the browser.

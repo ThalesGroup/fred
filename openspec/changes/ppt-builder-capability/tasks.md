@@ -510,3 +510,13 @@ Owns: `analysis.py` (`_pair_group`, `_pairs`, `_lone_figure`, `_item_order`, `_r
 - [x] 46.4 Before/after classification of Paintress Cyan, Paintress, the built-in template and the corporate reference; a Thales Italy/Spain deck rendered on Cyan before/after; `make builtin-inventory`
 - [x] 46.5 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; `verification.md`; `openspec validate --strict`
 - Not in scope: why vision did not run on these templates (a re-run after a restart has no model port, see verification), the capacity of Cyan's timeline texts (1 line)
+
+## WP47. Re-runs go through the save, the only path with the model port (owner decision 2026-10-15)
+
+Owns: `analysis_job.py` (`recover_interrupted`, `run_analysis`, `restart_from_stored`), `capability.py` (the re-run route deleted), the frontend ppt_builder folder (`usePptBuilderAnalysis`, `AnalysisStatus`), the regenerated client, fr/en `analysis.*` and Help Center wording, `COMPONENT-UX.md`, delta spec, tests, `verification.md`.
+
+- [x] 47.1 Delete `POST /analysis/{instance_id}/rerun` and the form's "Re-run analysis" button: the form says that saving the agent re-runs a failed, interrupted or outdated analysis, which the save already does with its model port. Tests: a save after a restart (no cached port) re-runs a failed and an outdated vision analysis with vision; route and component tests trimmed
+- [x] 47.2 A readiness check or turn does not recover an interrupted vision analysis without the port: it stays interrupted until a save. Test: no job, `interrupted`, then a save relabels with vision
+- [x] 47.3 A job that runs a vision key without a port logs a WARNING and stores `rules`. Test: forced refresh without the port
+- [x] 47.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; frontend tsc, prettier, eslint, the folder's vitest; `openspec validate --strict`
+- Not covered: a live save-based re-run in the browser
