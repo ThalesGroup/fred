@@ -141,6 +141,9 @@ BuildNoteCode = Literal[
     "layout_repeated",
     "layout_not_repeated",
     "intent_not_shown",
+    "illustrative_data",
+    "figures_unverified",
+    "wide_range_chart",
 ]
 
 

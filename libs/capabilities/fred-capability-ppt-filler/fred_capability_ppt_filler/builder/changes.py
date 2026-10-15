@@ -47,7 +47,7 @@ REPEAT = "repeat_layout"
 # Slide fields (and their aliases) a model may write in the change itself.
 _SLIDE_KEYS = frozenset(
     ("title", "subtitle", "bullets", "columns", "items", "image", "images", "table")
-    + ("chart",)
+    + ("chart", "takeaway", "source")
     + ("notes", "kind", "body", "text", "pattern", "type")
 )
 
@@ -202,6 +202,8 @@ class SlideChange(BaseModel):
 _Type = Union[str, Tuple[str, Any]]
 _FIELDS: Dict[str, Dict[str, _Type]] = {
     "slide": {
+        "takeaway": "text",
+        "source": "text",
         "title": "text",
         "subtitle": "text",
         "bullets": ("list", "text"),
@@ -409,6 +411,7 @@ def unchanged(base: DeckPlan, changed: DeckPlan, kinds: Mapping[str, str]) -> bo
 
 # Content a slide can lose when its kind changes; notes always stay.
 CLEARABLE = (
+    "takeaway",
     "title",
     "subtitle",
     "bullets",
@@ -568,4 +571,9 @@ def apply_changes(
             if gone.get(number) and cleared is not None:
                 cleared[len(slides)] = gone[number]
         slides.extend(inserts.get(number, []))
-    return DeckPlan(slides=slides, file_name=base.file_name)
+    return DeckPlan(
+        slides=slides,
+        file_name=base.file_name,
+        audience=base.audience,
+        main_message=base.main_message,
+    )

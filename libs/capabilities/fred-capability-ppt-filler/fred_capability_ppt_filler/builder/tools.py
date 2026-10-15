@@ -62,6 +62,7 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from PIL import Image, UnidentifiedImageError
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -71,11 +72,13 @@ from pydantic import (
 )
 from pydantic.json_schema import SkipJsonSchema
 
+from fred_capability_ppt_filler.builder import story
 from fred_capability_ppt_filler.builder.assign import (
     SECTION_RULE,
     SHAPE_HINTS,
     Assignment,
     Repeat,
+    SlideProblem,
     VarietyCheck,
     assign,
     assignable,
@@ -97,7 +100,6 @@ from fred_capability_ppt_filler.builder.models import (
     TemplateInventory,
 )
 from fred_capability_ppt_filler.builder.plan import (
-    HIDDEN_FIELDS,
     REPEAT_LAYOUT_HINT,
     DeckPlan,
     PlanChart,
@@ -107,6 +109,7 @@ from fred_capability_ppt_filler.builder.plan import (
     SlidePlan,
     field_hints,
     has_content,
+    without_hidden,
     zone_summary,
 )
 from fred_capability_ppt_filler.builder.render import RenderError, render_deck
@@ -382,7 +385,7 @@ def _schema_for(
                     "replace, insert: the new slides, each written as an entry of `slides`, "
                     "with the same fields and rooms: title, subtitle, bullets [...], columns "
                     "[{heading, bullets}], items [{number, heading, text, label, image}], "
-                    "image, images, "
+                    "takeaway, source, image, images, "
                     + ("table {header, rows}, " if "table" in kinds else "")
                     + ("chart, " if charts else "")
                     + "notes, kind."
@@ -421,6 +424,26 @@ def _schema_for(
                 description="Short, relevant file name for the deck; '.pptx' is added.",
             ),
         ),
+        audience=(
+            Optional[str],
+            Field(default=None, description="Optional: who the deck is for."),
+        ),
+        main_message=(
+            Optional[str],
+            Field(
+                default=None,
+                validation_alias=AliasChoices("main_message", "message"),
+                description="Optional: the one idea the whole deck leaves, as a sentence.",
+            ),
+        ),
+        skip_plan=(
+            Optional[str],
+            Field(
+                default=None,
+                description="Only when the user's latest message explicitly asks to build "
+                "without a plan first: quote their words.",
+            ),
+        ),
     )
     return model
 
@@ -442,15 +465,15 @@ def _sent(slide: Any) -> SlidePlan:
     """A slide as the model wrote it: a design pin it sent would bypass the
     fit and variety checks, so the fields only the tool sets are dropped."""
     plain = slide.model_dump() if isinstance(slide, BaseModel) else slide
-    return SlidePlan.model_validate(plain).model_copy(
-        update=dict.fromkeys(HIDDEN_FIELDS)
-    )
+    return without_hidden(SlidePlan.model_validate(plain))
 
 
 def _to_plan(validated: Any) -> DeckPlan:
     return DeckPlan(
         slides=[_sent(slide) for slide in validated.slides],
         file_name=validated.file_name,
+        audience=validated.audience,
+        main_message=validated.main_message,
     )
 
 
@@ -767,6 +790,103 @@ def _no_history() -> Sequence[BaseMessage]:
     return ()
 
 
+# A plan proposal starts so; a delivery, a revision or an error never does.
+_PROPOSED = "Plan proposed: nothing was built yet."
+
+
+def read_conversation(history: Sequence[BaseMessage]) -> story.Conversation:
+    """What the storytelling checks and the plan gate read from the messages:
+    the user's words, where figures may come from, the build tool's answers."""
+    calls = {
+        call.get("id")
+        for m in history
+        if isinstance(m, AIMessage)
+        for call in m.tool_calls
+        if call.get("name") == BUILD_TOOL_NAME
+    }
+    found = story.Conversation()
+    proposal_at = -1
+    for position, message in enumerate(history):
+        if message.type == "human":
+            text = _text_of(message.content)
+            found.users.append(text)
+            found.sources.append(text)
+        elif isinstance(message, ToolMessage):
+            text = _text_of(message.content)
+            if message.name == BUILD_TOOL_NAME or message.tool_call_id in calls:
+                found.builds.append(text)
+                if text.startswith(_PROPOSED):
+                    proposal_at = position
+            else:
+                found.sources.append(text)
+    found.answered = proposal_at >= 0 and any(
+        m.type == "human" for m in history[proposal_at + 1 :]
+    )
+    return found
+
+
+def _merged(
+    first: List[SlideProblem], second: List[SlideProblem]
+) -> List[SlideProblem]:
+    """One problem per slide: a slide is revised once, whatever found it."""
+    by_index: Dict[int, SlideProblem] = {}
+    for problem in first + second:
+        same = by_index.get(problem.index)
+        if same is None:
+            by_index[problem.index] = problem
+        else:
+            same.problem += "; " + problem.problem
+            same.options = list(dict.fromkeys(same.options + problem.options))
+    return [by_index[i] for i in sorted(by_index)]
+
+
+def _evaluate(
+    inventory: TemplateInventory,
+    plan: DeckPlan,
+    prefetched: Mapping[str, object],
+    variety: VarietyCheck,
+    max_uses: int,
+    continuing: bool,
+    checked: Sequence[int],
+    conversation: story.Conversation,
+    seen: set[str],
+) -> Tuple[Assignment, DeckPlan, List[str], story.StoryResult]:
+    """The storytelling checks, then the assignment: one revision for both."""
+    told = story.check(plan, checked, conversation, seen)
+    assignment, plan, bad = _assign_loadable(
+        inventory, plan, prefetched, variety, max_uses, continuing
+    )
+    told.hard = told.hard or bool(assignment.problems)
+    assignment.problems = _merged(assignment.problems, told.problems)
+    accepted = [
+        s.model_copy(update={"story_notes": told.accepted.get(n, [])})
+        if n in checked
+        else s
+        for n, s in enumerate(plan.slides, start=1)
+    ]
+    return assignment, plan.model_copy(update={"slides": accepted}), bad, told
+
+
+def _proposal(
+    plan: DeckPlan, assignment: Assignment, skip_refused: bool
+) -> tuple[str, ToolInvocationResult]:
+    kinds = [p.kind if p else None for p in assignment.patterns]
+    skip = (
+        " The user's latest message does not ask to skip the plan, so `skip_plan` was "
+        "not applied."
+        if skip_refused
+        else ""
+    )
+    payload = {"status": "plan_proposed", "slides": len(plan.slides)}
+    return _answer(
+        f"{_PROPOSED} Show this outline to the user in their language and ask them to "
+        "validate or correct it; end your answer; do not call build_presentation again in "
+        "this answer. Once they answer, build it: the whole deck in `slides`, or `changes` "
+        f"to this plan.{skip}\n{story.outline(plan, kinds)}\n"
+        + json.dumps(payload, ensure_ascii=False)
+    )
+
+
 def _issue_line(report: SlideReport) -> str:
     parts = []
     if report.truncated:
@@ -994,7 +1114,9 @@ def _description(
         "resending a slide's current kind or text never changes its design. "
         'Identical consecutive slides the user asked for: {"op": "edit", "slide": N, "field": '
         '"repeat_layout", "value": true}. '
-        "For each slide write its content: title, subtitle, bullets (telegraphic, "
+        "For each slide write first its `takeaway` (what the audience concludes, as a sentence; "
+        "not on cover, agenda, section, closing and quote slides), then its content: title "
+        "(short), subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
         + ("table {header, rows} for tabular data, " if "table" in kinds else "")
@@ -1009,7 +1131,8 @@ def _description(
             if charts
             else ""
         )
-        + "notes; then, "
+        + "notes, `source` on a slide with figures (document name, 'user', or "
+        "'illustrative' only when the user asked for made-up data); then, "
         "optionally, its `kind` from the list below (left out, it is inferred from the content; a kind "
         "the template cannot use there is replaced by a close kind that holds the content, never an "
         "unrelated one). The tool picks the "
@@ -1067,6 +1190,30 @@ def build_builder_tools(
     # answered without a rebuild (same turn only, so the template is the same).
     turn_delivered: List[Tuple[DeckPlan, str]] = []
     plans = _BasePlans(identity.session_id, identity.agent_instance_id)
+    validate_plan = ctx.config.validate_plan
+    # Storytelling refusals given once this turn: the same slide resent is built.
+    soft_refused: set[str] = set()
+    # The conversation as read for the last history seen: one scan per model call.
+    read: List[Any] = [None, None]
+
+    def conversation() -> story.Conversation:
+        messages = history()
+        key = (id(messages), len(messages))
+        if read[0] != key:
+            read[:] = [key, read_conversation(messages)]
+        return read[1]
+
+    async def delivered_before(base: Optional[DeckPlan]) -> bool:
+        if turn_delivered or (base is not None and base.delivered):
+            return True
+        if deck_delivered(history()):
+            return True
+        try:
+            stored = await plans.read() if base is None else None
+        except Exception:  # noqa: BLE001 - no proof of a deck: the plan is shown
+            logger.warning("[PPTBUILD][TOOL] base plan unreadable", exc_info=True)
+            return False
+        return stored is not None and stored.delivered
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         async with build_lock:
@@ -1118,7 +1265,11 @@ def build_builder_tools(
                     + "\n".join(exc.problems)
                 )
             plan = changed.model_copy(
-                update={"file_name": validated.file_name or changed.file_name}
+                update={
+                    "file_name": validated.file_name or changed.file_name,
+                    "audience": validated.audience or changed.audience,
+                    "main_message": validated.main_message or changed.main_message,
+                }
             )
             # Rebuilt, an identical deck would read as a change done.
             if (
@@ -1159,8 +1310,22 @@ def build_builder_tools(
         continuing = base is None and (
             bool(turn_delivered) or deck_delivered(history())
         )
-        assignment, plan, bad = await asyncio.to_thread(
-            _assign_loadable, inventory, plan, prefetched, variety, max_uses, continuing
+        # Only the slides `changes` touch are checked: an edit is never refused
+        # over a slide it leaves as it was.
+        kept = {id(s) for s in base.slides} if base is not None else set()
+        checked = [n for n, s in enumerate(plan.slides, start=1) if id(s) not in kept]
+        talk = conversation()
+        assignment, plan, bad, told = await asyncio.to_thread(
+            _evaluate,
+            inventory,
+            plan,
+            prefetched,
+            variety,
+            max_uses,
+            continuing,
+            checked,
+            talk,
+            soft_refused,
         )
         first, called = not called, True
         unloadable = [
@@ -1176,11 +1341,17 @@ def build_builder_tools(
         # sent to the model no longer shows it; read only when an ask would follow.
         if repeats and (base is not None or deck_delivered(history())):
             repeats = []
+        # The user validated the plan: its slides stay as they agreed.
+        if validate_plan and talk.answered:
+            repeats = []
         if assignment.problems:
             refused(plan)
-            refused_calls[call_key] = "; ".join(
-                f"slide {p.index}: {p.problem}" for p in assignment.problems
-            )
+            soft_refused.update(told.refused_soft)
+            # Refused once only (soft checks): the same call resent is built.
+            if told.hard:
+                refused_calls[call_key] = "; ".join(
+                    f"slide {p.index}: {p.problem}" for p in assignment.problems
+                )
             return _needs_revision(
                 assignment,
                 plan,
@@ -1193,6 +1364,15 @@ def build_builder_tools(
         if repeats:
             refused(plan)
             return _variety_revision(repeats, assignment)
+        if validate_plan and not talk.answered and not await delivered_before(base):
+            skip = bool(validated.skip_plan) and talk.asks_skip_plan()
+            if not skip:
+                proposed = plan.model_copy(
+                    update={"proposed": True, "delivered": False}
+                )
+                refused(proposed)
+                await plans.write(proposed)
+                return _proposal(plan, assignment, bool(validated.skip_plan))
 
         # Stored as delivered: a split list's parts become slides of their own,
         # so the file, the model and later `changes` share one numbering.

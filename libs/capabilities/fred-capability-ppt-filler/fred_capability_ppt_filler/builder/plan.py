@@ -176,6 +176,11 @@ _SLIDE_ALIASES = {
     # What the first schema called it.
     "pattern": "kind",
     "type": "kind",
+    "message": "takeaway",
+    "key_message": "takeaway",
+    "key_takeaway": "takeaway",
+    "sources": "source",
+    "data_source": "source",
     **{alias: "repeat_layout" for alias in REPEAT_ALIASES},
 }
 
@@ -692,7 +697,19 @@ REPEAT_LAYOUT_HINT = (
 
 
 class SlidePlan(BaseModel):
-    title: Optional[str] = None
+    # First on purpose: the model decides what the slide makes the audience
+    # conclude before writing its content.
+    takeaway: Optional[str] = Field(
+        default=None,
+        description="What the audience concludes when looking at this slide, as a full "
+        "sentence ('Italy weighs twice Spain in headcount, so hiring should start "
+        "there'). It shapes the slide; it is not the title and is not shown on it. Not "
+        "needed on cover, agenda, section, closing and quote slides.",
+    )
+    title: Optional[str] = Field(
+        default=None,
+        description="Short title, a few words pointing to the takeaway.",
+    )
     subtitle: Optional[str] = None
     bullets: List[str] = Field(
         default_factory=list,
@@ -718,6 +735,12 @@ class SlidePlan(BaseModel):
         "show}: "
         "numbers only, the template sets colours and fonts.",
     )
+    source: Optional[str] = Field(
+        default=None,
+        description="Where the slide's figures come from, required with a chart, a "
+        "numeric table or numbered items: the document's name, 'user' (typed in the "
+        "chat), or 'illustrative' only when the user asked for made-up data.",
+    )
     notes: Optional[str] = Field(default=None, description="Speaker notes.")
     repeat_layout: bool = Field(
         default=False,
@@ -739,6 +762,9 @@ class SlidePlan(BaseModel):
     # design it is (file numbering); cleared once the deck is delivered.
     asked_design: SkipJsonSchema[Optional[str]] = None
     asked_from: SkipJsonSchema[Optional[int]] = None
+    # Summary notes a storytelling check accepted the slide with
+    # (`figures_unverified`, `wide_range_chart`): set by the tool only.
+    story_notes: SkipJsonSchema[List[str]] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -749,7 +775,9 @@ class SlidePlan(BaseModel):
         known = set(cls.model_fields) | set(_SLIDE_ALIASES)
         return {**renamed, "ignored_fields": _ignored(value, known)}
 
-    @field_validator("title", "subtitle", "image", "notes", mode="before")
+    @field_validator(
+        "takeaway", "title", "subtitle", "image", "source", "notes", mode="before"
+    )
     @classmethod
     def _text(cls, value: Any) -> Optional[str]:
         return _as_text(value)
@@ -782,8 +810,18 @@ class SlidePlan(BaseModel):
         return [value]
 
 
-# Set by delivery and `like` only: never read from the model's call.
-HIDDEN_FIELDS = ("built_on", "asked_design", "asked_from")
+# Set by delivery, `like` and the checks only: never read from the model's call.
+HIDDEN_FIELDS = ("built_on", "asked_design", "asked_from", "story_notes")
+
+
+def without_hidden(slide: SlidePlan) -> SlidePlan:
+    """The slide with every tool-set field back to its default."""
+    return slide.model_copy(
+        update={
+            name: SlidePlan.model_fields[name].get_default(call_default_factory=True)
+            for name in HIDDEN_FIELDS
+        }
+    )
 
 
 class DeckPlan(BaseModel):
@@ -791,8 +829,12 @@ class DeckPlan(BaseModel):
     file_name: Optional[str] = Field(
         default=None, description="Short file name for the deck; '.pptx' is added."
     )
+    audience: Optional[str] = None
+    main_message: Optional[str] = None
     # The deck as a file holds it, not a plan still under revision.
     delivered: SkipJsonSchema[bool] = False
+    # Shown to the user as an outline, waiting for their answer.
+    proposed: SkipJsonSchema[bool] = False
 
 
 def has_content(slide: SlidePlan) -> bool:

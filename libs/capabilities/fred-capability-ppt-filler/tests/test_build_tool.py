@@ -162,8 +162,10 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
         "BuildSlide"
     ]["properties"]
     assert "pattern" not in properties
-    # Content first, `kind` last, listing only what this template offers.
-    assert list(properties)[0] == "title" and list(properties)[-1] == "kind"
+    # The takeaway first, then the content, `kind` last, listing only what this
+    # template offers.
+    assert list(properties)[:2] == ["takeaway", "title"]
+    assert list(properties)[-1] == "kind"
     # The only enum anywhere in the field: the type's full list stays out.
     kind_schema = properties["kind"]
     assert "enum" not in kind_schema
@@ -182,7 +184,8 @@ def test_each_text_field_states_its_room_where_the_model_writes_it():
     # The most common room, then each kind that differs; a single kind is named.
     title = slide["title"]["description"]
     assert title.startswith(
-        "Slide title. Room: ≤4 words (≈33 chars); cover ≤8 words (≈29 chars × 2 lines)"
+        "Short title, a few words pointing to the takeaway. Room: ≤4 words (≈33 chars); "
+        "cover ≤8 words (≈29 chars × 2 lines)"
     )
     assert (
         "Room: section ≤27 words (≈66 chars × 3 lines); "

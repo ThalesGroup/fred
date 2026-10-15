@@ -228,8 +228,8 @@ def test_conflicting_changes_and_bad_paths_are_reported():
         "changes[2] (edit): slide 2 is replaced or removed by changes[0]: put the edit in "
         "the replacement slide instead.",
         "changes[3] (edit): slide 3: 'items' has 2 entries (items[0] to items[1]).",
-        "changes[4] (edit): slide 3: 'colour' is not a field of a slide (it takes title, "
-        "subtitle, bullets, columns, items, image, images, table, chart, notes, kind, repeat_layout).",
+        "changes[4] (edit): slide 3: 'colour' is not a field of a slide (it takes takeaway, "
+        "source, title, subtitle, bullets, columns, items, image, images, table, chart, notes, kind, repeat_layout).",
         "changes[5] (edit): slide 4: 'title' is not a list: write 'title' without [0].",
     ]
     assert _problems(
@@ -657,7 +657,7 @@ def test_change_slides_do_not_repeat_the_slide_schema():
     params = convert_to_openai_tool(tool)["function"]["parameters"]
     changes = json.dumps(params["properties"]["changes"])
     assert "Room:" in json.dumps(params["properties"]["slides"])
-    assert "Room:" not in changes and len(changes) < 1600
+    assert "Room:" not in changes and len(changes) < 1650
 
 
 @pytest.mark.asyncio

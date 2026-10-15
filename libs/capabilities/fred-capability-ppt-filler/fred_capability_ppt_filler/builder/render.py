@@ -49,7 +49,7 @@ from pptx.parts.chart import ChartPart
 from pptx.util import Emu
 
 from fred_capability_ppt_filler import text_metrics
-from fred_capability_ppt_filler.builder import charts, checks, lexicon
+from fred_capability_ppt_filler.builder import charts, checks, lexicon, notes
 from fred_capability_ppt_filler.builder.analysis import (
     _cell_text,
     _font_name_of,
@@ -1217,6 +1217,7 @@ class _Renderer:
         self._originals: Dict[int, Dict[str, str]] = {}
         # An intent note's text → (its line in the report, the slides it concerns).
         self._intents: Dict[str, Tuple[int, List[int]]] = {}
+        self.language = "en"
 
     def render(
         self,
@@ -1227,6 +1228,7 @@ class _Renderer:
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
+        self.language = notes.plan_language(plan)
         # [source, rendered index of its last part, topics, number] of each agenda:
         # a deck announcing more topics than it has slides left is one the agent
         # meant to write and did not. The parts of a split agenda are one agenda.
@@ -1281,10 +1283,11 @@ class _Renderer:
                 )
             # A copied notes slide keeps its formatting, never the template's
             # own notes (author guidance, `intent:` annotations).
-            if slide_plan.notes or slide.has_notes_slide:
+            spoken = notes.speaker_notes(slide_plan, self.language)
+            if spoken or slide.has_notes_slide:
                 frame = slide.notes_slide.notes_text_frame
                 if frame is not None:
-                    frame.text = slide_plan.notes or ""
+                    frame.text = spoken or ""
             # A slide shown as is never keeps its example chart's made-up data.
             checks.settle_charts(slide, keep=filled)
         if rendered == 0:
@@ -1359,6 +1362,11 @@ class _Renderer:
             self.report.note("other_kind", kind=asked)
         if chart is not None and chart.asked_type:
             self.report.note("chart_type_changed", kind=chart.asked_type)
+        if part == 1:
+            if notes.is_illustrative(slide_plan):
+                self.report.note("illustrative_data")
+            for code in slide_plan.story_notes:
+                self.report.note(code)  # type: ignore[arg-type]
 
     def _tell(self, note: str) -> None:
         """A finding the after-check report does not carry: sent to the agent."""
@@ -1623,6 +1631,10 @@ class _Renderer:
         placed = index.get(host.key) if host is not None else None
         if chart is None or host is None or placed is None:
             return None
+        if notes.is_illustrative(plan):
+            chart = chart.model_copy(
+                update={"title": notes.caption(chart, self.language)}
+            )
         # The designer's own chart, when it already shows the type asked.
         example = (
             charts.example_frame(placed, chart)

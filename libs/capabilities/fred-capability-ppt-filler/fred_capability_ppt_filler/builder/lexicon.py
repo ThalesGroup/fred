@@ -335,3 +335,97 @@ def has_contact_words(texts: list[str]) -> bool:
     for text in texts:
         words.update(normalize(text).replace("-", " ").split())
     return len(words & CONTACT_WORDS) >= 2
+
+
+# --- storytelling ---------------------------------------------------------------------
+
+# Slide kinds that make no point of their own: no takeaway asked.
+TAKEAWAY_EXEMPT_KINDS = frozenset({"cover", "agenda", "section", "closing", "quote"})
+
+# User words that allow made-up figures, matched as word prefixes.
+ILLUSTRATIVE_WORDS = (
+    "illustrati",
+    "fictif",
+    "fictive",
+    "fictitious",
+    "exemple de donnees",
+    "donnees d exemple",
+    "donnees exemple",
+    "chiffres d exemple",
+    "invente",
+    "inventer",
+    "invented",
+    "dummy",
+    "fake",
+    "sample data",
+    "made up",
+    "placeholder",
+    "mock",
+    "hypothetique",
+    "hypothetical",
+)
+
+# User words that ask to build without showing the plan first.
+SKIP_PLAN_WORDS = (
+    "sans plan",
+    "pas de plan",
+    "sans valider",
+    "sans validation",
+    "sans me montrer le plan",
+    "construis directement",
+    "construis la directement",
+    "genere directement",
+    "fais la directement",
+    "no plan",
+    "without a plan",
+    "without plan",
+    "skip the plan",
+    "skip plan",
+    "skip the outline",
+    "no outline",
+    "build directly",
+    "build it directly",
+    "just build",
+)
+
+# How a slide's `source` names the user or made-up data (whole value, normalized).
+SOURCE_USER = frozenset(
+    {"user", "the user", "utilisateur", "l utilisateur", "conversation", "chat"}
+)
+SOURCE_ILLUSTRATIVE = frozenset(
+    {
+        "illustrative",
+        "illustratif",
+        "illustrative data",
+        "donnees illustratives",
+        "fictif",
+        "fictive",
+        "fictitious",
+        "exemple",
+        "example",
+        "dummy",
+        "fake",
+        "sample",
+        "made up",
+        "placeholder",
+    }
+)
+
+
+def says_any(texts: list[str], words: tuple[str, ...]) -> bool:
+    """Whether one of ``texts`` holds one of ``words`` (word-prefix match)."""
+    return any(name_matches(_unquote(text), words) for text in texts)
+
+
+def _unquote(text: str) -> str:
+    return re.sub(r"[’'\"«».,;:!?()]", " ", text)
+
+
+def source_kind(source: str) -> str:
+    """``user``, ``illustrative`` or ``document`` for a slide's `source`."""
+    norm = " ".join(normalize(_unquote(source)).split())
+    if norm in SOURCE_USER:
+        return "user"
+    if norm in SOURCE_ILLUSTRATIVE:
+        return "illustrative"
+    return "document"
