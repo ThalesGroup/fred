@@ -17,6 +17,16 @@ Authorization-after-revocation tests hold the relevant advisory lock to force th
 interleaving they prove. Last-admin tests issue simultaneous revocations and assert
 that at most one succeeds.
 
+## Generated HTTP contract
+
+`tests/openapi.rs` checks offline, deterministic schema emission with invalid runtime
+configuration paths, the complete route inventory, bearer security, role enums,
+required nullable response fields, flattening, multipart upload, optional ingestion
+body and empty success responses. Frontend client tests execute the generated RTK
+endpoints through the shared base query and check the multipart bytes, bearer,
+completed report, error propagation and flat space responses. Regenerating with
+`make -C apps/frontend update-fred-manager-api` produces the committed client.
+
 ## OpenFGA request costs
 
 Direct roles live in OpenFGA. The client uses `Check`, paginated `Read` and `Write`;

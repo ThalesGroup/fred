@@ -186,7 +186,7 @@ theme-bundle: ## Package THEME_SRC into THEME_ZIP, the archive a deployment serv
 # after changing a backend controller or model, and commit the regenerated
 # *OpenApi.ts alongside the backend change.
 .PHONY: update-all-apis
-update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api ## Regenerate the API client for ALL backends at once
+update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api update-fred-manager-api ## Regenerate the API client for ALL backends at once
 	@echo "All backend API clients regenerated"
 
 .PHONY: update-knowledge-flow-api
@@ -209,6 +209,12 @@ update-runtime-api: check-node node_modules ## Regenerate the API client for fre
 	cd ../../libs/fred-runtime && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
 	npx --no-install @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
+
+.PHONY: update-fred-manager-api
+update-fred-manager-api: check-node node_modules ## Regenerate the fred-manager API client and types
+	$(MAKE) -C ../fred-manager generate-openapi
+	npx --no-install @rtk-query/codegen-openapi src/slices/fredManager/fredManagerOpenApiConfig.json
+	node scripts/fred-manager-codegen.mjs
 
 # Per-capability client (AGENT-CAPABILITY-RFC §9.1, #1979): each capability's
 # router has its OWN OpenAPI document (dumped by the runtime CLI) and its OWN

@@ -21,7 +21,7 @@ use fred_manager::{
     api, auth, config::Configuration as Config, fga::Fga, ingestion, logging, spaces,
 };
 
-const USAGE: &str = "usage: fred-manager [serve | migrate-authorization | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: fred-manager [serve | generate-openapi | migrate-authorization | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -30,6 +30,11 @@ async fn main() -> Result<()> {
         println!(
             "{USAGE}\nImport requires an operator bearer file and an initialized schema/model. Replay is additive."
         );
+        return Ok(());
+    }
+    // Contract generation never loads secrets or initializes service dependencies.
+    if args == ["generate-openapi"] {
+        println!("{}", serde_json::to_string_pretty(&api::openapi())?);
         return Ok(());
     }
     // Same rule as fred-pod: ENV_FILE, default ./config/.env, never overriding the process.

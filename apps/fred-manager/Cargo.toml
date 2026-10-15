@@ -22,6 +22,8 @@ tower-http = { version = "=0.7.0", features = ["cors"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 uuid = { version = "1.28.0", features = ["v4", "serde", "v5"] }
+utoipa = { version = "6.0", features = ["uuid", "axum_extras"] }
+utoipa-axum = "0.3"
 zip = { version = "9.0.3", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]

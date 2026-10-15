@@ -54,6 +54,23 @@ A change described in the dossier updates its chapter in the same commit. A test
 proves an invariant carries `// Proves: I<n>` above it. Applied migrations are never
 edited; add a new one.
 
+## Generate the frontend contract
+
+```sh
+make generate-openapi                       # writes ignored openapi.json
+make -C ../frontend update-fred-manager-api  # regenerates schema, RTK endpoints and types
+```
+
+Generation runs without configuration, credentials or services. The frontend's
+`update-all-apis` includes fred-manager. Commit the regenerated
+`src/slices/fredManager/fredManagerOpenApi.ts` with changes to routes or DTOs;
+never edit it by hand. The slice uses the shared bearer/refresh base query and
+Redux store. Its enhancement encodes the generated import argument as multipart
+FormData, retaining the generated URL, method and completed-report type.
+Import never retries automatically on 401; expiry can follow committed effects.
+The generation target also corrects the code generator's required-body typing for
+the optional ingestion request. Frontend consumers use `fredManagerApiEnhancements`.
+
 ## Platform and space roles
 
 `GET /me` reports effective platform roles. Platform administrators list direct grants

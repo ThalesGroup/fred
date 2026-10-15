@@ -99,7 +99,7 @@ fn conflict(message: &str) -> anyhow::Error {
     AppError::Conflict(message.into()).into()
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, utoipa::ToSchema)]
 pub struct Report {
     pub identities_resolved: usize,
     pub identities_created: usize,

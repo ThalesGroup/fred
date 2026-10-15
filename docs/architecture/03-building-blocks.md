@@ -57,6 +57,19 @@ role mutations with bootstrap. `keycloak` owns one shared HTTP client and a sync
 service-token cache. `api::governance_router` groups identity, platform administration
 space listing, ZIP import and self-capability routes independently of the Temporal client.
 
+The same `utoipa-axum` registrations build the runtime routers and OpenAPI paths.
+`utoipa::ToSchema` derives request/response schemas from the Rust DTOs. The binary's
+`generate-openapi` command runs before configuration and logging initialization;
+it emits the canonical `/fred-manager/v1` contract without constructing service state.
+The frontend generates `fredManagerOpenApi.ts` through its standard RTK codegen
+tool and registers the slice in the shared Redux store. A handwritten enhancement
+encodes the import's generated binary argument as FormData; paths, methods and
+response types remain generated.
+The generation target corrects the code generator's required-body typing for the
+optional ingestion request and fails if that upstream output changes. The import
+endpoint disables automatic retry on 401 because expiry can follow committed
+effects; the shared base query still refreshes before each explicit attempt.
+
 `blueprint::Bundle` validates the bounded ZIP and normalizes declarations without exposing credentials
 through Debug or serialization. HTTP and CLI parse on a blocking worker without
 filesystem extraction. `Importer` performs read-only preflight, per-identity

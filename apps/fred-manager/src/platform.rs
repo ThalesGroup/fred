@@ -45,7 +45,7 @@ pub(crate) async fn require_root(
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Grant {
     pub user_id: String,
     pub role: PlatformRole,

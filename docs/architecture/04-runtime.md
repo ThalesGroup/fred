@@ -7,33 +7,33 @@ Every route but the health probe requires a bearer token (chapter 6).
 <!-- generated: routes apps/fred-manager/src/api.rs /fred-manager/v1 -->
 | Method | Path | Handler |
 | --- | --- | --- |
-| GET | `/fred-manager/v1/healthz` | `inline` |
+| GET | `/fred-manager/v1/admin/teams` | `team_registry` |
+| POST | `/fred-manager/v1/authorize/document` | `authorize_document` |
+| POST | `/fred-manager/v1/authorize/platform` | `authorize_platform` |
+| POST | `/fred-manager/v1/authorize/scope` | `authorize_scope` |
+| POST | `/fred-manager/v1/authorize/space` | `authorize_space` |
 | POST | `/fred-manager/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
-| POST | `/fred-manager/v1/me/personal-space` | `create_personal_space` |
-| POST | `/fred-manager/v1/spaces` | `create_space` |
-| PUT | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `grant` |
-| DELETE | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `revoke` |
-| GET | `/fred-manager/v1/spaces/{id}/folders` | `list_folders` |
-| GET | `/fred-manager/v1/spaces/{id}/documents` | `list_documents` |
-| POST | `/fred-manager/v1/folders` | `create_folder` |
-| PATCH | `/fred-manager/v1/folders/{id}` | `rename_folder` |
-| DELETE | `/fred-manager/v1/folders/{id}` | `delete_folder` |
 | POST | `/fred-manager/v1/documents` | `create_document` |
+| DELETE | `/fred-manager/v1/documents/{id}` | `delete_document` |
 | GET | `/fred-manager/v1/documents/{id}` | `get_document` |
 | PATCH | `/fred-manager/v1/documents/{id}` | `rename_document` |
-| DELETE | `/fred-manager/v1/documents/{id}` | `delete_document` |
 | POST | `/fred-manager/v1/documents/{id}/ingest` | `ingest_document` |
-| POST | `/fred-manager/v1/authorize/document` | `authorize_document` |
-| POST | `/fred-manager/v1/authorize/scope` | `authorize_scope` |
-| GET | `/fred-manager/v1/me` | `me` |
-| GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
+| POST | `/fred-manager/v1/folders` | `create_folder` |
+| DELETE | `/fred-manager/v1/folders/{id}` | `delete_folder` |
+| PATCH | `/fred-manager/v1/folders/{id}` | `rename_folder` |
+| GET | `/fred-manager/v1/healthz` | `health` |
 | POST | `/fred-manager/v1/import-export/import` | `import_blueprint` |
+| GET | `/fred-manager/v1/me` | `me` |
+| POST | `/fred-manager/v1/me/personal-space` | `create_personal_space` |
+| GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
+| POST | `/fred-manager/v1/spaces` | `create_space` |
+| GET | `/fred-manager/v1/spaces/{id}/documents` | `list_documents` |
+| GET | `/fred-manager/v1/spaces/{id}/folders` | `list_folders` |
+| DELETE | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `revoke` |
+| PUT | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `grant` |
 | GET | `/fred-manager/v1/users/platform-roles` | `list_platform_roles` |
-| PUT | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `grant_platform_role` |
 | DELETE | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `revoke_platform_role` |
-| GET | `/fred-manager/v1/admin/teams` | `team_registry` |
-| POST | `/fred-manager/v1/authorize/platform` | `authorize_platform` |
-| POST | `/fred-manager/v1/authorize/space` | `authorize_space` |
+| PUT | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `grant_platform_role` |
 <!-- end generated -->
 
 ## Content access

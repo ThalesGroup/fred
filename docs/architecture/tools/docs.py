@@ -61,15 +61,15 @@ def fenced(lang: str, text: str) -> str:
 def routes(path: str, base: str) -> str:
     source = (ROOT / path).read_text()
     rows = []
-    for start in (m.end() for m in re.finditer(r"\.route\(", source)):
-        depth, end = 1, start
-        while depth:
-            depth += {"(": 1, ")": -1}.get(source[end], 0)
-            end += 1
-        call = source[start : end - 1]
-        route = re.search(r'"([^"]+)"', call).group(1)
-        for method, handler in re.findall(r"\b(get|post|put|patch|delete)\(\s*([\w|]*)", call):
-            rows.append((route, method.upper(), handler if handler.isidentifier() else "inline"))
+    # utoipa annotations drive runtime registration and the generated client.
+    for annotation, handler in re.findall(
+        r"#\[utoipa::path\((.*?)\)\]\s*async fn (\w+)", source, re.S
+    ):
+        method, route = re.search(
+            r'\b(get|post|put|patch|delete),\s*path = "([^\"]+)"', annotation
+        ).groups()
+        rows.append((route, method.upper(), handler))
+    rows.sort()
     lines = ["| Method | Path | Handler |", "| --- | --- | --- |"]
     lines += [f"| {m} | `{base}{r}` | `{h}` |" for r, m, h in rows]
     return "\n".join(lines) + "\n"

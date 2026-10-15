@@ -17,7 +17,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
+)]
 #[sqlx(type_name = "space_kind", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum SpaceKind {
@@ -26,29 +28,33 @@ pub enum SpaceKind {
     Project,
 }
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Space {
     pub id: Uuid,
     pub kind: SpaceKind,
     pub name: String,
+    #[schema(required = true)]
     pub parent_id: Option<Uuid>,
+    #[schema(required = true)]
     pub personal_owner: Option<String>,
     pub path: Vec<Uuid>,
 }
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Folder {
     pub id: Uuid,
     pub space_id: Uuid,
+    #[schema(required = true)]
     pub parent_id: Option<Uuid>,
     pub name: String,
     pub path: String,
 }
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Document {
     pub id: Uuid,
     pub space_id: Uuid,
+    #[schema(required = true)]
     pub folder_id: Option<Uuid>,
     pub name: String,
     pub mime: String,
@@ -58,7 +64,7 @@ pub struct Document {
 }
 
 /// Direct roles stored in OpenFGA.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     Member,
@@ -94,7 +100,7 @@ impl Role {
 }
 
 /// Computed permissions checked against OpenFGA.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Permission {
     Read,

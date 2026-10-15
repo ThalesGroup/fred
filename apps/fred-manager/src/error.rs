@@ -17,9 +17,14 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde_json::json;
 
 use crate::domain::RuleError;
+
+/// JSON error envelope shared by application, authentication and import failures.
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct ErrorBody {
+    pub detail: String,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -92,7 +97,7 @@ impl IntoResponse for AppError {
             AppError::Internal(_) => "internal error".to_string(),
             other => other.to_string(),
         };
-        (status, Json(json!({ "detail": message }))).into_response()
+        (status, Json(ErrorBody { detail: message })).into_response()
     }
 }
 

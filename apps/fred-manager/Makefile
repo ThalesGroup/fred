@@ -11,6 +11,13 @@ include ../../scripts/makefiles/help.mk
 
 ##@ Dev Helpers
 
+.PHONY: generate-openapi
+generate-openapi: ## Generate OpenAPI JSON without configuration or running services
+	@set -e; tmp=$$(mktemp openapi.json.XXXXXX); \
+	trap 'rm -f "$$tmp"' EXIT; \
+	$(CARGO) run --quiet --locked -- generate-openapi > "$$tmp"; \
+	mv "$$tmp" openapi.json
+
 FRED_MANAGER_BASE_URL ?= http://localhost:8400/fred-manager/v1
 KEYCLOAK_REALM_URL ?= http://localhost:8080/realms/app
 KEYCLOAK_APP_CLIENT_ID ?= app

@@ -30,7 +30,12 @@ export function serializeQueryParams(params: Record<string, unknown>): string {
   return search.toString();
 }
 
-export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> => {
+export const createDynamicBaseQuery = (): BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError,
+  { retryUnauthorized?: boolean }
+> => {
   const raw = fetchBaseQuery({
     paramsSerializer: serializeQueryParams,
     prepareHeaders: (headers) => {
@@ -57,7 +62,9 @@ export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknow
     let result = await raw(requestArgs, api, extraOptions);
 
     // 3) If unauthorized, try ONE refresh + retry
-    if (result.error && result.error.status === 401) {
+    // An endpoint that can return 401 after committed effects must expose that
+    // result to its caller. Its next explicit attempt still refreshes proactively.
+    if (result.error && result.error.status === 401 && extraOptions?.retryUnauthorized !== false) {
       const ok = await KeyCloakService.ensureFreshToken(0);
       if (ok) {
         result = await raw(requestArgs, api, extraOptions);

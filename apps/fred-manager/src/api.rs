@@ -21,11 +21,14 @@ use axum::{
     Json, Router,
     extract::{FromRef, Path, Query, State},
     http::{HeaderValue, Method, StatusCode, header},
-    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use utoipa_axum::{
+    router::{OpenApiRouter, UtoipaMethodRouterExt},
+    routes,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -85,37 +88,10 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         fga: state.fga.clone(),
         directory: state.directory.clone(),
     });
-    let api = Router::new()
-        .route(
-            "/healthz",
-            get(|| async { Json(serde_json::json!({ "status": "ok" })) }),
-        )
-        .route("/bootstrap/platform-admin", post(bootstrap_platform_admin))
-        .route("/me/personal-space", post(create_personal_space))
-        .route("/spaces", post(create_space))
-        .route(
-            "/spaces/{id}/roles/{role}/{user}",
-            put(grant).delete(revoke),
-        )
-        .route("/spaces/{id}/folders", get(list_folders))
-        .route("/spaces/{id}/documents", get(list_documents))
-        .route("/folders", post(create_folder))
-        .route(
-            "/folders/{id}",
-            axum::routing::patch(rename_folder).delete(delete_folder),
-        )
-        .route("/documents", post(create_document))
-        .route(
-            "/documents/{id}",
-            get(get_document)
-                .patch(rename_document)
-                .delete(delete_document),
-        )
-        .route("/documents/{id}/ingest", post(ingest_document))
-        .route("/authorize/document", post(authorize_document))
-        .route("/authorize/scope", post(authorize_scope))
-        .route_layer(axum::middleware::from_fn(logging::expose_route))
+    let api = content_routes()
         .with_state(state)
+        .split_for_parts()
+        .0
         .merge(governance);
     // Request logging is outermost, as in fred-core: it also sees CORS and 404 answers.
     Router::new()
@@ -134,12 +110,12 @@ async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> 
 
 // ---------------------------------------------------------------- platform
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct BootstrapRequest {
     token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct BootstrapResponse {
     user_id: String,
     username: String,
@@ -148,6 +124,19 @@ struct BootstrapResponse {
 /// Same contract as the control-plane's `POST /bootstrap/platform-admin`: the caller's
 /// own verified bearer plus the deploy-time secret, granting platform admin to the
 /// caller only, once ever.
+#[utoipa::path(
+    post, path = "/bootstrap/platform-admin",
+    request_body = BootstrapRequest,
+    responses(
+        (status = 200, description = "Success", body = BootstrapResponse),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn bootstrap_platform_admin(
     State(s): State<AppState>,
     user: CurrentUser,
@@ -176,13 +165,21 @@ async fn bootstrap_platform_admin(
     }))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct Me {
     user_id: String,
     username: String,
     platform_roles: Vec<PlatformRole>,
 }
 
+#[utoipa::path(
+    get, path = "/me",
+    responses(
+        (status = 200, description = "Success", body = Me),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn me(State(s): State<GovernanceState>, user: CurrentUser) -> AppResult<Json<Me>> {
     Ok(Json(Me {
         platform_roles: s.fga.effective_platform_roles(&user.uid).await?,
@@ -193,13 +190,21 @@ async fn me(State(s): State<GovernanceState>, user: CurrentUser) -> AppResult<Js
 
 // ---------------------------------------------------------------- spaces and roles
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct MySpace {
     #[serde(flatten)]
     space: Space,
     roles: Vec<Role>,
 }
 
+#[utoipa::path(
+    get, path = "/me/spaces",
+    responses(
+        (status = 200, description = "Success", body = [MySpace]),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn my_spaces(
     State(s): State<GovernanceState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -224,7 +229,7 @@ async fn my_spaces(
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct CreateSpace {
     kind: SpaceKind,
     parent_id: Uuid,
@@ -233,6 +238,20 @@ struct CreateSpace {
     admin: String,
 }
 
+#[utoipa::path(
+    post, path = "/spaces",
+    request_body = CreateSpace,
+    responses(
+        (status = 201, description = "Success", body = Space),
+        (status = 400, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn create_space(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -251,11 +270,25 @@ async fn create_space(
     Ok((StatusCode::CREATED, Json(space)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct CreatePersonalSpace {
     organization_id: Uuid,
 }
 
+#[utoipa::path(
+    post, path = "/me/personal-space",
+    request_body = CreatePersonalSpace,
+    responses(
+        (status = 201, description = "Success", body = Space),
+        (status = 400, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn create_personal_space(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -269,6 +302,19 @@ fn parse_role(role: &str) -> AppResult<Role> {
     Role::parse(role).ok_or_else(|| AppError::BadRequest(format!("unknown role {role}")))
 }
 
+#[utoipa::path(
+    put, path = "/spaces/{id}/roles/{role}/{user}",
+    params(("id" = Uuid, Path), ("role" = Role, Path), ("user" = String, Path)),
+    responses(
+        (status = 204, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn grant(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -278,6 +324,19 @@ async fn grant(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    delete, path = "/spaces/{id}/roles/{role}/{user}",
+    params(("id" = Uuid, Path), ("role" = Role, Path), ("user" = String, Path)),
+    responses(
+        (status = 204, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn revoke(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -289,11 +348,22 @@ async fn revoke(
 
 // ---------------------------------------------------------------- folders
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct FolderQuery {
     parent_id: Option<Uuid>,
 }
 
+#[utoipa::path(
+    get, path = "/spaces/{id}/folders",
+    params(("id" = Uuid, Path), ("parent_id" = Option<Uuid>, Query)),
+    responses(
+        (status = 200, description = "Success", body = [Folder]),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn list_folders(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -304,13 +374,27 @@ async fn list_folders(
     Ok(Json(db::folders(&s.pool, space, q.parent_id).await?))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct CreateFolder {
     space_id: Uuid,
     parent_id: Option<Uuid>,
     name: String,
 }
 
+#[utoipa::path(
+    post, path = "/folders",
+    request_body = CreateFolder,
+    responses(
+        (status = 201, description = "Success", body = Folder),
+        (status = 400, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn create_folder(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -328,11 +412,26 @@ async fn create_folder(
     Ok((StatusCode::CREATED, Json(folder)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct Rename {
     name: String,
 }
 
+#[utoipa::path(
+    patch, path = "/folders/{id}",
+    params(("id" = Uuid, Path)),
+    request_body = Rename,
+    responses(
+        (status = 204, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn rename_folder(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -346,6 +445,19 @@ async fn rename_folder(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    delete, path = "/folders/{id}",
+    params(("id" = Uuid, Path)),
+    responses(
+        (status = 204, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn delete_folder(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -360,7 +472,7 @@ async fn delete_folder(
 
 // ---------------------------------------------------------------- documents
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct DocumentQuery {
     folder_id: Option<Uuid>,
     /// Cursor: the `name` and `id` of the last document of the previous page.
@@ -369,6 +481,18 @@ struct DocumentQuery {
     limit: Option<i64>,
 }
 
+#[utoipa::path(
+    get, path = "/spaces/{id}/documents",
+    params(("id" = Uuid, Path), ("folder_id" = Option<Uuid>, Query), ("after_name" = Option<String>, Query), ("after_id" = Option<Uuid>, Query), ("limit" = Option<i64>, Query, description = "Defaults to 50; clamped to 1..200. Both cursor fields must be supplied together.")),
+    responses(
+        (status = 200, description = "Success", body = [Document]),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn list_documents(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -391,7 +515,7 @@ async fn list_documents(
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct CreateDocument {
     space_id: Uuid,
     folder_id: Option<Uuid>,
@@ -401,7 +525,7 @@ struct CreateDocument {
     sha256: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct CreatedDocument {
     #[serde(flatten)]
     document: Document,
@@ -409,6 +533,19 @@ struct CreatedDocument {
     source_key: String,
 }
 
+#[utoipa::path(
+    post, path = "/documents",
+    request_body = CreateDocument,
+    responses(
+        (status = 201, description = "Success", body = CreatedDocument),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn create_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -440,6 +577,18 @@ async fn create_document(
     ))
 }
 
+#[utoipa::path(
+    get, path = "/documents/{id}",
+    params(("id" = Uuid, Path)),
+    responses(
+        (status = 200, description = "Success", body = Document),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn get_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -450,6 +599,21 @@ async fn get_document(
     Ok(Json(document))
 }
 
+#[utoipa::path(
+    patch, path = "/documents/{id}",
+    params(("id" = Uuid, Path)),
+    request_body = Rename,
+    responses(
+        (status = 204, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn rename_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -465,6 +629,19 @@ async fn rename_document(
 
 /// Artefact removal is submitted before the row goes, so a failure leaves a retryable
 /// document rather than orphaned chunks nobody can find.
+#[utoipa::path(
+    delete, path = "/documents/{id}",
+    params(("id" = Uuid, Path)),
+    responses(
+        (status = 204, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn delete_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -484,7 +661,7 @@ async fn delete_document(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, utoipa::ToSchema)]
 struct IngestRequest {
     profile: Option<String>,
 }
@@ -497,6 +674,21 @@ fn ingest_request(body: &[u8]) -> AppResult<IngestRequest> {
     serde_json::from_slice(body).map_err(|e| AppError::Unprocessable(e.to_string()))
 }
 
+#[utoipa::path(
+    post, path = "/documents/{id}/ingest",
+    params(("id" = Uuid, Path)),
+    request_body = IngestRequest,
+    responses(
+        (status = 202, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn ingest_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -531,17 +723,28 @@ async fn ingest_document(
 
 // ---------------------------------------------------------------- authorization for agents
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct AuthorizeDocument {
     document_id: Uuid,
     permission: Permission,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct Allowed {
     allowed: bool,
 }
 
+#[utoipa::path(
+    post, path = "/authorize/document",
+    request_body = AuthorizeDocument,
+    responses(
+        (status = 200, description = "Success", body = Allowed),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn authorize_document(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -555,18 +758,30 @@ async fn authorize_document(
     Ok(Json(Allowed { allowed }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct AuthorizeScope {
     space_id: Uuid,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct Scope {
     /// Filter for chunks and metadata: `space_id` must be one of these. Ancestors only,
     /// never descendants: a team conversation never sees its projects' content.
     space_ids: Vec<Uuid>,
 }
 
+#[utoipa::path(
+    post, path = "/authorize/scope",
+    request_body = AuthorizeScope,
+    responses(
+        (status = 200, description = "Success", body = Scope),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn authorize_scope(
     State(s): State<AppState>,
     CurrentUser { uid: user, .. }: CurrentUser,
@@ -609,6 +824,16 @@ fn require_directory_actor(s: &GovernanceState) -> AppResult<()> {
     }
     Ok(())
 }
+#[utoipa::path(
+    get, path = "/users/platform-roles",
+    responses(
+        (status = 200, description = "Success", body = [platform::Grant]),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn list_platform_roles(
     State(s): State<GovernanceState>,
     user: CurrentUser,
@@ -619,6 +844,21 @@ async fn list_platform_roles(
 fn platform_role(name: &str) -> AppResult<PlatformRole> {
     PlatformRole::parse(name).ok_or_else(|| AppError::BadRequest("unknown platform role".into()))
 }
+#[utoipa::path(
+    put, path = "/users/{user}/platform-roles/{role}",
+    params(("user" = String, Path), ("role" = PlatformRole, Path, description = "Also accepts the admin and observer aliases.")),
+    responses(
+        (status = 204, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn grant_platform_role(
     State(s): State<GovernanceState>,
     user: CurrentUser,
@@ -645,6 +885,20 @@ async fn grant_platform_role(
     .await?;
     Ok(StatusCode::NO_CONTENT)
 }
+#[utoipa::path(
+    delete, path = "/users/{user}/platform-roles/{role}",
+    params(("user" = String, Path), ("role" = PlatformRole, Path, description = "Also accepts the admin and observer aliases.")),
+    responses(
+        (status = 204, description = "Success"),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Direct grant not found", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn revoke_platform_role(
     State(s): State<GovernanceState>,
     user: CurrentUser,
@@ -654,10 +908,20 @@ async fn revoke_platform_role(
     platform::revoke(&s.pool, &s.fga, &user.uid, &target, platform_role(&role)?).await?;
     Ok(StatusCode::NO_CONTENT)
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct PlatformCheck {
     permission: PlatformPermission,
 }
+#[utoipa::path(
+    post, path = "/authorize/platform",
+    request_body = PlatformCheck,
+    responses(
+        (status = 200, description = "Success", body = Allowed),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn authorize_platform(
     State(s): State<GovernanceState>,
     user: CurrentUser,
@@ -667,11 +931,22 @@ async fn authorize_platform(
         allowed: s.fga.check_platform(&user.uid, req.permission).await?,
     }))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct SpaceCheck {
     space_id: Uuid,
     permission: SpacePermission,
 }
+#[utoipa::path(
+    post, path = "/authorize/space",
+    request_body = SpaceCheck,
+    responses(
+        (status = 200, description = "Success", body = Allowed),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn authorize_space(
     State(s): State<GovernanceState>,
     user: CurrentUser,
@@ -685,10 +960,21 @@ async fn authorize_space(
             .await?,
     }))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct RegistryQuery {
     after: Option<Uuid>,
 }
+#[utoipa::path(
+    get, path = "/admin/teams",
+    params(("after" = Option<Uuid>, Query, description = "Exclusive UUID cursor; at most 100 non-personal teams, ordered by ID.")),
+    responses(
+        (status = 200, description = "Success", body = [Space]),
+        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn team_registry(
     State(s): State<GovernanceState>,
     user: CurrentUser,
@@ -720,29 +1006,121 @@ impl FromRef<GovernanceState> for Arc<Authenticator> {
     }
 }
 pub fn governance_router(state: GovernanceState) -> Router {
-    Router::new()
-        .route("/me", get(me))
-        .route("/me/spaces", get(my_spaces))
-        .route(
-            "/import-export/import",
-            post(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
+    governance_routes().with_state(state).split_for_parts().0
+}
+
+fn governance_routes() -> OpenApiRouter<GovernanceState> {
+    OpenApiRouter::new()
+        .routes(routes!(me))
+        .routes(routes!(my_spaces))
+        .routes(
+            routes!(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
                 crate::blueprint::MAX_ARCHIVE + 64 * 1024,
             )),
         )
-        .route("/users/platform-roles", get(list_platform_roles))
-        .route(
-            "/users/{user}/platform-roles/{role}",
-            put(grant_platform_role).delete(revoke_platform_role),
-        )
-        .route("/admin/teams", get(team_registry))
-        .route("/authorize/platform", post(authorize_platform))
-        .route("/authorize/space", post(authorize_space))
+        .routes(routes!(list_platform_roles))
+        .routes(routes!(grant_platform_role, revoke_platform_role))
+        .routes(routes!(team_registry))
+        .routes(routes!(authorize_platform))
+        .routes(routes!(authorize_space))
         .route_layer(axum::middleware::from_fn(logging::expose_route))
-        .with_state(state)
+}
+
+fn content_routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(health))
+        .routes(routes!(bootstrap_platform_admin))
+        .routes(routes!(create_personal_space))
+        .routes(routes!(create_space))
+        .routes(routes!(grant, revoke))
+        .routes(routes!(list_folders))
+        .routes(routes!(list_documents))
+        .routes(routes!(create_folder))
+        .routes(routes!(rename_folder, delete_folder))
+        .routes(routes!(create_document))
+        .routes(routes!(get_document, rename_document, delete_document))
+        .routes(routes!(ingest_document))
+        .routes(routes!(authorize_document))
+        .routes(routes!(authorize_scope))
+        .route_layer(axum::middleware::from_fn(logging::expose_route))
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct Health {
+    status: &'static str,
+}
+
+#[utoipa::path(get, path = "/healthz", security(()), responses((status = 200, body = Health)))]
+async fn health() -> Json<Health> {
+    Json(Health { status: "ok" })
+}
+
+/// Offline contract from the same registrations used to serve requests.
+/// The canonical prefix matches frontend proxy routing; no state is constructed.
+pub fn openapi() -> utoipa::openapi::OpenApi {
+    use utoipa::openapi::{
+        ComponentsBuilder,
+        security::{Http, HttpAuthScheme, SecurityRequirement, SecurityScheme},
+    };
+    let mut api = content_routes().into_openapi();
+    api.merge(governance_routes().into_openapi());
+    let mut api = OpenApiRouter::<()>::new()
+        .nest("/fred-manager/v1", OpenApiRouter::with_openapi(api))
+        .into_openapi();
+    // utoipa's Option<T> makes both the body optional and its JSON nullable.
+    // This handler accepts no body, but rejects JSON null: only presence is optional.
+    if let Some(utoipa::openapi::RefOr::T(body)) = api
+        .paths
+        .paths
+        .get_mut("/fred-manager/v1/documents/{id}/ingest")
+        .unwrap()
+        .post
+        .as_mut()
+        .unwrap()
+        .request_body
+        .as_mut()
+    {
+        body.required = Some(utoipa::openapi::Required::False);
+    }
+    api.info.title = "fred-manager".into();
+    api.components
+        .get_or_insert_with(|| ComponentsBuilder::new().build())
+        .add_security_scheme(
+            "bearer",
+            SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
+        );
+    api.security = Some(vec![SecurityRequirement::new(
+        "bearer",
+        Vec::<String>::new(),
+    )]);
+    api
+}
+
+// A multipart contract, not a second parser: the handler validates the stream itself.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+struct ProvisioningUpload {
+    #[schema(value_type = String, format = Binary)]
+    file: Vec<u8>,
 }
 
 /// Authenticate and check platform authority before constructing the body extractor.
 /// Only the ZIP's file bytes are parsed, and all parsing precedes provisioning.
+#[utoipa::path(
+    post, path = "/import-export/import",
+    request_body(content = ProvisioningUpload, content_type = "multipart/form-data"),
+    responses(
+        (status = 200, description = "Success", body = crate::provisioning::Report),
+        (status = 400, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 413, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "Request failed", body = crate::error::ErrorBody),
+    )
+)]
 async fn import_blueprint(
     State(s): State<GovernanceState>,
     user: CurrentUser,
