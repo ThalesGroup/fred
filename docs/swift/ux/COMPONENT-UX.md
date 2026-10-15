@@ -4702,6 +4702,16 @@ falls back to splitting the capability id. The `name` step matters because
 `model_capability_id` normalizes non-id-safe characters — derived from the id,
 `mistral:latest` would read "Mistral Latest".
 
+### `ProvisioningPage` (`/admin/provisioning`, #3092)
+
+**Status:** `Functional`
+
+Manager-authorized ZIP import using the shared PageHeader, FileDropzone and Button.
+The form distinguishes unavailable authority from denial, disables controls during
+import, and displays server counts or an error with explicit replay guidance.
+Desktop and narrow browser screenshots cover the responsive report grid. Behavior
+and automated acceptance: [manager README](../../../apps/fred-manager/README.md#import-through-the-frontend).
+
 ### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
 
 **Status:** `Functional`

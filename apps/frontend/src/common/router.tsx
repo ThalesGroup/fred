@@ -22,6 +22,8 @@ import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAudit
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
+import ProvisioningPage from "@components/pages/admin/ProvisioningPage/ProvisioningPage";
+import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
@@ -80,9 +82,11 @@ const ADMIN_LANDING: [ProtectedRequirement, string][] = [
 
 const AdminIndexRoute = () => {
   const { isLoading, ...capabilities } = useUserCapabilities();
+  const manager = useManagerPlatformAdmin();
   if (isLoading) return null;
   const landing = ADMIN_LANDING.find(([requires]) => isProtectedAllowed(requires, capabilities));
-  return <Navigate to={landing?.[1] ?? "/unauthorized"} replace />;
+  if (!landing && manager.isLoading) return null;
+  return <Navigate to={landing?.[1] ?? (manager.isAdmin ? "/admin/provisioning" : "/unauthorized")} replace />;
 };
 
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
@@ -313,6 +317,11 @@ export const routes: RouteObject[] = [
             <CorpusAuditPage />
           </Protected>
         ),
+      },
+      {
+        // The page resolves manager authority; control-plane roles do not gate it.
+        path: "admin/provisioning",
+        element: <ProvisioningPage />,
       },
       {
         path: "admin/migration",

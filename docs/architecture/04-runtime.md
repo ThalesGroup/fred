@@ -278,3 +278,19 @@ Local folder/document mutations capture the organization guard, authorize, consu
 the guard and commit SQL under the same organization lock. Placement reads use the
 held SQL connection. Temporal submission holds that lock through dispatch; its
 remote effects have the dispatch boundary described by I5 in chapter 5.
+
+## Provisioning browser journey
+
+An admitted user reaches `/admin/provisioning` through the administration sidebar.
+The page waits for manager `/me`, hides the upload on denial, and offers an explicit
+authority retry on service failure. A manager admin can enter administration even
+without a control-plane admin role; existing control-plane destinations retain
+their own guards.
+
+Selecting a file clears the previous report. Submission sends one multipart `file`
+with the shared session bearer. While pending, file selection and submission are
+disabled; a second submit event cannot start another request. A completed response
+displays the four acknowledgment counts unchanged. Unsupported formats and other
+failures display an error and replay guidance, with no success report for that
+attempt. Import does not retry automatically after an HTTP 401. A subsequent
+explicit attempt refreshes the bearer through the shared authentication path.

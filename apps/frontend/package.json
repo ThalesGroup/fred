@@ -67,6 +67,7 @@
     "uuid": "^11.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@rtk-query/codegen-openapi": "2.2.0",
     "@svgr/rollup": "^8.1.0",
     "@types/react": "^19.2.14",

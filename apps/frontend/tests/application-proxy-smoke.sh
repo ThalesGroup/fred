@@ -95,6 +95,13 @@ assert_not_contains "${FRONTEND_DIR}/dockerfiles/Dockerfile-prod" 'apps/applicat
 
 config="${TEST_DIR}/fred.conf"
 
+# The optional manager keeps its canonical path and resolves DNS at request time.
+FRONTEND_FRED_MANAGER_UPSTREAM=http://manager.invalid:8400 run_entrypoint "${config}" '[]' 'false'
+assert_contains "${config}" 'location /fred-manager/ {'
+assert_contains "${config}" 'set $fred_manager_upstream http://manager.invalid:8400;'
+assert_contains "${config}" 'proxy_pass $fred_manager_upstream;'
+assert_contains "${config}" '~^/fred-manager(?:/|[?]|$) fred-manager;'
+
 # The kill switch defaults off, returns 404 for both namespaces, and never
 # inspects the registration list.
 disabled_config="${TEST_DIR}/fred-disabled.conf"

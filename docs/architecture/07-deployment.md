@@ -82,6 +82,18 @@ The operator token is never used to administer Keycloak: that traffic uses the m
 service identity from `identities.yaml`. Token validity and authority are rechecked during
 import; replay after expiry uses a fresh operator token.
 
+## Frontend routing
+
+The frontend uses same-origin `/fred-manager/v1` requests. Vite resolves the
+`/fred-manager` prefix before its broad `/fred` rule and proxies to
+`VITE_BACKEND_URL_FRED_MANAGER`, default `http://localhost:8400`. Production nginx
+proxies `/fred-manager/` to `FRONTEND_FRED_MANAGER_UPSTREAM`, default
+`http://fred-manager:8400`, with 3600-second read/send timeouts. It resolves this
+optional service at request time, so frontend startup does not require its DNS
+name to exist. Local frontend `make docker-run` supplies
+`http://host.docker.internal:8400`. Access logs use the bounded `fred-manager`
+route family without exposing paths, tokens or upload contents.
+
 ## Offline authorization cutover
 
 An unbound installation with spaces, bootstrap state or legacy tuples refuses

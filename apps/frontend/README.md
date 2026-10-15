@@ -25,10 +25,11 @@ make docker-run
 ```
 
 The production container serves static assets with nginx and now proxies
-`/fred/agents/v2`, `/knowledge-flow`, and `/control-plane` to backend
+`/fred/agents/v2`, `/knowledge-flow`, `/control-plane` and `/fred-manager` to backend
 upstreams.
 The image defaults are cluster-friendly service DNS names
-(`fred-agents`, `knowledge-flow-backend:8000`, `control-plane-backend:8222`).
+(`fred-agents`, `knowledge-flow-backend:8000`, `control-plane-backend:8222`,
+`fred-manager:8400`).
 `make docker-run` overrides those upstreams for local use and points them to
 services running on the host through `host.docker.internal`.
 
@@ -39,7 +40,8 @@ make docker-run \
   FRONTEND_DOCKER_NETWORK=fred-shared-network \
   FRONTEND_AGENTIC_UPSTREAM=http://fred-agents \
   FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://knowledge-flow-backend:8111 \
-  FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222
+  FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222 \
+  FRONTEND_FRED_MANAGER_UPSTREAM=http://fred-manager:8400
 ```
 
 Production nginx writes escaped JSON access events to stdout: event time, status-derived
@@ -411,3 +413,27 @@ If you need to update one of them, just run one of the command while the corresp
   ```sh
   make update-runtime-api
   ```
+
+## Manager provisioning
+
+`/admin/provisioning` uses the generated manager slice and its `/me` authority.
+Manager platform admins see the Provisioning entry independently of control-plane
+admin roles; the existing shell login and admission guards still apply. The page
+imports a ZIP synchronously and shows server counts only after completion. Errors
+retain explicit replay guidance because effects can survive failure. Migration,
+export and reset remain control-plane features.
+
+```sh
+make update-fred-manager-api       # offline Rust OpenAPI + generated RTK client
+make install-test-browser         # install Chromium once
+make test-provisioning-browser    # isolated real import journey and integration suite
+```
+
+Browser-test prerequisites and isolation are documented in the
+[manager README](../fred-manager/README.md#import-through-the-frontend).
+For interactive development, Vite proxies `/fred-manager` to `http://localhost:8400`;
+`VITE_BACKEND_URL_FRED_MANAGER` overrides this target. Production nginx uses
+`FRONTEND_FRED_MANAGER_UPSTREAM` and resolves that optional service at request time,
+so an absent manager does not prevent the frontend from starting. `make docker-run`
+uses `http://host.docker.internal:8400` by default. Both preserve the canonical
+`/fred-manager/v1` path and the bearer header.

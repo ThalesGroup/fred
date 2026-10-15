@@ -61,6 +61,12 @@ error_log /dev/stderr notice;
 events {}
 http {
     access_log /dev/stdout;
+    # Emit a bounded marker: raw multipart bodies contain CRLF and cannot be
+    # echoed safely in the existing single-line body header below.
+    map $request_body $manager_body_received {
+        default 0;
+        ~manager-zip-probe 1;
+    }
     server {
         listen 8080;
         client_body_in_single_buffer on;
@@ -76,6 +82,7 @@ http {
             add_header X-Smoke-Method $request_method always;
             add_header X-Smoke-Authorization $http_authorization always;
             add_header X-Smoke-Metadata $http_x_smoke_metadata always;
+            add_header X-Smoke-Manager-Body $manager_body_received always;
             add_header X-Smoke-Body $request_body always;
         }
     }
@@ -144,6 +151,7 @@ start_frontend() {
         -e "FRONTEND_AGENTIC_UPSTREAM=http://${upstream}:8080" \
         -e "FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://${upstream}:8080" \
         -e "FRONTEND_CONTROL_PLANE_UPSTREAM=http://${upstream}:8080" \
+        -e "FRONTEND_FRED_MANAGER_UPSTREAM=${4:-http://fred-manager:8400}" \
         -e "FRONTEND_EVALUATION_UPSTREAM=http://${upstream}:8080" \
         -e "FRONTEND_ENABLE_APPLICATIONS=${enabled}" \
         -e "FRONTEND_APPLICATIONS_JSON=${registrations}" \
@@ -194,8 +202,18 @@ if docker logs "${upstream}" 2>&1 | grep -E '/teams/team-disabled|index-disabled
 fi
 docker rm -f "${disabled_frontend}" >/dev/null
 
-start_frontend "${frontend}" "$(registrations "http://${upstream}:8080")" 'true'
+start_frontend "${frontend}" "$(registrations "http://${upstream}:8080")" 'true' "http://${upstream}:8080"
 frontend_port=$(wait_for_shell "${frontend}")
+
+# The manager leg preserves the canonical path, multipart body and bearer.
+manager_status=$(curl -sS -D "${test_directory}/manager-headers" -o /dev/null -w '%{http_code}' \
+    -H 'Authorization: Bearer smoke-manager' -F 'file=manager-zip-probe' \
+    "http://127.0.0.1:${frontend_port}/fred-manager/v1/import-export/import")
+[ "${manager_status}" = "204" ]
+grep -i -F 'X-Smoke-Request-Uri: /fred-manager/v1/import-export/import' "${test_directory}/manager-headers" >/dev/null
+grep -i -F 'X-Smoke-Method: POST' "${test_directory}/manager-headers" >/dev/null
+grep -i -F 'X-Smoke-Authorization: Bearer smoke-manager' "${test_directory}/manager-headers" >/dev/null
+grep -i -F 'X-Smoke-Manager-Body: 1' "${test_directory}/manager-headers" >/dev/null
 
 # The UI leg keeps the whole /apps/<id> prefix so the bundle's own absolute
 # asset URLs resolve, and .mjs assets must reach the app rather than Fred's
@@ -440,6 +458,7 @@ if docker run --rm \
     -e "FRONTEND_AGENTIC_UPSTREAM=http://${upstream}:8080" \
     -e "FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://${upstream}:8080" \
     -e "FRONTEND_CONTROL_PLANE_UPSTREAM=http://${upstream}:8080" \
+        -e "FRONTEND_FRED_MANAGER_UPSTREAM=${4:-http://fred-manager:8400}" \
     -e "FRONTEND_EVALUATION_UPSTREAM=http://${upstream}:8080" \
     -e 'FRONTEND_ENABLE_APPLICATIONS=true' \
     -e 'FRONTEND_APPLICATIONS_JSON=[{"app_id":"required-app","ui_upstream":"http://ui.invalid","service_required":true}]' \

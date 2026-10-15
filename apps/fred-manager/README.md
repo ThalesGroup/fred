@@ -139,6 +139,31 @@ There is no cross-system rollback, so failure does not prove absence of effects.
 Keycloak, PostgreSQL and OpenFGA, verifies replay and identity preservation, and
 imports a variant with a project.
 
+## Import through the frontend
+
+The administration console exposes **Provisioning** at `/admin/provisioning` to
+manager platform administrators. Select the ZIP produced by `make build-demo-bundle`.
+The page displays the completed server counts or an error with explicit replay
+guidance. The demo declares a platform admin and therefore requires the bootstrap
+root. Control-plane Migration remains a separate page.
+
+From `apps/frontend`, automate this journey without touching development data:
+
+```sh
+make install-test-browser       # once: Chromium, after installing Node dependencies
+make test-provisioning-browser
+```
+
+The test needs Docker, Node/npm and the Rust/protoc prerequisites above. It starts
+throwaway PostgreSQL, OpenFGA and Keycloak plus the real manager governance router
+and Vite frontend, then removes its services. It performs OIDC login, imports the
+actual Make ZIP, replays it, imports a project variant, and checks persisted roles,
+hierarchy, reports and refusals. Control-plane shell reads are explicit fixtures;
+this test does not validate control-plane admission policies. Screenshots are
+written under the frontend's ignored `target/` directory. The manager's
+`make test-browser` invokes the same journey and integration suite when frontend
+dependencies and Chromium are already installed.
+
 ## Upgrade existing authorization
 
 Stop legacy manager writers and settle pending requests, then run

@@ -43,6 +43,7 @@ set -eu
 # tune it. Layout and variables: apps/frontend/README.md, "Theme overlay".
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
+: "${FRONTEND_FRED_MANAGER_UPSTREAM:=http://fred-manager:8400}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
 : "${FRONTEND_EVALUATION_UPSTREAM:=http://fred-evaluation-backend}"
 : "${FRONTEND_CLIENT_MAX_BODY_SIZE:=150m}"
@@ -318,6 +319,7 @@ map $request_uri $fred_log_route {
     ~^/fred/agents/v2(?:/|[?]|$) agent;
     ~^/knowledge-flow(?:/|[?]|$) knowledge-flow;
     ~^/control-plane(?:/|[?]|$) control-plane;
+    ~^/fred-manager(?:/|[?]|$) fred-manager;
     ~^/evaluation(?:/|[?]|$) evaluation;
     ~^/apps(?:/|[?]|$) application-ui;
     ~^/app-services(?:/|[?]|$) application-service;
@@ -362,6 +364,19 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /fred-manager/ {
+        # Optional service: defer DNS resolution so its absence does not stop nginx.
+        set \$fred_manager_upstream ${FRONTEND_FRED_MANAGER_UPSTREAM};
+        proxy_pass \$fred_manager_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 3600;
+        proxy_send_timeout 3600;
     }
 
     location /control-plane/ {

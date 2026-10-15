@@ -185,4 +185,27 @@ impl Keycloak {
         .await;
         format!("{}/realms/app", self.base)
     }
+
+    /// Enable the real authorization-code/PKCE browser login for one local test origin.
+    #[allow(dead_code)]
+    pub async fn allow_browser(&self, origin: &str) {
+        let clients = self.get("/admin/realms/app/clients?clientId=app").await;
+        let mut client = clients[0].clone();
+        client["standardFlowEnabled"] = json!(true);
+        client["redirectUris"] = json!([format!("{origin}/*")]);
+        client["webOrigins"] = json!([origin]);
+        self.http
+            .put(format!(
+                "{}/admin/realms/app/clients/{}",
+                self.base,
+                client["id"].as_str().unwrap()
+            ))
+            .bearer_auth(&self.token)
+            .json(&client)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
 }

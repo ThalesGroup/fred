@@ -106,6 +106,7 @@ run-docker: ## Run the built image in a container, proxying backend calls to ser
 		-e FRONTEND_AGENTIC_UPSTREAM=$(FRONTEND_AGENTIC_UPSTREAM) \
 		-e FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=$(FRONTEND_KNOWLEDGE_FLOW_UPSTREAM) \
 		-e FRONTEND_CONTROL_PLANE_UPSTREAM=$(FRONTEND_CONTROL_PLANE_UPSTREAM) \
+		-e FRONTEND_FRED_MANAGER_UPSTREAM=$(FRONTEND_FRED_MANAGER_UPSTREAM) \
 		-e FRONTEND_ENABLE_APPLICATIONS=$(FRONTEND_ENABLE_APPLICATIONS) \
 		-e FRONTEND_APPLICATIONS_JSON='$(FRONTEND_APPLICATIONS_JSON_VALUE)' \
 		-p $(FRONTEND_HOST_PORT):$(FRONTEND_CONTAINER_PORT) \
@@ -178,6 +179,15 @@ THEME_ZIP ?= theme.zip
 .PHONY: theme-bundle
 theme-bundle: ## Package THEME_SRC into THEME_ZIP, the archive a deployment serves as its theme
 	sh scripts/build-theme-archive.sh "$(THEME_SRC)" "$(THEME_ZIP)"
+
+##@ Browser acceptance
+
+.PHONY: install-test-browser test-provisioning-browser
+install-test-browser: check-node node_modules ## Install Chromium for automated browser journeys
+	npx --no-install playwright install chromium
+
+test-provisioning-browser: check-node node_modules ## Test provisioning through the UI with disposable real manager dependencies
+	$(MAKE) -C ../fred-manager test-browser
 
 ##@ API client generation
 
@@ -281,6 +291,7 @@ FRONTEND_CONTAINER_PORT ?= 8080
 FRONTEND_AGENTIC_UPSTREAM ?= http://host.docker.internal:8000
 FRONTEND_KNOWLEDGE_FLOW_UPSTREAM ?= http://host.docker.internal:8111
 FRONTEND_CONTROL_PLANE_UPSTREAM ?= http://host.docker.internal:8222
+FRONTEND_FRED_MANAGER_UPSTREAM ?= http://host.docker.internal:8400
 FRONTEND_ENABLE_APPLICATIONS ?= false
 FRONTEND_APPLICATIONS_JSON ?= []
 # Shell-compatible .env files quote JSON to protect it while sourcing. GNU make

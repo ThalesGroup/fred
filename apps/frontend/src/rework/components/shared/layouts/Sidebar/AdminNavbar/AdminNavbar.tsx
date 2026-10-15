@@ -21,6 +21,7 @@ import { useSelector } from "react-redux";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { isProtectedAllowed, type ProtectedRequirement } from "@core/guards/Protected";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
+import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import styles from "./AdminNavbar.module.css";
 
 // `requires` is the same value the page's route guard in router.tsx passes to
@@ -30,6 +31,7 @@ export default function AdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
   const capabilities = useUserCapabilities();
+  const manager = useManagerPlatformAdmin();
   const allItems: (NavigationMenuItemProps & { requires: ProtectedRequirement })[] = [
     {
       type: "link",
@@ -121,6 +123,14 @@ export default function AdminNavbar() {
   const navigationItems: NavigationMenuItemProps[] = allItems.filter((item) =>
     isProtectedAllowed(item.requires, capabilities),
   );
+
+  if (manager.isAdmin)
+    navigationItems.push({
+      type: "link",
+      label: t("rework.provisioning.title"),
+      icon: { category: "outlined", type: "upload", filled: false },
+      linkProps: { to: "/admin/provisioning" },
+    });
 
   return (
     <div className={styles.adminNavbarContainer}>

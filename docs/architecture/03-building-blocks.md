@@ -75,3 +75,12 @@ through Debug or serialization. HTTP and CLI parse on a blocking worker without
 filesystem extraction. `Importer` performs read-only preflight, per-identity
 mutations, then additive space/role reconciliation. The binary connects without SQL
 migration or FGA model synchronization, and does not initialize Temporal for import.
+
+## Frontend provisioning
+
+`ProvisioningPage` consumes the generated import mutation through its FormData
+adapter. `useManagerPlatformAdmin` shares the manager `/me` RTK query between
+navigation, admin landing and page guard. It does not infer manager authority from
+control-plane roles. The page uses the shared `PageHeader`, `FileDropzone` and
+`Button` components and the mutation's pending, error and completed-report state.
+The control-plane retains ownership of shell admission and its Migration page.

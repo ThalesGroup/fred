@@ -1,0 +1,67 @@
+/* Copyright Thales 2026
+ * SPDX-License-Identifier: Apache-2.0 */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  margin: 0 auto;
+  padding: var(--spacing-m);
+  width: 100%;
+  max-width: 960px;
+  min-height: 0;
+  overflow-y: auto;
+  color: var(--on-surface);
+  overflow-wrap: anywhere;
+}
+.page p {
+  margin: 0;
+}
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.fields legend {
+  margin-bottom: var(--spacing-s);
+}
+.fields > button {
+  align-self: flex-start;
+}
+.error,
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-m);
+}
+.error {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+.report {
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+}
+.report h2 {
+  margin: 0;
+  font: var(--font-title-medium);
+}
+.counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-m);
+  margin: 0;
+}
+.counts dd {
+  margin: var(--spacing-xs) 0 0;
+  font: var(--font-title-large);
+}
+.note {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}

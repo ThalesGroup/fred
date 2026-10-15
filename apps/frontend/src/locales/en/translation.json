@@ -3893,6 +3893,31 @@
         "summary": "Other access: {{details}}",
         "separator": "; "
       }
+    },
+    "provisioning": {
+      "title": "Provisioning",
+      "description": "Import users, organizations, teams, projects and their roles from a provisioning ZIP.",
+      "bundle": "Provisioning bundle",
+      "choose": "Choose a ZIP or drop it here",
+      "format": "Provisioning ZIP, up to 50 MiB.",
+      "import": "Import the bundle",
+      "importing": "Importing...",
+      "pending": "Import is running. Keep this page open to receive its result.",
+      "authorityUnavailable": "Unable to verify your provisioning permissions.",
+      "retryAuthority": "Check permissions again",
+      "forbidden": "Provisioning requires a platform administrator role in fred-manager.",
+      "failed": "The import did not complete successfully.",
+      "unsupported": "This bundle format is not yet supported.",
+      "networkError": "The result could not be received.",
+      "replay": "Some changes may already be applied. Correct the cause, then explicitly import the same bundle again.",
+      "completed": "Import completed",
+      "additive": "Re-importing preserves existing identities, spaces and roles, and adds the declarations in the bundle. Existing passwords remain unchanged.",
+      "counts": {
+        "identities_resolved": "Identities resolved",
+        "identities_created": "Identities created",
+        "spaces_reconciled": "Spaces reconciled",
+        "grants_acknowledged": "Grants acknowledged"
+      }
     }
   },
   "runtime": {

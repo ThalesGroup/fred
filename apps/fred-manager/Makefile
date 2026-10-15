@@ -130,3 +130,7 @@ export DEMO_PROVISIONING_FIXTURE_DIR DEMO_BUNDLE_FILE
 .PHONY: build-demo-bundle
 build-demo-bundle: ## Build the demo provisioning ZIP without running services
 	python3 tools/build_demo_bundle.py
+
+.PHONY: test-browser
+test-browser: ## Run the real provisioning browser journey and integration regressions (frontend dependencies and Chromium required)
+	$(MAKE) test-integration CARGO_TEST_OPTS="--test browser_provisioning"

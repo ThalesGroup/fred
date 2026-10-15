@@ -3893,6 +3893,31 @@
         "summary": "Autres accès : {{details}}",
         "separator": " ; "
       }
+    },
+    "provisioning": {
+      "title": "Provisioning",
+      "description": "Importez les utilisateurs, les organisations, les équipes, les projets et leurs rôles depuis un ZIP de provisioning.",
+      "bundle": "Bundle de provisioning",
+      "choose": "Choisir un ZIP ou le déposer ici",
+      "format": "ZIP de provisioning, 50 Mio maximum.",
+      "import": "Importer le bundle",
+      "importing": "Import en cours...",
+      "pending": "L'import est en cours. Gardez cette page ouverte pour recevoir son résultat.",
+      "authorityUnavailable": "Impossible de vérifier vos droits de provisioning.",
+      "retryAuthority": "Revérifier les droits",
+      "forbidden": "Le provisioning nécessite le rôle d'administrateur plateforme dans fred-manager.",
+      "failed": "L'import ne s'est pas terminé avec succès.",
+      "unsupported": "Ce format de bundle n'est pas encore pris en charge.",
+      "networkError": "Le résultat n'a pas pu être reçu.",
+      "replay": "Certaines modifications peuvent déjà être appliquées. Corrigez la cause, puis importez explicitement le même bundle à nouveau.",
+      "completed": "Import terminé",
+      "additive": "Réimporter préserve les identités, les espaces et les rôles existants, et ajoute les déclarations du bundle. Les mots de passe existants sont conservés.",
+      "counts": {
+        "identities_resolved": "Identités résolues",
+        "identities_created": "Identités créées",
+        "spaces_reconciled": "Espaces réconciliés",
+        "grants_acknowledged": "Attributions confirmées"
+      }
     }
   },
   "runtime": {
