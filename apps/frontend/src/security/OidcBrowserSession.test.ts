@@ -34,8 +34,14 @@ function person(seconds = 300, subject = "person", url_state?: string): User {
   });
 }
 
-function newSession(): OidcBrowserSession {
-  const session = new OidcBrowserSession("https://identity.example", "ui", undefined, window.location.origin + "/");
+function newSession(provider: "keycloak" | "oidc" = "oidc"): OidcBrowserSession {
+  const session = new OidcBrowserSession(
+    "https://identity.example",
+    "ui",
+    undefined,
+    window.location.origin + "/",
+    provider,
+  );
   sessions.push(session);
   return session;
 }
@@ -366,6 +372,223 @@ it("rejects external callback destinations", async () => {
     await session.login(vi.fn());
     expect(window.location.pathname).toBe("/");
   }
+});
+
+describe("explicit local Keycloak login", () => {
+  it.each(["keycloak", "oidc"] as const)("creates a one-time PKCE request with provider %s", async (provider) => {
+    const capability = "synthetic-capability-token".padEnd(43, "x");
+    const target = `/fred/join/${capability}?source=invitation#terms`;
+    window.history.replaceState({ preserved: true }, "", target.replace("#", "&keycloak-login=true#"));
+    const session = newSession(provider);
+    const signin = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+    const authenticated = vi.fn();
+
+    await session.login(authenticated);
+
+    expect(authenticated).not.toHaveBeenCalled();
+    expect(signin).toHaveBeenCalledExactlyOnceWith({
+      state: target,
+      prompt: "login",
+      extraQueryParams: { kc_idp_hint: "" },
+    });
+    expect(window.location.pathname + window.location.search + window.location.hash).toBe(target);
+    expect(window.history.state).toEqual({ preserved: true });
+
+    const client = new OidcClient({
+      ...session.manager.settings,
+      metadata: {
+        issuer: "https://identity.example",
+        authorization_endpoint: "https://identity.example/authorize",
+        token_endpoint: "https://identity.example/token",
+      },
+    });
+    const request = await client.createSigninRequest(signin.mock.calls[0][0]);
+    const params = new URL(request.url).searchParams;
+    expect(params.has("kc_idp_hint")).toBe(true);
+    expect(params.get("kc_idp_hint")).toBe("");
+    expect(params.get("prompt")).toBe("login");
+    expect(params.get("response_type")).toBe("code");
+    expect(params.get("code_challenge_method")).toBe("S256");
+    expect(params.get("code_challenge")).toBeTruthy();
+    expect(params.get("state")).toBe(request.state.id);
+    expect(params.get("scope")).toBe(provider === "keycloak" ? "openid profile" : "openid profile offline_access");
+    expect(request.state.data).toBe(target);
+    expect(decodeURIComponent(request.url)).not.toContain(capability);
+    expect(request.url).not.toContain("keycloak-login");
+  });
+
+  it.each(["keycloak", "oidc"] as const)(
+    "replaces a cached session without provider logout with %s",
+    async (provider) => {
+      const session = newSession(provider);
+      await session.manager.storeUser(person());
+      await session.login(vi.fn());
+      expect(session.token).not.toBeNull();
+      window.history.replaceState({}, "", "/help?keycloak-login=true#tools");
+      const signin = vi.spyOn(session.manager, "signinRedirect").mockImplementation(async () => {
+        expect(session.token).toBeNull();
+        expect(session.refreshToken).toBeNull();
+        expect(session.tokenParsed).toBeNull();
+        expect(await session.manager.getUser()).toBeNull();
+      });
+      const silent = vi.spyOn(session.manager, "signinSilent");
+      const logout = vi.spyOn(session.manager, "signoutRedirect");
+      const authenticated = vi.fn();
+
+      await session.login(authenticated);
+
+      expect(signin).toHaveBeenCalledOnce();
+      expect(authenticated).not.toHaveBeenCalled();
+      expect(silent).not.toHaveBeenCalled();
+      expect(logout).not.toHaveBeenCalled();
+    },
+  );
+
+  it("returns to the cleaned deep link and restores the new account on reload", async () => {
+    window.history.replaceState({}, "", "/help?topic=agents&keycloak-login=true#tools");
+    const outgoing = newSession();
+    const signin = vi.spyOn(outgoing.manager, "signinRedirect").mockResolvedValue();
+    await outgoing.login(vi.fn());
+    const target = signin.mock.calls[0][0]?.state;
+    const user = person(600, "new-person");
+    Object.defineProperty(user, "state", { value: target });
+
+    // A top-level OIDC round trip creates a new browser session instance.
+    window.history.replaceState({}, "", "/?code=callback&state=opaque-state");
+    const incoming = newSession();
+    vi.spyOn(incoming.manager, "signinRedirectCallback").mockImplementation(async () => {
+      await incoming.manager.storeUser(user);
+      return user;
+    });
+    const authenticated = vi.fn();
+    await incoming.login(authenticated);
+    expect(authenticated).toHaveBeenCalledOnce();
+    expect(incoming.tokenParsed?.sub).toBe("new-person");
+    expect(window.location.pathname + window.location.search + window.location.hash).toBe("/help?topic=agents#tools");
+
+    const reloaded = newSession();
+    const redirect = vi.spyOn(reloaded.manager, "signinRedirect").mockResolvedValue();
+    await reloaded.login(authenticated);
+    expect(redirect).not.toHaveBeenCalled();
+    expect(reloaded.tokenParsed?.sub).toBe("new-person");
+    expect(authenticated).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["", "?keycloak-login=false", "?keycloak-login=", "?keycloak-login=True"])(
+    "preserves ordinary sign-in without exact opt-in: %s",
+    async (search) => {
+      window.history.replaceState({}, "", `/help${search}#tools`);
+      const session = newSession();
+      const signin = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+      await session.login(vi.fn());
+      expect(signin).toHaveBeenCalledExactlyOnceWith({ state: `/help${search}#tools` });
+      await session.manager.storeUser(person());
+      const authenticated = vi.fn();
+      await session.login(authenticated);
+      expect(authenticated).toHaveBeenCalledOnce();
+      expect(signin).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("processes a success callback before the opt-in flag", async () => {
+    window.history.replaceState({}, "", "/?code=callback&state=opaque-state&keycloak-login=true");
+    const session = newSession();
+    const callback = vi
+      .spyOn(session.manager, "signinRedirectCallback")
+      .mockResolvedValue(person(600, "new-person", "/help"));
+    const redirect = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+    const authenticated = vi.fn();
+    await session.login(authenticated);
+    expect(callback).toHaveBeenCalledOnce();
+    expect(redirect).not.toHaveBeenCalled();
+    expect(authenticated).toHaveBeenCalledOnce();
+    expect(window.location.pathname).toBe("/help");
+  });
+
+  it("preserves callback errors instead of starting another explicit login", async () => {
+    window.history.replaceState({}, "", "/?error=access_denied&state=opaque-state&keycloak-login=true");
+    const session = newSession();
+    const error = new ErrorResponse({ error: "access_denied" });
+    vi.spyOn(session.manager, "signinRedirectCallback").mockRejectedValue(error);
+    const redirect = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+    await expect(session.login(vi.fn())).rejects.toBe(error);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("rejects a late renewal from the previous account", async () => {
+    const session = await restoredSession();
+    const late = deferred<User>();
+    const stale = person(600, "previous-person");
+    vi.spyOn(session.manager, "signinSilent").mockImplementation(async () => {
+      const user = await late.promise;
+      await session.manager.storeUser(user);
+      return user;
+    });
+    const refresh = session.ensureFreshToken(0);
+    window.history.replaceState({}, "", "/?keycloak-login=true");
+    vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+    await session.login(vi.fn());
+    late.resolve(stale);
+    await expect(refresh).resolves.toBe(false);
+    expect(session.token).toBeNull();
+    expect(await session.manager.getUser()).toBeNull();
+  });
+
+  it("does not let an older renewal timeout cancel the explicit login", async () => {
+    vi.useFakeTimers();
+    const session = await restoredSession();
+    vi.spyOn(session.manager, "signinSilent").mockReturnValue(new Promise(() => undefined));
+    const refresh = session.ensureFreshToken(0);
+    const cleanup = deferred<void>();
+    const removeUser = session.manager.removeUser.bind(session.manager);
+    vi.spyOn(session.manager, "removeUser").mockImplementationOnce(async () => {
+      await cleanup.promise;
+      await removeUser();
+    });
+    window.history.replaceState({}, "", "/?keycloak-login=true");
+    const redirect = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+    const login = session.login(vi.fn());
+    await vi.advanceTimersByTimeAsync(8_000);
+    await expect(refresh).resolves.toBe(false);
+    cleanup.resolve();
+    await login;
+    expect(redirect).toHaveBeenCalledOnce();
+    expect(session.token).toBeNull();
+  });
+
+  it("rejects a callback that started before the explicit request", async () => {
+    const session = newSession();
+    const late = deferred<User>();
+    vi.spyOn(session.manager, "signinRedirectCallback").mockImplementation(async () => {
+      const user = await late.promise;
+      await session.manager.storeUser(user);
+      return user;
+    });
+    window.history.replaceState({}, "", "/?code=callback&state=opaque-state");
+    const authenticated = vi.fn();
+    const callback = session.login(authenticated);
+    window.history.replaceState({}, "", "/?keycloak-login=true");
+    vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+    await session.login(authenticated);
+    late.resolve(person(600, "previous-person"));
+    await callback;
+    expect(authenticated).not.toHaveBeenCalled();
+    expect(session.token).toBeNull();
+    expect(await session.manager.getUser()).toBeNull();
+  });
+
+  it("keeps the previous bearer unavailable if stored-user removal fails", async () => {
+    const session = await restoredSession();
+    const error = new Error("storage unavailable");
+    vi.spyOn(session.manager, "removeUser").mockRejectedValueOnce(error);
+    const redirect = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+    window.history.replaceState({}, "", "/?keycloak-login=true");
+    await expect(session.login(vi.fn())).rejects.toBe(error);
+    expect(session.token).toBeNull();
+    expect(session.refreshToken).toBeNull();
+    expect(redirect).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("");
+  });
 });
 
 it("keeps invitation capabilities out of the provider authorization state", async () => {

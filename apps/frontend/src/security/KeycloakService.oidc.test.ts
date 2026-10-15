@@ -89,6 +89,16 @@ it("keeps legacy Keycloak configuration usable without an offline-access grant",
   expect(state.settings).toMatchObject({ scope: "openid profile", disablePKCE: false });
 });
 
+it("ignores the local-login flag when security is disabled", async () => {
+  window.history.replaceState({}, "", "/?keycloak-login=true");
+  const { KeyCloakService } = await import("./KeycloakService");
+  const authenticated = vi.fn();
+  KeyCloakService.CallLogin(authenticated);
+  expect(authenticated).toHaveBeenCalledOnce();
+  expect(state.settings).toBeNull();
+  expect(state.signinRedirect).not.toHaveBeenCalled();
+});
+
 describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provider) => {
   const options = { ...genericOptions, provider };
   it("constructs a PKCE OIDC client with the API scope and no Keycloak realm parser", async () => {
@@ -165,6 +175,25 @@ describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provi
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(state.signinRedirect).toHaveBeenCalledOnce());
     expect(authenticated).not.toHaveBeenCalled();
+  });
+
+  it("passes the explicit local-login request through the facade", async () => {
+    window.history.replaceState({}, "", "/help?keycloak-login=true#tools");
+    state.user = user({ sub: "previous-person" });
+    const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
+    const authenticated = vi.fn();
+    KeyCloakService.CallLogin(authenticated);
+    await vi.waitFor(() =>
+      expect(state.signinRedirect).toHaveBeenCalledExactlyOnceWith({
+        state: "/help#tools",
+        prompt: "login",
+        extraQueryParams: { kc_idp_hint: "" },
+      }),
+    );
+    expect(state.removeUser).toHaveBeenCalledOnce();
+    expect(authenticated).not.toHaveBeenCalled();
+    expect(KeyCloakService.GetToken()).toBeNull();
   });
 
   it("renews a short-lived API token without changing the user id", async () => {

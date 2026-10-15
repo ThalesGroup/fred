@@ -117,6 +117,23 @@ export class OidcBrowserSession {
     } else if (query.has("state")) {
       await this.manager.signoutRedirectCallback();
       window.history.replaceState({}, "", this.redirectUri);
+    } else if (query.get("keycloak-login") === "true") {
+      query.delete("keycloak-login");
+      const search = query.toString();
+      const returnPath = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", returnPath);
+
+      const loginGeneration = ++this.generation;
+      this.invalidated = true;
+      this.user = null;
+      await this.reconcileRenewalState();
+      if (loginGeneration !== this.generation) return;
+      await this.manager.signinRedirect({
+        state: returnPath,
+        prompt: "login",
+        extraQueryParams: { kc_idp_hint: "" },
+      });
+      return;
     }
     const restored = this.user ?? (await this.manager.getUser());
     if (generation !== this.generation || this.invalidated) return;
@@ -179,7 +196,7 @@ export class OidcBrowserSession {
       }),
       new Promise<null>((resolve) => {
         timeout = setTimeout(() => {
-          this.generation += 1;
+          if (generation === this.generation) this.generation += 1;
           resolve(null);
         }, REFRESH_TIMEOUT_MS);
       }),
