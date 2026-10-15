@@ -37,6 +37,14 @@ On a valid team link, preview, opening, terms acceptance and enrollment check `P
 
 `TeamInviteLinkDialog` (shared organism next to `AddTeamMembersDialog`) reads the state and calls the two mutations. While the switch is off, everything below it is disabled, still showing the URL if one exists. Copy writes to the clipboard; on refusal the URL is focused and selected with an alert. The Members tab button is shown to team admins only when `platform_access_enabled` is true. The platform-admin `PlatformAccessLinkManager` is unchanged.
 
+### 5. Free admission comes from Free-link joins only
+
+Owner principle: a team admin must never be able to grant platform access. Before this change the Free source was any current membership of a Free team, so a rule-admitted person who joined a Free team through a team link (or was added by hand) kept platform access after the rule was tightened. Now `PlatformAccess.team_sources` returns, per eligible team the person is a member of, whether it is authorized (every member admitted, unchanged) and whether it is Free with a recorded joiner row of a `free` link of that team. The same evidence drives request admission on every backend, the activation preview (one joiner query for all users) and the whitelist sources. Enrollment through a Free link records a joiner whenever none exists for that person and link, including for an existing member. Team links never record one.
+
+Consequences: existing Free-team members without a joiner row (added by hand, by team link, or joined before joiners were recorded) lose that source on upgrade; deleting revoked or expired Free-link history (cleanup) deletes its joiners and so withdraws the source they provided; a Free joiner who leaves and is later re-added still has the recorded join. Readers now require the link and joiner tables at startup.
+
+Alternative considered: a dedicated "admitted via Free" flag on membership. Rejected: the joiner table already records exactly that event.
+
 ## Risks / Trade-offs
 
 - A team admin can bring any admitted user into a private team -> same power as the manual add; the link can be paused or replaced at any time.
@@ -57,5 +65,6 @@ Revision `c3a7e5d9f1b2` on swift head `24c2f88374fe` adds both columns with serv
 6. Route-family merge of the admin links: later, separate cleanup issue.
 7. A paused or replaced link shows the existing invalid-link state of the join page.
 8. After a successful join (or an already-member retry) through any invitation link, the person lands on the team's page (`team/{team_id}/agents`): the enroll answer carries `team_id` when the caller is admitted.
+9. A team admin must never grant platform access: Free admits only Free-link joiners while they are members and Free is on; authorized teams unchanged.
 
 No open questions remain.

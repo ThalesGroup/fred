@@ -11,6 +11,7 @@ The owner's decision (2026-10-15, GitHub issue #3116): a team admin can share on
 - Clicking a team link reuses `/join/:token` and the `/platform-access/free/{token}` endpoints. A paused or replaced link answers the existing invalid-link `404`, so the page shows "This invitation link is no longer valid". On a valid team link, a caller without platform access gets `403 team_link_requires_platform_access` before any membership, opening or terms effect, and the page sends them to the existing refusal screen, without the team name.
 - Joining grants `team_member` only, to the caller only. Already a member: no change.
 - Platform administrators' Free-link screens and routes cover Free links only.
+- A team admin can never grant platform access (owner principle): the Free source is derived from Free-link joins only, in request admission, the activation preview and the whitelist sources. Existing members of Free teams without a Free-link join record lose that source on upgrade.
 
 ## Capabilities
 
@@ -20,7 +21,7 @@ The owner's decision (2026-10-15, GitHub issue #3116): a team admin can share on
 
 ### Modified Capabilities
 
-None. The Free-link requirements in `platform-access-control` keep their meaning; the delta spec states that team links stay out of Free-link administration and never admit.
+- `platform-access-control`: the Free admission source now counts only people recorded as having enrolled through one of the team's Free links (while still members and while Free is on); members added by hand or through a team invite link get no Free source. Every Free enrollment records a joiner, including one by an existing member; cleaning up link history withdraws the source its joiners provided. Authorized teams are unchanged.
 
 ## Impact
 
