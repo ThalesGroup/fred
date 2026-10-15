@@ -79,7 +79,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
         <div
           className={styles.toggle}
           data-enabled={enabled}
-          aria-disabled={toggleDisabled}
+          data-disabled={toggleDisabled}
           onClick={() => toggle(!enabled)}
         >
           <span className={styles.toggleText}>
@@ -96,7 +96,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
             />
           </span>
         </div>
-        <div className={styles.link} aria-disabled={!enabled}>
+        <div className={styles.link} data-disabled={!enabled}>
           {url && (
             <div className={styles.urlRow}>
               <div className={styles.url}>

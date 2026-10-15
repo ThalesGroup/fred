@@ -28,7 +28,7 @@
     border-color: var(--primary);
   }
 
-  &[aria-disabled="true"] {
+  &[data-disabled="true"] {
     cursor: not-allowed;
   }
 
