@@ -5,12 +5,15 @@ from uuid import UUID
 import pytest
 from control_plane_backend.app.dependencies import get_application_configuration
 from control_plane_backend.platform_access import api, service
+from control_plane_backend.teams.schemas import UserTeamRelation
 from fastapi import FastAPI, HTTPException
+from fred_core.common import TeamId
 from fred_core.security.platform_access.access_control import get_platform_access
 from fred_core.security.rebac.rebac_engine import RelationType, TeamPermission
 from httpx import ASGITransport, AsyncClient
+from test_platform_access import MembershipEngine, draft, user
 from test_platform_access import access as access_fixture
-from test_platform_access import draft, user
+from tests.test_team_member_roles import _deps
 
 access = access_fixture
 
@@ -263,12 +266,86 @@ async def test_free_link_joiner_keeps_access_only_while_member_and_free(access):
     row = next(item for item in preview.users if item.user_id == joiner.uid)
     assert row.outcome == "allowed"
     assert [(s.kind, s.team_id) for s in row.sources] == [("free", "demo")]
-    access.rebac.members[joiner.uid].discard("demo")
-    assert not await access.admitted(joiner)
-    access.rebac.members[joiner.uid].add("demo")
-    assert await access.admitted(joiner)
     await service.set_team(access, actor, "demo", False, False)
     assert not await access.admitted(joiner)
+    await service.set_team(access, actor, "demo", False, True)
+    assert await access.admitted(joiner)
+
+
+class RemovableMembers(MembershipEngine):
+    """Membership double whose removal goes through the real teams service."""
+
+    async def delete_relations(self, relations):
+        for relation in relations:
+            self.members.get(relation.subject.id, set()).discard(relation.resource.id)
+
+
+async def remove_from_demo(access, monkeypatch, actor, person) -> None:
+    from control_plane_backend.scheduler.policies.policy_models import (
+        ConversationPolicyCatalog,
+    )
+    from control_plane_backend.teams import service as teams_service
+    from fred_core.security.platform_access import access_control
+
+    class NoSessions:
+        async def get_for_user(self, *args):
+            return []
+
+    monkeypatch.setattr(access_control, "_available", True)
+    monkeypatch.setattr(access_control, "_installed", access)
+    monkeypatch.setattr(teams_service, "_get_user_roles_in_team", _member_roles)
+    monkeypatch.setattr(teams_service, "_validate_team_and_check_permission", _no_check)
+    deps = _deps(
+        access.rebac,
+        "demo",
+        get_session_store=NoSessions,
+        get_purge_queue_store=object,
+        get_policy_catalog=ConversationPolicyCatalog,
+    )
+    await teams_service.remove_team_member(actor, TeamId("demo"), person.uid, deps)
+
+
+async def _member_roles(*args, **kwargs):
+    return {UserTeamRelation.TEAM_MEMBER}
+
+
+async def _no_check(*args, **kwargs):
+    return None
+
+
+@pytest.mark.asyncio
+async def test_removed_free_joiner_re_added_by_hand_stays_refused(access, monkeypatch):
+    access.rebac = RemovableMembers()
+    actor = await admin_with_exception(access)
+    await service.set_team(access, actor, "demo", False, True)
+    joiner = user()
+    await service.enroll(
+        access, joiner, await service.generate_link(access, "demo", actor), None
+    )
+    link_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
+    await service.revoke_link(access, "demo", link_id)
+    await remove_from_demo(access, monkeypatch, actor, joiner)
+    assert not await access.admitted(joiner)
+    assert (await service.list_link_joiners(access, "demo", link_id, 0, 25)).total == 0
+    # A team admin adds them back by hand: no Free source comes back.
+    access.rebac.members[joiner.uid].add("demo")
+    assert not await access.admitted(joiner)
+
+
+@pytest.mark.asyncio
+async def test_removed_free_joiner_regains_access_by_enrolling_again(
+    access, monkeypatch
+):
+    access.rebac = RemovableMembers()
+    actor = await admin_with_exception(access)
+    await service.set_team(access, actor, "demo", False, True)
+    token = await service.generate_link(access, "demo", actor)
+    joiner = user()
+    await service.enroll(access, joiner, token, None)
+    await remove_from_demo(access, monkeypatch, actor, joiner)
+    assert not await access.admitted(joiner)
+    await service.enroll(access, joiner, token, None)
+    assert await access.admitted(joiner)
 
 
 @pytest.mark.asyncio

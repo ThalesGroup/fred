@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
-from sqlalchemy import ColumnElement, func, literal, or_, select, text
+from sqlalchemy import ColumnElement, delete, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
@@ -133,6 +133,22 @@ class PlatformAccessStore:
             for uid, team_id in (await s.execute(query)).all():
                 joined.setdefault(uid, set()).add(team_id)
             return joined
+
+    async def forget_free_joins(
+        self, team_id: str, user_id: UUID, session: AsyncSession | None = None
+    ) -> None:
+        """Leaving a team ends its Free source: only a new Free enrollment restores it."""
+        async with self.read(session) as s:
+            links = select(PlatformAccessLinkRow.id).where(
+                PlatformAccessLinkRow.team_id == team_id,
+                PlatformAccessLinkRow.kind == "free",
+            )
+            await s.execute(
+                delete(PlatformAccessLinkJoinerRow).where(
+                    PlatformAccessLinkJoinerRow.user_id == user_id,
+                    PlatformAccessLinkJoinerRow.link_id.in_(links),
+                )
+            )
 
     @staticmethod
     def user_search(query: str) -> ColumnElement[bool]:

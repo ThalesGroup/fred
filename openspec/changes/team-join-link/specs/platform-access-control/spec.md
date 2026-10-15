@@ -51,7 +51,7 @@ Admission derived from a team SHALL require current membership and either a curr
 
 ### Requirement: Administrators can inspect successful Free-link joiners
 
-Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully enrolled through that link, including a person who was already a member when enrolling; this history is the evidence of the Free admission source. Only platform administrators SHALL read the history. Each entry SHALL expose that person's current first name, last name and username while the account is active, or the last recorded values with a deleted marker after account deletion, plus the time of the successful join. This history SHALL remain visible if the person later leaves the team, the account is deleted, or the link is suspended, revoked or expired. An explicit deletion of the link history SHALL delete its joiner entries and with them the Free admission source they provided. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment by a person already recorded on that link SHALL NOT create a joiner entry or change the page-opening aggregate. Team invite links SHALL NOT create joiner entries.
+Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully enrolled through that link, including a person who was already a member when enrolling; this history is the evidence of the Free admission source. Only platform administrators SHALL read the history. Each entry SHALL expose that person's current first name, last name and username while the account is active, or the last recorded values with a deleted marker after account deletion, plus the time of the successful join. This history SHALL remain visible if the account is deleted, or the link is suspended, revoked or expired. When the person leaves or is removed from the team, their entries on that team's Free links SHALL be deleted, so that a later re-addition by hand or through a team invite link cannot restore the Free source; only a new Free enrollment can. An explicit deletion of the link history SHALL delete its joiner entries and with them the Free admission source they provided. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment by a person already recorded on that link SHALL NOT create a joiner entry or change the page-opening aggregate. Team invite links SHALL NOT create joiner entries.
 
 #### Scenario: Two links have different joiners
 
@@ -59,10 +59,23 @@ Each Free-team link SHALL retain a bounded, paginated history of distinct people
 - **WHEN** one person successfully joins through A and another through B
 - **THEN** each link's joiner list SHALL contain only the person who joined through that link
 
+#### Scenario: Link is revoked while the joiner stays a member
+
+- **WHEN** a person joins through a link and the link is later revoked or expires
+- **THEN** that person's join entry SHALL remain visible on that link until the link history is deleted
+
 #### Scenario: Member leaves and link is revoked
 
-- **WHEN** a person joins through a link, later leaves the team and the link is revoked or expires
-- **THEN** that person's join entry SHALL remain visible on that link until the link history is deleted
+- **WHEN** a person joins through a link, later leaves or is removed from the team, and the link is revoked or expires
+- **THEN** that person's join entry SHALL be deleted when they leave, and the Free source SHALL NOT return without a new Free enrollment
+
+#### Scenario: Removed joiner is re-added by hand
+
+- **GIVEN** a person joined a Free team through its link, which was later revoked
+- **WHEN** they are removed from the team and a team administrator adds them back by hand
+- **THEN** their join entry SHALL be gone and the team SHALL NOT admit them
+- **WHEN** they instead enroll again through a valid Free link of that team
+- **THEN** they SHALL be admitted through that team's Free source
 
 #### Scenario: Joiner account is deleted
 
