@@ -69,15 +69,15 @@ export default function PlatformAccessRuleEditor({
   const [result, setResult] = useState<PlatformAccessPolicyPreview>();
   const locked = disabled || busy;
   // The test answers "kept or lost" only; the admin user list names what else grants access.
-  const username = KeyCloakService.GetUserName();
+  const userId = KeyCloakService.GetUserId();
   const ownAccess = usePlatformAccessUsersQuery(
-    { offset: 0, limit: 100, query: username ?? "" },
-    { skip: !result?.admitted || !username },
+    { offset: 0, limit: 1, query: userId ?? "" },
+    { skip: !result?.admitted || !userId },
   );
   const ruleUnchecked = result?.conditions.some((reason) => reason === "timeout" || reason === "unavailable") ?? false;
   const blocking = draft.mode === "block";
   const ruleAccepts = !!result && !ruleUnchecked && (blocking ? !result.matched : result.matched);
-  const ownSources = ownAccess.currentData?.items.find((user) => user.user_id === KeyCloakService.GetUserId())?.sources;
+  const ownSources = ownAccess.currentData?.items.find((user) => user.user_id === userId)?.sources;
   // A team without a name is counted, never shown by its identifier.
   const unnamedTeams = (kind: "team" | "free") =>
     (ownSources ?? []).filter((source) => source.kind === kind && !source.team_name).length;
