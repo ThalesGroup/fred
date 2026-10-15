@@ -36,6 +36,8 @@ interface TeamSelectionListItemProps {
   redirection: To;
   /** Display name: the team name, or the personal-space label. */
   name: string;
+  /** Explicit presentation text for organization/team/project membership rows. */
+  description?: string;
   /** The current user's folded roles on this team (from `Team.my_relations`).
    *  Ignored for the personal space (`personal`), which shows no role line. */
   roles?: UserTeamRelation[];
@@ -59,6 +61,7 @@ interface TeamSelectionListItemProps {
 export default function TeamSelectionListItem({
   redirection,
   name,
+  description,
   roles = [],
   personal = false,
   imgUrl,
@@ -87,7 +90,7 @@ export default function TeamSelectionListItem({
       )}
       <span className={styles.labels}>
         <span className={styles.name}>{name}</span>
-        {!personal && <span className={styles.roles}>{roleLabel}</span>}
+        {!personal && <span className={styles.roles}>{description ?? roleLabel}</span>}
       </span>
     </Link>
   );

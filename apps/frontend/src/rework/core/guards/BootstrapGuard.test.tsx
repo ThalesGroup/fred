@@ -16,11 +16,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import BootstrapGuard from "./BootstrapGuard";
 
-const mockUseFrontendProperties = vi.fn();
+const mockStatus = vi.fn();
 
-vi.mock("src/hooks/useFrontendProperties.ts", () => ({
-  useFrontendProperties: () => mockUseFrontendProperties(),
+vi.mock("../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+  useOnboardingStatusQuery: () => ({ data: mockStatus() }),
 }));
+vi.mock("@shared/layouts/MainLayout/MainLayout", () => ({ default: ({ children }) => children }));
 
 vi.mock("@components/pages/BootstrapPage/BootstrapPage.tsx", () => ({
   default: () => <div data-testid="bootstrap-page" />,
@@ -35,8 +36,8 @@ function renderGuard(): string {
 }
 
 describe("BootstrapGuard", () => {
-  it("renders BootstrapPage when rootBootstrapRequired is true", () => {
-    mockUseFrontendProperties.mockReturnValue({ rootBootstrapRequired: true });
+  it("renders BootstrapPage when root_bootstrap_required is true", () => {
+    mockStatus.mockReturnValue({ root_bootstrap_required: true });
 
     const html = renderGuard();
 
@@ -44,8 +45,8 @@ describe("BootstrapGuard", () => {
     expect(html).not.toContain("app-children");
   });
 
-  it("renders children when rootBootstrapRequired is false, including the fresh auth-disabled/dev case", () => {
-    mockUseFrontendProperties.mockReturnValue({ rootBootstrapRequired: false });
+  it("renders children when root_bootstrap_required is false", () => {
+    mockStatus.mockReturnValue({ root_bootstrap_required: false });
 
     const html = renderGuard();
 

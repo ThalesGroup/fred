@@ -145,12 +145,14 @@ imports a variant with a project.
 
 ## Import through the frontend
 
-The experimental manager entry exposes **Provisioning** at `/admin/provisioning` to
-manager platform administrators. Select the ZIP produced by `make build-demo-bundle`.
+Fred's existing administration console exposes **Provisioning** at
+`/admin/provisioning` to manager platform administrators. Select the ZIP produced by `make build-demo-bundle`.
 The page displays the completed server counts or an error with explicit replay
 guidance. The demo declares a platform admin and therefore requires the bootstrap
-root. The entry mounts only onboarding, own memberships and provisioning; legacy
-control-plane pages are not part of this journey.
+root. The existing Home and sidebar display own memberships, hierarchy and roles.
+The account menu permits logout before and after admission. The router mounts only
+onboarding, Home and provisioning; other product destinations return home without
+starting their Python consumers.
 
 From `apps/frontend`, automate this journey without touching development data:
 
@@ -164,8 +166,9 @@ throwaway PostgreSQL, OpenFGA and Keycloak plus the real manager governance rout
 and Vite frontend, then removes its services. Starting with no root or consent,
 it accepts CGU, bootstraps through the UI, imports the actual Make ZIP, replays it,
 imports a project variant, then switches accounts in the same browser. It checks
-consent isolation, empty root memberships, persisted hierarchy/roles, reports and
-refusals. Any control-plane or knowledge-flow call fails the test. Screenshots are
+consent isolation, empty root memberships, persisted hierarchy/roles, reports,
+refusals, unsupported direct URLs and keyboard logout through the existing account
+menu. Any control-plane, knowledge-flow or agent-runtime call fails the test. Screenshots are
 written under the frontend's ignored `target/` directory. The manager's
 `make test-browser` invokes the same journey and integration suite when frontend
 dependencies and Chromium are already installed.

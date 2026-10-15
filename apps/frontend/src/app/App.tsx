@@ -1,4 +1,3 @@
-import { isPlatformAccessStandalone } from "../common/platformAccess";
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,15 +19,11 @@ import React, { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import AnnouncementStack from "../rework/features/announcements/AnnouncementStack";
-import PatchNoteGate from "../rework/features/announcements/PatchNoteGate";
 import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import { uiThemeBase, uiThemeTab } from "./uiThemes";
-import GcuGuard from "@core/guards/GcuGuard.tsx";
-import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
 import styles from "./App.module.css";
 
 const LoadingScreen = ({
@@ -104,37 +99,17 @@ function FredUiContent() {
       }
     >
       <AuthProvider>
-        {/* The announcement banners render INSIDE the guards — that is the
-            only reliable "past GCU and bootstrap" signal: `useAuth()`'s
-            isAuthenticated is `!!GetUserRoles()`, and that call always returns
-            an array, so it is never false. They still push the routed content
-            down instead of covering it: .appContent is a flex column, the
-            banners are its auto-height first child and .routedContent takes the
-            rest, so routed pages keep sizing with height: 100%, never 100vh. */}
         <div className={styles.appShell}>
-          <div className={styles.appContent}>
-            {isPlatformAccessStandalone() ? (
-              <RouterProvider router={router} />
-            ) : (
-              <GcuGuard>
-                <BootstrapGuard>
-                  <AnnouncementStack />
-                  <div className={styles.routedContent}>
-                    <ConfirmationDialogProvider>
-                      <ToastProvider
-                        onCopy={async (text) => {
-                          await writeRichClipboard("", text);
-                        }}
-                      >
-                        {/* Same guards as the banners, and above the router: it never remounts. */}
-                        <PatchNoteGate />
-                        <RouterProvider router={router} />
-                      </ToastProvider>
-                    </ConfirmationDialogProvider>
-                  </div>
-                </BootstrapGuard>
-              </GcuGuard>
-            )}
+          <div className={styles.routedContent}>
+            <ConfirmationDialogProvider>
+              <ToastProvider
+                onCopy={async (text) => {
+                  await writeRichClipboard("", text);
+                }}
+              >
+                <RouterProvider router={router} />
+              </ToastProvider>
+            </ConfirmationDialogProvider>
           </div>
         </div>
       </AuthProvider>

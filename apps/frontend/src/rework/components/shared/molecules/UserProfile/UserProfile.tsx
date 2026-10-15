@@ -13,46 +13,37 @@
 // limitations under the License.
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
-import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
-import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap.ts";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
-import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog.tsx";
-import { usePatchNoteHistory } from "../../../../features/announcements/usePatchNoteHistory.ts";
 
-/**
- * Bottom-of-rail user entry: an avatar button. Clicking it opens a popover above it grouping
- * user-scoped actions: Profile (the existing settings page), What's new (the
- * patch-note history, while it has something to read), optional Contact support, and Logout. The Help Center and the platform admin console moved out
- * of this menu to the mainNavBar (#2298); team admin stays on the team banner
- * gear. This menu is global only.
- */
+/** The account menu remains available before admission and never queries business data. */
 export default function UserProfile() {
-  const navigate = useNavigate();
   const { t } = useTranslation();
-  const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
-  const { notes: patchNotes } = usePatchNoteHistory();
-  const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const logoutRef = useRef<HTMLButtonElement>(null);
 
-  const userFullName = KeyCloakService.GetUserFullName();
-  const { bootstrap } = useFrontendBootstrap();
+  const userFullName =
+    KeyCloakService.GetUserFullName() || KeyCloakService.GetUserName() || KeyCloakService.GetUserId();
   const userEmail = KeyCloakService.GetUserMail();
 
   useEffect(() => {
     if (!open) return;
+    logoutRef.current?.focus();
     const onPointer = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -61,11 +52,6 @@ export default function UserProfile() {
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-
-  const goTo = (path: string) => {
-    setOpen(false);
-    navigate(path);
-  };
 
   return (
     <div className={styles.container} ref={containerRef}>
@@ -78,41 +64,8 @@ export default function UserProfile() {
             groups={[
               [
                 <MenuPopoverItem
-                  key="profile"
-                  icon={{ category: "outlined", type: "person" }}
-                  label={t("rework.profileMenu.profile")}
-                  onClick={() => goTo("/settings")}
-                />,
-                ...(patchNotes.length > 0
-                  ? [
-                      <MenuPopoverItem
-                        key="whatsNew"
-                        icon={{ category: "outlined", type: "new_releases" }}
-                        label={t("rework.profileMenu.whatsNew")}
-                        onClick={() => {
-                          setOpen(false);
-                          setReadingPatchNotes(true);
-                        }}
-                      />,
-                    ]
-                  : []),
-              ],
-              contactSupportLink
-                ? [
-                    <MenuPopoverItem
-                      key="support"
-                      icon={{ category: "outlined", type: "chat" }}
-                      label={t("rework.profileMenu.contactSupport")}
-                      onClick={() => {
-                        setOpen(false);
-                        window.open(contactSupportLink, "_blank", "noopener,noreferrer");
-                      }}
-                    />,
-                  ]
-                : [],
-              [
-                <MenuPopoverItem
                   key="logout"
+                  ref={logoutRef}
                   icon={{ category: "outlined", type: "logout" }}
                   label={t("rework.userSettings.disconnect")}
                   danger
@@ -127,17 +80,16 @@ export default function UserProfile() {
       <Tooltip text={t("rework.profileMenu.trigger", { name: userFullName })} placement="right">
         <button
           type="button"
+          ref={triggerRef}
           className={styles.trigger}
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
           aria-haspopup="menu"
           aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
         >
-          <UserAvatar name={userFullName} size="small" imageUrl={bootstrap?.current_user?.avatar_image_url} />
+          <UserAvatar name={userFullName} size="small" />
         </button>
       </Tooltip>
-
-      <PatchNoteDialog open={readingPatchNotes} notes={patchNotes} onClose={() => setReadingPatchNotes(false)} />
     </div>
   );
 }

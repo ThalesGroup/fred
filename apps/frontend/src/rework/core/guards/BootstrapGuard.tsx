@@ -12,23 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren } from "react";
-import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
-import { useFrontendProperties } from "src/hooks/useFrontendProperties.ts";
+import { type PropsWithChildren } from "react";
+import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage";
+import MainLayout from "@shared/layouts/MainLayout/MainLayout";
+import { useOnboardingStatusQuery } from "../../../slices/fredManager/fredManagerApiEnhancements";
 
+/** GcuGuard owns status loading/errors and keeps this guard behind personal consent. */
 export default function BootstrapGuard({ children }: PropsWithChildren) {
-  // `rootBootstrapRequired` comes from the public pre-auth config, so it is
-  // known as soon as the app loads — no per-user query needed. It is the
-  // backend's authoritative gating decision (AUTHZ-07): true only when user
-  // auth and ReBAC are both enabled and root bootstrap has not yet completed.
-  // Deployments with auth or ReBAC disabled report `false` here even though
-  // `POST /bootstrap/platform-admin` would still 503 there — this guard must
-  // not re-derive that predicate itself.
-  const { rootBootstrapRequired } = useFrontendProperties();
-
-  if (rootBootstrapRequired) {
-    return <BootstrapPage />;
-  }
-
-  return <>{children}</>;
+  const { data } = useOnboardingStatusQuery();
+  if (!data) return null;
+  return data.root_bootstrap_required ? (
+    <MainLayout navigation={false}>
+      <BootstrapPage />
+    </MainLayout>
+  ) : (
+    <>{children}</>
+  );
 }

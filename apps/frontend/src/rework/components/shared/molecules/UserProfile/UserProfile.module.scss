@@ -57,3 +57,12 @@
 .popoverBox {
   width: 100%;
 }
+
+@media (max-width: 640px) {
+  .popoverWrap {
+    top: 100%;
+    right: 0;
+    bottom: auto;
+    left: auto;
+  }
+}

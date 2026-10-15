@@ -1,8 +1,8 @@
 # Fred Frontend
 
 On `chore/rust-rebac`, the entry is limited to the [manager first-user journey](#manager-provisioning).
-It requires fred-manager and does not mount the legacy product shell described in
-the source overview below.
+It requires fred-manager and reuses the existing application, router and layout.
+Unsupported feature pages and their data consumers are not mounted.
 
 Fred frontend is a node React/Typescript application. It uses vite.js.
 
@@ -178,8 +178,8 @@ For teams using this structure, onboarding is faster, testing is easier, and fea
 
 ## Configuration Surfaces
 
-This branch starts the limited manager journey described below. The legacy product
-router and page catalog above remain source references, not mounted entry points.
+This branch uses the existing router for the limited manager journey described
+below. Unsupported pages in the source catalog remain unmounted.
 The frontend reads two configuration surfaces during startup:
 
 | Surface                            | Owner                                           | Purpose                                                                                                                                                                                |
@@ -531,12 +531,14 @@ If you need to update one of them, just run one of the command while the corresp
 
 ## Manager provisioning
 
-This experimental branch starts `ManagerApp`: manager public configuration,
-Keycloak login, personal CGU acceptance, root bootstrap, own memberships and
-`/admin/provisioning`. The generated manager slice is the authority for each step.
-The legacy `App`/control-plane shell is not mounted. Root has no implicit space;
-imported users accept their own terms and see their declared organizations, teams
-and projects. The terms assets and `app.gcu_version` are deployed together.
+This experimental branch uses Fred's existing `App`, router, layout and sidebar
+for manager public configuration, Keycloak login, personal CGU, root bootstrap,
+Home memberships and `/admin/provisioning` in the administration console. The
+generated manager slice is the authority for each step. Root has no implicit
+space; imported users accept their own terms and select declared organizations,
+teams and projects on Home to read hierarchy and roles. The account menu remains
+available before admission. Unsupported routes return home without mounting Python
+consumers. The terms assets and `app.gcu_version` are deployed together.
 
 Provisioning imports a ZIP synchronously and shows server counts only after
 completion. Errors retain explicit replay guidance because effects can survive

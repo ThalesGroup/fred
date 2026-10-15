@@ -121,10 +121,17 @@ migration or FGA model synchronization, and does not initialize Temporal for imp
 
 `ProvisioningPage` consumes the generated import mutation through its FormData
 adapter. `useManagerPlatformAdmin` shares the manager `/me` RTK query between
-the manager entry and page guard. It does not infer manager authority from
+the existing navigation and page guard. It does not infer manager authority from
 control-plane roles. The page uses the shared `PageHeader`, `FileDropzone` and
 `Button` components and the mutation's pending, error and completed-report state.
-The experimental entry uses manager onboarding; the legacy control-plane shell is not mounted.
+`App`, the existing router, `MainLayout` and `Sidebar` compose this journey.
+`GcuGuard` reads manager onboarding and gates `BootstrapGuard` and admitted routes;
+the same layout keeps the account menu available before admission without protected
+queries. Home and its navigation consume generated `/me/spaces` data directly.
+Selecting a membership displays its hierarchy and direct roles on Home. There is
+no synthetic Python team or permission mapping. Unsupported routes redirect home;
+agent widgets, task polling, announcements and Python bootstrap consumers are not
+mounted. Theme presentation uses configuration loaded at startup.
 
 ## Content access
 

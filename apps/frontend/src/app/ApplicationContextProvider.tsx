@@ -16,8 +16,6 @@ import { createContext, PropsWithChildren, useEffect, useState } from "react";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
 import { getPlatformUiThemes } from "../common/config.tsx";
-import { useFrontendConfigQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
-import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "../rework/core/hooks/crossSessionRefresh";
 import {
   cachePlatformUiThemes,
   computeDarkMode,
@@ -42,10 +40,7 @@ const getSystemDarkMode = (): boolean => {
 };
 
 export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
-  const { data: publicConfig, refetch } = useFrontendConfigQuery(undefined, crossSessionRefreshOptions(false));
-  useRefetchOnWindowFocus(refetch, false);
-  const platformUiThemes = publicConfig ? (publicConfig.ui_themes ?? null) : getPlatformUiThemes();
-  return <ApplicationThemeProvider platformUiThemes={platformUiThemes}>{props.children}</ApplicationThemeProvider>;
+  return <ApplicationThemeProvider platformUiThemes={getPlatformUiThemes()}>{props.children}</ApplicationThemeProvider>;
 };
 
 /** Presentation state shared by shells; this provider performs no API requests. */

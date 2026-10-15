@@ -6,19 +6,20 @@ Rules live in their domain chapters; this chapter shows their composition.
 
 ## From an empty platform to an organization's first user
 
-Execution context: the experimental frontend entry and fred-manager on
-`chore/rust-rebac`, using Keycloak, PostgreSQL and OpenFGA. This entry exposes
-onboarding, memberships and provisioning. It does not mount the Python product shell.
+Execution context: Fred's existing application, navigation and screens connected
+to fred-manager on `chore/rust-rebac`, using Keycloak, PostgreSQL and OpenFGA.
+The reachable journey contains onboarding, memberships and provisioning.
+Other product pages and their Python data consumers are not mounted.
 
 | Step | What the person sees or does | Architectural effect |
 | --- | --- | --- |
 | 1. Open Fred | Sign in with a personal Keycloak account. | Public configuration identifies the login authority. The bearer identifies the caller; it grants no organization membership. |
 | 2. Accept the CGU | Read the active terms and explicitly accept. | Manager records that person's subject, version and time in SQL. No role or space is created. |
 | 3. Initialize administration | On an unclaimed platform, enter the deployment bootstrap secret. | Manager reserves this caller as root, writes platform administration in OpenFGA and records completion. |
-| 4. Open the platform | Root sees an empty membership view and the Provisioning entry. | Platform governance grants no organization membership or content access. |
+| 4. Open the platform | Root sees an empty Home view and Provisioning in the administration console. | Platform governance grants no organization membership or content access. |
 | 5. Import the ZIP | Select the Make-generated bundle and read the completed report. | Manager uses its own Keycloak service identity to resolve/create users and reconciles declared organizations, teams, projects and direct roles. |
 | 6. Change accounts | Sign out, then sign in as an imported person. | The browser starts a fresh session; the previous person's data is not retained. |
-| 7. Enter the organization | Accept personal CGU, then view the declared organization and spaces. | Import has not accepted terms for this person. Membership comes from the bundle's roles, not from accepting terms or logging in. |
+| 7. Enter the organization | Accept personal CGU, then select an organization, team or project in the Home navigation to read its hierarchy and roles. | Import has not accepted terms for this person. Membership comes from the bundle's roles, not from accepting terms or logging in. |
 
 ```mermaid
 sequenceDiagram
@@ -46,6 +47,10 @@ sequenceDiagram
     M->>FGA: Apply declared direct roles
     M-->>UI: Completed acknowledgment counts
 ```
+
+The account menu displays the authenticated identity and allows logout even before
+CGU acceptance or bootstrap, including when admission is unavailable. Unknown or
+unsupported URLs return to Home after admission without mounting their consumers.
 
 Unavailable configuration, onboarding state or legal text keeps the protected
 journey closed and offers retry. A wrong secret grants nothing. A completed

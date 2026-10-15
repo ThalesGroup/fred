@@ -19,7 +19,7 @@ Read the journeys first, then follow the relevant domain chapter.
 
 Empty sections define the editorial structure only. They make no implementation
 claim. Populated sections name their execution context: in particular, the
-organization/team/project journey uses this branch's manager entry. A rule
+organization/team/project journey uses Fred's existing UI connected to manager on this branch. A rule
 implemented there does not imply that every Python product surface uses it.
 
 ## Technical references

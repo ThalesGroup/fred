@@ -26,7 +26,7 @@ const expect = baseExpect.configure({ timeout: 60_000 });
 
 async function login(username, password, path = "/admin/provisioning") {
   const context = await browser.newContext({ locale: "en", viewport: { width: 1280, height: 900 } });
-  await context.route(/\/(control-plane|knowledge-flow)\/v1\//, async (route) => {
+  await context.route(/\/(control-plane|knowledge-flow|fred-agents|agentic-backend|runtime)\/v1\//, async (route) => {
     unexpected.push(new URL(route.request().url()).pathname);
     await route.abort();
   });
@@ -53,8 +53,20 @@ async function login(username, password, path = "/admin/provisioning") {
     headers: { Authorization: bearer },
   });
   assert.equal(denied.status(), 403);
+  if (username === "root") {
+    // Logout before consent must not imply acceptance when the person returns.
+    await logout(page);
+    await page.locator("#username").fill(username);
+    await page.locator("#password").fill(password);
+    await page.locator("#kc-login").click();
+  }
   await acceptTerms(page);
   if (username === "root") {
+    await logout(page);
+    await page.locator("#username").fill(username);
+    await page.locator("#password").fill(password);
+    await page.locator("#kc-login").click();
+
     const secret = page.getByLabel("Bootstrap secret", { exact: false });
     await secret.fill("wrong-but-long-enough");
     await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
@@ -64,12 +76,37 @@ async function login(username, password, path = "/admin/provisioning") {
     await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
     await expect(page.getByText("You are now the platform administrator, root.")).toBeVisible();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("button", { name: "Home", exact: true }).click();
     await expect(page.getByText("You do not belong to any organization or space.")).toBeVisible();
     assert.deepEqual(await get(context, bearer, "/me/spaces"), []);
+    await page.getByRole("button", { name: "Technical console", exact: true }).click();
     await page.getByRole("link", { name: "Provisioning", exact: true }).click();
   }
   await expect(page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
   return { context, page, bearer };
+}
+
+async function logout(page) {
+  const trigger = page.getByRole("button", { name: /'s account$/ });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  const disconnect = page.getByRole("menuitem", { name: "Disconnect", exact: true });
+  await expect(disconnect).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(disconnect).toBeFocused();
+  await page.keyboard.press("Enter");
+}
+
+async function assertBoundedNavigation(page) {
+  await expect(page.getByRole("navigation", { name: "Main navigation", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Marketplace", exact: true })).toHaveCount(0);
+  for (const path of ["/team/unknown/resources", "/team/unknown/agents", "/admin/teams", "/marketplace/teams"]) {
+    await page.goto(origin + path);
+    await expect(page).toHaveURL(origin + "/home");
+    await expect(page.getByRole("heading", { name: "Your spaces", exact: true })).toBeVisible();
+  }
 }
 
 async function acceptTerms(page) {
@@ -118,6 +155,9 @@ try {
   const root = await login("root", "it-root", "/admin");
   await expect(root.page.getByRole("link", { name: "Provisioning", exact: true })).toBeVisible();
   await expect(root.page.getByRole("link", { name: "Migration", exact: true })).toHaveCount(0);
+  await assertBoundedNavigation(root.page);
+  await root.page.getByRole("button", { name: "Technical console", exact: true }).click();
+  await expect(root.page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
 
   // Hold the actual outgoing request, assert pending controls, then allow it to
   // reach the real importer. No fabricated result can satisfy this assertion.
@@ -176,7 +216,7 @@ try {
 
   await mkdir("target", { recursive: true });
   await root.page.screenshot({ path: "target/provisioning-browser.png", fullPage: true });
-  await root.page.setViewportSize({ width: 760, height: 900 });
+  await root.page.setViewportSize({ width: 390, height: 844 });
   assert(await root.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
   await root.page.screenshot({ path: "target/provisioning-browser-narrow.png", fullPage: true });
 
@@ -196,16 +236,40 @@ try {
   root.page.on("request", (request) => {
     if (request.url() === `${origin}/fred-manager/v1/me`) bobBearer = request.headers().authorization;
   });
-  await root.page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await logout(root.page);
+  await root.page.locator("#username").fill("bob");
+  await root.page.locator("#password").fill("Azerty123_");
+  await root.page.locator("#kc-login").click();
+  // Leave Bob's consent pending, return to root, then check Bob still needs his own consent.
+  await expect(root.page.getByRole("button", { name: "Accept the TOS", exact: true })).toBeVisible();
+  await logout(root.page);
+  await root.page.locator("#username").fill("root");
+  await root.page.locator("#password").fill("it-root");
+  await root.page.locator("#kc-login").click();
+  await root.page.getByRole("button", { name: "Home", exact: true }).click();
+  await expect(root.page.getByText("You do not belong to any organization or space.")).toBeVisible();
+  await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toHaveCount(0);
+  await logout(root.page);
   await root.page.locator("#username").fill("bob");
   await root.page.locator("#password").fill("Azerty123_");
   await root.page.locator("#kc-login").click();
   await acceptTerms(root.page);
+  await root.page.getByRole("button", { name: "Home", exact: true }).click();
   await expect(root.page.getByRole("heading", { name: "Your spaces", exact: true })).toBeVisible();
   await expect(root.page.getByRole("heading", { name: "Demo", exact: true })).toBeVisible();
   await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toBeVisible();
   await expect(root.page.getByText("You do not belong to any organization or space.")).toHaveCount(0);
+  await root.page.getByRole("link", { name: "Browser project", exact: true }).click();
+  await expect(root.page.getByRole("region", { name: "Browser project", exact: true })).toContainText(
+    "Demo / northbridge / Browser project",
+  );
+  await expect(root.page.getByRole("heading", { name: "northbridge", exact: true })).toHaveCount(0);
+  await root.page.screenshot({ path: "target/provisioning-spaces-narrow.png", fullPage: true });
+  await root.page.setViewportSize({ width: 1280, height: 900 });
+  await root.page.screenshot({ path: "target/provisioning-spaces.png", fullPage: true });
   const bob = { page: root.page, context: root.context, bearer: bobBearer };
+  await assertBoundedNavigation(bob.page);
+  await expect(bob.page.getByRole("button", { name: "Technical console", exact: true })).toHaveCount(0);
   await bob.page.goto(origin + "/admin/provisioning");
   await expect(bob.page.getByRole("alert")).toContainText("Provisioning requires a platform administrator role");
   await expect(bob.page.locator('input[type="file"]')).toHaveCount(0);
@@ -235,6 +299,9 @@ try {
   console.log(
     "Provisioning browser acceptance passed: OIDC login, personal terms, root bootstrap, logout/account switch, empty root memberships, navigation, multipart import, pending state, reports, replay, project hierarchy/roles, legacy rejection and access refusals.",
   );
+} catch (error) {
+  console.error({ pageErrors, unexpected });
+  throw error;
 } finally {
   await browser?.close();
   await server.close();

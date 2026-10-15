@@ -20,19 +20,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const state = vi.hoisted(() => ({ version: "v1" as string | null, accepted: "v1" as string | null }));
-vi.mock("react-redux", () => ({ useDispatch: () => vi.fn() }));
-vi.mock("src/hooks/useFrontendProperties.ts", () => ({ useFrontendProperties: () => ({ gcuVersion: state.version }) }));
-vi.mock("@components/pages/GcuPage/GcuPage.tsx", () => ({ default: () => <div>Accept terms</div> }));
-vi.mock("../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: false }) }));
-vi.mock("./PlatformAdmissionGuard", () => ({ default: vi.fn() }));
-vi.mock("../../../slices/controlPlane/controlPlaneApi.ts", () => ({
-  controlPlaneApi: {
-    endpoints: {
-      getUserDetailsControlPlaneV1UserGet: {
-        useQuery: () => ({ data: { cguValidated: state.accepted }, isLoading: false, isUninitialized: false }),
-      },
-    },
-  },
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@components/pages/GcuPage/GcuPage", () => ({ default: () => <div>Accept terms</div> }));
+vi.mock("@shared/layouts/MainLayout/MainLayout", () => ({ default: ({ children }) => children }));
+vi.mock("../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+  useOnboardingStatusQuery: () => ({
+    data: { gcu_version: state.version, acceptance: { version: state.accepted } },
+    refetch: vi.fn(),
+  }),
 }));
 
 import GcuGuard from "./GcuGuard.tsx";

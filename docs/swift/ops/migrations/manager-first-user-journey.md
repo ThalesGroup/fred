@@ -9,9 +9,9 @@ configuration_reason: "The experimental manager reference and standalone k3d ove
 ## Applicability
 
 Experimental `chore/rust-rebac` deployments using manager and the frontend from this
-branch. This entry exposes only personal CGU, root bootstrap, memberships and
-provisioning. It replaces the full product entry for this branch; it is not a
-transparent upgrade of the legacy Fred UI.
+branch. Fred's existing layout and navigation expose only personal CGU, root
+bootstrap, Home memberships and administration provisioning. This is a bounded
+journey, not a transparent upgrade enabling the full product.
 
 ## Prerequisites
 
@@ -33,6 +33,9 @@ additive migration 0005 at startup. The frontend reads manager public configurat
 before login and shows a reload action when unavailable. Accept CGU in the UI before
 bootstrap or import; the obsolete `bootstrap-local` helper is removed. Existing
 manager roles and spaces remain unchanged. No organization membership is implicit.
+Rebuilding the frontend restores this journey in Fred's existing layout; it needs
+no additional migration, Keycloak reset or reimport. Use Home for memberships and
+the administration console for Provisioning.
 
 ## Validation
 
@@ -52,7 +55,7 @@ not edit an applied migration or delete its history record to force a rollback.
 
 ## Limitations
 
-The legacy full Fred UI is outside this experimental entry. Existing root roles
+Only the stated destinations are reachable in the existing Fred UI. Existing root roles
 remain authoritative in OpenFGA; there is no role mirroring or compatibility layer.
 The browser acceptance uses real governance APIs but does not start Temporal or
 validate the remaining content, admission and administration journeys.

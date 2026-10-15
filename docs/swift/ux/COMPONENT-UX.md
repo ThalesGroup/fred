@@ -4784,6 +4784,12 @@ is stored; a failed read is shown explicitly and leaves that value unchanged.
 
 ### `ProvisioningPage` (`/admin/provisioning`, #3092)
 
+On `chore/rust-rebac`, the first-user journey uses the existing `App`, `MainLayout`,
+sidebar, Home and account menu. Home displays manager memberships and roles;
+Provisioning appears in the existing administration console. Unsupported navigation
+and its route consumers are unmounted. The account menu remains usable before
+admission, including keyboard logout; no separate manager shell is mounted.
+
 **Status:** `Functional`
 
 Manager-authorized ZIP import using the shared PageHeader, FileDropzone and Button.

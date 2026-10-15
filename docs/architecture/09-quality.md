@@ -71,13 +71,20 @@ The journey starts without root grants or consent. It exercises initial configur
 failure/reload, personal terms, wrong secret, successful bootstrap, empty root
 memberships, import/replay, and same-browser logout/login as an imported person.
 The second person accepts independently and sees their declared spaces. No manager
-or Python response is fabricated; any control-plane or knowledge-flow call fails.
+or Python response is fabricated; any control-plane, knowledge-flow or agent-runtime
+call fails. The browser traverses Fred's existing sidebar and administration console,
+checks unsupported direct URLs, selects a project on Home, and exercises keyboard
+logout before consent, before bootstrap and after admission. A pending-consent
+member can return to root and back without inheriting root's consent or memberships.
 Each run owns its database, FGA store and Keycloak container. The frontend command
 `make test-provisioning-browser` invokes this journey and the integration suite.
 Nginx smoke tests verify canonical paths, multipart bodies and bearer forwarding.
 
 Frontend regressions prove that unavailable onboarding fails closed, stale consent
 never advances the journey, and a changed version reloads the displayed legal text.
+Account tests cover missing name/username claims and menu focus restoration.
+Membership tests distinguish an empty result, a missing selection and a failed query;
+a failed query hides cached memberships.
 Integration regressions exercise version changes, timestamp-preserving retry,
 service/delegation refusal, CLI admission and absence of membership side effects.
 
@@ -91,10 +98,12 @@ parents. A fixed number of HTTP calls does not specify OpenFGA's datastore work,
 latency or throughput.
 
 The frontend navigation and provisioning guard share one cached `/me` query.
-The admitted entry refetches `/me` when mounted; the provisioning guard refetches
-data older than 60 seconds. Concurrent subscribers
-deduplicate the request. Each network fetch performs the five concurrent Checks
-listed below. There is no polling or additional import-specific FGA query. The
+Navigation and page subscribers refetch `/me` data older than 60 seconds when
+they mount; this threshold does not schedule periodic refresh.
+Concurrent subscribers deduplicate the request. Home and the space navigation
+share `/me/spaces`; Home requests a fresh result on mount, and selection within
+Home uses that result without per-space requests. Each `/me` network fetch performs
+the five concurrent Checks listed below; `/me/spaces` uses paginated tuple Reads. There is no polling or additional import-specific FGA query. The
 browser fixture (15 imported users, one organization, three teams and one project,
 one active import at a time) proves behavior, not throughput or scalability.
 

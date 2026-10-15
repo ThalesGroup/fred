@@ -18,27 +18,42 @@ import { useTranslation } from "react-i18next";
 import { platformPath } from "../../../../common/platformAccess";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import {
-  useGetUserDetailsControlPlaneV1UserGetQuery,
-  useValidateGcuControlPlaneV1GcuPostMutation,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+  useAcceptTermsMutation,
+  useOnboardingStatusQuery,
+} from "../../../../slices/fredManager/fredManagerApiEnhancements";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { useLegalMarkdownState } from "@hooks/useLegalMarkdown.ts";
 import styles from "./GcuPage.module.css";
 
-export default function GcuPage() {
-  const [trigger, { isLoading }] = useValidateGcuControlPlaneV1GcuPostMutation();
-  const { data: userDetails, refetch } = useGetUserDetailsControlPlaneV1UserGetQuery();
-  const { gcuVersion } = useFrontendProperties();
-
+export default function GcuPage({ version }: { version: string }) {
+  const { t } = useTranslation();
+  const [accept, result] = useAcceptTermsMutation();
+  const state = useOnboardingStatusQuery();
+  const [failed, setFailed] = useState(false);
   return (
-    <GcuPageContent
-      accepted={!gcuVersion || userDetails?.cguValidated?.toString() === gcuVersion}
-      isLoading={isLoading}
-      onAccept={async () => {
-        await trigger().unwrap();
-        await refetch().unwrap();
-      }}
-    />
+    <>
+      {failed && (
+        <div role="alert">
+          <p>{t("rework.manager.unavailable")}</p>
+          <Button color="primary" variant="outlined" size="medium" onClick={() => window.location.reload()}>
+            {t("rework.bootstrap.reload")}
+          </Button>
+        </div>
+      )}
+      <GcuPageContent
+        version={version}
+        isLoading={result.isLoading || state.isFetching}
+        onAccept={async () => {
+          setFailed(false);
+          try {
+            await accept({ termsRequest: { version } }).unwrap();
+            await state.refetch().unwrap();
+          } catch {
+            setFailed(true);
+          }
+        }}
+      />
+    </>
   );
 }
 

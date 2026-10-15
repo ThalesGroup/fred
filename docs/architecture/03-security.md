@@ -56,7 +56,11 @@ contains subject, version and server timestamp, without roles or membership.
 The server checks consent before business HTTP operations, bootstrap and authenticated
 CLI import. Missing acceptance returns 403 `user_not_accept_gcu`, even for root.
 Acceptance creates no default team, personal space or organization. Import never
-accepts terms on behalf of its users.
+accepts terms on behalf of its users. Fred's existing guards use manager state;
+loading or unavailable admission does not mount business routes. The account menu
+uses authenticated claims only and remains available to change accounts before
+admission. Hiding unsupported navigation does not grant permission: its routes
+also remain unmounted and the manager enforces each operation on the server.
 
 Onboarding, acceptance and bootstrap reject service-account credentials, the
 `service_agent` identity role and query parameters. Acceptance and bootstrap bodies

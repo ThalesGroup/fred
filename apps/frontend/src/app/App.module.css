@@ -38,17 +38,6 @@
   height: 100vh;
 }
 
-/* A flex column: the announcement banners (auto height, rendered inside the
-   guards) sit above .routedContent, which takes the rest. A blocked guard
-   renders its own page as the only child and keeps the definite height its
-   `height: 100%` resolves against. */
-.appContent {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
 .routedContent {
   flex: 1;
   min-height: 0;
@@ -88,4 +77,9 @@
   clip: rect(0, 0, 0, 0);
   border: 0;
   white-space: nowrap;
+}
+
+.startupFailure {
+  padding: var(--spacing-l);
+  color: var(--on-surface);
 }

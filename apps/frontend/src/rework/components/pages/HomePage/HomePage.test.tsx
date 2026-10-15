@@ -25,14 +25,13 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserGivenName: () => givenName },
 }));
-vi.mock("@shared/atoms/ButtonGroup/ButtonGroup.tsx", () => ({ default: () => null }));
-vi.mock("./HomeSearch/HomeSearch.tsx", () => ({ default: () => null }));
-vi.mock("./RecentAgents/RecentAgents.tsx", () => ({ default: () => null }));
-vi.mock("./ActivityKpis/ActivityKpis.tsx", () => ({ default: () => null }));
-vi.mock("./ResponsibleAiSection/ResponsibleAiSection.tsx", () => ({ default: () => null }));
-vi.mock("./TopAgents/TopAgents.tsx", () => ({ default: () => null }));
-vi.mock("./TopTeams/TopTeams.tsx", () => ({ default: () => null }));
-vi.mock("./MarketplaceTopPrompts/MarketplaceTopPrompts.tsx", () => ({ default: () => null }));
+const state = vi.hoisted(() => ({ spaces: [] as unknown[], selected: "", failed: false, loading: false }));
+vi.mock("react-router-dom", () => ({
+  useSearchParams: () => [new URLSearchParams(state.selected ? { space: state.selected } : {})],
+}));
+vi.mock("../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+  useMySpacesQuery: () => ({ data: state.spaces, isError: state.failed, isLoading: state.loading, refetch: vi.fn() }),
+}));
 
 import HomePage from "./HomePage";
 
@@ -51,4 +50,52 @@ describe("HomePage greeting", () => {
     expect(html).toContain("rework.home.greeting<");
     expect(html).not.toContain("greetingNamed");
   });
+});
+
+const org = { id: "org", kind: "organization", name: "Org", path: ["org"], roles: ["member"] };
+const team = { id: "team", kind: "team", name: "Team", path: ["org", "team"], roles: ["admin"] };
+const project = {
+  id: "project",
+  kind: "project",
+  name: "Project",
+  path: ["org", "team", "project"],
+  roles: ["analyst", "editor"],
+};
+beforeEach(() => {
+  state.spaces = [];
+  state.selected = "";
+  state.failed = false;
+  state.loading = false;
+});
+it("shows the platform root's empty state without inventing a personal space", () => {
+  expect(renderToStaticMarkup(<HomePage />)).toContain("rework.manager.empty");
+});
+it("shows declared hierarchy and every direct role without implied member grants", () => {
+  state.spaces = [org, team, project];
+  state.selected = "project";
+  const html = renderToStaticMarkup(<HomePage />);
+  expect(html).toContain("Org / Team / Project");
+  expect(html).toContain("rework.manager.roles.analyst, rework.manager.roles.editor");
+  expect(html).not.toContain("rework.manager.roles.member");
+  expect(html).not.toContain('aria-label="Team"');
+});
+it("does not substitute another membership for an unknown selection", () => {
+  state.spaces = [org, team];
+  state.selected = "other";
+  const html = renderToStaticMarkup(<HomePage />);
+  expect(html).toContain("rework.manager.missingSpace");
+  expect(html).not.toContain('aria-label="Team"');
+});
+it("hides cached memberships on query failure and offers retry", () => {
+  state.spaces = [org];
+  state.failed = true;
+  const html = renderToStaticMarkup(<HomePage />);
+  expect(html).toContain("rework.provisioning.retryAuthority");
+  expect(html).not.toContain('aria-label="Org"');
+});
+it("shows loading without an empty-membership claim", () => {
+  state.loading = true;
+  const html = renderToStaticMarkup(<HomePage />);
+  expect(html).toContain('role="status"');
+  expect(html).not.toContain("rework.manager.empty");
 });

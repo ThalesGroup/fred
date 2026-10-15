@@ -4183,7 +4183,12 @@
         "member": "Member",
         "editor": "Editor",
         "analyst": "Analyst"
-      }
+      },
+      "search": "Search your spaces",
+      "missingSpace": "This space is not in your memberships.",
+      "kind": "Type",
+      "hierarchy": "Hierarchy",
+      "roleLabel": "Roles"
     }
   },
   "runtime": {

@@ -8,7 +8,8 @@ import { Provider } from "react-redux";
 import { afterEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
-  version: "v1",
+  version: "v1" as string | null,
+  bootstrap: true,
   legalFailed: false,
   accepted: false,
   failStatus: false,
@@ -16,7 +17,9 @@ const state = vi.hoisted(() => ({
   calls: [] as string[],
 }));
 vi.mock("../common/config", () => ({ getConfig: () => ({ frontend_basename: "/" }) }));
-vi.mock("../security/KeycloakService", () => ({ KeyCloakService: { CallLogout: vi.fn() } }));
+vi.mock("../security/KeycloakService", () => ({
+  KeyCloakService: { CallLogout: vi.fn(), GetUserFullName: () => "Alice", GetUserMail: () => "alice@example.test" },
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("./ApplicationContextProvider", async () => {
   const { createContext } = await import("react");
@@ -51,7 +54,7 @@ vi.mock("../common/dynamicBaseQuery", () => ({
               username: "alice",
               gcu_version: state.version,
               acceptance: state.accepted ? { version: "v1", accepted_at: "2026-10-15T00:00:00Z" } : null,
-              root_bootstrap_required: true,
+              root_bootstrap_required: state.bootstrap,
             },
           };
     }
@@ -64,12 +67,17 @@ vi.mock("../common/dynamicBaseQuery", () => ({
     throw new Error(`Unexpected business request before onboarding: ${request.url}`);
   },
 }));
-import ManagerApp from "./ManagerApp";
+import { MemoryRouter } from "react-router-dom";
+import GcuGuard from "@core/guards/GcuGuard";
+import BootstrapGuard from "@core/guards/BootstrapGuard";
+import { KeyCloakService } from "../security/KeycloakService";
 import { enhancedFredManagerApi as api } from "../slices/fredManager/fredManagerApiEnhancements";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 afterEach(() => {
   state.version = "v1";
+  state.bootstrap = true;
+  vi.clearAllMocks();
   state.legalFailed = false;
   state.accepted = false;
   state.failStatus = false;
@@ -101,7 +109,13 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
     await act(async () => {
       root.render(
         <Provider store={store}>
-          <ManagerApp />
+          <MemoryRouter>
+            <GcuGuard>
+              <BootstrapGuard>
+                <p>Admitted</p>
+              </BootstrapGuard>
+            </GcuGuard>
+          </MemoryRouter>
         </Provider>,
       );
     });
@@ -117,13 +131,14 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
 }
 async function click(host: HTMLDivElement, text: string) {
   await act(async () => {
-    [...host.querySelectorAll("button")].find((button) => button.textContent === text)!.click();
+    [...host.querySelectorAll("button")].find((button) => button.textContent?.includes(text))!.click();
   });
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
 }
 
+// Proves: I19
 it("keeps business queries unmounted until consent and root bootstrap are complete", async () => {
   await mounted(async (host) => {
     expect(host.textContent).toContain("rework.gcu.validate");
@@ -139,6 +154,7 @@ it("keeps business queries unmounted until consent and root bootstrap are comple
   });
 });
 
+// Proves: I19
 it("an unavailable onboarding service fails closed and can be retried", async () => {
   state.failStatus = true;
   await mounted(async (host) => {
@@ -151,6 +167,7 @@ it("an unavailable onboarding service fails closed and can be retried", async ()
   });
 });
 
+// Proves: I19
 it("a stale consent submission never advances the journey or assumes success", async () => {
   state.failConsent = true;
   await mounted(async (host) => {
@@ -162,6 +179,7 @@ it("a stale consent submission never advances the journey or assumes success", a
   });
 });
 
+// Proves: I19
 it("refreshing the active version reloads the legal document before consent", async () => {
   await mounted(async (host) => {
     expect(host.textContent).toContain("Terms v1");
@@ -179,6 +197,7 @@ it("refreshing the active version reloads the legal document before consent", as
   });
 });
 
+// Proves: I19
 it("missing legal text exposes retry and never enables consent", async () => {
   state.legalFailed = true;
   await mounted(async (host) => {
@@ -187,5 +206,54 @@ it("missing legal text exposes retry and never enables consent", async () => {
     expect(accept.disabled).toBe(true);
     expect(host.textContent).not.toContain("Root bootstrap");
     expect(state.calls).toEqual(["/fred-manager/v1/me/onboarding"]);
+  });
+});
+
+it("allows disabled terms only after status confirms bootstrap completion", async () => {
+  state.version = null;
+  state.bootstrap = false;
+  await mounted(async (host) => {
+    expect(host.textContent).toContain("Admitted");
+    expect(state.calls).toEqual(["/fred-manager/v1/me/onboarding"]);
+  });
+});
+
+it.each(["terms", "bootstrap", "failure"])(
+  "keeps identity/logout available during %s without business queries",
+  async (phase) => {
+    state.accepted = phase === "bootstrap";
+    state.failStatus = phase === "failure";
+    await mounted(async (host) => {
+      await act(async () => {
+        host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click();
+      });
+      expect(host.textContent).toContain("alice@example.test");
+      await click(host, "rework.userSettings.disconnect");
+      expect(KeyCloakService.CallLogout).toHaveBeenCalledOnce();
+      expect(state.calls).toEqual(["/fred-manager/v1/me/onboarding"]);
+    });
+  },
+);
+
+// Proves: I19
+it("gates an admitted view again after a changed version or failed status refresh", async () => {
+  state.accepted = true;
+  state.bootstrap = false;
+  await mounted(async (host) => {
+    expect(host.textContent).toContain("Admitted");
+    state.version = "v2";
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(host.textContent).not.toContain("Admitted");
+    expect(host.textContent).toContain("Terms v2");
+    state.failStatus = true;
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.textContent).not.toContain("rework.gcu.validate");
   });
 });

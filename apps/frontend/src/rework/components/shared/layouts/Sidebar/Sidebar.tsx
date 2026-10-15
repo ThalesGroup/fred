@@ -14,41 +14,26 @@
 
 import MainNavBar from "./MainNavBar/MainNavBar.tsx";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
-import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
-import styles from "./Sidebar.module.scss";
+import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
 import { useLocation } from "react-router-dom";
-import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
-import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
-export default function Sidebar() {
+import styles from "./Sidebar.module.scss";
+
+export default function Sidebar({ navigation = true }: { navigation?: boolean }) {
   const { pathname } = useLocation();
-
-  const getSidebarMode = (): SidebarMode => {
-    if (pathname.startsWith("/home")) return "HOME";
-    if (pathname.startsWith("/marketplace")) return "MARKETPLACE";
-    if (pathname.startsWith("/admin")) return "ADMIN";
-    return "TEAM";
-  };
-  const sidebarMode: SidebarMode = getSidebarMode();
-
   return (
     <div className={styles["sidebar-container"]}>
       <div className={styles.rail}>
-        <div className={styles["main-nav-bar-container"]}>
-          <MainNavBar />
-        </div>
+        <div className={styles["main-nav-bar-container"]}>{navigation && <MainNavBar />}</div>
         <div className={styles["user-profile-container"]}>
           <UserProfile />
         </div>
       </div>
-      <div className={styles["nav-panel-card"]}>
-        {sidebarMode === "HOME" && <HomeNavPanel />}
-        {sidebarMode === "TEAM" && <TeamContentNavbar />}
-        {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
-        {sidebarMode === "ADMIN" && <AdminNavbar />}
-      </div>
+      {navigation && (
+        <div className={styles["nav-panel-card"]}>
+          {pathname.startsWith("/admin") ? <AdminNavbar /> : <HomeNavPanel />}
+        </div>
+      )}
     </div>
   );
 }
-
-type SidebarMode = "HOME" | "TEAM" | "MARKETPLACE" | "ADMIN";

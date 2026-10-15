@@ -12,26 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { type PropsWithChildren } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
-import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate.tsx";
-import { useTaskPolling } from "../../../../features/tasks/useTaskPolling.ts";
-import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration.ts";
 import styles from "./MainLayout.module.css";
 
-export default function MainLayout() {
-  useTaskRehydration();
-  useTaskPolling();
+export default function MainLayout({ children, navigation = true }: PropsWithChildren<{ navigation?: boolean }>) {
   return (
     <div className={styles.mainLayout}>
-      <nav className={styles.sidebar}>
-        <Sidebar />
-      </nav>
-      <main className={styles.content}>
-        <TeamAdminCharterGate>
-          <Outlet />
-        </TeamAdminCharterGate>
-      </main>
+      <aside className={styles.sidebar}>
+        <Sidebar navigation={navigation} />
+      </aside>
+      <main className={styles.content}>{children ?? <Outlet />}</main>
     </div>
   );
 }

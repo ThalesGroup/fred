@@ -12,17 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Regression coverage for the MUI-purge route cleanup (#2296/#2297): the
-// removed `/monitoring/*`, `/test-renderer`, and `/tools` routes must stay
-// gone (no accidental re-add, no dangling reference to a deleted page
-// component), and unknown paths must still resolve to the catch-all
-// PageError rather than a hard crash.
-
-import type { ReactElement } from "react";
 import type { RouteObject } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import { PageError } from "@components/pages/PageError/PageError.tsx";
-import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
+import { Navigate } from "react-router-dom";
 
 // router.tsx reads getConfig() at module scope (for `basename`), which
 // throws unless loadConfig() already ran — stub it the same way the real
@@ -44,20 +36,6 @@ vi.mock("react-router-dom", async (importOriginal) => {
 
 const { routes } = await import("./router");
 
-// Paths that used to exist (removed by 5e758208 and #2296) and must never
-// come back without an explicit product decision — see FRONTEND-BACKLOG.md
-// and FRONTEND-AUTHZ-PATTERN.md's "Historical note".
-const REMOVED_PATHS = [
-  "monitoring/kpis",
-  "monitoring/runtime",
-  "monitoring/data",
-  "monitoring/rebac-backfill",
-  "monitoring/processors",
-  "monitoring/processors/runs/:runId",
-  "test-renderer",
-  "tools",
-];
-
 function collectPaths(items: RouteObject[]): string[] {
   return items.flatMap((route) => [
     ...(route.path !== undefined ? [route.path] : []),
@@ -65,36 +43,12 @@ function collectPaths(items: RouteObject[]): string[] {
   ]);
 }
 
-describe("router", () => {
-  const allPaths = collectPaths(routes);
-
-  it.each(REMOVED_PATHS)("does not register the removed route %s", (removedPath) => {
-    expect(allPaths).not.toContain(removedPath);
+describe("bounded Fred router", () => {
+  it("registers only the implemented journey, inside admission guards", () => {
+    expect(collectPaths(routes)).toEqual(["/", "home", "admin", "admin/provisioning", "*"]);
   });
-
-  it("still falls back to PageError for unknown paths under the main layout", () => {
-    const mainLayout = routes.find((route) => route.path === "/");
-    const catchAll = mainLayout?.children?.find((route) => route.path === "*");
-
-    expect(catchAll).toBeDefined();
-    expect(catchAll?.element).toEqual(<PageError />);
+  it("redirects unknown destinations home without mounting their old components", () => {
+    const catchAll = routes[0].children?.find((route) => route.path === "*");
+    expect(catchAll?.element).toEqual(<Navigate to="/home" replace />);
   });
-
-  it("registers one generic team application index and wildcard host", () => {
-    expect(allPaths.filter((path) => path === "team/:teamId/apps")).toHaveLength(1);
-    expect(allPaths.filter((path) => path === "team/:teamId/apps/:appId/*")).toHaveLength(1);
-  });
-
-  it.each(["team/:teamId/apps", "team/:teamId/apps/:appId/*"])(
-    "gates the application route %s on the deployment switch",
-    (path) => {
-      const mainLayout = routes.find((route) => route.path === "/");
-      const applicationRoute = mainLayout?.children?.find((route) => route.path === path);
-      const element = applicationRoute?.element as ReactElement<{ flag: string; fallback: ReactElement }>;
-
-      expect(element.type).toBe(FrontendFeatureGate);
-      expect(element.props.flag).toBe("enableApplications");
-      expect(element.props.fallback.type).toBe(PageError);
-    },
-  );
 });

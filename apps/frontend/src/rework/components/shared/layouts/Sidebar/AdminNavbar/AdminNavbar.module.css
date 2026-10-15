@@ -19,3 +19,9 @@
 .adminNavbarContainer {
   width: 254px;
 }
+
+@media (max-width: 640px) {
+  .adminNavbarContainer {
+    width: 100%;
+  }
+}
