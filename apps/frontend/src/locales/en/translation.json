@@ -418,6 +418,10 @@
             "template_slide": "By slide name",
             "kind": "By identified slide type"
           }
+        },
+        "validate_plan": {
+          "title": "Validate the plan before building",
+          "description": "Before building the first presentation of a conversation, the agent shows its plan (audience, main message, one line per slide) and waits for your answer. Changes to a delivered presentation never wait."
         }
       },
       "form": {
@@ -523,7 +527,10 @@
           "intent_not_shown": "An emphasis you asked for could not be shown.",
           "intent_not_shown_highlight": "The emphasis asked on one part of the chart could not be shown.",
           "intent_not_shown_sort": "The chart keeps the order given: it could not be sorted as asked.",
-          "intent_not_shown_stacked_as": "The chart could not show its columns as percentages."
+          "intent_not_shown_stacked_as": "The chart could not show its columns as percentages.",
+          "illustrative_data": "The figures on this slide are illustrative, as you asked: they do not come from your documents.",
+          "figures_unverified": "These figures were not found in the documents read: check them before presenting.",
+          "wide_range_chart": "This chart puts very different values on one axis: check that they measure the same thing."
         }
       }
     }

@@ -38,6 +38,9 @@ const PLAIN_NOTES = new Set([
   "chart_shows_shares",
   "layout_repeated",
   "layout_not_repeated",
+  "illustrative_data",
+  "figures_unverified",
+  "wide_range_chart",
 ]);
 
 // Intent fields with their own wording; any other field gets the generic one.

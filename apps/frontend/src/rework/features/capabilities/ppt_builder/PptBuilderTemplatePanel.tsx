@@ -26,6 +26,7 @@ import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { helpLangFor } from "@rework/features/helpCenter/manifest";
 import { PatternReviewDialog } from "./PatternReviewDialog";
+import { PptBuilderPlanSettings } from "./PptBuilderPlanSettings";
 import { PptBuilderVarietySettings } from "./PptBuilderVarietySettings";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
 import { isInProgress, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
@@ -141,6 +142,8 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
       />
 
       <PptBuilderVarietySettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
+
+      <PptBuilderPlanSettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
 
       {reviewOpen && effective && (
         <PatternReviewDialog

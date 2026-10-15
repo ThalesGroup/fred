@@ -418,6 +418,10 @@
             "template_slide": "Par nom de slide",
             "kind": "Par type de slide identifié"
           }
+        },
+        "validate_plan": {
+          "title": "Valider le plan avant de construire",
+          "description": "Avant de construire la première présentation d'une conversation, l'agent montre son plan (public, message principal, une ligne par slide) et attend votre réponse. Les modifications d'une présentation déjà livrée n'attendent jamais."
         }
       },
       "form": {
@@ -523,7 +527,10 @@
           "intent_not_shown": "Une mise en avant demandée n'a pas pu être affichée.",
           "intent_not_shown_highlight": "La mise en avant demandée sur une partie du graphique n'a pas pu être affichée.",
           "intent_not_shown_sort": "Le graphique garde l'ordre donné : il n'a pas pu être trié comme demandé.",
-          "intent_not_shown_stacked_as": "Le graphique n'a pas pu afficher ses colonnes en pourcentages."
+          "intent_not_shown_stacked_as": "Le graphique n'a pas pu afficher ses colonnes en pourcentages.",
+          "illustrative_data": "Les chiffres de cette slide sont illustratifs, comme vous l'avez demandé : ils ne viennent pas de vos documents.",
+          "figures_unverified": "Ces chiffres n'ont pas été retrouvés dans les documents lus : vérifiez-les avant de présenter.",
+          "wide_range_chart": "Ce graphique place des valeurs très différentes sur un même axe : vérifiez qu'elles mesurent la même chose."
         }
       }
     }
