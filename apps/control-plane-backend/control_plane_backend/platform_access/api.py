@@ -18,6 +18,7 @@ from fred_core.security.platform_access.access_control import (
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
+    TeamPermission,
 )
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
@@ -256,6 +257,7 @@ async def generate_platform_enrollment_link(
     emit_audit_log(
         "platform.access.link.created",
         actor_uid=user.uid,
+        kind="free",
         team_id=team_id,
         link_id=str(link_id),
     )
@@ -303,6 +305,7 @@ async def delete_inactive_platform_enrollment_links(
     emit_audit_log(
         "platform.access.links.deleted",
         actor_uid=user.uid,
+        kind="free",
         team_id=team_id,
         deleted_count=deleted,
     )
@@ -322,6 +325,7 @@ async def reveal_platform_enrollment_link(
     emit_audit_log(
         "platform.access.link.revealed",
         actor_uid=user.uid,
+        kind="free",
         team_id=team_id,
         link_id=str(link_id),
     )
@@ -338,6 +342,130 @@ async def revoke_platform_enrollment_link(
     emit_audit_log(
         "platform.access.link.revoked",
         actor_uid=user.uid,
+        kind="free",
+        team_id=team_id,
+        link_id=str(link_id),
+    )
+
+
+async def require_team_members_admin(
+    team_id: str, access: Access, user: KeycloakUser = Depends(get_current_user)
+) -> KeycloakUser:
+    await access.rebac.check_user_permission_or_raise(
+        user,
+        TeamPermission.CAN_ADMINISTER_MEMBERS,
+        team_id,
+        consistency_token=access.rebac.HIGHER_CONSISTENCY,
+    )
+    return user
+
+
+TeamAdmin = Annotated[KeycloakUser, Depends(require_team_members_admin)]
+TEAM_LINKS = "/teams/{team_id}/join-links"
+
+
+@router.post(TEAM_LINKS, response_model=PlatformEnrollmentLink, tags=["Teams"])
+async def create_team_join_link(
+    team_id: str,
+    body: CreatePlatformEnrollmentLink,
+    access: Access,
+    user: TeamAdmin,
+    response: Response,
+) -> PlatformEnrollmentLink:
+    service.require_own_credential(user)
+    token, link_id = await service.generate_link_record(
+        access, team_id, user, body, "team"
+    )
+    response.headers["Cache-Control"] = "no-store"
+    emit_audit_log(
+        "platform.access.link.created",
+        actor_uid=user.uid,
+        kind="team",
+        team_id=team_id,
+        link_id=str(link_id),
+    )
+    return PlatformEnrollmentLink(token=token)
+
+
+@router.get(TEAM_LINKS, response_model=PlatformEnrollmentLinksPage, tags=["Teams"])
+async def list_team_join_links(
+    team_id: str,
+    access: Access,
+    user: TeamAdmin,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+    status: PlatformEnrollmentLinkStatus | None = None,
+) -> PlatformEnrollmentLinksPage:
+    return await service.list_links(access, team_id, offset, limit, status, "team")
+
+
+@router.get(
+    TEAM_LINKS + "/{link_id}/joiners",
+    response_model=PlatformEnrollmentJoinersPage,
+    tags=["Teams"],
+)
+async def list_team_join_link_joiners(
+    team_id: str,
+    link_id: UUID,
+    access: Access,
+    user: TeamAdmin,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+) -> PlatformEnrollmentJoinersPage:
+    return await service.list_link_joiners(
+        access, team_id, link_id, offset, limit, "team"
+    )
+
+
+@router.delete(
+    TEAM_LINKS + "/inactive",
+    response_model=DeletedPlatformEnrollmentLinks,
+    tags=["Teams"],
+)
+async def delete_inactive_team_join_links(
+    team_id: str, access: Access, user: TeamAdmin
+) -> DeletedPlatformEnrollmentLinks:
+    deleted = await service.delete_inactive_links(access, team_id, "team")
+    emit_audit_log(
+        "platform.access.links.deleted",
+        actor_uid=user.uid,
+        kind="team",
+        team_id=team_id,
+        deleted_count=deleted,
+    )
+    return DeletedPlatformEnrollmentLinks(deleted_count=deleted)
+
+
+@router.post(
+    TEAM_LINKS + "/{link_id}/reveal",
+    response_model=PlatformEnrollmentLink,
+    tags=["Teams"],
+)
+async def reveal_team_join_link(
+    team_id: str, link_id: UUID, access: Access, user: TeamAdmin, response: Response
+) -> PlatformEnrollmentLink:
+    service.require_own_credential(user)
+    token = await service.reveal_link(access, team_id, link_id, "team")
+    response.headers["Cache-Control"] = "no-store"
+    emit_audit_log(
+        "platform.access.link.revealed",
+        actor_uid=user.uid,
+        kind="team",
+        team_id=team_id,
+        link_id=str(link_id),
+    )
+    return PlatformEnrollmentLink(token=token)
+
+
+@router.delete(TEAM_LINKS + "/{link_id}", status_code=204, tags=["Teams"])
+async def revoke_team_join_link(
+    team_id: str, link_id: UUID, access: Access, user: TeamAdmin
+) -> None:
+    await service.revoke_link(access, team_id, link_id, "team")
+    emit_audit_log(
+        "platform.access.link.revoked",
+        actor_uid=user.uid,
+        kind="team",
         team_id=team_id,
         link_id=str(link_id),
     )
@@ -361,7 +489,7 @@ async def preview_free_enrollment(
 async def record_free_enrollment_opening(
     token: str, access: Access, user: OwnUser
 ) -> None:
-    await service.record_opening(access, token)
+    await service.record_opening(access, token, user)
 
 
 @router.post("/platform-access/free/{token}/gcu", status_code=204)

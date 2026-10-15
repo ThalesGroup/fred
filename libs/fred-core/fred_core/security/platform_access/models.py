@@ -58,6 +58,11 @@ class PlatformAccessLinkRow(Base):
         nullable=False,
         index=True,
     )
+    # "free" links admit to the platform (platform admins); "team" links only add an
+    # already-admitted person to the team (team admins).
+    kind: Mapped[str] = mapped_column(
+        String(8), default="free", server_default="free", nullable=False
+    )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     token: Mapped[str | None] = mapped_column(String(43), nullable=True)
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)

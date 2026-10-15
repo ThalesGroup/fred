@@ -145,5 +145,10 @@ async def test_cleanup_route_and_filter_validation(access, history, monkeypatch)
         assert response.status_code == 200 and response.json() == {"deleted_count": 30}
     assert audit[-1] == (
         ("platform.access.links.deleted",),
-        {"actor_uid": actor.uid, "team_id": "demo", "deleted_count": 30},
+        {
+            "actor_uid": actor.uid,
+            "kind": "free",
+            "team_id": "demo",
+            "deleted_count": 30,
+        },
     )

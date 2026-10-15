@@ -1186,13 +1186,13 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
     )
     assert token not in page.model_dump_json()
     revision = (await access.state()).revision
-    await service.record_opening(access, token)
+    await service.record_opening(access, token, newcomer)
     assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 1
     await service.preview_link(access, newcomer, token, None)
     await service.enroll(access, newcomer, token, None)
     assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 1
     assert await service.reveal_link(access, "demo", first.id) == token
-    await service.record_opening(access, token)
+    await service.record_opening(access, token, newcomer)
     assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 2
     assert (await access.state()).revision == revision
     later = await service.generate_link(
@@ -1213,7 +1213,7 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
         for item in (await service.list_links(access, "demo", 0, 25)).items
     )
     with pytest.raises(HTTPException):
-        await service.record_opening(access, token)
+        await service.record_opening(access, token, newcomer)
     await service.revoke_link(access, "demo", first.id)
     await service.revoke_link(access, "demo", first.id)
     await service.set_team(access, actor, "demo", False, True)
@@ -1230,7 +1230,7 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
         lambda: service.preview_link(access, newcomer, later, None),
         lambda: service.enroll(access, newcomer, later, None),
         lambda: service.accept_cgu(access, newcomer, later, "v1", "v1"),
-        lambda: service.record_opening(access, later),
+        lambda: service.record_opening(access, later, newcomer),
     ):
         with pytest.raises(HTTPException):
             await operation()
@@ -1260,7 +1260,7 @@ async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(
     second_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
 
     await service.preview_link(access, first, first_token, None)
-    await service.record_opening(access, first_token)
+    await service.record_opening(access, first_token, first)
     assert (await service.list_link_joiners(access, "demo", first_id, 0, 25)).total == 0
     await service.enroll(access, first, first_token, None)
     await service.enroll(access, first, first_token, None)
@@ -1410,7 +1410,12 @@ async def test_link_admin_history_and_tokens_are_guarded(access, monkeypatch):
         )
         assert (
             "platform.access.link.created",
-            {"actor_uid": actor.uid, "team_id": "demo", "link_id": str(created_id)},
+            {
+                "actor_uid": actor.uid,
+                "kind": "free",
+                "team_id": "demo",
+                "link_id": str(created_id),
+            },
         ) in events
         assert created.json()["token"] not in str(events)
         history = await client.get("/admin/platform/access/teams/demo/enrollment-links")
@@ -1448,7 +1453,9 @@ async def test_pg_concurrent_openings_and_revocation_are_serialized(pg_access):
 
     token = await service.generate_link(pg_access, "demo", user("accepted"))
     link_id = (await service.list_links(pg_access, "demo", 0, 25)).items[0].id
-    await asyncio.gather(*(service.record_opening(pg_access, token) for _ in range(4)))
+    await asyncio.gather(
+        *(service.record_opening(pg_access, token, user()) for _ in range(4))
+    )
     assert (await service.list_links(pg_access, "demo", 0, 25)).items[
         0
     ].opening_count == 4
