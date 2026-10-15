@@ -131,6 +131,18 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: {
       invalidatesTags: ["PlatformAccessLinks"],
     },
+    // Team join links share the link tags: same shapes, keyed by team.
+    createTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksPost: { invalidatesTags: ["PlatformAccessLinks"] },
+    listTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGet: {
+      providesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
+    },
+    listTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGet: {
+      providesTags: (_result, _error, arg) => [{ type: "PlatformAccessJoiners", id: arg.linkId }],
+    },
+    deleteInactiveTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksInactiveDelete: {
+      invalidatesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
+    },
+    revokeTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdDelete: { invalidatesTags: ["PlatformAccessLinks"] },
     recordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPost: {
       invalidatesTags: ["PlatformAccessLinks"],
     },
@@ -1174,4 +1186,11 @@ export const {
   useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation:
     useDeleteInactivePlatformLinksMutation,
   useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation: useRecordFreeOpeningMutation,
+  useCreateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksPostMutation: useCreateTeamJoinLinkMutation,
+  useListTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksGetQuery: useTeamJoinLinksQuery,
+  useListTeamJoinLinkJoinersControlPlaneV1TeamsTeamIdJoinLinksLinkIdJoinersGetQuery: useTeamJoinLinkJoinersQuery,
+  useRevealTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdRevealPostMutation: useRevealTeamJoinLinkMutation,
+  useRevokeTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinksLinkIdDeleteMutation: useRevokeTeamJoinLinkMutation,
+  useDeleteInactiveTeamJoinLinksControlPlaneV1TeamsTeamIdJoinLinksInactiveDeleteMutation:
+    useDeleteInactiveTeamJoinLinksMutation,
 } = enhancedControlPlaneApi;

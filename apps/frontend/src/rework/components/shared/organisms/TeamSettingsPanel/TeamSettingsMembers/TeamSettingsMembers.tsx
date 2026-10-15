@@ -22,6 +22,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import PlatformAccessLinkManager from "../../../../pages/admin/PlatformAccessPage/PlatformAccessLinkManager";
 import styles from "./TeamSettingsMembers.module.scss";
 
 interface TeamSettingsMembersProps {
@@ -34,6 +35,7 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
   const { canAdministerMembers: can_administer_members } = useTeamCapabilities(team);
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isInviteLinkOpen, setIsInviteLinkOpen] = useState(false);
   const [search, setSearch] = useState("");
 
   return (
@@ -54,9 +56,14 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
               />
             </div>
             {can_administer_members && (
-              <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
-                {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
-              </Button>
+              <>
+                <Button color="primary" variant="outlined" size="medium" onClick={() => setIsInviteLinkOpen(true)}>
+                  {t("rework.teamSettings.members.inviteLink.buttonLabel")}
+                </Button>
+                <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
+                  {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
+                </Button>
+              </>
             )}
           </>
         }
@@ -66,6 +73,13 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
       </div>
       {can_administer_members && (
         <AddTeamMembersDialog open={isAddDialogOpen} team={team} onClose={() => setIsAddDialogOpen(false)} />
+      )}
+      {can_administer_members && isInviteLinkOpen && (
+        <PlatformAccessLinkManager
+          scope="team"
+          team={{ team_id: team.id, name: team.name }}
+          onClose={() => setIsInviteLinkOpen(false)}
+        />
       )}
     </div>
   );

@@ -2839,6 +2839,10 @@
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
           "updateRoleSummary": "Échec de la mise à jour du rôle"
         },
+        "inviteLink": {
+          "buttonLabel": "Lien d'invitation",
+          "hint": "Partagez ces liens vous-même : toute personne ayant déjà accès à la plateforme peut s'en servir pour rejoindre l'équipe en tant que membre."
+        },
         "moreActions": "Plus d'actions",
         "search": {
           "ariaLabel": "Rechercher un membre",

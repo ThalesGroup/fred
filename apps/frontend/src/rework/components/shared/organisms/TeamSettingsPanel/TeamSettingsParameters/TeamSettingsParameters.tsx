@@ -143,12 +143,10 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
 
-  // TEAM-10 (#2398): a PRIVATE team can never be OPEN, and there is no
-  // invitation flow either — a team admin adds members by hand. So while
-  // private, the joining-mode toggle is not a setting at all: it is replaced
-  // by a single disabled "manual only" button rather than a two-state control
-  // that refuses every click — one inert, locked state reads as the fact it
-  // is, where a greyed-out toggle still reads as a choice.
+  // A PRIVATE team can never be OPEN: people join it only when a team admin adds
+  // them or shares an invite link (Members tab). So while private, the
+  // joining-mode toggle is replaced by a single disabled "manual only" button, an
+  // inert state that reads as a fact rather than a refused choice.
   // #2433: private is the platform default — mirror it when the field is absent.
   const visibility = team.visibility ?? "private";
   const isPrivate = visibility === "private";
