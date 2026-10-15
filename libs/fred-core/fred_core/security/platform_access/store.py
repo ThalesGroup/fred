@@ -12,6 +12,7 @@ from sqlalchemy import ColumnElement, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -97,6 +98,32 @@ class PlatformAccessStore:
                     )
                 )
             return list((await s.scalars(query.order_by(TeamMetadataRow.id))).all())
+
+    async def free_joined_teams(
+        self, user_id: UUID | None = None, session: AsyncSession | None = None
+    ) -> dict[UUID, set[str]]:
+        """Teams each person joined through a Free link: the only Free admission evidence."""
+        async with self.read(session) as s:
+            query = (
+                select(
+                    PlatformAccessLinkJoinerRow.user_id, PlatformAccessLinkRow.team_id
+                )
+                .join(
+                    PlatformAccessLinkRow,
+                    PlatformAccessLinkRow.id == PlatformAccessLinkJoinerRow.link_id,
+                )
+                .where(
+                    PlatformAccessLinkRow.kind == "free",
+                    PlatformAccessLinkJoinerRow.deleted_at.is_(None),
+                )
+                .distinct()
+            )
+            if user_id is not None:
+                query = query.where(PlatformAccessLinkJoinerRow.user_id == user_id)
+            joined: dict[UUID, set[str]] = {}
+            for uid, team_id in (await s.execute(query)).all():
+                joined.setdefault(uid, set()).add(team_id)
+            return joined
 
     @staticmethod
     def user_search(query: str) -> ColumnElement[bool]:

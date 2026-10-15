@@ -25,6 +25,8 @@ from fred_core.security.platform_access.access_control import (
     PlatformAccess,
 )
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
+    PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -103,6 +105,8 @@ async def access(tmp_path):
             TeamMetadataRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
+            PlatformAccessLinkRow,
+            PlatformAccessLinkJoinerRow,
         ):
             await connection.run_sync(cast(Table, model.__table__).create)
     value = PlatformAccess(PlatformAccessStore(engine), MembershipEngine())
@@ -270,7 +274,34 @@ async def test_live_independent_sources_and_revocation_across_instances(access):
     access.rebac.members[user.uid] = {"demo"}
     async with access.store.mutation() as session:
         await session.delete(await access.store.exception(UUID(user.uid), session))
+    # Membership alone (added by hand or by a team link) is no Free source.
+    assert not await second.admitted(user)
+    link_id = uuid4()
+    async with access.store.mutation() as session:
+        session.add(
+            PlatformAccessLinkRow(
+                id=link_id,
+                team_id="demo",
+                token_hash="0" * 64,
+                created_by="admin",
+                created_at=datetime.now(timezone.utc),
+                opening_count=0,
+            )
+        )
+        await session.flush()
+        session.add(
+            PlatformAccessLinkJoinerRow(
+                link_id=link_id,
+                user_id=UUID(user.uid),
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
     assert await second.admitted(user)
+    async with access.store.mutation() as session:
+        (await session.get(PlatformAccessLinkRow, link_id)).kind = "team"
+    assert not await second.admitted(user)
+    async with access.store.mutation() as session:
+        (await session.get(PlatformAccessLinkRow, link_id)).kind = "free"
     async with access.store.mutation() as session:
         team = await access.store.team("demo", session)
         team.platform_access_free = False

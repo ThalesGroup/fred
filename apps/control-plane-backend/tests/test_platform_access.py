@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
@@ -122,6 +123,30 @@ async def access(tmp_path):
         )
     yield value
     await engine.dispose()
+
+
+async def free_joiner(access, uid: str, team_id: str = "demo") -> None:
+    """Record a Free-link join: the only evidence of a Free admission source."""
+    link_id = uuid4()
+    async with access.store.mutation() as session:
+        session.add(
+            PlatformAccessLinkRow(
+                id=link_id,
+                team_id=team_id,
+                token_hash=uuid4().hex + uuid4().hex,
+                created_by=uid,
+                created_at=datetime.now(timezone.utc),
+                opening_count=0,
+            )
+        )
+        await session.flush()
+        session.add(
+            PlatformAccessLinkJoinerRow(
+                link_id=link_id,
+                user_id=UUID(uid),
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
 
 
 def user(attribute="other"):
@@ -962,6 +987,8 @@ async def test_member_removal_revokes_global_direct_cached_and_delegated_access(
     await service.set_team(access, actor, "demo", not free, free)
     await service.set_filtering(access, actor, True)
     access.rebac.members[member.uid] = {"demo"}
+    if free:
+        await free_joiner(access, member.uid)
     other_reader = PlatformAccess(
         PlatformAccessStore(access.store.engine), access.rebac
     )
@@ -990,6 +1017,7 @@ async def test_team_deletion_protects_admin_last_source_before_external_deletes(
     await access.observe(actor)
     access.rebac.members[actor.uid] = {"demo"}
     await service.set_team(access, accepted, "demo", False, True)
+    await free_joiner(access, actor.uid)
     await service.set_filtering(access, actor, True)
     monkeypatch.setattr(access_control, "_available", True)
     monkeypatch.setattr(access_control, "_installed", access)
@@ -1056,6 +1084,7 @@ async def test_actual_full_member_removal_with_multiple_roles_revokes_other_read
                 id="fredlab", name="Free demonstration", platform_access_free=True
             )
         )
+    await free_joiner(access, member.uid, "fredlab")
     await service.set_filtering(access, actor, True)
     other_reader = PlatformAccess(
         PlatformAccessStore(access.store.engine), cast(RebacEngine, rebac)
@@ -1268,15 +1297,16 @@ async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(
     already_member = user()
     access.rebac.members[already_member.uid] = {"demo"}
     await service.enroll(access, already_member, first_token, None)
+    # A member added by hand who enrolls through the Free link gets its source too.
     assert events == [
         (
             "platform.access.free.enrolled",
             {"actor_uid": person.uid, "team_id": "demo", "link_id": str(first_id)},
         )
-        for person in (first, second)
+        for person in (first, second, already_member)
     ]
     first_page = await service.list_link_joiners(access, "demo", first_id, 0, 1)
-    assert first_page.total == 2 and len(first_page.items) == 1
+    assert first_page.total == 3 and len(first_page.items) == 1
     assert (await service.list_link_joiners(access, "demo", first_id, 1, 1)).items[
         0
     ].user_id != first_page.items[0].user_id
@@ -1306,7 +1336,7 @@ async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(
 
     await service.revoke_link(access, "demo", first_id)
     await service.set_team(access, actor, "demo", False, False)
-    assert (await service.list_link_joiners(access, "demo", first_id, 0, 25)).total == 2
+    assert (await service.list_link_joiners(access, "demo", first_id, 0, 25)).total == 3
     assert await service.delete_inactive_links(access, "demo") == 1
     with pytest.raises(HTTPException) as removed:
         await service.list_link_joiners(access, "demo", first_id, 0, 25)
@@ -1484,6 +1514,8 @@ async def test_block_policy_preserves_exceptions_and_live_team_revocation(access
     assert not await access.admitted(blocked)
     await service.set_team(access, actor, "demo", False, True)
     access.rebac.members[blocked.uid] = {"demo"}
+    assert not await access.admitted(blocked)
+    await free_joiner(access, blocked.uid)
     assert await access.admitted(blocked)
     access.rebac.members[blocked.uid].clear()
     assert not await access.admitted(blocked)
@@ -1643,6 +1675,7 @@ async def test_population_preview_live_free_membership_and_conflicted_evidence(a
         (await access.store.user(UUID(member.uid), session)).admission_conflicted = True
     access.rebac.members[member.uid] = {"demo"}
     await service.set_team(access, actor, "demo", False, True)
+    await free_joiner(access, member.uid)
     preview = await service.activation_preview(access)
     assert (
         next(row for row in preview.users if row.user_id == member.uid).outcome

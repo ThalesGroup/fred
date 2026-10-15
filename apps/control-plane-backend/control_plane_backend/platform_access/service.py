@@ -224,14 +224,14 @@ async def users_page(
                         granted_at=exception.granted_at,
                     )
                 )
-            for team in await access.team_sources(uid):
-                if team.platform_access_allowed:
+            for team, allowed, free in await access.team_sources(uid):
+                if allowed:
                     sources.append(
                         AdmissionSource(
                             kind="team", team_id=team.id, team_name=team.name
                         )
                     )
-                if team.platform_access_free:
+                if free:
                     sources.append(
                         AdmissionSource(
                             kind="free", team_id=team.id, team_name=team.name
@@ -263,6 +263,7 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
             for row in (await session.scalars(select(PlatformAccessUserRow))).all()
         }
         teams = await access.store.teams(session, eligible_only=True)
+        free_joined = await access.store.free_joined_teams(session=session)
     slots = asyncio.Semaphore(8)
 
     async def project(row: UserRow) -> PlatformAccessActivationUser:
@@ -310,8 +311,15 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
                         if outcome == "allowed":
                             sources.append(AdmissionSource(kind="attribute"))
                 if outcome != "allowed":
-                    for start in range(0, len(teams), 8):
-                        batch = teams[start : start + 8]
+                    # Free admits only people who joined through that team's Free link.
+                    joined = free_joined.get(UUID(uid), set())
+                    candidates = [
+                        team
+                        for team in teams
+                        if team.platform_access_allowed or team.id in joined
+                    ]
+                    for start in range(0, len(candidates), 8):
+                        batch = candidates[start : start + 8]
                         memberships = await access.rebac.has_team_memberships(
                             uid, [team.id for team in batch]
                         )
@@ -325,6 +333,7 @@ async def activation_preview(access: PlatformAccess) -> PlatformAccessActivation
                                     AdmissionSource(
                                         kind="free"
                                         if team.platform_access_free
+                                        and team.id in joined
                                         else "team",
                                         team_id=team.id,
                                         team_name=team.name,
@@ -900,23 +909,26 @@ async def enroll(
             await _add_team_member_relation(
                 access.rebac, TeamId(team.id), user.uid, UserTeamRelation.TEAM_MEMBER
             )
-            if (
-                link.kind == "free"
-                and await session.get(
-                    PlatformAccessLinkJoinerRow, (link.id, UUID(user.uid))
+            joined = True
+        # The joiner row is the Free admission source, so a member who enrolls
+        # through a Free link gets it too; team links never record one.
+        if (
+            link.kind == "free"
+            and await session.get(
+                PlatformAccessLinkJoinerRow, (link.id, UUID(user.uid))
+            )
+            is None
+        ):
+            session.add(
+                PlatformAccessLinkJoinerRow(
+                    link_id=link.id,
+                    user_id=UUID(user.uid),
+                    joined_at=datetime.now(timezone.utc),
+                    username_snapshot=user.username,
+                    first_name_snapshot=user.first_name,
+                    last_name_snapshot=user.last_name,
                 )
-                is None
-            ):
-                session.add(
-                    PlatformAccessLinkJoinerRow(
-                        link_id=link.id,
-                        user_id=UUID(user.uid),
-                        joined_at=datetime.now(timezone.utc),
-                        username_snapshot=user.username,
-                        first_name_snapshot=user.first_name,
-                        last_name_snapshot=user.last_name,
-                    )
-                )
+            )
             joined = True
     if joined:
         emit_audit_log(

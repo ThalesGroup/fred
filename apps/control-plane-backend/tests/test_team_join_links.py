@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from control_plane_backend.app.dependencies import get_application_configuration
@@ -9,7 +10,7 @@ from fred_core.security.platform_access.access_control import get_platform_acces
 from fred_core.security.rebac.rebac_engine import RelationType, TeamPermission
 from httpx import ASGITransport, AsyncClient
 from test_platform_access import access as access_fixture
-from test_platform_access import user
+from test_platform_access import draft, user
 
 access = access_fixture
 
@@ -211,3 +212,84 @@ async def test_routes_require_team_member_administration(access, monkeypatch):
         "team.join_link.regenerated",
     ]
     assert all(token not in str(fields) for _, fields in events)
+
+
+async def admin_with_exception(access):
+    actor = user("accepted")
+    await access.observe(actor)
+    await service.set_user(access, actor, UUID(actor.uid), True)
+    await service.set_filtering(access, actor, True)
+    return actor
+
+
+def team_sources(page, uid):
+    row = next(item for item in page.items if item.user_id == uid)
+    return {(source.kind, source.team_id) for source in row.sources}
+
+
+@pytest.mark.asyncio
+async def test_team_link_member_of_free_team_loses_access_when_the_rule_tightens(
+    access,
+):
+    actor = await admin_with_exception(access)
+    await service.set_team(access, actor, "demo", False, True)
+    member = user("accepted")
+    await service.enroll(access, member, await enabled_token(access), None)
+    assert "demo" in access.rebac.members[member.uid]
+    assert await access.admitted(member)
+    assert team_sources(await service.users_page(access, 0, 25, ""), member.uid) == {
+        ("attribute", None)
+    }
+    await service.save_policy(access, actor, draft("tightened"), 1)
+    assert not await access.admitted(member)
+    preview = await service.activation_preview(access)
+    row = next(item for item in preview.users if item.user_id == member.uid)
+    assert (row.outcome, row.sources) == ("blocked", [])
+
+
+@pytest.mark.asyncio
+async def test_free_link_joiner_keeps_access_only_while_member_and_free(access):
+    actor = await admin_with_exception(access)
+    await service.set_team(access, actor, "demo", False, True)
+    joiner = user()
+    await service.enroll(
+        access, joiner, await service.generate_link(access, "demo", actor), None
+    )
+    assert await access.admitted(joiner)
+    assert team_sources(await service.users_page(access, 0, 25, ""), joiner.uid) == {
+        ("free", "demo")
+    }
+    preview = await service.activation_preview(access)
+    row = next(item for item in preview.users if item.user_id == joiner.uid)
+    assert row.outcome == "allowed"
+    assert [(s.kind, s.team_id) for s in row.sources] == [("free", "demo")]
+    access.rebac.members[joiner.uid].discard("demo")
+    assert not await access.admitted(joiner)
+    access.rebac.members[joiner.uid].add("demo")
+    assert await access.admitted(joiner)
+    await service.set_team(access, actor, "demo", False, False)
+    assert not await access.admitted(joiner)
+
+
+@pytest.mark.asyncio
+async def test_member_added_by_hand_to_a_free_team_gets_no_access_source(access):
+    actor = await admin_with_exception(access)
+    await service.set_team(access, actor, "demo", False, True)
+    added = user()
+    await access.observe(added)
+    access.rebac.members[added.uid] = {"demo"}
+    assert not await access.admitted(added)
+    assert team_sources(await service.users_page(access, 0, 25, ""), added.uid) == set()
+
+
+@pytest.mark.asyncio
+async def test_authorized_team_still_admits_every_member(access):
+    actor = await admin_with_exception(access)
+    await service.set_team(access, actor, "demo", True, True)
+    member = user("accepted")
+    await service.enroll(access, member, await enabled_token(access), None)
+    await service.save_policy(access, actor, draft("tightened"), 1)
+    assert await access.admitted(member)
+    assert team_sources(await service.users_page(access, 0, 25, ""), member.uid) == {
+        ("team", "demo")
+    }

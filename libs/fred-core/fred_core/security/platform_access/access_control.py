@@ -4,7 +4,7 @@ import math
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -40,6 +40,12 @@ def token_time(value: Any) -> float | None:
         and math.isfinite(value)
         else None
     )
+
+
+class TeamSource(NamedTuple):
+    team: TeamMetadataRow
+    allowed: bool  # authorized team: every member is admitted
+    free: bool  # Free team the person joined through one of its Free links
 
 
 class PlatformAccess:
@@ -92,16 +98,32 @@ class PlatformAccess:
 
     async def team_sources(
         self, uid: str, session: AsyncSession | None = None
-    ) -> list[TeamMetadataRow]:
-        teams = await self.store.teams(session, eligible_only=True)
-        memberships = await self.rebac.has_team_memberships(
-            uid, [team.id for team in teams]
+    ) -> list[TeamSource]:
+        """Current team-derived admission: membership plus a current team flag.
+
+        Free counts only for people who joined through that team's Free link, so
+        team admins adding members (by hand or team link) never grant admission.
+        """
+        joined = (await self.store.free_joined_teams(UUID(uid), session)).get(
+            UUID(uid), set()
         )
-        if len(memberships) != len(teams) or any(
+        candidates = [
+            TeamSource(
+                team,
+                team.platform_access_allowed,
+                team.platform_access_free and team.id in joined,
+            )
+            for team in await self.store.teams(session, eligible_only=True)
+        ]
+        candidates = [source for source in candidates if source.allowed or source.free]
+        memberships = await self.rebac.has_team_memberships(
+            uid, [source.team.id for source in candidates]
+        )
+        if len(memberships) != len(candidates) or any(
             type(value) is not bool for value in memberships
         ):
             raise RuntimeError("Incomplete membership authority response")
-        return [team for team, member in zip(teams, memberships) if member]
+        return [source for source, member in zip(candidates, memberships) if member]
 
     async def platform_admin_uid(self, uid: str) -> bool:
         """Resolve the current platform-admin permission for a person's UID."""
@@ -159,8 +181,8 @@ class PlatformAccess:
         if await self.store.exception(uid, session) is not None:
             return True
         return any(
-            team.id != excluding_team
-            for team in await self.team_sources(user.uid, session)
+            source.team.id != excluding_team
+            for source in await self.team_sources(user.uid, session)
         )
 
     async def admitted(self, user: Principal) -> bool:
@@ -230,11 +252,9 @@ async def initialize_platform_access(
             "platform_access_users",
             "users",
             "teammetadata",
-            *(
-                ["platform_access_links", "platform_access_link_joiners"]
-                if authority
-                else []
-            ),
+            # Free admission is derived from Free-link joins on every backend.
+            "platform_access_links",
+            "platform_access_link_joiners",
         ],
         component="platform-access",
         migrate_command="make db-upgrade (apps/control-plane-backend)",
