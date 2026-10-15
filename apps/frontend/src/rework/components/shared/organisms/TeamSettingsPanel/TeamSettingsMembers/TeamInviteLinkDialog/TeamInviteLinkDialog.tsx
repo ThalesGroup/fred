@@ -103,7 +103,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
                 <TextInput
                   ref={urlRef}
                   className={styles.urlInput}
-                  size="small"
+                  size="xs"
                   compact
                   aria-label={t("rework.teamSettings.members.inviteLink.urlLabel")}
                   value={url}
