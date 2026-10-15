@@ -2919,7 +2919,7 @@
           "open": "Ouverte",
           "inviteOnly": "Sur invitation",
           "manual": "Ajout manuel",
-          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : ses membres sont ajoutés manuellement par un administrateur de l'équipe."
+          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation."
         },
         "visibility": {
           "label": "Visibilité de l'équipe",
