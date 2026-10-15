@@ -1490,20 +1490,16 @@ async def _capability_save_routing_params(
     deps: ProductServiceDependencies, team_id: TeamId, template_agent_id: str
 ) -> dict[str, str]:
     """
-    The team routing snapshot prepare-execution sends, narrowed to this agent,
-    so a capability can call the agent's model during its save. Client-tier
+    The team routing snapshot prepare-execution sends (its default chat
+    model), so a capability can call the agent's model during its save. Client-tier
     values like at prepare-execution: the pod still enforces `can_use`. The
     platform binding is not sent — the pod must never trust it from a request.
     """
 
-    chat_default, overrides = await resolve_execution_routing_snapshot(team_id, deps)
+    chat_default = await resolve_execution_routing_snapshot(team_id, deps)
     params = {"template_agent_id": template_agent_id}
     if chat_default is not None:
         params["chat_default_profile_id"] = chat_default
-    if template_agent_id in overrides:
-        params["agent_profile_overrides"] = json.dumps(
-            {template_agent_id: overrides[template_agent_id]}
-        )
     return params
 
 

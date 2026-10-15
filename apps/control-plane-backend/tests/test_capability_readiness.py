@@ -292,11 +292,11 @@ async def test_sweep_sets_pending_after_availability_and_config_health(
 
 
 @pytest.mark.asyncio
-async def test_save_routing_params_narrow_the_team_policy_to_this_agent(
+async def test_save_routing_params_carry_the_team_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _snapshot(team_id, deps):
-        return "chat.team", {"rico": "chat.rico", "other": "chat.other"}
+        return "chat.team"
 
     monkeypatch.setattr(service, "resolve_execution_routing_snapshot", _snapshot)
 
@@ -309,7 +309,6 @@ async def test_save_routing_params_narrow_the_team_policy_to_this_agent(
     assert params == {
         "template_agent_id": "rico",
         "chat_default_profile_id": "chat.team",
-        "agent_profile_overrides": '{"rico": "chat.rico"}',
     }
 
 
