@@ -4107,9 +4107,9 @@ def _build_capability_save_services(
             chat_default_profile_id=(
                 routing.chat_default_profile_id if routing else None
             ),
-            agent_profile_overrides=(
-                routing.agent_profile_overrides if routing else None
-            ),
+        ),
+        recommended_chat_profile_id=(
+            routing.recommended_chat_profile_id if routing else None
         ),
         portable_context=PortableContext(
             request_id=request_id,

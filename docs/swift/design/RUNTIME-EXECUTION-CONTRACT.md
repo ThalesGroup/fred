@@ -7170,9 +7170,10 @@ set and the resolved profile lacks `supports_vision`. The port holds no user tok
 a background job started from the save may keep it.
 
 Routing on the save path: validate-config reads optional query parameters
-`template_agent_id`, `chat_default_profile_id` and `agent_profile_overrides` (JSON),
-the team snapshot control-plane builds for prepare-execution; copy-config reads the
-same parameters for the destination save. Like that snapshot they are client-tier. The pod computes the team's usable models itself through ReBAC, and
+`template_agent_id`, `chat_default_profile_id` and `recommended_chat_profile_id`,
+resolved like a turn's chat profile (the instance recommendation, validated like on a
+turn, else the team default); copy-config reads the same parameters for the
+destination save. Like that snapshot they are client-tier. The pod computes the team's usable models itself through ReBAC, and
 re-reads them at most every 30 s, so a background job holding the port stops using a
 revoked model. A platform binding is never accepted on this user-reachable request, so the
 save path routes to catalogue profiles only.

@@ -20,7 +20,6 @@ save path, and the team authorizer bound before every capability route.
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 
@@ -56,7 +55,7 @@ class CapabilitySaveRouting(BaseModel):
 
     template_agent_id: str | None = None
     chat_default_profile_id: str | None = None
-    agent_profile_overrides: dict[str, str] | None = None
+    recommended_chat_profile_id: str | None = None
 
 
 def parse_save_routing(params: Mapping[str, str]) -> CapabilitySaveRouting | None:
@@ -64,15 +63,14 @@ def parse_save_routing(params: Mapping[str, str]) -> CapabilitySaveRouting | Non
     if not any(key in params for key in CapabilitySaveRouting.model_fields):
         return None
     try:
-        raw_overrides = params.get("agent_profile_overrides")
         return CapabilitySaveRouting(
             template_agent_id=params.get("template_agent_id") or None,
             chat_default_profile_id=params.get("chat_default_profile_id") or None,
-            agent_profile_overrides=(
-                json.loads(raw_overrides) if raw_overrides else None
+            recommended_chat_profile_id=(
+                params.get("recommended_chat_profile_id") or None
             ),
         )
-    except (ValueError, ValidationError) as exc:
+    except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Invalid model routing parameters: {exc}",

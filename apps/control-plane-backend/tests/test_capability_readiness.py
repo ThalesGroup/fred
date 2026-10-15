@@ -292,7 +292,7 @@ async def test_sweep_sets_pending_after_availability_and_config_health(
 
 
 @pytest.mark.asyncio
-async def test_save_routing_params_carry_the_team_default(
+async def test_save_routing_params_carry_the_team_default_and_recommendation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _snapshot(team_id, deps):
@@ -310,6 +310,14 @@ async def test_save_routing_params_carry_the_team_default(
         "template_agent_id": "rico",
         "chat_default_profile_id": "chat.team",
     }
+
+    recommended = await service._capability_save_routing_params(
+        object(),  # type: ignore[arg-type]
+        "personal",  # type: ignore[arg-type]
+        "rico",
+        "chat.instance",
+    )
+    assert recommended["recommended_chat_profile_id"] == "chat.instance"
 
 
 # --- lazy re-check on listing ------------------------------------------------

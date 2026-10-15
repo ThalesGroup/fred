@@ -339,7 +339,10 @@ async def copy_agent_instance_to_team(
     new_instance_id = str(uuid4())
     routing_params = (
         await product_service._capability_save_routing_params(
-            deps, target_team_id, record.source_agent_id
+            deps,
+            target_team_id,
+            record.source_agent_id,
+            record.tuning.recommended_chat_profile_id,
         )
         if source.capability_ids
         else None

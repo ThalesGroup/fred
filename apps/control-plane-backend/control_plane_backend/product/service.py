@@ -1487,19 +1487,25 @@ async def template_default_capability_ids(
 
 
 async def _capability_save_routing_params(
-    deps: ProductServiceDependencies, team_id: TeamId, template_agent_id: str
+    deps: ProductServiceDependencies,
+    team_id: TeamId,
+    template_agent_id: str,
+    recommended_chat_profile_id: str | None = None,
 ) -> dict[str, str]:
     """
-    The team routing snapshot prepare-execution sends (its default chat
-    model), so a capability can call the agent's model during its save. Client-tier
-    values like at prepare-execution: the pod still enforces `can_use`. The
-    platform binding is not sent — the pod must never trust it from a request.
+    The routing a turn of this agent would use (the instance's recommended
+    chat model, else the team default), so a capability can call the agent's
+    model during its save. Client-tier values like at prepare-execution: the
+    pod validates the recommendation and enforces `can_use`. The platform
+    binding is not sent — the pod must never trust it from a request.
     """
 
     chat_default = await resolve_execution_routing_snapshot(team_id, deps)
     params = {"template_agent_id": template_agent_id}
     if chat_default is not None:
         params["chat_default_profile_id"] = chat_default
+    if recommended_chat_profile_id is not None:
+        params["recommended_chat_profile_id"] = recommended_chat_profile_id
     return params
 
 
@@ -1520,6 +1526,7 @@ async def _apply_capability_selection(
     asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
     supports_capabilities: bool = True,
     template_agent_id: str | None = None,
+    recommended_chat_profile_id: str | None = None,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -1607,7 +1614,9 @@ async def _apply_capability_selection(
             )
 
     routing_params = (
-        await _capability_save_routing_params(deps, team_id, template_agent_id)
+        await _capability_save_routing_params(
+            deps, team_id, template_agent_id, recommended_chat_profile_id
+        )
         if deps is not None and template_agent_id is not None and effective_ids
         else None
     )
@@ -3151,6 +3160,7 @@ async def enroll_agent_instance(
         asset_uploads=asset_uploads,
         supports_capabilities=template.supports_capabilities,
         template_agent_id=template.template_agent_id,
+        recommended_chat_profile_id=request.recommended_chat_profile_id,
     )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
@@ -3366,6 +3376,11 @@ async def update_agent_instance(
                 asset_uploads=asset_uploads,
                 supports_capabilities=template.supports_capabilities,
                 template_agent_id=record.source_agent_id,
+                recommended_chat_profile_id=(
+                    request.recommended_chat_profile_id
+                    if "recommended_chat_profile_id" in tuning_fields_set
+                    else base.recommended_chat_profile_id
+                ),
             )
         new_tuning = base
 

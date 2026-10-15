@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
@@ -99,14 +98,13 @@ def _binding(
     *,
     team_id: str | None = "team-1",
     chat_default_profile_id: str | None = None,
-    agent_profile_overrides: dict[str, str] | None = None,
+    recommended_chat_profile_id: str | None = None,
 ) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
-            team_id=team_id,
-            chat_default_profile_id=chat_default_profile_id,
-            agent_profile_overrides=agent_profile_overrides,
+            team_id=team_id, chat_default_profile_id=chat_default_profile_id
         ),
+        recommended_chat_profile_id=recommended_chat_profile_id,
         portable_context=PortableContext(
             request_id="req",
             correlation_id="req",
@@ -184,8 +182,14 @@ def test_default_outside_usable_models_fails_closed(
         _ask(_port(monkeypatch, usable=frozenset()))
 
 
-def test_team_override_for_the_template_wins(monkeypatch: pytest.MonkeyPatch) -> None:
-    port = _port(monkeypatch, agent_profile_overrides={"agent-1": VISION_PROFILE})
+def test_instance_recommendation_wins_over_the_team_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    port = _port(
+        monkeypatch,
+        chat_default_profile_id=TEXT_PROFILE,
+        recommended_chat_profile_id=VISION_PROFILE,
+    )
     assert _ask(port) == "vision-model"
 
 
@@ -243,7 +247,7 @@ def test_save_services_carry_the_model_port_and_routing() -> None:
     routing = CapabilitySaveRouting(
         template_agent_id="template-1",
         chat_default_profile_id=VISION_PROFILE,
-        agent_profile_overrides={"template-1": TEXT_PROFILE},
+        recommended_chat_profile_id=TEXT_PROFILE,
     )
     services = agent_app_module._build_capability_save_services(
         capability_id="ppt_builder",
@@ -257,7 +261,7 @@ def test_save_services_carry_the_model_port_and_routing() -> None:
     assert isinstance(port, RoutedCapabilityModelPort)
     context = port._binding.runtime_context
     assert context.chat_default_profile_id == VISION_PROFILE
-    assert context.agent_profile_overrides == {"template-1": TEXT_PROFILE}
+    assert port._binding.recommended_chat_profile_id == TEXT_PROFILE
     assert context.access_token is None
     assert port._binding.platform_chat_model_binding is None
     assert port._definition.agent_id == "template-1"
@@ -268,19 +272,16 @@ def test_parse_save_routing_from_query_parameters() -> None:
         {
             "template_agent_id": "template-1",
             "chat_default_profile_id": VISION_PROFILE,
-            "agent_profile_overrides": json.dumps({"template-1": TEXT_PROFILE}),
+            "recommended_chat_profile_id": TEXT_PROFILE,
             "usable_model_ids": "x",
         }
     )
     assert routing == CapabilitySaveRouting(
         template_agent_id="template-1",
         chat_default_profile_id=VISION_PROFILE,
-        agent_profile_overrides={"template-1": TEXT_PROFILE},
+        recommended_chat_profile_id=TEXT_PROFILE,
     )
     assert parse_save_routing({}) is None
-    with pytest.raises(HTTPException) as exc:
-        parse_save_routing({"agent_profile_overrides": "3"})
-    assert exc.value.status_code == 422
 
 
 # ---------------------------------------------------------------------------

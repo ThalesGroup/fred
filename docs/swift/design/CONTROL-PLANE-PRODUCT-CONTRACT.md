@@ -4922,9 +4922,10 @@ compare-and-set on the reason read before the pod call, so they never overwrite 
 suspension written meanwhile.
 
 **Save-time routing.** The pod `validate-config` call carries query parameters
-`template_agent_id`, `chat_default_profile_id` and `agent_profile_overrides` (JSON,
-this agent's entry only): the team snapshot prepare-execution sends, so a capability
-can call the agent's model during its save. No platform binding is sent. The pod
+`template_agent_id`, `chat_default_profile_id` (the team default) and
+`recommended_chat_profile_id` (the instance recommendation, when set): the levels a
+new conversation of this agent starts from, so a capability can call the agent's
+model during its save. No platform binding is sent. The pod
 `copy-config` call carries the same parameters for the destination team.
 
 **Vision flags.** `AvailableModelProfile.supports_vision` and
