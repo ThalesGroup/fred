@@ -369,7 +369,8 @@ def conversation(
         None,
     )
     assert template, (
-        "Deploy the public fred.github.test_assistant agent before document validation"
+        "Test Assistant is unavailable to this team. Check the deployed runtime "
+        "and enable fred.github.test_assistant in Admin > Features for the test team."
     )
     assert any(
         entry.get("id") == "document_access"
@@ -450,10 +451,16 @@ def test_new_library_document_reaches_existing_conversation(
         assert_found(conversation.turn(libraries=[tag["id"]])["sources"], uid, marker)
 
 
+@pytest.mark.parametrize(
+    "corpus_selection", [False, True], ids=["session-only", "session-and-document"]
+)
 def test_late_attachment_and_session_isolation(
-    corpus: Corpus, conversation: Conversation, kf: ClientFactory
+    corpus: Corpus,
+    conversation: Conversation,
+    kf: ClientFactory,
+    corpus_selection: bool,
 ) -> None:
-    """A late attachment reaches the next turn, but not another session or another user."""
+    """A late attachment reaches the next turn and stays session-private, including corpus selection={corpus_selection}."""
     c, conv = corpus, conversation
     client = kf(c.editor)
     before = conv.turn(attachments="", corpus=False)
@@ -503,17 +510,18 @@ def test_late_attachment_and_session_isolation(
             )
             == []
         )
-        # A valid corpus selection must not silently exclude the conversation's own files.
-        assert_found(
-            search(
-                client,
-                team_id=c.team_a,
-                session_id=conv.session_id,
-                documents=[c.uid_a],
-            ),
-            uid,
-            marker,
-        )
+        if corpus_selection:
+            # A valid corpus selection must not silently exclude the conversation's own files.
+            assert_found(
+                search(
+                    client,
+                    team_id=c.team_a,
+                    session_id=conv.session_id,
+                    documents=[c.uid_a],
+                ),
+                uid,
+                marker,
+            )
     finally:
         checked(
             client.delete(

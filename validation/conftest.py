@@ -64,7 +64,8 @@ def _require_stack() -> None:
     except Exception as exc:  # noqa: BLE001
         pytest.fail(
             f"Control-plane not reachable at {CP_URL}/healthz ({exc}). "
-            f"Start the complete Docker stack before running validation.",
+            "Check FRED_CONTROL_PLANE_URL against your running deployment; "
+            "the default k3d ingress uses http://localhost:8088/control-plane/v1.",
             pytrace=False,
         )
 
@@ -102,10 +103,19 @@ def login(username: str) -> str:
         failed_manager = _LOGIN_MANAGERS.pop(username, None)
         if failed_manager is not None:
             failed_manager.close()
+        hint = "Check demo provisioning and direct-grant configuration in validation/README.md."
+        if isinstance(exc, httpx.HTTPStatusError):
+            try:
+                error = exc.response.json().get("error")
+            except (ValueError, AttributeError):
+                error = None
+            if error == "unauthorized_client":
+                hint = "Keycloak rejected the password grant. Enable Direct access grants on the configured client in the local test realm for this campaign, then restore its original value."
+            elif error == "invalid_grant":
+                hint = "Keycloak rejected the demo credentials or requires an interactive account action. Check the imported demo identities."
         pytest.fail(
             f"Keycloak login/refresh failed for {username!r} on client {CLIENT_ID!r}: "
-            f"{type(exc).__name__}. Check demo provisioning and direct-grant configuration "
-            "in validation/README.md.",
+            f"{type(exc).__name__}. {hint}",
             pytrace=False,
         )
     if not token:
@@ -214,6 +224,14 @@ def _bootstrap_collaborative_teams(_require_stack) -> None:
     )
     try:
         existing_resp = admin_client.get("/teams/all")
+        if existing_resp.status_code == 401:
+            pytest.fail(
+                "Control-plane rejected the Keycloak token (HTTP 401). Check the "
+                "realm issuer and audience trusted by the deployment. For local k3d, "
+                "use FRED_REALM_URL=http://keycloak:8080/realms/app with the host alias "
+                "documented in validation/README.md; do not disable JWT checks.",
+                pytrace=False,
+            )
         existing_resp.raise_for_status()
         existing_items = existing_resp.json()
         if not isinstance(existing_items, list):

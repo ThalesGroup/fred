@@ -19,6 +19,9 @@ See `validation/README.md`.
 ## Configuration
 
 Use the existing validation endpoint variables to target the intended deployment.
+For local k3d, use the realm URL trusted by its pods (`http://keycloak:8080/realms/app`),
+with the workstation's existing `keycloak` host alias. See the README's complete
+command and temporary local direct-grant prerequisite.
 No chart or service configuration changes are required.
 
 ## Upgrade

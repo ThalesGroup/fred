@@ -7,11 +7,10 @@ and `libs/`), that logs in **as the real users** defined in
 (alice, bob, phil, ...) and asserts the **authorization matrix** expected by the
 no-grant runtime authorization model.
 
-The current supported mode is **localhost auth/isolation validation**: backing
-services run in Docker (Keycloak, Postgres, OpenFGA, OpenSearch, Temporal, ...),
-while the Fred applications run in the foreground from this `fred` checkout
-(`apps/control-plane-backend`, `apps/fred-agents`, `apps/knowledge-flow`,
-`apps/frontend`) using their `configuration_prod.yaml`.
+The suite targets an already running deployment: local applications with Docker
+backing services, or a complete k3d installation through its ingress. It does
+not deploy the platform. Set the endpoints and authentication prerequisites for
+the chosen environment before running it.
 
 It reads the user/role/team matrix straight from that fixture, so there is **no
 drift**: change the users there and the assertions follow. That same fixture is
@@ -107,14 +106,11 @@ and `/fred/agents/v2/...`, the validation can target the same public origin as
 the browser. This is closer to the UI path, but it also tests the proxy routing in
 addition to runtime authorization.
 
-### Mode C - future full k3d validation
+### Mode C - an existing k3d deployment
 
-`make validate-auth-isolation-k3d` is reserved for a future mode. It will deploy
-Keycloak/backing services and all Fred apps inside k3d, then run the same
-black-box suite against the k3d ingress. That is the right direction for a more
-deployment-representative C3 evidence path, but it is explicitly **not** required
-for the current revamp validation. Track it as a follow-up task, not as a blocker
-for this harness.
+Use `make validation-report` with the k3d ingress and realm coordinates documented
+below. The cluster and demo import must already exist. A command that creates
+the cluster and deploys the applications as part of validation remains future work.
 
 ## Prerequisites
 
@@ -122,15 +118,11 @@ for this harness.
    Keycloak and the control-plane database must be seeded with the
    `demo_provisioning` fixture's users/teams/roles (`make build-demo-bundle` +
    Admin > Migration upload - see the intro above).
-2. **Direct-grant on the `app` Keycloak client** (test realm only). The validation
-   logs users in with the *password grant*; the `app` client must allow it.
-   In the realm template (`docker/keycloak/app-realm.json.template`), the
-   `app` client must have:
-   ```json
-   "directAccessGrantsEnabled" : true
-   ```
-   Then re-import the realm (restart Keycloak / re-run the keycloak post-install).
-   **Test/dev only** - do NOT enable ROPC on a real integration / C3 realm.
+2. **Direct-grant on the `app` Keycloak client** (local test realm only). The
+   validation logs users in with the *password grant*. Temporarily enable Direct
+   access grants on this client in the local Keycloak admin console, then restore
+   its previous value after the campaign. No realm re-import or restart is needed.
+   Do not change shared realm templates or production settings for this test.
 3. **No grant signing requirement.** This suite targets RUNTIME-07 rev. 2: the
    control-plane does not issue `ExecutionGrant`; runtime pods validate the user
    JWT and perform pod-side OpenFGA checks.
@@ -339,15 +331,39 @@ product fix. A failed positive control is a failed setup, never proof of isolati
 
 ### Run against the existing k3d deployment
 
-Use the deployed ingress endpoints (not the localhost backend defaults). Set
-`FRED_REALM_URL`, `FRED_CONTROL_PLANE_URL`, `FRED_KNOWLEDGE_FLOW_URL` and
-`FRED_RUNTIME_PUBLIC_BASE` to that deployment. The first three include their
-API/realm path; the runtime value is the public origin used to resolve the
-prepare-execution URL. Keep normal TLS verification enabled.
+The default local factory exposes Fred's ingress on port 8088 and Keycloak
+directly on port 8080. Its pods trust the internal realm authority
+`keycloak:8080`. A token requested through `localhost` has a different issuer
+and is rejected even though login succeeds. Use the realm URL below, with
+`keycloak` resolving to `127.0.0.1` on the workstation, as required by
+`deploy/k3d/finish` for browser login too (`getent hosts keycloak` to check).
 
-From the repository root, with those endpoint variables exported:
+Before running, enable **Direct access grants** for client `app` in the local
+test realm (Keycloak admin console on port 8080, realm `app`, Clients, `app`,
+Settings, Capability config). The factory disables this password grant by
+default. Restore the original setting after the campaign. This is a local test
+prerequisite, not a change to the shared factory templates or production realms.
+The harness never changes Keycloak settings or turns off JWT validation.
+
+In Fred's **Admin > Features**, enable **Test Assistant (no LLM)** and
+**document_access** for `FRED_TEST_TEAM` (default `fredlab`), either through the
+platform default or an explicit team grant. A running pod alone does not make
+its templates available to a team. The suite verifies this prerequisite without
+changing capability grants.
+The runtime also checks access to its configured default chat model when it
+activates this graph agent, even though the document scenario makes no LLM call.
+Enable that model for the test team too (the default k3d configuration uses
+`openai/mistral-small-latest`). A `ModelNotUsableError` in the runtime logs is a
+setup failure, not evidence of document isolation.
+
+From the repository root, for that default local k3d installation:
 
 ```bash
+export FRED_REALM_URL=http://keycloak:8080/realms/app
+export FRED_CONTROL_PLANE_URL=http://localhost:8088/control-plane/v1
+export FRED_KNOWLEDGE_FLOW_URL=http://localhost:8088/knowledge-flow/v1
+export FRED_RUNTIME_PUBLIC_BASE=http://localhost:8088
+
 # Focused first run, with separate evidence from the full campaign:
 make validation-report VALIDATION_ARGS="scenarios/test_document_access.py" \
   VALIDATION_REPORT=document-access-report.md VALIDATION_JUNIT_XML=document-access-report.xml
@@ -355,6 +371,10 @@ make validation-report VALIDATION_ARGS="scenarios/test_document_access.py" \
 # Full campaign:
 make validation-report
 ```
+
+For another deployment, adapt the addresses to its trusted issuer and public
+ingress. Keep TLS verification enabled. The runtime base is the public origin
+resolving `prepare-execution` URLs.
 
 The command runs the local validation code against the deployed services; it
 does not rebuild or redeploy k3d. Report paths are relative to `validation/`.
