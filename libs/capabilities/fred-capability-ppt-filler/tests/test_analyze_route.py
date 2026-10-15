@@ -231,7 +231,7 @@ def test_selection_and_save_each_open_one_reclaimable_presentation(client, monke
     import asyncio
     import weakref
 
-    from fred_capability_ppt_filler import folder_resolution
+    from fred_capability_ppt_filler import pptx_archive
     from fred_capability_ppt_filler.capability import TEMPLATE_SLOT, PptFillerConfig
     from fred_sdk.contracts.capability import (
         CapabilityIdentity,
@@ -241,7 +241,7 @@ def test_selection_and_save_each_open_one_reclaimable_presentation(client, monke
     from fred_sdk.contracts.runtime import RuntimeServices
     from port_fakes import FakeAssets
 
-    original = folder_resolution.Presentation
+    original = pptx_archive.Presentation
     refs = []
 
     def tracked(*args, **kwargs):
@@ -249,7 +249,7 @@ def test_selection_and_save_each_open_one_reclaimable_presentation(client, monke
         refs.append(weakref.ref(presentation))
         return presentation
 
-    monkeypatch.setattr(folder_resolution, "Presentation", tracked)
+    monkeypatch.setattr(pptx_archive, "Presentation", tracked)
     deck = build_deck([("{{name}}", "{{name}}:\nThe name")])
     for _ in range(3):
         before = len(refs)

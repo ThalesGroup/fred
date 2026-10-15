@@ -889,9 +889,9 @@ async def test_heavy_job_slot_released_after_successful_fill(no_pdf, monkeypatch
 
     import weakref
 
-    from fred_capability_ppt_filler import fill as fill_mod
+    from fred_capability_ppt_filler import pptx_archive
 
-    original = fill_mod.Presentation
+    original = pptx_archive.Presentation
     refs = []
 
     def tracked(*args, **kwargs):
@@ -899,7 +899,7 @@ async def test_heavy_job_slot_released_after_successful_fill(no_pdf, monkeypatch
         refs.append(weakref.ref(presentation))
         return presentation
 
-    monkeypatch.setattr(fill_mod, "Presentation", tracked)
+    monkeypatch.setattr(pptx_archive, "Presentation", tracked)
     _content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
 
     assert artifact.is_error is False
