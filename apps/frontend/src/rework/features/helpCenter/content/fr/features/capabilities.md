@@ -135,8 +135,9 @@ continué sur une autre diapositive.
 
 **Comment la configurer** — déposez un template `.pptx` sur l'agent et
 enregistrez. Le template est alors lu en arrière-plan : pendant ce temps,
-l'agent affiche **En préparation** et n'est pas encore disponible ; il le
-devient tout seul quand la lecture est terminée, et vous pouvez fermer la
+l'agent affiche **En préparation — lecture du template PowerPoint en cours** et
+n'est pas disponible ; il le redeviendra tout seul dans quelques minutes, quand
+la lecture sera terminée, et vous pouvez fermer la
 fenêtre en attendant. Ensuite, **Vérifier les slides** montre chaque
 diapositive trouvée, avec son nom et son type : renommez une diapositive,
 changez son type ou mettez-la de côté. Rien n'est obligatoire.

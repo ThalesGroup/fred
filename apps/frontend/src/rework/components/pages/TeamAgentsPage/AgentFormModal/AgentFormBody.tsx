@@ -17,6 +17,7 @@ import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
+import { capabilityPreparingKey } from "@shared/utils/capabilityPreparing.ts";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -241,8 +242,10 @@ export function AgentFormBody({
     // Pending clears on its own once the capability reports ready.
     if (suspensionReason === "capability_pending") {
       const detail = editInstance?.suspension_detail;
-      return detail
-        ? t("rework.teams.formAgent.suspended.pendingFailed", { detail })
+      if (detail) return t("rework.teams.formAgent.suspended.pendingFailed", { detail });
+      const preparingKey = editInstance && capabilityPreparingKey(editInstance, (key) => i18n.exists(key));
+      return preparingKey
+        ? t("rework.teams.formAgent.suspended.pendingDetail", { detail: t(preparingKey) })
         : t("rework.teams.formAgent.suspended.pending");
     }
     if (suspensionReason === "capability_config_invalid") {

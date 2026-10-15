@@ -227,7 +227,7 @@ use LangChain middleware on ReAct/Deep.
 | Contribute a system-prompt fragment | `wrap_model_call` / `modify_model_request` editing the prompt |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4) |
-| Save starts background work the agent must wait for | `readiness(stored, identity)` returning `CapabilityReadiness.pending()` / `.failed(detail)`; return quickly (it may start background work, never wait for it); control-plane keeps the agent suspended (`capability_pending`) until it returns ready (`RUNTIME-EXECUTION-CONTRACT.md` §8.106) |
+| Save starts background work the agent must wait for | `readiness(stored, identity)` returning `CapabilityReadiness.pending()` / `.failed(detail)`; return quickly (it may start background work, never wait for it); control-plane keeps the agent suspended (`capability_pending`) until it returns ready (`RUNTIME-EXECUTION-CONTRACT.md` §8.117); ship a frontend locale key `capability.<id>.preparing` (a lowercase fragment saying what it prepares) so the agent card and form name the work instead of the generic text |
 
 All three runtimes build `CapabilityContext` through the same assembly path:
 identity, typed stored config, turn options, team settings and `RuntimeServices`

@@ -126,8 +126,9 @@ slide.
 
 **How to set it up** — upload a `.pptx` template on the agent and save. The
 template is then read in the background: meanwhile the agent shows
-**Preparing** and is not available yet; it becomes available on its own when
-the reading is done, and you can close the window in the meantime. Then
+**Preparing — reading the PowerPoint template** and is not available; it will
+be available again on its own in a few minutes, when the reading is done, and
+you can close the window in the meantime. Then
 **Review slides** shows each slide found, with its name and kind: rename a
 slide, change its kind, or set it aside. Nothing is mandatory.
 To prepare a template the agent understands well, see

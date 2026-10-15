@@ -17,6 +17,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
+import { capabilityPreparingKey } from "@shared/utils/capabilityPreparing.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -91,13 +92,14 @@ export default function AgentCard({
   marketplace,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // A suspended instance (#1975, RFC §3.9) is a platform-forced broken state
   // distinct from the editor's enable toggle: it never counts as enabled (no
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
   const isEnabled = !offline && !isSuspended && instance.status === "enabled";
   const isPreparing = instance.suspension_reason === "capability_pending" && !instance.suspension_detail;
+  const preparingKey = isPreparing ? capabilityPreparingKey(instance, (key) => i18n.exists(key)) : undefined;
   const toggleLabel = isPreparing
     ? t("rework.agentCard.pendingToggleLocked")
     : isSuspended
@@ -279,7 +281,9 @@ export default function AgentCard({
         {isSuspended && (
           <div className={styles.suspensionWarning}>
             {isPreparing
-              ? t("rework.agentCard.preparing")
+              ? preparingKey
+                ? t("rework.agentCard.preparingDetail", { detail: t(preparingKey) })
+                : t("rework.agentCard.preparing")
               : instance.suspension_reason === "capability_pending"
                 ? t("rework.agentCard.preparationFailed", { detail: instance.suspension_detail })
                 : t("rework.agentCard.suspended")}
