@@ -211,6 +211,7 @@ describe("DeckSummaryButton", () => {
       notes: [
         { code: "intent_shown_otherwise", field: "total_row" },
         { code: "intent_not_shown", field: "trend" },
+        { code: "intent_not_shown", field: "takeaway" },
         { code: "intent_shown_otherwise", field: "takeaway" },
       ],
     };
@@ -219,6 +220,7 @@ describe("DeckSummaryButton", () => {
     expect(notes).toEqual([
       "The total row is shown in bold: the table's style has no total formatting.",
       "The rising or falling arrows asked on the figures could not be shown.",
+      "The key message could not be shown on this slide: it stays in the speaker notes.",
       "An emphasis you asked for is shown in bold instead.",
     ]);
   });
@@ -270,6 +272,7 @@ describe("DeckSummaryButton", () => {
       "intent_not_shown_highlight_row",
       "intent_not_shown_highlight_column",
       "intent_not_shown_trend",
+      "intent_not_shown_takeaway",
       "intent_shown_otherwise",
       "intent_shown_otherwise_total_row",
       "intent_shown_otherwise_highlight_row",

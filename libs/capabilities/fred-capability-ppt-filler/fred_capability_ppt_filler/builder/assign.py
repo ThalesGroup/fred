@@ -66,6 +66,7 @@ from fred_capability_ppt_filler.builder.render import (
     _Line,
     _only_names_the_slide,
     _reading_order,
+    _takeaway_zone,
     _unused_item_fields,
     chart_hosts,
     fit_table,
@@ -779,6 +780,8 @@ class _Slide:
     # of their kind that fills more (`_fullest`).
     empty: Dict[str, int] = field(default_factory=dict)
     emptier: set[str] = field(default_factory=set)
+    # The pattern ids that show the takeaway the user asked to see.
+    shows: set[str] = field(default_factory=set)
     candidates: List[Tuple[Pattern, float]] = field(default_factory=list)
     # A slide that fits nothing: the pattern closest to holding it, its misfits.
     closest: Optional[Tuple[Pattern, List[Misfit]]] = None
@@ -794,7 +797,8 @@ def _kept(
     """The template slide the delivered deck showed this slide on, alone, while
     it is still among the best-ranked kind's fits: a text change keeps its
     design, a kind the template replaced included. Otherwise the fullest fits."""
-    kept = [c for c in candidates if c[0].id == slide.plan.built_on]
+    shown = _shown(slide, candidates)
+    kept = [c for c in shown if c[0].id == slide.plan.built_on]
     return kept or _fullest(slide, candidates)
 
 
@@ -901,17 +905,28 @@ def _candidates(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
     return []
 
 
+def _shown(
+    slide: _Slide, found: List[Tuple[Pattern, float]]
+) -> List[Tuple[Pattern, float]]:
+    """Without the fits that cannot show the takeaway the user asked to see
+    when one of their kind can."""
+    showing = {p.kind for p, _ in found if p.id in slide.shows}
+    return [c for c in found if c[0].id in slide.shows or c[0].kind not in showing]
+
+
 def _fullest(
     slide: _Slide, found: List[Tuple[Pattern, float]]
 ) -> List[Tuple[Pattern, float]]:
     """Without the fits one of their kind beats on unfilled zones at no higher
-    cost: reuse and variety only choose between equally filled slides."""
+    cost, or that cannot show a takeaway the user asked to see when one of
+    their kind can: reuse and variety only choose between equally filled slides."""
+    shown = _shown(slide, found)
     kept = [
         (p, cost)
-        for p, cost in found
+        for p, cost in shown
         if not any(
             q.kind == p.kind and slide.empty[q.id] < slide.empty[p.id] and other <= cost
-            for q, other in found
+            for q, other in shown
         )
     ]
     slide.emptier |= {p.id for p, _ in found} - {p.id for p, _ in kept}
@@ -923,6 +938,8 @@ def _check(slide: _Slide, pool: List[Pattern], size: Tuple[int, int]) -> None:
         reasons, cost, empty = _weigh(p, slide.plan, size)
         slide.checked.append((p, reasons, cost))
         slide.empty[p.id] = empty
+        if _takeaway_zone(p, slide.plan, size) is not None:
+            slide.shows.add(p.id)
 
 
 # --- a list continued on a second slide ---------------------------------------------------

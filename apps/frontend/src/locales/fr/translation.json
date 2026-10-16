@@ -533,6 +533,7 @@
           "intent_not_shown_highlight_row": "La mise en avant demandée sur une ligne du tableau n'a pas pu être affichée.",
           "intent_not_shown_highlight_column": "La mise en avant demandée sur une colonne du tableau n'a pas pu être affichée.",
           "intent_not_shown_trend": "Les flèches de hausse ou de baisse demandées sur les chiffres n'ont pas pu être affichées.",
+          "intent_not_shown_takeaway": "Le message clé n'a pas pu être affiché sur cette diapositive : il reste dans les notes de l'orateur.",
           "intent_shown_otherwise": "Une mise en avant demandée est affichée en gras à la place.",
           "intent_shown_otherwise_total_row": "La ligne de total est affichée en gras : le style du tableau n'a pas de mise en forme de total.",
           "intent_shown_otherwise_highlight_row": "La ligne mise en avant est affichée en gras seulement, pour rester lisible sur les couleurs sombres du tableau.",

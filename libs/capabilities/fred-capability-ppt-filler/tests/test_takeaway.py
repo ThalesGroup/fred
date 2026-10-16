@@ -210,6 +210,25 @@ async def test_a_takeaway_longer_than_the_card_stays_in_the_notes(monkeypatch):
     slide = deck(workspace).slides[1]
     assert _card(slide) == ["Q3 porté par l'export"]
     assert notes(slide).split("\n")[0] == long
+    assert "Slide 2: the takeaway is too long" in text
+
+
+@pytest.mark.asyncio
+async def test_on_request_every_chart_takes_the_slide_with_a_card(monkeypatch):
+    second = {
+        **CHART,
+        "takeaway": "Les marges suivent les ventes tout au long de l'année",
+        "title": "Marges 2025",
+    }
+    slides = [COVER, CHART, second]
+    text, _, workspace = await _built(monkeypatch, slides, ASK, show_takeaways=True)
+    assert text.startswith("Delivered"), text
+    built = deck(workspace).slides
+    assert [_card(built[1]), _card(built[2])] == [[TAKEAWAY], [second["takeaway"]]]
+    # Without the request the card would stay empty: the wide chart slide, as before.
+    text, _, workspace = await _built(monkeypatch, slides, "")
+    assert text.startswith("Delivered"), text
+    assert [_card(s) for s in list(deck(workspace).slides)[1:]] == [[], []]
 
 
 @pytest.mark.asyncio
@@ -226,7 +245,11 @@ async def test_a_bullets_slide_without_a_zone_is_unchanged(monkeypatch):
     slide = deck(workspace).slides[1]
     assert not any(points["takeaway"] in t for t in texts(slide))
     (part,) = result.ui_parts
-    assert not part.summary[1].notes
+    # The loss is told, not silent.
+    assert [(n.code, n.field) for n in part.summary[1].notes] == [
+        ("intent_not_shown", "takeaway")
+    ]
+    assert "has no key-message zone, so the takeaway stays in the speaker notes" in text
 
 
 @pytest.mark.asyncio

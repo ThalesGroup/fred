@@ -533,6 +533,7 @@
           "intent_not_shown_highlight_row": "The emphasis asked on a table row could not be shown.",
           "intent_not_shown_highlight_column": "The emphasis asked on a table column could not be shown.",
           "intent_not_shown_trend": "The rising or falling arrows asked on the figures could not be shown.",
+          "intent_not_shown_takeaway": "The key message could not be shown on this slide: it stays in the speaker notes.",
           "intent_shown_otherwise": "An emphasis you asked for is shown in bold instead.",
           "intent_shown_otherwise_total_row": "The total row is shown in bold: the table's style has no total formatting.",
           "intent_shown_otherwise_highlight_row": "The emphasised row is shown in bold only, to stay readable on the table's dark colours.",

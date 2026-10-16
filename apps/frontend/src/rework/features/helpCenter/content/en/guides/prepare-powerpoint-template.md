@@ -175,7 +175,9 @@ speaker notes. To let the agent also show it on the slide when someone asks
 for it ("show the key messages on the slides"), name the text area meant for
 it `takeaway` or `key message` in PowerPoint's Selection pane, or on its
 layout. Without such a request, that area is filled like any other text area.
-A key message too long for the area stays in the speaker notes.
+With it, the agent prefers a slide that has such an area. A key message that
+cannot be shown, too long for the area or on a slide without one, stays in the
+speaker notes, and **What was built** says so.
 
 ## What is set aside
 

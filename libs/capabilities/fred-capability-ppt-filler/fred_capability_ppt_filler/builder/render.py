@@ -1561,6 +1561,7 @@ class _Renderer:
         )
         hosted = self._fill_charts(slide, pattern, plan, index, text, position, lost)
         self._tell_trends(pattern, plan, position)
+        self._tell_takeaway(pattern, plan, position)
 
         for group in pattern.groups:
             group_text, group_images, used = _assign_group(
@@ -1818,6 +1819,23 @@ class _Renderer:
                 "items' trend was not shown: this slide shows no figure for its items. "
                 "Nothing to do; drop items[].trend, or use a slide showing figures.",
             )
+
+    def _tell_takeaway(self, pattern: Pattern, plan: SlidePlan, position: int) -> None:
+        """A takeaway the user asked to see that this slide cannot show."""
+        size = (self.width, self.height)
+        if not plan.takeaway_shown or not (plan.takeaway or "").strip():
+            return
+        if _takeaway_zone(pattern, plan, size) is not None:
+            return
+        self._tell_intent(
+            position,
+            "takeaway",
+            "the takeaway is too long for the slide's key-message zone and stays in "
+            "the speaker notes. To show it, shorten takeaway."
+            if any(z.takeaway for z in pattern.zones)
+            else f"'{pattern.label}' has no key-message zone, so the takeaway stays "
+            "in the speaker notes. Nothing to do.",
+        )
 
     def _tell_axes(self, chart: PlanChart, where: str, at: str) -> None:
         """Axis fields the chart type does not draw: said, never dropped quietly."""

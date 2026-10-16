@@ -53,6 +53,7 @@ const INTENT_FIELDS: Record<string, Set<string>> = {
     "highlight_row",
     "highlight_column",
     "trend",
+    "takeaway",
   ]),
   intent_shown_otherwise: new Set(["total_row", "highlight_row", "highlight_column"]),
 };

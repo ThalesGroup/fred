@@ -188,8 +188,10 @@ dans les notes de l'orateur. Pour que l'agent l'affiche aussi sur la
 diapositive quand on le lui demande (« affiche les messages clés sur les
 slides »), nommez la zone de texte prévue pour lui `message clé`, `à retenir`
 ou `takeaway` dans le volet Sélection de PowerPoint, ou sur son masque. Sans
-cette demande, la zone est remplie comme toute autre zone de texte. Un message
-clé trop long pour la zone reste dans les notes de l'orateur.
+cette demande, la zone est remplie comme toute autre zone de texte. Avec elle,
+l'agent préfère une diapositive qui a une telle zone. Un message clé qui ne
+peut pas être affiché, trop long pour la zone ou sur une diapositive sans zone,
+reste dans les notes de l'orateur, et **Ce qui a été construit** le signale.
 
 ## Ce qui est mis de côté
 
