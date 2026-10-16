@@ -2774,8 +2774,9 @@
         "title": "Create team",
         "nameLabel": "Team name",
         "namePlaceholder": "e.g. swiftpost",
-        "adminsLabel": "Initial team admin(s)",
+        "adminsLabel": "Team admin(s)",
         "adminsPlaceholder": "Enter a name, first name, or user ID",
+        "open": "Create team",
         "submit": "Create team",
         "successSummary": "Team created",
         "errors": {
@@ -2783,6 +2784,18 @@
           "fallbackDetail": "Could not create the team. Please try again.",
           "conflictDetail": "A team with this name already exists.",
           "forbiddenDetail": "You are not allowed to create teams."
+        }
+      },
+      "editTeam": {
+        "title": "Edit team",
+        "openAria": "Edit {{name}}",
+        "submit": "Save",
+        "successSummary": "Team updated",
+        "errors": {
+          "summary": "Failed to update the team",
+          "fallbackDetail": "Could not update the team. Please try again.",
+          "conflictDetail": "This name is taken, or the team would be left without an active admin.",
+          "forbiddenDetail": "Only platform administrators can edit teams."
         }
       }
     },

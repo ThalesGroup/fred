@@ -2774,8 +2774,9 @@
         "title": "Créer une équipe",
         "nameLabel": "Nom de l'équipe",
         "namePlaceholder": "ex. swiftpost",
-        "adminsLabel": "Administrateur(s) initial(aux)",
+        "adminsLabel": "Administrateur(s) de l'équipe",
         "adminsPlaceholder": "Entrer un nom, prénom ou ID utilisateur",
+        "open": "Créer une équipe",
         "submit": "Créer l'équipe",
         "successSummary": "Équipe créée",
         "errors": {
@@ -2783,6 +2784,18 @@
           "fallbackDetail": "Impossible de créer l'équipe. Veuillez réessayer.",
           "conflictDetail": "Une équipe portant ce nom existe déjà.",
           "forbiddenDetail": "Vous n'avez pas les droits pour créer des équipes."
+        }
+      },
+      "editTeam": {
+        "title": "Modifier l'équipe",
+        "openAria": "Modifier {{name}}",
+        "submit": "Enregistrer",
+        "successSummary": "Équipe modifiée",
+        "errors": {
+          "summary": "Échec de la modification de l'équipe",
+          "fallbackDetail": "Impossible de modifier l'équipe. Veuillez réessayer.",
+          "conflictDetail": "Ce nom est déjà pris, ou l'équipe resterait sans administrateur actif.",
+          "forbiddenDetail": "Seuls les administrateurs de la plateforme peuvent modifier les équipes."
         }
       }
     },

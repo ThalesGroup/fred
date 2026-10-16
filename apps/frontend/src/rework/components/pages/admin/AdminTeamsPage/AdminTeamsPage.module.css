@@ -18,7 +18,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--spacing-xl);
+  gap: var(--spacing-l);
   margin: 0 auto;
   padding: var(--spacing-xl);
   width: 100%;
@@ -26,12 +26,37 @@
 }
 
 .existingTeamsSection,
-.defaultTeamSection,
-.createTeamSection {
+.defaultTeamSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  width: 100%;
+}
+
+/* TeamFormDialog body: fluid, the Dialog sizes it. */
+.teamForm {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
   width: 100%;
+}
+
+.teamNameCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.teamName,
+.teamDescription {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teamDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 .emptyTeamsMessage,
@@ -67,9 +92,4 @@
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
 }
