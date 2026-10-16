@@ -20,3 +20,11 @@
 - [x] 4.2 Accept only validated repeated markers in the bounded completed-message parser; verify all calls execute once, and adjacent, modified, unknown, or invalid later markers reconstruct no calls.
 - [x] 4.3 Withhold pending marked syntax when a completed response already has native calls, preserving safe prose and native IDs; verify neither assistant nor Planning events contain the encoded call.
 - [x] 4.4 Reconcile the execution contract and OpenSpec artifacts, run focused ReAct and Deep suites, strict OpenSpec validation, and the root quality gate; push the draft PR update and verify its checks.
+
+## 5. Streamed reasoning responses ([#3110](https://github.com/ThalesGroup/fred/issues/3110))
+
+- [x] 5.1 Add a regression fixture aggregated from one-block deltas (hundreds of thinking blocks, the sentinel between a split name and two calls) and a rendering test for a block without text; verify both fail on the current code.
+- [x] 5.2 Remove the content-block cap from the completed-message parser, keeping the character and call caps; verify the fixture recovers two calls and the remaining cap tests still reject.
+- [x] 5.3 Stop rendering the sentinel and tool-call blocks in `content_to_text`, render refusals as text, keep unknown blocks visible, and drop a closing-bracket residue after recovered calls; verify with renderer, residue and stream-bridge tests.
+- [x] 5.4 Add the dated execution-contract entry and a migration note; run the fred-runtime test and quality gates and strict OpenSpec validation.
+- [x] 5.5 Add regressions for empty or bare typed blocks streamed between deltas and for a plain answer containing a literal `{}`; skip content-less blocks in the parser. Verified: `tests/test_tool_call_recovery.py` 57 passed (the empty-blocks test failed before the parser change); fred-runtime `make test` 2145 passed, 11 skipped; ruff check, ruff `--select I`, ruff format and basedpyright clean (0 errors).

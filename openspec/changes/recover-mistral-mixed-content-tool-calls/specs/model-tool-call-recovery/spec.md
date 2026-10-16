@@ -6,13 +6,28 @@ Defines the narrow conditions under which provider-encoded assistant content can
 
 ### Requirement: Recover complete Mistral calls from typed and mixed content
 
-The runtime SHALL convert a completed Mistral assistant response into native tool calls only when an exact empty `reference` sentinel separates a currently registered tool name from complete JSON object arguments accepted by that tool's input schema. Adjacent text blocks and plain string fragments SHALL be interpreted in their original order, including when a tool name or JSON argument is split across fragments. Recovery SHALL be bounded and SHALL occur once per completed message. A later exact sentinel MAY separate another registered tool name from its arguments, provided the whole call sequence validates before any call is reconstructed.
+The runtime SHALL convert a completed Mistral assistant response into native tool calls only when an exact empty `reference` sentinel separates a currently registered tool name from complete JSON object arguments accepted by that tool's input schema. Adjacent text blocks and plain string fragments SHALL be interpreted in their original order, including when a tool name or JSON argument is split across fragments. Recovery SHALL be bounded by the recovered text size and call count, not by the number of content blocks, so a streamed response holding one block per delta remains recoverable, and SHALL occur once per completed message. A later exact sentinel MAY separate another registered tool name from its arguments, provided the whole call sequence validates before any call is reconstructed.
 
 #### Scenario: Mixed fragments encode two valid calls
 
 - **WHEN** a Mistral response contains text blocks and plain strings that together form a registered tool name, the exact empty sentinel, and two complete valid calls
 - **THEN** the runtime emits two native tool calls with the validated arguments, once each
 - **AND** it continues the agent loop using their tool results
+
+#### Scenario: Streamed response holds one block per delta
+
+- **WHEN** a streamed Mistral response is aggregated into hundreds of reasoning blocks followed by text blocks forming a registered tool name, the exact empty sentinel, and valid calls
+- **THEN** the runtime emits each validated call once, as for the same content in a few blocks
+
+#### Scenario: Streamed response holds empty blocks between deltas
+
+- **WHEN** a streamed Mistral response interleaves blocks without any content (`{}`, or a bare typed marker such as `{"type": "signature"}`) with the text blocks forming a registered tool name, the exact empty sentinel, and valid arguments
+- **THEN** the runtime ignores the content-less blocks and emits the validated call once
+
+#### Scenario: Plain answer containing literal braces
+
+- **WHEN** a Mistral answer contains a literal `{}` (for example a code snippet) with no exact sentinel after a registered tool name
+- **THEN** the response stays assistant text, unchanged, and no call is reconstructed
 
 #### Scenario: Repeated exact markers encode valid calls
 
@@ -46,7 +61,7 @@ The runtime MUST leave ordinary prose or quoted examples without the exact typed
 
 ### Requirement: Stream and execute recovered calls through normal controls
 
-The runtime SHALL keep the marker and recoverable call syntax out of assistant answer and reasoning events while the completed Mistral response is being resolved. A recovered call MUST pass the same access, human approval, budget, tracing, observability, and result-pairing controls as a native call. Text that is not part of a recovered call SHALL remain visible through the existing assistant or thought routing.
+The runtime SHALL keep the marker and recoverable call syntax out of assistant answer and reasoning events while the completed Mistral response is being resolved. A recovered call MUST pass the same access, human approval, budget, tracing, observability, and result-pairing controls as a native call. Text that is not part of a recovered call SHALL remain visible through the existing assistant or thought routing. Rendering into assistant text, conversation history, or replayed model context SHALL omit the sentinel and other known non-text call blocks (`reference`, `tool_use`, `tool_call`, `input_json_delta`), SHALL render a `refusal` block as its refusal text, and SHALL keep rendering any other block or non-dict object visibly. A residue made only of closing brackets or braces between or after recovered calls SHALL NOT remain as message content.
 
 #### Scenario: Recovered call completes
 
@@ -58,3 +73,9 @@ The runtime SHALL keep the marker and recoverable call syntax out of assistant a
 
 - **WHEN** a Mistral response has ordinary text or an unrecognized typed block and no recoverable complete call
 - **THEN** the text remains visible in the assistant answer without being executed
+
+#### Scenario: Unrecovered response keeps the sentinel out of text
+
+- **WHEN** a Mistral response containing the sentinel is not recovered
+- **THEN** its text fragments remain visible in order, without a rendering of the sentinel block
+- **AND** an unknown typed block in the same response remains visible

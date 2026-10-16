@@ -37,7 +37,6 @@ from ..react_model_adapter import (
 
 RECOVERED_TOOL_CALL_TEXT_METADATA_KEY = "fred_tool_call_text_recovered"
 
-_MAX_RECOVERY_BLOCKS = 256
 MAX_TOOL_CALL_RECOVERY_CHARS = 16_384
 MAX_TOOL_CALL_RECOVERY_NAME_CHARS = 256
 _MAX_RECOVERED_CALLS = 16
@@ -45,6 +44,16 @@ _TOOL_NAME_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
 )
 _FOLLOWUP_CALL = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,256})\s*(?=\{)")
+# Mistral can over-close the JSON it writes as text; a residue of closers alone
+# after a recovered call is not prose and must not reach the user as content.
+_CLOSER_RESIDUE = re.compile(r"\s*[\]}][\s\]}]*")
+# Keys that carry no visible content: streaming leaves `{}` or bare typed
+# markers (e.g. `{"type": "signature"}`) between deltas.
+_PAYLOADLESS_KEYS = frozenset({"type", "index", "id"})
+
+
+def _without_closer_residue(text: str) -> str:
+    return "" if _CLOSER_RESIDUE.fullmatch(text) else text
 
 
 class _DuplicateJsonKey(ValueError):
@@ -135,9 +144,9 @@ def _trailing_registered_name(
 def _anchored_text(
     content: object, tools_by_name: dict[str, BaseTool]
 ) -> tuple[str, list[tuple[str, str]]] | None:
+    # No block-count cap: streaming leaves one block per delta (hundreds of
+    # thinking blocks in a long turn). The text and call caps bound the work.
     if not isinstance(content, list):
-        return None
-    if len(content) > _MAX_RECOVERY_BLOCKS:
         return None
 
     before: list[str] = []
@@ -157,6 +166,12 @@ def _anchored_text(
             isinstance(block, dict)
             and block.get("type") == "thinking"
             and marked_name is None
+        ):
+            continue
+        elif (
+            isinstance(block, dict)
+            and block.get("type") not in ("text", "reference")
+            and block.keys() <= _PAYLOADLESS_KEYS
         ):
             continue
         elif is_tool_call_recovery_reference_block(block):
@@ -250,12 +265,12 @@ def _parse_sequence(
                 next_call = name, candidate_args, candidate.start(), end
                 break
         if next_call is None:
-            retained.append(text[position:])
+            retained.append(_without_closer_residue(text[position:]))
             break
         if len(parsed) >= max_calls:
             return None
         name, args, start, end = next_call
-        retained.append(text[position:start])
+        retained.append(_without_closer_residue(text[position:start]))
         parsed.append((name, args))
         position = end
     return parsed, "".join(retained)

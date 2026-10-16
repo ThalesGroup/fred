@@ -9,6 +9,7 @@ A live Deep turn using Mistral Medium 3.5 ended with two intended `read_query` i
 - Make the streamed-output bridge recognize the same mixed shape, withholding recoverable call syntax and the sentinel until the completed-message decision, while releasing ordinary text.
 - Accept repeated exact markers only when each one follows a registered tool name and all calls validate together. When a response already has native calls, withhold pending marked syntax from its streamed answer and Planning preamble while preserving those calls.
 - Add redacted regression fixtures based on the captured checkpoints, with ReAct and Deep checks for execution, UI output, and existing tool gates.
+- Follow-up [#3110](https://github.com/ThalesGroup/fred/issues/3110): a streamed reasoning response holds one content block per delta, so the 256-block cap rejected every long Mistral turn before parsing. Bound recovery by text size and call count only, stop rendering the sentinel and tool-call blocks as their Python repr in answers, history and replayed context (unknown blocks stay visible, refusals render as text), and drop a closing-bracket residue after recovered calls.
 
 ## Capabilities
 

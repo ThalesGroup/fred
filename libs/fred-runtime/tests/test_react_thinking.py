@@ -260,6 +260,25 @@ def test_content_to_text_matches_stringify() -> None:
     assert content_to_text(blocks) == "keep me" == stringify_langchain_content(blocks)
 
 
+def test_content_to_text_drops_blocks_without_text() -> None:
+    blocks = [
+        "build_presentation",
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": '{"slides": []}'},
+    ]
+    assert content_to_text(blocks) == 'build_presentation{"slides": []}'
+
+
+def test_content_to_text_renders_refusal_and_keeps_unknown_blocks() -> None:
+    unknown = {"type": "metadata", "value": "keep me"}
+    blocks = [
+        {"type": "refusal", "refusal": "I cannot help with that."},
+        {"type": "tool_use", "id": "call-1", "name": "ls", "input": {}},
+        unknown,
+    ]
+    assert content_to_text(blocks) == "I cannot help with that." + str(unknown)
+
+
 # ---------------------------------------------------------------------------
 # decode_stream_chunk — split reasoning fragments from answer text
 # ---------------------------------------------------------------------------

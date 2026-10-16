@@ -6407,7 +6407,7 @@ The exact empty sentinel is distinct from ordinary cited-answer blocks, which
 carry reference IDs. Native tool calls, including duplicates and their IDs, are
 preserved unchanged.
 
-Recovery is bounded, validates every call before allocating call IDs, and marks
+Recovery is bounded (by text size and call count, §8.116), validates every call before allocating call IDs, and marks
 the normalized message so the Mistral-gated streaming bridge withholds the typed
 marker and call syntax from assistant/reasoning SSE for the same mixed content
 shape. If a completed message already carries native calls and marked content,
@@ -7067,3 +7067,23 @@ OpenAPI or configuration change. Tests:
 `libs/fred-runtime/tests/test_react_tool_error_final_2244.py`.
 OpenSpec: `openspec/changes/keep-model-answer-after-failed-tool-round/`.
 Migration note: `docs/swift/ops/migrations/2588-keep-model-answer-after-failed-tool-round.md`.
+
+### 8.116 Recovery of streamed Mistral tool-call text (2026-10-14, #3110)
+
+The §8.92 recovery no longer caps the number of content blocks. A streamed
+response is aggregated with one block per provider delta, so a long reasoning
+turn ends with hundreds of `thinking` blocks and the former 256-block cap
+rejected it before parsing. The 16k-character cap on recovered text and the
+16-call cap remain the bounds; thinking blocks before the tool name are skipped,
+as are blocks with no content (`{}` or a bare typed marker) anywhere in the message.
+
+`content_to_text` (transcript, history and replay rendering) no longer renders
+the `reference` sentinel or tool-call blocks (`tool_use`, `tool_call`,
+`input_json_delta`) as their Python repr, so `{'type': 'reference', ...}` never
+appears in an answer, the stored history, or the context replayed to the model.
+A `refusal` block renders as its refusal text. Unknown block types and non-dict
+objects keep the visible `str()` fallback; text blocks, plain strings and
+reasoning handling are unchanged. Text made only of closing brackets or braces
+between or after recovered calls (Mistral over-closing its JSON) is dropped
+from the recovered message content.
+Migration note: `docs/swift/ops/migrations/3110-recover-streamed-mistral-tool-calls.md`.

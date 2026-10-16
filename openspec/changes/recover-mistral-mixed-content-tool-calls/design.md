@@ -30,15 +30,23 @@ Alternative: flatten the whole list through the generic text renderer and parse 
 
 ### Make the stream bridge recognize the same mixed shape
 
-Treat plain strings, typed text blocks, thinking blocks, and the exact empty sentinel as eligible content-list members when detecting the marker. Collect text on either side in order, and pass the joined fragments to the existing tool-name suffix probe. An unknown typed block keeps the generic rendering path so its text is not lost when recovery is rejected. Keep the current completed-message metadata decision: a recovered call discards its buffered encoding, while an unrecovered response releases buffered text. Do not broaden the branch for non-Mistral output.
+Treat plain strings, typed text blocks, thinking blocks, and the exact empty sentinel as eligible content-list members when detecting the marker. Collect text on either side in order, and pass the joined fragments to the existing tool-name suffix probe. An unknown typed block keeps the generic rendering path so its text is not lost when recovery is rejected (since #3110 the generic renderer drops only known non-text blocks; an unknown block still renders). Keep the current completed-message metadata decision: a recovered call discards its buffered encoding, while an unrecovered response releases buffered text. Do not broaden the branch for non-Mistral output.
 
-Alternative: hide every empty reference block in generic text rendering. That would mask the visible symptom but leave the tool unexecuted and could silently alter ordinary responses.
+Alternative: hide every empty reference block in generic text rendering. That would mask the visible symptom but leave the tool unexecuted and could silently alter ordinary responses. (Revisited for #3110: the generic renderer now drops only the call `reference` and tool-call blocks (`tool_use`, `tool_call`, `input_json_delta`), renders a `refusal` block as its refusal text, and keeps the visible fallback for unknown block types and non-dict objects. Hiding the sentinel is no longer a substitute for recovery, which now fires; it only stops its Python repr reaching answers, history and the model's replayed context, and no consumer reads that repr. Unknown blocks are not hidden, so ordinary responses keep everything they showed before.)
 
 ### Handle repeated markers and native calls without leaking syntax
 
 Allow a later exact marker only after another registered tool name. Remove only validated markers while preserving the original text bytes, then validate the entire call sequence before allocating any call IDs. Adjacent markers, modified references, malformed arguments, and a later marker without a registered name reject the whole recovery candidate.
 
 When the completed message already carries native tool calls, keep those calls and IDs. If its mixed content contains the exact marker, discard the pending marked stream buffer instead of releasing it as answer text and then reclassifying it as a Planning preamble. Safe prose emitted before the tool-name probe remains available as a preamble.
+
+### Bound recovery by text, not by content blocks (#3110)
+
+The parser first rejected lists longer than 256 blocks. A streamed response is aggregated by `AIMessageChunk.__add__`, which appends typed blocks without merging them, so a long reasoning turn arrives as hundreds of one-delta `thinking` blocks and every such recovery candidate was rejected before parsing. The cap is removed rather than raised: thinking blocks are skipped in constant time, and the 16k character cap and 16-call cap already bound the parsing work.
+
+Alternative: normalise the list (drop thinking, merge adjacent text) before applying the block cap. Same result with more code; no remaining bound depends on the block count.
+
+Mistral can also over-close the JSON it writes as text (the incident had a stray `}` after the first call). Text made only of closing brackets or braces, with optional whitespace, between or after recovered calls is dropped instead of being kept as the message content; any other text is retained as before.
 
 ### Reproduce from a redacted checkpoint shape
 

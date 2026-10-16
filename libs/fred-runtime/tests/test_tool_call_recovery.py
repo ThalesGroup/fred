@@ -36,7 +36,7 @@ from fred_sdk.contracts.models import ToolApprovalPolicy
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool, tool
 
 
@@ -549,14 +549,8 @@ async def test_deeply_nested_json_remains_assistant_text(
             "x" * 16_385,
             '"}',
         ],
-        [
-            *({"type": "thinking", "thinking": "x"} for _ in range(255)),
-            {"type": "text", "text": "ls"},
-            {"type": "reference", "reference_ids": []},
-            {"type": "text", "text": '{"path":"/"}'},
-        ],
     ],
-    ids=["character_cap", "call_cap", "mixed_character_cap", "block_cap"],
+    ids=["character_cap", "call_cap", "mixed_character_cap"],
 )
 async def test_recovery_caps_reject_before_creating_calls(
     content: str | list[str | dict[Any, Any]],
@@ -771,6 +765,133 @@ async def test_mixed_checkpoint_fragments_recover_two_calls(
     assert [
         (call["name"], call["args"]) for call in recovered.tool_calls
     ] == expected_calls
+
+
+@tool
+def build_presentation(
+    file_name: str | None = None,
+    slides: list[dict[str, Any]] | None = None,
+    changes: list[dict[str, Any]] | None = None,
+) -> str:
+    """Build or revise a fake deck."""
+
+    return "fake deck"
+
+
+def _streamed_content(deltas: list[str | dict[str, Any]]) -> list[str | dict[Any, Any]]:
+    """Aggregate one-block deltas the way a streamed model call does."""
+
+    message = AIMessageChunk(content="")
+    for delta in deltas:
+        message += AIMessageChunk(content=[delta])
+    assert isinstance(message.content, list)
+    return message.content
+
+
+@pytest.mark.asyncio
+async def test_streamed_call_with_one_block_per_delta_is_recovered() -> None:
+    # Reasoning streams one block per delta: a long turn ends with far more
+    # blocks than calls, and the recovery must still see the call.
+    first_args = (
+        '{"changes": [{"op": "replace", "slide": 2, '
+        '"slides": [{"kind": "agenda", "title": "Fake agenda"}]}]}'
+    )
+    second_call = (
+        'build_presentation{"file_name": "fake_deck", '
+        '"slides": [{"kind": "cover", "title": "Fake deck"}]}'
+    )
+    tail = f"{first_args}}} {second_call}"
+    content = _streamed_content(
+        [
+            *(
+                {"type": "thinking", "thinking": [{"type": "text", "text": "x"}]}
+                for _ in range(400)
+            ),
+            {"type": "text", "text": "build_"},
+            {"type": "text", "text": "presentation"},
+            {"type": "reference", "reference_ids": []},
+            *(
+                {"type": "text", "text": tail[i : i + 4]}
+                for i in range(0, len(tail), 4)
+            ),
+        ]
+    )
+    assert len(content) > 400
+
+    response, _ = await _recover_message(
+        AIMessage(
+            content=content, response_metadata={"model_name": "mistral-medium-latest"}
+        ),
+        tools=[build_presentation],
+    )
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    # The over-closing brace after the first call is not shown as content.
+    assert recovered.content == ""
+    assert [(call["name"], call["args"]) for call in recovered.tool_calls] == [
+        ("build_presentation", json.loads(first_args)),
+        (
+            "build_presentation",
+            {
+                "file_name": "fake_deck",
+                "slides": [{"kind": "cover", "title": "Fake deck"}],
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_streamed_call_with_empty_blocks_between_deltas_is_recovered() -> None:
+    args = '{"file_name": "fake_deck", "slides": [{"kind": "cover", "title": "Fake"}]}'
+    content = _streamed_content(
+        [
+            {"type": "text", "text": "build_"},
+            {},
+            {"type": "text", "text": "presentation"},
+            {"type": "signature"},
+            {"type": "reference", "reference_ids": []},
+            {},
+            *(
+                {"type": "text", "text": args[i : i + 8]}
+                for i in range(0, len(args), 8)
+            ),
+            {},
+        ]
+    )
+
+    response, _ = await _recover_message(
+        AIMessage(
+            content=content, response_metadata={"model_name": "mistral-medium-latest"}
+        ),
+        tools=[build_presentation],
+    )
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [(call["name"], call["args"]) for call in recovered.tool_calls] == [
+        ("build_presentation", json.loads(args))
+    ]
+
+
+@pytest.mark.asyncio
+async def test_plain_answer_with_literal_braces_stays_text() -> None:
+    content = _streamed_content(
+        [
+            {"type": "text", "text": "Pass an empty object to reset the deck:\n"},
+            {},
+            {"type": "text", "text": "```python\nbuild_presentation({})\n```"},
+        ]
+    )
+    original = AIMessage(
+        content=content, response_metadata={"model_name": "mistral-medium-latest"}
+    )
+
+    response, _ = await _recover_message(original, tools=[build_presentation])
+
+    assert response.result[0] is original
+    assert original.tool_calls == []
 
 
 @pytest.mark.asyncio
