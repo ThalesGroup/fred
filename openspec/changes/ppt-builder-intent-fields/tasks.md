@@ -28,6 +28,7 @@
 - [x] 3.3 `render.py` `fill_table`: `lastRow` set or cleared (D6); bold fallback with `intent_shown_otherwise`; highlight row/column resolved against the plan and mapped through the fit, bold + tinted accent, dark-style skip (D7)
 - [x] 3.4 `changes.py`: `table.total_row`, `table.highlight_row`, `table.highlight_column`
 - [x] 3.5 `tools.py`: the three fields only when the template has a `table` kind
+- [x] 3.6 Q9 (2026-10-16): highlight tint `lumMod 60 % lumOff 40 %`, paler `40 %` when the theme's `dk1` reads below 4.5:1 on it (`table_intents.tint_level`)
 - Verification: `test_table_intents.py` — `lastRow="1"` set on a predefined style, cleared on a template table that had it, bold fallback on a style without `a:lastRow`; row by index and by first-cell text, column by header text, out-of-range → note, header-less template shifts the row; tint references the style's accent (Accent 2 style → `accent2`); preview evidence of a total row and a highlighted row through LibreOffice
 
 ### 4. Key-figure trend
@@ -54,6 +55,7 @@ Needs `SlidePlan.takeaway` from `ppt-builder-storytelling` (field, checks, notes
 - [x] 6.1 `plan.py` `DeckPlan.show_takeaways: bool = False` (top-level build argument, one schema line, offered only with a takeaway zone, kept from the base by `changes`; the honoured flag goes on each slide as the hidden `takeaway_shown`); `lexicon.py` `SHOW_TAKEAWAY_WORDS` (fr/en), matched through the storytelling change's user-message lexicon helper; the flag without a matching user message ignored with one agent note
 - [x] 6.2 `render.py` `_assign_text`: with the flag honoured, the takeaway into the assigned slide's takeaway zone when it fits, bullets no longer fall into that zone then; otherwise (default) today's filling, no note. The filled zone counts for `_fullest` (assignment reads `_assign_text`)
 - [x] 6.3 `tools.py` catalogue: `takeaway zone ≤N words` on patterns holding the zone
+- [x] 6.4 Q10 (2026-10-16): `assign.py` `_shown` drops, with the flag honoured, the fits of a kind that cannot show the takeaway when one of that kind can (in `_fullest` and before `_kept`); `render.py` `_tell_takeaway`: `intent_not_shown` / `takeaway` and one agent note when it is still not shown; frontend wording `intent_not_shown_takeaway` (fr/en) and Help Center
 - Verification: `test_takeaway.py` — default (no flag): built-in chart slide's card filled from the bullets as before and the takeaway in the notes only; flag + "affiche les messages clés" in a user message: a short takeaway in the card; flag without such a message: card as before plus the agent note; a takeaway longer than the card left in the notes only with bullets filling the card; bullets slide without a zone unchanged; edit of `takeaway` refills the card when the flag is honoured
 
 ## Phase D — chart target (dropped)

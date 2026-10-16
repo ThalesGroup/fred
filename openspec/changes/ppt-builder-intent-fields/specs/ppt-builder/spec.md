@@ -52,7 +52,7 @@ The system SHALL reorder a chart's categories with all their values for `sort: d
 
 ### Requirement: Table and key-figure emphasis
 
-For `table.total_row: true`, the system SHALL apply the table style's own total-row formatting, and SHALL fall back to bold text with `intent_shown_otherwise` when the style defines none; when `total_row` is false or absent the system SHALL NOT leave a template's total-row formatting on the last data row. For `highlight_row` and `highlight_column`, given as an index or as the row's first-cell text or the column's header text, the system SHALL emphasise that row or column with bold text and a light tint of the table style's accent. For `items[].trend: up | down | flat`, the system SHALL show an arrow glyph before the item's figure in the figure's own text style, and SHALL NOT colour it by meaning.
+For `table.total_row: true`, the system SHALL apply the table style's own total-row formatting, and SHALL fall back to bold text with `intent_shown_otherwise` when the style defines none; when `total_row` is false or absent the system SHALL NOT leave a template's total-row formatting on the last data row. For `highlight_row` and `highlight_column`, given as an index or as the row's first-cell text or the column's header text, the system SHALL emphasise that row or column with bold text and a tint of the table style's theme accent that differs from the style's own row bands, paler when the theme's dark text would not stay readable on it. For `items[].trend: up | down | flat`, the system SHALL show an arrow glyph before the item's figure in the figure's own text style, and SHALL NOT colour it by meaning.
 
 #### Scenario: Total row on a predefined table style
 
@@ -69,7 +69,13 @@ For `table.total_row: true`, the system SHALL apply the table style's own total-
 #### Scenario: Highlighted row by its text
 
 - **WHEN** the model sends `highlight_row: "Offer B"` and a body row's first cell is "Offer B"
-- **THEN** that row's text is bold and its cells are tinted with the table style's accent
+- **THEN** that row's text is bold and its cells are tinted with the table style's accent, stronger than the style's banded and unbanded rows
+
+#### Scenario: Highlight on a dark accent
+
+- **GIVEN** a theme whose table accent is too dark for the theme's text on the strong tint
+- **WHEN** the model sends a highlighted row
+- **THEN** the row is tinted with a paler shade of the same accent and its text is bold
 
 #### Scenario: Rising key figure
 
@@ -83,7 +89,7 @@ For `table.total_row: true`, the system SHALL apply the table style's own total-
 
 ### Requirement: Slide takeaway
 
-The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. By default the system SHALL fill a takeaway zone as before this change, from the slide's content, and SHALL leave the takeaway in the speaker notes only. The system SHALL write the takeaway into the zone only when the plan sets `show_takeaways`, a user message of the conversation explicitly asks for key messages or takeaways to be shown, the assigned template slide has a takeaway zone and the takeaway fits its room; it SHALL then NOT fill that zone from `bullets`. In every other case the zone SHALL be filled as before and the takeaway SHALL stay in the speaker notes only, without a refusal or a summary note; `show_takeaways` without such a user message SHALL be ignored with an agent note. The takeaway SHALL NOT change which kind of slide is assigned; a takeaway written into its zone SHALL count as filling that zone when slides of one kind are compared on the zones they leave empty.
+The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. By default the system SHALL fill a takeaway zone as before this change, from the slide's content, and SHALL leave the takeaway in the speaker notes only. The system SHALL write the takeaway into the zone only when the plan sets `show_takeaways`, a user message of the conversation explicitly asks for key messages or takeaways to be shown, the assigned template slide has a takeaway zone and the takeaway fits its room; it SHALL then NOT fill that zone from `bullets`. In every other case the zone SHALL be filled as before and the takeaway SHALL stay in the speaker notes, without a refusal; when `show_takeaways` is honoured the slide's summary SHALL then hold `intent_not_shown` for `takeaway`. `show_takeaways` without such a user message SHALL be ignored with an agent note. The takeaway SHALL NOT change which kind of slide is assigned; a takeaway written into its zone SHALL count as filling that zone when slides of one kind are compared on the zones they leave empty, and with `show_takeaways` honoured the system SHALL prefer, among template slides of one kind, one that can show the takeaway over one that cannot.
 
 #### Scenario: Takeaway kept off the slide by default
 
@@ -105,9 +111,15 @@ The analysis SHALL mark at most one text zone per pattern as a takeaway zone whe
 
 #### Scenario: Takeaway without a zone
 
-- **GIVEN** a template whose bullets slide has no takeaway zone
-- **WHEN** the model sends a bullets slide with a takeaway
-- **THEN** the body holds the bullets only, the takeaway is in the speaker notes, and the summary holds no note for it
+- **GIVEN** a template whose bullets slide has no takeaway zone and a user message asking to show key messages
+- **WHEN** the model sends `show_takeaways: true` and a bullets slide with a takeaway
+- **THEN** the body holds the bullets only, the takeaway is in the speaker notes, and the summary holds `intent_not_shown` for `takeaway`
+
+#### Scenario: Chart slides on request prefer the takeaway card
+
+- **GIVEN** the built-in template and a user message asking to show key messages
+- **WHEN** the model sends `show_takeaways: true` and two chart slides with a takeaway each
+- **THEN** both are built on the chart slide with the takeaway card, each card holding its takeaway, rather than one on the wide chart slide
 
 #### Scenario: Takeaway zone detected by name
 
@@ -118,4 +130,4 @@ The analysis SHALL mark at most one text zone per pattern as a takeaway zone whe
 #### Scenario: Takeaway longer than the zone
 
 - **WHEN** the user asked to show key messages and the model sends `show_takeaways: true` with a chart slide holding one bullet and a takeaway longer than the built-in template's takeaway card holds
-- **THEN** the bullet fills the takeaway card as before this change and the takeaway is in the speaker notes only
+- **THEN** the bullet fills the takeaway card as before this change, the takeaway is in the speaker notes only, and the agent is told to shorten it

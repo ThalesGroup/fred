@@ -14,7 +14,7 @@ One cross-cutting rule, then eight optional fields in three phases (a fourth, th
   - A sorted bar chart draws the first of the sorted order on top (the data is fed in reverse); an unsorted bar chart is unchanged.
 - **Phase B — tables and key figures** (render-time detection, no re-analysis):
   - `table.total_row: bool`: the table style's own total-row formatting (`lastRow` flag), else bold.
-  - `table.highlight_row` / `table.highlight_column`: an index or the row's first-cell / the column's header text; bold and a light tint of the table style's accent.
+  - `table.highlight_row` / `table.highlight_column`: an index or the row's first-cell / the column's header text; bold and a tint of the table style's accent, stronger than its row bands.
   - `items[i].trend: up | down | flat`: a ▲ ▼ ► glyph before the figure, in the figure's own text style; no colour.
 - **Phase C — slide takeaway** (re-analysis):
   - the slide's `takeaway` (field owned by `ppt-builder-storytelling`) placed in the template's takeaway zone (shape name or vision purpose) only when the user explicitly asked to show key messages (`show_takeaways`, checked against the user's words) and it fits; by default the zone is filled from the slide's content as before and the takeaway stays in the speaker notes only (owner, 2026-10-15).
