@@ -84,7 +84,7 @@ teams page: every card shows a description.
 
 ## Rollback
 
-Downgrade the control-plane database to revision `93427a5fe874` **with this
+Downgrade the control-plane database to revision `d4e8b2a6f091` **with this
 release**, then redeploy the previous one: the previous release does not know
 the revision and cannot downgrade it. A previous control-plane running against
 the upgraded database cannot create a team (it sends no description, the

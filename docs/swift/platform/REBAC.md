@@ -341,7 +341,7 @@ who runs them) — none of them grant the caller a team relation. Three are
 `platform_admin`-only; the read-only listing is delegable:
 
 - **`can_list_all_teams`** → `GET /teams/all`: every team in the registry,
-  regardless of the caller's own membership. The one of the three that is
+  regardless of the caller's own membership. The only one of the four that is
   delegable — `team_manager` and `feature_manager` both need the roster to
   render their own page (see below). Read-only, and it reaches no team
   *content* — but it is not just names and ids: the route returns the full
