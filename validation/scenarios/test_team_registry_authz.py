@@ -23,7 +23,8 @@ capabilities that grant nothing about a team's own content:
 admin), `can_list_all_teams` (`GET /teams/all`, bypasses the caller's own
 CAN_READ visibility filter), `can_delete_team` (`DELETE /teams/{id}`), and
 `can_rescue_team_admin` (`POST /teams/{id}/rescue-admin`, only succeeds when
-the team currently has zero team_admin).
+the team currently has zero team_admin), and `can_edit_team_registry`
+(`PATCH /teams/{id}/registry`, name, description and admins of any team).
 
 The `NON_PLATFORM_ADMINS` denial checks below read as "not platform_admin =>
 403" only because the validation fixtures seed no delegated-role holder. The
@@ -31,7 +32,8 @@ first two capabilities are no longer platform-admin-only: `can_create_team` is
 `platform_admin or team_manager` and `can_list_all_teams` also admits
 `feature_manager`. Seed a `team_manager` in `users.json` and these two
 parametrizations must be narrowed to the users who hold neither role - only
-`can_delete_team` and `can_rescue_team_admin` are platform-admin-only for good.
+`can_delete_team`, `can_rescue_team_admin` and `can_edit_team_registry` are
+platform-admin-only for good.
 
 What this file does NOT attempt: driving a team to a genuine zero-admin state
 through the public API. `remove_team_member` (full member removal) and
@@ -215,6 +217,38 @@ def test_platform_admin_cannot_rescue_a_team_that_still_has_an_admin(
     assert admin_ids == {_jwt_sub(token_for("oscar"))}, (
         f"rescue-admin must write no relation when refused; team_admin set is now {admin_ids!r}"
     )
+
+
+@pytest.mark.parametrize("username", [u for u in NON_PLATFORM_ADMINS if u != "oscar"])
+def test_non_platform_admin_cannot_edit_team_registry(username: str, disposable_team, cp) -> None:
+    """A non-platform-admin cannot edit a team's registry entry, even oscar as its admin. [username={username}]"""
+    resp = cp(username).patch(f"/teams/{disposable_team['id']}/registry", json={"name": f"deny-{uuid.uuid4().hex[:8]}"})
+    assert resp.status_code == 403, (
+        f"{username} is not platform_admin, yet edited a team's registry entry: {resp.status_code} {resp.text[:200]}"
+    )
+
+
+def test_platform_admin_edits_a_team_and_keeps_one_admin(disposable_team, cp, token_for) -> None:
+    """The platform admin renames the disposable team and swaps oscar for nina, but cannot leave it adminless."""
+    admin = cp(_platform_admin_username())
+    oscar_sub = _jwt_sub(token_for("oscar"))
+    nina_sub = _jwt_sub(token_for("nina"))
+    team_path = f"/teams/{disposable_team['id']}/registry"
+
+    orphaning = admin.patch(team_path, json={"remove_admin_ids": [oscar_sub]})
+    assert orphaning.status_code == 409, (
+        f"removing the only team_admin must be refused, got {orphaning.status_code} {orphaning.text[:200]}"
+    )
+
+    new_name = f"val-registry-edited-{uuid.uuid4().hex[:8]}"
+    edited = admin.patch(team_path, json={"name": new_name, "add_admin_ids": [nina_sub]})
+    assert edited.status_code == 200, f"{edited.status_code} {edited.text[:200]}"
+    assert edited.json()["name"] == new_name
+    nina_is_active = nina_sub in {a["id"] for a in edited.json().get("admins", [])}
+
+    # Without nina's charter acceptance, removing oscar would leave no active admin.
+    swapped = admin.patch(team_path, json={"remove_admin_ids": [oscar_sub]})
+    assert swapped.status_code == (200 if nina_is_active else 409), f"{swapped.status_code} {swapped.text[:200]}"
 
 
 @pytest.mark.parametrize("username", NON_PLATFORM_ADMINS)

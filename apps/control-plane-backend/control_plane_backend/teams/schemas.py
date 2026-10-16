@@ -21,7 +21,7 @@ from typing import Literal
 from fred_core import JoiningMode, RelationType, TeamPermission, TeamVisibility
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamDescription, reject_null_description
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from control_plane_backend.marketplace_settings.schemas import TeamMarketplaceView
 from control_plane_backend.scheduler.policies.policy_models import (
@@ -324,21 +324,12 @@ class GrantTeamMemberRoleRequest(BaseModel):
         return relation
 
 
-class UpdateTeamRequest(BaseModel):
-    # A team_admin may rename their own team through this surface (the route is
-    # gated on `can_update_info`, which is exactly `team_admin` in schema.fga).
+class _TeamIdentityPatch(BaseModel):
+    """Name and description as both team edit surfaces accept them: omitted
+    keeps the stored value, an explicit ``null`` is refused."""
+
     name: str | None = Field(default=None, min_length=1, max_length=180)
     description: TeamDescription | None = None
-    joining_mode: JoiningMode | None = None
-    visibility: TeamVisibility | None = None
-    avatar_image_url: str | None = Field(default=None, max_length=300)
-    # CTRLP-12 (RFC §3.B): per-team retention, patched through the team surface.
-    # Partial semantics (exclude_unset): an omitted field keeps its current
-    # stored value, an explicit ``null`` clears it (re-inherit the platform cap).
-    # ISO-8601 durations validated here; the cap check ("team may only tighten")
-    # is enforced server-side in `update_team` (422 via `RetentionUpdateError`).
-    team_delete_grace: str | None = Field(default=None, min_length=1)
-    max_idle: str | None = Field(default=None, min_length=1)
 
     @field_validator("name")
     @classmethod
@@ -355,10 +346,42 @@ class UpdateTeamRequest(BaseModel):
     def _reject_null_description(cls, value: str | None) -> str | None:
         return reject_null_description(value)
 
+
+class UpdateTeamRequest(_TeamIdentityPatch):
+    # A team_admin may rename their own team through this surface (the route is
+    # gated on `can_update_info`, which is exactly `team_admin` in schema.fga).
+    joining_mode: JoiningMode | None = None
+    visibility: TeamVisibility | None = None
+    avatar_image_url: str | None = Field(default=None, max_length=300)
+    # CTRLP-12 (RFC §3.B): per-team retention, patched through the team surface.
+    # Partial semantics (exclude_unset): an omitted field keeps its current
+    # stored value, an explicit ``null`` clears it (re-inherit the platform cap).
+    # ISO-8601 durations validated here; the cap check ("team may only tighten")
+    # is enforced server-side in `update_team` (422 via `RetentionUpdateError`).
+    team_delete_grace: str | None = Field(default=None, min_length=1)
+    max_idle: str | None = Field(default=None, min_length=1)
+
     @field_validator("team_delete_grace", "max_idle")
     @classmethod
     def _validate_optional_durations(cls, value: str | None) -> str | None:
         return _validate_optional_duration(value)
+
+
+class EditTeamRegistryRequest(_TeamIdentityPatch):
+    """Platform admin edit of any team (`PATCH /teams/{team_id}/registry`).
+
+    Admins change as a diff against the roster the caller saw, so pending
+    nominations it never displayed and concurrent team-admin changes survive.
+    """
+
+    add_admin_ids: list[str] = Field(default_factory=list)
+    remove_admin_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _reject_admin_in_both_lists(self) -> EditTeamRegistryRequest:
+        if set(self.add_admin_ids) & set(self.remove_admin_ids):
+            raise ValueError("A user cannot be both added and removed as admin.")
+        return self
 
 
 class RemoveTeamMemberResponse(BaseModel):

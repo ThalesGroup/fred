@@ -54,6 +54,7 @@ from fred_core.teams.metadata_store import (
     TEAM_DESCRIPTION_PLACEHOLDER,
     TeamMetadata,
     TeamMetadataPatch,
+    TeamMetadataStore,
 )
 from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
@@ -95,6 +96,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     CreateTeamRequest,
     DefaultTeamForNewUsers,
+    EditTeamRegistryRequest,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RetentionFieldView,
@@ -1104,16 +1106,7 @@ async def update_team(
     if request.model_fields_set:
         patch_data = request.model_dump(exclude_unset=True)
         store = deps.get_team_metadata_store()
-        renamed_from: str | None = None
-        # Renaming to the current name is a no-op, not a conflict. Any other
-        # name must be free: `teammetadata.name` is globally unique, so this
-        # pre-check turns the common collision into a 409 instead of a 500.
-        if patch_data.get("name") == metadata.name:
-            patch_data.pop("name")
-        elif "name" in patch_data:
-            if await store.get_by_name(patch_data["name"]):
-                raise TeamAlreadyExistsError(patch_data["name"])
-            renamed_from = metadata.name
+        renamed_from = await _prepare_rename(store, metadata, patch_data)
         # The public API exposes the team image as `avatar_image_url`, but the
         # storage layer (fred_core `TeamMetadataPatch`) still speaks `banner_*`
         # (#2300 Option A: the DB column keeps its legacy name, no migration).
@@ -1156,24 +1149,9 @@ async def update_team(
             else:
                 updated = await store.upsert(team_id, patch)
         except IntegrityError as exc:
-            # `name` is the only unique-constrained column, and the pre-check
-            # above is a fast path only - this is what closes the race between
-            # two concurrent renames onto the same name.
-            if "name" not in patch_data:
-                raise
-            raise TeamAlreadyExistsError(patch_data["name"]) from exc
+            raise _name_conflict_or(exc, patch_data) from exc
         emit_unpublished(removed, actor_uid=user.uid)
-        if renamed_from is not None:
-            # Nothing else records a rename: there is no team audit table, and
-            # the bundle importer reconciles teams by name, so a duplicate team
-            # appearing on a later import is only explainable from this line.
-            logger.info(
-                "Team %s renamed from '%s' to '%s' by %s",
-                team_id,
-                renamed_from,
-                patch_data["name"],
-                user.uid,
-            )
+        _log_rename(team_id, renamed_from, patch_data, user)
         if updated is not None:
             metadata = updated
         if "visibility" in patch_data:
@@ -1204,6 +1182,169 @@ async def update_team(
                 consistency_token = public_token
 
     return await _build_team_with_permissions(user, metadata, deps, consistency_token)
+
+
+async def _prepare_rename(
+    store: TeamMetadataStore, metadata: TeamMetadata, patch_data: dict
+) -> str | None:
+    """Drop a rename to the current name; refuse a name another team holds.
+
+    Returns the previous name when the patch renames the team. The pre-check
+    turns the common collision into a 409; the unique index closes the race.
+    """
+    if patch_data.get("name") == metadata.name:
+        patch_data.pop("name")
+        return None
+    if "name" not in patch_data:
+        return None
+    if await store.get_by_name(patch_data["name"]):
+        raise TeamAlreadyExistsError(patch_data["name"])
+    return metadata.name
+
+
+def _name_conflict_or(exc: IntegrityError, patch_data: dict) -> Exception:
+    # `name` is the only unique-constrained column of the team row.
+    if "name" not in patch_data:
+        return exc
+    return TeamAlreadyExistsError(patch_data["name"])
+
+
+def _log_rename(
+    team_id: TeamId, renamed_from: str | None, patch_data: dict, user: KeycloakUser
+) -> None:
+    # The bundle importer reconciles teams by name, so a duplicate team on a
+    # later import is only explainable from this line.
+    if renamed_from is not None:
+        logger.info(
+            "Team %s renamed from '%s' to '%s' by %s",
+            team_id,
+            renamed_from,
+            patch_data["name"],
+            user.uid,
+        )
+
+
+async def edit_team_registry(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: EditTeamRegistryRequest,
+    deps: TeamServiceDependencies,
+) -> TeamWithPermissions:
+    """Rename, describe and change the admins of any team (platform admin).
+
+    Admins change as a diff. Every check (name free, at least one active
+    admin left) runs before any write, so a refusal changes nothing. Full
+    rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md "platform admin team editing".
+    """
+    rebac = deps.rebac
+    await rebac.check_user_permission_or_raise(
+        user,
+        OrganizationPermission.CAN_EDIT_TEAM_REGISTRY,
+        ORGANIZATION_ID,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+    )
+    store = deps.get_team_metadata_store()
+    metadata = await store.get_by_team_id(team_id)
+    if metadata is None:
+        raise TeamNotFoundError(team_id)
+
+    patch_data = request.model_dump(include={"name", "description"}, exclude_unset=True)
+    if patch_data.get("description") == metadata.description:
+        patch_data.pop("description")
+    removed_ids = set(request.remove_admin_ids)
+    async with store.advisory_lock(_team_member_role_lock_key(team_id)):
+        renamed_from = await _prepare_rename(store, metadata, patch_data)
+        added = {
+            user_id: await resolve_granted_team_relation(
+                user_id, UserTeamRelation.TEAM_ADMIN, deps
+            )
+            for user_id in dict.fromkeys(request.add_admin_ids)
+        }
+        if added or removed_ids:
+            await _ensure_registry_edit_keeps_an_admin(
+                rebac, team_id, added, removed_ids
+            )
+        for user_id, relation in added.items():
+            await _add_team_member_relation(rebac, team_id, user_id, relation)
+        for user_id in removed_ids:
+            await _demote_team_admin(rebac, team_id, user_id)
+        if patch_data:
+            try:
+                updated = await store.upsert(
+                    team_id, TeamMetadataPatch.model_validate(patch_data)
+                )
+            except IntegrityError as exc:
+                raise _name_conflict_or(exc, patch_data) from exc
+            if updated is not None:
+                metadata = updated
+
+    _log_rename(team_id, renamed_from, patch_data, user)
+    if patch_data or added or removed_ids:
+        emit_audit_log(
+            "team.registry.edited",
+            actor_uid=user.uid,
+            team_id=str(team_id),
+            changed_fields=sorted(patch_data),
+            admins_added=sorted(added),
+            admins_removed=sorted(removed_ids),
+        )
+    return await _build_team_with_permissions(
+        user, metadata, deps, RebacEngine.HIGHER_CONSISTENCY
+    )
+
+
+async def _ensure_registry_edit_keeps_an_admin(
+    rebac: RebacEngine,
+    team_id: TeamId,
+    added: dict[str, UserTeamRelation],
+    removed_ids: set[str],
+) -> None:
+    current = await _get_team_users_by_relation(
+        rebac,
+        team_id,
+        RelationType.TEAM_ADMIN,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+    )
+    active_added = {
+        user_id
+        for user_id, relation in added.items()
+        if relation == UserTeamRelation.TEAM_ADMIN
+    }
+    if (current - removed_ids) | active_added:
+        return
+    if len(active_added) < len(added):
+        raise TeamAdminConstraintError(
+            "A new admin has not accepted the team administrator charter yet: "
+            "keep the current admin until they accept."
+        )
+    raise TeamAdminConstraintError(
+        "Operation denied: a team must keep at least one team_admin."
+    )
+
+
+async def _demote_team_admin(rebac: RebacEngine, team_id: TeamId, user_id: str) -> None:
+    """Drop `team_admin` and `pending_team_admin`; the user stays a member."""
+    roles = await _get_user_roles_in_team(
+        rebac, team_id, user_id, consistency_token=RebacEngine.HIGHER_CONSISTENCY
+    )
+    admin_roles = {UserTeamRelation.TEAM_ADMIN, UserTeamRelation.PENDING_TEAM_ADMIN}
+    if not roles & admin_roles:
+        return
+    if not roles - admin_roles:
+        await _add_team_member_relation(
+            rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
+        )
+    await rebac.delete_relations(
+        [
+            Relation(
+                subject=RebacReference(Resource.USER, user_id),
+                relation=role.to_relation(),
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+            for role in sorted(roles & admin_roles)
+        ]
+    )
+    invalidate_team_relations_cache(team_id)
 
 
 async def _remove_published_agents_of_private_team(
