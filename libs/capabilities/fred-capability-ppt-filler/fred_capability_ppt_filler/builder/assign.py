@@ -32,7 +32,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple
 
-from fred_capability_ppt_filler.builder import charts, lexicon
+from fred_capability_ppt_filler.builder import charts, lexicon, table_intents
 from fred_capability_ppt_filler.builder.models import (
     SLIDE_KINDS,
     Pattern,
@@ -975,7 +975,11 @@ def _parts(slide: _Slide, count: int) -> List[_Slide]:
             update["items"] = plan.items[start : start + size]
         elif table is not None:
             update["table"] = PlanTable(
-                header=table.header, rows=rows[start : start + size]
+                header=table.header,
+                rows=rows[start : start + size],
+                total_row=table.total_row and k == count,
+                highlight_row=table_intents.part_row(table, start, size, k == 1),
+                highlight_column=table.highlight_column,
             )
         found.append(
             _Slide(

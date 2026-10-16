@@ -141,6 +141,7 @@ BuildNoteCode = Literal[
     "layout_repeated",
     "layout_not_repeated",
     "intent_not_shown",
+    "intent_shown_otherwise",
     "illustrative_data",
     "figures_unverified",
     "wide_range_chart",
@@ -154,7 +155,7 @@ class BuildNote(BaseModel):
     count: Optional[int] = None
     # The requested kind (`other_kind`) or chart type (`chart_type_changed`).
     kind: Optional[str] = None
-    # The plan field an intent note is about (`intent_not_shown`): "highlight", "sort"...
+    # The plan field an intent note is about: "highlight", "total_row", "trend"...
     field: Optional[str] = None
 
 

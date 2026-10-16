@@ -107,6 +107,7 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanItem,
     PlanTable,
     SlidePlan,
+    Trend,
     field_hints,
     has_content,
     without_hidden,
@@ -272,6 +273,13 @@ def multi_chart(inventory: TemplateInventory) -> bool:
     )
 
 
+def trend_figures(inventory: TemplateInventory) -> bool:
+    """Whether items show a figure an arrow can lead (`trend` is offered)."""
+    return any(
+        "number" in g.item_zones for p in assignable(inventory) for g in p.groups
+    )
+
+
 def catalogue(inventory: TemplateInventory) -> str:
     """One line per kind the template offers, with every distinct variant: its
     label and what it holds. A hidden variant is one the model never writes for."""
@@ -299,6 +307,7 @@ def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
         field_hints(assignable(inventory)),
         bool(chart_hosts(inventory)),
         multi_chart(inventory),
+        trend_figures(inventory),
     )
 
 
@@ -340,10 +349,20 @@ def _schema_for(
     hints: Tuple[Tuple[str, str], ...],
     charts: bool = False,
     several: bool = False,
+    trends: bool = False,
 ) -> type[BaseModel]:
     rooms = dict(hints)
+    # Offered only where an item shows a figure: the arrow leads it.
+    trend: Any = (
+        (Optional[Trend], PlanItem.model_fields["trend"])
+        if trends
+        else (SkipJsonSchema[Optional[Trend]], None)
+    )
     item = create_model(
-        "BuildItem", __base__=PlanItem, **_hinted("Item", PlanItem, rooms, "items.")
+        "BuildItem",
+        __base__=PlanItem,
+        **_hinted("Item", PlanItem, rooms, "items."),
+        trend=trend,
     )
     column = create_model(
         "BuildColumn",
@@ -1143,6 +1162,7 @@ def _description(
     kinds = offered_kinds(inventory)
     charts = chart_hosts(inventory)
     several = multi_chart(inventory)
+    trends = trend_figures(inventory)
     rules = ""
     if "cover" in kinds:
         rules += " The first slide is always the template's cover."
@@ -1176,8 +1196,16 @@ def _description(
         "not on cover, agenda, section, closing and quote slides), then its content: title "
         "(short), subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
-        "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
-        + ("table {header, rows} for tabular data, " if "table" in kinds else "")
+        "heading, text, label, image"
+        + (", trend (up, down or flat: an arrow before the number)" if trends else "")
+        + "}], image/images (document_ids from list_images_in_folder), "
+        + (
+            "table {header, rows} for tabular data (total_row: true when the last row "
+            "is a total; highlight_row, highlight_column: the first cell or header of "
+            "the one row or column that matters), "
+            if "table" in kinds
+            else ""
+        )
         + (
             "chart {type, categories, series [{name, values}], title, unit, show} for numbers "
             "(data only: the template sets its colours, fonts and place; a pie or doughnut "

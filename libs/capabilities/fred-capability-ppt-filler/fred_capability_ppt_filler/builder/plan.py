@@ -141,12 +141,19 @@ def _ignored(value: Dict[str, Any], known: set[str]) -> List[str]:
     ]
 
 
+# A key figure's direction, shown as an arrow glyph before it (never a colour).
+Trend = Literal["up", "down", "flat"]
+TREND_GLYPHS: Dict[str, str] = {"up": "▲", "down": "▼", "flat": "►"}
+
 # The catalogue shows these zone roles; a model naturally reuses them as keys.
 _ITEM_ALIASES = {
     "body": "text",
     "description": "text",
     "value": "number",
     "title": "heading",
+    "direction": "trend",
+    "evolution": "trend",
+    "tendency": "trend",
 }
 _COLUMN_ALIASES = {
     "title": "heading",
@@ -205,7 +212,14 @@ class PlanItem(BaseModel):
         default=None,
         description="document_id of an image for the item, from list_images_in_folder.",
     )
+    trend: Optional[Trend] = Field(
+        default=None,
+        description="Optional, with a number: up, down or flat, shown as an arrow "
+        "before the figure.",
+    )
 
+    # A `trend` naming no direction: the text sent, for the note.
+    asked_trend: SkipJsonSchema[Optional[str]] = None
     ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
 
     @model_validator(mode="before")
@@ -215,8 +229,16 @@ class PlanItem(BaseModel):
             return {"heading": _as_text(value)}
         renamed = _with_aliases(value, _ITEM_ALIASES)
         texts = {k: _as_text(renamed.get(k)) for k in ITEM_KEYS}
+        trend, asked = _named(renamed.get("trend"), _TREND_NAMES)
+        if not trend and _empty(renamed.get("trend")):
+            asked = value.get("asked_trend")
         known = set(cls.model_fields) | set(_ITEM_ALIASES)
-        return {**texts, "ignored_fields": _ignored(value, known)}
+        return {
+            **texts,
+            "trend": trend,
+            "asked_trend": None if trend else asked,
+            "ignored_fields": _ignored(value, known),
+        }
 
 
 class PlanColumn(BaseModel):
@@ -244,6 +266,41 @@ class PlanColumn(BaseModel):
         }
 
 
+_TABLE_ALIASES = {
+    "total": "total_row",
+    "totals_row": "total_row",
+    "has_total": "total_row",
+    "last_row_total": "total_row",
+    "highlighted_row": "highlight_row",
+    "emphasis_row": "highlight_row",
+    "highlighted_column": "highlight_column",
+    "emphasis_column": "highlight_column",
+}
+
+
+def _total(value: Any) -> bool:
+    """A loose yes, or a word naming the last row ("last", "dernière")."""
+    if as_flag(value):
+        return True
+    text = (
+        lexicon.normalize(_as_text(_seq(value)[0]) or "") if not _empty(value) else ""
+    )
+    return text in ("last", "last row", "derniere", "derniere ligne", "oui", "total")
+
+
+def _reference(value: Any) -> Optional[int | str]:
+    """A row or column named by its index or its text; the first of a list."""
+    first = _seq(value)[0] if not _empty(value) else None
+    if isinstance(first, bool) or first is None:
+        return None
+    if isinstance(first, int):
+        return first
+    if isinstance(first, float) and first.is_integer():
+        return int(first)
+    text = (_as_text(first) or "").strip()
+    return text[:60] or None
+
+
 def _cells(value: Any) -> List[str]:
     if isinstance(value, dict):
         value = list(value.values())
@@ -263,6 +320,20 @@ class PlanTable(BaseModel):
         default_factory=list,
         description="Rows of cells, each as many cells as the header; short text.",
     )
+    total_row: bool = Field(
+        default=False,
+        description="Optional: true when the last row is a total, shown as one.",
+    )
+    highlight_row: Optional[int | str] = Field(
+        default=None,
+        description="Optional: the one row that matters, by its first cell's text or "
+        "its index in rows (from 0).",
+    )
+    highlight_column: Optional[int | str] = Field(
+        default=None,
+        description="Optional: the one column that matters, by its header text or "
+        "its index (from 0).",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -271,6 +342,12 @@ class PlanTable(BaseModel):
             value = {"rows": value}
         if not isinstance(value, dict):
             return {"rows": [[_as_text(value) or ""]]}
+        value = _with_aliases(value, _TABLE_ALIASES)
+        intents = {
+            "total_row": _total(value.get("total_row")),
+            "highlight_row": _reference(value.get("highlight_row")),
+            "highlight_column": _reference(value.get("highlight_column")),
+        }
         header = value.get("header") or value.get("headers") or value.get("columns")
         rows = value.get("rows") or value.get("data") or value.get("body") or []
         if not isinstance(rows, (list, tuple)):
@@ -295,6 +372,7 @@ class PlanTable(BaseModel):
             if header_cells
             else [],
             "rows": [r + [""] * (width - len(r)) for r in cells],
+            **intents,
         }
 
     @property
@@ -419,6 +497,25 @@ _STACKED_NAMES: Dict[str, StackedAs] = {
     **dict.fromkeys(
         ("value", "values", "absolute", "number", "numbers", "valeur", "valeurs"),
         "value",
+    ),
+}
+_TREND_NAMES: Dict[str, Trend] = {
+    **dict.fromkeys(
+        ("up", "rising", "rise", "increase", "increasing", "growth", "growing")
+        + ("higher", "positive", "hausse", "en hausse", "augmentation", "croissance")
+        + ("monte", "progression", "↑", "▲", "+"),
+        "up",
+    ),
+    **dict.fromkeys(
+        ("down", "falling", "fall", "decrease", "decreasing", "decline", "lower")
+        + ("negative", "baisse", "en baisse", "diminution", "recul", "descend")
+        + ("↓", "▼"),
+        "down",
+    ),
+    **dict.fromkeys(
+        ("flat", "stable", "steady", "unchanged", "constant", "level", "same")
+        + ("inchange", "stagnation", "→", "►", "="),
+        "flat",
     ),
 }
 _NUMBER = re.compile(r"^([^\d+\-.,]*?)\s*([+\-]?\d[\d\s.,']*)\s*(\D*)$")

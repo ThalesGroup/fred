@@ -49,7 +49,13 @@ from pptx.parts.chart import ChartPart
 from pptx.util import Emu
 
 from fred_capability_ppt_filler import text_metrics
-from fred_capability_ppt_filler.builder import charts, checks, lexicon, notes
+from fred_capability_ppt_filler.builder import (
+    charts,
+    checks,
+    lexicon,
+    notes,
+    table_intents,
+)
 from fred_capability_ppt_filler.builder.analysis import (
     _cell_text,
     _font_name_of,
@@ -65,6 +71,7 @@ from fred_capability_ppt_filler.builder.models import (
 )
 from fred_capability_ppt_filler.builder.plan import (
     MIN_FONT_SCALE,
+    TREND_GLYPHS,
     DeckPlan,
     PlanChart,
     PlanItem,
@@ -75,7 +82,7 @@ from fred_capability_ppt_filler.builder.plan import (
     shown_charts,
     slide_charts,
 )
-from fred_capability_ppt_filler.fill import BuiltSlide
+from fred_capability_ppt_filler.fill import BuildNoteCode, BuiltSlide
 from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
 from fred_capability_ppt_filler.pptx_archive import open_presentation
@@ -534,6 +541,26 @@ def _write_paragraphs(txBody, lines: Sequence[_Line]) -> None:
                     rPr.set("i", "1")
 
 
+# The arrow before a key figure, against the figure's own size.
+_GLYPH_SCALE = 0.6
+
+
+def _shrink_trend_glyph(shape, base_pt: Optional[float]) -> None:
+    """Split a figure's leading arrow into its own run, smaller, in the
+    figure's own font and colour."""
+    run = shape.text_frame._txBody.find(f"{qn('a:p')}/{qn('a:r')}")
+    text = run.text if run is not None else ""
+    if not text or text[0] not in TREND_GLYPHS.values():
+        return
+    glyph = copy.deepcopy(run)
+    glyph.text, run.text = text[:2], text[2:]
+    run.addprevious(glyph)
+    rPr = glyph.get_or_add_rPr()
+    size = int(rPr.get("sz")) / 100 if rPr.get("sz") else base_pt
+    if size:
+        rPr.set("sz", str(max(600, int(size * _GLYPH_SCALE * 100))))
+
+
 def _clear_text(shape) -> None:
     _write_lines(shape, [])
 
@@ -764,6 +791,9 @@ class TableFit:
     scale: Optional[float] = None
     heights: List[float] = field(default_factory=list)  # pt, header row first
     problem: Optional[Tuple[str, str]] = None
+    # Plan row i is fit row i - shift: 1 when the plan's first row became the
+    # header, -1 when its header went into the body.
+    shift: int = 0
 
 
 def _cell_lines(widths_em: Sequence[float], room_em: float) -> int:
@@ -825,7 +855,13 @@ def fit_table(zone: Zone, table: PlanTable) -> TableFit:
         found = [spec.row_height(n, scale) for n in lines(scale)]
         if sum(found) <= spec.height_pt + TABLE_SLACK_PT:
             return TableFit(
-                header, rows, widths, None if scale == 1.0 else scale, found
+                header,
+                rows,
+                widths,
+                None if scale == 1.0 else scale,
+                found,
+                None,
+                first,
             )
 
     full, floor = lines(1.0), lines(MIN_FONT_SCALE)
@@ -1148,6 +1184,9 @@ def _assign_group(
                 text[zone.key] = _lead_lines(item, at)
             elif zone.role == "number":
                 value = item.number or _auto_number(zone.sample, start + index)
+                if item.trend and item.number:
+                    # A thin space after the arrow: it reads as part of the figure.
+                    value = f"{TREND_GLYPHS[item.trend]}\u2009{value}"
                 text[zone.key] = (
                     _lines_from_bullets([value], at + "number") if value else []
                 )
@@ -1402,9 +1441,16 @@ class _Renderer:
         """A finding the after-check report does not carry: sent to the agent."""
         self.report.notes.append(note)
 
-    def _tell_intent(self, position: int, name: str, note: str) -> None:
-        """An intent built without: one agent line per text, naming every slide."""
-        self.report.note("intent_not_shown", field=name)
+    def _tell_intent(
+        self,
+        position: int,
+        name: str,
+        note: str,
+        code: BuildNoteCode = "intent_not_shown",
+    ) -> None:
+        """An intent built without (or drawn otherwise): one agent line per
+        text, naming every slide."""
+        self.report.note(code, field=name)
         line, slides = self._intents.get(note) or (len(self.report.notes), [])
         if not slides:
             self.report.notes.append("")
@@ -1486,6 +1532,7 @@ class _Renderer:
             _unused_item_fields(pattern.groups, plan, (self.width, self.height))
         )
         hosted = self._fill_charts(slide, pattern, plan, index, text, position, lost)
+        self._tell_trends(pattern, plan, position)
 
         for group in pattern.groups:
             group_text, group_images, used = _assign_group(
@@ -1581,6 +1628,8 @@ class _Renderer:
                     zone, lines, self.width, self.height, font_name, bold
                 )
             _write_lines(shape, lines)
+            if zone.role == "number":
+                _shrink_trend_glyph(shape, zone.font_pt)
             # Registered even when it needs no shrinking: a sibling that does is
             # what decides the size of the set.
             scaled.setdefault(_sibling_key(zone, pattern), []).append(
@@ -1713,6 +1762,35 @@ class _Renderer:
                 "Nothing to do; never send them."
             )
 
+    def _tell_trends(self, pattern: Pattern, plan: SlidePlan, position: int) -> None:
+        """Trends the slide cannot draw: no figure zone, no figure, or a word
+        naming no direction."""
+        shown = plan.items[: max((g.count for g in pattern.groups), default=0)]
+        figures = any("number" in g.item_zones for g in pattern.groups)
+        for index, item in enumerate(shown):
+            at = f"items[{index}].trend"
+            if item.asked_trend:
+                self._tell_intent(
+                    position,
+                    "trend",
+                    f"{at} '{item.asked_trend}' is not a direction; built without "
+                    "its arrow. Use 'up', 'down' or 'flat', or drop it.",
+                )
+            elif item.trend and figures and not item.number:
+                self._tell_intent(
+                    position,
+                    "trend",
+                    f"{at} needs the item's number: the arrow goes before a figure. "
+                    "Give items[].number, or drop the trend.",
+                )
+        if not figures and any(item.trend for item in shown):
+            self._tell_intent(
+                position,
+                "trend",
+                "items' trend was not shown: this slide shows no figure for its items. "
+                "Nothing to do; drop items[].trend, or use a slide showing figures.",
+            )
+
     def _tell_axes(self, chart: PlanChart, where: str, at: str) -> None:
         """Axis fields the chart type does not draw: said, never dropped quietly."""
         drawn = _AXIS_FIELDS if chart.type == "bubble" else ()
@@ -1770,6 +1848,12 @@ class _Renderer:
         removed = fill_table(frame, zone, fit)
         if removed:
             report.removed.extend(removed)
+        tbl = frame._element.find(f".//{qn('a:tbl')}")
+        head = zone.table is not None and zone.table.header
+        for name, code, note in table_intents.emphasise(
+            self.prs, tbl, table, bool(head), fit.shift
+        ):
+            self._tell_intent(position, name, note, code)
         if fit.scale is not None:
             report.shrunk.append(f"table text at {round(fit.scale * 100)} % to fit")
             self.report.note("table_text_smaller")

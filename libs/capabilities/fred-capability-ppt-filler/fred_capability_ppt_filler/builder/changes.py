@@ -219,8 +219,16 @@ _FIELDS: Dict[str, Dict[str, _Type]] = {
         REPEAT: "flag",
     },
     "column": {"heading": "text", "bullets": ("list", "text")},
-    "item": {k: "text" for k in ("number", "heading", "text", "label", "image")},
-    "table": {"header": ("list", "text"), "rows": ("list", ("list", "text"))},
+    "item": {
+        k: "text" for k in ("number", "heading", "text", "label", "image", "trend")
+    },
+    "table": {
+        "header": ("list", "text"),
+        "rows": ("list", ("list", "text")),
+        "total_row": "flag",
+        "highlight_row": "text",
+        "highlight_column": "text",
+    },
     "chart": {
         "type": "text",
         "title": "text",
