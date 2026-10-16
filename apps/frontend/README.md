@@ -411,7 +411,7 @@ the URL is unset or an empty literal, the frontend is disabled, or either key is
 which is a hard failure for what is only branding. With it the fetch degrades to
 anonymous and the baked assets are served.
 
-The k3d values (`deploy/k3d/values.yaml`) use
+The k3d values (fred-deployment-factory's `k3d-apps/fred/values.yaml`) use
 `http://seaweedfs:8333/fred-themes/theme.zip`, reusing the stack chart's own
 `fred-secrets`.
 Upload a new ZIP to the `fred-themes/theme.zip` object in SeaweedFS, then
