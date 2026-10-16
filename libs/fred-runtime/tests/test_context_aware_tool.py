@@ -204,3 +204,298 @@ def test_context_aware_tool_respects_agent_scoped_library() -> None:
     )
 
     assert injected["document_library_tags_ids"] == ["lib-agent"]
+
+
+class _TabularTool(BaseTool):
+    name: str = "list_tabular_documents"
+    description: str = "List tabular documents."
+    args_schema: ArgsSchema | None = {
+        "type": "object",
+        "properties": {
+            "attachment_uids": {"type": "array", "items": {"type": "string"}},
+            "include_session_scope": {"type": "boolean"},
+            "include_corpus_scope": {"type": "boolean"},
+            "corpus_document_uids": {"type": "array", "items": {"type": "string"}},
+            "document_library_tags_ids": {"type": "array", "items": {"type": "string"}},
+            "sql": {"type": "string"},
+        },
+    }
+    calls: list[dict[str, Any]] = []
+
+    def _run(self, **kwargs: Any) -> str:
+        raise NotImplementedError
+
+    async def _arun(self, **kwargs: Any) -> str:
+        kwargs.pop("config", None)
+        self.calls.append(kwargs)
+        return "ok"
+
+
+@pytest.fixture
+def tabular_wrapper(monkeypatch):
+    from types import SimpleNamespace
+
+    import fred_runtime.common.context_aware_tool as module
+    import httpx
+
+    context = RuntimeContext(
+        session_id="session-1", team_id="team-1", access_token="test-token"
+    )
+    requests = []
+    inventory = {
+        "session-1": [{"document_uid": "attached-1"}],
+        "session-2": [{"document_uid": "attached-2"}],
+    }
+
+    class Client:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def _request_with_token_refresh(self, _method, path, **_kwargs):
+            requests.append(path)
+            session = path.split("/")[-2]
+            if session not in inventory:
+                raise httpx.HTTPStatusError(
+                    "Forbidden",
+                    request=httpx.Request("GET", "https://cp.invalid"),
+                    response=httpx.Response(403),
+                )
+            return httpx.Response(200, json=inventory[session])
+
+    monkeypatch.setattr(module, "KfBaseClient", Client)
+    monkeypatch.setattr(
+        module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                control_plane_url="https://cp.invalid",
+                control_plane_http_client=object(),
+            )
+        ),
+    )
+    agent = SimpleNamespace(
+        runtime_context=context,
+        agent_settings=_FakeAgentSettings(),
+        document_access_config={"attachments": True, "team_documents": True},
+    )
+    agent.inventory = inventory
+    tool = _TabularTool()
+    wrapper = ContextAwareTool(
+        tool,
+        lambda: agent.runtime_context,
+        lambda: agent.agent_settings,
+        agent_context=agent,
+    )
+    return wrapper, tool, agent, requests
+
+
+@pytest.mark.asyncio
+async def test_tabular_no_argument_call_uses_authoritative_inventory(tabular_wrapper):
+    wrapper, tool, _agent, requests = tabular_wrapper
+    assert "attachment_uids" not in wrapper.args_schema["properties"]
+    assert "attachment_uids" in tool.args_schema["properties"]
+    assert (
+        await wrapper._arun(
+            attachment_uids=["forged"], session_id="forged", include_corpus_scope=False
+        )
+        == "ok"
+    )
+    assert tool.calls[-1]["attachment_uids"] == ["attached-1"]
+    assert tool.calls[-1]["include_corpus_scope"] is True
+    assert requests == ["/teams/team-1/sessions/session-1/attachments"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("session", "corpus"), [(True, False), (False, True), (False, False)]
+)
+async def test_tabular_source_ceilings_cannot_be_widened(
+    tabular_wrapper, session, corpus
+):
+    wrapper, tool, agent, requests = tabular_wrapper
+    agent.document_access_config = {"attachments": session, "team_documents": corpus}
+    await wrapper._arun(include_session_scope=True, include_corpus_scope=True)
+    assert tool.calls[-1]["include_session_scope"] is session
+    assert tool.calls[-1]["include_corpus_scope"] is corpus
+    assert bool(requests) is session
+
+
+@pytest.mark.asyncio
+async def test_tabular_scope_refreshes_between_conversations_and_after_deletion(
+    tabular_wrapper,
+):
+    wrapper, tool, agent, requests = tabular_wrapper
+    await wrapper._arun()
+    agent.runtime_context = agent.runtime_context.model_copy(
+        update={"session_id": "session-2"}
+    )
+    await wrapper._arun()
+    assert [call["attachment_uids"] for call in tool.calls] == [
+        ["attached-1"],
+        ["attached-2"],
+    ]
+    assert len(requests) == 2
+    agent.inventory["session-2"] = []
+    await wrapper._arun()
+    assert tool.calls[-1]["attachment_uids"] == []
+    assert tool.calls[-1]["include_session_scope"] is False
+
+
+@pytest.mark.asyncio
+async def test_tabular_membership_failure_does_not_call_tool(tabular_wrapper):
+    wrapper, tool, agent, _requests = tabular_wrapper
+    agent.runtime_context = agent.runtime_context.model_copy(
+        update={"session_id": "refused-session"}
+    )
+    result = await wrapper._arun()
+    assert "Error:" in result
+    assert tool.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tabular_general_only_has_no_document_inventory(tabular_wrapper):
+    wrapper, tool, agent, requests = tabular_wrapper
+    agent.runtime_context = agent.runtime_context.model_copy(
+        update={"search_rag_scope": "general_only"}
+    )
+    await wrapper._arun()
+    assert tool.calls[-1]["include_session_scope"] is False
+    assert tool.calls[-1]["include_corpus_scope"] is False
+    assert requests == []
+
+
+@pytest.mark.asyncio
+async def test_tabular_library_and_document_selection_are_kept_separate(
+    tabular_wrapper,
+):
+    wrapper, tool, agent, _requests = tabular_wrapper
+    agent.document_access_config.update(
+        bind_libraries=True,
+        library_tag_ids=["finance"],
+        document_uids=["picked", "another"],
+    )
+    agent.runtime_context = agent.runtime_context.model_copy(
+        update={
+            "selected_document_libraries_ids": ["outside"],
+            "selected_document_uids": ["picked"],
+        }
+    )
+    await wrapper._arun()
+    assert tool.calls[-1]["document_library_tags_ids"] == []
+    assert tool.calls[-1]["corpus_document_uids"] == ["picked"]
+    assert tool.calls[-1]["include_corpus_scope"] is True
+    agent.runtime_context = agent.runtime_context.model_copy(
+        update={"selected_document_uids": ["outside"]}
+    )
+    await wrapper._arun()
+    assert tool.calls[-1]["include_corpus_scope"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("execution_model", ["react", "deep"])
+async def test_native_agents_share_tabular_discovery_scope(
+    tabular_wrapper, execution_model, tmp_path
+):
+    from langchain.agents import create_agent
+    from langchain_core.messages import AIMessage, HumanMessage
+    from test_deep_compiled_filesystem_tools import _ScriptedModel
+
+    wrapper, _tool, agent, requests = tabular_wrapper
+    tools = []
+    names = ["list_tabular_documents", "describe_tabular_documents", "read_query"]
+    for name in names:
+        base = _TabularTool(name=name)
+        tools.append(
+            ContextAwareTool(
+                base,
+                lambda: agent.runtime_context,
+                lambda: agent.agent_settings,
+                agent_context=agent,
+            )
+        )
+    model = _ScriptedModel(
+        disable_streaming=True,
+        custom_get_token_ids=lambda text: list(range(len(text) // 4)),
+        script=[
+            AIMessage(
+                content="", tool_calls=[{"id": str(index), "name": name, "args": args}]
+            )
+            for index, (name, args) in enumerate(
+                zip(
+                    names,
+                    [
+                        {},
+                        {"document_uids": ["attached-1"]},
+                        {
+                            "dataset_uids": ["attached-1"],
+                            "sql": "SELECT COUNT(*) FROM attachment",
+                        },
+                    ],
+                    strict=True,
+                )
+            )
+        ]
+        + [AIMessage(content="done")],
+    )
+    import asyncio
+
+    if execution_model == "react":
+        compiled = create_agent(model=model, tools=tools)
+        result = await asyncio.wait_for(
+            compiled.ainvoke(
+                {
+                    "messages": [
+                        HumanMessage(
+                            content="Discover, describe and query my spreadsheets"
+                        )
+                    ]
+                }
+            ),
+            timeout=10,
+        )
+        assert result["messages"][-1].content == "done"
+    else:
+        from fred_core.filesystem.local_filesystem import LocalFilesystem
+        from fred_runtime.conversation_filesystem import ConversationFilesystemService
+        from fred_runtime.deep.deep_runtime import (
+            _create_compiled_deep_agent,
+            build_conversation_filesystem,
+        )
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        filesystem = ConversationFilesystemService(
+            LocalFilesystem(str(tmp_path)), "conversation-a"
+        )
+        backend, permissions = build_conversation_filesystem(filesystem)
+        compiled = _create_compiled_deep_agent(
+            model=model,
+            tools=tools,
+            system_prompt="Discover, describe and query",
+            checkpointer=InMemorySaver(),
+            middleware=[],
+            subagent_middleware=[],
+            backend=backend,
+            permissions=permissions,
+        )
+        tool_node = getattr(compiled, "get_graph")().nodes["tools"].data
+        for index, (name, args) in enumerate(
+            zip(
+                names,
+                [
+                    {},
+                    {"document_uids": ["attached-1"]},
+                    {
+                        "dataset_uids": ["attached-1"],
+                        "sql": "SELECT COUNT(*) FROM attachment",
+                    },
+                ],
+                strict=True,
+            )
+        ):
+            registered_tool = tool_node.tools_by_name[name]
+            assert isinstance(registered_tool, ContextAwareTool)
+            assert await registered_tool._arun(**args) == "ok"
+    assert len(requests) == 3
+    assert [tool.base_tool.calls[0]["attachment_uids"] for tool in tools] == [
+        ["attached-1"]
+    ] * 3

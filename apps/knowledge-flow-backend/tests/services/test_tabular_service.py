@@ -969,6 +969,9 @@ async def test_excel_attachment_uses_corpus_tables_and_roadmap(tmp_path, metadat
 
     service = TabularService()
     service.rebac = _FakeRebac(set())
+    inventory = await service.list_documents(_user(), attachment_uids=["excel-attachment"])
+    assert len(inventory) == 1 and inventory[0].source_kind == "conversation_attachment"
+    assert [table.query_alias for table in inventory[0].tables] == [table.query_alias for table in multi.tables]
     schemas = await service.describe_documents(_user(), ["excel-attachment"])
     assert len(schemas[0].tables) == 2
     assert schemas[0].markdown == roadmap
@@ -2320,3 +2323,100 @@ async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rebac_disabled", [False, True])
+@pytest.mark.parametrize(("session", "corpus"), [(True, True), (True, False), (False, True), (False, False)])
+async def test_document_discovery_unions_scoped_sources(tmp_path, metadata_store, monkeypatch, rebac_disabled, session, corpus):
+    async def persist(_service, _user, metadata):
+        await metadata_store.save_metadata(metadata)
+
+    monkeypatch.setattr(MetadataService, "save_document_metadata", persist)
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="corpus", file_name="sales.csv", content="city,amount\nParis,10\n", tag_ids=["finance"], tag_names=["Finance"])
+    await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="attached", file_name="sales.csv", content="city,amount\nLyon,20\n", uploaded_by="u-1")
+    await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="other-session", file_name="private.csv", content="city,amount\nRome,30\n", uploaded_by="u-1")
+    await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="other-user", file_name="foreign.csv", content="city,amount\nBerlin,40\n", uploaded_by="u-2")
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled() if rebac_disabled else _FakeRebac({"corpus"})
+    scope = dict(attachment_uids=["attached", "attached", "other-user", "missing"], include_session_scope=session, include_corpus_scope=corpus)
+    documents = await service.list_documents(_user(), **scope)
+    expected = ({"attached"} if session else set()) | ({"corpus"} if corpus else set())
+    assert {document.document_uid for document in documents} == expected
+    assert len(documents) == len(expected)
+    for document in documents:
+        assert document.source_kind == ("conversation_attachment" if document.document_uid == "attached" else "corpus")
+    if session:
+        descriptions = await service.describe_documents(_user(), ["attached"], **scope)
+        alias = descriptions[0].tables[0].query_alias
+        result = await service.query_read(_user(), request=TabularQueryRequest(sql=f'SELECT SUM(amount) AS total FROM "{alias}"', dataset_uids=["attached"], **scope))
+        assert result.rows == [{"total": 20}]
+    with pytest.raises((PermissionError, FileNotFoundError)):
+        await service.describe_documents(_user(), ["other-session"], **scope)
+    with pytest.raises((PermissionError, FileNotFoundError)):
+        await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT 1", dataset_uids=["other-session"], **scope))
+    with pytest.raises((PermissionError, FileNotFoundError)):
+        await service.search_values(_user(), request=TabularSearchRequest(keyword="Rome", dataset_uids=["other-session"], **scope))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("libraries", "documents", "expected"),
+    [
+        (["lib-A"], ["doc-B"], {"doc-A", "doc-B"}),
+        (["lib-A"], ["outside-owner"], {"doc-A"}),
+        ([], ["doc-B"], {"doc-B"}),
+        (["lib-A"], [], {"doc-A"}),
+        (None, ["doc-B"], {"doc-B"}),
+    ],
+)
+async def test_corpus_selection_union_remains_inside_owner_scope(monkeypatch, libraries, documents, expected):
+    from unittest.mock import AsyncMock
+
+    import knowledge_flow_backend.features.tabular.service as module
+
+    service = object.__new__(TabularService)
+    service.rebac = _FakeRebac({"doc-A", "doc-B", "outside-owner"})
+    rows = [_metadata(document_uid=uid, file_name=uid + ".csv", tag_ids=[tag]) for uid, tag in [("doc-A", "lib-A"), ("doc-B", "lib-B"), ("outside-owner", "lib-foreign")]]
+    service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=rows))
+    service._resolve_scope_tag_ids = AsyncMock(return_value={"lib-A", "lib-B"})
+    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    datasets = await service._resolve_authorized_datasets(
+        _user(), include_session_scope=False, owner_filter=OwnerFilter.TEAM, team_id="team-1", document_library_tags_ids=libraries, corpus_document_uids=documents
+    )
+    assert {dataset.metadata.document_uid for dataset in datasets} == expected
+
+
+@pytest.mark.asyncio
+async def test_scoped_inventory_excludes_unready_legacy_and_removed_attachments(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    import knowledge_flow_backend.features.tabular.service as module
+
+    service = object.__new__(TabularService)
+    rows = [_attachment_metadata(document_uid=uid, file_name=uid + ".csv", uploaded_by=owner) for uid, owner in [("ready", "u-1"), ("unready", "u-1"), ("legacy", "u-1"), ("foreign", "u-2")]]
+    rows[0].mark_stage_done(ProcessingStage.SQL_INDEXED)
+    rows[3].mark_stage_done(ProcessingStage.SQL_INDEXED)
+    service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=rows))
+    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: None if metadata.document_uid == "legacy" else object())
+    requested = [row.document_uid for row in rows]
+    datasets = await service._resolve_authorized_datasets(_user(), include_corpus_scope=False, attachment_uids=requested)
+    assert [dataset.metadata.document_uid for dataset in datasets] == ["ready"]
+    assert service.metadata_store.get_metadata_by_uids.await_count == 1
+    service.metadata_store.get_metadata_by_uids.return_value = []
+    assert await service._resolve_authorized_datasets(_user(), include_corpus_scope=False, attachment_uids=requested) == []
+
+
+@pytest.mark.asyncio
+async def test_corpus_grant_does_not_replace_attachment_ownership(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    import knowledge_flow_backend.features.tabular.service as module
+
+    service = object.__new__(TabularService)
+    service.rebac = _FakeRebac({"foreign"})
+    foreign = _attachment_metadata(document_uid="foreign", file_name="private.csv", uploaded_by="u-2")
+    service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=[foreign]))
+    service._resolve_scope_tag_ids = AsyncMock(return_value=None)
+    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    assert await service._resolve_authorized_datasets(_user(), attachment_uids=["foreign"]) == []

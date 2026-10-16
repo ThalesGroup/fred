@@ -127,10 +127,12 @@ def test_document_list_returns_only_names_identifiers_and_excel_tables(tabular_c
     response = client.get("/tabular/documents")
     assert response.status_code == 200
     assert response.json() == [
-        {"document_uid": "csv-uid", "document_name": "Sales.csv"},
+        {"document_uid": "csv-uid", "document_name": "Sales.csv", "source_kind": "corpus", "tag_names": ["Finance"]},
         {
             "document_uid": "excel-uid",
             "document_name": "Budget.xlsx",
+            "source_kind": "corpus",
+            "tag_names": ["Finance"],
             "tables": [{"query_alias": "q1-alias", "sheet": "Q1", "title": "Revenue"}],
         },
     ]
