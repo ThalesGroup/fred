@@ -308,8 +308,8 @@ if docker exec "${frontend}" sh -c "tr '\\0' '\\n' < /proc/1/environ" |
     echo "The theme store credential survived into the nginx environment" >&2
     exit 1
 fi
-# nginx escapes the quote as \x22 in its access log.
-expect_store_log '/theme.zip?X-Amz-Signature=not-for-the-logs authorization="AWS4-HMAC-SHA256 Credential=theme\x22key/'
+# curl percent-encodes the quote in the SigV4 credential before sending it.
+expect_store_log '/theme.zip?X-Amz-Signature=not-for-the-logs authorization="AWS4-HMAC-SHA256 Credential=theme%22key/'
 
 # An archive made from a folder is unwrapped; without keys the request is anonymous.
 start_frontend -e "FRONTEND_THEME_URL=${theme_url}/wrapped.zip"

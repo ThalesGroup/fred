@@ -17,3 +17,11 @@ No product capability or public contract changes are intended. This security mai
 - Shared Python dependency installation recipe and the three production Python Dockerfiles.
 - Package composition of released images, build time, and deployment rollback guidance.
 - No API, database, frontend behavior, or configuration contract change.
+
+## Follow-up: published image assessment
+
+The authorized full-component pass follows issues #3149, #3150 and #3152 on the
+existing remediation branch, without opening a PR. Assess all four publishable
+images and shared SDK dependency constraints. Remove unnecessary tooling and
+Knowledge Flow's unused LangChain agent runtime; refresh affected dependencies
+without changing application APIs, workflow definitions or storage contracts.

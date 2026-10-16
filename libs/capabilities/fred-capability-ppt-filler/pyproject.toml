@@ -1,14 +1,14 @@
 [project]
 name = "fred-capability-ppt-filler"
-version = "4.5.0"
+version = "4.5.1"
 description = "Fred agent capability: fill an uploaded PowerPoint template from chat (ppt_filler)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.5.0",
-  "fred-sdk[agents]>=4.5.0",
+  "fred-core>=4.5.3",
+  "fred-sdk[agents]>=4.5.3",
   "pydantic>=2.7.0,<3.0.0",
   "python-pptx>=1.0.2",
   "Pillow>=10.0.0",
