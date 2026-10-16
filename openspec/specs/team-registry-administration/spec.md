@@ -1,8 +1,9 @@
-## Purpose
+# team-registry-administration Specification
 
+## Purpose
 Defines what platform-level administrators may do to a collaborative team's registry entry from the admin Teams page: create a team, and edit its name, description and team admins, under rules that keep every team named, described and administered.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Platform admins edit a team's registry entry
 
@@ -53,16 +54,21 @@ The request SHALL name admins to add and admins to remove. An added user SHALL b
 
 ### Requirement: Registry edits are audited
 
-Every successful registry edit SHALL emit one audit event naming the actor, the team, the fields changed, and the user ids added and removed as admins. A refused edit SHALL emit none.
+Every successful registry edit SHALL emit one audit event naming the actor, the team, the fields changed, and the user ids added and removed as admins. A refused edit SHALL emit none. An edit that fails after its admin changes were written SHALL still emit the event, with no field listed as changed.
 
 #### Scenario: Audit event on edit
 
 - **WHEN** a platform admin renames a team and adds one admin
 - **THEN** one audit event records the actor, the team id, the name change and the added user id
 
+#### Scenario: Rename lost to a race after the admin change
+
+- **WHEN** a platform admin renames a team and adds one admin, and another team takes the name before the rename is written
+- **THEN** the edit answers 409, the admin stays added, and one audit event records the added user id with no changed field
+
 ### Requirement: Admin Teams page creates and edits teams in one dialog
 
-The admin Teams page SHALL show a "Create team" action in its header to every caller allowed to create teams. It SHALL open a dialog with the name, the description (required) and the team admins (at least one), and SHALL create the team on confirm. For a caller holding `can_edit_team_registry`, each team row SHALL offer an "Edit" action opening the same dialog prefilled with the team's name, description and admins; confirming SHALL send only what changed. The confirm action SHALL stay disabled while a required field is empty or invalid. Every label and message SHALL exist in French and English.
+The admin Teams page SHALL show a "Create team" action in its header to every caller allowed to create teams. It SHALL open a dialog with the name, the description (required) and the team admins (at least one), and SHALL create the team on confirm. For a caller holding `can_edit_team_registry`, each team row SHALL offer an "Edit" action opening the same dialog prefilled with the team's name, description and admins; confirming SHALL send only what changed. The confirm action SHALL stay disabled while a required field is empty or invalid. Escape SHALL NOT close the dialog, so a draft is not lost by accident. The admin search SHALL open from two characters with localized searching and no-match messages, above the dialog rather than clipped by it. Every label and message SHALL exist in French and English.
 
 #### Scenario: Create from the header
 
