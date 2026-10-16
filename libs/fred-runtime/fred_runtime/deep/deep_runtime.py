@@ -28,9 +28,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Collection, Mapping, Sequence
+from dataclasses import replace
 from typing import cast
 
-from deepagents.backends import CompositeBackend
+from deepagents.backends import CompositeBackend, FilesystemBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from fred_core.kpi import BaseKPIWriter
@@ -42,6 +43,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     TracerPort,
 )
+from fred_sdk.contracts.skills import SkillsPort
 from langchain.agents.middleware import AgentMiddleware, TodoListMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -94,6 +96,7 @@ from fred_runtime.react.react_tool_binding import (
 )
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
+from fred_runtime.skills.catalog import PlatformSkills
 
 logger = logging.getLogger(__name__)
 
@@ -191,11 +194,31 @@ class DeepAgentRuntime(ReActRuntime):
         capability_block = self._capability_block
         _reject_capability_filesystem_middleware(capability_block)
 
+        capability_filesystem = self.services.conversation_filesystem
+        if isinstance(capability_filesystem, DeepConversationFilesystemPort):
+            backend, permissions = mount_skills(
+                capability_filesystem.backend,
+                capability_filesystem.permissions,
+                self.services.skills,
+            )
+        else:
+            backend, permissions = build_conversation_filesystem(
+                self._conversation_filesystem, skills=self.services.skills
+            )
+        filesystem = (
+            DeepConversationFilesystemPort(backend, permissions)
+            if isinstance(capability_filesystem, DeepConversationFilesystemPort)
+            or self.services.skills is not None
+            else capability_filesystem
+        )
+        services = replace(self.services, conversation_filesystem=filesystem)
+
         runtime_tools = ReActRuntimeToolResolver(
             declared_tool_refs=self.definition.declared_tool_refs,
             toolset_key=self._toolset_key(),
-            services=self.services,
+            services=services,
             binding=binding,
+            include_skill_tools=False,
             capability_tool_names=tuple(tool.name for tool in capability_block.tools)
             if capability_block is not None
             else (),
@@ -205,7 +228,6 @@ class DeepAgentRuntime(ReActRuntime):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
-        filesystem = self.services.conversation_filesystem
         available_tool_names = collect_available_tool_names(
             (
                 *(bound_tool.runtime_name for bound_tool in bound_tools),
@@ -247,14 +269,6 @@ class DeepAgentRuntime(ReActRuntime):
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
-        capability_filesystem = self.services.conversation_filesystem
-        if isinstance(capability_filesystem, DeepConversationFilesystemPort):
-            backend = capability_filesystem.backend
-            permissions = capability_filesystem.permissions
-        else:
-            backend, permissions = build_conversation_filesystem(
-                self._conversation_filesystem
-            )
         # Bind the child's effective policy to both its custom tools and
         # Deep's built-in filesystem tools.
         child_permissions = list(
@@ -262,6 +276,8 @@ class DeepAgentRuntime(ReActRuntime):
             if self._subagent_permissions is not None
             else permissions
         )
+        if self.services.skills is not None:
+            child_permissions = skills_permissions(child_permissions)
         child_filesystem = DeepConversationFilesystemPort(backend, child_permissions)
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
@@ -281,6 +297,7 @@ class DeepAgentRuntime(ReActRuntime):
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
                 filesystem=filesystem,
+                skills=self.services.skills,
             ),
             subagent_middleware=_build_deepagent_runtime_middleware(
                 tracer=self.services.tracer,
@@ -290,19 +307,22 @@ class DeepAgentRuntime(ReActRuntime):
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
                 filesystem=child_filesystem,
+                skills=self.services.skills,
                 child=True,
             ),
             backend=backend,
             permissions=permissions,
             subagent_permissions=child_permissions,
+            skills=["/skills/"] if self.services.skills is not None else None,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
             binding=binding,
-            services=self.services,
+            services=services,
             runtime_class_name=type(self).__name__,
             available_tool_names=available_tool_names,
             model_name=extract_model_name_from_object(self._model),
+            preload_selected_skill=False,
         )
 
 
@@ -318,6 +338,7 @@ def _create_compiled_deep_agent(
     backend: BackendProtocol,
     permissions: list[FilesystemPermission],
     subagent_permissions: list[FilesystemPermission] | None = None,
+    skills: list[str] | None = None,
 ) -> _CompiledReActAgent:
     try:
         from deepagents import create_deep_agent
@@ -347,6 +368,7 @@ def _create_compiled_deep_agent(
         "tools": list(subagent_tools if subagent_tools is not None else tools),
         "middleware": list(subagent_middleware),
         "permissions": child_permissions,
+        "skills": skills or [],
     }
     return cast(
         _CompiledReActAgent,
@@ -359,12 +381,15 @@ def _create_compiled_deep_agent(
             checkpointer=checkpointer,
             backend=backend,
             permissions=parent_permissions,
+            skills=skills,
         ),
     )
 
 
 def build_conversation_filesystem(
     conversation_filesystem: ConversationFilesystemService | None,
+    *,
+    skills: SkillsPort | None = None,
 ) -> tuple[CompositeBackend, list[FilesystemPermission]]:
     """Compose virtual routes, per-route quotas and agent rules together."""
     if conversation_filesystem is None:
@@ -383,11 +408,65 @@ def build_conversation_filesystem(
                 namespace_id=".deep",
                 max_bytes=quotas.deep_max_bytes,
                 max_files=quotas.deep_max_files,
-            )
+            ),
+            **(
+                {"/skills/": _native_skills_backend(skills)}
+                if skills is not None
+                else {}
+            ),
         },
         artifacts_root="/.deep",
     )
-    return backend, _conversation_permissions()
+    permissions = _conversation_permissions()
+    if skills is not None:
+        permissions = skills_permissions(permissions)
+    return backend, permissions
+
+
+def _native_skills_backend(skills: SkillsPort) -> FilesystemBackend:
+    if not isinstance(skills, PlatformSkills):
+        raise ValueError("Deep skills require a physical platform skills directory")
+    return skills.filesystem_backend
+
+
+def mount_skills(
+    backend: BackendProtocol,
+    permissions: list[FilesystemPermission],
+    skills: SkillsPort | None,
+) -> tuple[BackendProtocol, list[FilesystemPermission]]:
+    """Add the native directory to capability backends without changing their routes."""
+    if skills is None:
+        return backend, permissions
+    routes = dict(backend.routes) if isinstance(backend, CompositeBackend) else {}
+    mounted = routes.get("/skills/")
+    if mounted is _native_skills_backend(skills):
+        return backend, skills_permissions(permissions)
+    if any(
+        route.rstrip("/") == "/skills"
+        or route.startswith("/skills/")
+        or "/skills/".startswith(route.rstrip("/") + "/")
+        for route in routes
+    ):
+        raise ValueError("Deep filesystem route collides with /skills/")
+    routes["/skills/"] = _native_skills_backend(skills)
+    return CompositeBackend(
+        default=backend.default if isinstance(backend, CompositeBackend) else backend,
+        routes=routes,
+        artifacts_root=backend.artifacts_root
+        if isinstance(backend, CompositeBackend)
+        else "/",
+    ), skills_permissions(permissions)
+
+
+def skills_permissions(
+    permissions: list[FilesystemPermission],
+) -> list[FilesystemPermission]:
+    return [
+        FilesystemPermission(
+            operations=["write"], paths=["/skills", "/skills/**"], mode="deny"
+        ),
+        *permissions,
+    ]
 
 
 def _conversation_permissions() -> list[FilesystemPermission]:
@@ -445,6 +524,7 @@ def _build_deepagent_runtime_middleware(
     capability_block: CapabilityAgentBlock | None = None,
     filesystem: ConversationFilesystemPort | None = None,
     child: bool = False,
+    skills: SkillsPort | None = None,
 ) -> list[AgentMiddleware]:
     """Keep hygiene outermost and guard disabled tools before HITL runs.
 
@@ -471,7 +551,9 @@ def _build_deepagent_runtime_middleware(
             binding=binding,
             role="child" if child else "root",
         ),
-        ToolObservabilityMiddleware(kpi=kpi, binding=binding, tracer=tracer),
+        ToolObservabilityMiddleware(
+            kpi=kpi, binding=binding, tracer=tracer, skills=skills
+        ),
         (DeepChildHitlMiddleware if child else FredHitlMiddleware)(
             binding=binding,
             approval_policy=approval_policy,

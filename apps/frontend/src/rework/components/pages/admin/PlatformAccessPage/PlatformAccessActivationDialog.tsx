@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
+import Disclosure from "@shared/atoms/Disclosure/Disclosure";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import {
@@ -37,10 +39,13 @@ export default function PlatformAccessActivationDialog({
     refetchOnMountOrArgChange: true,
   });
   const authority = usePlatformAccessStateQuery(undefined, { skip: !enabling });
-  const initialImport = usePlatformAccessT0Query(undefined, {
-    skip: !enabling,
-    refetchOnMountOrArgChange: true,
-  });
+  const initialImport = usePlatformAccessT0Query(
+    {},
+    {
+      skip: !enabling,
+      refetchOnMountOrArgChange: true,
+    },
+  );
   const refresh = () => void Promise.all([preview.refetch(), authority.refetch(), initialImport.refetch()]);
   const importKnown = !initialImport.isFetching && !initialImport.isError && !!initialImport.data;
   const missingImport = enabling && importKnown && !initialImport.data?.completed_at;
@@ -54,8 +59,9 @@ export default function PlatformAccessActivationDialog({
   const outcomes = ["blocked", "allowed"] as const;
   const selectedGroup = group ?? (preview.data?.blocked ? 0 : 1);
   const renderUsers = (outcome: "allowed" | "blocked" | "unknown") => (
-    <div className={styles.reviewUserTable}>
+    <div className={styles.boundedTable}>
       <DataTable
+        size="small"
         data={(preview.data?.users ?? []).filter((user) => user.outcome === outcome)}
         rowKey={(user) => user.user_id}
         pageSize={20}
@@ -89,17 +95,17 @@ export default function PlatformAccessActivationDialog({
       }}
       onConfirm={() => onConfirm(enabling ? preview.data!.revision : revision)}
     >
-      <div className={`${styles.dialogBody} ${styles.activationBody}`}>
+      <div className={styles.dialogBody}>
         <p>{t(`rework.platformAccess.activation.${enabling ? "savedOnly" : "disableHint"}`)}</p>
         {enabling && (
           <>
             {missingImport && (
-              <div role="alert" className={styles.section}>
+              <div role="alert" className={styles.importWarning}>
                 <strong>{t("rework.platformAccess.activation.importWarning")}</strong>
                 <p>{t("rework.platformAccess.activation.importWarningHint")}</p>
               </div>
             )}
-            {initialImport.isFetching && <p role="status">{t("rework.platformAccess.loading")}</p>}
+            {refreshing && <Spinner statusText={t("rework.platformAccess.loading")} />}
             {(initialImport.isError || (!initialImport.isFetching && !initialImport.data)) && (
               <div role="alert">
                 <p>{t("rework.platformAccess.activation.importStatusFailed")}</p>
@@ -108,7 +114,6 @@ export default function PlatformAccessActivationDialog({
                 </Button>
               </div>
             )}
-            {(preview.isFetching || authority.isFetching) && <p role="status">{t("rework.platformAccess.loading")}</p>}
             {(preview.isError || authority.isError || (!refreshing && preview.data && !fresh)) && (
               <div role="alert">
                 <p>{t("rework.platformAccess.activation.previewFailed")}</p>
@@ -142,7 +147,7 @@ export default function PlatformAccessActivationDialog({
                   <>
                     <div className={styles.reviewTable}>
                       <ButtonGroup
-                        size="medium"
+                        size="small"
                         color="secondary"
                         variant="tabs"
                         selectedIndex={selectedGroup}
@@ -163,13 +168,14 @@ export default function PlatformAccessActivationDialog({
                       )}
                     </div>
                     {!!preview.data.unknown && (
-                      <details className={styles.unverifiedUsers}>
-                        <summary role="button" tabIndex={0}>
-                          {t("rework.platformAccess.activation.unverified", { count: preview.data.unknown })}
-                        </summary>
-                        <p>{t("rework.platformAccess.activation.unknownHint")}</p>
-                        {renderUsers("unknown")}
-                      </details>
+                      <Disclosure
+                        title={t("rework.platformAccess.activation.unverified", { count: preview.data.unknown })}
+                      >
+                        <div className={styles.group}>
+                          <p className={styles.hint}>{t("rework.platformAccess.activation.unknownHint")}</p>
+                          {renderUsers("unknown")}
+                        </div>
+                      </Disclosure>
                     )}
                   </>
                 )}

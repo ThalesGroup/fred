@@ -21,6 +21,7 @@ from uuid import uuid4
 
 from fred_core import (
     AuthorizationError,
+    DocumentPermission,
     FileTypeBucket,
     KeycloakUser,
     RebacDisabledResult,
@@ -39,7 +40,7 @@ from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
-from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.metadata.service import MetadataService, MetadataUpdateError
 from knowledge_flow_backend.features.resources.service import ResourceService
 from knowledge_flow_backend.features.tag.structure import (
     MissingTeamIdError,
@@ -363,6 +364,20 @@ class TagService:
 
         tag = await self._tag_store.get_tag_by_id(tag_id)
 
+        if tag.type == TagType.DOCUMENT:
+            sub_tags = await self._tag_store.list_subtree(tag)
+            for start in range(0, len(sub_tags), 10):
+                await asyncio.gather(*(self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, sub_tag.id) for sub_tag in sub_tags[start : start + 10]))
+            uids_by_tag = await self.document_metadata_service.metadata_store.document_uids_by_tags([t.id for t in sub_tags])
+            uids = {uid for items in uids_by_tag.values() for uid in items}
+            readable = await self.document_metadata_service.filter_readable_document_uids(user, sorted(uids))
+            if uids - readable:
+                raise AuthorizationError(user.uid, DocumentPermission.READ.value, Resource.DOCUMENTS)
+            # Children first; shared parent/child documents must never be detached concurrently.
+            for sub_tag in sorted(sub_tags, key=lambda t: (t.full_path.count("/"), t.full_path), reverse=True):
+                await self._delete_one_tag(sub_tag, user)
+            return
+
         # Get all sub tags (recusrively) and the current tag
         # No UI pagination here: the default limit is a page size, and a tree
         # larger than one page would be deleted only partially, leaving orphaned
@@ -389,12 +404,21 @@ class TagService:
         # pooled DB connection and writes the owning team's counter, so an
         # unbounded gather over a large library exhausted the connection pool and
         # piled every write onto one contended row (#2149 review).
-        item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
+        if tag.type == TagType.DOCUMENT:
+            items = await self.document_metadata_service.metadata_store.document_uids_by_tags([tag.id])
+            item_ids = items[tag.id]
+        else:
+            item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
         for start in range(0, len(item_ids), _TAG_ITEM_DELETE_BATCH):
             batch = item_ids[start : start + _TAG_ITEM_DELETE_BATCH]
             await asyncio.gather(
                 *(item_service.remove_tag_id_from_item(user, item_id, tag.id) for item_id in batch),
             )
+
+        if tag.type == TagType.DOCUMENT:
+            remaining = await self.document_metadata_service.metadata_store.document_uids_by_tags([tag.id])
+            if remaining[tag.id]:
+                raise MetadataUpdateError("Folder removal incomplete: document memberships remain")
 
         # Remove tag
         await self._tag_store.delete_tag_by_id(tag.id)

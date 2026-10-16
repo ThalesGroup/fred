@@ -42,6 +42,22 @@ Trois zones :
 - **Le menu profil**, en bas à gauche : votre profil, le support, la
   déconnexion.
 
+## Les nouveautés après une mise à jour
+
+Après une mise à jour, la fenêtre **Nouveautés** peut s'ouvrir à votre arrivée
+sur l'application pour présenter les changements. Fermez-la avec **Fermer** :
+elle ne s'ouvrira plus toute seule, sur aucun de vos appareils, jusqu'à la
+prochaine annonce des administrateurs.
+
+Pour la rouvrir à tout moment, ouvrez votre menu de profil, en bas de la barre
+latérale, et choisissez **Nouveautés**. Cette entrée est présente tant que des
+nouveautés sont publiées.
+
+Quand plusieurs nouveautés sont publiées, les flèches en bas à gauche de la
+fenêtre permettent de passer de l'une à l'autre : la plus récente s'affiche en
+premier, la flèche de droite mène aux précédentes, et le repère entre les deux
+(par exemple « 1 / 4 ») indique où vous en êtes.
+
 ## Votre espace personnel
 
 Dès la première connexion vous avez un **espace personnel** : une équipe dont

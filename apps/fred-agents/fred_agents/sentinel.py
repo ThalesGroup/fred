@@ -65,8 +65,6 @@ class SentinelReActDefinition(ReActAgentDefinition):
         "and platform KPI review."
     )
     tags: tuple[str, ...] = ("monitoring", "react")
-    # The shared global base prompt (Mermaid output contract) is injected at
-    # execution time by the runtime, not baked into this editable template.
     system_prompt_template: str = load_agent_prompt_markdown(
         package="fred_agents.sentinel",
         file_name="basic_react_sentinel_system_prompt.md",

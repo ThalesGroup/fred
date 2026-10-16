@@ -46,14 +46,28 @@ from fred_core import (
     team_organization_relation,
 )
 from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
+from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from control_plane_backend.agent_instances.store import TeamAgentsDeletion
+from control_plane_backend.agent_marketplace.store import (
+    RemovalReason,
+    RemovedEntry,
+    emit_unpublished,
+)
 from control_plane_backend.common.avatar_image import read_avatar_upload
+from control_plane_backend.marketplace_settings.effective import (
+    count_published_agents,
+    effective_marketplace_settings,
+    load_marketplace_default,
+)
+from control_plane_backend.marketplace_settings.schemas import TeamMarketplaceView
 from control_plane_backend.product.prompt_starter_kit import (
     STARTER_CATEGORY_NAMES,
     STARTER_PROMPTS,
@@ -317,9 +331,39 @@ async def delete_team(
         await rebac.delete_all_relations_of_reference(
             RebacReference(Resource.TEAM, team_id)
         )
+        # The team's agents go with it, and their marketplace entries cascade.
+        deleted = (
+            await deps.get_agent_instance_store().delete_by_team(team_id)
+            if deps.get_agent_instance_store is not None
+            else None
+        )
         await store.delete(team_id)
 
+    if deleted is not None:
+        _emit_team_agents_deleted(user, team_id, deleted, deps)
     logger.info("Deleted one team via platform-admin registry action")
+
+
+def _emit_team_agents_deleted(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deleted: TeamAgentsDeletion,
+    deps: TeamServiceDependencies,
+) -> None:
+    """Report each agent as a single deletion would: KPI per agent, audit per entry."""
+    emit_unpublished(deleted.unpublished, actor_uid=user.uid)
+    if deps.get_kpi_writer is None:
+        return
+    writer = deps.get_kpi_writer()
+    for agent_instance_id in deleted.agent_instance_ids:
+        try:
+            writer.count(
+                "agent.deleted_total",
+                dims={"team_id": str(team_id), "agent_instance_id": agent_instance_id},
+                actor=to_kpi_actor(user),
+            )
+        except Exception:
+            logger.exception("[control-plane][kpi] Failed to emit agent.deleted_total")
 
 
 async def rescue_team_admin(
@@ -1092,8 +1136,21 @@ async def update_team(
         ):
             patch_data["joining_mode"] = JoiningMode.INVITE_ONLY
         patch = TeamMetadataPatch.model_validate(patch_data)
+        removed: list[RemovedEntry] = []
         try:
-            updated = await store.upsert(team_id, patch)
+            if (
+                "visibility" in patch_data
+                and resulting_visibility == TeamVisibility.PRIVATE
+                and deps.get_agent_marketplace_store is not None
+            ):
+                async with store.transaction() as session:
+                    updated = await store.upsert(team_id, patch, session=session)
+                    if updated is not None:
+                        removed = await _remove_published_agents_of_private_team(
+                            team_id, deps, session=session
+                        )
+            else:
+                updated = await store.upsert(team_id, patch)
         except IntegrityError as exc:
             # `name` is the only unique-constrained column, and the pre-check
             # above is a fast path only - this is what closes the race between
@@ -1101,6 +1158,7 @@ async def update_team(
             if "name" not in patch_data:
                 raise
             raise TeamAlreadyExistsError(patch_data["name"]) from exc
+        emit_unpublished(removed, actor_uid=user.uid)
         if renamed_from is not None:
             # Nothing else records a rename: there is no team audit table, and
             # the bundle importer reconciles teams by name, so a duplicate team
@@ -1142,6 +1200,17 @@ async def update_team(
                 consistency_token = public_token
 
     return await _build_team_with_permissions(user, metadata, deps, consistency_token)
+
+
+async def _remove_published_agents_of_private_team(
+    team_id: TeamId, deps: TeamServiceDependencies, *, session: AsyncSession
+) -> list[RemovedEntry]:
+    """A private team cannot publish: its marketplace entries are removed."""
+    if deps.get_agent_marketplace_store is None:
+        return []
+    return await deps.get_agent_marketplace_store().remove_team_entries(
+        [team_id], RemovalReason.TEAM_PRIVATE, session=session
+    )
 
 
 async def upload_team_avatar(
@@ -1511,7 +1580,15 @@ async def remove_team_member(
             skip_permission_check=user.uid == user_id,
             metadata=metadata,
         )
+        from fred_core.security.platform_access.access_control import (
+            forget_free_joins,
+        )
+
+        # Before, so a failure keeps the membership rather than a stale Free join;
+        # again after, for a Free enrollment that raced the relation removal.
+        await forget_free_joins(team_id, user_id)
         await _remove_all_team_member_relations(rebac, team_id, user_id)
+        await forget_free_joins(team_id, user_id)
         # Favorites are personal data about this team's prompts: they go with the access.
         await deps.get_prompt_store().delete_favorites_for_team(user_id, team_id)
 
@@ -2078,13 +2155,21 @@ async def _build_team_with_permissions(
     rebac = deps.rebac
     team_id = metadata.id
 
-    direct_relations, permissions, retention = await asyncio.gather(
+    (
+        direct_relations,
+        permissions,
+        retention,
+        marketplace_default,
+        published_counts,
+    ) = await asyncio.gather(
         rebac.list_direct_relations(
             RebacReference(Resource.TEAM, team_id),
             consistency_token=consistency_token,
         ),
         _get_team_permissions_for_user(rebac, user, team_id, consistency_token),
         _resolve_team_retention_view(team_id, deps),
+        load_marketplace_default(deps.get_marketplace_settings_store),
+        count_published_agents([team_id], deps.get_agent_marketplace_store),
     )
     roles_by_user = _fold_team_role_relations(direct_relations)
     admin_ids = {
@@ -2109,10 +2194,16 @@ async def _build_team_with_permissions(
     )
     # `my_relations` now rides along on the base `Team` (via `team.model_dump()`),
     # so it must not be passed again here — a duplicate keyword would raise.
+    effective = effective_marketplace_settings(marketplace_default, metadata)
     return TeamWithPermissions(
         **team.model_dump(),
         permissions=permissions,
         retention=retention,
+        marketplace=TeamMarketplaceView(
+            agents_publishing_enabled=effective.agents_publishing_enabled,
+            agents_publish_quota=effective.agents_publish_quota,
+            published_count=published_counts.get(team_id, 0),
+        ),
     )
 
 

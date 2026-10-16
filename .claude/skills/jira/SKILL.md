@@ -115,19 +115,33 @@ Keep the status in step with the work: the reporter watches it, and the team fil
 | ------------------------------------------------------------------------ | ---------------------- |
 | You start investigating                                                  | `Analysis in progress` |
 | A public reply asking the reporter a question is posted                  | `Waiting for customer` |
-| Cause found, GitHub issue created, and the public reply is posted        | `Resolved`             |
-| Fix deployed on the reporter's environment                               | `Closed`               |
+| Bug: GitHub bug issue created and public reply with its link posted       | `Planned`              |
+| Bug: fix deployed on the reporter's production platform                  | `Resolved`             |
+| Bug: second-person verification of fix and customer satisfaction         | `Closed`               |
 
 ```bash
 acli jira workitem transition --key PRISM-68 --status "Analysis in progress" --yes
 ```
 
-- Move only after the step is actually done. `Waiting for customer` and `Resolved` follow a
+- Move only after the step is actually done. `Waiting for customer` and `Planned` follow a
   public reply, so they wait for the developer's approval of that reply (rule 2).
-- `Closed` usually comes days later, when a release reaches the reporter's environment. Do
-  not close a ticket because a fix merged. Close it only when the developer says the fix is
-  deployed there.
-- These statuses exist on `Bug`, `Improvement`, `Service Request` and `Platform Incident`.
+- From `Analysis in progress`, reaching `Planned` requires `CCB` -> `Planned`.
+  Once the planning criteria above are met, move through `CCB` and immediately to
+  `Planned`. `CCB` normally holds tickets where the decision to fix is still uncertain
+  and is currently used rarely; this required intermediate transition adds no new
+  approval step for bugs already accepted for a fix. Verify each resulting status.
+- For bugs, keep the ticket `Planned` while the fix is developed, reviewed, merged or
+  tagged. Move it to `Resolved` only after confirmed deployment on the reporter's
+  production platform: this status notifies the customer that their bug is resolved.
+  Deployment detection is being worked on separately; for now, wait for the developer
+  to confirm deployment rather than inferring it from a merge, tag or release.
+- `Resolved` -> `Closed` is a second verification by someone other than the person who
+  resolved the ticket. Move it only after that person checks that the bug was indeed
+  addressed and the customer appears satisfied; deployment alone does not close it.
+- The post-analysis bug lifecycle above applies to `Bug` tickets. For other ticket types,
+  ask the developer before planning, resolving or closing a ticket.
+- `Analysis in progress` and `Waiting for customer` apply to `Bug`, `Improvement`,
+  `Service Request` and `Platform Incident`.
   `Task` and `Sub-task` use a different workflow (`Work in progress`, `Completed`, …), so
   ask before moving one.
 - If a transition fails (a required field, or a status unreachable from the current one),
@@ -147,7 +161,10 @@ Try to **reproduce** it, and locate the cause in this repo (`git log`, `grep`, r
 3. Draft a public reply for the developer to approve (rule 2): thank the reporter, give a
    workaround if one exists, and include the GitHub issue link so they can follow the fix.
    The reporter is usually an end user, so keep the reply non-technical.
-4. Once the reply is posted, move the ticket to `Resolved`.
+4. Once the reply with the GitHub issue link is posted, follow "Ticket status" to move
+   the ticket to `Planned`.
+   Follow the deployment and second-verification rules in "Ticket status" for subsequent
+   resolution and closure.
 
 **Not reproduced / need more information:**
 

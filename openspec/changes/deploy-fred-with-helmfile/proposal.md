@@ -13,6 +13,15 @@ Tracking: https://github.com/ThalesGroup/fred/issues/2957
 - **BREAKING**: retire `k3d-fred` and its old launcher without an alias; document the Helmfile-based replacement.
 - Limit this slice to Fred on the existing infrastructure. Maxwell, evaluator migration and migration of `k3d-up` into Helmfile are excluded.
 
+### Published releases without a checkout (2026-10-16)
+
+A k3d instance is an environment: like a GitOps repository, it should own its values and the versions it runs, and install published charts and images without a clone. For Fred's open-source ecosystem (Fred and the evaluation application):
+
+- `fred-deployment-factory` holds each application's instance definition in `k3d-apps/<app>/`: helmfile (published OCI chart, default version pinned), k3d values, `identities.yaml`, `prepare` and `finish`. `make k3d-app APP=fred` and `make k3d-app APP=fred-evaluator` deploy the pinned releases with no checkout; `RELEASE=<version>` selects another published one.
+- `DIR=<checkout>` with `APP` is the development mode: the checkout's chart and its `deploy/k3d/build` images, with the factory's values.
+- Fred and fred-agent-evaluator keep only `deploy/k3d/build` (and an optional `reset`); their helmfile, values and hooks are deleted.
+- Proprietary applications are unaffected: `make k3d-app DIR=<checkout>` with a product-owned `deploy/k3d/helmfile.yaml.gotmpl` keeps working.
+
 ## Capabilities
 
 ### New Capabilities

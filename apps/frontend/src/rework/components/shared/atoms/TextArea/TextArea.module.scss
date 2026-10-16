@@ -39,6 +39,7 @@
 
     &:disabled {
       background-color: var(--state-surface-main-disabled);
+      color: var(--state-on-surface-disabled);
 
       &::placeholder {
         color: var(--state-on-surface-disabled);

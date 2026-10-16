@@ -1833,7 +1833,7 @@ class DocumentTreeAdapter(DocumentTreePort):
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
     ) -> DocumentTreeResult:
         runtime_context = self._binding.runtime_context
         effective_libs = _narrow_port_scope_ids(

@@ -1,6 +1,6 @@
 [project]
 name = "fred-sdk"
-version = "4.4.3"
+version = "4.5.2"
 description = "Authoring SDK for Fred agents — graph, ReAct, and team agent primitives."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -10,7 +10,7 @@ dependencies = [
   # Deliberately lean: configuration, identity, naming and plain contract
   # models only. The agent platform (fred-core, langchain, langgraph) lives
   # behind the `agents` extra so a Knowledge Base pod never installs it.
-  "fred-pod>=4.4.3",
+  "fred-pod>=4.5.1",
   "pydantic>=2.7.0,<3.0.0",
   "httpx>=0.28.1",
 ]
@@ -27,7 +27,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # plus the fred-core platform behind them. A Knowledge Base pod never needs it.
 agents = [
   "pyyaml>=6.0.1",
-  "fred-core>=4.4.3",
+  "fred-core>=4.5.2",
   "langchain-core>=1.6.5",
   "langchain>=1.4.2",
   "langgraph>=1.2.12",
@@ -62,9 +62,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["fred_sdk*"]
-
-[tool.setuptools.package-data]
-"fred_sdk" = ["resources/prompts/*.md"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

@@ -13,10 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act, type ReactNode } from "react";
+import { SkillBadge } from "@shared/molecules/SkillBadge/SkillBadge";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
+import type { ThreadMessage } from "../../../types/thread";
+import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -36,7 +40,23 @@ const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaun
 // The personal team's id: a chat in it counts as administered by its owner.
 const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
 // The composer's recall handler, captured so a test can press an arrow on it.
-const composerKeys = vi.hoisted(() => ({ recall: undefined as undefined | ((event: unknown) => boolean) }));
+const composerKeys = vi.hoisted(() => ({
+  recall: undefined as undefined | ((event: unknown) => boolean),
+  send: undefined as undefined | (() => void),
+}));
+// The composer's model read: refetched when the window regains focus or a conversation opens.
+const modelRead = vi.hoisted(() => ({
+  refetch: vi.fn(),
+  fulfilledTimeStamp: undefined as number | undefined,
+  options: undefined as { skip?: boolean } | undefined,
+}));
+// The thread's opener for a sent prompt badge, and the error toast.
+const threadProps = vi.hoisted(() => ({
+  openCommandPrompt: undefined as
+    | undefined
+    | ((turn: { text: string; command: { command: string }; promptIndex?: number }) => void),
+}));
+const showError = vi.hoisted(() => vi.fn());
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
 // A fresh object per read, like a real selector over changing store state: the
@@ -44,7 +64,12 @@ vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agent
 // would never look like a new request.
 vi.mock("react-redux", () => ({ useSelector: () => ({ ...openRequest }) }));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({
+    // The values a command error is built from are part of the message.
+    t: (key: string, options?: { command?: string; limit?: number }) =>
+      key.startsWith("chatbot.commandMenu.runError") && options ? `${key}:${options.command ?? options.limit}` : key,
+    i18n: { language: "en" },
+  }),
 }));
 
 let chatValue: Record<string, unknown>;
@@ -59,9 +84,24 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal
     characterCount?: number;
     characterLimit?: number;
     focusEndRequestId?: number;
+    inlineSkills?: {
+      tokens: { name: string; description?: string; onOpen: (name: string) => void }[];
+      promptTokens?: {
+        name: string;
+        promptId: string;
+        promptTeamId: string;
+        from: number;
+        to: number;
+        teamName?: string;
+      }[];
+      onOpenPrompt?: (target: { promptId: string; promptTeamId: string; name: string; command: string }) => void;
+    };
+    value?: string;
+    onSend?: () => void;
     onRecallKeyDown?: (event: unknown) => boolean;
   }) => {
     composerKeys.recall = props.onRecallKeyDown;
+    composerKeys.send = props.onSend;
     return (
       <div
         data-testid="composer"
@@ -72,31 +112,56 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal
         data-character-count={props.characterCount}
         data-character-limit={props.characterLimit}
         data-focus-request={props.focusEndRequestId}
-      />
+      >
+        {props.inlineSkills?.tokens.map((token) => <SkillBadge key={token.name} {...token} />)}
+        {props.inlineSkills?.promptTokens?.map((token) => (
+          <button
+            key={token.from}
+            type="button"
+            data-testid="prompt-token"
+            data-team-name={token.teamName}
+            onClick={() =>
+              props.inlineSkills?.onOpenPrompt?.({
+                promptId: token.promptId,
+                promptTeamId: token.promptTeamId,
+                name: token.name,
+                command: (props.value ?? "").slice(token.from + 1, token.to),
+              })
+            }
+          >
+            {token.name}
+          </button>
+        ))}
+      </div>
     );
   },
 }));
 vi.mock("./ConversationThread/ConversationThread", () => ({
   ConversationThread: (props: {
+    messages: ThreadMessage[];
     maxChatInputChars?: number;
     hitlFreeText: string;
     onHitlFreeTextChange: unknown;
     isLoading?: boolean;
     readOnly?: boolean;
-  }) => (
-    <div
-      data-testid="thread"
-      data-character-limit={props.maxChatInputChars}
-      data-hitl-draft={props.hitlFreeText}
-      data-has-hitl-change-handler={typeof props.onHitlFreeTextChange === "function"}
-      data-readonly={props.readOnly}
-      data-loading={props.isLoading}
-    />
-  ),
-}));
-
-vi.mock("@shared/molecules/ThoughtTrace/traceDrawerContext", () => ({
-  TraceDrawerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+    onOpenCommandPrompt?: typeof threadProps.openCommandPrompt;
+  }) => {
+    threadProps.openCommandPrompt = props.onOpenCommandPrompt;
+    return (
+      <div
+        data-testid="thread"
+        data-character-limit={props.maxChatInputChars}
+        data-hitl-draft={props.hitlFreeText}
+        data-has-hitl-change-handler={typeof props.onHitlFreeTextChange === "function"}
+        data-readonly={props.readOnly}
+        data-loading={props.isLoading}
+      >
+        {props.messages.map((message) => (
+          <ThoughtTrace key={message.id} messages={message.traceMessages ?? []} />
+        ))}
+      </div>
+    );
+  },
 }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentIconName: "person", agentsNicknameSingular: "" }),
@@ -105,17 +170,65 @@ vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useGetTeamQuery: () => ({ data: undefined }),
+  useGetTeamQuery: () => ({ data: fetchedTeam.current }),
   // #2387 — the composer's model label. Undefined here: this file covers the
   // chat-input policy wiring, and the label's own behaviour is covered in
   // ReasoningChip.test.tsx.
-  useEffectiveChatModelQuery: () => ({ data: undefined }),
+  useEffectiveChatModelQuery: (_: unknown, options?: { skip?: boolean }) => {
+    modelRead.options = options;
+    return {
+      data: undefined,
+      currentData: undefined,
+      fulfilledTimeStamp: modelRead.fulfilledTimeStamp,
+      refetch: modelRead.refetch,
+    };
+  },
   useAddPromptFavoriteMutation: () => [vi.fn()],
   useRemovePromptFavoriteMutation: () => [vi.fn()],
 }));
+const commandQueries = vi.hoisted(() => vi.fn());
+const fetchedTeam = vi.hoisted(() => ({ current: undefined as { id: string; name: string } | undefined }));
+const teamCommands = vi.hoisted(() => ({ current: [] as unknown[] }));
+const promptPreviewFetch = vi.hoisted(() => vi.fn());
+// What reading a prompt answers when a command runs; a rejection is a failed read.
+const promptRead = vi.hoisted(() => ({
+  current: (async () => ({ text: "" })) as (args: { promptId: string }) => Promise<{ text: string }>,
+}));
+const promptPreviewResult = vi.hoisted(() => ({
+  currentData: undefined as { text: string } | undefined,
+  isFetching: false,
+  isError: false,
+  originalArgs: undefined as { promptId: string } | undefined,
+}));
+const skillPreviewQuery = vi.hoisted(() => vi.fn());
+const previewResult = vi.hoisted(() => ({
+  currentData: undefined as unknown,
+  isFetching: false,
+  error: undefined as unknown,
+  refetch: vi.fn(),
+}));
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useGetAgentInstanceSkillsQuery: () => ({
+    currentData: {
+      supported: true,
+      skills: [
+        { name: "compare-options", description: "Compare", argument_hint: "[options]" },
+        { name: "review", description: "Review" },
+      ],
+    },
+  }),
+  useGetAgentInstanceSkillDetailQuery: (args: unknown, options: unknown) => {
+    skillPreviewQuery(args, options);
+    return previewResult;
+  },
+
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [
-    () => ({ unwrap: async () => ({ text: "" }) }),
+    (args: { promptId: string }) => {
+      promptPreviewFetch(args);
+      promptPreviewResult.originalArgs = args;
+      return { unwrap: () => promptRead.current(args) };
+    },
+    promptPreviewResult,
   ],
   // Read by the prompt-selection panel the page mounts; it is closed here, so
   // the queries are skipped and only their shape matters.
@@ -126,13 +239,16 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({ data: [] }),
   // The composer's command list — no prompt carries a command here, so the
   // trigger stays closed and the composer behaves as it did before.
-  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ data: [] }),
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: (args: unknown, options: unknown) => {
+    commandQueries(args, options);
+    return { currentData: (args as { teamId: string }).teamId === "team-1" ? teamCommands.current : [] };
+  },
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({ canAdministerAdmins: false }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError: () => undefined }),
+  useToast: () => ({ showError }),
 }));
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserGivenName: () => "Ada" },
@@ -912,5 +1028,531 @@ describe("ManagedChatPage — arrow keys recall sent messages", () => {
 
     expect(consumed).toBe(true);
     expect(setInput).toHaveBeenCalledWith("/summary focus on risks");
+  });
+});
+
+describe("ManagedChatPage — the model list follows admin changes made elsewhere", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    modelRead.refetch.mockClear();
+    modelRead.fulfilledTimeStamp = Date.now() - 31_000;
+    chatValue = { ...chatValue, sessionId: "session-1", isHistorySettled: true };
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("refetches the model list when the window regains focus", () => {
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(modelRead.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  // Each read also asks the pod for its catalog: tab switching must not hammer it.
+  it("skips a focus refetch when the last read is under 30 seconds old", () => {
+    modelRead.fulfilledTimeStamp = Date.now() - 5_000;
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(modelRead.refetch).not.toHaveBeenCalled();
+  });
+
+  it("refetches the model list when another conversation opens, not on a plain re-render", () => {
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    expect(modelRead.refetch).not.toHaveBeenCalled();
+
+    chatValue = { ...chatValue, sessionId: "session-2" };
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+
+    expect(modelRead.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops reading the model list once the conversation's agent is deleted", () => {
+    expect(modelRead.options?.skip).toBeFalsy();
+
+    chatValue = { ...chatValue, sessionId: "session-2", isReadOnly: true, executionDisabled: true };
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(modelRead.options?.skip).toBe(true);
+    expect(modelRead.refetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("ManagedChatPage skill preview", () => {
+  it.each([
+    { origin: "user", child: false },
+    { origin: "agent", child: false },
+    { origin: "agent", child: true },
+  ])("previews a $origin load from its trace row and toggles it closed (child: $child)", ({ origin, child }) => {
+    const load: ChatMessage = {
+      session_id: "session-1",
+      exchange_id: "exchange-1",
+      rank: 1,
+      timestamp: "2026-10-07T10:00:00Z",
+      role: "system",
+      channel: "system_note",
+      parts: [{ type: "text", text: "Loaded instructions" }],
+      metadata: { extras: { skill_load: { name: "meeting-minutes", origin, load_id: "load", child } } },
+    };
+    chatValue = baseChatValue([load]);
+    chatValue.threadMessages = [{ ...renderedTurn, traceMessages: [load] }];
+    chatValue.input = "Keep my draft";
+    const setInput = vi.fn();
+    const handleSend = vi.fn();
+    chatValue.setInput = setInput;
+    chatValue.handleSend = handleSend;
+    previewResult.currentData = {
+      skill: { name: "meeting-minutes", description: "Prepare meeting minutes", argument_hint: "[notes]" },
+      revision: "snapshot",
+      content: "## Minutes\nRead **notes**.",
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      const skill = container.querySelector<HTMLButtonElement>(
+        '[aria-label="1. chatbot.skills.loaded: meeting-minutes"]',
+      );
+      expect(skill?.type).toBe("button");
+      act(() => skill!.click());
+      expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "meeting-minutes" },
+        { skip: false, refetchOnMountOrArgChange: true },
+      );
+      expect(container.querySelector('aside[data-open="true"]')?.textContent).toContain("Prepare meeting minutes");
+      expect(container.querySelector("strong")?.textContent).toBe("notes");
+      act(() => skill!.click());
+      expect(container.textContent).not.toContain("Prepare meeting minutes");
+      expect(setInput).not.toHaveBeenCalled();
+      expect(handleSend).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      previewResult.currentData = undefined;
+    }
+  });
+
+  it("opens the exclusive right-hand panel without sending or changing the selected request", () => {
+    chatValue = baseChatValue([]);
+    chatValue.input = "/compare-options Keep this request";
+    const setInput = vi.fn();
+    const handleSend = vi.fn();
+    chatValue.setInput = setInput;
+    chatValue.handleSend = handleSend;
+    previewResult.currentData = {
+      skill: { name: "compare-options", description: "Compare alternatives", argument_hint: "[options]" },
+      revision: "snapshot",
+      content: "---\nname: compare-options\n---\n## Procedure\nRead **evidence**.",
+    };
+    previewResult.error = undefined;
+    previewResult.isFetching = false;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "" },
+        { skip: true, refetchOnMountOrArgChange: true },
+      );
+      const skill = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]');
+      expect(skill).not.toBeNull();
+      expect(skill?.title).toBe("chatbot.skills.platformProvided\nCompare");
+      expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe("[options]");
+      act(() => skill!.click());
+      expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "compare-options" },
+        { skip: false, refetchOnMountOrArgChange: true },
+      );
+      expect(container.textContent).not.toContain("chatbot.skills.currentVersion");
+      expect(container.querySelector('aside[data-open="true"]')?.getAttribute("data-title-size")).toBe("large");
+      expect(container.textContent).toContain("Compare alternatives");
+      expect(container.querySelector("strong")?.textContent).toBe("evidence");
+      expect(container.textContent).not.toContain("name: compare-options");
+      expect(setInput).not.toHaveBeenCalled();
+      expect(handleSend).not.toHaveBeenCalled();
+      act(() => skill!.click());
+      expect(container.textContent).not.toContain("Compare alternatives");
+      expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "" },
+        { skip: true, refetchOnMountOrArgChange: true },
+      );
+      act(() => skill!.click());
+      expect(container.textContent).toContain("Compare alternatives");
+      act(() => rail.footerLaunchers.find((launcher) => launcher.key === "full-reasoning")!.onOpen());
+      expect(container.textContent).not.toContain("Compare alternatives");
+      chatValue.input = "/review ";
+      act(() => root.render(<ManagedChatPage />));
+      expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe(
+        "chatbot.skills.requestPlaceholder",
+      );
+      chatValue.input = "";
+      act(() => root.render(<ManagedChatPage />));
+      expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe(
+        "chatbot.composerPlaceholder",
+      );
+      expect(setInput).not.toHaveBeenCalled();
+      expect(handleSend).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      previewResult.currentData = undefined;
+    }
+  });
+});
+
+describe("ManagedChatPage skill reference preview", () => {
+  it.each(["read_skill_file", "read_file"])(
+    "opens stored file text from %s by keyboard, replaces the skill and toggles closed without changing the draft",
+    (toolName) => {
+      const common = { session_id: "session-1", exchange_id: "exchange-1", timestamp: "2026-10-07T10:00:00Z" };
+      const call: ChatMessage = {
+        ...common,
+        rank: 1,
+        role: "assistant",
+        channel: "tool_call",
+        parts: [
+          {
+            type: "tool_call",
+            call_id: "ref",
+            name: toolName,
+            args:
+              toolName === "read_file"
+                ? { file_path: "/skills/compare-options/references/model.md", offset: 1, limit: 1 }
+                : { name: "compare-options", path: "references/model.md" },
+          },
+        ],
+      };
+      const result: ChatMessage = {
+        ...common,
+        rank: 2,
+        role: "tool",
+        channel: "tool_result",
+        parts: [{ type: "tool_result", call_id: "ref", ok: true, content: "## Stored reference\n**Historical** text" }],
+      };
+      chatValue = baseChatValue([call, result]);
+      chatValue.threadMessages = [{ ...renderedTurn, traceMessages: [call, result] }];
+      chatValue.input = "/compare-options Keep draft";
+      const setInput = vi.fn();
+      chatValue.setInput = setInput;
+      const handleSend = vi.fn();
+      chatValue.handleSend = handleSend;
+      previewResult.currentData = {
+        skill: { name: "compare-options", description: "Current skill description" },
+        revision: "now",
+        content: "Current instructions",
+      };
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      try {
+        act(() => root.render(<ManagedChatPage />));
+        act(() => container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!.click());
+        expect(container.textContent).toContain("Current skill description");
+        const row = container.querySelector<HTMLElement>(
+          '[aria-label="1. rework.chatTrace.toolLabels.readSkillFile: references/model.md"]',
+        );
+        expect(row).not.toBeNull();
+        act(() => row!.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
+        expect(container.textContent).not.toContain("Current skill description");
+        expect(container.querySelector('aside[data-open="true"]')?.textContent).toContain("Historical");
+        expect(skillPreviewQuery).toHaveBeenLastCalledWith(
+          expect.objectContaining({ skillName: "" }),
+          expect.objectContaining({ skip: true }),
+        );
+        act(() => row!.click());
+        expect(container.querySelector('aside[data-open="true"]')).toBeNull();
+        expect(setInput).not.toHaveBeenCalled();
+        expect(handleSend).not.toHaveBeenCalled();
+      } finally {
+        act(() => root.unmount());
+        container.remove();
+        previewResult.currentData = undefined;
+      }
+    },
+  );
+});
+
+describe("ManagedChatPage slash prompt sources", () => {
+  it("reads the personal commands in a team chat without waiting for the agent's kind", () => {
+    bootstrap.activeTeamId = "personal-1";
+    chatValue = { ...baseChatValue([]), agentInstance: { template_id: "runtime:agent-1" } };
+    commandQueries.mockClear();
+    renderToStaticMarkup(<ManagedChatPage />);
+    expect(commandQueries.mock.calls.slice(-2)).toEqual([
+      [{ teamId: "team-1" }, { skip: false }],
+      [{ teamId: "personal-1" }, { skip: false }],
+    ]);
+    bootstrap.activeTeamId = "team-1";
+  });
+});
+
+describe("ManagedChatPage prompt token preview", () => {
+  it("opens the prompt behind the composer token in the side panel and toggles it closed", () => {
+    teamCommands.current = [
+      { prompt_id: "p-summary", name: "Résumé", command: "summary", description: "Résumer", emoji: null },
+    ];
+    fetchedTeam.current = { id: "team-1", name: "Finance" };
+    bootstrap.activeTeamId = "personal-1";
+    chatValue = baseChatValue([]);
+    chatValue.input = "/summary keep this";
+    const setInput = vi.fn();
+    const handleSend = vi.fn();
+    chatValue.setInput = setInput;
+    chatValue.handleSend = handleSend;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panel = () => container.querySelector('aside[data-open="true"]');
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      const token = container.querySelector<HTMLButtonElement>('[data-testid="prompt-token"]')!;
+      expect(token.dataset.teamName).toBe("Finance");
+      expect(panel()).toBeNull();
+
+      promptPreviewResult.isFetching = true;
+      act(() => token.click());
+      expect(promptPreviewFetch).toHaveBeenCalledWith({ teamId: "team-1", promptId: "p-summary" });
+      expect(panel()?.textContent).toContain("Résumé");
+      expect(panel()?.textContent).toContain("/summary");
+      expect(panel()?.querySelector('[role="status"]')?.textContent).toBe("chatbot.commandTurn.previewLoading");
+
+      promptPreviewResult.isFetching = false;
+      promptPreviewResult.currentData = { text: "Résume le document en trois points." };
+      act(() => root.render(<ManagedChatPage />));
+      expect(panel()?.querySelector('[role="status"]')).toBeNull();
+      // Name, then command, then the instructions.
+      expect(panel()?.textContent).toMatch(/Résumé\/summaryRésume le document en trois points\.$/);
+
+      promptPreviewResult.isError = true;
+      act(() => root.render(<ManagedChatPage />));
+      expect(panel()?.querySelector('[role="status"]')?.textContent).toBe("chatbot.commandTurn.previewError");
+      expect(panel()?.textContent).not.toContain("trois points");
+
+      act(() => token.click());
+      expect(panel()).toBeNull();
+      expect(promptPreviewFetch).toHaveBeenCalledOnce();
+      expect(setInput).not.toHaveBeenCalled();
+      expect(handleSend).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      teamCommands.current = [];
+      fetchedTeam.current = undefined;
+      bootstrap.activeTeamId = "team-1";
+      Object.assign(promptPreviewResult, { currentData: undefined, isFetching: false, isError: false });
+    }
+  });
+});
+
+describe("ManagedChatPage with several prompt commands", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  const panel = () => container.querySelector('aside[data-open="true"]');
+  const tokens = () => Array.from(container.querySelectorAll<HTMLButtonElement>('[data-testid="prompt-token"]'));
+
+  function mount(input: string) {
+    teamCommands.current = [
+      { prompt_id: "p-summary", name: "Résumé", command: "summary", description: "Résumer", emoji: null },
+      { prompt_id: "p-tone", name: "Ton", command: "tone", description: "Ton formel", emoji: null },
+    ];
+    chatValue = baseChatValue([]);
+    chatValue.input = input;
+    chatValue.setInput = vi.fn();
+    chatValue.handleSend = vi.fn();
+    chatValue.runCommand = vi.fn();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => root.render(<ManagedChatPage />));
+  }
+
+  beforeEach(() => {
+    showError.mockClear();
+    promptPreviewFetch.mockClear();
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    teamCommands.current = [];
+    promptRead.current = async () => ({ text: "" });
+    Object.assign(promptPreviewResult, { currentData: undefined, isFetching: false, isError: false });
+  });
+
+  it("previews the prompt of the activated composer token, and closes on a second click", () => {
+    mount("/summary then /tone now");
+    expect(tokens().map((token) => token.textContent)).toEqual(["Résumé", "Ton"]);
+
+    act(() => tokens()[1].click());
+    expect(promptPreviewFetch).toHaveBeenLastCalledWith({ teamId: "team-1", promptId: "p-tone" });
+    expect(panel()?.textContent).toContain("Ton/tone");
+
+    act(() => tokens()[0].click());
+    expect(promptPreviewFetch).toHaveBeenLastCalledWith({ teamId: "team-1", promptId: "p-summary" });
+    expect(panel()?.textContent).toContain("Résumé/summary");
+    expect(panel()?.textContent).not.toContain("/tone");
+
+    act(() => tokens()[0].click());
+    expect(panel()).toBeNull();
+    expect(promptPreviewFetch).toHaveBeenCalledTimes(2);
+    expect(chatValue.runCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 404, key: "chatbot.commandMenu.runErrorStale" },
+    { status: 500, key: "chatbot.commandMenu.runErrorDetail" },
+  ])("names the command that held the message back when its read answers $status", async ({ status, key }) => {
+    mount("/summary then /tone now");
+    promptRead.current = ({ promptId }) =>
+      promptId === "p-tone" ? Promise.reject({ status, data: {} }) : Promise.resolve({ text: "Summarise." });
+    await act(async () => composerKeys.send?.());
+
+    expect(showError).toHaveBeenCalledExactlyOnceWith({
+      summary: "chatbot.commandMenu.runErrorSummary",
+      detail: `${key}:tone`,
+    });
+    expect(chatValue.runCommand).not.toHaveBeenCalled();
+    expect(chatValue.handleSend).not.toHaveBeenCalled();
+  });
+
+  it("states the limit when the message holds too many prompt commands", async () => {
+    mount(Array.from({ length: 17 }, () => "/summary").join(" ") + " end");
+    promptRead.current = async () => ({ text: "Summarise." });
+    await act(async () => composerKeys.send?.());
+
+    expect(showError).toHaveBeenCalledExactlyOnceWith({
+      summary: "chatbot.commandMenu.runErrorSummary",
+      detail: "chatbot.commandMenu.runErrorTooMany:16",
+    });
+    expect(chatValue.runCommand).not.toHaveBeenCalled();
+  });
+
+  it("sends the assembled text of every prompt with its list", async () => {
+    mount("/summary then /tone now");
+    promptRead.current = async ({ promptId }) => ({ text: promptId === "p-tone" ? "Be formal." : "Summarise." });
+    await act(async () => composerKeys.send?.());
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(chatValue.runCommand).toHaveBeenCalledExactlyOnceWith({
+      text: "Summarise.\n\nthen\n\nBe formal.\n\nnow",
+      command: expect.objectContaining({
+        command: "summary",
+        appended_text: "then\n\nnow",
+        prompts: [
+          expect.objectContaining({ command: "summary", text_offset: 0, text_length: 10 }),
+          expect.objectContaining({ command: "tone", text_offset: 18, text_length: 10 }),
+        ],
+      }),
+    });
+  });
+
+  describe("the panel of a sent message", () => {
+    const text = "First\n\nSummarise the document.\n\nthen\n\nUse a formal tone.\n\nplease";
+    const command = {
+      command: "summary",
+      prompt_id: "p-summary",
+      prompt_name: "Weekly review",
+      appended_text: "First\n\nthen\n\nplease",
+      draft_text: "First /summary then /tone please",
+      draft_command_offset: 6,
+      prompts: [
+        {
+          command: "summary",
+          prompt_id: "p-summary",
+          prompt_name: "Weekly review",
+          draft_offset: 6,
+          text_offset: 7,
+          text_length: 23,
+        },
+        {
+          command: "tone",
+          prompt_id: "p-tone",
+          prompt_name: "Formal",
+          draft_offset: 20,
+          text_offset: 38,
+          text_length: 18,
+        },
+      ],
+    };
+
+    it("shows only the text of the activated prompt, under its own name and command", () => {
+      mount("");
+      act(() => threadProps.openCommandPrompt?.({ text, command, promptIndex: 1 }));
+      expect(panel()?.textContent).toMatch(/Formal\/toneUse a formal tone\.$/);
+      for (const other of ["First", "then", "please", "Summarise", "Weekly review"])
+        expect(panel()?.textContent).not.toContain(other);
+
+      act(() => threadProps.openCommandPrompt?.({ text, command, promptIndex: 0 }));
+      expect(panel()?.textContent).toMatch(/Weekly review\/summarySummarise the document\.$/);
+      expect(panel()?.textContent).not.toContain("formal tone");
+      // The library is never read for a sent message.
+      expect(promptPreviewFetch).not.toHaveBeenCalled();
+    });
+
+    it("no longer shows the user's words for a single listed prompt", () => {
+      mount("");
+      const single = {
+        command: "summary",
+        prompt_name: "Weekly review",
+        appended_text: "the report",
+        draft_text: "/summary the report",
+        draft_command_offset: 0,
+        prompts: [
+          { command: "summary", prompt_name: "Weekly review", draft_offset: 0, text_offset: 0, text_length: 23 },
+        ],
+      };
+      act(() =>
+        threadProps.openCommandPrompt?.({
+          text: "Summarise the document.\n\nthe report",
+          command: single,
+          promptIndex: 0,
+        }),
+      );
+      expect(panel()?.textContent).toMatch(/Weekly review\/summarySummarise the document\.$/);
+      expect(panel()?.textContent).not.toContain("the report");
+    });
+
+    it("shows the whole sent text for a turn that has no usable list", () => {
+      mount("");
+      const { prompts: _prompts, ...old } = command;
+      act(() => threadProps.openCommandPrompt?.({ text, command: old }));
+      expect(panel()?.textContent).toContain("Weekly review/summary");
+      expect(panel()?.textContent).toContain("Use a formal tone.");
+      expect(panel()?.textContent).toContain("please");
+
+      // A list that does not fit the stored text is ignored the same way.
+      act(() => threadProps.openCommandPrompt?.({ text: "short", command, promptIndex: 1 }));
+      expect(panel()?.textContent).toMatch(/Weekly review\/summaryshort$/);
+    });
   });
 });

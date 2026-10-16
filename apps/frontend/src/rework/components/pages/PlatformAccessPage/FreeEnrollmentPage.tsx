@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials";
 import { GcuPageContent } from "../GcuPage/GcuPage";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { platformPath } from "../../../../common/platformAccess";
 import {
@@ -13,13 +14,27 @@ import {
   useEnrollFreeTeamMutation,
   useRecordFreeOpeningMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import styles from "./FreeEnrollmentPage.module.css";
+import PlatformAccessCard from "./PlatformAccessCard";
+import styles from "./PlatformAccessCard.module.css";
 import PlatformAccessError from "./PlatformAccessError";
+
+// The backend gives this one answer for an expired, revoked or suspended link.
+const isInvalidLink = (error: unknown) => {
+  const { status, detail } = normalizeApiError(error);
+  return status === 404 && detail === "free_enrollment_link_invalid";
+};
+
+// A team join link answers this to a person without platform access: show the refusal page.
+const isPlatformAccessDenied = (error: unknown) => {
+  const { status, detail } = normalizeApiError(error);
+  return status === 403 && detail === "team_link_requires_platform_access";
+};
+const showRefusal = () => window.location.replace(platformPath("platform-access-denied"));
 
 export default function FreeEnrollmentPage() {
   const { token = "" } = useParams();
   const { t } = useTranslation();
-  const { gcuVersion, contactSupportLink, siteDisplayName } = useFrontendProperties();
+  const { gcuVersion } = useFrontendProperties();
   const preview = useFreeEnrollmentPreviewQuery({ token });
   const [accept, acceptance] = useAcceptFreeCguMutation();
   const [enroll, enrollment] = useEnrollFreeTeamMutation();
@@ -38,86 +53,81 @@ export default function FreeEnrollmentPage() {
       active = false;
     };
   }, [token, preview.isSuccess, record]);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<"invalid" | "failed" | null>(null);
+  const denied = preview.isError && isPlatformAccessDenied(preview.error);
+  useEffect(() => {
+    if (denied) showRefusal();
+  }, [denied]);
   const busy = acceptance.isLoading || enrollment.isLoading || preview.isFetching;
   const acceptTerms = async () => {
     if (!gcuVersion) return;
     try {
       await accept({ token, acceptFreeEnrollmentCgu: { version: gcuVersion } }).unwrap();
       await preview.refetch().unwrap();
-    } catch {
-      setFailed(true);
+    } catch (error) {
+      if (isPlatformAccessDenied(error)) showRefusal();
+      else setFailure(isInvalidLink(error) ? "invalid" : "failed");
     }
   };
   const join = async () => {
-    setFailed(false);
+    setFailure(null);
     try {
       const status = await enroll({ token }).unwrap();
-      if (status.admitted) window.location.replace(platformPath("/"));
-      else setFailed(true);
-    } catch {
-      setFailed(true);
+      if (status.admitted)
+        window.location.replace(
+          platformPath(status.team_id ? `team/${encodeURIComponent(status.team_id)}/agents` : "/"),
+        );
+      else setFailure("failed");
+    } catch (error) {
+      if (isPlatformAccessDenied(error)) showRefusal();
+      else setFailure(isInvalidLink(error) ? "invalid" : "failed");
     }
   };
-  if (preview.isError || failed)
+  if (denied) return null;
+  if (failure === "invalid" || (preview.isError && isInvalidLink(preview.error)))
+    return (
+      <PlatformAccessCard title={t("rework.platformAccess.join.invalidTitle")}>
+        <p className={styles.retreat}>{t("rework.platformAccess.join.invalidMessage")}</p>
+      </PlatformAccessCard>
+    );
+  // Anything else may be temporary: never call a working link invalid.
+  if (preview.isError || failure)
     return (
       <PlatformAccessError
-        hideSignOut
-        title={t("rework.platformAccess.joinTitle")}
-        message={t(preview.isError ? "rework.platformAccess.invalidLink" : "rework.platformAccess.failed")}
+        hideFooterLinks
+        title={t(
+          preview.isError ? "rework.platformAccess.join.uncheckedTitle" : "rework.platformAccess.join.failedTitle",
+        )}
+        message={t(preview.isError ? "rework.platformAccess.join.uncheckedMessage" : "rework.platformAccess.failed")}
         retry={() => {
-          setFailed(false);
+          setFailure(null);
           void preview.refetch();
         }}
       />
     );
   if (preview.data?.cgu_required) return <GcuPageContent isLoading={busy} onAccept={acceptTerms} />;
+  if (!preview.data)
+    return (
+      <PlatformAccessCard title={t("rework.platformAccess.join.checking")}>
+        <p role="status" className={styles.retreat}>
+          {t("rework.platformAccess.loading")}
+        </p>
+      </PlatformAccessCard>
+    );
   return (
-    <main className={styles.page}>
-      <section className={styles.card} aria-labelledby="invitation-title">
-        <header className={styles.header}>
-          {siteDisplayName && <p className={styles.brand}>{siteDisplayName}</p>}
-          <h1 id="invitation-title" className={styles.title}>
-            {t("rework.platformAccess.joinTitle")}
-          </h1>
-        </header>
-        <div className={styles.content}>
-          {preview.isLoading && <p role="status">{t("rework.platformAccess.loading")}</p>}
-          {preview.data && (
-            <>
-              <div className={styles.team}>
-                <TeamInitials name={preview.data.team_name} size="medium" className={styles.avatar} />
-                <div className={styles.teamDetails}>
-                  <h2 className={styles.teamName}>{preview.data.team_name}</h2>
-                  <p className={styles.description}>
-                    {t("rework.platformAccess.joinTeam", { team: preview.data.team_name })}
-                  </p>
-                </div>
-              </div>
-              {openingFailed && <p role="status">{t("rework.platformAccess.links.openingFailed")}</p>}
-            </>
-          )}
-        </div>
-        <footer className={styles.footer}>
-          {contactSupportLink && (
-            <a className={styles.support} href={contactSupportLink} target="_blank" rel="noopener noreferrer">
-              {t("rework.platformAccess.support")}
-            </a>
-          )}
-          {preview.data && (
-            <Button
-              color="primary"
-              variant="filled"
-              size="medium"
-              icon={{ category: "outlined", type: "person_add" }}
-              disabled={busy}
-              onClick={() => void join()}
-            >
-              {t("rework.platformAccess.join")}
-            </Button>
-          )}
-        </footer>
-      </section>
-    </main>
+    <PlatformAccessCard
+      title={t("rework.platformAccess.join.title")}
+      actions={
+        <Button color="primary" variant="filled" size="medium" disabled={busy} onClick={() => void join()}>
+          {t("rework.platformAccess.join.action")}
+        </Button>
+      }
+    >
+      <div className={styles.inner}>
+        <TeamInitials name={preview.data.team_name} size="medium" className={styles.teamTile} />
+        <h2 className={styles.teamName}>{preview.data.team_name}</h2>
+      </div>
+      {openingFailed && <p role="status">{t("rework.platformAccess.links.openingFailed")}</p>}
+    </PlatformAccessCard>
   );
 }

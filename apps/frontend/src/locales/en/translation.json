@@ -309,6 +309,7 @@
         "clearAria": "Remove the selected file",
         "currentTemplate": "A template is configured for this agent.",
         "templateRequired": "The PowerPoint generator requires a PowerPoint template. Upload a .pptx file.",
+        "templateNoFields": "No template fields found. This feature fills prepared templates. Add fields such as {{placeholder}} and describe them in the slide notes.",
         "templateInvalid": "Fix the template errors below before saving.",
         "analyzing": "Analyzing the template…",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
@@ -395,15 +396,27 @@
     "commandTurn": {
       "open": "Open the prompt behind the /{{command}} command",
       "openWithText": "Open the prompt behind the /{{command}} command, followed by “{{appended}}”",
-      "panelTitle": "Command prompt"
+      "panelTitle": "Command prompt",
+      "previewLoading": "Loading the prompt…",
+      "previewEmpty": "This prompt is empty.",
+      "previewError": "This prompt cannot be shown. It may have been deleted, or you may no longer have access to it."
     },
     "commandMenu": {
       "ariaLabel": "Available commands",
-      "promptsSection": "Prompt library",
-      "noneInTeam": "No command in this team yet. An editor can give one to a prompt from the Prompts page.",
+      "sections": {
+        "team": "Team \"{{name}}\"",
+        "teamFallback": "Team",
+        "personal": "Personal space",
+        "platform": "Platform skills"
+      },
+      "loading": "Loading commands…",
+      "error": "The commands could not be loaded. Type / again to retry.",
+      "none": "No command yet. Add one to any of your personal prompts from the Prompts page. In a team, an editor can also add one to a team prompt.",
       "noMatch": "No command matches.",
       "runErrorSummary": "Could not run the command",
-      "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment."
+      "runErrorDetail": "The prompt behind the /{{command}} command could not be read. Please try again in a moment.",
+      "runErrorStale": "The /{{command}} command is no longer available: its prompt was deleted or renamed, or it comes from another agent or team. Remove it from your message and choose it again.",
+      "runErrorTooMany": "A message can hold at most {{limit}} prompt commands. Remove a few, then send again."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
     "newConversation": "New conversation",
@@ -503,12 +516,14 @@
       "reasoningRowLabel": "Reasoning",
       "reasoningModelsSection": "Models",
       "reasoningEffortSection": "Effort",
+      "reasoningEffortNone": "No effort level available",
+      "modelAndReasoningMenu": "Model and reasoning",
       "reasoningOff": "Low",
       "reasoningOn": "High",
       "reasoningOnMenu": "High (Reasoning)",
-      "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
       "selectLibraryFirst": "Select a library first.",
-      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
+      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it.",
+      "modelChoiceLost": "{{model}} is no longer available: the conversation goes back to the recommended model."
     },
     "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
@@ -613,11 +628,27 @@
       "waiting": "Waiting for an answer",
       "answered": "Answered",
       "skipped": "Skipped"
+    },
+    "skills": {
+      "badge": "Skill: {{name}}",
+      "platformProvided": "Skill provided by the platform",
+      "requestPlaceholder": "Your request (optional)",
+      "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
+      "errorTitle": "Skill could not be used",
+      "unavailable": "This skill’s content is unavailable.",
+      "loaded": "Skill loaded",
+      "originUser": "Requested by you",
+      "originAgent": "Selected by the agent",
+      "originChild": "Selected by a sub-agent",
+      "open": "View skill {{name}}",
+      "panelTitle": "Skill: {{name}}",
+      "fileTitle": "File: {{path}}",
+      "fileExcerptTitle": "Excerpt: {{path}}",
+      "loading": "Loading skill…",
+      "retry": "Try again",
+      "description": "Description:",
+      "arguments": "Arguments:"
     }
-  },
-  "comingSoon": {
-    "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",
-    "title": "{{siteDisplayName}} is coming soon."
   },
   "common": {
     "cancel": "Cancel",
@@ -1142,7 +1173,9 @@
           "genericTitle": "Disable default-on?",
           "genericMessage": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this feature.",
           "knowledgeBaseTitle": "Disable Knowledge Base by default?",
-          "knowledgeBaseMessage": "Turning off default-on removes inherited Knowledge Base access from every team. Explicit team grants remain unchanged."
+          "knowledgeBaseMessage": "Turning off default-on removes inherited Knowledge Base access from every team. Explicit team grants remain unchanged.",
+          "impactPublished_one": "{{count}} of them is published: it will be removed from the marketplace.",
+          "impactPublished_other": "{{count}} of them are published: they will be removed from the marketplace."
         },
         "matrix": {
           "title": "{{name}} — team access",
@@ -1266,9 +1299,60 @@
           "confirm": "Repair documents",
           "cancel": "Cancel"
         }
+      },
+      "marketplaces": {
+        "title": "Marketplaces",
+        "subtitle": "Choose which teams may publish their agents to the agents marketplace, and how many agents each team may publish.",
+        "agentsSection": "Agents",
+        "defaultTitle": "Publishing",
+        "defaultHint": "Lets the team's editors publish their agents to the marketplace.",
+        "defaultChoice": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        },
+        "quota": "Max agents",
+        "quotaAria": "Max agents for {{team}}",
+        "defaultQuotaAria": "Default max agents",
+        "quotaInvalid": "Enter a whole number of at least 1.",
+        "resetQuota": "Back to the default value ({{count}})",
+        "resetQuotaAria": "Put the max agents of {{team}} back to Default",
+        "customizeQuota": "Customize",
+        "customizeQuotaAria": "Customize the max agents of {{team}}",
+        "rowControlAria": "Publishing for {{team}}",
+        "choice": {
+          "disabled": "Off",
+          "default": "Default",
+          "enabled": "On"
+        },
+        "col": {
+          "team": "Team",
+          "publishing": "Publishing",
+          "quota": "Max agents",
+          "published": "Published"
+        },
+        "loading": "Loading marketplace settings…",
+        "loadError": "Could not load the marketplace settings.",
+        "noTeams": "No team exists yet.",
+        "savedToast": "Marketplace settings saved.",
+        "saveError": "Could not save the marketplace settings.",
+        "impactError": "Could not check what this change would remove.",
+        "offConfirm": {
+          "title": "Turn publishing off?",
+          "teamMessage": "{{team}} will no longer be able to publish agents.",
+          "defaultMessage": "Teams that follow Default will no longer be able to publish agents.",
+          "agents_one": "{{count}} agent will be removed from the marketplace.",
+          "agents_other": "{{count}} agents will be removed from the marketplace.",
+          "confirm": "Turn off",
+          "cancel": "Cancel"
+        }
       }
     },
     "agentCard": {
+      "validationErrors": {
+        "capability_validation_unavailable": "The agent runtime could not be reached to validate the configuration. Please try again in a moment.",
+        "capability_validation_timeout": "Configuration validation took too long. Please try again.",
+        "capability_validation_interrupted": "Communication with the agent runtime was interrupted during configuration validation. Please try again."
+      },
       "activate": "Activate",
       "catalogWarning": "MCP configuration drift — recreate to resolve",
       "chat": "Chat",
@@ -1319,6 +1403,7 @@
       "duplicateDialog": {
         "title": "Duplicate this agent",
         "nameLabel": "New agent name",
+        "copyWord": "copy",
         "cancel": "Cancel",
         "confirm": "Duplicate"
       },
@@ -1341,9 +1426,20 @@
       "statusDisabled": "disabled",
       "toggleSuccess": "{{agent}} {{status}}",
       "unexpectedError": "An unexpected error occurred.",
-      "missingTeamId": "Missing team id in route."
+      "missingTeamId": "Missing team id in route.",
+      "moreMenu": "More actions"
     },
     "analytics": {
+      "skillUsage": {
+        "title": "Skill usage",
+        "skill": "Skill",
+        "user_count": "User",
+        "model_count": "Model",
+        "total": "Total",
+        "description": "Successful skill loads in the selected period, requested by users or chosen by the model. Collection starts when this feature is enabled.",
+        "empty": "No skill loads recorded in this period.",
+        "truncated": "Showing the 100 most loaded skills. Sorting applies to these results."
+      },
       "activeUsers": {
         "title": "Active users",
         "uniqueTotal": "Active users (over full period)",
@@ -1463,6 +1559,7 @@
       "tokenUsage": {
         "byAgent": {
           "empty": "No agent usage in this period.",
+          "creationAssistant": "Creation assistant",
           "title": "Token usage by agent",
           "valueLabel": "Tokens"
         },
@@ -1470,6 +1567,11 @@
           "empty": "No model usage in this period.",
           "title": "Token usage by model",
           "valueLabel": "Tokens"
+        },
+        "creationAssistant": {
+          "drafts_one": "{{count, number}} use",
+          "drafts_other": "{{count, number}} uses",
+          "label": "Creation assistant"
         },
         "overTime": {
           "title": "Token usage over time",
@@ -1610,7 +1712,8 @@
       "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
     },
     "teamUsage": {
-      "title": "My token usage",
+      "personalSkillsSectionTitle": "My skill usage",
+      "title": "My usage",
       "personalSectionTitle": "My usage",
       "tokensOverTime": {
         "title": "Token usage over time",
@@ -1627,6 +1730,7 @@
         "valueLabel": "Tokens"
       },
       "team": {
+        "skillsSectionTitle": "Team skill usage",
         "pageTitle": "Team usage",
         "sectionTitle": "Team usage",
         "membersLabel": "Members",
@@ -1678,6 +1782,35 @@
     },
     "cancel": "Cancel",
     "chatTrace": {
+      "documentTree": {
+        "metadataFor": "Metadata for {{name}}",
+        "truncated": "Truncated",
+        "unknown": "Unknown",
+        "displayed_one": "{{count}} document displayed",
+        "displayed_other": "{{count}} documents displayed",
+        "incomplete": "Partial listing: omitted documents may be more recent.",
+        "empty": "No documents in this listing.",
+        "root": "Root",
+        "latestDisplayed": "Most recent displayed",
+        "arrival": "Added to {{siteDisplayName}}: {{date}}",
+        "legacyDate": "Historical upload date: {{date}}",
+        "addedToKb": "Added to {{siteDisplayName}}",
+        "created": "File creation",
+        "modified": "Modification",
+        "title": "Title",
+        "format": "Format",
+        "mimeType": "MIME type",
+        "language": "Language",
+        "volume": "Pages",
+        "rowsLabel": "Rows",
+        "pages_one": "{{count}} page",
+        "pages_other": "{{count}} pages",
+        "rows_one": "{{count}} row",
+        "rows_other": "{{count}} rows",
+        "source": "Source",
+        "labels": "Labels",
+        "legacyUploaded": "Historical upload date"
+      },
       "ariaLabel": "Agent reasoning trace",
       "awaitingConfirmation": "awaiting confirmation…",
       "cancelledByUser": "cancelled by the user",
@@ -1746,6 +1879,7 @@
         "success": "Success"
       },
       "toolLabels": {
+        "readSkillFile": "Reading skill file",
         "readQuery": "Reading query",
         "documents": "Listing tabular documents",
         "markdown": "Reading the workbook catalog",
@@ -1840,6 +1974,90 @@
           "confirm": "Remove",
           "successToast": "Prompt removed from the marketplace",
           "errorToast": "Failed to remove prompt"
+        }
+      },
+      "agents": {
+        "title": "Community agents",
+        "searchPlaceholder": "Search an agent...",
+        "clearSearch": "Clear search",
+        "loading": "Loading agents...",
+        "likeError": "Could not save your like",
+        "teamFilter": {
+          "chip": "Team: {{team}}",
+          "clear": "Remove the filter on {{team}}"
+        },
+        "empty": {
+          "title": "No agent shared yet",
+          "description": "When a team publishes one of its agents, it appears here. You can then see what it does, like it, and import your own copy into your spaces."
+        },
+        "emptySearch": {
+          "title": "No agent matches",
+          "description": "Try other words, or remove the team filter."
+        },
+        "card": {
+          "byTeam": "By",
+          "filterByTeam": "Filter by team {{team}}",
+          "like_one": "Like this agent ({{count}} like)",
+          "like_other": "Like this agent ({{count}} likes)",
+          "import_one": "Import this agent ({{count}} import)",
+          "import_other": "Import this agent ({{count}} imports)",
+          "updatedOn": "Updated on {{date}}",
+          "details": "View details"
+        },
+        "detail": {
+          "import": "Import",
+          "close": "Close",
+          "loadError": "Could not load this agent. It may no longer be published.",
+          "publishedBy": "Published by {{team}} · updated on {{date}}",
+          "likesSinceUpdateTooltip_one": "Including {{count}} since the update of {{date}}",
+          "likesSinceUpdateTooltip_other": "Including {{count}} since the update of {{date}}",
+          "capabilitiesTitle": "What it can do",
+          "noCapabilities": "It answers questions, without any extra function.",
+          "instructionsTitle": "Instructions",
+          "noInstructions": "No instructions.",
+          "filesTitle": "Configuration files",
+          "filesHint": "Your copy receives these files when you import the agent."
+        },
+        "remove": {
+          "title": "Remove from the marketplace?",
+          "message": "\"{{name}}\" will no longer be listed. The team {{team}} sees that a platform administrator removed it, with your message if you write one.",
+          "reasonLabel": "Message to the team (optional)",
+          "reasonHint": "For example: outdated instructions.",
+          "confirm": "Remove"
+        },
+        "import": {
+          "title": "Import {{name}}",
+          "subtitle": "Select the spaces to import this agent into.",
+          "confirm": "Import",
+          "noEditableTeams": "You are not an editor of any team. Only an editor can import an agent into one — ask a team administrator for that role.",
+          "typeNotEnabled": "Agent type not enabled in this team",
+          "loses_one": "Loses {{count}} capability",
+          "loses_other": "Loses {{count}} capabilities",
+          "losesTitle": "Not available in this team:",
+          "independent": "Your copy will be independent: updates made by {{team}} will not reach it.",
+          "info": {
+            "copiedLabel": "Imported",
+            "copied": "The agent's name, description, instructions and settings",
+            "resetLabel": "To choose again",
+            "reset": "Libraries, folders and documents, which belonged to the publishing team",
+            "recreatedLabel": "Recreated",
+            "recreated": "Configuration files, such as a PowerPoint template",
+            "notCopiedLabel": "Not imported",
+            "notCopied": "Conversations, and capabilities not enabled in the team"
+          },
+          "resultTitle": "Import of {{name}}",
+          "importedInto": "Imported into {{team}}",
+          "failedInto": "Not imported into {{team}}",
+          "renamed": "Named \"{{name}}\": the name was already taken there.",
+          "toReconfigure": "To reconfigure there: the libraries, documents and folders the agent should use.",
+          "dropped": "Without: {{capabilities}}",
+          "notice": "{{capability}}: {{message}}",
+          "errorToast": "Import failed",
+          "errors": {
+            "marketplace_publishing_team": "An agent cannot be imported into the team that published it.",
+            "agent_name_conflict": "An agent with this name already exists in this space.",
+            "generic": "Something went wrong for this space. Try again later."
+          }
         }
       }
     },
@@ -1988,7 +2206,8 @@
     "profileMenu": {
       "contactSupport": "Contact support",
       "profile": "Profile",
-      "trigger": "{{name}}'s account"
+      "trigger": "{{name}}'s account",
+      "whatsNew": "What's new"
     },
     "promptCategories": {
       "pickerTitle": "Category",
@@ -2111,7 +2330,8 @@
         "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
         "agents": "No agent files yet. Files your agents create for you will appear here, grouped by agent.",
         "createLibrary": "Create a library (folder) to start adding documents.",
-        "folder": "This folder is empty."
+        "folder": "This folder is empty.",
+        "loadError": "Could not load this folder. Use Refresh to try again."
       },
       "folder": {
         "docCount": "{{count}} docs",
@@ -2268,9 +2488,10 @@
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams",
-          "platformPrompt": "Platform global prompt",
+          "platformPrompt": "Platform prompts",
           "announcements": "Announcements",
-          "uiSettings": "User interface"
+          "uiSettings": "User interface",
+          "marketplaces": "Marketplaces"
         },
         "title": "Administration spaces"
       },
@@ -2618,6 +2839,18 @@
           "updateRoleDetail": "Could not update member role.",
           "updateRoleSummary": "Failed to update role"
         },
+        "inviteLink": {
+          "buttonLabel": "Invite link",
+          "copied": "Copied",
+          "copy": "Copy",
+          "copyFailed": "The link could not be copied automatically. It is selected: copy it with your keyboard.",
+          "enable": "Enable invitation by link",
+          "failed": "The invite link could not be updated. Try again.",
+          "hint": "Anyone who already has access to the platform can join the team as a member with this link.",
+          "regenerate": "Generate a new link",
+          "title": "Invite link",
+          "urlLabel": "Link"
+        },
         "moreActions": "More actions",
         "search": {
           "ariaLabel": "Search for a member",
@@ -2641,31 +2874,39 @@
         "activity": "Activity",
         "usage": "Usage",
         "responsibilities": "Responsibilities",
-        "routing": "Model routing",
+        "routing": "Models",
         "retention": "Retention"
       },
       "routing": {
-        "title": "Model routing",
-        "defaultProfile": {
-          "title": "Default chat model",
-          "explanation": "The model profile used for this team's managed chat agents when no agent override matches below. Leave empty to use the deployment default.",
-          "label": "Default profile id",
-          "useDeploymentDefault": "Use deployment default"
+        "title": "Models",
+        "subtitle": "The models the platform allows this team: which ones members can use, the default one, and whether reasoning starts on.",
+        "readOnly": "Only team administrators can change the team's models.",
+        "emptyState": "The platform allows no model for this team yet. Ask a platform administrator to allow one.",
+        "enabledTooltip": "Enabled for the team",
+        "enabledLabel": "Enable {{model}} for the team",
+        "defaultCannotBeDisabled": "The default model cannot be disabled",
+        "reasoningDefault": "Reasoning on by default",
+        "reasoningDefaultLabel": "Reasoning on by default for {{model}}",
+        "isDefault": "Default",
+        "setDefault": "Set as default",
+        "defaultUnavailable": "The team's default model is no longer available to this team. Set another model as default.",
+        "saveSuccess": "Team models saved.",
+        "saveError": "Could not save the team's models.",
+        "disableDialog": {
+          "title": "Disable {{model}}?",
+          "confirm": "Disable",
+          "loading": "Looking for the agents that use this model as their recommended model…",
+          "loadError": "Could not check which agents use this model as their recommended model.",
+          "noAgents": "No agent in this team uses this model as its recommended model.",
+          "agents": "These agents use this model as their recommended model. They will switch to the team's default model, {{model}}:",
+          "agentsUnnamed": "These agents use this model as their recommended model. They will switch to the team's default model:",
+          "conversations": "Ongoing conversations on this model will switch to their agent's recommended model. For agents that follow the team's default model, that is {{model}}.",
+          "conversationsUnnamed": "Ongoing conversations on this model will switch to their agent's recommended model."
         },
-        "agentOverrides": {
-          "title": "Agent overrides",
-          "explanation": "Override the default model for one specific agent.",
-          "agent": "Agent",
-          "agentPlaceholder": "Select an agent",
-          "targetProfileId": "Profile id",
-          "targetProfilePlaceholder": "Select a model",
-          "addRule": "Add override",
-          "incompleteRow": "Pick both an agent and a profile for every override row (or remove the row) before saving."
-        },
-        "profileUnavailable": "No longer enabled for this team",
-        "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
-        "save": "Save",
-        "saveError": "Could not save the routing policy."
+        "loadError": "The team's models could not be loaded.",
+        "loadErrorHint": "Changes are disabled until they load. Try again in a moment.",
+        "conflict": "The team's models changed meanwhile",
+        "conflictHint": "They were reloaded. Check them, then make your change again."
       },
       "parameters": {
         "title": "Settings",
@@ -2686,13 +2927,19 @@
           "open": "Open",
           "inviteOnly": "Invite only",
           "manual": "Manual only",
-          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
+          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link."
         },
         "visibility": {
           "label": "Team visibility",
           "support": "Determines whether the team is visible on the marketplace to every user.",
           "public": "Public",
-          "private": "Private"
+          "private": "Private",
+          "privateConfirm": {
+            "title": "Make the team private?",
+            "message_one": "{{count}} published agent of this team will be removed from the marketplace. Making the team public again does not publish it again.",
+            "message_other": "{{count}} published agents of this team will be removed from the marketplace. Making the team public again does not publish them again.",
+            "confirm": "Make private"
+          }
         },
         "teamAvatar": {
           "title": "Team avatar",
@@ -2771,8 +3018,7 @@
           },
           "sections": {
             "dataKnowledge": "Data and knowledge",
-            "documentProduction": "Document production",
-            "intelligenceOrchestration": "Intelligence and orchestration"
+            "documentProduction": "Document production"
           },
           "builtIn": {
             "section": "Included with this agent",
@@ -2803,10 +3049,6 @@
             "webPage": {
               "title": "Generate a web page (HTML/CSS)",
               "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
-            },
-            "reasoning": {
-              "title": "Reasoning",
-              "description": "Access to \"reasoning\" mode in the chat options."
             }
           }
         },
@@ -2831,13 +3073,13 @@
             "intro": "To ensure your agent complies with applicable standards and regulations, please describe in detail this agent's purpose, its intended uses, and the associated risks.",
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           },
-          "reasoning": {
-            "label": "Access deep reasoning",
-            "hint": "Access to \"deep reasoning\" mode in the chat options."
-          },
-          "reasoningDefaultOn": {
-            "label": "Deep reasoning on by default",
-            "hint": "Every new conversation with this agent starts with the composer's deep reasoning toggle already on. Users can still switch it off per question. Deep reasoning is slower and, on agents that call tools, can make the model repeat calls."
+          "recommendedModel": {
+            "label": "Recommended model",
+            "hint": "New conversations with this agent start on this model. Members can still pick another model in the chat.",
+            "teamDefault": "Team default model",
+            "teamDefaultCurrent": "Currently {{model}}. Follows changes made by the team admin.",
+            "teamDefaultFollows": "Follows changes made by the team admin.",
+            "loadError": "The recommended model could not be checked. Saving will leave it unchanged."
           }
         },
         "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
@@ -2851,6 +3093,48 @@
           "pickFromLibrary": "Pick from library",
           "removeTagAria": "Remove {{tag}}",
           "tagsPlaceholder": "Type and press Enter to add tags..."
+        },
+        "creationAssistant": {
+          "open": "Assistant",
+          "title": "Creation assistant",
+          "intro": "Describe in your own words what your agent should do: its role, its mission, its audience, its constraints… The assistant suggests a name, a role, a description, instructions (the system prompt) and capabilities. You choose what to keep.",
+          "descriptionLabel": "What your agent should do",
+          "descriptionPlaceholder": "Example: an assistant for the HR team that answers employees' questions about leave and health insurance from our internal documents. Friendly tone, short answers, always cite the source document. Never give legal advice.",
+          "generate": "Suggest",
+          "loading": "Preparing suggestions…",
+          "apply": "Apply",
+          "editDescription": "Edit the description",
+          "identityHeading": "Proposed identity",
+          "promptHeading": "Suggested system prompt",
+          "fields": {
+            "name": "Name",
+            "role": "Role",
+            "description": "Description"
+          },
+          "capabilitiesHeading": "Recommended capabilities",
+          "noCapabilities": "No capability recommended: the agent will answer from its instructions alone.",
+          "selectHint": "Select the assistant's proposals you want to apply.",
+          "applyHint": "Apply fills in only the ticked items; ticked capabilities replace the current selection. Nothing is saved until you save the agent.",
+          "overwrite": {
+            "title": "Replace what is already filled in?",
+            "message": "Applying replaces these values in the form:",
+            "confirm": "Replace",
+            "items": {
+              "systemPrompt": "System prompt",
+              "name": "Name",
+              "role": "Role",
+              "description": "Description",
+              "capabilities": "Capability selection"
+            }
+          },
+          "errors": {
+            "forbidden": "You are not allowed to edit this team's agents.",
+            "unsupported": "The creation assistant is not available for this agent template. Fill in the form yourself or contact an administrator.",
+            "timeout": "The suggestions took too long. Try again, possibly with a shorter description.",
+            "unavailable": "The creation assistant is unavailable right now. Try again in a moment.",
+            "invalid": "The description was not accepted. Check that it is not empty and does not exceed 4000 characters.",
+            "failed": "The suggestions could not be prepared. Your description is kept: you can try again."
+          }
         },
         "sections": {
           "aria": "Form sections",
@@ -2895,17 +3179,31 @@
         "firstCreate": "Create prompt",
         "form": {
           "command": "Command",
-          "commandConflict": "This command label is already used by another team prompt",
+          "commandConflict": "This command is already used by another prompt",
           "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
-          "text": "Prompt text"
+          "text": "Prompt text",
+          "commandReserved": "/skill is reserved for platform skills. Choose another command."
         },
         "loading": "Loading prompts...",
         "modalCreate": "New prompt",
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
+        "toasts": {
+          "created": "Prompt created",
+          "updated": "Prompt updated",
+          "saveFailed": "Failed to save prompt",
+          "deleted": "Prompt deleted",
+          "deleteFailed": "Failed to delete prompt"
+        },
+        "deleteDialog": {
+          "title": "Delete prompt?",
+          "message": "\"{{name}}\" will be permanently deleted. This action cannot be undone.",
+          "confirm": "Delete"
+        },
+        "missingTeam": "Missing team id in route.",
         "title": "Team prompts",
         "view": {
           "closeAria": "Close",
@@ -3033,10 +3331,11 @@
     },
     "uiSettings": {
       "title": "User interface",
-      "subtitle": "Default theme and themes available to users. Changes apply the next time each user loads the application.",
-      "hint": "A disabled theme disappears from users' profile; their choice is kept and comes back if the theme is offered again. The default theme applies to users who have not chosen one, and is always offered.",
+      "subtitle": "Default theme and available themes. Choices refresh after saving, when returning to the application, or within a minute.",
+      "hint": "A withdrawn theme disappears from the profile. Users on that theme switch to the default; their preference is retained if the theme is offered again. The default theme stays available.",
       "offeredLabel": "Offer the {{theme}} theme to users",
       "offeredTooltip": "Offered to users",
+      "defaultAvailabilityHint": "The default theme must stay available to users.",
       "setDefault": "Set as default",
       "isDefault": "Default",
       "unknown": "Themes unknown to this version, kept as they are: {{ids}}",
@@ -3046,7 +3345,7 @@
       "unknownAuthor": "an administrator"
     },
     "platformPrompt": {
-      "title": "Platform global prompt",
+      "title": "Platform prompts",
       "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
       "editor": {
         "title": "Global prompt",
@@ -3073,7 +3372,48 @@
         "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
         "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
-      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
+      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers.",
+      "tabs": {
+        "aria": "Platform prompts",
+        "system": "Platform system prompt",
+        "creationAssistant": "Creation assistant"
+      },
+      "creationAssistant": {
+        "title": "Creation assistant",
+        "badgeDefault": "Default",
+        "badgeCustom": "Customised",
+        "subtitle": "The creation assistant drafts an agent (name, role, description, instructions, capabilities) from the description a user types in the agent form. These are the instructions it follows. Keep the {language} text: it is replaced with the user's language.",
+        "hint": "Edit them to fit drafted agents to your organisation's style. \"Restore default\" goes back to the text shipped with the platform; it does not change the model.",
+        "missingLanguage": "The {language} text is missing: drafts may no longer be written in the user's language. You can still save.",
+        "defaultRevised": "The default prompt was updated on {{revised}}, after your customisation of {{customized}}.",
+        "viewDefault": "View default",
+        "hideDefault": "Hide default",
+        "empty": "The instructions cannot be empty.",
+        "reset": "Restore default",
+        "resetConfirm": {
+          "title": "Restore the default text?",
+          "message": "Your customised instructions will be deleted and the creation assistant will use the text shipped with the platform again. The chosen model is kept."
+        },
+        "resetDone": "Default text restored.",
+        "resetFailed": "Could not restore the default text.",
+        "saved": "Creation assistant settings saved.",
+        "saveFailed": "Could not save the creation assistant settings.",
+        "model": {
+          "label": "Model",
+          "default": "Platform default model",
+          "missing": "{{id}} (no longer selectable)"
+        },
+        "reasoning": {
+          "label": "Reasoning",
+          "unsupported": "This model cannot reason.",
+          "levels": {
+            "off": "Off",
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High"
+          }
+        }
+      }
     },
     "wiki": {
       "title": "Wiki",
@@ -3279,11 +3619,13 @@
       },
       "page": {
         "title": "Announcements",
-        "subtitle_one": "{{count}} announcement is live for every user.",
-        "subtitle_other": "{{count}} announcements are live for every user.",
-        "subtitle_zero": "Nothing is showing to users right now.",
-        "create": "New announcement",
-        "empty": "No announcement yet.\nCreate one to show a banner at the top of the app."
+        "subtitle_one": "{{count}} banner is live for every user.",
+        "subtitle_other": "{{count}} banners are live for every user.",
+        "subtitle_zero": "No banner is showing right now.",
+        "emptyBanners": "No banner yet.\nCreate one to show a message at the top of the app.",
+        "emptyPatchNotes": "No patch note yet.\nCreate one: users do not see it until you announce the update.",
+        "createBanner": "New banner",
+        "createPatchNote": "New patch note"
       },
       "severity": {
         "info": "Info",
@@ -3324,6 +3666,118 @@
       "delete": {
         "title": "Delete this announcement?",
         "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
+      },
+      "patchNote": {
+        "dialog": {
+          "navigation": "Browse patch notes",
+          "newer": "Newer patch note",
+          "older": "Older patch note"
+        },
+        "editor": {
+          "createTitle": "New patch note",
+          "editTitle": "Edit patch note",
+          "title": "Patch note title",
+          "titleRequired": "Give the patch note a title in this language.",
+          "body": "Content (Markdown)",
+          "placeholder": "Describe what's new in this release in Markdown…",
+          "hint": "Headings, lists, links and code are supported.",
+          "preview": "Preview",
+          "previewEmpty": "The preview appears here as you type.",
+          "previewAsUsers": "Preview as users see it",
+          "bodyRequired": "Write the content in this language.",
+          "tooLong": "The content is longer than {{max}} characters in one language.",
+          "incomplete": "The {{language}} version needs both a title and content, or neither.",
+          "saveAndActivate": "Save and include"
+        },
+        "discard": {
+          "title": "Discard your changes?",
+          "message": "The patch note you are writing has not been saved.",
+          "confirm": "Discard changes",
+          "cancel": "Keep writing"
+        },
+        "savedIncluded": "Patch note saved. It is included in the next announcement.",
+        "savedNotIncluded": "Patch note saved. It is not included in the next announcement.",
+        "row": {
+          "enableHint": "Include in the next announcement",
+          "disableHint": "Leave out of the next announcement",
+          "statusIncluded": "Included in the next announcement",
+          "statusNotIncluded": "Not included",
+          "preview": "Preview as users see it",
+          "edit": "Edit this patch note",
+          "delete": "Delete this patch note",
+          "move": "Move \"{{title}}\""
+        },
+        "delete": {
+          "title": "Delete this patch note?",
+          "message": "\"{{title}}\" will be removed for good. The current announcement is not changed."
+        },
+        "deleted": "Patch note deleted.",
+        "reorder": {
+          "instructions": "To move this patch note, press Space or Enter, use the up and down arrows, then press Space or Enter again to drop it, or Escape to cancel.",
+          "picked": "\"{{title}}\" picked up, at position {{position}} of {{total}}.",
+          "moved": "\"{{title}}\" moved to position {{position}} of {{total}}.",
+          "dropped": "\"{{title}}\" dropped at position {{position}} of {{total}}.",
+          "cancelled": "Move cancelled. \"{{title}}\" stays at position {{position}} of {{total}}.",
+          "failed": "The new order was not saved.",
+          "role": "sortable item"
+        },
+        "announce": {
+          "action": "Announce the update ({{included}}/{{max}})",
+          "lastUse": "Last announced on {{date}}, by {{name}}",
+          "noneIncluded": "Include at least one patch note to announce the update.",
+          "tooMany": "An announcement holds at most {{max}} patch notes. Deselect some to announce.",
+          "confirm": {
+            "title": "Send this list to users?",
+            "message": "Users will see exactly this list, in this order, at their next sign-in and in What's new. Your later changes will not reach them until the next announcement.",
+            "list": "Patch notes included in the announcement",
+            "confirm": "Announce"
+          },
+          "done": "Update announced. Users will see it at their next sign-in.",
+          "failed": "The update was not announced.",
+          "changed": "The patch notes changed meanwhile. Check the list, then announce again.",
+          "withdraw": {
+            "action": "Withdraw the current announcement",
+            "title": "Withdraw the current announcement?",
+            "message": "What's new will be empty for every user and nobody will get the dialog until the next announcement. Your patch notes are not changed.",
+            "confirm": "Withdraw the announcement",
+            "done": "Announcement withdrawn.",
+            "failed": "The announcement was not withdrawn."
+          }
+        }
+      },
+      "history": {
+        "empty": "No activation yet.",
+        "unknownActor": "Unknown author",
+        "error": "Could not load the history.",
+        "type": {
+          "banner": "Banner",
+          "patch_note": "Patch notes"
+        },
+        "more_one": "{{title}} + {{count}} other",
+        "more_other": "{{title}} + {{count}} others",
+        "openPackage": "View the announced patch notes",
+        "packageFailed": "Could not open this announcement's patch notes.",
+        "packageEmpty": "This announcement has no readable patch note.",
+        "column": {
+          "type": "Type",
+          "title": "Title",
+          "activation": "Activation",
+          "deactivation": "Deactivation",
+          "by": "By",
+          "open": "Open"
+        },
+        "filter": {
+          "all": "All",
+          "banner": "Banners",
+          "patch_note": "Patch notes",
+          "group": "Filter by type"
+        }
+      },
+      "view": {
+        "group": "Announcements page view",
+        "banners": "Banners",
+        "patchNotes": "Patch notes",
+        "history": "History"
       }
     },
     "copyToTeams": {
@@ -3335,98 +3789,95 @@
       "infoLabel": "What a copy does"
     },
     "platformAccess": {
-      "whitelistTabs": {
-        "label": "Whitelist sections",
-        "users": "Users",
-        "teams": "Teams"
-      },
       "tabs": {
         "label": "Platform access sections",
         "rules": "Rules",
-        "users": "Whitelist"
+        "users": "Users",
+        "teams": "Teams"
       },
-      "bulkHint": "Select users across searches and pages to add independent exceptions. Team access follows current membership.",
-      "allowSelected": "Allow selected users ({{count}})",
-      "clearSelection": "Clear selection",
-      "select": "Select",
-      "selectUser": "Select {{user}}",
       "title": "Platform access",
-      "description": "Control admission using the configured identity attribute, individual exceptions and team membership.",
-      "disabled": "Platform access administration requires authenticated Fred with enforced authorization.",
-      "t0Hint": "Import existing users once before activating filtering. Individual entries can be removed afterward.",
-      "t0Preview": "{{count}} users to import; {{matching}} currently allowed by the rule.",
+      "description": "Choose who can use the platform: a rule on the account, and a whitelist of users and teams.",
+      "disabled": "This page is only available when user sign-in and permission checks are enabled on this instance.",
+      "t0Hint": "Add existing users who are not already accepted by the rule to the whitelist. You can run this import again at any time.",
+      "t0Preview": "{{count}} users to import; {{matching}} already accepted by the rule.",
+      "t0Refresh": {
+        "title": "Refresh the whitelist",
+        "mode": "Update mode",
+        "preserve_removals": "Preserve removals",
+        "include_removed": "Include removed people",
+        "confirm": "Run import again",
+        "includeWarning": "This refresh can re-add people manually removed from the whitelist.",
+        "missingHistory": "Removal history is unavailable. This refresh will recalculate the entire whitelist and can re-add people who were manually removed. A full import is required before future refreshes can preserve removals.",
+        "preview": "Estimate: {{count}} users to add; {{skipped}} removals preserved.",
+        "success_one": "Whitelist updated: {{count}} user added.",
+        "success_other": "Whitelist updated: {{count}} users added.",
+        "conflict": "The configuration or last import changed. Check the updated estimate before confirming again."
+      },
       "t0Done": "Initial import completed",
       "t0Import": "Import existing users",
-      "users": "Whitelist",
-      "search": "Search local users",
-      "user": "User",
-      "sources": "Access via",
-      "exception": "Individual exception",
-      "remove": "Remove exception",
-      "allow": "Allow user",
-      "teams": "Teams",
+      "search": "Search a whitelisted user",
+      "exception": "Actions",
+      "remove": "Remove",
       "team": "Team",
-      "allowTeam": "Whitelist this team",
+      "allowTeam": "Allow team",
       "free": "Link access",
-      "teamHint": "Authorizing a team admits its current members. Removing a member withdraws that source of access.",
-      "freeHint": "Link access admits team members to the platform. Disabling it suspends invitation links and withdraws this access source.",
+      "freeHint": "Link access admits the people who joined through this team's links to the platform. Disabling it suspends invitation links and withdraws this access source.",
       "link": "Invitations",
       "createLink": "Create link",
-      "copyLink": "Invitation URL",
+      "copyLink": "Invitation link",
       "failed": "The operation could not be completed. Check your access and try again.",
-      "deniedTitle": "Access not authorized",
-      "deniedMessage": "You are not authorized to access this platform. Please contact support to request access.",
+      "denied": {
+        "greetingNamed": "Hello {{firstName}},",
+        "greeting": "Hello,",
+        "title": "your access is not open yet",
+        "stepRequestWithEmail": "Ask support for access, giving the address above.",
+        "stepRequest": "Ask support for access.",
+        "stepReturn": "Once it is open, come back here and check your access.",
+        "check": "Check my access",
+        "request": "Request access"
+      },
       "support": "Contact support",
       "retry": "Try again",
       "signOut": "Sign out",
-      "joinTitle": "Join a team",
-      "joinTeam": "You can join the team {{team}}.",
-      "join": "Join this team",
-      "invalidLink": "This link cannot be used. It may be expired, revoked or suspended, or the service is unavailable.",
-      "loading": "Loading...",
-      "source": {
-        "attribute": "Identity attribute",
-        "manual": "Manual exception",
-        "t0": "Initial import",
-        "team": "Authorized team",
-        "free": "Link access"
+      "join": {
+        "title": "You have been invited to join a team",
+        "action": "Join the team",
+        "checking": "Checking your invitation…",
+        "invalidTitle": "This invitation link is no longer valid",
+        "invalidMessage": "Ask the person who invited you for a new link.",
+        "uncheckedTitle": "This link could not be checked right now",
+        "uncheckedMessage": "A technical problem is preventing us from checking your invitation. Try again in a moment.",
+        "failedTitle": "The team could not be joined right now"
       },
-      "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
+      "loading": "Loading...",
+      "actorLockout": "This change would remove your own last access to the platform.",
       "rule": {
-        "title": "Admission rule",
-        "hint": "Individual exceptions and authorized teams always allow access.",
-        "combination": "Combine conditions",
-        "all": "All conditions (AND)",
-        "any": "At least one condition (OR)",
+        "combination": "Conditions to meet",
+        "all": "All (AND)",
+        "any": "At least one (OR)",
         "condition": "Condition {{number}}",
         "accountField": "Account field",
         "removeConditionNumber": "Remove condition {{number}}",
         "operator": "Comparison",
         "value": "Value",
         "regex": "Regular expression",
-        "regexHint": "Advanced: matches the whole value. Missing, empty or incompatible claims always fail, including negative comparisons.",
+        "regexHint": "Advanced: the expression must match the whole value. If the field is missing or empty, the condition always fails, even with a negative comparison.",
         "caseSensitive": "Case sensitive",
         "caseSensitiveCondition": "Case sensitive for condition {{number}}",
         "addCondition": "Add condition",
         "test": "Test with my account",
         "save": "Save rule",
-        "reload": "Discard draft and reload",
-        "saved": "Rule saved. It applies to subsequent requests.",
-        "conflict": "Another administrator saved a newer rule. Your draft is preserved. Discard it and reload before saving again.",
-        "actorLockout": "This rule would remove your last admission source. Keep a rule that allows you or grant yourself an independent exception first.",
-        "invalidOrFailed": "The rule could not be validated or saved. Check the claim keys, values and regular expressions, then try again.",
-        "required": "Save a rule or add an admission exception before activating filtering.",
+        "reload": "Discard changes",
+        "saved": "Rule saved",
+        "conflict": "Another administrator saved a newer rule. Discard your changes to load it before saving again.",
+        "actorLockout": "This rule would remove your own last access. Keep a rule that accepts you, or add yourself to the whitelist first.",
+        "invalidOrFailed": "The rule could not be tested or saved. Check the fields, values and regular expressions, then try again.",
+        "required": "Save a rule or add an access to the whitelist before enabling filtering.",
         "mode": "Filter mode",
         "modeLabel": {
           "allow": "Allow users matching the rule",
           "block": "Block users matching the rule"
         },
-        "testAllowed": "Test result: access would be allowed",
-        "testDenied": "Test result: access would be refused",
-        "ruleMatches": "Your token matches the draft rule.",
-        "ruleDoesNotMatch": "Your token does not match the draft rule.",
-        "admitted": "With filtering active, you would be admitted, including independent exceptions and teams.",
-        "denied": "With filtering active, you would be refused.",
         "operatorLabel": {
           "contains": "Contains",
           "not_contains": "Does not contain",
@@ -3437,18 +3888,36 @@
         "result": {
           "matched": "Condition matches.",
           "not_matching": "Condition does not match.",
-          "missing": "This claim is missing from your token.",
-          "incompatible": "This claim is empty, too large or has an incompatible type.",
-          "unavailable": "This field could not be inspected within the token limits.",
-          "timeout": "Regular expression exceeded its time budget."
+          "missing": "This field is missing from your account.",
+          "incompatible": "This field is empty, too long or not text.",
+          "unavailable": "This field could not be checked.",
+          "timeout": "The regular expression took too long to run."
         },
         "invalidRegex": "Invalid regular expression. Check its syntax.",
-        "invalidCondition": "Invalid condition. Check its keys and value.",
-        "delegatedHint": "After a field change, delegated requests may require a new direct user request. Exceptions and teams remain valid.",
+        "invalidCondition": "Invalid condition. Check its field and value.",
         "empty": "No conditions yet. Add a condition to choose a field from your account.",
         "saving": "Saving...",
         "unsaved": "Unsaved changes",
-        "saveHint": "Rule changes apply after saving, when filtering is active."
+        "conditions": "Conditions",
+        "ruleAccepts": "The rule accepts your account.",
+        "ruleRejects": "The rule does not accept your account.",
+        "ruleBlocks": "The rule blocks your account.",
+        "ruleDoesNotBlock": "The rule does not block your account.",
+        "ruleUnchecked": "The rule could not be checked on your account: it does not give you access.",
+        "accessKeptBy": "With filtering on, you keep access thanks to: {{sources}}.",
+        "accessKept": "With filtering on, you keep access.",
+        "accessLost": "With filtering on, you would lose access to the platform.",
+        "accessSource": {
+          "rule": "the rule",
+          "admin": "your platform administrator role",
+          "manual": "the user whitelist",
+          "team": "the authorized team {{team}}",
+          "teamUnnamed_one": "an authorized team",
+          "teamUnnamed_other": "{{count}} authorized teams",
+          "free": "link access of the team {{team}}",
+          "freeUnnamed_one": "link access of a team",
+          "freeUnnamed_other": "link access of {{count}} teams"
+        }
       },
       "picker": {
         "choose": "Choose an account field",
@@ -3456,16 +3925,16 @@
         "own": "My account fields",
         "search": "Search field names",
         "unsupported": "This value cannot be filtered as text.",
-        "truncated": "Some values were omitted because the token exceeds display limits. Unavailable fields cannot be selected.",
-        "empty": "No supported claims found. Try the other source.",
-        "failed": "Could not read your verified session claims.",
+        "truncated": "Some values are too long to display. Unavailable fields cannot be selected.",
+        "empty": "No usable field found.",
+        "failed": "Could not read your account information.",
         "selected": "Selected field",
         "noSelection": "No field selected",
-        "tokenValue": "Current token value",
+        "tokenValue": "Current value in your account",
         "useField": "Use this field",
         "advancedFields": "Show advanced fields",
         "simpleFields": "Show simple fields",
-        "simpleEmpty": "No matching root text fields. Change the search or show advanced fields.",
+        "simpleEmpty": "No simple field matches. Change the search or show advanced fields.",
         "valueTitle": "Use the current value?",
         "useValue": "Use this value",
         "keepValue": "Enter my own value",
@@ -3477,7 +3946,8 @@
       "links": {
         "manage": "Manage links",
         "title": "Invitations for {{team}}",
-        "hint": "Share links manually. Accesses count page openings after sign-in.",
+        "hint": "Share these links yourself: they let people join the team.",
+        "suspendedHint": "Link access is disabled for this team. Valid invitation links are suspended until it is enabled again.",
         "note": "Note (optional)",
         "expiry": "Expiration (optional)",
         "expiryDate": "Expiration date",
@@ -3488,14 +3958,20 @@
         },
         "futureExpiry": "Choose a future date and time.",
         "never": "No expiration",
-        "untitled": "No note",
         "created": "Created",
         "statusLabel": "Status",
-        "openings": "Accesses",
+        "openings": "Opens",
+        "joiners": "Joined users",
+        "deletedUser": "Deleted",
+        "joinersTitle": "Users who joined through {{note}}",
+        "joinedAt": "Joined at",
+        "noJoiners": "No joins recorded since tracking began.",
+        "username": "Username",
+        "joinersFailed": "Could not load the users who joined through this link.",
         "actions": "Actions",
         "revoke": "Revoke",
         "revokeTitle": "Revoke this invitation?",
-        "revokeHint": "This link will permanently stop accepting new enrollments. Other links and existing team members remain unchanged. Remove a member or disable link access to withdraw that source of platform access.",
+        "revokeHint": "This link will stop accepting new sign-ups. Members who already joined keep their access.",
         "openingFailed": "The opening could not be recorded. You can still try to join.",
         "status": {
           "active": "Active",
@@ -3504,40 +3980,189 @@
           "revoked": "Revoked",
           "all": "All links"
         },
-        "copyUrl": "Copy URL",
-        "copied": "URL copied to clipboard.",
-        "copyFailed": "Clipboard access failed. Select the URL above and copy it manually, or retry.",
+        "copyUrl": "Copy link",
+        "copied": "Link copied to clipboard.",
+        "copyFailed": "Clipboard access failed. Select the link above and copy it yourself, or try again.",
         "createdSuccess": "Link created",
-        "cleanup": "Delete expired and revoked links",
-        "cleanupTitle": "Delete obsolete links for {{team}}?",
+        "cleanup": "Delete inactive links",
+        "cleanupTitle": "Delete inactive links for {{team}}?",
         "cleanupConfirm": "Delete links",
-        "cleanupHint": "Permanently delete {{count}} expired or revoked links for {{team}}, including their notes and access counts. Team members and usable links will be kept.",
-        "deleted": "{{count}} obsolete links deleted.",
-        "loading": "Loading links..."
+        "cleanupHint": "{{count}} expired or revoked links for {{team}} will be permanently deleted, with their notes and open counts. People who joined through them stay team members but lose the platform access these links gave them. Active links are kept.",
+        "deleted": "{{count}} inactive links deleted.",
+        "loading": "Loading links...",
+        "noteColumn": "Note",
+        "expiryColumn": "Expiry"
       },
       "activation": {
-        "emptyAllowed": "No users are allowed by this review.",
-        "emptyBlocked": "No users are blocked by this review.",
-        "unverified": "Verification unavailable ({{count}})",
+        "emptyAllowed": "No user would be allowed.",
+        "emptyBlocked": "No user would be blocked.",
+        "unverified": "Not checked ({{count}})",
         "update": "Update",
         "importWarning": "Existing users have not been imported",
-        "importWarningHint": "Users without a matching rule or a whitelist exception may lose access. Do you want to continue without importing them, or go to the whitelist to import them first?",
+        "importWarningHint": "Users the rule does not accept and who are not in the whitelist may lose access. You can continue without importing them, or go to the whitelist to import them first.",
         "continueWithoutImport": "Continue without importing",
         "goToWhitelist": "Go to whitelist",
-        "importStatusFailed": "Unable to check whether existing users have been imported. Retry before enabling filtering.",
+        "importStatusFailed": "Could not check whether existing users have been imported. Try again before enabling filtering.",
         "enable": "Enable filtering",
         "disable": "Disable filtering",
-        "enableTitle": "Activate platform filtering?",
+        "enableTitle": "Enable platform filtering?",
         "disableTitle": "Disable platform filtering?",
-        "savedOnly": "This review uses the saved rule and current exceptions. Unsaved rule changes are not applied.",
-        "disableHint": "Users will no longer be filtered. Authentication and resource permissions remain enforced.",
-        "previewFailed": "The population review is unavailable or outdated. Retry before confirming.",
+        "savedOnly": "This preview uses the saved rule and the current whitelist. Unsaved changes are not taken into account.",
+        "disableHint": "All signed-in users will be able to access the platform again. Their permissions on resources do not change.",
+        "previewFailed": "The preview is unavailable or out of date. Try again before confirming.",
         "checkedAt": "Last checked: {{date}}",
-        "unknownHint": "These accounts could not be evaluated with the available verified data. Token information may be missing, expired or conflicting, or account status could not be checked. Their access will be evaluated on their next request; a missing field in a verified token is evaluated normally.",
-        "groups": "Dry run",
+        "unknownHint": "These accounts could not be checked for now. Their access will be evaluated the next time they use the platform.",
+        "groups": "Preview before activation",
         "allowed": "Allowed",
         "blocked": "Blocked",
         "email": "Email"
+      },
+      "filteringOn": "Filtering on",
+      "filteringOff": "Filtering off",
+      "clearSearch": "Clear search",
+      "searchTeam": "Search a team",
+      "noTeams": "No team matches.",
+      "teamFilter": {
+        "all": "All",
+        "allowed": "Allowed",
+        "group": "Filter teams"
+      },
+      "noUsers": "No whitelisted user matches this search.",
+      "teamAllowed": "Allowed",
+      "grantedSelected_one": "{{count}} user added to the whitelist.",
+      "grantedSelected_other": "{{count}} users added to the whitelist.",
+      "revokedUser": "{{user}} removed from the whitelist.",
+      "addUsers": "Add users",
+      "emptyWhitelist": "The whitelist has no user yet. Use “Add users” to add some.",
+      "addDialog": {
+        "title": "Add users",
+        "subtitle": "People added to the whitelist can use the platform whatever the rule says.",
+        "searchPlaceholder": "Enter a username, a name or an email",
+        "pendingListHeader": "Users to add to the whitelist",
+        "pendingListEmpty": "No user selected yet",
+        "removeAria": "Remove {{name}} from the selection",
+        "confirm": "Add",
+        "searching": "Searching...",
+        "noMatch": "No user matches this search.",
+        "searchFailed": "The search could not be completed. Try again.",
+        "searchTooBroad": "Too many results. Refine the search.",
+        "alreadyGranted": "Already on the whitelist",
+        "more_one": "{{count}} more result. Refine the search to see it.",
+        "more_other": "{{count}} more results. Refine the search to see them."
+      },
+      "addedOn": "Added on",
+      "origin": {
+        "label": "Origin",
+        "manual": "Manual",
+        "t0": "Import"
+      },
+      "whitelistedUsers": "Whitelisted users",
+      "whitelistedUsersHint": "Users added here can always access the platform, whatever the rule says.",
+      "whitelistedTeams": "Whitelisted teams",
+      "whitelistedTeamsHint": "All current members of a team authorized here can access the platform, whatever the rule says.",
+      "otherAccess": {
+        "unnamedTeam": "unnamed team",
+        "label": "Other access",
+        "attribute": "Rule",
+        "admin": "Platform administrator",
+        "team_one": "Authorized team: {{teams}}",
+        "team_other": "Authorized teams: {{teams}}",
+        "free_one": "Link access: {{teams}}",
+        "free_other": "Link access: {{teams}}",
+        "summary": "Other access: {{details}}",
+        "separator": "; "
+      }
+    },
+    "agentMarketplace": {
+      "barLabel": "Marketplace",
+      "published": "Published",
+      "publishedTooltip": "This agent is published on the marketplace",
+      "publish": "Publish",
+      "likes_one": "{{count}} like",
+      "likes_other": "{{count}} likes",
+      "imports_one": "{{count}} import",
+      "imports_other": "{{count}} imports",
+      "modified": {
+        "label": "Marketplace update needed",
+        "tooltip": "This agent changed since publication. The marketplace still shows the previous version until an editor updates it."
+      },
+      "removed": {
+        "label": "Removed from the marketplace",
+        "date": "Removed on {{date}}",
+        "message": "Message from the platform administrator: {{message}}",
+        "hide": "Hide",
+        "reasons": {
+          "deactivated": "The agent was deactivated.",
+          "suspended": "The agent was suspended: a capability it uses is no longer available to the team.",
+          "switch_off": "Publishing agents was turned off for this team.",
+          "team_private": "The team became private.",
+          "removed_by_platform_admin": "A platform administrator removed it.",
+          "unknown": "The agent is no longer published."
+        }
+      },
+      "menu": {
+        "publish": "Publish to the marketplace",
+        "republish": "Update on the marketplace",
+        "remove": "Remove from the marketplace"
+      },
+      "blocked": {
+        "templateNotPublic": "This agent uses an agent type reserved to platform administrators: it cannot be published.",
+        "teamPrivate": "Private teams cannot publish agents. Make the team public to publish it.",
+        "quotaReached": "Your team has reached its quota of published agents. Remove one from the marketplace to publish this one."
+      },
+      "publishDialog": {
+        "title": "Publish {{name}} to the marketplace?",
+        "titleRepublish": "Update {{name}} on the marketplace?",
+        "visibility": "Its configuration (name, description, instructions and settings) becomes visible to every user of the organization, who can import a copy of it. Settings tied to your team, such as libraries and documents, are not shared.",
+        "visibilityRepublish": "Its current configuration (name, description, instructions and settings) will replace the published version on the marketplace. Everyone in the organization can import a copy. Settings tied to your team, such as libraries and documents, are not shared.",
+        "files": "Anyone who imports this agent receives a copy of its files ({{names}}).",
+        "quota_one": "Your team has published {{count}} agent out of {{quota}} allowed.",
+        "quota_other": "Your team has published {{count}} agents out of {{quota}} allowed.",
+        "quotaLast_one": "Your team has published {{count}} agent out of {{quota}} allowed. This will be the last one.",
+        "quotaLast_other": "Your team has published {{count}} agents out of {{quota}} allowed. This will be the last one.",
+        "learnMore": "Learn more about the marketplace",
+        "understand": "I understand",
+        "confirm": "Publish",
+        "confirmRepublish": "Update"
+      },
+      "proposal": {
+        "title": "Update on the marketplace?",
+        "titleReactivated": "Publish again to the marketplace?",
+        "saved": "You changed {{name}}. The marketplace still shows its previous version.",
+        "reactivated": "{{name}} was removed from the marketplace when it was deactivated. Publish it again?",
+        "update": "Update",
+        "publish": "Publish",
+        "ignore": "Ignore"
+      },
+      "removeDialog": {
+        "title": "Remove from the marketplace?",
+        "message": "\"{{name}}\" will no longer be listed on the marketplace. It stays in your team unchanged, and its likes and imports are kept if you publish it again.",
+        "confirm": "Remove"
+      },
+      "deactivateDialog": {
+        "title": "Deactivate this published agent?",
+        "message": "\"{{name}}\" will also be removed from the marketplace. Reactivating it does not publish it again.",
+        "confirm": "Deactivate"
+      },
+      "deleteRemoves": "It will also be removed from the marketplace.",
+      "publishSuccess": "{{name}} published to the marketplace",
+      "publishError": "Could not publish this agent",
+      "removeSuccess": "{{name}} removed from the marketplace",
+      "removeError": "Could not remove this agent from the marketplace",
+      "hideError": "Could not hide this state",
+      "errors": {
+        "marketplace_version_conflict": "Someone changed this agent's publication in the meantime. The card now shows its current state.",
+        "marketplace_quota_reached": "Your team has reached its quota of published agents.",
+        "marketplace_team_private": "Private teams cannot publish agents.",
+        "marketplace_switch_off": "Publishing agents is not enabled for this team.",
+        "marketplace_template_not_public": "This agent uses an agent type reserved to platform administrators: it cannot be published.",
+        "marketplace_agent_inactive": "A deactivated or suspended agent cannot be published.",
+        "marketplace_personal_space": "Agents of your personal space cannot be published.",
+        "marketplace_forbidden": "You are not allowed to do this.",
+        "marketplace_agent_not_found": "This agent no longer exists.",
+        "marketplace_entry_not_found": "This agent is not published.",
+        "marketplace_runtime_unavailable": "The service running this agent cannot be reached. The published version is unchanged; try again later.",
+        "marketplace_capability_not_exportable": "The capability \"{{capability}}\" cannot be prepared for the marketplace. The published version is unchanged."
       }
     }
   },

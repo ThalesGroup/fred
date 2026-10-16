@@ -40,11 +40,22 @@
   color: var(--on-surface);
 }
 
+/* The container takes focus only programmatically (on open, or when nothing
+   inside is focusable); it is not a control, so it draws no focus ring. */
+.dialog:focus {
+  outline: none;
+}
+
 .titleContainer {
   display: flex;
   align-items: center;
   gap: var(--spacing-2xs);
   padding: var(--spacing-s) var(--spacing-m);
+}
+
+/* compactTitle: the body starts right under the title. */
+.titleContainer.compactTitle {
+  padding-bottom: 0;
 }
 
 .title {
@@ -69,10 +80,38 @@
   overflow: hidden;
 }
 
+/* Left-aligned content facing the buttons; it takes the free space and wraps. */
+.actionsStart {
+  flex: 1;
+  margin-right: auto;
+  min-width: 0;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: var(--spacing-xs);
   border-top: 1px solid var(--outline-muted);
   padding: var(--spacing-m);
+}
+
+.titleContainer.dense,
+.actions.dense {
+  padding-block: var(--spacing-xs);
+}
+
+.dividers .titleContainer {
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.dividers .actions {
+  border-top-color: var(--outline-variant);
+}
+
+/* Adds to the bar's gap so the addon sits a full --spacing-m from the buttons. */
+.actionsAddon {
+  display: flex;
+  align-items: center;
+  margin-right: calc(var(--spacing-m) - var(--spacing-xs));
 }

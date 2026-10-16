@@ -24,12 +24,12 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
-import { EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
-import { styleTags, tags } from "@lezer/highlight";
+import { drawSelection, EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
+import { highlightCode, styleTags, tags } from "@lezer/highlight";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
-import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./PromptEditor.module.css";
 
@@ -39,6 +39,14 @@ export interface PromptEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** Not editable but not greyed out: shows a prompt with its highlighting (e.g. a draft to review). */
+  readOnly?: boolean;
+  /** Keep the label for assistive tech only, when the caller renders its own visible heading. */
+  hideLabel?: boolean;
+  /** Grow to the parent's height instead of `rows` (the parent must be a sized flex column). */
+  fillHeight?: boolean;
+  /** Show the field as chosen, with a primary border (e.g. selected in a review). */
+  highlighted?: boolean;
   required?: boolean;
   error?: string;
   /** Visible height in lines before the editor scrolls. */
@@ -48,11 +56,13 @@ export interface PromptEditorProps {
 /** Height a prompt field gets unless a caller asks for more. */
 export const PROMPT_EDITOR_ROWS = 15;
 
-// `editable` alone only takes the surface out of the tab order and off
-// contenteditable: CodeMirror's drop handler gates on `readOnly`, so without it
-// text dropped on a disabled field still edits the document and reports a
-// change the form believes it has locked.
-const editStateFor = (disabled: boolean) => [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)];
+// Disabled needs `readOnly` too: CodeMirror's drop handler ignores `editable`.
+// Read-only stays `editable` so keyboard users can focus, scroll and select it.
+const editStateFor = (disabled: boolean, readOnly: boolean) => [
+  EditorView.editable.of(!disabled),
+  EditorState.readOnly.of(disabled || readOnly),
+  EditorView.contentAttributes.of({ "aria-readonly": String(readOnly && !disabled) }),
+];
 
 // Both list markers — a bullet's dash and an ordered item's number — are the
 // same `ListMark` node, and re-tagging it non-contextually is enough to give
@@ -62,6 +72,8 @@ const editStateFor = (disabled: boolean) => [EditorView.editable.of(!disabled), 
 const listMarkerTag = {
   props: [styleTags({ ListMark: tags.number })],
 };
+
+const promptMarkdown = markdown({ extensions: [listMarkerTag] });
 
 // Marks a document change this component made to adopt an incoming `value`, so
 // it is not echoed back to the parent as if the user had typed it.
@@ -94,6 +106,10 @@ export function PromptEditor({
   onChange,
   placeholder,
   disabled = false,
+  readOnly = false,
+  hideLabel = false,
+  fillHeight = false,
+  highlighted = false,
   required = false,
   error,
   rows = PROMPT_EDITOR_ROWS,
@@ -125,8 +141,10 @@ export function PromptEditor({
         extensions: [
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
-          markdown({ extensions: [listMarkerTag] }),
+          promptMarkdown,
           EditorView.lineWrapping,
+          // Use the placeholder's text coordinates for the caret.
+          drawSelection(),
           syntaxHighlighting(promptHighlighting),
           placeholderRef.current.of(placeholder ? placeholderExtension(placeholder) : []),
           // The editing surface is a contenteditable, not a form control, so a
@@ -136,7 +154,7 @@ export function PromptEditor({
           // replaced. Autocorrect and autocapitalize stay off — they rewrite
           // text, and a prompt's XML tags must survive verbatim.
           EditorView.contentAttributes.of({ "aria-labelledby": labelId, spellcheck: "true" }),
-          editableRef.current.of(editStateFor(false)),
+          editableRef.current.of(editStateFor(false, false)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return;
             if (update.transactions.some((tr) => tr.annotation(externalSync))) return;
@@ -180,9 +198,9 @@ export function PromptEditor({
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({
-      effects: editableRef.current.reconfigure(editStateFor(disabled)),
+      effects: editableRef.current.reconfigure(editStateFor(disabled, readOnly)),
     });
-  }, [disabled]);
+  }, [disabled, readOnly]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -208,8 +226,10 @@ export function PromptEditor({
   };
 
   return (
-    <div className={`${styles.editor} ${disabled ? styles.disabled : ""} ${!disabled && error ? styles.error : ""}`}>
-      <span className={styles.label} id={labelId}>
+    <div
+      className={`${styles.editor} ${disabled ? styles.disabled : ""} ${readOnly ? styles.readOnly : ""} ${fillHeight ? styles.fill : ""} ${highlighted ? styles.highlighted : ""} ${!disabled && error ? styles.error : ""}`}
+    >
+      <span className={hideLabel ? styles.visuallyHidden : styles.label} id={labelId}>
         {required ? `${label} *` : label}
       </span>
 
@@ -234,4 +254,32 @@ export function PromptEditor({
       {error && <span className={styles.information}>{error}</span>}
     </div>
   );
+}
+
+/** Read-only rendering of a prompt with the editor's syntax colours: plain,
+ * selectable spans, so the caller keeps control of layout and scrolling. */
+export function PromptHighlight({ value, className }: { value: string; className?: string }) {
+  const nodes = useMemo(() => {
+    const out: ReactNode[] = [];
+    const tree = promptMarkdown.language.parser.parse(value);
+    highlightCode(
+      value,
+      tree,
+      promptHighlighting,
+      (text, classes) =>
+        out.push(
+          classes ? (
+            <span key={out.length} className={classes}>
+              {text}
+            </span>
+          ) : (
+            text
+          ),
+        ),
+      () => out.push("\n"),
+    );
+    return out;
+  }, [value]);
+
+  return <div className={className}>{nodes}</div>;
 }

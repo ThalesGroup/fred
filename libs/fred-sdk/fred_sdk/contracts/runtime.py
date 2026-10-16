@@ -61,6 +61,7 @@ from .context import (
     UiPart,
 )
 from .models import AgentDefinition
+from .skills import SkillLoadAttribution, SkillsPort
 from .web_research import WebResearchPort
 
 ChatModelHandle: TypeAlias = object
@@ -220,6 +221,7 @@ class StatusRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.STATUS] = RuntimeEventKind.STATUS
     status: str = Field(..., min_length=1)
     detail: str | None = None
+    skill_load: SkillLoadAttribution | None = None
 
 
 class ThoughtStartEvent(RuntimeEventBase):
@@ -1109,7 +1111,7 @@ class DocumentTreePort(ABC):
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
     ) -> DocumentTreeResult:
         """
         Return the caller's authorized folder/document tree as rendered text.
@@ -1623,6 +1625,7 @@ class RuntimeServices:
     # Appended last to preserve positional compatibility.
     conversation_filesystem: ConversationFilesystemPort | None = None
     web_research: WebResearchPort | None = None
+    skills: SkillsPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

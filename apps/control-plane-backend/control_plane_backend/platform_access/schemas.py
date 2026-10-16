@@ -30,7 +30,7 @@ class SetPlatformFiltering(BaseModel):
 
 
 class AdmissionSource(BaseModel):
-    kind: Literal["attribute", "manual", "t0", "team", "free"]
+    kind: Literal["admin", "attribute", "manual", "t0", "team", "free"]
     team_id: str | None = None
     team_name: str | None = None
     granted_by: str | None = None
@@ -117,14 +117,42 @@ class PlatformEnrollmentLinksPage(BaseModel):
     inactive_count: int
 
 
+class PlatformEnrollmentJoiner(BaseModel):
+    user_id: str
+    username: str | None
+    first_name: str | None
+    last_name: str | None
+    joined_at: datetime
+    deleted: bool
+
+
+class PlatformEnrollmentJoinersPage(BaseModel):
+    items: list[PlatformEnrollmentJoiner]
+    total: int
+
+
 class DeletedPlatformEnrollmentLinks(BaseModel):
     deleted_count: int
+
+
+PlatformT0RefreshMode = Literal["preserve_removals", "include_removed"]
+
+
+class RefreshPlatformT0(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: PlatformT0RefreshMode
+    expected_revision: int = Field(ge=0)
+    expected_completed_at: AwareDatetime
 
 
 class PlatformT0Preview(BaseModel):
     candidates: int
     matching: int
     completed_at: datetime | None
+    revision: int = 0
+    removal_history_complete: bool = True
+    removed_skipped: int = 0
+    imported_count: int | None = None
 
 
 class PlatformAccessStatus(BaseModel):
@@ -132,9 +160,24 @@ class PlatformAccessStatus(BaseModel):
     cgu_required: bool
 
 
+class EnrollmentResult(PlatformAccessStatus):
+    # Set only once the caller is a member and admitted, so the page can open the team.
+    team_id: str | None = None
+
+
 class FreeEnrollmentPreview(BaseModel):
     team_name: str
     cgu_required: bool
+
+
+class TeamJoinLink(BaseModel):
+    enabled: bool
+    token: str | None = None
+
+
+class SetTeamJoinLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
 
 
 class AcceptFreeEnrollmentCgu(BaseModel):

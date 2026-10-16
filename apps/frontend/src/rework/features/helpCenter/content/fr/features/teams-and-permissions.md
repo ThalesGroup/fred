@@ -18,7 +18,7 @@ accordés séparément.
 | Rôle         | Peut                                                                                | Ne peut pas, sans autre rôle                           |
 | ------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | **Membre**   | Utiliser les agents, lire les conversations et les fichiers de l'équipe, la quitter | Modifier quoi que ce soit de partagé                   |
-| **Éditeur**  | Créer et modifier agents, prompts, ressources et routage des modèles                | Gérer les membres ou les réglages de l'équipe          |
+| **Éditeur**  | Créer et modifier agents, prompts et ressources                                     | Gérer les membres ou les réglages de l'équipe          |
 | **Admin**    | Gérer les membres et leurs rôles, les réglages et la politique de l'équipe          | **Créer ou modifier un agent, un prompt, un document** |
 | **Analyste** | Créer et lancer des campagnes d'évaluation, gérer les corpus d'évaluation           | Toucher au corpus général, aux membres, aux réglages   |
 
@@ -31,15 +31,47 @@ accordés séparément.
 **Membre** est la base : automatique dès qu'on porte un rôle au-dessus. Et une
 équipe garde toujours **au moins un Admin** — retirer le dernier est refusé.
 
+## Publier des agents
+
+Tout **Éditeur** peut partager les agents de l'équipe avec toute l'organisation
+grâce à la marketplace des agents. Un **Admin** de l'équipe peut retirer un
+agent de la marketplace sans être Éditeur. Le fonctionnement de la publication
+est expliqué sur la page
+[Les agents](/help/fr/features/agents#la-marketplace-des-agents).
+
+La publication est **activée pour chaque équipe par l'administrateur de la
+plateforme**, qui fixe aussi le nombre d'agents qu'une équipe peut publier. Si
+l'administrateur la désactive plus tard, les agents publiés de l'équipe quittent
+la marketplace.
+
 ## Entrer dans une équipe
 
 La **marketplace** liste les équipes visibles de votre organisation. Une équipe
 **publique** y figure et se rejoint d'un clic si elle est ouverte ; sinon un
-Admin de l'équipe doit vous ajouter. Une équipe **privée** n'apparaît pas du
-tout, et ne se rejoint jamais seul : demandez à un de ses membres.
+Admin de l'équipe doit vous ajouter ou vous envoyer un lien d'invitation. Une
+équipe **privée** n'apparaît pas du tout, et ne se rejoint jamais seul :
+demandez à un de ses membres.
 
 À noter : une équipe privée **ne peut pas** être ouverte à l'adhésion libre.
-On y entre uniquement sur ajout par l'un de ses membres.
+On y entre quand l'un de ses Admins vous ajoute ou vous envoie un lien
+d'invitation.
+
+### Liens d'invitation
+
+Un Admin de l'équipe peut ouvrir **Réglages → Membres → Lien d'invitation** et
+activer **Activer l'invitation par lien**. L'équipe dispose alors d'un lien,
+affiché en entier avec un bouton **Copier**, à partager comme il le souhaite
+(messagerie, e-mail…). Ouvrir ce lien puis choisir **Rejoindre l'équipe** vous
+rend **Membre** ; un Admin peut ensuite vous donner d'autres rôles.
+
+Le lien ne fonctionne que pour les personnes qui ont déjà accès à la
+plateforme. Il ne donne pas accès à la plateforme elle-même : sans cet accès, le
+lien mène à la page qui explique comment le demander.
+
+Désactiver l'interrupteur met le lien en pause : il ne fonctionne plus jusqu'à
+sa réactivation, avec le même lien. **Générer un nouveau lien** le remplace
+définitivement : l'ancien lien ne fonctionne plus. Dans les deux cas, les
+personnes déjà entrées restent membres.
 
 ## Qui crée les équipes
 
@@ -58,13 +90,19 @@ de l'administration de la plateforme, animer une équipe relève de l'équipe.
 La page **Réglages** rassemble ce qui gouverne l'équipe. L'accès à chaque
 section dépend de votre rôle.
 
-- **Membres** — ajouter, retirer, changer les rôles (**Admin**).
+- **Membres** — ajouter, retirer, changer les rôles, partager des liens
+  d'invitation (**Admin**).
 - **Paramètres** — la description de l'équipe, sa visibilité sur la marketplace,
   son mode d'adhésion, et le délai de **rétention** après lequel les
   conversations supprimées sont définitivement effacées (**Admin**).
-- **Routage des modèles** — quel profil de modèle les agents de l'équipe
-  utilisent, par défaut et selon l'opération. Laissé vide, le profil du
-  déploiement s'applique (**Éditeur**).
+- **Modèles** — parmi les modèles de langage que la plateforme ouvre à
+  l'équipe : ceux que les membres peuvent utiliser, celui par défaut, et si le
+  raisonnement démarre activé pour chacun (**Admin** ; les Éditeurs et
+  Analystes le consultent). Le modèle par défaut ne peut pas être désactivé.
+  Désactiver un modèle affiche d'abord les agents qui le conseillaient : ils
+  suivent alors le modèle par défaut de l'équipe. Les conversations qui
+  l'utilisaient reviennent au modèle conseillé de l'agent. Un modèle
+  nouvellement ouvert par la plateforme arrive activé.
 
 ## L’application d’évaluation
 

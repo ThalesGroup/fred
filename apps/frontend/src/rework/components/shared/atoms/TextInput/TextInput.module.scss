@@ -55,6 +55,15 @@
       color: var(--on-surface-retreat);
     }
 
+    &:disabled {
+      background-color: var(--state-surface-main-disabled);
+      color: var(--state-on-surface-disabled);
+
+      &::placeholder {
+        color: var(--state-on-surface-disabled);
+      }
+    }
+
     &:-webkit-autofill,
     &:-webkit-autofill:hover,
     &:-webkit-autofill:focus {

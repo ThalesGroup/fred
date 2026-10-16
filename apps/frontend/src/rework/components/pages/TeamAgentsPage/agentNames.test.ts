@@ -28,11 +28,12 @@ describe("agent names", () => {
     expect(isAgentNameTaken("   ", taken)).toBe(false);
   });
 
-  it("starts a duplicate on the first free numbered name", () => {
-    const taken = takenAgentNames([agent("a", "Analyst"), agent("b", "analyst (2)")]);
+  it("starts a duplicate on the first free copy name, numbered from 1", () => {
+    const taken = takenAgentNames([agent("a", "Analyst"), agent("b", "analyst (copie 1)")]);
 
-    expect(freeAgentName("Analyst", taken)).toBe("Analyst (3)");
-    expect(freeAgentName("Writer", taken)).toBe("Writer");
+    expect(freeAgentName("Analyst", taken, "copie")).toBe("Analyst (copie 2)");
+    expect(freeAgentName("Report", takenAgentNames([agent("c", "Report")]), "copy")).toBe("Report (copy 1)");
+    expect(freeAgentName("Writer", taken, "copie")).toBe("Writer");
   });
 
   it("recognises the server's name conflict and nothing else", () => {

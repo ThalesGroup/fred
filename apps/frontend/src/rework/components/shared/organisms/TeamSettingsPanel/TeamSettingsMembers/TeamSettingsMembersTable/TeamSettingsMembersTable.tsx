@@ -196,6 +196,7 @@ export default function TeamSettingsMembersTable({ team, search, size = "medium"
         size: "23rem",
         cellRenderer: (teamMember) => (
           <TeamRoleChips
+            size="small"
             heldRoles={teamMember.relations}
             canAdminister={(role) => canAdministerTeamRole(capabilities, role)}
             onToggle={(role, held) =>

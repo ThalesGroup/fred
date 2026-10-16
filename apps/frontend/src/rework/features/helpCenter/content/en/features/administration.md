@@ -28,8 +28,26 @@ do not necessarily reach the same page.
 - **Platform roles** — who holds which cross-cutting role.
 - **Users** — the platform's accounts.
 - **Features** — the catalogue of functions and their opening per team.
-- **Platform prompt** — the shared instructions prepended to every agent's own.
+- **Platform prompts** — two tabs: the **platform system prompt**, the shared
+  instructions prepended to every agent's own, and the **creation assistant**,
+  which helps users draft an agent from the agent form. For the assistant you
+  can adapt its instructions and restore the default at any time (keep the
+  `{language}` text, replaced with the user's language), and choose the model
+  it uses; by default, the platform's default model. The **Reasoning**
+  setting next to it lets that model think before answering when it can.
+  It is off by default: in our tests it made drafts slower and costlier
+  without clearly better results, so we recommend an intermediate model
+  without reasoning. Depending on the model it is a switch or a choice of levels from
+  Off to High; a higher level thinks longer. When reasoning is slow, the
+  assistant also asks the same model without it and keeps the first proposal
+  ready, which uses more tokens. This choice does not change the model of the
+  agents it drafts. If the default instructions change
+  after you customised them, a warning says so and lets you view them. Anyone
+  who can edit a team's agents can read these instructions and the chosen
+  model, so never put confidential notes in them.
 - **User interface** — the default theme and the themes available to users.
+- **Announcements** — the banners and patch notes shown to users.
+- **Marketplaces** — who may publish agents to the marketplace, and how many.
 - **Analytics** — platform-wide usage indicators.
 - **Activity** — running work and its history.
 - **Self-test** and **Corpus audit** — the health checks.
@@ -52,8 +70,28 @@ Each change is saved at once.
 
 A user whose theme is no longer offered moves to the default theme. Their choice is kept: it comes back if the theme is offered again. Picking a theme in
 the profile, even the one already shown, keeps it afterwards if the default
-theme changes. When a single theme is offered, the profile only shows the mode. Changes apply
-the next time each user loads the application.
+theme changes. When a single theme is offered, the profile only shows the mode. Changes apply at once
+for the administrator, and for other users when they return to the
+application or within a minute.
+
+To add a theme in your organization's colors, see
+[Create a custom theme](/help/en/guides/custom-theme).
+
+## Marketplaces
+
+On the **Marketplaces** page, a **Platform admin** decides in which teams the
+editors may publish agents to the marketplace (see
+[Agents](/help/en/features/agents#the-agents-marketplace)):
+
+- a **Publishing** row: **Disabled** or **Enabled**, and how
+  many agents a team may publish (5 unless changed). Every team follows it,
+  including teams created later;
+- per team, **Off**, **Default** or **On**. Its **Max agents** follows the
+  default value; **Customize** gives it its own, with a way back to the default.
+
+Turning publishing off for a team removes its published agents from the
+marketplace; the confirmation states how many first. Lowering the max agents
+keeps the agents already published but blocks new publications.
 
 ## Who opens functions to your team
 

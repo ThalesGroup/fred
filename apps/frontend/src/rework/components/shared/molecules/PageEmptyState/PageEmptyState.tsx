@@ -28,6 +28,8 @@ export interface PageEmptyStateProps {
   icon: IconType;
   /** Primary message shown below the icon. */
   message: string;
+  /** Optional short explanation under the message, in a quieter style. */
+  description?: string;
   /** Optional primary action button rendered below the message. */
   action?: PageEmptyStateAction;
 }
@@ -47,7 +49,7 @@ export interface PageEmptyStateProps {
  * Example:
  * - `<PageEmptyState icon="description" message={t("...")} action={{ label: t("..."), onClick: openCreate }} />`
  */
-export default function PageEmptyState({ icon, message, action }: PageEmptyStateProps) {
+export default function PageEmptyState({ icon, message, description, action }: PageEmptyStateProps) {
   return (
     <div className={styles.pageEmptyState}>
       <div className={styles.presentation}>
@@ -55,6 +57,7 @@ export default function PageEmptyState({ icon, message, action }: PageEmptyState
           <Icon category="outlined" type={icon} filled />
         </span>
         <span className={styles.message}>{message}</span>
+        {description && <span className={styles.description}>{description}</span>}
       </div>
       {action && (
         <Button

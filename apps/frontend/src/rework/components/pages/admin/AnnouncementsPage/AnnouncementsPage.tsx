@@ -15,13 +15,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
-import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import Switch from "@shared/atoms/Switch/Switch";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import AnnouncementBanner from "@shared/molecules/AnnouncementBanner/AnnouncementBanner";
+import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
@@ -34,60 +32,113 @@ import {
   useUpdateAnnouncementMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Announcement, AnnouncementWriteRequest } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import ActivationHistory from "./ActivationHistory";
 import AnnouncementEditorDialog from "./AnnouncementEditorDialog";
+import PatchNoteAnnouncer from "./PatchNoteAnnouncer";
+import PatchNoteEditorDialog from "./PatchNoteEditorDialog";
+import PatchNoteList from "./PatchNoteList";
+import RowControls from "./RowControls";
 import styles from "./AnnouncementsPage.module.css";
 
-/** `null` means "compose a new one"; `undefined` means the dialog is closed. */
-type EditorTarget = Announcement | null | undefined;
+type AnnouncementKind = NonNullable<Announcement["kind"]>;
+
+const VIEWS = ["banners", "patchNotes", "history"] as const;
+type View = (typeof VIEWS)[number];
+
+/** What each list tab creates, and the words around it. */
+const LISTS = {
+  banners: { kind: "banner", icon: "campaign", create: "createBanner", empty: "emptyBanners" },
+  patchNotes: { kind: "patch_note", icon: "new_releases", create: "createPatchNote", empty: "emptyPatchNotes" },
+} as const;
+
+/** `announcement: null` composes a new one of that kind; `undefined` means the editor is closed. */
+type EditorTarget = { kind: AnnouncementKind; announcement: Announcement | null } | undefined;
+
+/** What names an announcement in a sentence. */
+function announcementName(announcement: Announcement, language: string): string {
+  return resolveAnnouncementText(announcement.title, language) || announcement.id;
+}
 
 /**
- * Platform announcements: the banners every user sees at the top of the app.
- *
- * The enabled count sits in the header rather than being left to be counted
- * from the rows: several announcements stack, and the number on screen is the
- * one thing an admin most easily loses track of.
+ * Platform announcements, one tab per kind: banners at the top of the app, and
+ * patch notes, a working area that reaches users only when announced. The live banner count sits in the
+ * header, the number an admin most easily loses track of; the activation
+ * history is the third tab.
  */
 export default function AnnouncementsPage() {
   const { t, i18n } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
-  const { data: announcements = [], isLoading } = useAnnouncementsQuery();
+  const { data: announcements = [], isLoading, isFetching, refetch } = useAnnouncementsQuery();
   const [createAnnouncement, { isLoading: isCreating }] = useCreateAnnouncementMutation();
   const [updateAnnouncement, { isLoading: isUpdating }] = useUpdateAnnouncementMutation();
   const [setEnabled] = useSetAnnouncementEnabledMutation();
   const [deleteAnnouncement] = useDeleteAnnouncementMutation();
 
+  // Not remembered: no admin page keeps its view in the URL or in storage.
+  const [view, setView] = useState<View>("banners");
   const [editing, setEditing] = useState<EditorTarget>(undefined);
+  const [previewing, setPreviewing] = useState<Announcement | null>(null);
   const [serverError, setServerError] = useState<string | undefined>();
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [reordering, setReordering] = useState(false);
 
-  const enabledCount = announcements.filter((announcement) => announcement.enabled).length;
-  // The empty state carries its own call to action, front and centre. Leaving
-  // the header button beside it offers the same thing twice and splits the
-  // admin's attention between two identical buttons.
-  const isEmpty = !isLoading && announcements.length === 0;
+  const setPending = (id: string, pending: boolean) =>
+    setPendingIds((previous) => {
+      const next = new Set(previous);
+      if (pending) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
-  const onSave = async (payload: AnnouncementWriteRequest) => {
+  // One read, split by kind; the server already returns patch notes in the administrator's order.
+  const banners = announcements.filter((a) => a.kind !== "patch_note");
+  const patchNotes = announcements.filter((a) => a.kind === "patch_note");
+  const enabledCount = banners.filter((a) => a.enabled).length;
+  // What the confirmation lists must be what the server holds: wait for it.
+  const settling = isFetching || reordering || patchNotes.some((note) => pendingIds.has(note.id));
+  const list = view === "history" ? undefined : LISTS[view];
+
+  const closeEditor = () => {
+    setEditing(undefined);
+    setServerError(undefined);
+  };
+
+  const onSave = async (payload: AnnouncementWriteRequest, activate = false) => {
+    const target = editing?.announcement;
+    const activating = activate && target ? target.id : undefined;
+    if (activating) setPending(activating, true);
     try {
-      if (editing) {
-        await updateAnnouncement({
-          announcementId: editing.id,
-          announcementWriteRequest: payload,
-        }).unwrap();
+      if (target) {
+        await updateAnnouncement({ announcementId: target.id, announcementWriteRequest: payload }).unwrap();
+        if (activate) {
+          await setEnabled({ announcementId: target.id, setAnnouncementEnabledRequest: { enabled: true } }).unwrap();
+        }
       } else {
-        await createAnnouncement({ announcementWriteRequest: payload }).unwrap();
+        await createAnnouncement({ announcementWriteRequest: { ...payload, enabled: activate } }).unwrap();
       }
-      setEditing(undefined);
-      setServerError(undefined);
-      showSuccess({ summary: t("rework.announcements.saved") });
+      closeEditor();
+      const live = activate || (target?.enabled ?? false);
+      showSuccess({
+        summary:
+          payload.kind !== "patch_note"
+            ? t("rework.announcements.saved")
+            : live
+              ? t("rework.announcements.patchNote.savedIncluded")
+              : t("rework.announcements.patchNote.savedNotIncluded"),
+      });
     } catch (error: unknown) {
       // A 422 names the field that was refused: it belongs in the form, where
       // the fix is. The toast only says the save did not happen.
       setServerError(normalizeApiError(error).detail);
       showError({ summary: t("rework.announcements.saveFailed") });
+    } finally {
+      if (activating) setPending(activating, false);
     }
   };
 
-  const onToggle = async (announcement: Announcement, enabled: boolean) => {
+  const toggle = async (announcement: Announcement, enabled: boolean) => {
+    setPending(announcement.id, true);
     try {
       await setEnabled({
         announcementId: announcement.id,
@@ -98,20 +149,22 @@ export default function AnnouncementsPage() {
         summary: t("rework.announcements.toggleFailed"),
         detail: normalizeApiError(error).detail,
       });
+    } finally {
+      setPending(announcement.id, false);
     }
   };
 
-  const onDelete = (announcement: Announcement) =>
+  const onDelete = (announcement: Announcement) => {
+    const keys =
+      announcement.kind === "patch_note" ? "rework.announcements.patchNote" : ("rework.announcements" as const);
     showConfirmationDialog({
-      title: t("rework.announcements.delete.title"),
-      message: t("rework.announcements.delete.message", {
-        title: resolveAnnouncementText(announcement.title, i18n.language) ?? announcement.id,
-      }),
+      title: t(`${keys}.delete.title`),
+      message: t(`${keys}.delete.message`, { title: announcementName(announcement, i18n.language) }),
       criticalAction: true,
       onConfirm: async () => {
         try {
           await deleteAnnouncement({ announcementId: announcement.id }).unwrap();
-          showSuccess({ summary: t("rework.announcements.deleted") });
+          showSuccess({ summary: t(`${keys}.deleted`) });
         } catch (error: unknown) {
           showError({
             summary: t("rework.announcements.deleteFailed"),
@@ -120,6 +173,18 @@ export default function AnnouncementsPage() {
         }
       },
     });
+  };
+
+  // Remount per target so the form seeds from the announcement being edited
+  // rather than keeping the previous one's state.
+  const editorKey = editing && `${editing.kind}:${editing.announcement?.id ?? "new"}`;
+  const editorProps = editing && {
+    open: true,
+    announcement: editing.announcement,
+    saving: isCreating || isUpdating,
+    serverError,
+    onCancel: closeEditor,
+  };
 
   return (
     <div className={styles.page}>
@@ -127,78 +192,109 @@ export default function AnnouncementsPage() {
         title={t("rework.announcements.page.title")}
         subtitle={t("rework.announcements.page.subtitle", { count: enabledCount })}
         actions={
-          isEmpty ? undefined : (
-            <Button color="primary" variant="filled" size="medium" onClick={() => setEditing(null)}>
-              {t("rework.announcements.page.create")}
+          // Each list tab creates its own kind; the history has nothing to add.
+          list && (
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              icon={{ category: "outlined", type: "add" }}
+              onClick={() => setEditing({ kind: list.kind, announcement: null })}
+            >
+              {t(`rework.announcements.page.${list.create}`)}
             </Button>
           )
         }
+        tabs={
+          <ButtonGroup
+            variant="tabs"
+            size="small"
+            color="secondary"
+            aria-label={t("rework.announcements.view.group")}
+            items={VIEWS.map((value) => ({ label: t(`rework.announcements.view.${value}`) }))}
+            selectedIndex={VIEWS.indexOf(view)}
+            onSelectedIndexChange={(index) => setView(VIEWS[index])}
+          />
+        }
       />
 
-      {isEmpty ? (
-        <PageEmptyState
-          icon="campaign"
-          message={t("rework.announcements.page.empty")}
-          action={{ label: t("rework.announcements.page.create"), onClick: () => setEditing(null) }}
-        />
+      {!list ? (
+        <ActivationHistory />
       ) : (
-        <ul className={styles.list}>
-          {announcements.map((announcement) => (
-            <li key={announcement.id} className={styles.row}>
-              {/* The real banner component, not a lookalike: an admin has to be
-                  able to trust that what they see here is what users get. */}
-              <div className={styles.preview}>
-                <AnnouncementBanner announcement={announcement} preview />
-              </div>
-              <div className={styles.controls}>
-                <Tooltip
-                  text={
-                    announcement.enabled
-                      ? t("rework.announcements.row.disableHint")
-                      : t("rework.announcements.row.enableHint")
-                  }
-                >
-                  <Switch
-                    size="small"
-                    checked={announcement.enabled}
-                    onChange={(event) => void onToggle(announcement, event.target.checked)}
-                    aria-label={t("rework.announcements.row.enabled")}
-                  />
-                </Tooltip>
-                <IconButton
-                  size="small"
-                  variant="icon"
-                  icon={{ category: "outlined", type: "edit" }}
-                  aria-label={t("rework.announcements.row.edit")}
-                  onClick={() => setEditing(announcement)}
-                />
-                <DeleteIconButton
-                  size="small"
-                  aria-label={t("rework.announcements.row.delete")}
-                  onClick={() => onDelete(announcement)}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className={styles.main}>
+          {/* Above the empty state too: an announcement can outlive its patch notes. */}
+          {view === "patchNotes" && (
+            <PatchNoteAnnouncer
+              includedNotes={patchNotes.filter((a) => a.enabled)}
+              settling={settling}
+              onSelectionChanged={() => void refetch()}
+            />
+          )}
+          {!isLoading && (view === "banners" ? banners : patchNotes).length === 0 ? (
+            // No action of its own: the header button is always there.
+            <PageEmptyState icon={list.icon} message={t(`rework.announcements.page.${list.empty}`)} />
+          ) : view === "banners" ? (
+            <ul className={styles.list}>
+              {banners.map((announcement) => (
+                <li key={announcement.id} className={styles.row}>
+                  {/* The real banner component, not a lookalike: an admin has to be
+                      able to trust that what they see here is what users get. */}
+                  <div className={styles.preview}>
+                    <AnnouncementBanner announcement={announcement} preview />
+                  </div>
+                  <div className={styles.controls}>
+                    <RowControls
+                      announcement={announcement}
+                      pending={pendingIds.has(announcement.id)}
+                      onToggle={(enabled) => void toggle(announcement, enabled)}
+                      onEdit={() => setEditing({ kind: "banner", announcement })}
+                      onDelete={() => onDelete(announcement)}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <PatchNoteList
+              notes={patchNotes}
+              pendingIds={pendingIds}
+              onPreview={setPreviewing}
+              onToggle={(note, enabled) => void toggle(note, enabled)}
+              onEdit={(announcement) => setEditing({ kind: "patch_note", announcement })}
+              onDelete={onDelete}
+              onReorderingChange={setReordering}
+            />
+          )}
+        </div>
       )}
 
-      {editing !== undefined && (
-        <AnnouncementEditorDialog
-          // Remount per target so the form seeds from the announcement being
-          // edited rather than keeping the previous one's state.
-          key={editing?.id ?? "new"}
-          open
-          announcement={editing}
-          saving={isCreating || isUpdating}
-          serverError={serverError}
-          onSave={onSave}
-          onCancel={() => {
-            setEditing(undefined);
-            setServerError(undefined);
-          }}
-        />
-      )}
+      {editorProps &&
+        (editing.kind === "patch_note" ? (
+          <PatchNoteEditorDialog
+            key={editorKey}
+            {...editorProps}
+            onSave={(payload, activate) => void onSave(payload, activate)}
+          />
+        ) : (
+          <AnnouncementEditorDialog key={editorKey} {...editorProps} onSave={(payload) => void onSave(payload)} />
+        ))}
+
+      {/* The users' dialog itself, with this single note; closing a preview records nothing. */}
+      <PatchNoteDialog
+        open={previewing !== null}
+        notes={
+          previewing
+            ? [
+                {
+                  id: previewing.id,
+                  title: announcementName(previewing, i18n.language),
+                  markdown: resolveAnnouncementText(previewing.description_long, i18n.language) ?? "",
+                },
+              ]
+            : []
+        }
+        onClose={() => setPreviewing(null)}
+      />
     </div>
   );
 }

@@ -83,6 +83,22 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
+it("keeps legacy Keycloak configuration usable without an offline-access grant", async () => {
+  const { createKeycloakInstance } = await import("./KeycloakService");
+  createKeycloakInstance("https://identity.example/realms/app", "app");
+  expect(state.settings).toMatchObject({ scope: "openid profile", disablePKCE: false });
+});
+
+it("ignores the local-login flag when security is disabled", async () => {
+  window.history.replaceState({}, "", "/?keycloak-login=true");
+  const { KeyCloakService } = await import("./KeycloakService");
+  const authenticated = vi.fn();
+  KeyCloakService.CallLogin(authenticated);
+  expect(authenticated).toHaveBeenCalledOnce();
+  expect(state.settings).toBeNull();
+  expect(state.signinRedirect).not.toHaveBeenCalled();
+});
+
 describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provider) => {
   const options = { ...genericOptions, provider };
   it("constructs a PKCE OIDC client with the API scope and no Keycloak realm parser", async () => {
@@ -93,7 +109,10 @@ describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provi
       client_id: "ui",
       response_type: "code",
       disablePKCE: false,
-      scope: "openid profile offline_access api://fred-api/access_as_user",
+      scope:
+        provider === "keycloak"
+          ? "openid profile api://fred-api/access_as_user"
+          : "openid profile offline_access api://fred-api/access_as_user",
     });
     if (provider === "oidc") expect(KeyCloakService.GetKeycloakRealmConfig()).toBeNull();
   });
@@ -156,6 +175,25 @@ describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provi
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(state.signinRedirect).toHaveBeenCalledOnce());
     expect(authenticated).not.toHaveBeenCalled();
+  });
+
+  it("passes the explicit local-login request through the facade", async () => {
+    window.history.replaceState({}, "", "/help?keycloak-login=true#tools");
+    state.user = user({ sub: "previous-person" });
+    const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
+    const authenticated = vi.fn();
+    KeyCloakService.CallLogin(authenticated);
+    await vi.waitFor(() =>
+      expect(state.signinRedirect).toHaveBeenCalledExactlyOnceWith({
+        state: "/help#tools",
+        prompt: "login",
+        extraQueryParams: { kc_idp_hint: "" },
+      }),
+    );
+    expect(state.removeUser).toHaveBeenCalledOnce();
+    expect(authenticated).not.toHaveBeenCalled();
+    expect(KeyCloakService.GetToken()).toBeNull();
   });
 
   it("renews a short-lived API token without changing the user id", async () => {

@@ -32,6 +32,7 @@ export interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  titleSize?: "small" | "large";
   closeLabel?: string;
   /** Optional content rendered immediately after the visible title. */
   titleAccessory?: ReactNode;
@@ -91,6 +92,7 @@ export function InlineDrawer({
   open,
   onClose,
   title,
+  titleSize = "small",
   closeLabel = "Close panel",
   titleAccessory,
   headerActions,
@@ -150,7 +152,7 @@ export function InlineDrawer({
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape" && !e.defaultPrevented) handleClose();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -168,6 +170,7 @@ export function InlineDrawer({
         data-layout={layout}
         data-floating={floating ? "true" : undefined}
         data-compact-header={compactHeader ? "true" : undefined}
+        data-title-size={titleSize}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
         aria-hidden={!open}
         aria-labelledby={hideHeader ? undefined : titleId}

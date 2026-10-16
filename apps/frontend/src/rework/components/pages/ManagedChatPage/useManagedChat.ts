@@ -28,13 +28,15 @@ import {
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { EffectiveChatModel } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
+import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
-import type { ChatMessage, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
@@ -81,11 +83,13 @@ function resolvedHitlAnswer(
 interface UseManagedChatParams {
   teamId: string;
   agentInstanceId: string;
+  /** The agent's resolved model and the models a member may pick for it. */
+  effectiveChatModel?: EffectiveChatModel;
 }
 
-export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams) {
+export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: UseManagedChatParams) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { showError } = useToast();
+  const { showError, showWarn } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
@@ -103,6 +107,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     draft: string;
     text: string;
     command?: TurnCommand;
+    skills?: SkillInvocation[];
   } | null>(null);
   const [pendingHitls, setPendingHitls] = useState<RuntimeAwaitingHumanEvent[]>([]);
   const pendingHitlsRef = useRef<RuntimeAwaitingHumanEvent[]>([]);
@@ -216,7 +221,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // user has since navigated away from must never touch `contextPromptIds`
   // (a single, not-per-session piece of UI state) or show a toast for it.
   const activeSessionIdRef = useRef(sessionId);
-  activeSessionIdRef.current = sessionId;
+  activeSessionIdRef.current = sessionId ?? locallyCreatedSessionIdRef.current;
   // Live mirror of the rendered thread. `handleHitlAnswer`'s continuation
   // settles after arbitrary delay and must read the CURRENT thread, not the one
   // captured when the user answered.
@@ -231,19 +236,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const hasLocalMutationForActiveSessionRef = useRef(false);
   // Suppresses the sessionId-change reset when handleSend itself binds a new session.
   const skipResetOnSessionBindRef = useRef(false);
-  // Synchronous reentrancy guard for handleSend()'s OWN preflight — session
-  // id selection, bindSessionId, and createSessionRow all happen BEFORE
-  // useChatSse's send() (and its own lock) is ever called: send() is not
-  // reached until after `await flushSessionWrites(sid)` resolves. The
-  // `waitResponse` check below does not cover this window — it only flips
-  // true once send() itself runs, well after two rapid handleSend() calls
-  // (e.g. a double Enter) could each have already generated their own
-  // session id, bound it, and created a session row. Checked and set
-  // synchronously, before any await, independent of `waitResponse` or a
-  // React rerender — a second handleSend() arriving while the first is
-  // still inside this window (including while suspended in
-  // flushSessionWrites) is dropped outright, not queued or merged.
-  const handleSendOwnerRef = useRef(false);
+  // The attempt owns preflight before SSE starts. Navigation revokes it even
+  // if the user later returns to the same session while creation is pending.
+  const sendAttemptRef = useRef<{ sessionId: string; originSessionId: string | null; cancelled: boolean } | null>(null);
+  useEffect(
+    () => () => {
+      if (sendAttemptRef.current) sendAttemptRef.current.cancelled = true;
+    },
+    [],
+  );
 
   const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
     { teamId },
@@ -256,7 +257,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const attachments = useChatAttachments({ teamId, sessionId });
 
-  if (locallyCreatedSessionIdRef.current !== sessionId) locallyCreatedSessionIdRef.current = null;
+  useEffect(() => {
+    const attempt = sendAttemptRef.current;
+    if (attempt && sessionId !== attempt.sessionId && sessionId !== attempt.originSessionId) attempt.cancelled = true;
+    // A mutation can render the draft route before its new session binding commits.
+    if (locallyCreatedSessionIdRef.current !== sessionId) locallyCreatedSessionIdRef.current = null;
+  }, [sessionId]);
   const locallyCreatingSession =
     sessionId !== null &&
     (locallyCreatedSessionIdRef.current === sessionId || sessionCreateFailedIdRef.current.has(sessionId));
@@ -294,6 +300,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const bindSessionId = useCallback(
     (sid: string) => {
+      activeSessionIdRef.current = sid;
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -403,7 +410,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     if (activeSessionIdRef.current !== rejectedSessionId || submitted?.sessionId !== rejectedSessionId) return;
     setInput(submitted.draft);
   }, []);
-  const isTurnCurrent = useCallback((turnSessionId: string) => activeSessionIdRef.current === turnSessionId, []);
+  const isTurnCurrent = useCallback((turnSessionId: string) => {
+    const attempt = sendAttemptRef.current;
+    return activeSessionIdRef.current === turnSessionId && !(attempt?.sessionId === turnSessionId && attempt.cancelled);
+  }, []);
 
   const isExecutionAllowed = useCallback(() => !executionDisabledRef.current, []);
 
@@ -480,7 +490,14 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     };
   }, [sessionId]);
 
-  const composer = useComposerSettings(sessionId, chatControls);
+  const handleModelChoiceDropped = useCallback(
+    (model: string) => showWarn({ summary: t("chatbot.composerSettings.modelChoiceLost", { model }) }),
+    [showWarn, t],
+  );
+  // A conversation that cannot run ignores the model read: it may describe
+  // another agent, or none (deleted), and must not judge the stored choice.
+  const composerModel = executionDisabled ? undefined : effectiveChatModel;
+  const composer = useComposerSettings(sessionId, chatControls, composerModel, handleModelChoiceDropped);
 
   useEffect(() => {
     if (skipResetOnSessionBindRef.current) {
@@ -649,60 +666,78 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   // The composer's context for one turn, shared by send and HITL resume so a
   // resumed turn keeps the user's search scope, attachments and reasoning choice.
-  const buildTurnContext = useCallback(() => {
-    // `document_scope`'s params carry the same `bound_library_ids` the retired
-    // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
-    // MCP-server-bound library scope the picker cannot override.
-    const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
-    const boundLibraryIds =
-      (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ?? null;
-    // The picker's per-turn selection reaches the OWNING capability's typed
-    // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
-    // `document_access` declares a TurnOptionsModel for it. The MCP
-    // capability's document_scope widget reads RuntimeContext (built below)
-    // and validates turn_options against EmptyModel, so sending it a slice
-    // is a typed 422.
-    const turnOptions =
-      documentScopeControl && documentScopeControl.capability_id === "document_access"
-        ? {
-            [documentScopeControl.capability_id]: {
-              library_tag_ids: composer.selectedLibraryIds,
-              document_uids: composer.selectedDocumentUids,
-            },
-          }
-        : undefined;
-    // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): reasoning is a
-    // platform chat option, not a capability's turn_options slice — it travels
-    // on RuntimeContext exactly like search policy and RAG scope. Sent ONLY
-    // when the composer actually offers the control: its absence means the
-    // agent does not offer reasoning (or a gate upstream is closed, §8), and
-    // that must reach the runtime as "no choice made", never as an explicit
-    // `false` that would suppress reasoning the agent never offered to begin
-    // with.
-    const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
-    return {
-      runtimeContext: buildComposerRuntimeContext({
-        selectedLibraryIds: composer.selectedLibraryIds,
-        selectedDocumentUids: composer.selectedDocumentUids,
-        searchPolicy: composer.searchPolicy,
-        ragScope: composer.ragScope,
-        boundLibraryIds,
-        attachmentsMarkdown: attachments.attachmentsMarkdown,
-        ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
-        askUser: composer.askUser,
-      }),
-      turnOptions,
-    };
-  }, [
-    attachments.attachmentsMarkdown,
-    chatControls,
-    composer.selectedLibraryIds,
-    composer.selectedDocumentUids,
-    composer.searchPolicy,
-    composer.ragScope,
-    composer.reasoning,
-    composer.askUser,
-  ]);
+  const buildTurnContext = useCallback(
+    (resumedExchangeId?: string) => {
+      // `document_scope`'s params carry the same `bound_library_ids` the retired
+      // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
+      // MCP-server-bound library scope the picker cannot override.
+      const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
+      const boundLibraryIds =
+        (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ??
+        null;
+      // The picker's per-turn selection reaches the OWNING capability's typed
+      // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
+      // `document_access` declares a TurnOptionsModel for it. The MCP
+      // capability's document_scope widget reads RuntimeContext (built below)
+      // and validates turn_options against EmptyModel, so sending it a slice
+      // is a typed 422.
+      const turnOptions =
+        documentScopeControl && documentScopeControl.capability_id === "document_access"
+          ? {
+              [documentScopeControl.capability_id]: {
+                library_tag_ids: composer.selectedLibraryIds,
+                document_uids: composer.selectedDocumentUids,
+              },
+            }
+          : undefined;
+      // The reasoning value is explicit while the composer shows its row, and
+      // absent otherwise; the model choice rides along when one is made.
+      const reasoningShown = offersReasoning(chatControls, composerModel, composer.chatProfileId);
+      const extras = resumedExchangeId
+        ? latestMessagesRef.current.find(
+            (message) => message.exchange_id === resumedExchangeId && message.role === "user",
+          )?.metadata?.extras
+        : null;
+      const selections: unknown =
+        extras?.skill_invocations ?? (extras?.skill_invocation ? [extras.skill_invocation] : []);
+      const skills = Array.isArray(selections)
+        ? selections.flatMap((item: unknown) =>
+            item && typeof item === "object" && "name" in item && typeof item.name === "string"
+              ? [{ name: item.name }]
+              : [],
+          )
+        : [];
+      return {
+        runtimeContext: {
+          ...buildComposerRuntimeContext({
+            selectedLibraryIds: composer.selectedLibraryIds,
+            selectedDocumentUids: composer.selectedDocumentUids,
+            searchPolicy: composer.searchPolicy,
+            ragScope: composer.ragScope,
+            boundLibraryIds,
+            attachmentsMarkdown: attachments.attachmentsMarkdown,
+            ...(reasoningShown ? { reasoning: composer.reasoning } : {}),
+            askUser: composer.askUser,
+            chatProfileId: composer.chatProfileId,
+          }),
+          ...(skills?.length ? { skills } : {}),
+        },
+        turnOptions,
+      };
+    },
+    [
+      attachments.attachmentsMarkdown,
+      chatControls,
+      composer.selectedLibraryIds,
+      composer.selectedDocumentUids,
+      composer.searchPolicy,
+      composer.ragScope,
+      composer.reasoning,
+      composer.askUser,
+      composer.chatProfileId,
+      composerModel,
+    ],
+  );
 
   // Read at answer time so handleHitlAnswer keeps its identity across keystrokes.
   const buildTurnContextRef = useRef(buildTurnContext);
@@ -713,7 +748,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // through the composer. `turnCommand` only adds the descriptor to the
   // context; every guard, session write and restore below is shared.
   const sendTurn = useCallback(
-    async (text: string, turnCommand?: TurnCommand, interrupted?: InterruptedRunChoice): Promise<boolean> => {
+    async (
+      text: string,
+      turnCommand?: TurnCommand,
+      interrupted?: InterruptedRunChoice,
+      skills?: SkillInvocation[],
+    ): Promise<boolean> => {
       const attachmentContext = attachments.attachmentsMarkdown;
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
@@ -733,7 +773,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         );
         return false;
       }
-      if (handleSendOwnerRef.current) {
+      if (sendAttemptRef.current && !sendAttemptRef.current.cancelled) {
         console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
         return false;
       }
@@ -752,7 +792,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         });
         return false;
       }
-      handleSendOwnerRef.current = true;
+      const attempt = { sessionId: sessionId ?? uuidv4(), originSessionId: sessionId, cancelled: false };
+      sendAttemptRef.current = attempt;
       try {
         // Composer input is left untouched until the session write barrier below
         // confirms success — clearing it eagerly would lose the user's message if
@@ -760,7 +801,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         let sid = sessionId;
         const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
         if (!sid) {
-          sid = uuidv4();
+          sid = attempt.sessionId;
           console.debug(`[useManagedChat] sendTurn() — no session, creating new sid=${sid}, calling bindSessionId`);
           skipResetOnSessionBindRef.current = true;
           // See ensureSessionForAttachments: makes this turn's composer settings
@@ -794,7 +835,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // onError above); nothing further to show here, just don't proceed —
         // the message stays in the composer for an explicit retry.
         const writesOk = await flushSessionWrites(sid);
-        if (!writesOk || executionDisabledRef.current) {
+        if (!writesOk || executionDisabledRef.current || attempt.cancelled || activeSessionIdRef.current !== sid) {
           console.debug("[useManagedChat] sendTurn() ABORTED — a pending session write failed");
           return false;
         }
@@ -815,16 +856,20 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // `send()` receives the trimmed wire value, but a backend rejection must
         // restore the complete editable draft, including surrounding whitespace —
         // for a command, the command line the user actually typed.
-        submittedDraftRef.current = { sessionId: sid, draft: input, text, command: turnCommand };
+        submittedDraftRef.current = { sessionId: sid, draft: input, text, command: turnCommand, skills };
         return send(
           text,
           sid,
-          turnCommand ? { ...runtimeContext, command: turnCommand } : runtimeContext,
+          {
+            ...runtimeContext,
+            ...(turnCommand ? { command: turnCommand } : {}),
+            ...(skills?.length ? { skills } : {}),
+          },
           turnOptions,
           interrupted,
         );
       } finally {
-        handleSendOwnerRef.current = false;
+        if (sendAttemptRef.current === attempt) sendAttemptRef.current = null;
       }
     },
     [
@@ -858,7 +903,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // its identity across keystrokes.
   const restartLastTurn = () => {
     const submitted = submittedDraftRef.current;
-    return sendTurn(submitted?.text ?? input.trim(), submitted?.command, { action: "restart" });
+    return sendTurn(submitted?.text ?? input.trim(), submitted?.command, { action: "restart" }, submitted?.skills);
   };
   const restartLastTurnRef = useRef(restartLastTurn);
   restartLastTurnRef.current = restartLastTurn;
@@ -866,9 +911,16 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // Runs a prompt command: the assembled text goes on the wire, the descriptor
   // on the turn's context, and the composer keeps the short command line the
   // user typed until the turn actually starts.
+  const runSkill = useCallback(
+    async (run: { text: string; skills: SkillInvocation[] }) => {
+      await sendTurn(run.text, undefined, undefined, run.skills);
+    },
+    [sendTurn],
+  );
+
   const runCommand = useCallback(
-    async (run: { text: string; command: TurnCommand }) => {
-      await sendTurn(run.text, run.command);
+    async (run: { text: string; command: TurnCommand; skills?: SkillInvocation[] }) => {
+      await sendTurn(run.text, run.command, undefined, run.skills);
     },
     [sendTurn],
   );
@@ -953,7 +1005,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           setHitlFreeText(hitlDraftsRef.current.get(hitlKey(prompt)) ?? "");
         }
       };
-      const { runtimeContext, turnOptions } = buildTurnContextRef.current();
+      const { runtimeContext, turnOptions } = buildTurnContextRef.current(prompt.exchange_id);
       const toolNames = (prompt.payload.pending_calls ?? []).map((call) => call.tool_name);
       const rememberTools =
         rememberApproval && prompt.payload.stage === "tool_approval" && answer === "proceed" && toolNames.length > 0;
@@ -1049,7 +1101,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         setSelectedHitlKey(remaining.length ? hitlKey(remaining[0]) : null);
         setHitlFreeText(remaining.length ? (hitlDraftsRef.current.get(hitlKey(remaining[0])) ?? "") : "");
       };
-      const { runtimeContext, turnOptions } = buildTurnContextRef.current();
+      const { runtimeContext, turnOptions } = buildTurnContextRef.current(owner.exchange_id);
       void sendHitlResume(owner, undefined, undefined, runtimeContext, turnOptions, false, clearAcceptedBatch, answers)
         .then((accepted) => {
           if (!accepted) {
@@ -1097,6 +1149,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const startNewConversation = useCallback(() => {
     if (executionDisabledRef.current) return;
+    const attempt = sendAttemptRef.current;
+    if (attempt) attempt.cancelled = true;
+    locallyCreatedSessionIdRef.current = null;
+    activeSessionIdRef.current = null;
+    if (attempt && !sessionId) {
+      reset();
+      setInput("");
+      skipResetOnSessionBindRef.current = false;
+    }
     replacePendingHitls([]);
     lastHitlExchangeRef.current = null;
     submittedBatchKeysRef.current = new Set();
@@ -1113,7 +1174,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       },
       { replace: true },
     );
-  }, [setSearchParams, replacePendingHitls, replaceStagedHitlAnswers]);
+  }, [setSearchParams, replacePendingHitls, replaceStagedHitlAnswers, reset, sessionId]);
 
   const commitTitle = useCallback(
     (title: string) => {
@@ -1199,6 +1260,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       setRagScope: guardChange(composer.setRagScope),
       setReasoning: guardChange(composer.setReasoning),
       setAskUser: guardChange(composer.setAskUser),
+      setChatProfileId: guardChange(composer.setChatProfileId),
     }),
     [
       guardChange,
@@ -1208,6 +1270,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       composer.setRagScope,
       composer.setReasoning,
       composer.setAskUser,
+      composer.setChatProfileId,
     ],
   );
   const setComposerInput = useMemo(() => guardChange(setInput), [guardChange]);
@@ -1268,6 +1331,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setReasoning: guardedComposer.setReasoning,
     askUser: composer.askUser,
     setAskUser: guardedComposer.setAskUser,
+    chatProfileId: composer.chatProfileId,
+    setChatProfileId: guardedComposer.setChatProfileId,
     contextPromptIds,
     setContextPrompts,
     threadMessages,
@@ -1277,6 +1342,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     isHistorySettled,
     handleSend,
     runCommand,
+    runSkill,
     handleHitlAnswer,
     handleSendAllHitl,
     handleSkipAllHitl,

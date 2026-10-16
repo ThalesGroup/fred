@@ -37,9 +37,13 @@ from __future__ import annotations
 from enum import Enum
 
 from fred_core.common import ModelConfiguration
-from fred_sdk.contracts.capability.manifest import model_capability_id
+from fred_sdk.contracts.capability.manifest import (
+    REASONING_EFFORT_LEVELS,
+    ReasoningEffortLevel,
+    model_capability_id,
+)
 from fred_sdk.contracts.context import FrozenModel, ModelCapability
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from ..execution_errors import UserFacingExecutionError, sanitize_identifier
 
@@ -148,6 +152,26 @@ def without_reasoning_settings(model: ModelConfiguration) -> ModelConfiguration:
     )
 
 
+def clamp_reasoning_effort(
+    choice: str, levels: tuple[ReasoningEffortLevel, ...]
+) -> ReasoningEffortLevel | None:
+    """The offered level nearest `choice` (ties go to the stronger one); None
+    for "off". `levels` must be non-empty and in `REASONING_EFFORT_LEVELS`."""
+
+    if choice not in REASONING_EFFORT_LEVELS:
+        return None
+    if choice in levels:
+        return choice  # type: ignore[return-value]
+    wanted = REASONING_EFFORT_LEVELS.index(choice)  # type: ignore[arg-type]
+    return min(
+        levels,
+        key=lambda level: (
+            abs(REASONING_EFFORT_LEVELS.index(level) - wanted),
+            -REASONING_EFFORT_LEVELS.index(level),
+        ),
+    )
+
+
 class ModelProfile(FrozenModel):
     """
     Named model configuration.
@@ -205,6 +229,46 @@ class ModelProfile(FrozenModel):
         ),
     )
 
+    reasoning_efforts: tuple[ReasoningEffortLevel, ...] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Reasoning effort levels the provider accepts for this profile, "
+            "declared explicitly (never inferred: Mistral rejects low/medium). "
+            "Two or more make the effort selectable by the platform helpers "
+            "that offer it; absent or a single value means on/off only, on "
+            "being the profile's own `reasoning_effort`, else the single "
+            "declared level. Requires `supports_thinking`."
+        ),
+    )
+
+    @field_validator("reasoning_efforts")
+    @classmethod
+    def _order_levels(
+        cls, value: tuple[ReasoningEffortLevel, ...] | None
+    ) -> tuple[ReasoningEffortLevel, ...] | None:
+        if value is None:
+            return None
+        return tuple(level for level in REASONING_EFFORT_LEVELS if level in value)
+
+    @property
+    def reasoning_levels(self) -> tuple[ReasoningEffortLevel, ...]:
+        """The selectable levels: the declared ones when two or more, else ()."""
+        levels = self.reasoning_efforts or ()
+        return levels if len(levels) >= 2 else ()
+
+    @property
+    def reasoning_on_effort(self) -> str | None:
+        """What "on" sends for an on/off thinking profile: its own
+        `reasoning_effort`, else its single declared level; None when it has
+        neither, so a platform helper cannot make it reason."""
+        if not self.supports_thinking:
+            return None
+        own = (self.model.settings or {}).get("reasoning_effort")
+        if isinstance(own, str):
+            return own
+        return self.reasoning_efforts[0] if self.reasoning_efforts else None
+
     @property
     def capability_id(self) -> str:
         """This profile's model identity as a capability id — the ONE derivation
@@ -244,6 +308,19 @@ class ModelProfile(FrozenModel):
                 "'supports_thinking: true' on the profile (it declares the model's "
                 "aptitude), or remove the setting."
             )
+        if self.reasoning_efforts is not None:
+            if not self.supports_thinking:
+                raise ValueError(
+                    f"ModelProfile {self.profile_id!r} declares reasoning_efforts "
+                    "but supports_thinking is false."
+                )
+            own = (self.model.settings or {}).get("reasoning_effort")
+            if own is not None and own not in self.reasoning_efforts:
+                raise ValueError(
+                    f"ModelProfile {self.profile_id!r} sets reasoning_effort "
+                    f"{own!r}, which is not one of its reasoning_efforts "
+                    f"{list(self.reasoning_efforts)}."
+                )
         return self
 
 
@@ -255,8 +332,8 @@ class ModelRoutingPolicy(FrozenModel):
     - `default_profile_by_capability`: fallback profile per capability
     - `profiles`: known profile definitions
     - `agent_profile_overrides`: optional `agent_id -> profile_id` override,
-      the ops-level escape hatch equivalent of a team's own routing policy
-      (`RuntimeContext.agent_profile_overrides`). An override only applies
+      the ops-level escape hatch that outranks every team and user level.
+      An override only applies
       when it exists for the requested `agent_id` and the referenced
       profile's capability matches the request; otherwise resolution falls
       through to the capability default.
@@ -306,8 +383,8 @@ class ModelSelectionRequest(FrozenModel):
     This is emitted by runtimes per invocation with contextual dimensions:
     `capability`, `agent_id`. `team_id` is deliberately not a matching
     dimension here — the static `agent_profile_overrides` policy is
-    deployment-wide, not per-team; per-team routing is the separate
-    `resolve_team_override` pass (`RuntimeContext.agent_profile_overrides`).
+    deployment-wide, not per-team; team and user levels are applied by
+    `RoutedChatModelFactory.select`.
     """
 
     capability: ModelCapability
@@ -320,6 +397,8 @@ class ModelSelectionSource(str, Enum):
     DEFAULT = "default"
     AGENT_OVERRIDE = "agent_override"
     TEAM_POLICY = "team_policy"
+    USER_CHOICE = "user_choice"
+    INSTANCE_RECOMMENDATION = "instance_recommendation"
     PLATFORM_BINDING = "platform_binding"
 
 

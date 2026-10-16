@@ -64,6 +64,11 @@ MODEL_CAPABILITY_NAMESPACE_PREFIX = "model__"
 # Retain the compatibility import from the shared application identifier owner.
 APPLICATION_CAPABILITY_NAMESPACE_PREFIX = _CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX
 
+# Reasoning effort levels a catalog profile may declare (`reasoning_efforts`),
+# weakest first; the order is what "nearest offered level" is measured on.
+ReasoningEffortLevel = Literal["low", "medium", "high"]
+REASONING_EFFORT_LEVELS: tuple[ReasoningEffortLevel, ...] = ("low", "medium", "high")
+
 
 def model_capability_id(provider: str, name: str) -> str:
     """Stable, namespaced capability id for one model identity.
@@ -426,6 +431,12 @@ class CapabilityCatalogEntry(BaseModel):
     # so the admin row shows no reasoning control at all (an administrator
     # cannot make a model reason). Always empty for kind="tool"/"agent".
     model_thinking_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # Reasoning levels per thinking profile id, for profiles declaring at least
+    # two (`reasoning_efforts`); empty when a platform helper has no level to
+    # send (no own `reasoning_effort` either). Any other thinking profile is on/off.
+    model_reasoning_efforts: dict[str, tuple[ReasoningEffortLevel, ...]] = Field(
+        default_factory=dict
+    )
     # The ops-authored `model_display_name` from `models_catalog.yaml` — the
     # label the composer shows for this model. None = unnamed, and the
     # frontend derives one from the capability id. Display only; nothing

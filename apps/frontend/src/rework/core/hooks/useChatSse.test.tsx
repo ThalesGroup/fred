@@ -340,6 +340,42 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it.each(["user", "agent", "child"] as const)(
+    "projects one compact %s skill load from repeated live statuses",
+    async (source) => {
+      const load = {
+        name: "meeting-minutes",
+        origin: source === "user" ? "user" : "agent",
+        load_id: "same-load",
+        revision: "snapshot",
+        agent_id: "test",
+        child: source === "child",
+        child_id: source === "child" ? "child" : null,
+      };
+      const status = { kind: "status", status: "skill_loaded", skill_load: load };
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          new Response(`data: ${JSON.stringify(status)}\n\ndata: ${JSON.stringify(status)}\n\n`, { status: 200 }),
+        );
+      mount();
+      await act(async () => {
+        await latest.send("notes", "session-1", { skill: { name: "meeting-minutes" } });
+      });
+      const rows = latest.messages.filter((message) => message.channel === "system_note");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].parts).toEqual([{ type: "text", text: "meeting-minutes" }]);
+      expect(rows[0].metadata?.extras).toEqual({ skill_load: load });
+      expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)).runtime_context.skill).toEqual({
+        name: "meeting-minutes",
+      });
+      expect(latest.messages.find((message) => message.role === "user")?.metadata?.extras?.skill_invocation).toEqual({
+        name: "meeting-minutes",
+      });
+      fetchSpy.mockRestore();
+    },
+  );
+
   it("calls prepare-execution and fires onTurnStarted exactly once when the write barrier reports success", async () => {
     flushPendingWrites = async () => true;
     // The stream fetch itself is irrelevant to this assertion — let it fail
@@ -1040,7 +1076,6 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       capability_base_urls: {},
       context_prompt_text: "session prompt",
       chat_default_profile_id: "default.chat.team",
-      agent_profile_overrides: { "agent-1": "default.chat.fred-test-mock" },
       reasoning_enabled_model_ids: ["model__x__y"],
     });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
@@ -1066,7 +1101,6 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(body.runtime_context).toMatchObject({
       context_prompt_text: "session prompt",
       chat_default_profile_id: "default.chat.team",
-      agent_profile_overrides: { "agent-1": "default.chat.fred-test-mock" },
       reasoning_enabled_model_ids: ["model__x__y"],
       selected_document_libraries_ids: ["lib-1"],
       language: "fr",

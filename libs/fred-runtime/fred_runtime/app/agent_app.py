@@ -101,10 +101,16 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import KeycloakUser, is_service_agent
+from fred_sdk.contracts.agent_draft import (
+    AgentDraftPodRequest,
+    AgentDraftResult,
+)
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
     CapabilityConfigCopyRequest,
     CapabilityConfigCopyResult,
+    CapabilityConfigExportRequest,
+    CapabilityConfigExportResult,
     CapabilityIdentity,
     ChatControlsRequest,
     ChatControlsResponse,
@@ -112,6 +118,7 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
     UploadedFile,
 )
+from fred_sdk.contracts.capability.manifest import ReasoningEffortLevel
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -156,6 +163,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     parse_human_input_answer,
 )
+from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
@@ -183,6 +191,7 @@ from fred_runtime.capabilities import (
 from fred_runtime.capabilities.copy import (
     CapabilityCopyRejectedError,
     prepare_capability_copy,
+    prepare_capability_export,
 )
 from fred_runtime.capabilities.errors import (
     CapabilityError,
@@ -267,6 +276,7 @@ from ..runtime_support.run_scope import (
     reset_owner_execution,
     set_owner_execution,
 )
+from . import creation_assistant
 from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
@@ -626,13 +636,6 @@ def _definition_to_agent_tuning(
         description=definition.description,
         tags=list(definition.tags),
         fields=list(definition.fields),
-        # REASON-01 level 3 + Amendment B (#2473). Projected so a template can
-        # seed the agent form's Reasoning card, the same way
-        # `default_mcp_servers` seeds the capability ticks. Both stayed False
-        # here until #2473, which is why a template could not express "this
-        # agent's job needs reasoning" at all.
-        reasoning_enabled=definition.reasoning_enabled,
-        reasoning_default_on=definition.reasoning_default_on,
     )
 
 
@@ -956,7 +959,12 @@ def _build_runtime_services(
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
     if conversation_filesystem is not None:
-        backend, permissions = build_conversation_filesystem(conversation_filesystem)
+        backend, permissions = build_conversation_filesystem(
+            conversation_filesystem,
+            skills=runtime_config.skills
+            if isinstance(definition, DeepAgentDefinition)
+            else None,
+        )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(definition, team_id=team_id)
     base_tool_invoker = FredKnowledgeSearchToolInvoker(
@@ -1123,6 +1131,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
+        skills=runtime_config.skills,
     )
 
 
@@ -1355,6 +1364,13 @@ class _ModelCatalogEntry(BaseModel):
     shows no reasoning control at all — aptitude is not a choice, an
     administrator cannot make a model reason. Non-empty means the row carries
     the toggle. Same established join as `profile_ids` above."""
+    reasoning_efforts: dict[str, list[ReasoningEffortLevel]] = Field(
+        default_factory=dict
+    )
+    """Selectable reasoning levels per profile id of `thinking_profile_ids`,
+    for profiles declaring two or more (`ModelProfile.reasoning_levels`).
+    Absent: that thinking profile is on/off only. Empty: no level a platform
+    helper can send (`ModelProfile.reasoning_on_effort` is None)."""
     display_name: str | None = None
     """The ops-authored `model_display_name` of this model's first profile that
     declares one — the label the composer shows instead of splitting the
@@ -1384,6 +1400,11 @@ class _PlatformPromptFileResponse(BaseModel):
     """The read-only block, rendered directly under the one above on every turn.
     Nothing can edit it; the admin UI displays it so an admin can see exactly
     what agents are told alongside their own prompt."""
+    creation_assistant_prompt: str
+    """The built-in meta-prompt of `POST /agents/creation-assistant/draft`, shown
+    as the default of the admin editor that can override it."""
+    creation_assistant_prompt_revised_at: str
+    """ISO date of the last edit of `creation_assistant_prompt`."""
 
 
 def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | None:
@@ -1485,6 +1506,13 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
         # this one condition is the whole projection between them.
         if profile.supports_thinking:
             existing.thinking_profile_ids.append(profile.profile_id)
+            if profile.reasoning_levels:
+                existing.reasoning_efforts[profile.profile_id] = list(
+                    profile.reasoning_levels
+                )
+            elif profile.reasoning_on_effort is None:
+                # Nothing a platform helper could send: reported as no levels.
+                existing.reasoning_efforts[profile.profile_id] = []
     return list(seen.values())
 
 
@@ -1539,6 +1567,9 @@ class _ResolvedAgentInstance(BaseModel):
     # `_ResolvedExecutionTarget.reasoning_enabled_model_ids` for why this
     # replaced reading the same field off the caller-supplied context.
     reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
+    # Models the team disabled, resolved on this same call. Defaults empty so
+    # an older control plane that does not send it stays compatible.
+    team_disabled_model_ids: list[str] = Field(default_factory=list)
     # Platform-operator `chat` model binding, resolved fresh by control-plane
     # on this same call — see
     # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
@@ -1576,6 +1607,9 @@ class _ResolvedExecutionTarget:
     # control — this one is, so it's worth a fresh check. Empty for direct
     # template execution, same as `tuning`.
     reasoning_enabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
+    # Models the team disabled, resolved on the same per-turn call and for the
+    # same reason: the pod must not trust a client-forwarded copy.
+    team_disabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
     # Platform-operator `chat` model binding (V1 platform-binding hardening).
     # Resolved by control-plane on the SAME per-turn call as
     # `reasoning_enabled_model_ids` above, for the same reason — never read
@@ -1884,6 +1918,7 @@ async def _resolve_agent_instance(
         tuning=resolution.tuning,
         team_settings=resolution.team_capability_settings,
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
+        team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
         platform_prompt=resolution.platform_prompt,
     )
@@ -2457,6 +2492,21 @@ async def _authorize_and_resolve(
                 credentials=credentials or static_person_provider(access_token),
             )
         _validate_resolved_team(request, target.team_id, container)
+        selections = (
+            request.runtime_context.selected_skills if request.runtime_context else ()
+        )
+        if selections and request.resume_payload is None:
+            skills = get_runtime_context().config.skills
+            if isinstance(target.definition, GraphAgentDefinition) or skills is None:
+                raise HTTPException(
+                    status_code=422, detail="Platform skills unavailable for this agent"
+                )
+            if not isinstance(target.definition, DeepAgentDefinition):
+                try:
+                    for selection in selections:
+                        skills.read(selection.name)
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from None
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
@@ -2910,6 +2960,8 @@ async def _write_turn_history(
     user_id: str,
     request_message: str | None,
     turn_command: CommandDescriptor | None = None,
+    skill_invocation: SkillInvocation | dict[str, Any] | None = None,
+    skill_invocations: list[SkillInvocation | dict[str, Any]] | None = None,
     payloads: list[dict[str, Any]],
     history_store: HistoryStorePort,
     team_id: str | None = None,
@@ -3028,11 +3080,29 @@ async def _write_turn_history(
                 )
                 rank += 1
     elif request_message:
-        messages.append(
-            make_user_text(
-                session_id, exchange_id, rank, request_message, command=turn_command
-            )
+        user_message = make_user_text(
+            session_id, exchange_id, rank, request_message, command=turn_command
         )
+        if skill_invocations:
+            extras = {
+                "skill_invocations": [
+                    SkillInvocation.model_validate(item).model_dump(mode="json")
+                    for item in skill_invocations
+                ]
+            }
+            user_message.metadata = user_message.metadata.model_copy(
+                update={"extras": extras}
+            )
+        elif skill_invocation is not None:
+            extras = {
+                "skill_invocation": SkillInvocation.model_validate(
+                    skill_invocation
+                ).model_dump(mode="json")
+            }
+            user_message.metadata = user_message.metadata.model_copy(
+                update={"extras": extras}
+            )
+        messages.append(user_message)
         rank += 1
 
     # Reasoning blocks still accumulating, keyed by thought_id. A block reserves
@@ -3093,10 +3163,33 @@ async def _write_turn_history(
     final_finish_reason: str | None = None
     final_context_tokens: int | None = None
 
+    skill_load_ids: set[str] = set()
     for payload in payloads:
         kind = payload.get("kind")
 
-        if kind == "tool_call":
+        if kind == "status" and isinstance(payload.get("skill_load"), dict):
+            from fred_sdk.contracts.skills import SkillLoadAttribution
+
+            attribution = SkillLoadAttribution.model_validate(payload["skill_load"])
+            if attribution.load_id in skill_load_ids:
+                continue
+            skill_load_ids.add(attribution.load_id)
+            messages.append(
+                ChatMessage(
+                    session_id=session_id,
+                    exchange_id=exchange_id,
+                    rank=rank,
+                    timestamp=datetime.now(timezone.utc),
+                    role=Role.system,
+                    channel=Channel.system_note,
+                    parts=[TextPart(text=attribution.name)],
+                    metadata=ChatMetadata.model_validate(
+                        {"extras": {"skill_load": attribution.model_dump(mode="json")}}
+                    ),
+                )
+            )
+            rank += 1
+        elif kind == "tool_call":
             messages.append(
                 make_tool_call(
                     session_id,
@@ -3632,6 +3725,7 @@ async def _stream(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
+    team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -3681,6 +3775,7 @@ async def _stream(
         capability_registry=capability_registry,
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
+        team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
@@ -3719,6 +3814,8 @@ async def _stream(
                     user_id=user_id,
                     request_message=request.message,
                     turn_command=_turn_command(ctx),
+                    skill_invocation=ctx.get("skill"),
+                    skill_invocations=ctx.get("skills"),
                     payloads=collected,
                     history_store=history_store,
                     team_id=resolved_team_id,
@@ -4272,6 +4369,7 @@ async def _iterate_runtime_event_payloads(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
+    team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -4294,6 +4392,7 @@ async def _iterate_runtime_event_payloads(
         capability_registry=capability_registry,
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
+        team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
@@ -4381,6 +4480,7 @@ async def _iterate_runtime_event_payloads_inner(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
+    team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -4512,6 +4612,8 @@ async def _iterate_runtime_event_payloads_inner(
         agent_instance_id=request.agent_instance_id,
         template_agent_id=definition.agent_id,
         execution_action=execution_action,
+        skill=ctx.get("skill"),
+        skills=ctx.get("skills"),
         # Chat options forwarded from the frontend RuntimeContext.
         # These were present in ctx but were silently dropped, causing
         # ContextAwareTool and all KF search helpers to always use defaults.
@@ -4532,45 +4634,23 @@ async def _iterate_runtime_event_payloads_inner(
         # When the final file is deleted this is absent, so the per-turn runtime
         # notice disappears without leaving a checkpointed system message behind.
         attachments_markdown=ctx.get("attachments_markdown"),
-        # Team routing policy snapshot: control-plane resolves it once at
-        # prepare-execution and the frontend forwards it unchanged, same
-        # channel as context_prompt_text above — but it was also silently
-        # dropped here, so resolve_team_override in
-        # fred_runtime.model_routing.provider always saw None and no team's
-        # routing policy ever took effect on a real chat turn. Already a
-        # plain `{agent_id: profile_id}` dict from to_legacy_context()'s
-        # model_dump(exclude_none=True), so it passes through as-is.
+        # Team default: client-forwarded from prepare-execution, bounded by the
+        # per-turn `can_use` gate. The user's per-conversation choice rides the
+        # same channel and is validated in `RoutedChatModelFactory.select`; it
+        # applies to managed instances only, so direct template runs drop it.
         chat_default_profile_id=ctx.get("chat_default_profile_id"),
-        agent_profile_overrides=ctx.get("agent_profile_overrides"),
-        # Which models currently have reasoning switched on. Resolved
-        # control-plane-side on THIS turn's own runtime-binding call and
-        # threaded through as the `reasoning_enabled_model_ids` parameter — NOT
-        # read from the caller-supplied `ctx`, unlike `chat_default_profile_id`/
-        # `agent_profile_overrides` above. Those two stay client-forwarded
-        # because they are a frugality/comfort lever already bounded by the
-        # per-turn model `can_use` check; this one is the admin's incident
-        # lever (switch reasoning off platform-wide), so a stale or spoofed
-        # client-forwarded copy could keep it on past the moment an admin
-        # turned it off. Downstream model routing strips the reasoning
-        # settings for every model absent from this list, so an empty list
-        # here pins reasoning permanently OFF and makes the admin toggle
-        # decorative.
-        #
-        # Intersected with the agent's own reasoning switch rather than taken
-        # as-is: an agent whose author did not enable reasoning must not
-        # reason whatever the platform allows. Absent tuning (agent-to-agent
-        # invocation, no managed instance) means no author ever enabled it:
-        # off by default.
+        chat_profile_id=(
+            ctx.get("chat_profile_id")
+            if request.agent_instance_id is not None
+            else None
+        ),
+        # TRUSTED: the platform list from this turn's runtime-binding call, never
+        # `ctx`. No managed instance (agent-to-agent invocation) means no ceiling.
         reasoning_enabled_model_ids=(
-            list(reasoning_enabled_model_ids or ())
-            if tuning is not None and tuning.reasoning_enabled
-            else []
+            list(reasoning_enabled_model_ids or ()) if tuning is not None else []
         ),
         ask_user=ctx.get("ask_user"),
-        # The user's per-question reasoning choice (REASON-01 level 4). Same
-        # trap as every field above: unnamed here means silently dropped. Kept
-        # tri-state on purpose — `ctx.get` yielding None means "the agent never
-        # offered the choice", which is NOT the same as the user answering no.
+        # Only an explicit True reasons; None (non-composer callers) does not.
         reasoning=ctx.get("reasoning"),
     )
 
@@ -4582,9 +4662,13 @@ async def _iterate_runtime_event_payloads_inner(
         # runtime-binding call (see the `platform_chat_model_binding`
         # parameter's caller), never read from caller-supplied `ctx`. A
         # request-body field can never set this: unlike
-        # chat_default_profile_id/agent_profile_overrides above, there is no
-        # ctx.get(...) for it at all.
+        # chat_default_profile_id above, there is no ctx.get(...) for it at all.
         platform_chat_model_binding=platform_chat_model_binding,
+        # TRUSTED, same channel: no ctx.get(...) exists for either field.
+        team_disabled_model_ids=tuple(team_disabled_model_ids),
+        recommended_chat_profile_id=(
+            tuning.recommended_chat_profile_id if tuning is not None else None
+        ),
         # TRUSTED, same channel and same reasoning as the binding above: no
         # `ctx.get(...)` exists for it, so a request body can never prepend
         # text ahead of every agent on this deployment.
@@ -5142,6 +5226,55 @@ def _build_agent_router(
             if include_non_public or getattr(definition, "public", True)
         ]
 
+    @router.get(
+        "/skills",
+        response_model=SkillCatalog,
+        operation_id="get_runtime_instance_skills",
+    )
+    async def get_skills(
+        http_request: Request,
+        agent_instance_id: str,
+        team_id: str,
+        container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillCatalog:
+        """List metadata after the same team-use and target checks as execution."""
+        from fred_runtime.skills.api import get_instance_skills
+
+        return await get_instance_skills(
+            agent_instance_id,
+            team_id,
+            caller,
+            http_request.headers.get("Authorization"),
+            container,
+            registry,
+        )
+
+    @router.get(
+        "/skills/{skill_name}",
+        response_model=SkillDetail,
+        operation_id="get_runtime_instance_skill_detail",
+    )
+    async def get_skill_detail(
+        http_request: Request,
+        skill_name: str,
+        agent_instance_id: str,
+        team_id: str,
+        container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillDetail:
+        from fred_runtime.skills.api import get_instance_skill_detail
+
+        return await get_instance_skill_detail(
+            skill_name,
+            agent_instance_id,
+            team_id,
+            caller,
+            http_request.headers.get("Authorization"),
+            container,
+            registry,
+        )
+
     @router.get("/mcp-catalog")
     async def get_mcp_catalog() -> _McpCatalogResponse:
         """
@@ -5215,7 +5348,8 @@ def _build_agent_router(
     @router.get("/platform-prompt")
     async def get_platform_prompt_file() -> _PlatformPromptFileResponse:
         """
-        Return the two head blocks this pod ships in `config/platform_prompt.json`.
+        Return the two head blocks this pod ships in `config/platform_prompt.json`,
+        plus the creation assistant's built-in meta-prompt.
 
         Why this endpoint exists:
         - the admin UI shows both: the platform prompt an admin edits (this file
@@ -5246,6 +5380,24 @@ def _build_agent_router(
         return _PlatformPromptFileResponse(
             platform_prompt=runtime_config.default_platform_prompt or "",
             platform_instructions=runtime_config.platform_instructions or "",
+            creation_assistant_prompt=creation_assistant.CREATION_ASSISTANT_SYSTEM_PROMPT,
+            creation_assistant_prompt_revised_at=creation_assistant.CREATION_ASSISTANT_REVISED_AT,
+        )
+
+    @router.post("/creation-assistant/draft")
+    async def draft_agent(
+        body: AgentDraftPodRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> AgentDraftResult:
+        """
+        Draft an agent system prompt and capability selection from a user's
+        plain-language description (`creation_assistant.py`).
+        """
+        return await creation_assistant.handle_draft_request(
+            body,
+            caller=caller,
+            authorization=http_request.headers.get("Authorization"),
         )
 
     @router.post("/capabilities/{capability_id}/validate-config")
@@ -5380,6 +5532,39 @@ def _build_agent_router(
             config=stored.model_dump(mode="json"),
         )
 
+    def _installed_capability(http_request: Request, capability_id: str):
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None or capability_id not in capability_registry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Capability '{capability_id}' is not installed on this pod.",
+            )
+        return capability_registry.capability(capability_id)
+
+    def _copy_save_ctx(
+        http_request: Request,
+        caller: KeycloakUser | None,
+        capability_id: str,
+        team_id: str,
+        agent_instance_id: str,
+    ) -> SaveContext:
+        user_id = (caller.uid if caller is not None else None) or "anonymous"
+        auth = http_request.headers.get("Authorization", "")
+        return SaveContext(
+            identity=CapabilityIdentity(
+                user_id=user_id,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+            ),
+            services=_build_capability_save_services(
+                capability_id=capability_id,
+                user_id=user_id,
+                team_id=team_id,
+                access_token=auth.removeprefix("Bearer ").strip() or None,
+                agent_instance_id=agent_instance_id,
+            ),
+        )
+
     @router.post("/capabilities/{capability_id}/copy-config")
     async def copy_capability_config(
         capability_id: str,
@@ -5392,7 +5577,8 @@ def _build_agent_router(
 
         POST <base_url>/agents/capabilities/{capability_id}/copy-config
         Body: CapabilityConfigCopyRequest — the source envelope, the source and
-        target team and agent instance.
+        target team and agent instance, and optionally the configuration files
+        inline (`asset_files`, from `export-config`) instead of the source's.
 
         Why this endpoint exists:
         - only the pod knows a capability's hidden and nested settings, so the
@@ -5404,39 +5590,62 @@ def _build_agent_router(
           without it. `notices` says what an editor must redo in the target.
         """
 
-        capability_registry = _capability_registry_of(http_request)
-        if capability_registry is None or capability_id not in capability_registry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Capability '{capability_id}' is not installed on this pod.",
-            )
-        capability = capability_registry.capability(capability_id)
-        user_id = (caller.uid if caller is not None else None) or "anonymous"
-        auth = http_request.headers.get("Authorization", "")
-        access_token = auth.removeprefix("Bearer ").strip() or None
-
-        def save_ctx(team_id: str, agent_instance_id: str) -> SaveContext:
-            return SaveContext(
-                identity=CapabilityIdentity(
-                    user_id=user_id,
-                    team_id=team_id,
-                    agent_instance_id=agent_instance_id,
-                ),
-                services=_build_capability_save_services(
-                    capability_id=capability_id,
-                    user_id=user_id,
-                    team_id=team_id,
-                    access_token=access_token,
-                    agent_instance_id=agent_instance_id,
-                ),
-            )
-
+        capability = _installed_capability(http_request, capability_id)
         try:
             return await prepare_capability_copy(
                 capability,
                 body,
-                source_ctx=save_ctx(body.source_team_id, body.source_agent_instance_id),
-                target_ctx=save_ctx(body.target_team_id, body.target_agent_instance_id),
+                source_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.source_team_id,
+                    body.source_agent_instance_id,
+                ),
+                target_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.target_team_id,
+                    body.target_agent_instance_id,
+                ),
+            )
+        except CapabilityCopyRejectedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    @router.post("/capabilities/{capability_id}/export-config")
+    async def export_capability_config(
+        capability_id: str,
+        body: CapabilityConfigExportRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> CapabilityConfigExportResult:
+        """
+        Export one capability's stored config as it would leave its team.
+
+        POST <base_url>/agents/capabilities/{capability_id}/export-config
+        Body: CapabilityConfigExportRequest — the envelope, its team and agent
+        instance. Response: the upgraded envelope with scope-private settings
+        reset and every `AssetKey` file base64-encoded, so a later `copy-config`
+        with `asset_files` never reads that team. 404 when the capability is not
+        installed here, 422 when the config or one of its files cannot be read.
+        """
+
+        capability = _installed_capability(http_request, capability_id)
+        try:
+            return await prepare_capability_export(
+                capability,
+                body,
+                source_ctx=_copy_save_ctx(
+                    http_request,
+                    caller,
+                    capability_id,
+                    body.team_id,
+                    body.agent_instance_id,
+                ),
             )
         except CapabilityCopyRejectedError as exc:
             raise HTTPException(
@@ -6063,6 +6272,7 @@ def _build_agent_router(
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+                team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
@@ -6093,6 +6303,8 @@ def _build_agent_router(
                     user_id=user_id_str,
                     request_message=request.input,
                     turn_command=_turn_command(internal_req.context or {}),
+                    skill_invocation=(internal_req.context or {}).get("skill"),
+                    skill_invocations=(internal_req.context or {}).get("skills"),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
@@ -6168,6 +6380,7 @@ def _build_agent_router(
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+                team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
@@ -6197,6 +6410,8 @@ def _build_agent_router(
                     user_id=user_id_str,
                     request_message=request.input,
                     turn_command=_turn_command(internal_req.context or {}),
+                    skill_invocation=(internal_req.context or {}).get("skill"),
+                    skill_invocations=(internal_req.context or {}).get("skills"),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
@@ -6294,6 +6509,7 @@ def _build_agent_router(
             capability_registry=_capability_registry_of(http_request),
             team_settings=target.team_settings,
             reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+            team_disabled_model_ids=target.team_disabled_model_ids,
             platform_chat_model_binding=target.platform_chat_model_binding,
             platform_prompt=target.platform_prompt,
             credential_provider=provider,
@@ -6512,6 +6728,15 @@ def create_agent_app(
                 raise RuntimeError(
                     "Invalid runtime storage state: checkpointer and history store must be configured together."
                 )
+            from fred_runtime.skills.catalog import PlatformSkills
+
+            skills = (
+                await asyncio.to_thread(
+                    PlatformSkills.from_directory, config.skills.directory
+                )
+                if config.skills is not None
+                else None
+            )
             set_runtime_context(
                 FredRuntimeContext(
                     RuntimeConfig(
@@ -6522,6 +6747,7 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        skills=skills,
                         conversation_filesystem_quotas=(
                             config.storage.conversation_filesystem
                         ),

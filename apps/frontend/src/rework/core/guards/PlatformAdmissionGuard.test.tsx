@@ -22,7 +22,9 @@ vi.mock("../../../common/dynamicBaseQuery", () => ({
   },
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("../../../hooks/useFrontendProperties", () => ({ useFrontendProperties: () => ({ gcuVersion: "v1" }) }));
+vi.mock("../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ gcuVersion: "v1", contactSupportLink: "https://support.example.org" }),
+}));
 vi.mock("@hooks/useLegalMarkdown.ts", () => ({ useLegalMarkdown: () => "Terms of use" }));
 vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({ MarkdownRenderer: () => <p>Terms of use</p> }));
 import { enhancedControlPlaneApi } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -100,6 +102,7 @@ it("renders shared verification failure outside the router and retries without m
     });
     expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.verificationFailed");
     expect(host.querySelector('[role="alert"]')?.textContent).toBe("rework.platformAccess.failed");
+    expect(host.querySelector('a[href="https://support.example.org"]')).not.toBeNull();
     expect(host.textContent).not.toContain("Protected shell");
     const before = state.statusReads;
     const retry = [...host.querySelectorAll("button")].find(

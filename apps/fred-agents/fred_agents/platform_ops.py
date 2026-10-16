@@ -97,8 +97,6 @@ class PlatformOpsReActDefinition(ReActAgentDefinition):
         )
     }
     tags: tuple[str, ...] = ("platform", "ops", "react")
-    # The shared global base prompt (Mermaid output contract) is injected at
-    # execution time by the runtime, not baked into this editable template.
     system_prompt_template: str = _SYSTEM_PROMPT
 
     # Default capability selection projected onto the template's
@@ -107,9 +105,6 @@ class PlatformOpsReActDefinition(ReActAgentDefinition):
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id="platform_postgres"),
     )
-
-    reasoning_enabled: bool = True
-    reasoning_default_on: bool = True
 
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(

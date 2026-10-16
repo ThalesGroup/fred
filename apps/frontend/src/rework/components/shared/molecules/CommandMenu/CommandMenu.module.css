@@ -30,6 +30,7 @@
   padding: var(--spacing-2xs);
   max-height: 40vh;
   overflow-y: auto;
+  color: var(--on-surface);
 }
 
 .group:not(:first-child) {
@@ -37,11 +38,15 @@
 }
 
 .groupTitle {
+  margin-bottom: var(--spacing-2xs);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high);
   padding: var(--spacing-2xs) var(--spacing-s);
-  color: var(--on-surface-muted);
+  overflow: hidden;
+  color: var(--on-surface-retreat);
   font: var(--font-label-small);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row {
@@ -75,18 +80,16 @@
 .rowText {
   display: flex;
   flex: 1;
-  align-items: baseline;
-  gap: var(--spacing-s);
+  flex-direction: column;
   min-width: 0;
 }
 
-/* The command never truncates — it is what the user is about to type. The
- * description beside it gives up the width instead. */
 .rowLabel {
-  flex-shrink: 0;
+  flex-shrink: 1;
   color: var(--on-surface);
   font: var(--font-body-medium);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Shown in place of the list when there is nothing to offer. */
@@ -97,12 +100,11 @@
   font: var(--font-body-medium);
 }
 
-.rowSublabel {
-  flex: 1;
-  min-width: 0;
+.rowDescription {
   overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
+  font-style: italic;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

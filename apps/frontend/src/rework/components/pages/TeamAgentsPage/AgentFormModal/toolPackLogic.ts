@@ -27,7 +27,6 @@ import {
 export interface CapabilitySelectionState {
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
-  reasoningEnabled: boolean;
 }
 
 const DOCUMENT_PACKS = TOOL_PACK_SECTIONS.flatMap((section) => section.packs).filter((pack) => pack.documentSource);
@@ -79,7 +78,6 @@ export function applyDocumentAccessConfigChange(
 
 /** Hide a pack if its switch cannot enable anything for this team. */
 export function isPackSelectable(pack: ToolPack, availableIds: ReadonlySet<string>): boolean {
-  if (pack.kind === "reasoning") return true;
   if (pack.documentSource) return availableIds.has(CAP_DOCUMENT_ACCESS);
   return pack.enablesCapabilityIds.some((id) => availableIds.has(id));
 }
@@ -90,7 +88,6 @@ export function derivePackChecked(
   state: CapabilitySelectionState,
   availableIds: ReadonlySet<string>,
 ): boolean {
-  if (pack.kind === "reasoning") return state.reasoningEnabled;
   if (pack.documentSource) {
     return (
       state.selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS) &&
@@ -108,9 +105,6 @@ export function applyPackToggle(
   state: CapabilitySelectionState,
   availableIds: ReadonlySet<string>,
 ): CapabilitySelectionState {
-  if (pack.kind === "reasoning") {
-    return { ...state, reasoningEnabled: nextOn };
-  }
   if (pack.documentSource) return applyDocumentPackToggle(pack, pack.documentSource, nextOn, state, availableIds);
 
   const ids = new Set(state.selectedCapabilityIds);

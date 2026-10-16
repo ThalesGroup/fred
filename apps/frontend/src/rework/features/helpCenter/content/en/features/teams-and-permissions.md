@@ -17,7 +17,7 @@ They **stack**: one person can hold several, each granted separately.
 | Role        | Can                                                                     | Cannot, without another role                      |
 | ----------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
 | **Member**  | Use the agents, read the team's conversations and files, leave the team | Change anything shared                            |
-| **Editor**  | Create and edit agents, prompts, resources and model routing            | Manage members or team settings                   |
+| **Editor**  | Create and edit agents, prompts and resources                           | Manage members or team settings                   |
 | **Admin**   | Manage members and their roles, the team's settings and policy          | **Create or edit an agent, a prompt, a document** |
 | **Analyst** | Create and run evaluation campaigns, manage evaluation corpora          | Touch the general corpus, members or settings     |
 
@@ -29,15 +29,43 @@ They **stack**: one person can hold several, each granted separately.
 **Member** is the baseline: automatic as soon as you hold any role above it. And
 a team always keeps **at least one Admin** — removing the last one is refused.
 
+## Publishing agents
+
+Every **Editor** can share the team's agents with the whole organization
+through the agents marketplace. A team **Admin** may take an agent down from
+the marketplace without being an Editor. How publishing works is explained on
+the [Agents](/help/en/features/agents#the-agents-marketplace) page.
+
+Publishing is **enabled for each team by the platform administrator**, who
+also sets how many agents a team may publish. If the administrator turns it
+off later, the team's published agents leave the marketplace.
+
 ## Getting into a team
 
 The **marketplace** lists the teams visible in your organization. A **public**
 team appears there and is joined in one click if it is open; otherwise a team
-Admin has to add you. A **private** team does not appear at all, and is never
-joined alone: ask one of its members.
+Admin has to add you or send you an invite link. A **private** team does not
+appear at all, and is never joined alone: ask one of its members.
 
-Note: a private team **cannot** be open to free joining. Members are added by
-one of its existing members.
+Note: a private team **cannot** be open to free joining. You get in when one of
+its Admins adds you or sends you an invite link.
+
+### Invite links
+
+A team Admin can open **Settings → Members → Invite link** and turn on
+**Enable invitation by link**. The team then has one link, shown in full with a
+**Copy** button, to share however they like (chat, e-mail…). Opening it and
+choosing **Join the team** makes you a **Member**; an Admin can then give you
+other roles.
+
+The link only works for people who already have access to the platform. It does
+not give access to the platform itself: without that access, the link leads to
+the page that explains how to request it.
+
+Turning the switch off pauses the link: it stops working until the switch is
+turned on again, with the same link. **Generate a new link** replaces it for
+good: the previous link no longer works. Neither removes the people who already
+joined.
 
 ## Who creates teams
 
@@ -56,12 +84,17 @@ administration, running one belongs to the team.
 The **Settings** page gathers what governs the team. Access to each section
 depends on your role.
 
-- **Members** — add, remove, change roles (**Admin**).
+- **Members** — add, remove, change roles, share invite links (**Admin**).
 - **Settings** — the team's description, its marketplace visibility, how it is
   joined, and the **retention** period after which deleted conversations are
   permanently erased (**Admin**).
-- **Model routing** — which model profile the team's agents use, by default and
-  per operation. Left empty, the deployment's profile applies (**Editor**).
+- **Models** — among the language models the platform opens to the team: which
+  ones members can use, the default one, and whether reasoning starts on for
+  each (**Admin**; Editors and Analysts can view it). The default model cannot
+  be disabled. Disabling a model first shows the agents that recommended it:
+  they then follow the team's default model. Conversations that were using it
+  go back to the agent's recommended model. A model the platform newly opens
+  arrives enabled.
 
 ## Evaluation application
 

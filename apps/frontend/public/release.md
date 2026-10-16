@@ -1,3 +1,116 @@
+**v3.6.1** - 2026-10-16
+
+- **Summary**
+
+  Fred itself is unchanged in this release. Its published installation package now explains how to deploy it.
+
+- **Improvements**
+
+  - The published Helm chart includes its installation guide, the Fred logo and links to the documentation (#3137)
+
+- **Deployment note**
+
+  No action needed: normal deployment is enough.
+
+**v3.6.0** - 2026-10-15
+
+- **Summary**
+
+  Team administrators can invite people who already have platform access with one link. Platform administrators can find accounts in their configured directory, and document searches now respect current access. Operators can control which Knowledge Base services publish to Fred.
+
+- **Features**
+
+  - Share a team invitation link with people who already have platform access (#3116)
+
+- **Improvements**
+
+  - Find and whitelist people from your configured account directory, including Keycloak users who have not signed in to Fred (#3122)
+  - Browse theme choices with aligned light and dark previews in platform settings (#3027)
+
+- **Security**
+
+  - Restrict Knowledge Base publication to services approved by your organization (#3104)
+  - Search excludes documents outside the selected team or removed from a library (#3091)
+
+- **Bug Fixes**
+
+  - Folders show their complete document lists and preserve files linked elsewhere when deleted (#2845)
+  - The Case sensitive switch is visible when editing platform access rules (#3117)
+  - Team invitation pages no longer offer an unrelated contact-support action (#3119)
+
+- **Deployment note**
+
+  Operators must review Free-team admission and database access before upgrading. Deployments with Knowledge Base pods must register their publishers. Follow the operator guide for the staged rollout; no document re-ingestion is needed.
+
+**v3.5.0** - 2026-10-14
+
+- **Summary**
+
+  Discover and share agents, choose a model for each conversation, and use several saved prompts in one message. Administrators gain clearer access controls and a browsable history of update announcements.
+
+- **Features**
+
+  - Explore shared agents, like them, and import them into your team when publishing is enabled (#3044)
+  - Choose a model for each conversation while teams control available models and reasoning defaults (#3029)
+  - Find team, personal, and platform commands by section and use several prompts in one message (#3073)
+  - Reopen announcements and browse the update history (#3080)
+  - Choose additional branded themes supplied by your organization (#3027)
+
+- **Improvements**
+
+  - Manage access exceptions and invitation links in clearer screens without losing rules when filtering is off (#3061, #3085, #3086, #3087)
+  - Use GPT-6 Astra with tools when your organization enables it (#3097)
+
+- **Bug Fixes**
+
+  - Agents keep their answer when a tool fails, including in compatible chat integrations (#2588, #3003)
+  - CSV and Excel questions with missing date cells return results instead of failing (#3059)
+  - Plain-text and Markdown files with Windows-1252 characters or byte-order marks open correctly (#3004)
+  - HTML artifacts download as PNG or PDF in Chrome and Edge (#3102)
+  - PowerPoint template setup catches files without fields and reports validation failures clearly (#3093, #3094)
+  - Resource folders keep their document list visible while ingestion runs (#3106)
+
+- **Deployment note**
+
+  Follow the operator guide for database migrations and a staged deployment. Replace any file whitelist with Platform access rules before upgrading. Marketplace publishing, GPT-6 Astra and custom themes need separate activation; no document re-ingestion is required.
+
+**v3.4.0** - 2026-10-12
+
+- **Summary**
+
+  Describe an agent to draft its setup, combine reusable skills in chat and let enabled agents research the web. Administrators can manage platform access and publish release announcements.
+
+- **Features**
+
+  - Draft an agent's name, description and instructions from a plain-language request (#3009)
+  - Combine shared skills and saved prompts in chat, with instructions available to preview (#2711)
+  - Search the web and read public pages with agents when web research is enabled (#2980)
+  - Manage platform access rules, user and team exceptions, and team invitation links (#2965)
+  - Publish release announcements that users can reopen from What's new (#3016)
+  - Recall sent messages with the arrow keys to edit and send them again (#3038)
+
+- **Improvements**
+
+  - Inspect document details directly from an agent's folder listing (#3052)
+  - Configure the capabilities included with Graph agents from the agent form (#3049)
+  - Agent questions and tool approvals have clearer choices and keyboard shortcuts (#3034)
+  - Agent names stay distinct within each team or personal space (#3042)
+  - Fill PowerPoint templates using either single or double braces around placeholders (#3020)
+
+- **Bug Fixes**
+
+  - Read saved conversations after deleting their agent (#2992)
+  - Document uploads renew an expiring sign-in token instead of failing immediately (#3019)
+  - Opening an in-app page in a new tab preserves the destination and sign-in session (#3000)
+  - Document searches consider every selected file on affected deployments (#3002)
+  - Agent searches respect the libraries assigned to the agent (#3049)
+  - Agents can pause for free-text answers without failing the conversation (#3035)
+  - The Help Center shows your configured contact-support link throughout its pages (#3018)
+
+- **Deployment note**
+
+  Follow the operator guide for the permission model, database migrations and staged worker and application upgrade. Access filtering will be activated later; web research, skills and autoscaling also need separate activation. No document re-ingestion is required.
+
 **v3.3.0** — 2026-10-08
 
 - **Summary**

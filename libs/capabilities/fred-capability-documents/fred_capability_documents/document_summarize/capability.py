@@ -182,8 +182,6 @@ class DocumentSummarizeCapability(
 
     manifest = CapabilityManifest(
         id="document_summarize",
-        # Pre-GA: version stays 0.1.0 while the platform has not shipped —
-        # config-surface changes land without bumps.
         version="0.1.0",
         name="capability.document_summarize.name",
         description="capability.document_summarize.description",

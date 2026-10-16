@@ -119,7 +119,7 @@
 
 .metaLabel {
   color: var(--on-surface-retreat);
-  font: 600 var(--font-label-small);
+  font: var(--font-label-small-emphasized);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -141,7 +141,7 @@
 .contentLabel {
   margin: 0;
   color: var(--on-surface-retreat);
-  font: 600 var(--font-label-small);
+  font: var(--font-label-small-emphasized);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }

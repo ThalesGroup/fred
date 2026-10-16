@@ -18,17 +18,6 @@ from collections.abc import Sequence
 
 from .packaged import load_packaged_resource
 
-# Add one `(package, path_parts)` tuple here for each shared prompt fragment that
-# must apply to every agent turn. Fragments are concatenated in declaration order
-# into `GLOBAL_BASE_PROMPT_MARKDOWN` and injected at execution time by the runtime
-# (`compose_system_prompt` in fred-runtime). They are deliberately NOT
-# baked into any agent's editable `system_prompt_template`, so they stay out of
-# the operator-facing agent editor and apply even when an operator overrides the
-# whole prompt.
-GLOBAL_BASE_PROMPT_RESOURCES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("fred_sdk", ("resources", "prompts", "mermaid_output_contract.md")),
-)
-
 
 def load_packaged_markdown(*, package: str, path_parts: Sequence[str]) -> str:
     """
@@ -76,9 +65,8 @@ def load_agent_prompt_markdown(
     - pass the package owning the `prompts/` directory and the file name to load
 
     Note:
-    - Fred's shared renderer/output contracts (`GLOBAL_BASE_PROMPT_MARKDOWN`) are
-      NOT appended here. They are injected at execution time by the runtime
-      (`compose_system_prompt`) so they stay out of the editable prompt.
+    - returns the resource verbatim; platform instructions and skill loading are
+      owned by the runtime rather than appended to editable agent templates
 
     Example:
     - `prompt = load_agent_prompt_markdown(package="my_package.agents.search_agent", file_name="system_prompt.md")`
@@ -87,17 +75,3 @@ def load_agent_prompt_markdown(
         package=package,
         path_parts=(*prompts_subdir, file_name),
     )
-
-
-def _join_prompt_sections(sections: Sequence[str]) -> str:
-    return "\n\n".join(section for section in sections if section)
-
-
-# Single source of truth for Fred's shared global base prompt. Consumed at
-# execution time by the runtime suffix builder, never baked into agent templates.
-GLOBAL_BASE_PROMPT_MARKDOWN: str = _join_prompt_sections(
-    tuple(
-        load_packaged_markdown(package=package, path_parts=path_parts).strip()
-        for package, path_parts in GLOBAL_BASE_PROMPT_RESOURCES
-    )
-)

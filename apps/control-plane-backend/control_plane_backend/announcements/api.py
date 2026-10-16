@@ -22,7 +22,13 @@ from fred_core import KeycloakUser, get_current_user
 from control_plane_backend.announcements import service
 from control_plane_backend.announcements.schemas import (
     Announcement,
+    AnnouncementExposure,
     AnnouncementWriteRequest,
+    PatchNoteAnnouncement,
+    PatchNoteAnnounceRequest,
+    PatchNoteHistory,
+    PatchNoteOrderRequest,
+    PatchNoteSnapshot,
     SetAnnouncementEnabledRequest,
 )
 from control_plane_backend.product.dependencies import (
@@ -40,13 +46,13 @@ ProductDependencies = Annotated[
 @router.get(
     "/announcements/active",
     response_model=list[Announcement],
-    summary="List the announcements currently delivered to users.",
+    summary="List the banners currently delivered to users.",
 )
 async def get_active_announcements(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[Announcement]:
-    """Every authenticated user's view: the enabled announcements.
+    """Every authenticated user's view: the enabled banners (never patch notes).
 
     Authentication is the only gate — this is content the deployment means
     every user to see. It is deliberately NOT on the public pre-auth
@@ -57,6 +63,130 @@ async def get_active_announcements(
 
     del user  # authentication is the gate; identity is not used
     return await service.list_active_announcements(deps=deps)
+
+
+@router.get(
+    "/announcements/patch-notes",
+    response_model=PatchNoteHistory,
+    summary="List the announced patch notes and the caller's pending announcement.",
+)
+async def get_patch_note_history(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PatchNoteHistory:
+    """Read once per application load. A non-null `pending_announcement_id`
+    tells the client to open the dialog on its own, then record that id."""
+
+    return await service.get_patch_note_history(user=user, deps=deps)
+
+
+@router.put(
+    "/announcements/patch-note-announcements/{announcement_id}/seen",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Record that the caller saw a patch-note announcement.",
+)
+async def mark_patch_note_announcement_seen(
+    announcement_id: str,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Response:
+    await service.mark_patch_note_announcement_seen(
+        user=user, announcement_id=announcement_id, deps=deps
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put(
+    "/admin/platform/announcements/patch-notes/order",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Set the order of the patch notes (admin).",
+)
+async def set_patch_note_order(
+    request: PatchNoteOrderRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Response:
+    """Answers `409` when the list is not exactly the current patch notes."""
+
+    await service.set_patch_note_order(user=user, ordered_ids=request.ids, deps=deps)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/admin/platform/announcements/patch-notes/announcement",
+    response_model=PatchNoteAnnouncement | None,
+    summary="Get the patch-note announcement in effect, if any (admin).",
+)
+async def get_patch_note_announcement(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PatchNoteAnnouncement | None:
+    return await service.get_patch_note_announcement(user=user, deps=deps)
+
+
+@router.post(
+    "/admin/platform/announcements/patch-notes/announcement",
+    response_model=PatchNoteAnnouncement,
+    status_code=status.HTTP_201_CREATED,
+    summary="Announce the included patch notes to every user (admin).",
+)
+async def announce_patch_notes(
+    request: PatchNoteAnnounceRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PatchNoteAnnouncement:
+    """Freezes the included patch notes as the package users read. Answers
+    `409` when they are not exactly the confirmed `ids` in order, or are more
+    than an announcement may hold."""
+
+    return await service.announce_patch_notes(
+        user=user, expected_ids=request.ids, deps=deps
+    )
+
+
+@router.delete(
+    "/admin/platform/announcements/patch-notes/announcement",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Withdraw the patch-note announcement in effect (admin).",
+)
+async def withdraw_patch_note_announcement(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Response:
+    """Users read no patch note until the next announcement. Answers `404`
+    when no announcement is in effect."""
+
+    await service.withdraw_patch_note_announcement(user=user, deps=deps)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/admin/platform/announcements/patch-notes/announcements/{announcement_id}",
+    response_model=list[PatchNoteSnapshot],
+    summary="Get the patch notes of one announcement, as users saw them (admin).",
+)
+async def get_patch_note_package(
+    announcement_id: str,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[PatchNoteSnapshot]:
+    """Answers `404` for a history line that kept no package."""
+
+    return await service.get_patch_note_package(
+        user=user, announcement_id=announcement_id, deps=deps
+    )
+
+
+@router.get(
+    "/admin/platform/announcements/activation-history",
+    response_model=list[AnnouncementExposure],
+    summary="List the latest banner and patch-note exposures (admin).",
+)
+async def list_exposure_history(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[AnnouncementExposure]:
+    return await service.list_exposure_history(user=user, deps=deps)
 
 
 @router.get(
@@ -112,9 +242,8 @@ async def set_announcement_enabled(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> Announcement:
-    """Separate from the content update so a toggle never bumps
-    `content_version` — a dismissed banner must not come back because an admin
-    flicked the switch."""
+    """Re-enabling a banner bumps `content_version`. On a patch note this only
+    decides whether the next announcement includes it."""
 
     return await service.set_announcement_enabled(
         user=user,

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: knowledge-base
+description: A Knowledge Base pod built on Fred's fred-sdk, deployed from its own image and configuration
+type: application
+# version follows the fred chart; appVersion identifies the fred-sdk version used
+# by the embedded Knowledge Base PodConfiguration values.schema.json.
+version: 1.5.0-post
+appVersion: "4.5.2"
+home: https://github.com/ThalesGroup/fred
+icon: https://site.fredlab.dev/images/fred.svg
+sources:
+  - https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/knowledge-base
+keywords:
+  - fred
+  - knowledge-base
+annotations:
+  artifacthub.io/license: Apache-2.0

@@ -45,4 +45,18 @@ describe("Button", () => {
     expect(button.classList.contains("consumer-class")).toBe(true);
     expect(onClick).toHaveBeenCalledOnce();
   });
+
+  it("renders the tonal variant", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() =>
+      root.render(
+        <Button color="primary" variant="tonal" size="medium">
+          Assist
+        </Button>,
+      ),
+    );
+    expect(container.querySelector("button")!.className).toMatch(/btn-tonal/);
+  });
 });

@@ -35,6 +35,8 @@
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { assemblePromptTurn } from "@rework/utils/skillInvocation";
+import type { EffectiveChatModel } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -61,6 +63,8 @@ vi.mock("react-i18next", () => ({
 // arbitrary previously-visited sid (e.g. clicking a session in a sidebar) —
 // something `startNewConversation()`/`handleSend()` alone can't simulate,
 // since both only ever mint a brand-new sid, never rebind to an existing one.
+let postponeNavigation = false;
+let commitNavigation: (() => void) | undefined;
 let capturedSetSearchParams:
   | ((updater: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams)) => void)
   | undefined;
@@ -71,7 +75,9 @@ vi.mock("react-router-dom", () => ({
       updater: URLSearchParams | ((prev: URLSearchParams) => URLSearchParams),
       _opts?: unknown,
     ) => {
-      setParams((prev) => (typeof updater === "function" ? updater(prev) : updater));
+      const commit = () => setParams((prev) => (typeof updater === "function" ? updater(prev) : updater));
+      if (postponeNavigation) commitNavigation = commit;
+      else commit();
     };
     capturedSetSearchParams = setSearchParams;
     return [params, setSearchParams] as const;
@@ -80,7 +86,7 @@ vi.mock("react-router-dom", () => ({
 
 const showErrorMock = vi.fn();
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError: showErrorMock, showSuccess: vi.fn() }),
+  useToast: () => ({ showError: showErrorMock, showSuccess: vi.fn(), showWarn: vi.fn() }),
 }));
 
 const notifyApiErrorMock = vi.fn();
@@ -109,6 +115,8 @@ const replaceAllMessagesMock = vi.fn();
 // thread on screen; reset to [] in beforeEach.
 let chatSseMessages: unknown[] = [];
 let chatSseMaxChatInputChars: number | undefined;
+let chatSseChatControls: unknown[] = [];
+let hostEffectiveModel: EffectiveChatModel | undefined;
 let capturedFlushPendingWrites: ((sid: string | null) => Promise<boolean>) | undefined;
 let capturedOnTurnStarted: (() => void) | undefined;
 let capturedOnTurnRejected: ((draft: string, sessionId: string) => void) | undefined;
@@ -133,7 +141,7 @@ vi.mock("@hooks/useChatSse", () => ({
     return {
       messages: chatSseMessages,
       waitResponse: false,
-      chatControls: [],
+      chatControls: chatSseChatControls,
       maxChatInputChars: chatSseMaxChatInputChars,
       prepareChatControls: prepareChatControlsMock,
       send: sendMock,
@@ -154,6 +162,10 @@ const composerValue = {
   selectedDocumentUids: [] as string[],
   askUser: true,
   setAskUser: vi.fn(),
+  reasoning: false,
+  setReasoning: vi.fn(),
+  chatProfileId: null as string | null,
+  setChatProfileId: vi.fn(),
   setSearchPolicy: vi.fn(),
   setRagScope: vi.fn(),
   setSelectedLibraryIds: vi.fn(),
@@ -161,8 +173,12 @@ const composerValue = {
   reset: composerResetMock,
   bindSession: composerBindSessionMock,
 };
+let composerModelArg: unknown;
 vi.mock("./useComposerSettings", () => ({
-  useComposerSettings: () => composerValue,
+  useComposerSettings: (_sessionId: unknown, _controls: unknown, effectiveModel: unknown) => {
+    composerModelArg = effectiveModel;
+    return composerValue;
+  },
 }));
 
 const sessionHistoryValue = { isLoading: false };
@@ -192,7 +208,13 @@ let patchSessionImpl: (args: unknown) => Promise<unknown> = async () => ({});
 const registerSessionCalls: unknown[] = [];
 const patchSessionCalls: unknown[] = [];
 let sessionData:
-  | { context_prompt_ids?: string[]; title?: string; agent_deleted?: boolean; agent_display_name?: string | null }
+  | {
+      context_prompt_ids?: string[];
+      title?: string;
+      agent_deleted?: boolean;
+      agent_display_name?: string | null;
+      agent_instance_id?: string;
+    }
   | undefined;
 let sessionQueryUnresolved = false;
 const refetchSessionMock = vi.fn();
@@ -260,7 +282,7 @@ import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHist
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useManagedChat>) => void }) {
-  const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1" });
+  const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1", effectiveChatModel: hostEffectiveModel });
   onRender(hook);
   return null;
 }
@@ -303,8 +325,14 @@ describe("useManagedChat — session write reliability", () => {
   };
 
   beforeEach(() => {
+    postponeNavigation = false;
+    commitNavigation = undefined;
     localStorage.clear();
     composerValue.askUser = true;
+    composerValue.reasoning = false;
+    composerValue.chatProfileId = null;
+    chatSseChatControls = [];
+    hostEffectiveModel = undefined;
     clearSessionHistoryCache();
     chatSseMessages = [];
     chatSseMaxChatInputChars = undefined;
@@ -414,6 +442,108 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.input).toBe("  🙂🙂🙂🙂🙂🙂  ");
   });
 
+  it("starts the first send after an intermediate render before router binding", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("hello"));
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    postponeNavigation = true;
+    const first = latest.handleSend();
+    await tick();
+    expect(registerSessionCalls).toHaveLength(1);
+    // Mutation updates can render before the router commits its new search params.
+    rerender();
+    act(() => commitNavigation?.());
+    expect(latest.executionDisabled).toBe(false);
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(capturedIsTurnCurrent?.(latest.sessionId!)).toBe(true);
+  });
+
+  it("keeps the effective first-turn identity when preparation precedes router binding", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    postponeNavigation = true;
+    sendMock.mockImplementationOnce(async (_text, sid) => {
+      expect(capturedIsTurnCurrent?.(sid as string)).toBe(true);
+      capturedOnTurnStarted?.();
+      return true;
+    });
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(latest.sessionId).toBeNull();
+    expect(latest.input).toBe("");
+    act(() => commitNavigation?.());
+    expect(latest.executionDisabled).toBe(false);
+    expect(sendMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])(
+    "revokes a pending first send on navigation, including return to its sid (%s)",
+    async (returnToOrigin) => {
+      sessionQueryUnresolved = true;
+      mount();
+      act(() => latest.setInput("first draft"));
+      const create = deferred<unknown>();
+      registerSessionImpl = () => create.promise;
+      const first = latest.handleSend();
+      await tick();
+      const sid = latest.sessionId!;
+      sessionQueryUnresolved = false;
+      act(() => capturedSetSearchParams?.(new URLSearchParams("session=other")));
+      if (returnToOrigin) act(() => capturedSetSearchParams?.(new URLSearchParams(`session=${sid}`)));
+      act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+      const question = latest.pendingHitl;
+      await act(async () => {
+        create.resolve({});
+        await first;
+      });
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(latest.pendingHitl).toBe(question);
+    },
+  );
+
+  it("revokes a deferred draft handoff when starting another new conversation", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    postponeNavigation = true;
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    const first = latest.handleSend();
+    await tick();
+    act(() => latest.startNewConversation());
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(latest.sessionId).toBeNull();
+    expect(latest.input).toBe("");
+  });
+
+  it("does not start a first turn when session creation finishes after unmount", async () => {
+    sessionQueryUnresolved = true;
+    mount();
+    act(() => latest.setInput("first draft"));
+    const create = deferred<unknown>();
+    registerSessionImpl = () => create.promise;
+    const first = latest.handleSend();
+    await tick();
+    act(() => root.unmount());
+    await act(async () => {
+      create.resolve({});
+      await first;
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
   it("accepts an exact-limit Unicode draft", async () => {
     chatSseMaxChatInputChars = 5;
     mount();
@@ -444,6 +574,49 @@ describe("useManagedChat — session write reliability", () => {
 
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][2]).toMatchObject({ ask_user: askUser });
+  });
+
+  it("sends the conversation's model choice and an explicit reasoning value while the row is shown", async () => {
+    composerValue.chatProfileId = "chat.large";
+    composerValue.reasoning = false;
+    chatSseChatControls = [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
+    hostEffectiveModel = {
+      capability_id: "model__mistral__small",
+      selectable_models: [
+        { profile_id: "chat.small", capability_id: "model__mistral__small", name: "small", reasoning_enabled: true },
+        { profile_id: "chat.large", capability_id: "model__mistral__large", name: "large", reasoning_enabled: true },
+      ],
+    } as EffectiveChatModel;
+    mount();
+    act(() => latest.setInput("question"));
+    rerender();
+
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    expect(sendMock.mock.calls[0][2]).toMatchObject({ chat_profile_id: "chat.large", reasoning: false });
+  });
+
+  it("sends no reasoning value when the chosen model cannot reason, and no choice when none is made", async () => {
+    chatSseChatControls = [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
+    hostEffectiveModel = {
+      capability_id: "model__mistral__large",
+      selectable_models: [
+        { profile_id: "chat.large", capability_id: "model__mistral__large", name: "large", reasoning_enabled: false },
+      ],
+    } as EffectiveChatModel;
+    mount();
+    act(() => latest.setInput("question"));
+    rerender();
+
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    const context = sendMock.mock.calls[0][2] as Record<string, unknown>;
+    expect("reasoning" in context).toBe(false);
+    expect("chat_profile_id" in context).toBe(false);
   });
 
   // #2369: a brand-new conversation's composer settings live only in memory —
@@ -538,6 +711,52 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).not.toHaveBeenCalled();
     expect(registerSessionCalls).toHaveLength(0);
     expect(showErrorMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("measures the assembled text of a turn with several prompt commands, not the typed line", async () => {
+    chatSseMaxChatInputChars = 40;
+    mount();
+    const draft = "/summary and /tone";
+    act(() => {
+      latest.setInput(draft);
+    });
+    rerender();
+    const run = assemblePromptTurn(draft, [
+      { command: "summary", promptId: "p-1", promptName: "Summary", from: 0, to: 8, text: "x".repeat(20) },
+      { command: "tone", promptId: "p-2", promptName: "Tone", from: 13, to: 18, text: "y".repeat(20) },
+    ]);
+    expect(draft.length).toBeLessThan(40);
+    expect(run.text.length).toBeGreaterThan(40);
+
+    await act(async () => {
+      await latest.runCommand(run);
+    });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(registerSessionCalls).toHaveLength(0);
+    expect(showErrorMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("titles a session started with several prompt commands from the first one and the user's own text", async () => {
+    mount();
+    const draft = "/summary /tone the Q3 report";
+    act(() => {
+      latest.setInput(draft);
+    });
+    rerender();
+
+    await act(async () => {
+      await latest.runCommand(
+        assemblePromptTurn(draft, [
+          { command: "summary", promptId: "p-1", promptName: "Weekly review", from: 0, to: 8, text: "Summarise." },
+          { command: "tone", promptId: "p-2", promptName: "Formal", from: 9, to: 14, text: "Be formal." },
+        ]),
+      );
+    });
+
+    const created = registerSessionCalls[0] as { createSessionRequest: { title: string } };
+    expect(created.createSessionRequest.title).toBe("Weekly review — the Q3 report");
+    expect(sendMock.mock.calls[0][0]).toBe("Summarise.\n\nBe formal.\n\nthe Q3 report");
   });
 
   it("restores the complete ordinary draft after a backend length rejection", async () => {
@@ -2051,6 +2270,91 @@ describe("useManagedChat — session write reliability", () => {
     );
   });
 
+  it.each([
+    { exchangeId: "exch-1", invocation: { name: "meeting-minutes" }, expected: "meeting-minutes" },
+    { exchangeId: "older-exchange", invocation: { name: "meeting-minutes" }, expected: undefined },
+    { exchangeId: "exch-1", invocation: { name: 42 }, expected: undefined },
+  ])("restores only the resumed exchange's typed skill ($exchangeId)", async ({ exchangeId, invocation, expected }) => {
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: exchangeId,
+        timestamp: "2026-10-09T00:00:00Z",
+        rank: 0,
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "/meeting-minutes notes" }],
+        metadata: { extras: { skill_invocation: invocation } },
+      },
+    ];
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    rerender();
+    await act(async () => latest.handleHitlAnswer("proceed"));
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      awaitingHumanEvent,
+      "proceed",
+      undefined,
+      expected
+        ? expect.objectContaining({ skills: [{ name: expected }] })
+        : expect.not.objectContaining({ skills: expect.anything() }),
+      undefined,
+      false,
+    );
+    act(() => latest.setInput("follow up"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+    expect(sendMock.mock.calls[0]?.[2]).not.toHaveProperty("skill");
+  });
+
+  it("sends a prompt with all skills and restores them only for its interrupted exchange", async () => {
+    const skills = [{ name: "meeting-minutes" }, { name: "mermaid" }];
+    const command = {
+      command: "summary",
+      prompt_id: "p-summary",
+      draft_text: "Before /summary /meeting-minutes /mermaid after",
+      draft_command_offset: 7,
+    };
+    mount();
+    bindSession("session-1");
+    await act(async () =>
+      latest.runCommand({ text: "Before\n\nPrompt instructions\n\n/meeting-minutes /mermaid after", command, skills }),
+    );
+    expect(sendMock.mock.calls[sendMock.mock.calls.length - 1]?.[2]).toEqual(
+      expect.objectContaining({ command, skills }),
+    );
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: "exch-1",
+        timestamp: "2026-10-09T00:00:00Z",
+        rank: 0,
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "assembled prompt" }],
+        metadata: { command, extras: { skill_invocations: skills } },
+      },
+    ];
+    rerender();
+    act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
+    rerender();
+    await act(async () => latest.handleHitlAnswer("proceed"));
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      awaitingHumanEvent,
+      "proceed",
+      undefined,
+      expect.objectContaining({ skills }),
+      undefined,
+      false,
+    );
+    act(() => latest.setInput("follow up"));
+    await act(async () => latest.handleSend());
+    expect(sendMock.mock.calls[sendMock.mock.calls.length - 1]?.[2]).not.toHaveProperty("skills");
+  });
+
   it("blocks new turns while an agent question is pending and during its resume", async () => {
     let resolveResume: (reached: boolean) => void = () => {};
     sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => (resolveResume = resolve)));
@@ -2350,6 +2654,38 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingHitl).toEqual(newerPrompt);
     expect(latest.hitlFreeText).toBe("answer for the newer prompt");
   });
+  // The page reads the model list before it knows whether the conversation can
+  // run; that answer must not drop the stored choice (and warn) meanwhile.
+  it("hides the model read from the composer while the conversation cannot run", () => {
+    hostEffectiveModel = {
+      capability_id: "model__mistral__small",
+      selectable_models: [{ profile_id: "chat.small", capability_id: "model__mistral__small", name: "small" }],
+    };
+    mount();
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
+    expect(composerModelArg).toBe(hostEffectiveModel);
+
+    // Agent deleted: the read answers with an empty model.
+    sessionData = { agent_deleted: true };
+    rerender();
+    expect(composerModelArg).toBeUndefined();
+
+    // Conversation of another agent: the read describes the wrong agent.
+    sessionData = { agent_instance_id: "agent-2" };
+    rerender();
+    expect(composerModelArg).toBeUndefined();
+
+    // Conversation row not loaded yet.
+    sessionData = undefined;
+    sessionQueryUnresolved = true;
+    rerender();
+    expect(composerModelArg).toBeUndefined();
+
+    sessionQueryUnresolved = false;
+    rerender();
+    expect(composerModelArg).toBe(hostEffectiveModel);
+  });
+
   it("freezes an existing conversation after deletion and resumes normal behavior on a live conversation", async () => {
     mount();
     act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
@@ -2369,9 +2705,11 @@ describe("useManagedChat — session write reliability", () => {
       retainedUpload([new File(["content"], "file.txt")], "picker");
       latest.setContextPrompts(["blocked"]);
       latest.setAskUser(false);
+      latest.setChatProfileId("chat.fast");
       latest.startNewConversation();
     });
     expect(sendMock).not.toHaveBeenCalled();
+    expect(composerValue.setChatProfileId).not.toHaveBeenCalled();
     expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
     expect(patchSessionCalls).toHaveLength(writes);
     expect(latest.sessionId).toBe("saved");

@@ -30,19 +30,22 @@
   font: var(--font-body-small);
 }
 
+/* Tiles share the list's columns (subgrid), so every preview starts at the
+ * same place right after the longest name. */
 .themes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
+  display: grid;
+  grid-template-columns: auto minmax(0, max-content) auto 1fr;
+  gap: var(--spacing-xs) var(--spacing-m);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .tile {
-  display: flex;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: center;
-  gap: var(--spacing-m);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-ms);
   background-color: var(--surface-container);
@@ -50,10 +53,27 @@
   min-width: 500px;
 }
 
-/* The switch: L after it, while the tile's gap keeps M between the other items. */
-/* Only the name gives way when the tile is narrow. */
-.tile > :not(.name) {
-  flex-shrink: 0;
+.tile[data-default="true"] {
+  /* No 70% primary token exists; a one-off mix on purpose. */
+  border-color: color-mix(in srgb, var(--primary), transparent 30%);
+}
+
+.tile > :last-child {
+  justify-self: end;
+}
+
+/* Same text and icon metrics as the small Button it stands in for. */
+.defaultLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding-inline: var(--spacing-xs) var(--spacing-s);
+  color: var(--primary);
+  font: var(--font-title-small);
+}
+
+.defaultLabel > :first-child {
+  font-size: 1.25rem;
 }
 
 .toggle {
@@ -65,7 +85,6 @@
 }
 
 .name {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   color: var(--on-surface);
@@ -78,14 +97,20 @@
 
 .preview {
   display: flex;
+  /* L between the name and the preview, while the grid gap keeps M elsewhere. */
+  margin-inline-start: calc(var(--spacing-l) - var(--spacing-m));
 }
 
 .swatches {
   display: flex;
+  align-items: center;
   gap: var(--spacing-2xs);
   border: 1px solid var(--outline-muted);
   background-color: var(--surface-container);
   padding: var(--spacing-xs);
+  /* The mode icon takes the previewed theme's own colour and the swatch size. */
+  color: var(--on-surface-retreat);
+  font-size: 20px;
 }
 
 .swatches:first-child {

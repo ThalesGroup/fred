@@ -22,6 +22,7 @@ import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAudit
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
+import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
@@ -34,6 +35,7 @@ import HomePage from "@components/pages/HomePage/HomePage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
+import MarketplaceAgents from "@components/pages/marketplace/MarketplaceAgents/MarketplaceAgents.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import KnowledgeBaseDocumentsPage from "@components/pages/TeamKnowledgeBasesPage/KnowledgeBaseDocumentsPage.tsx";
@@ -55,7 +57,6 @@ import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { isProtectedAllowed, Protected, type ProtectedRequirement } from "@core/guards/Protected";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
-import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
 import { getConfig } from "./config";
@@ -105,7 +106,7 @@ const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
 
 export const routes: RouteObject[] = [
   { path: "/platform-access-denied", element: <PlatformAccessDeniedPage /> },
-  { path: "/join-free/:token", element: <FreeEnrollmentPage /> },
+  { path: "/join/:token", element: <FreeEnrollmentPage /> },
   {
     path: "/",
     element: <MainLayout />,
@@ -206,6 +207,10 @@ export const routes: RouteObject[] = [
         element: <MarketplacePrompts />,
       },
       {
+        path: "marketplace/agents",
+        element: <MarketplaceAgents />,
+      },
+      {
         path: "admin",
         element: <AdminIndexRoute />,
       },
@@ -293,6 +298,16 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <UiSettingsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Agents marketplace settings; same platform-admin gate as the backend's
+        // `can_manage_platform` on /admin/marketplace-settings.
+        path: "admin/marketplaces",
+        element: (
+          <Protected requires="admin">
+            <MarketplacesPage />
           </Protected>
         ),
       },
@@ -395,13 +410,6 @@ export const routes: RouteObject[] = [
   {
     path: "unauthorized",
     element: <Unauthorized />,
-  },
-  {
-    // Whitelist-rejection landing page (HTTP 403 "user_not_whitelisted",
-    // see docs/swift/platform/KEYCLOAK.md §"Behavior"). Standalone, no
-    // MainLayout chrome — must render even when auth/bootstrap has failed.
-    path: "coming-soon",
-    element: <ComingSoon />,
   },
 ];
 

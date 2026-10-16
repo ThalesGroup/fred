@@ -58,6 +58,13 @@ storage:
     root_path: "~/.fred/control-plane/content-storage"
 
 knowledge_bases:
+  # The clients allowed to publish Knowledge Base definitions, each with the
+  # one prefix it owns. Empty by default: nobody publishes.
+  # Security is off here, so every local caller, the samples' Knowledge Base
+  # included, publishes as the local-dev client.
+  publishers:
+    - client_id: local-dev
+      prefix: fred.samples
   # How many times one synchronization run is attempted before Fred records it
   # as failed. Without a bound the workflow engine retries for ever, so a
   # handler that fails the same way every time never reaches a terminal state.

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import copy
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, List, Tuple
 
@@ -40,64 +41,54 @@ KEY_MARKER_PATTERN = r"(?:\{\{[^}]+\}\}|(?<!\{)\{[^{}]+\}(?!\}))"
 KEY_PATTERN = re.compile(rf"(?={KEY_MARKER_PATTERN})" r"\{\{?([^}]+)\}\}?")
 
 
-def _iter_shape_paragraphs(shape: "BaseShape") -> List["_Paragraph"]:
-    """Yield every text paragraph reachable from ``shape``, recursing as needed.
-
-    Three text-bearing shape kinds are handled, in priority order:
-
-    - a **group** (``shape_type`` GROUP, exposing ``.shapes``): recurse into each child
-      so nested text boxes / tables at any depth are reached;
-    - a **table** (``has_table``): every cell is a text frame;
-    - a plain **text frame** (``has_text_frame``): its own paragraphs.
-
-    Any other shape (pictures, media, OLE, ink, lines, and — for now — SmartArt and
-    charts) contributes no paragraphs.
-    """
-    paragraphs: List["_Paragraph"] = []
-
-    # Group: recurse. Checked first because a group is itself neither has_text_frame nor
-    # has_table, but its children may be either.
+def _iter_shape_paragraphs(
+    shape: "BaseShape",
+) -> Iterator[tuple["_Paragraph", bool]]:
+    """Yield paragraphs and table membership, descending into nested groups."""
     if getattr(shape, "shapes", None) is not None and not shape.has_text_frame:
         for child in shape.shapes:  # type: ignore[attr-defined]
-            paragraphs.extend(_iter_shape_paragraphs(child))
-        return paragraphs
-
-    # Table: each cell carries its own text frame.
-    if getattr(shape, "has_table", False):
+            yield from _iter_shape_paragraphs(child)
+    elif getattr(shape, "has_table", False):
         for row in shape.table.rows:  # type: ignore[attr-defined]
             for cell in row.cells:
-                paragraphs.extend(cell.text_frame.paragraphs)
-        return paragraphs
-
-    # Plain text frame (text box, title, other placeholder, auto-shape, ...).
-    if shape.has_text_frame:
-        paragraphs.extend(shape.text_frame.paragraphs)  # type: ignore[attr-defined]
-
-    return paragraphs
+                for paragraph in cell.text_frame.paragraphs:
+                    yield paragraph, True
+    elif shape.has_text_frame:
+        for paragraph in shape.text_frame.paragraphs:  # type: ignore[attr-defined]
+            yield paragraph, False
 
 
 def _iter_text_paragraphs(slide: "Slide") -> List["_Paragraph"]:
-    """Yield every fillable paragraph on ``slide``, descending into tables and groups."""
-    paragraphs: List["_Paragraph"] = []
+    """Return every fillable paragraph, descending into tables and groups."""
+    return [
+        paragraph
+        for shape in slide.shapes
+        for paragraph, _in_table in _iter_shape_paragraphs(shape)
+    ]
+
+
+def _keys_of_paragraph(paragraph: "_Paragraph") -> List[str]:
+    """Match shared marker syntax after joining runs, preserving occurrence order."""
+    merged = "".join(run.text for run in paragraph.runs)
+    return [match.group(1).strip() for match in KEY_PATTERN.finditer(merged)]
+
+
+def list_keys_and_table_keys_on_slide(slide: "Slide") -> tuple[List[str], set[str]]:
+    """Discover ordered marker occurrences and table keys in one lightweight walk."""
+    keys: List[str] = []
+    table_keys: set[str] = set()
     for shape in slide.shapes:
-        paragraphs.extend(_iter_shape_paragraphs(shape))
-    return paragraphs
+        for paragraph, in_table in _iter_shape_paragraphs(shape):
+            paragraph_keys = _keys_of_paragraph(paragraph)
+            keys.extend(paragraph_keys)
+            if in_table:
+                table_keys.update(paragraph_keys)
+    return keys, table_keys
 
 
 def list_keys_on_slide(slide: "Slide") -> List[str]:
-    """Return every ``{key}`` or ``{{key}}`` key found in the text-frame shapes of ``slide``.
-
-    Keys are returned in document order with duplicates preserved; de-duplication (when
-    needed) is the caller's responsibility. Keys are reconstructed even when PowerPoint
-    splits a placeholder across multiple runs within a paragraph, because the run texts
-    of each paragraph are merged before matching.
-    """
-    keys: List[str] = []
-    for paragraph in _iter_text_paragraphs(slide):
-        merged = "".join(run.text for run in paragraph.runs)
-        for match in KEY_PATTERN.finditer(merged):
-            keys.append(match.group(1).strip())
-    return keys
+    """Return normalized keys in document order, retaining duplicates and split runs."""
+    return list_keys_and_table_keys_on_slide(slide)[0]
 
 
 def _styled_spans_for_paragraph(
@@ -265,18 +256,8 @@ def replace_keys_on_slide(slide: "Slide", value_for: Callable[[str], str]) -> No
 
 
 # ---------------------------------------------------------------------------
-# Image-anchor shape-walking traversal (geometry seam).
-#
-# ``list_keys_on_slide`` / ``replace_keys_on_slide`` flatten shapes to paragraphs and
-# discard the containing shape, so they cannot give an image its placement box. This
-# second traversal walks the *shapes* (recursing into groups) and yields, per ``{{key}}``
-# found in a shape's text, the containing shape plus its ABSOLUTE EMU geometry. It drives
-# BOTH the analyze-time ``image_key_invalid_location`` check and the fill-time picture
-# insertion, so parse and fill can never diverge on geometry.
-#
-# It deliberately reuses ``KEY_PATTERN`` and the run-merging idiom (a key may be split
-# across runs), but stays a separate function from the text seam: same merging, different
-# output (shape + geometry vs. text round-trip).
+# Image geometry is needed only when generating the deck. Validation uses the
+# lightweight marker/table walk above; both paths share paragraph matching.
 # ---------------------------------------------------------------------------
 
 
@@ -317,9 +298,7 @@ def _merged_keys_of_shape(shape: "BaseShape") -> List[str]:
     """
     keys: List[str] = []
     for paragraph in shape.text_frame.paragraphs:  # type: ignore[attr-defined]
-        merged = "".join(run.text for run in paragraph.runs)
-        for match in KEY_PATTERN.finditer(merged):
-            keys.append(match.group(1).strip())
+        keys.extend(_keys_of_paragraph(paragraph))
     return keys
 
 
@@ -453,11 +432,10 @@ def _collect_image_anchors(
         for row in shape.table.rows:  # type: ignore[attr-defined]
             for cell in row.cells:
                 for paragraph in cell.text_frame.paragraphs:
-                    merged = "".join(run.text for run in paragraph.runs)
-                    for match in KEY_PATTERN.finditer(merged):
+                    for key in _keys_of_paragraph(paragraph):
                         out.append(
                             ImageAnchor(
-                                key=match.group(1).strip(),
+                                key=key,
                                 left=abs_box[0],
                                 top=abs_box[1],
                                 width=abs_box[2],

@@ -83,6 +83,14 @@ describe("MarkdownRenderer layout variants", () => {
     expect(wrapper?.classList.contains(styles.compact)).toBe(true);
     expect(wrapper?.classList.contains(styles.fullWidth)).toBe(true);
   });
+
+  it.each([false, true])("opens links in a new tab only when asked (linksInNewTab=%s)", (linksInNewTab) => {
+    act(() => root.render(<MarkdownRenderer text="[Docs](https://example.com)" linksInNewTab={linksInNewTab} />));
+    const link = container.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("https://example.com");
+    expect(link.getAttribute("target")).toBe(linksInNewTab ? "_blank" : null);
+    expect(link.getAttribute("rel")).toBe(linksInNewTab ? "noopener noreferrer" : null);
+  });
 });
 
 describe("MarkdownRenderer code routing", () => {

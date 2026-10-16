@@ -42,9 +42,11 @@ interface TeamRoleChipsProps {
   onToggle: (role: UserTeamRelation, held: boolean) => void;
   /** Per-role gate for the current actor. Omit to leave every chip enabled. */
   canAdminister?: (role: UserTeamRelation) => boolean;
+  /** "small" for dense rows such as the members table. */
+  size?: "medium" | "small";
 }
 
-export default function TeamRoleChips({ heldRoles, onToggle, canAdminister }: TeamRoleChipsProps) {
+export default function TeamRoleChips({ heldRoles, onToggle, canAdminister, size = "medium" }: TeamRoleChipsProps) {
   const { t } = useTranslation();
 
   // Built once per instance instead of once per render: the members table
@@ -69,7 +71,7 @@ export default function TeamRoleChips({ heldRoles, onToggle, canAdminister }: Te
   }, [t]);
 
   return (
-    <div className={styles.roleChips} role="group">
+    <div className={styles.roleChips} role="group" data-size={size}>
       {ELEVATED_TEAM_ROLES.map((role) => {
         // A pending nomination keeps the short "Admin" label, marked by colour and a clock icon;
         // toggling it cancels the nomination.

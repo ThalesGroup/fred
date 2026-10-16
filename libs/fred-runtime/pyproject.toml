@@ -1,14 +1,14 @@
 [project]
 name = "fred-runtime"
-version = "4.4.3"
+version = "4.5.2"
 description = "Runtime adapters and infrastructure wiring for Fred v2 agents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.4.3",
-  "fred-sdk[agents]>=4.4.3",
+  "fred-core>=4.5.2",
+  "fred-sdk[agents]>=4.5.2",
   "alembic>=1.18.4",
   "deepagents>=0.7.19",
   "httpx>=0.28.1",
@@ -74,7 +74,15 @@ build-backend = "setuptools.build_meta"
 include = ["fred_runtime*"]
 
 [tool.setuptools.package-data]
-fred_runtime = ["migrations/*.mako"]
+fred_runtime = [
+  "migrations/*.mako",
+  "skills/*/**/*.md",
+  "skills/*/**/*.txt",
+  "skills/*/**/*.json",
+  "skills/*/**/*.yaml",
+  "skills/*/**/*.yml",
+  "skills/*/**/*.csv",
+]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

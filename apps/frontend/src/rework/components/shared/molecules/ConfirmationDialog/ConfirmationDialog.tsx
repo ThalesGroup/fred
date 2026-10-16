@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import Button from "@shared/atoms/Button/Button.tsx";
-import { Portal } from "@shared/utils/Portal.tsx";
+import { isTopmostModal, Portal } from "@shared/utils/Portal.tsx";
 import { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 import styles from "./ConfirmationDialog.module.css";
+
+const FOCUSABLE =
+  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 interface ConfirmationDialogProps {
   open: boolean;
@@ -37,6 +40,10 @@ interface ConfirmationDialogProps {
    *  when `criticalAction` is set. Color still follows `criticalAction`
    *  (error vs. primary), independent of variant. */
   confirmVariant?: ButtonVariant;
+  confirmDisabled?: boolean;
+  /** False for a choice the user must make explicitly: neither the scrim nor
+   *  Escape closes the dialog, only its two buttons. */
+  dismissible?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -52,6 +59,8 @@ export function ConfirmationDialog({
   cancelVariant,
   cancelColor,
   confirmVariant,
+  confirmDisabled = false,
+  dismissible = true,
   onConfirm,
   onCancel,
 }: ConfirmationDialogProps) {
@@ -63,21 +72,51 @@ export function ConfirmationDialog({
   const resolvedCancelVariant = cancelVariant ?? (criticalAction ? "filled" : "outlined");
   const resolvedCancelColor = cancelColor ?? (criticalAction ? "primary" : "on-surface");
   const resolvedConfirmVariant = confirmVariant ?? (criticalAction ? "text" : "filled");
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const callbacks = useRef({ onCancel, dismissible });
+  callbacks.current = { onCancel, dismissible };
+  // Focus lands on Cancel, the safe choice, once the portal has mounted the dialog.
+  const attachDialog = useCallback((node: HTMLDivElement | null) => {
+    dialogRef.current = node;
+    node?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, []);
+
   useEffect(() => {
     if (!open) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      const dialog = dialogRef.current;
+      if (!dialog || !isTopmostModal(dialog)) return;
+      if (e.key === "Escape" && !e.defaultPrevented) {
+        // A non-dismissible choice keeps the focus trap but ignores Escape.
+        if (!callbacks.current.dismissible) return;
+        e.preventDefault();
+        callbacks.current.onCancel();
+      } else if (e.key === "Tab") {
+        const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)];
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first) return;
+        if (!dialog.contains(document.activeElement) || document.activeElement === (e.shiftKey ? first : last)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        }
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onCancel]);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
   return (
     <Portal id="modal-portal">
-      <div className={styles.overlay} onClick={onCancel}>
+      <div className={styles.overlay} onClick={dismissible ? onCancel : undefined}>
         <div
+          ref={attachDialog}
           className={styles.dialog}
           role="alertdialog"
           aria-modal="true"
@@ -92,13 +131,20 @@ export function ConfirmationDialog({
             {details}
           </div>
           <div className={styles.actions}>
-            <Button color={resolvedCancelColor} variant={resolvedCancelVariant} size="medium" onClick={onCancel}>
+            <Button
+              color={resolvedCancelColor}
+              variant={resolvedCancelVariant}
+              size="medium"
+              onClick={onCancel}
+              data-autofocus
+            >
               {cancelLabel}
             </Button>
             <Button
               color={criticalAction ? "error" : "primary"}
               variant={resolvedConfirmVariant}
               size="medium"
+              disabled={confirmDisabled}
               onClick={onConfirm}
             >
               {confirmLabel}

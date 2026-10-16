@@ -22,7 +22,7 @@ export type ColorTheme =
   | "info"
   | "on-surface"
   | "on-surface-retreat";
-export type ButtonVariant = "filled" | "outlined" | "text";
+export type ButtonVariant = "filled" | "tonal" | "outlined" | "text";
 
 /**
  * Shared size scale for interactive components (Button, IconButton, ButtonGroupItem, Select…).
@@ -49,7 +49,7 @@ export type ButtonSize = Extract<ComponentSize, "2xs" | "small" | "medium">;
 export type IconButtonVariant = "filled" | "tonal" | "outlined" | "icon";
 export type IconCategory = "outlined" | "rounded" | "sharp";
 
-const customIcons = ["customAgent"] as const;
+const customIcons = ["customAgent", "customPlatformSkill"] as const;
 
 /**
  * Material Symbols names the app supports (ligature names, snake_case).
@@ -58,6 +58,7 @@ const customIcons = ["customAgent"] as const;
  */
 export const materialIcons = [
   "add",
+  "drag_indicator",
   "add_comment",
   "crown",
   "remove",
@@ -107,6 +108,7 @@ export const materialIcons = [
   "build",
   "check",
   "check_circle",
+  "remove_circle",
   "check_box",
   "check_box_outline_blank",
   "star",
@@ -194,6 +196,7 @@ export const materialIcons = [
   "login",
   "mic",
   "stop",
+  "favorite",
   "book_2",
 ] as const;
 

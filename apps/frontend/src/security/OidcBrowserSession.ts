@@ -33,9 +33,18 @@ export class OidcBrowserSession {
   private invalidated = false;
   private readonly redirectUri: string;
 
-  constructor(issuer: string, clientId: string, apiScope: string | undefined, redirectUri: string) {
+  constructor(
+    issuer: string,
+    clientId: string,
+    apiScope: string | undefined,
+    redirectUri: string,
+    provider: "keycloak" | "oidc" = "oidc",
+  ) {
     this.redirectUri = redirectUri;
-    const scope = ["openid", "profile", "offline_access", apiScope].filter(Boolean).join(" ");
+    // Keycloak issues ordinary refresh tokens without the offline-access grant.
+    const scope = ["openid", "profile", provider === "oidc" ? "offline_access" : undefined, apiScope]
+      .filter(Boolean)
+      .join(" ");
     this.manager = new UserManager({
       authority: issuer.replace(/\/+$/, ""),
       client_id: clientId,
@@ -85,6 +94,7 @@ export class OidcBrowserSession {
     return this.user.expires_in ?? null;
   }
 
+  /** Restore OIDC login state, or request fresh local login with ?keycloak-login=true. */
   async login(onAuthenticated: () => void): Promise<void> {
     const generation = this.generation;
     const query = new URLSearchParams(window.location.search);
@@ -108,6 +118,23 @@ export class OidcBrowserSession {
     } else if (query.has("state")) {
       await this.manager.signoutRedirectCallback();
       window.history.replaceState({}, "", this.redirectUri);
+    } else if (query.get("keycloak-login") === "true") {
+      query.delete("keycloak-login");
+      const search = query.toString();
+      const returnPath = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", returnPath);
+
+      const loginGeneration = ++this.generation;
+      this.invalidated = true;
+      this.user = null;
+      await this.reconcileRenewalState();
+      if (loginGeneration !== this.generation) return;
+      await this.manager.signinRedirect({
+        state: returnPath,
+        prompt: "login",
+        extraQueryParams: { kc_idp_hint: "" },
+      });
+      return;
     }
     const restored = this.user ?? (await this.manager.getUser());
     if (generation !== this.generation || this.invalidated) return;
@@ -170,7 +197,7 @@ export class OidcBrowserSession {
       }),
       new Promise<null>((resolve) => {
         timeout = setTimeout(() => {
-          this.generation += 1;
+          if (generation === this.generation) this.generation += 1;
           resolve(null);
         }, REFRESH_TIMEOUT_MS);
       }),

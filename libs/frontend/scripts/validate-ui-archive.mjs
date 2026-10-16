@@ -408,6 +408,7 @@ export async function validateUiArchive(
     );
     for (const forbidden of [
       "customAgent",
+      "customPlatformSkill",
       "react-i18next",
       "OptionModel",
       "Aucune option disponible",
@@ -517,7 +518,7 @@ export async function validateUiArchive(
         "declaration",
       );
       assert(
-        !/\b(?:IconCategory|IconType|CustomIconType|isCustomIcon|toIconType|OptionModel)\b|customAgent|react-i18next|material-symbols-(?:rounded|sharp)|\/images\/icons\//.test(
+        !/\b(?:IconCategory|IconType|CustomIconType|isCustomIcon|toIconType|OptionModel)\b|customAgent|customPlatformSkill|react-i18next|material-symbols-(?:rounded|sharp)|\/images\/icons\//.test(
           declaration,
         ),
         `${file} contains application-only declarations`,

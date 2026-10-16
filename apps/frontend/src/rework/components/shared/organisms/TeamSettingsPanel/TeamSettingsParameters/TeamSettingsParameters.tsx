@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog.tsx";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -142,24 +143,32 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
 
-  // TEAM-10 (#2398): a PRIVATE team can never be OPEN, and there is no
-  // invitation flow either — a team admin adds members by hand. So while
-  // private, the joining-mode toggle is not a setting at all: it is replaced
-  // by a single disabled "manual only" button rather than a two-state control
-  // that refuses every click — one inert, locked state reads as the fact it
-  // is, where a greyed-out toggle still reads as a choice.
+  // A PRIVATE team can never be OPEN: people join it only when a team admin adds
+  // them or shares an invite link (Members tab). So while private, the
+  // joining-mode toggle is replaced by a single disabled "manual only" button, an
+  // inert state that reads as a fact rather than a refused choice.
   // #2433: private is the platform default — mirror it when the field is absent.
   const visibility = team.visibility ?? "private";
   const isPrivate = visibility === "private";
+  const applyVisibility = (newVisibility: TeamVisibility) => {
+    updateTeam({
+      teamId: team.id,
+      updateTeamRequest: { visibility: newVisibility },
+    });
+  };
+  // Going private removes the team's published agents: say how many first.
+  const publishedCount = team.marketplace?.published_count ?? 0;
+  const [confirmPrivate, setConfirmPrivate] = useState(false);
   const handleSelectVisibility = (index: number) => {
     const newVisibility = VISIBILITIES[index];
     if (newVisibility === visibility) {
       return;
     }
-    updateTeam({
-      teamId: team.id,
-      updateTeamRequest: { visibility: newVisibility },
-    });
+    if (newVisibility === "private" && publishedCount > 0) {
+      setConfirmPrivate(true);
+      return;
+    }
+    applyVisibility(newVisibility);
   };
 
   const handleAvatarUpload = async (file: File) => {
@@ -228,6 +237,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
             variant="radio"
             size="small"
             color="secondary"
+            surface="surface-container-lowest"
             aria-label={t("rework.teamSettings.parameters.visibility.label")}
             selectedIndex={VISIBILITIES.indexOf(visibility)}
             onSelectedIndexChange={handleSelectVisibility}
@@ -262,6 +272,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
               variant="radio"
               size="small"
               color="secondary"
+              surface="surface-container-lowest"
               aria-label={t("rework.teamSettings.parameters.joiningMode.label")}
               selectedIndex={JOINING_MODES.indexOf(joiningMode)}
               onSelectedIndexChange={handleSelectJoiningMode}
@@ -273,6 +284,19 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           )}
         </div>
       </div>
+      <ConfirmationDialog
+        open={confirmPrivate}
+        criticalAction
+        title={t("rework.teamSettings.parameters.visibility.privateConfirm.title")}
+        message={t("rework.teamSettings.parameters.visibility.privateConfirm.message", { count: publishedCount })}
+        confirmLabel={t("rework.teamSettings.parameters.visibility.privateConfirm.confirm")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={() => {
+          setConfirmPrivate(false);
+          applyVisibility("private");
+        }}
+        onCancel={() => setConfirmPrivate(false)}
+      />
       {/* Data & Retention (CTRLP-12 B6): lives here rather than a dedicated tab. */}
       <TeamSettingsRetention team={team} />
       {/*

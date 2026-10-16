@@ -23,10 +23,36 @@ from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 
 from control_plane_backend.announcements.schemas import (
     Announcement,
+    AnnouncementExposure,
     AnnouncementWriteRequest,
+    PatchNoteAnnouncement,
+    PatchNoteHistory,
+    PatchNoteSnapshot,
 )
-from control_plane_backend.announcements.store import StoredAnnouncement
+from control_plane_backend.announcements.store import (
+    StoredAnnouncement,
+    StoredExposure,
+)
+from control_plane_backend.models.announcement_models import (
+    MAX_PATCH_NOTES_PER_ANNOUNCEMENT,
+)
+from control_plane_backend.models.base import utcnow
 from control_plane_backend.product.dependencies import ProductServiceDependencies
+
+#: How many exposure lines the admin history returns (no pagination).
+EXPOSURE_HISTORY_LIMIT = 100
+
+_NOT_FOUND = "announcement not found"
+_STALE_ORDER = "the patch notes changed meanwhile; reload and retry"
+_NOTHING_INCLUDED = "no patch note is included; nothing to announce"
+_TOO_MANY_INCLUDED = (
+    f"an announcement holds at most {MAX_PATCH_NOTES_PER_ANNOUNCEMENT} patch "
+    "notes; leave some out and retry"
+)
+_SELECTION_CHANGED = (
+    "the included patch notes changed since the confirmation; reload and retry"
+)
+_NO_ANNOUNCEMENT = "no announcement is in effect"
 
 
 async def _require_manage_platform(
@@ -48,6 +74,7 @@ async def _require_manage_platform(
 def _to_announcement(stored: StoredAnnouncement) -> Announcement:
     return Announcement(
         id=stored.id,
+        kind=stored.kind,  # type: ignore[arg-type]
         severity=stored.severity,  # type: ignore[arg-type]
         title=stored.title,
         description_short=stored.description_short,
@@ -59,6 +86,33 @@ def _to_announcement(stored: StoredAnnouncement) -> Announcement:
         updated_at=stored.updated_at,
         created_by=stored.created_by,
         updated_by=stored.updated_by,
+        position=stored.position,
+    )
+
+
+def _to_patch_note_announcement(exposure: StoredExposure) -> PatchNoteAnnouncement:
+    return PatchNoteAnnouncement(
+        id=exposure.id,
+        announced_at=exposure.activated_at,
+        announced_by=exposure.actor_uid,
+    )
+
+
+def _to_snapshots(exposure: StoredExposure) -> list[PatchNoteSnapshot]:
+    return [PatchNoteSnapshot(**note) for note in exposure.package or []]
+
+
+def _banner_exposure(stored: StoredAnnouncement, actor_uid: str) -> StoredExposure:
+    """The history line a banner starts when it goes on air."""
+
+    return StoredExposure(
+        id=str(uuid.uuid4()),
+        kind=stored.kind,
+        announcement_id=stored.id,
+        label=dict(stored.title),
+        severity=stored.severity,
+        actor_uid=actor_uid,
+        activated_at=utcnow(),
     )
 
 
@@ -81,24 +135,33 @@ def _content_changed(
     )
 
 
-def _relaunched(stored: StoredAnnouncement, enabled: bool) -> bool:
-    """Whether a disabled announcement is going back on air.
+def _versioning_after_edit(stored: StoredAnnouncement, changed: bool) -> int:
+    """`content_version` once the content PUT lands.
 
-    A relaunch must reach the users who closed the previous run. Their
-    dismissals live in their own browser's storage, keyed by content version,
-    so bumping that version is the only lever the server has. Turning an
-    announcement off never bumps, and neither does re-sending `enabled=True`
-    on one that is already live. Only the `/enabled` endpoint can trigger this:
-    the content PUT leaves delivery alone.
+    A banner bumps on every visible change; a patch note never does, since
+    nothing is keyed on it.
     """
 
-    return enabled and not stored.enabled
+    if stored.kind == "patch_note" or not changed:
+        return stored.content_version
+    return stored.content_version + 1
+
+
+def _versioning_after_toggle(stored: StoredAnnouncement, enabled: bool) -> int:
+    """`content_version` once the toggle lands: every off-to-on bumps it.
+
+    Going back on air relaunches a banner; nothing reads it on a patch note.
+    """
+
+    if enabled and not stored.enabled:
+        return stored.content_version + 1
+    return stored.content_version
 
 
 async def list_announcements(
     *, user: KeycloakUser, deps: ProductServiceDependencies
 ) -> list[Announcement]:
-    """Every announcement, for the admin page."""
+    """Every announcement for the admin page: banners, then patch notes in order."""
 
     await _require_manage_platform(deps, user)
     stored = await deps.get_announcement_store().list_all()
@@ -108,7 +171,7 @@ async def list_announcements(
 async def list_active_announcements(
     *, deps: ProductServiceDependencies
 ) -> list[Announcement]:
-    """The enabled announcements, for any authenticated user.
+    """The enabled banners, for any authenticated user; patch notes have their own read.
 
     No authorization check beyond authentication: an announcement is content
     every user of the deployment is meant to see. The route's
@@ -126,21 +189,31 @@ async def create_announcement(
     deps: ProductServiceDependencies,
 ) -> Announcement:
     await _require_manage_platform(deps, user)
+    store = deps.get_announcement_store()
     announcement_id = str(uuid.uuid4())
-    stored = await deps.get_announcement_store().create(
-        announcement_id=announcement_id,
-        severity=request.severity,
-        title=request.title,
-        description_short=request.description_short,
-        description_long=request.description_long,
-        enabled=request.enabled,
-        dismissible=request.dismissible,
-        created_by=user.uid,
-    )
+    async with store.transaction() as session:
+        stored = await store.create(
+            announcement_id=announcement_id,
+            kind=request.kind,
+            severity=request.severity,
+            title=request.title,
+            description_short=request.description_short,
+            description_long=request.description_long,
+            enabled=request.enabled,
+            dismissible=request.dismissible,
+            created_by=user.uid,
+            session=session,
+        )
+        # Only a banner is on air once enabled; a patch note waits to be announced.
+        if stored.enabled and stored.kind == "banner":
+            await store.add_exposure(
+                _banner_exposure(stored, user.uid), session=session
+            )
     emit_audit_log(
         "platform.announcement.created",
         actor_uid=user.uid,
         announcement_id=announcement_id,
+        kind=request.kind,
         severity=request.severity,
         enabled=request.enabled,
     )
@@ -156,42 +229,44 @@ async def update_announcement(
 ) -> Announcement:
     await _require_manage_platform(deps, user)
     store = deps.get_announcement_store()
-    existing = await store.get(announcement_id)
-    if existing is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
+    async with store.transaction() as session:
+        # Locked: the new content_version is computed from the stored one.
+        existing = await store.get(announcement_id, for_update=True, session=session)
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            )
+        if existing.kind != request.kind:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="an announcement's kind cannot change",
+            )
+        content_version = _versioning_after_edit(
+            existing, _content_changed(existing, request)
         )
-
-    content_version = existing.content_version + (
-        1 if _content_changed(existing, request) else 0
-    )
-    stored = await store.update(
-        announcement_id=announcement_id,
-        severity=request.severity,
-        title=request.title,
-        description_short=request.description_short,
-        description_long=request.description_long,
-        # Delivery is owned by the `/enabled` endpoint alone. The editor fills
-        # `enabled` from the announcement as it was when the dialog opened, so
-        # honouring it here would let a save made after someone flicked the
-        # switch silently undo that — and, on the off → on direction, bump the
-        # version and resurrect every dismissed banner.
-        enabled=existing.enabled,
-        dismissible=request.dismissible,
-        content_version=content_version,
-        updated_by=user.uid,
-    )
-    if stored is None:
-        # Deleted between the read and the write.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
+        stored = await store.update(
+            announcement_id=announcement_id,
+            severity=request.severity,
+            title=request.title,
+            description_short=request.description_short,
+            description_long=request.description_long,
+            # Delivery belongs to the `/enabled` route alone: a toggle made
+            # while the editor was open stands.
+            dismissible=request.dismissible,
+            content_version=content_version,
+            updated_by=user.uid,
+            session=session,
         )
+        if stored is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            )
     emit_audit_log(
         "platform.announcement.updated",
         actor_uid=user.uid,
         announcement_id=announcement_id,
         severity=request.severity,
-        enabled=existing.enabled,
+        enabled=stored.enabled,
         content_version=content_version,
     )
     return _to_announcement(stored)
@@ -206,26 +281,38 @@ async def set_announcement_enabled(
 ) -> Announcement:
     await _require_manage_platform(deps, user)
     store = deps.get_announcement_store()
-    existing = await store.get(announcement_id)
-    if existing is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
+    async with store.transaction() as session:
+        # Locked so two concurrent toggles cannot both record the change.
+        existing = await store.get(announcement_id, for_update=True, session=session)
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            )
+        changed = existing.enabled != enabled
+        content_version = _versioning_after_toggle(existing, enabled)
+        stored = await store.set_enabled(
+            announcement_id=announcement_id,
+            enabled=enabled,
+            content_version=content_version,
+            updated_by=user.uid,
+            session=session,
         )
-
-    content_version = existing.content_version + (
-        1 if _relaunched(existing, enabled) else 0
-    )
-    stored = await store.set_enabled(
-        announcement_id=announcement_id,
-        enabled=enabled,
-        content_version=content_version,
-        updated_by=user.uid,
-    )
-    if stored is None:
-        # Deleted between the read and the write.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
-        )
+        if stored is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            )
+        if changed and stored.kind == "banner":
+            if enabled:
+                await store.add_exposure(
+                    _banner_exposure(stored, user.uid), session=session
+                )
+            else:
+                await store.end_exposures(
+                    kind="banner",
+                    announcement_id=stored.id,
+                    at=utcnow(),
+                    session=session,
+                )
     emit_audit_log(
         "platform.announcement.toggled",
         actor_uid=user.uid,
@@ -243,13 +330,220 @@ async def delete_announcement(
     deps: ProductServiceDependencies,
 ) -> None:
     await _require_manage_platform(deps, user)
-    deleted = await deps.get_announcement_store().delete(announcement_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
-        )
+    store = deps.get_announcement_store()
+    async with store.transaction() as session:
+        # Locked so two concurrent deletes cannot both end the exposure.
+        existing = await store.get(announcement_id, for_update=True, session=session)
+        if existing is None or not await store.delete(announcement_id, session=session):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            )
+        if existing.enabled and existing.kind == "banner":
+            await store.end_exposures(
+                kind="banner",
+                announcement_id=existing.id,
+                at=utcnow(),
+                session=session,
+            )
     emit_audit_log(
         "platform.announcement.deleted",
         actor_uid=user.uid,
         announcement_id=announcement_id,
+        was_enabled=existing.enabled,
     )
+
+
+async def set_patch_note_order(
+    *,
+    user: KeycloakUser,
+    ordered_ids: list[str],
+    deps: ProductServiceDependencies,
+) -> None:
+    """Store the administrator's order; refuses a list that is not the current set."""
+
+    await _require_manage_platform(deps, user)
+    if not await deps.get_announcement_store().set_patch_note_order(ordered_ids):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_STALE_ORDER)
+    emit_audit_log(
+        "platform.announcement.patch_notes_reordered",
+        actor_uid=user.uid,
+        ordered_ids=ordered_ids,
+    )
+
+
+async def announce_patch_notes(
+    *,
+    user: KeycloakUser,
+    expected_ids: list[str],
+    deps: ProductServiceDependencies,
+) -> PatchNoteAnnouncement:
+    """Freeze the included patch notes as a package: every user gets the dialog once.
+
+    Refused unless they are exactly `expected_ids`, in order: what the
+    administrator confirmed is what gets frozen.
+    """
+
+    await _require_manage_platform(deps, user)
+    store = deps.get_announcement_store()
+    async with store.transaction() as session:
+        # One announce or withdraw at a time: never two announcements in effect.
+        await store.lock_patch_notes(session=session)
+        included = await store.list_included_patch_notes(session=session)
+        if not included:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=_NOTHING_INCLUDED
+            )
+        if len(included) > MAX_PATCH_NOTES_PER_ANNOUNCEMENT:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=_TOO_MANY_INCLUDED
+            )
+        if [note.id for note in included] != expected_ids:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=_SELECTION_CHANGED
+            )
+        now = utcnow()
+        exposure = StoredExposure(
+            id=str(uuid.uuid4()),
+            kind="patch_note",
+            announcement_id=included[0].id,
+            label=dict(included[0].title),
+            actor_uid=user.uid,
+            activated_at=now,
+            note_count=len(included),
+            package=[
+                {
+                    "id": note.id,
+                    "title": note.title,
+                    "description_long": note.description_long,
+                }
+                for note in included
+            ],
+        )
+        # The new package replaces the one in effect, at the same instant.
+        await store.end_exposures(kind="patch_note", at=now, session=session)
+        await store.add_exposure(exposure, session=session)
+    emit_audit_log(
+        "platform.announcement.patch_notes_announced",
+        actor_uid=user.uid,
+        announcement_id=exposure.id,
+        patch_note_ids=[note.id for note in included],
+    )
+    return _to_patch_note_announcement(exposure)
+
+
+async def withdraw_patch_note_announcement(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> None:
+    """End the announcement in effect: users read nothing until the next one."""
+
+    await _require_manage_platform(deps, user)
+    store = deps.get_announcement_store()
+    async with store.transaction() as session:
+        await store.lock_patch_notes(session=session)
+        current = await store.get_announcement_in_effect(session=session)
+        if current is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NO_ANNOUNCEMENT
+            )
+        await store.end_exposures(kind="patch_note", at=utcnow(), session=session)
+    emit_audit_log(
+        "platform.announcement.patch_notes_withdrawn",
+        actor_uid=user.uid,
+        announcement_id=current.id,
+    )
+
+
+async def get_patch_note_announcement(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> PatchNoteAnnouncement | None:
+    """The announcement in effect, or `None` when none was made or it was withdrawn."""
+
+    await _require_manage_platform(deps, user)
+    current = await deps.get_announcement_store().get_announcement_in_effect()
+    return None if current is None else _to_patch_note_announcement(current)
+
+
+async def get_patch_note_package(
+    *, user: KeycloakUser, announcement_id: str, deps: ProductServiceDependencies
+) -> list[PatchNoteSnapshot]:
+    """The package of one history line, as users saw it."""
+
+    await _require_manage_platform(deps, user)
+    exposure = await deps.get_announcement_store().get_exposure(
+        announcement_id, with_package=True
+    )
+    # An older patch-note line kept no package: nothing to open.
+    if exposure is None or exposure.note_count is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return _to_snapshots(exposure)
+
+
+async def get_patch_note_history(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> PatchNoteHistory:
+    """The package in effect, and whether the caller has still to see it.
+
+    Authentication only, like the banner read; identity comes from the token.
+    """
+
+    store = deps.get_announcement_store()
+    async with store.transaction() as session:
+        current = await store.get_announcement_in_effect(
+            with_package=True, session=session
+        )
+        if current is None:
+            return PatchNoteHistory(patch_notes=[])
+        pending = None
+        if current.opens_dialog:
+            seen = await store.get_seen_announcement_id(user.uid, session=session)
+            pending = None if seen == current.id else current.id
+    return PatchNoteHistory(
+        patch_notes=_to_snapshots(current), pending_announcement_id=pending
+    )
+
+
+async def mark_patch_note_announcement_seen(
+    *,
+    user: KeycloakUser,
+    announcement_id: str,
+    deps: ProductServiceDependencies,
+) -> None:
+    """Record that the caller saw that announcement; idempotent."""
+
+    store = deps.get_announcement_store()
+    async with store.transaction() as session:
+        if await store.record_seen_announcement(
+            user_id=user.uid, announcement_id=announcement_id, session=session
+        ):
+            return
+        # Nothing written: an unknown id, or a record already at or past it.
+        exposure = await store.get_exposure(announcement_id, session=session)
+        if exposure is None or exposure.note_count is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            )
+
+
+async def list_exposure_history(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> list[AnnouncementExposure]:
+    """The newest history lines, for the admin page."""
+
+    await _require_manage_platform(deps, user)
+    exposures = await deps.get_announcement_store().list_exposures(
+        limit=EXPOSURE_HISTORY_LIMIT
+    )
+    return [
+        AnnouncementExposure(
+            id=exposure.id,
+            kind=exposure.kind,  # type: ignore[arg-type]
+            announcement_id=exposure.announcement_id,
+            label=exposure.label,
+            severity=exposure.severity,  # type: ignore[arg-type]
+            note_count=exposure.note_count,
+            activated_at=exposure.activated_at,
+            deactivated_at=exposure.deactivated_at,
+            actor_uid=exposure.actor_uid,
+        )
+        for exposure in exposures
+    ]

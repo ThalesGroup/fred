@@ -46,7 +46,7 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: k3d-tests libs-version-tests publish-libs-tests ## Run non-integration test suites in all submodules and print coverage summary
+test: k3d-tests pod-chart-tests libs-version-tests publish-libs-tests ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
@@ -69,9 +69,15 @@ test: k3d-tests libs-version-tests publish-libs-tests ## Run non-integration tes
 
 ##@ Validation
 
-.PHONY: validation-report
+.PHONY: validation-report integration-test-docker integration-test-k3d
 validation-report: ## Run the live cross-app validation suite (requires infra + running apps - see validation/README.md)
 	$(MAKE) -C validation validation-report
+
+integration-test-docker: ## Validate running local Docker-backed services and Fred apps using their direct ports
+	$(MAKE) -C validation $@
+
+integration-test-k3d: ## Validate an existing local k3d deployment through its ingress (localhost:8088)
+	$(MAKE) -C validation $@
 
 ##@ Setup
 
@@ -179,9 +185,11 @@ install-wtf: ## Install the wtf worktree CLI locally (uv tool install, or fallba
 ##@ Release
 
 VERSION ?=
+PYPI_UV ?= $(shell command -v uv 2>/dev/null)
+PYPI_RELEASE_CHECK ?= python3 scripts/validate_python_release.py
 
 # The Python packages published to PyPI, in dependency order: the libs, then
-# the capabilities. All of them carry one version, set by `libs-version`.
+# the capabilities. Each pyproject.toml owns its package version.
 PYPI_PACKAGES := \
 	libs/fred-pod \
 	libs/fred-core \
@@ -197,13 +205,26 @@ PYPI_PACKAGES := \
 	libs/capabilities/fred-capability-web-research \
 	libs/capabilities/fred-capability-writable-document
 
-.PHONY: libs-version
-libs-version: ## Set one version on every PyPI package, their floors on each other, and relock (usage: make libs-version VERSION=x.y.z)
-	@test -n "$(VERSION)" || { echo "Usage: make libs-version VERSION=x.y.z"; exit 1; }
-	python3 scripts/libs_version.py --version "$(VERSION)" $(PYPI_PACKAGES)
+# Fred's generic pod charts, released with the fred chart.
+POD_CHARTS := agent-pod knowledge-base
+
+BASE_TAG ?=
+CAPABILITY_PACKAGES ?=
+CAPABILITY_MANIFESTS ?=
+POD_CHANGED ?= false
+PYTHON_RELEASE_ARGS = --base "$(BASE_TAG)" $(foreach name,$(CAPABILITY_PACKAGES),--capability "$(name)") $(foreach path,$(CAPABILITY_MANIFESTS),--manifest "$(path)") $(if $(filter true,$(POD_CHANGED)),--pod,)
+
+.PHONY: python-release-plan prepare-python-release
+python-release-plan: ## Show patch versions and changed capability candidates (BASE_TAG=code/vX.Y.Z)
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+	python3 scripts/libs_version.py plan $(PYTHON_RELEASE_ARGS)
+
+prepare-python-release: ## Patch selected Python packages/manifests and relock affected projects
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+	python3 scripts/libs_version.py apply $(PYTHON_RELEASE_ARGS)
 
 .PHONY: libs-version-tests
-libs-version-tests: ## Test the libs-version rewrite offline
+libs-version-tests: ## Test independent Python release preparation offline
 	python3 -m unittest discover -s scripts/tests -p 'test_libs_version.py'
 
 .PHONY: publish-libs-tests
@@ -212,11 +233,19 @@ publish-libs-tests: ## Test bulk publishing offline with fake packages
 
 .PHONY: publish-libs-dry-run
 publish-libs-dry-run: ## Build every PyPI package in dependency order, stop at the first failure, upload nothing
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+	@test -n "$(PYPI_UV)" || { echo "uv is required to build the PyPI packages."; exit 1; }
 	@set -e; \
 	for dir in $(PYPI_PACKAGES); do \
 		echo "************ Building $$dir ************"; \
-		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish-dry-run; \
-	done
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir UV="$(PYPI_UV)" publish-dry-run; \
+		done
+	$(MAKE) validate-python-release BASE_TAG="$(BASE_TAG)"
+
+.PHONY: validate-python-release
+validate-python-release: ## Validate independently versioned PyPI artifacts and internal floors
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" $(PYPI_PACKAGES)
 
 # The packages whose version is not on PyPI yet, one directory per line; a
 # package already there is reported on stderr. PyPI answers 200 for a release
@@ -236,25 +265,29 @@ _pypi-pending:
 	done
 
 .PHONY: publish-libs
-publish-libs: ## Build every PyPI package, then publish, in order, each version PyPI does not have yet (requires PYPI_TOKEN)
+publish-libs: ## Validate and publish prebuilt PyPI artifacts in order, skipping versions already present (requires PYPI_TOKEN)
+	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+	@test -n "$(PYPI_UV)" || { echo "uv is required to publish the PyPI packages."; exit 1; }
 	@test -n "$$PYPI_TOKEN" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
-	$(MAKE) publish-libs-dry-run
+	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" --pending -- $(PYPI_PACKAGES)
 	@set -e; \
 	pending=$$($(MAKE) --no-print-directory -s _pypi-pending); \
+	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" --pending $$pending -- $(PYPI_PACKAGES); \
 	for dir in $$pending; do \
 		echo "************ Publishing $$dir ************"; \
-		env -u VIRTUAL_ENV $(MAKE) -C $$dir publish; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir UV="$(PYPI_UV)" publish; \
 	done; \
 	echo "Every PyPI package is published."
 
 .PHONY: set-version
-set-version: ## Update the chart and application versions; the PyPI packages have libs-version (usage: make set-version VERSION=x.y.z)
+set-version: ## Update the chart and application versions; Python packages have prepare-python-release (usage: make set-version VERSION=x.y.z)
 	@if [ -z "$(VERSION)" ]; then echo "ERROR: VERSION is required. Usage: make set-version VERSION=x.y.z"; exit 1; fi
 	$(eval PY_VERSION := $(shell echo "$(VERSION)" | sed 's/-/+/'))
 	@echo "Setting version to $(VERSION) (Python: $(PY_VERSION))..."
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
+	sed -i 's/^version: .*/version: $(VERSION)/' $(POD_CHARTS:%=deploy/charts/%/Chart.yaml)
 	@echo "--- fred-agents ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/fred-agents/pyproject.toml
 	cd apps/fred-agents && uv lock
@@ -356,12 +389,16 @@ include scripts/makefiles/help.mk
 include scripts/makefiles/chart-schema.mk
 
 # k3d: fred-deployment-factory deploys this chart on its local k3d instance
-# (`make k3d-up`, then `make k3d-app DIR=<this checkout>`) from deploy/k3d/:
-# its helmfile, its values, and the build, prepare and finish hooks.
+# (`make k3d-up`, then `make k3d-app APP=fred DIR=<this checkout>`), with the
+# images deploy/k3d/build makes from this checkout.
 
 .PHONY: k3d-tests
-k3d-tests: ## Test local k3d image preparation and configuration without a cluster
+k3d-tests: ## Test local k3d image preparation without a cluster
 	python3 -m unittest discover -s deploy/k3d -p 'test_*.py'
+
+.PHONY: pod-chart-tests
+pod-chart-tests: ## Render the agent-pod and knowledge-base charts with helm (skipped without helm)
+	python3 -m unittest deploy/charts/test_pod_charts.py
 
 ##@ Migration notes and release preparation
 

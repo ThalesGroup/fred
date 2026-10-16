@@ -129,7 +129,7 @@ _KF_SERVICE = "Knowledge Flow"
 
 logger = logging.getLogger(__name__)
 
-_TREE_MAX_CHARS_BOUNDS = (500, 20_000)
+_TREE_MAX_CHARS_BOUNDS = (500, 60_000)
 
 
 def _clamp(value: int, bounds: tuple[int, int]) -> int:
@@ -704,34 +704,32 @@ class DocumentAccessCapability(
         @tool("list_document_tree", response_format="content_and_artifact")
         async def list_document_tree(
             working_directory: str | None = None,
-            max_chars: int = 6000,
+            max_chars: int = 20_000,
         ) -> tuple[str, ToolInvocationResult]:
             """List the folders and documents in the user's document scope as a tree.
 
-            Call this first to orient on what's available before searching or
-            summarizing — it shows folder structure and, for each document, its
-            name, uid, and upload date, not its content.
+            Call this to browse folders and document metadata before reading
+            or summarizing a document. Each document leaf is a JSON record
+            with uid, name, added_to_kb, created and modified. Available title,
+            format/MIME, language, page/row counts, labels and source are included.
 
-            Documents are rendered as "name [document_uid] (uploaded date)" —
-            use that uid as the `document_uid` argument to summarize_document.
-            Folder lines end with "/" and are rendered as "name [folder:id]/":
-            a folder id is NOT a document_uid — never pass it to
-            summarize_document (the call will fail). To summarize a folder's
-            content, summarize each document leaf under it instead. The
-            bracketed identifiers are internal working ids for YOUR tool
-            calls only: NEVER repeat them in your answer to the user — always
-            refer to documents by their display name.
+            For the latest document added to Fred, compare added_to_kb timestamps.
+            created is file creation metadata; modified can include Fred metadata
+            edits. Neither is an arrival date. Arrival is not ingestion completion.
+            Dates retain time and timezone; null means unknown. Never infer an
+            unknown date from another field.
 
-            `working_directory` narrows the listing to a specific folder (e.g.
-            "Sales/HR"); omit it to start from the root. The tree is rendered as
-            indented text, with documents appearing as leaves under every folder
-            they belong to (a document can be in more than one folder).
+            Use uid as the document_uid argument to reading/summarizing tools.
+            Folder records use folder and optional folder_id, never uid:
+            a folder_id is never a document_uid. All ids are internal working identifiers
+            for YOUR tool calls only. NEVER repeat them in your answer to the
+            user; refer to documents by display name.
 
-            If the corpus is too large to show in full, the deepest branches are
-            pruned and a note tells you how many items were omitted — when that
-            happens, narrow `working_directory` or switch to
-            search_documents_using_vectorization instead of trying to browse
-            everything.
+            working_directory narrows the listing to a folder such as Sales/HR.
+            Omit it to start at the root. Documents can appear in multiple folders.
+            A large result is pruned to the character budget. An incomplete tree
+            cannot establish the latest document across the entire requested scope;
+            narrow the folder and state the limit instead of claiming exhaustiveness.
             """
 
             port = services.document_tree
@@ -760,18 +758,16 @@ class DocumentAccessCapability(
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            # `blocks` carries the same tree text as `content` (CAPAB-02): a
-            # Graph agent's plain-dict invocation keeps only the artifact half
-            # of a `content_and_artifact` return (`_adapt_capability_tool_for_graph`,
-            # `graph_runtime.py`) — an artifact with no payload silently loses
-            # the tree for a Graph node, exactly the "never silently degrade"
-            # failure RFC §3.9 forbids. ReAct is unaffected: `content` is
-            # still what the model reads.
+            text = result.tree
+            if result.truncated:
+                text = (
+                    "Listing incomplete: omitted documents may be more recent.\n" + text
+                )
             artifact = ToolInvocationResult(
                 tool_ref="list_document_tree",
-                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=result.tree),),
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
             )
-            return result.tree, artifact
+            return text, artifact
 
         tools: list[BaseTool] = [search_documents_using_vectorization]
         # The tree lists the corpus only (no session-attachment enumeration yet,

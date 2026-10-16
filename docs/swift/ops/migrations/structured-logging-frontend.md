@@ -2,6 +2,7 @@
 schema: 1
 title: "Read structured frontend access logs"
 impact: minor
+after: [structured-logging-output]
 configuration: none
 configuration_reason: "The frontend image selects JSON access logs automatically; no new deployment setting or collector container is required."
 ---

@@ -35,12 +35,13 @@ from typing import Dict, List, Literal, Optional, Tuple, Union
 from fred_sdk.contracts.capability import Public, ScopePrivate
 from pptx import Presentation
 from pptx.oxml.ns import qn
+from pptx.presentation import Presentation as PresentationObject
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from fred_capability_ppt_filler.traversal import (
     KEY_MARKER_PATTERN,
     KEY_PATTERN,
-    list_keys_on_slide,
+    list_keys_and_table_keys_on_slide,
 )
 
 # Stable, machine-readable error codes. The frontend maps these to i18n messages; the
@@ -478,13 +479,29 @@ def parse(pptx_source: Union[bytes, str, Path]) -> ParseResult:
     else:
         presentation = Presentation(str(pptx_source))
 
+    return parse_presentation(presentation)
+
+
+def parse_presentation(presentation: PresentationObject) -> ParseResult:
+    """Extract fields from an already open deck so validation can reuse it."""
+    return parse_presentation_with_locations(presentation)[0]
+
+
+def parse_presentation_with_locations(
+    presentation: PresentationObject,
+) -> tuple[ParseResult, dict[int, set[str]]]:
+    """Extract fields and table-key sets in one walk, retaining no deck references."""
     schema: List[SlideSchema] = []
     errors: List[TemplateError] = []
+    table_keys_by_slide: dict[int, set[str]] = {}
 
     for index, slide in enumerate(presentation.slides):
         slide_number = index + 1  # 1-based, as the author sees it
 
-        text_keys = _dedupe_preserving_order(list_keys_on_slide(slide))
+        occurrences, table_keys = list_keys_and_table_keys_on_slide(slide)
+        text_keys = _dedupe_preserving_order(occurrences)
+        if table_keys:
+            table_keys_by_slide[slide_number] = table_keys
         described = _parse_notes_descriptions(_slide_notes_text(slide))
 
         # Build the schema for this slide from the text-box keys (deduped, in order),
@@ -556,4 +573,4 @@ def parse(pptx_source: Union[bytes, str, Path]) -> ParseResult:
 
     # Construct via the ``schema`` alias (the field is named ``slides`` in Python to
     # avoid shadowing ``BaseModel``; ``populate_by_name=True`` also allows ``slides=``).
-    return ParseResult(schema=schema, errors=errors)
+    return ParseResult(schema=schema, errors=errors), table_keys_by_slide

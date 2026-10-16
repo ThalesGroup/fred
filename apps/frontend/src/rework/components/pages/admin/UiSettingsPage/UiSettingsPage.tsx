@@ -15,13 +15,14 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
-import { offeredUiThemes, UI_THEME_LABEL_KEYS, UI_THEMES } from "../../../../../app/uiThemes.ts";
+import { availableUiThemes, offeredUiThemes, uiThemeBase, uiThemeLabel } from "../../../../../app/uiThemes.ts";
 import {
   usePlatformUiSettingsQuery,
   useSetPlatformUiSettingsMutation,
@@ -50,7 +51,7 @@ function storedDefault(stored: StoredSettings): string {
  * Platform UI theme settings: one tile per theme to offer it to users and pick
  * the platform default. The default is always offered, and at least one theme
  * stays offered. Each change is saved at once and applies at each user's next
- * load of the application.
+ * settings refresh or load of the application.
  */
 export default function UiSettingsPage() {
   const { t } = useTranslation();
@@ -61,7 +62,7 @@ export default function UiSettingsPage() {
   const auditUids = data?.updated_by ? [data.updated_by] : [];
   const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
 
-  const [defaultTheme, setDefaultTheme] = useState<string>(UI_THEMES[0]);
+  const [defaultTheme, setDefaultTheme] = useState<string>(availableUiThemes()[0]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [serverError, setServerError] = useState<string | undefined>();
   useEffect(() => {
@@ -71,10 +72,8 @@ export default function UiSettingsPage() {
   }, [data]);
 
   // Ids stored by another frontend version: kept as they are on save.
-  const unknownIds = [...new Set([...hidden, defaultTheme])].filter(
-    (id) => !(UI_THEMES as readonly string[]).includes(id),
-  );
-  const offered = UI_THEMES.filter((theme) => !hidden.includes(theme));
+  const unknownIds = [...new Set([...hidden, defaultTheme])].filter((id) => !availableUiThemes().includes(id));
+  const offered = availableUiThemes().filter((theme) => !hidden.includes(theme));
   // Also while refetching after a save: a revert must never use settings older than the server's.
   const locked = isLoading || isFetching || isSaving || isError;
 
@@ -111,14 +110,16 @@ export default function UiSettingsPage() {
       <p className={styles.hint}>{t("rework.uiSettings.hint")}</p>
 
       <ul className={styles.themes}>
-        {UI_THEMES.map((theme) => {
-          const label = t(UI_THEME_LABEL_KEYS[theme]);
+        {availableUiThemes().map((theme) => {
+          const label = uiThemeLabel(theme, t);
           const isOffered = !hidden.includes(theme);
           const isDefault = theme === defaultTheme;
           return (
-            <li key={theme} className={styles.tile}>
+            <li key={theme} className={styles.tile} data-default={isDefault}>
               {/* A wrapper, so the hint also shows on a disabled switch. */}
-              <Tooltip text={t("rework.uiSettings.offeredTooltip")}>
+              <Tooltip
+                text={t(isDefault ? "rework.uiSettings.defaultAvailabilityHint" : "rework.uiSettings.offeredTooltip")}
+              >
                 <span className={styles.toggle}>
                   <Switch
                     size="small"
@@ -135,30 +136,44 @@ export default function UiSettingsPage() {
                   />
                 </span>
               </Tooltip>
+              {/* Only the theme's font and shapes apply here; colors stay those of the page. */}
+              <span className={styles.name} data-ui-theme={theme} data-ui-base-theme={uiThemeBase(theme)} title={label}>
+                {label}
+              </span>
               {/* One preview, light half then dark half; the theme's own tokens resolve inside each half. */}
               <span className={styles.preview}>
                 {MODES.map((mode) => (
-                  <span key={mode} className={styles.swatches} data-ui-theme={theme} data-theme={mode}>
+                  <span
+                    key={mode}
+                    className={styles.swatches}
+                    data-ui-theme={theme}
+                    data-ui-base-theme={uiThemeBase(theme)}
+                    data-theme={mode}
+                  >
+                    {mode === "light" && <Icon category="outlined" type="light_mode" />}
                     {SWATCHES.map((role) => (
                       <span key={role} className={styles.swatch} style={{ backgroundColor: `var(--${role})` }} />
                     ))}
+                    {mode === "dark" && <Icon category="outlined" type="dark_mode" />}
                   </span>
                 ))}
               </span>
-              {/* Only the theme's font and shapes apply here; colors stay those of the page. */}
-              <span className={styles.name} data-ui-theme={theme} title={label}>
-                {label}
-              </span>
-              <Button
-                color="primary"
-                variant={isDefault ? "text" : "outlined"}
-                size="small"
-                icon={isDefault ? { category: "outlined", type: "check", filled: false } : undefined}
-                disabled={locked || isDefault || !isOffered}
-                onClick={() => persist(theme, hidden)}
-              >
-                {isDefault ? t("rework.uiSettings.isDefault") : t("rework.uiSettings.setDefault")}
-              </Button>
+              {isDefault ? (
+                <span className={styles.defaultLabel}>
+                  <Icon category="outlined" type="check" />
+                  {t("rework.uiSettings.isDefault")}
+                </span>
+              ) : (
+                <Button
+                  color="primary"
+                  variant="outlined"
+                  size="small"
+                  disabled={locked || !isOffered}
+                  onClick={() => persist(theme, hidden)}
+                >
+                  {t("rework.uiSettings.setDefault")}
+                </Button>
+              )}
             </li>
           );
         })}

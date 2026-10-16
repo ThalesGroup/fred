@@ -219,7 +219,9 @@ A contributor delivers the **image**, the **prefix** it claims, and the **list
 of what it exposes**.
 
 Cloudops creates one confidential Keycloak client per prefix, sets the prefix
-and the client credentials in the Deployment's environment, and deploys. The
+and the client credentials in the Deployment's environment, and deploys. For a
+Knowledge Base it also lists that client with its prefix under the Control
+Plane's `knowledge_bases.publishers`, without which publication is refused. The
 only check is a lookup, never a judgement: *is this prefix already owned by a
 different client?*
 

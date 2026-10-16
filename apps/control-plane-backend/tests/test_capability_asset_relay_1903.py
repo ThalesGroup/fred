@@ -274,3 +274,56 @@ async def test_parse_empty_arrays_returns_empty_mapping() -> None:
 
     # The common no-upload save: equal (zero) lengths, nothing to relay.
     assert uploads == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure,code,status",
+    [
+        (httpx.ConnectError, "capability_validation_unavailable", 503),
+        (httpx.ConnectTimeout, "capability_validation_unavailable", 503),
+        (httpx.ReadTimeout, "capability_validation_timeout", 504),
+        (httpx.WriteTimeout, "capability_validation_timeout", 504),
+        (httpx.PoolTimeout, "capability_validation_timeout", 504),
+        (httpx.RemoteProtocolError, "capability_validation_interrupted", 502),
+        (httpx.ReadError, "capability_validation_interrupted", 502),
+    ],
+)
+async def test_validation_transport_failures_are_safe_and_distinct(
+    monkeypatch,
+    caplog,
+    failure,
+    code,
+    status,
+) -> None:
+    from fred_core.logs.context import request_log_scope
+
+    async def fail(self, url, **kwargs):
+        raise failure(
+            "secret http://internal-runtime/", request=httpx.Request("POST", url)
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fail)
+    with request_log_scope(
+        request_id="request-test", correlation_id="correlation-test"
+    ):
+        with pytest.raises(service.EnrollmentError) as caught:
+            await service._validate_capability_config_via_pod(
+                base_url="http://internal-runtime",
+                capability_id="ppt_filler",
+                config_values={},
+                team_id=cast(TeamId, "personal"),
+                agent_instance_id="instance-1",
+                authorization=None,
+            )
+    error = caught.value
+    assert error.code == code
+    assert error.http_status == status
+    assert "internal-runtime" not in str(error)
+    assert "secret" not in str(error)
+    assert "Start" not in str(error)
+    assert failure.__name__ in caplog.text
+    assert "duration_ms=" in caplog.text
+    assert "secret" not in caplog.text
+    assert "internal-runtime" not in caplog.text
+    assert api._coded_error_detail(error) == {"code": code, "message": str(error)}

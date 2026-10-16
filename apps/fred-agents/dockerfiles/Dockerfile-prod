@@ -87,6 +87,12 @@ RUN cd /workspace/apps/fred-agents && \
     UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache
 
+# Packaged procedures and their source path stay read-only for the runtime UID.
+RUN chown -R root:root /workspace/libs/fred-runtime && \
+    chmod -R a-w /workspace/libs/fred-runtime && \
+    chown root:root /workspace /workspace/libs && \
+    chmod a-w /workspace /workspace/libs
+
 # alembic.ini is a real file only at the repo root; the per-project ones are dev-only
 # symlinks kept out of the build context (see .dockerignore), because Kaniko would copy
 # them verbatim — which is exactly the dangling link this image used to ship (#2289).

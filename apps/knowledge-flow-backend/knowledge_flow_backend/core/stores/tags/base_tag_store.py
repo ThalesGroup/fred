@@ -60,6 +60,12 @@ class BaseTagStore(ABC):
     async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:
         pass
 
+    async def list_subtree(self, root: Tag) -> List[Tag]:
+        """Canonical membership, independent of a caller's filtered listing."""
+        return [
+            tag for tag in await self.list_all_tags() if tag.owner_id == root.owner_id and tag.type == root.type and (tag.full_path == root.full_path or tag.full_path.startswith(root.full_path + "/"))
+        ]
+
     @abstractmethod
     async def create_tag(self, tag: Tag, session: AsyncSession | None = None) -> Tag:
         pass

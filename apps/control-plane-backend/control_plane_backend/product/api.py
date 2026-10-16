@@ -43,12 +43,23 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.kpi import runtime_stage_timer
 from fred_core.security.structure import PrincipalContext
+from fred_sdk.contracts.agent_draft import (
+    AgentDraftRequest,
+    AgentDraftResult,
+    CreationAssistantRuntimeSettings,
+)
+from fred_sdk.contracts.skills import SkillCatalog, SkillDetail
 from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_marketplace.service import attach_marketplace_states
 from control_plane_backend.product.agent_copy import (
     copy_agent_instance,
     list_agent_copy_targets,
+)
+from control_plane_backend.product.creation_assistant import (
+    creation_assistant_runtime_settings,
+    draft_agent,
 )
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -312,7 +323,11 @@ async def get_team_agent_instances(
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    return await list_managed_agent_instances(team_id, deps)
+    summaries = await list_managed_agent_instances(team_id, deps)
+    await attach_marketplace_states(
+        user=user, team_id=team_id, summaries=summaries, deps=deps
+    )
+    return summaries
 
 
 @router.post(
@@ -366,6 +381,66 @@ async def post_team_agent_instance(
         raise HTTPException(
             status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
+
+
+@router.post(
+    "/teams/{team_id}/agent-templates/{template_id}/draft-agent",
+    response_model=AgentDraftResult,
+    summary="Draft an agent system prompt and capability selection from a description.",
+)
+async def post_draft_agent(
+    team_id: Annotated[TeamId, Path()],
+    template_id: Annotated[str, Path(min_length=3)],
+    body: AgentDraftRequest,
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> AgentDraftResult:
+    """
+    Turn a plain-language description into a system prompt for an agent built
+    on `template_id`, and recommend capabilities among those the team may use.
+    Nothing is saved: the agent form applies the result.
+    """
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    try:
+        return await draft_agent(
+            user=user,
+            team_id=team_id,
+            template_id=template_id,
+            request=body,
+            deps=deps,
+            authorization=http_request.headers.get("Authorization"),
+        )
+    except EnrollmentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.get(
+    "/teams/{team_id}/creation-assistant/settings",
+    response_model=CreationAssistantRuntimeSettings,
+    summary="Admin settings a pod applies to a creation assistant draft.",
+)
+async def get_creation_assistant_runtime_settings(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> CreationAssistantRuntimeSettings:
+    """
+    Called by the pod while drafting, with the caller's token: the pod is
+    browser-reachable, so it never takes these settings from a request body.
+    """
+    await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    return await creation_assistant_runtime_settings(deps)
 
 
 @router.patch(
@@ -753,6 +828,7 @@ async def post_agent_instance_copy(
             deps=deps,
             authorization=http_request.headers.get("Authorization"),
             require_editor=require_editor,
+            locale=body.locale,
         )
     except EnrollmentError as exc:
         raise HTTPException(
@@ -1452,7 +1528,9 @@ async def post_marketplace_prompt_import(
             )
             return MarketplaceImportResult(team_id=str(target_team_id), prompt=summary)
         except PromptRequestError as exc:
-            return MarketplaceImportResult(team_id=str(target_team_id), error=str(exc))
+            return MarketplaceImportResult(
+                team_id=str(target_team_id), error=str(exc), error_code=exc.code
+            )
 
     # Dedupe (preserving order) so two imports into the same team can't race on
     # the `_imported-N` suffix; distinct targets have no ordering dependency, so
@@ -2015,6 +2093,70 @@ async def post_prepare_runtime_agent_execution(
         )
     except ExecutionPreparationError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.get(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/skills",
+    response_model=SkillCatalog,
+    operation_id="get_agent_instance_skills",
+)
+async def get_agent_instance_skills(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(get_current_user),
+) -> SkillCatalog:
+    """Discover skills on the selected instance after team-use authorization."""
+    from control_plane_backend.product.skills import get_instance_skills
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    try:
+        return await get_instance_skills(
+            team_id, agent_instance_id, deps, http_request.headers.get("Authorization")
+        )
+    except ExecutionPreparationError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from None
+
+
+@router.get(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/skills/{skill_name}",
+    response_model=SkillDetail,
+    operation_id="get_agent_instance_skill_detail",
+)
+async def get_agent_instance_skill_detail(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    skill_name: Annotated[
+        str, Path(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=64)
+    ],
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(get_current_user),
+) -> SkillDetail:
+    from control_plane_backend.product.skills import get_instance_skill_detail
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    try:
+        return await get_instance_skill_detail(
+            team_id,
+            agent_instance_id,
+            skill_name,
+            deps,
+            http_request.headers.get("Authorization"),
+        )
+    except ExecutionPreparationError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from None
 
 
 @router.post(

@@ -34,6 +34,10 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 
 def _tool(session_id: str | None = "s-1", user_id: str = "u-1"):
@@ -44,6 +48,40 @@ def _tool(session_id: str | None = "s-1", user_id: str = "u-1"):
         services=RuntimeServices(),
     )
     return _HtmlArtifactMiddleware(ctx).tools[0]
+
+
+@pytest.mark.asyncio
+async def test_model_and_tool_guidance_route_mermaid_to_chat():
+    middleware = _HtmlArtifactMiddleware(
+        CapabilityContext(
+            identity=CapabilityIdentity(user_id="u-1", session_id="s-1"),
+            config=EmptyModel(),
+            turn_options=EmptyModel(),
+            services=RuntimeServices(),
+        )
+    )
+    request = ModelRequest(
+        model=FakeMessagesListChatModel(responses=[]),
+        messages=[],
+        system_message=SystemMessage(content="Existing skills catalog"),
+    )
+
+    async def handler(received: ModelRequest) -> ModelResponse:
+        prompt = received.system_prompt
+        assert prompt is not None
+        assert prompt.startswith("Existing skills catalog")
+        assert "fenced mermaid Markdown block" in prompt
+        assert "does not render Mermaid source" in prompt
+        assert "you MUST call the 'render_html_artifact' tool" in prompt
+        assert "After rendering an HTML artifact, reply in the chat" in prompt
+        return ModelResponse(result=[AIMessage(content="done")])
+
+    response = await middleware.awrap_model_call(request, handler)
+    assert response.result[0].content == "done"
+    assert request.system_prompt == "Existing skills catalog"
+    description = convert_to_openai_tool(middleware.tools[0])["function"]["description"]
+    assert "fenced mermaid Markdown block" in description
+    assert "does not render Mermaid source" in description
 
 
 @pytest.mark.asyncio

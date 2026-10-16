@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
@@ -8,8 +9,18 @@ import pytest
 import pytest_asyncio
 from control_plane_backend.app.dependencies import get_application_configuration
 from control_plane_backend.platform_access import api, service
+from control_plane_backend.platform_access.directory import PlatformAccessDirectory
+from control_plane_backend.platform_access.schemas import (
+    PlatformT0Preview,
+    PlatformT0RefreshMode,
+    RefreshPlatformT0,
+)
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import UserTeamRelation
+from control_plane_backend.users.dependencies import (
+    UserServiceDependencies,
+    get_user_service_dependencies,
+)
 from fastapi import FastAPI, HTTPException
 from fred_core.common import TeamId
 from fred_core.security.models import Resource
@@ -18,7 +29,9 @@ from fred_core.security.platform_access.access_control import (
     get_platform_access,
 )
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
+    PlatformAccessRemovalRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -28,7 +41,11 @@ from fred_core.security.platform_access.rules import (
 )
 from fred_core.security.platform_access.store import PlatformAccessStore
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
-from fred_core.security.rebac.rebac_engine import RebacReference, RelationType
+from fred_core.security.rebac.rebac_engine import (
+    OrganizationPermission,
+    RebacReference,
+    RelationType,
+)
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import (
@@ -40,7 +57,7 @@ from fred_pod.security.structure import (
     Principal,
 )
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import Table
+from sqlalchemy import Table, event
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -49,6 +66,7 @@ class MembershipEngine(NoopRebacEngine):
         super().__init__()
         self.members: dict[str, set[str]] = {}
         self.admin = True
+        self.admins: set[str] = set()
         self.writes = []
         self.write_failure = False
 
@@ -59,6 +77,8 @@ class MembershipEngine(NoopRebacEngine):
         ]
 
     async def _has_permission_raw(self, subject, permission, resource, **kwargs):
+        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+            return subject.id in self.admins
         return resource.id in self.members.get(subject.id, set())
 
     async def check_user_permission_or_raise(self, *args, **kwargs):
@@ -76,11 +96,20 @@ class MembershipEngine(NoopRebacEngine):
 @pytest_asyncio.fixture
 async def access(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'admission.sqlite'}")
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def enforce_foreign_keys(connection, _record):
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     async with engine.begin() as connection:
         for model in (
             UserRow,
             TeamMetadataRow,
             PlatformAccessLinkRow,
+            PlatformAccessRemovalRow,
+            PlatformAccessLinkJoinerRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
         ):
@@ -108,6 +137,30 @@ async def access(tmp_path):
     await engine.dispose()
 
 
+async def free_joiner(access, uid: str, team_id: str = "demo") -> None:
+    """Record a Free-link join: the only evidence of a Free admission source."""
+    link_id = uuid4()
+    async with access.store.mutation() as session:
+        session.add(
+            PlatformAccessLinkRow(
+                id=link_id,
+                team_id=team_id,
+                token_hash=uuid4().hex + uuid4().hex,
+                created_by=uid,
+                created_at=datetime.now(timezone.utc),
+                opening_count=0,
+            )
+        )
+        await session.flush()
+        session.add(
+            PlatformAccessLinkJoinerRow(
+                link_id=link_id,
+                user_id=UUID(uid),
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+
+
 def user(attribute="other"):
     return KeycloakUser(
         uid=str(uuid4()),
@@ -119,6 +172,74 @@ def user(attribute="other"):
         admission_issued_at=time.time() - 1,
         admission_expires_at=time.time() + 300,
     )
+
+
+def local_user_deps() -> UserServiceDependencies:
+    return cast(
+        UserServiceDependencies,
+        SimpleNamespace(
+            configuration=SimpleNamespace(
+                security=SimpleNamespace(user_directory="local")
+            ),
+            create_keycloak_admin_client=lambda: None,
+        ),
+    )
+
+
+class FakeDirectoryAdmin:
+    def __init__(self, users):
+        self.users = {item["id"]: item for item in users}
+        self.calls = []
+        self.get_calls = []
+
+    async def a_get_users(self, params):
+        self.calls.append(params)
+        for field in ("username", "email"):
+            if field in params:
+                value = str(params[field]).casefold()
+                matches = [
+                    item
+                    for item in self.users.values()
+                    if str(item.get(field, "")).casefold() == value
+                ]
+                return matches[params["first"] : params["first"] + params["max"]]
+        query = str(params.get("search", "")).casefold()
+        matches = [
+            item
+            for item in self.users.values()
+            if query
+            in " ".join(
+                str(item.get(field, ""))
+                for field in ("username", "firstName", "lastName", "email")
+            ).casefold()
+        ]
+        return matches[params["first"] : params["first"] + params["max"]]
+
+    async def a_users_count(self, params=None):
+        params = params or {}
+        query = str(params.get("search", "")).casefold()
+        return sum(
+            query
+            in " ".join(
+                str(item.get(field, ""))
+                for field in ("username", "firstName", "lastName", "email")
+            ).casefold()
+            for item in self.users.values()
+        )
+
+    async def a_get_user(self, user_id):
+        self.get_calls.append(user_id)
+        return self.users.get(user_id)
+
+
+def keycloak_directory(admin):
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            security=SimpleNamespace(user_directory="keycloak")
+        ),
+        create_keycloak_admin_client=lambda: admin,
+    )
+    return PlatformAccessDirectory(cast(UserServiceDependencies, deps))
 
 
 @pytest.mark.asyncio
@@ -142,6 +263,229 @@ async def test_t0_once_and_deleted_entries_never_return(access):
 
 
 @pytest.mark.asyncio
+async def test_keycloak_grant_resolves_profile_without_prior_fred_row(access):
+    actor = user()
+    uid = uuid4()
+    missing = uuid4()
+    admin = FakeDirectoryAdmin(
+        [
+            {
+                "id": str(uid),
+                "username": "julien-bouchet",
+                "firstName": "Julien",
+                "lastName": "BOUCHET",
+            }
+        ]
+    )
+    directory = keycloak_directory(admin)
+
+    with pytest.raises(HTTPException, match="user_not_found"):
+        await service.grant_users(access, actor, [uid, missing], directory)
+    assert await access.store.user(uid) is None
+
+    assert await service.grant_users(access, actor, [uid], directory) == 1
+    assert (await access.store.user(uid)).username is None
+    assert (
+        await service.users_page(
+            access, 0, 25, "", directory=PlatformAccessDirectory(local_user_deps())
+        )
+    ).total == 0
+    page = await service.users_page(access, 0, 25, "", True, directory)
+    assert page.total == 1
+    assert (
+        page.items[0].username,
+        page.items[0].first_name,
+        page.items[0].last_name,
+    ) == ("julien-bouchet", "Julien", "BOUCHET")
+
+    admin.users[str(uid)]["firstName"] = "Jules"
+    page = await service.users_page(access, 0, 25, "Jules", True, directory)
+    assert page.total == 1 and page.items[0].first_name == "Jules"
+
+    del admin.users[str(uid)]
+    page = await service.users_page(access, 0, 25, "", True, directory)
+    assert page.items[0].username == str(uid)
+    by_id = await service.users_page(access, 0, 25, str(uid), True, directory)
+    assert by_id.total == 1 and by_id.items[0].username == str(uid)
+    assert [source.kind for source in page.items[0].sources] == ["manual"]
+    await service.set_user(access, actor, uid, False, directory)
+    assert await access.store.exception(uid) is None
+
+    second = uuid4()
+    admin.users[str(second)] = {"id": str(second), "username": "new-account"}
+    await service.set_user(access, actor, second, True, directory)
+    assert await access.store.exception(second) is not None
+
+
+@pytest.mark.asyncio
+async def test_keycloak_t0_imports_directory_humans_not_fred_only_rows(access):
+    actor = user()
+    federated, created, technical = uuid4(), uuid4(), uuid4()
+    admin = FakeDirectoryAdmin(
+        [
+            {"id": str(federated), "username": "federated", "firstName": "Fed"},
+            {"id": str(created), "username": "created-in-keycloak"},
+            {"id": str(uuid4()), "username": "service-account-test"},
+            {"id": "f:provider:unimported", "username": "not-yet-imported"},
+        ]
+    )
+    directory = keycloak_directory(admin)
+    async with access.store.mutation() as session:
+        session.add(UserRow(id=technical))
+
+    preview = await service.t0(access, directory=directory)
+    assert (preview.candidates, preview.matching) == (2, 0)
+    result, count = await service.import_t0(access, actor, directory)
+    assert result.completed_at is not None and count == 2
+    assert await access.store.exception(federated) is not None
+    assert await access.store.exception(created) is not None
+    assert (await access.store.user(created)).username is None
+    assert await access.store.exception(technical) is None
+    reviewed = await service.activation_preview(access, directory)
+    assert {item.user_id for item in reviewed.users} == {
+        str(federated),
+        str(created),
+    }
+
+
+@pytest.mark.asyncio
+async def test_keycloak_directory_paginates_and_fails_when_unavailable(access):
+    admin = FakeDirectoryAdmin(
+        [
+            {"id": str(UUID(int=index + 1)), "username": f"person-{index}"}
+            for index in range(205)
+        ]
+    )
+    directory = keycloak_directory(admin)
+    assert len(await directory.search()) == 205
+    assert len(await directory.search("person-1")) == 111
+    admin.calls.clear()
+    page = await service.users_page(access, 0, 25, "person-1", directory=directory)
+    assert page.total == 111 and len(page.items) == 25
+    assert len(admin.calls) == 1
+    preview = await service.t0(access, directory=directory)
+    assert (preview.candidates, preview.matching) == (205, 0)
+    imported, count = await service.import_t0(access, user(), directory)
+    assert count == 205 and imported.completed_at is not None
+    searched = await service.users_page(access, 0, 25, "person-1", True, directory)
+    assert searched.total == 111 and len(searched.items) == 25
+    assert admin.get_calls == []
+    admin.calls.clear()
+    assert (await service.t0(access, directory=directory)).completed_at is not None
+    assert admin.calls == []
+
+    class UnavailableAdmin:
+        async def a_users_count(self, _params=None):
+            raise RuntimeError("directory down")
+
+        async def a_get_users(self, _params):
+            raise RuntimeError("directory down")
+
+        async def a_get_user(self, _user_id):
+            raise RuntimeError("directory down")
+
+    unavailable = keycloak_directory(UnavailableAdmin())
+    with pytest.raises(HTTPException, match="platform_access_directory_unavailable"):
+        await unavailable.search("person")
+    with pytest.raises(HTTPException, match="platform_access_directory_unavailable"):
+        await unavailable.by_ids([str(uuid4())])
+
+
+@pytest.mark.asyncio
+async def test_keycloak_add_search_counts_only_selectable_people_and_bounds_broad_queries():
+    admin = FakeDirectoryAdmin(
+        [
+            {"id": str(uuid4()), "username": "user-human"},
+            {"id": str(uuid4()), "username": "service-account-user"},
+            {"id": "f:provider:unimported", "username": "user-external"},
+        ]
+    )
+    directory = keycloak_directory(admin)
+    page, total = await directory.search_page("user", 0, 25)
+    assert total == 1 and [person.username for person in page] == ["user-human"]
+    assert await directory.search_page("user", 1, 25) == ([], 1)
+
+    large = FakeDirectoryAdmin(
+        [
+            {"id": str(UUID(int=index + 1)), "username": f"person-{index}"}
+            for index in range(1001)
+        ]
+    )
+    with pytest.raises(HTTPException) as error:
+        await keycloak_directory(large).search_page("person", 0, 25)
+    assert error.value.status_code == 422
+    assert [call.get("exact") for call in large.calls] == [True, True]
+
+    admin_id = uuid4()
+    exact = FakeDirectoryAdmin(
+        [
+            {
+                "id": str(UUID(int=index + 1)),
+                "username": f"person-{index}",
+                "email": f"admin-{index}@example.org",
+            }
+            for index in range(1001)
+        ]
+        + [{"id": str(admin_id), "username": "admin"}]
+    )
+    directory = keycloak_directory(exact)
+    page, total = await directory.search_page("admin", 0, 25)
+    assert total == 1 and page[0].id == str(admin_id)
+    page, total = await directory.search_page(str(admin_id), 0, 1)
+    assert total == 1 and page[0].username == "admin"
+
+
+@pytest.mark.asyncio
+async def test_local_directory_rejects_nonlocal_and_profileless_identities(access):
+    actor = user()
+    unknown = uuid4()
+    profileless, local_id = uuid4(), uuid4()
+    async with access.store.mutation() as session:
+        session.add(UserRow(id=profileless))
+        session.add(UserRow(id=local_id, username="local-person"))
+    directory = PlatformAccessDirectory(local_user_deps())
+
+    with pytest.raises(HTTPException, match="user_not_found"):
+        await service.grant_users(access, actor, [unknown], directory)
+    with pytest.raises(HTTPException, match="user_not_found"):
+        await service.grant_users(access, actor, [profileless], directory)
+    assert (await service.users_page(access, 0, 25, "", directory=directory)).total == 1
+    by_id = await service.users_page(access, 0, 1, str(local_id), directory=directory)
+    assert by_id.total == 1 and by_id.items[0].username == "local-person"
+    assert (await service.t0(access, directory=directory)).candidates == 1
+
+
+@pytest.mark.asyncio
+async def test_t0_audit_reports_actual_import_once(access, monkeypatch):
+    actor, candidate, matching = user(), user(), user("accepted")
+    for person in (actor, candidate, matching):
+        await access.observe(person)
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post("/admin/platform/access/t0-import")
+        later = user()
+        await access.observe(later)
+        retry = await client.post("/admin/platform/access/t0-import")
+    assert first.status_code == retry.status_code == 200
+    assert len(events) == 1
+    assert events[0][0] == "platform.access.t0.imported"
+    assert events[0][1]["actor_uid"] == actor.uid
+    assert events[0][1]["candidates"] == 2
+    assert events[0][1]["matching"] == 1
+    assert events[0][1]["imported_count"] == 2
+
+
+@pytest.mark.asyncio
 async def test_filter_and_exception_mutations_preserve_acting_admin(access):
     actor = user()
     await access.observe(actor)
@@ -155,6 +499,49 @@ async def test_filter_and_exception_mutations_preserve_acting_admin(access):
     assert await access.admitted(actor)
     await service.set_filtering(access, actor, False)
     await service.set_user(access, actor, UUID(actor.uid), False)
+
+
+@pytest.mark.asyncio
+async def test_disabling_filtering_preserves_configuration_for_reactivation(access):
+    actor, outsider = user(), user()
+    await access.observe(actor)
+    await service.set_user(access, actor, UUID(actor.uid), True)
+    await service.set_team(access, actor, "demo", True, True)
+    token = await service.generate_link(access, "demo", actor)
+    original = await access.state()
+    await service.set_filtering(access, actor, True)
+    assert not await access.admitted(outsider)
+
+    disabled = await service.set_filtering(access, actor, False)
+    assert await access.admitted(outsider)
+    assert disabled.policy == access.policy(original)
+    assert disabled.revision == original.revision
+    assert await access.store.exception(UUID(actor.uid)) is not None
+    assert (await access.store.teams())[0].platform_access_free
+    assert (await service.list_links(access, "demo", 0, 25)).total == 1
+    assert (
+        await service.preview_link(access, outsider, token, None)
+    ).team_name == "Demonstration"
+
+    await service.set_filtering(access, actor, True)
+    assert not await access.admitted(outsider)
+
+
+@pytest.mark.asyncio
+async def test_live_platform_admin_is_admitted_and_visible_in_preview(access):
+    actor = user()
+    await access.observe(actor)
+    access.rebac.admins.add(actor.uid)
+    await service.set_filtering(access, actor, True)
+    assert await access.admitted(actor)
+    assert await access.admitted(cast(Principal, SimpleNamespace(uid=actor.uid)))
+    preview = await service.activation_preview(access)
+    entry = next(item for item in preview.users if item.user_id == actor.uid)
+    assert entry.outcome == "allowed"
+    assert any(source.kind == "admin" for source in entry.sources)
+    access.rebac.admins.remove(actor.uid)
+    assert not await access.admitted(actor)
+    assert not await access.admitted(cast(Principal, SimpleNamespace(uid=actor.uid)))
 
 
 @pytest.mark.asyncio
@@ -195,7 +582,7 @@ async def test_independent_free_links_suspension_revocation_and_private_enrollme
     assert (await service.preview_link(access, newcomer, token, "next")).cgu_required
     await service.set_filtering(access, actor, True)
     enrolled = await service.enroll(access, newcomer, token, version)
-    assert enrolled.admitted
+    assert enrolled.admitted and enrolled.team_id == "demo"
     assert access.rebac.writes[0].relation == RelationType.TEAM_MEMBER
     await service.enroll(access, newcomer, token, version)
     assert len(access.rebac.writes) == 1
@@ -228,6 +615,8 @@ async def test_failed_membership_write_can_retry_without_granting_admin(access):
     access.rebac.write_failure = True
     with pytest.raises(HTTPException) as unavailable:
         await service.enroll(access, newcomer, token, None)
+    link_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
+    assert (await service.list_link_joiners(access, "demo", link_id, 0, 25)).total == 0
     assert unavailable.value.status_code == 503
     access.rebac.write_failure = False
     await service.enroll(access, newcomer, token, None)
@@ -263,6 +652,7 @@ async def test_admin_endpoints_reject_nonplatform_admins(access):
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = user
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -310,6 +700,7 @@ async def test_denied_self_status_does_not_provision_team_or_directory(access):
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_own_user_for_platform_access] = lambda: person
     app.dependency_overrides[get_application_configuration] = lambda: SimpleNamespace(
         app=SimpleNamespace(gcu_version="v1")
@@ -347,6 +738,7 @@ async def pg_access(monkeypatch):
                 UserRow,
                 TeamMetadataRow,
                 PlatformAccessLinkRow,
+                PlatformAccessRemovalRow,
                 PlatformAccessSettingsRow,
                 PlatformAccessUserRow,
             ):
@@ -588,6 +980,7 @@ async def test_rule_endpoints_permissions_validation_and_retired_catalog(access)
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -713,28 +1106,17 @@ async def test_completed_t0_retry_reports_completion_despite_concurrent_rule_edi
     access, monkeypatch
 ):
     import asyncio
-    import threading
 
     actor = user("accepted")
     await access.observe(actor)
     first = await service.t0(access, actor)
-    entered, release = threading.Event(), threading.Event()
-    original = access.observed_match
 
-    def blocked_match(row, policy):
-        entered.set()
-        released = release.wait(timeout=4)
-        assert released
-        return original(row, policy)
+    def unexpected_match(*_args):
+        raise AssertionError("completed import scanned")
 
-    monkeypatch.setattr(access, "observed_match", blocked_match)
+    monkeypatch.setattr(access, "observed_match", unexpected_match)
     retry = asyncio.create_task(service.t0(access, actor))
-    entered_in_time = await asyncio.to_thread(entered.wait, 2)
-    assert entered_in_time
-    try:
-        await service.save_policy(access, actor, draft("accepted"), 1)
-    finally:
-        release.set()
+    await service.save_policy(access, actor, draft("accepted"), 1)
     assert first.completed_at is not None
     assert (await retry).completed_at == first.completed_at.replace(tzinfo=None)
 
@@ -769,25 +1151,6 @@ async def test_pg_live_policy_and_free_journey_with_cached_human_facts(pg_access
 
 
 @pytest.mark.asyncio
-async def test_legacy_gate_blocks_activation_and_active_readers(access, monkeypatch):
-    from fred_core.security.whitelist_access_control import access_control as legacy
-
-    monkeypatch.setattr(legacy, "is_whitelist_active", lambda: True)
-    actor = user("accepted")
-    assert await access.admitted(actor)
-    with pytest.raises(HTTPException) as conflict:
-        await service.set_filtering(access, actor, True)
-    assert conflict.value.detail == "platform_access_legacy_gate_conflict"
-    assert not (await access.state()).filtering_enabled
-    async with access.store.mutation() as session:
-        state = await access.store.settings(session)
-        state.filtering_enabled = True
-    with pytest.raises(HTTPException) as unavailable:
-        await access.admitted(actor)
-    assert unavailable.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_bulk_grants_are_atomic_preserve_provenance_and_revoke_independently(
     access,
 ):
@@ -814,10 +1177,18 @@ async def test_bulk_grants_are_atomic_preserve_provenance_and_revoke_independent
 
 
 @pytest.mark.asyncio
-async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(access):
+async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(
+    access, monkeypatch
+):
     from unittest.mock import AsyncMock
 
     actor, first, second = user("accepted"), user(), user()
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api,
+        "emit_audit_log",
+        lambda name, **fields: events.append((name, fields)),
+    )
     await access.observe(first)
     await access.observe(second)
     gate = AsyncMock()
@@ -825,6 +1196,7 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -840,11 +1212,24 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         )
         assert response.status_code == 404
         assert await access.store.exception(UUID(first.uid)) is None
+        assert events == []
+        async with access.store.mutation() as session:
+            await access.state(session)
+            await access.store.add_exception(UUID(first.uid), actor.uid, "t0", session)
         response = await client.post(
             "/admin/platform/access/users",
             json={"user_ids": [first.uid] * 101 + [second.uid]},
         )
         assert response.status_code == 204
+        summary = [
+            fields for name, fields in events if name == "platform.access.users.granted"
+        ]
+        assert len(summary) == 1
+        assert summary[0] == {
+            "actor_uid": actor.uid,
+            "count": 2,
+            "granted_count": 1,
+        }
         assert (
             gate.call_args.kwargs["consistency_token"]
             == access.rebac.HIGHER_CONSISTENCY
@@ -857,6 +1242,7 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         )
         assert response.status_code == 403
         assert await access.store.exception(UUID(third.uid)) is None
+        assert len(events) == 1
 
 
 @pytest.mark.asyncio
@@ -869,6 +1255,8 @@ async def test_member_removal_revokes_global_direct_cached_and_delegated_access(
     await service.set_team(access, actor, "demo", not free, free)
     await service.set_filtering(access, actor, True)
     access.rebac.members[member.uid] = {"demo"}
+    if free:
+        await free_joiner(access, member.uid)
     other_reader = PlatformAccess(
         PlatformAccessStore(access.store.engine), access.rebac
     )
@@ -897,6 +1285,7 @@ async def test_team_deletion_protects_admin_last_source_before_external_deletes(
     await access.observe(actor)
     access.rebac.members[actor.uid] = {"demo"}
     await service.set_team(access, accepted, "demo", False, True)
+    await free_joiner(access, actor.uid)
     await service.set_filtering(access, actor, True)
     monkeypatch.setattr(access_control, "_available", True)
     monkeypatch.setattr(access_control, "_installed", access)
@@ -905,7 +1294,11 @@ async def test_team_deletion_protects_admin_last_source_before_external_deletes(
     store = SimpleNamespace(
         get_by_team_id=AsyncMock(return_value=object()), delete=AsyncMock()
     )
-    deps = SimpleNamespace(rebac=access.rebac, get_team_metadata_store=lambda: store)
+    deps = SimpleNamespace(
+        rebac=access.rebac,
+        get_team_metadata_store=lambda: store,
+        get_agent_instance_store=None,
+    )
     with pytest.raises(HTTPException) as lockout:
         await delete_team(actor, TeamId("demo"), cast(TeamServiceDependencies, deps))
     assert lockout.value.detail == "platform_access_actor_lockout"
@@ -959,6 +1352,7 @@ async def test_actual_full_member_removal_with_multiple_roles_revokes_other_read
                 id="fredlab", name="Free demonstration", platform_access_free=True
             )
         )
+    await free_joiner(access, member.uid, "fredlab")
     await service.set_filtering(access, actor, True)
     other_reader = PlatformAccess(
         PlatformAccessStore(access.store.engine), cast(RebacEngine, rebac)
@@ -1038,6 +1432,7 @@ async def test_own_claim_endpoint_requires_admin_own_verified_human_and_disables
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -1089,13 +1484,13 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
     )
     assert token not in page.model_dump_json()
     revision = (await access.state()).revision
-    await service.record_opening(access, token)
+    await service.record_opening(access, token, newcomer)
     assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 1
     await service.preview_link(access, newcomer, token, None)
     await service.enroll(access, newcomer, token, None)
     assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 1
     assert await service.reveal_link(access, "demo", first.id) == token
-    await service.record_opening(access, token)
+    await service.record_opening(access, token, newcomer)
     assert (await service.list_links(access, "demo", 0, 25)).items[0].opening_count == 2
     assert (await access.state()).revision == revision
     later = await service.generate_link(
@@ -1116,7 +1511,7 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
         for item in (await service.list_links(access, "demo", 0, 25)).items
     )
     with pytest.raises(HTTPException):
-        await service.record_opening(access, token)
+        await service.record_opening(access, token, newcomer)
     await service.revoke_link(access, "demo", first.id)
     await service.revoke_link(access, "demo", first.id)
     await service.set_team(access, actor, "demo", False, True)
@@ -1133,12 +1528,122 @@ async def test_free_link_history_openings_recovery_expiry_and_individual_revocat
         lambda: service.preview_link(access, newcomer, later, None),
         lambda: service.enroll(access, newcomer, later, None),
         lambda: service.accept_cgu(access, newcomer, later, "v1", "v1"),
-        lambda: service.record_opening(access, later),
+        lambda: service.record_opening(access, later, newcomer),
     ):
         with pytest.raises(HTTPException):
             await operation()
     with pytest.raises(HTTPException):
         await service.reveal_link(access, "other-team", first.id)
+
+
+@pytest.mark.asyncio
+async def test_free_link_joiners_follow_successful_enrollment_and_cleanup(
+    access, monkeypatch
+):
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        service, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
+    actor = user("accepted")
+    first = user().model_copy(
+        update={"username": "first", "first_name": "First", "last_name": "Joiner"}
+    )
+    second = user().model_copy(
+        update={"username": "second", "first_name": "Second", "last_name": "Joiner"}
+    )
+    await service.set_team(access, actor, "demo", False, True)
+    first_token = await service.generate_link(access, "demo", actor)
+    first_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
+    second_token = await service.generate_link(access, "demo", actor)
+    second_id = (await service.list_links(access, "demo", 0, 25)).items[0].id
+
+    await service.preview_link(access, first, first_token, None)
+    await service.record_opening(access, first_token, first)
+    assert (await service.list_link_joiners(access, "demo", first_id, 0, 25)).total == 0
+    await service.enroll(access, first, first_token, None)
+    await service.enroll(access, first, first_token, None)
+    await service.enroll(access, second, first_token, None)
+    already_member = user()
+    access.rebac.members[already_member.uid] = {"demo"}
+    await service.enroll(access, already_member, first_token, None)
+    # A member added by hand who enrolls through the Free link gets its source too.
+    assert events == [
+        (
+            "platform.access.free.enrolled",
+            {"actor_uid": person.uid, "team_id": "demo", "link_id": str(first_id)},
+        )
+        for person in (first, second, already_member)
+    ]
+    first_page = await service.list_link_joiners(access, "demo", first_id, 0, 1)
+    assert first_page.total == 3 and len(first_page.items) == 1
+    assert (await service.list_link_joiners(access, "demo", first_id, 1, 1)).items[
+        0
+    ].user_id != first_page.items[0].user_id
+    assert (
+        await service.list_link_joiners(access, "demo", second_id, 0, 25)
+    ).total == 0
+    assert (await service.list_links(access, "demo", 0, 25)).items[1].opening_count == 1
+
+    access.rebac.members[first.uid].remove("demo")
+    await service.enroll(access, first, second_token, None)
+    assert events[-1] == (
+        "platform.access.free.enrolled",
+        {"actor_uid": first.uid, "team_id": "demo", "link_id": str(second_id)},
+    )
+    assert (await service.list_link_joiners(access, "demo", second_id, 0, 25)).items[
+        0
+    ].username == "first"
+    async with access.store.mutation() as session:
+        row = await session.get(UserRow, UUID(first.uid))
+        row.last_name = "Updated"
+    assert any(
+        item.last_name == "Updated"
+        for item in (
+            await service.list_link_joiners(access, "demo", first_id, 0, 25)
+        ).items
+    )
+
+    await service.revoke_link(access, "demo", first_id)
+    await service.set_team(access, actor, "demo", False, False)
+    assert (await service.list_link_joiners(access, "demo", first_id, 0, 25)).total == 3
+    assert await service.delete_inactive_links(access, "demo") == 1
+    with pytest.raises(HTTPException) as removed:
+        await service.list_link_joiners(access, "demo", first_id, 0, 25)
+    assert removed.value.status_code == 404
+    assert (
+        await service.list_link_joiners(access, "demo", second_id, 0, 25)
+    ).total == 1
+    await service.mark_user_join_history_deleted(access.store, first.uid)
+    deleted_joiner = (
+        await service.list_link_joiners(access, "demo", second_id, 0, 25)
+    ).items[0]
+    assert deleted_joiner.deleted
+    assert (
+        deleted_joiner.username,
+        deleted_joiner.first_name,
+        deleted_joiner.last_name,
+    ) == (
+        "first",
+        "First",
+        "Updated",
+    )
+    async with access.store.mutation() as session:
+        user_row = await session.get(UserRow, UUID(first.uid))
+        assert user_row is not None
+        await session.delete(user_row)
+    assert (await service.list_link_joiners(access, "demo", second_id, 0, 25)).items[
+        0
+    ] == deleted_joiner
+    await service.mark_user_join_history_deleted(
+        access.store, second.uid, table_may_be_missing=True
+    )
+    async with access.store.engine.begin() as connection:
+        await connection.run_sync(
+            cast(Table, PlatformAccessLinkJoinerRow.__table__).drop
+        )
+    await service.mark_user_join_history_deleted(
+        access.store, first.uid, table_may_be_missing=True
+    )
 
 
 def test_link_creation_rejects_past_naive_expiry_and_oversized_note():
@@ -1160,8 +1665,12 @@ def test_link_creation_rejects_past_naive_expiry_and_oversized_note():
 
 
 @pytest.mark.asyncio
-async def test_link_admin_history_and_tokens_are_guarded(access):
+async def test_link_admin_history_and_tokens_are_guarded(access, monkeypatch):
     actor = user("accepted")
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        api, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
     await access.observe(actor)
     await service.set_team(access, actor, "demo", False, True)
     token = await service.generate_link(access, "demo", actor)
@@ -1169,6 +1678,7 @@ async def test_link_admin_history_and_tokens_are_guarded(access):
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -1176,6 +1686,10 @@ async def test_link_admin_history_and_tokens_are_guarded(access):
         access.rebac.admin = False
         for method, path in (
             ("GET", "/admin/platform/access/teams/demo/enrollment-links"),
+            (
+                "GET",
+                f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/joiners",
+            ),
             (
                 "POST",
                 f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/reveal",
@@ -1185,8 +1699,31 @@ async def test_link_admin_history_and_tokens_are_guarded(access):
         ):
             assert (await client.request(method, path)).status_code == 403
         access.rebac.admin = True
+        created = await client.post(
+            "/admin/platform/access/teams/demo/enrollment-link", json={}
+        )
+        assert created.status_code == 200
+        created_id = next(
+            item.id
+            for item in (await service.list_links(access, "demo", 0, 25)).items
+            if item.id != link_id
+        )
+        assert (
+            "platform.access.link.created",
+            {"actor_uid": actor.uid, "team_id": "demo", "link_id": str(created_id)},
+        ) in events
+        assert created.json()["token"] not in str(events)
         history = await client.get("/admin/platform/access/teams/demo/enrollment-links")
         assert token not in history.text
+        await service.enroll(
+            access, user().model_copy(update={"username": "link-guest"}), token, None
+        )
+        joiners = await client.get(
+            f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/joiners"
+        )
+        assert joiners.status_code == 200
+        assert joiners.json()["items"][0]["username"] == "link-guest"
+        assert token not in joiners.text
         revealed = await client.post(
             f"/admin/platform/access/teams/demo/enrollment-links/{link_id}/reveal"
         )
@@ -1211,7 +1748,9 @@ async def test_pg_concurrent_openings_and_revocation_are_serialized(pg_access):
 
     token = await service.generate_link(pg_access, "demo", user("accepted"))
     link_id = (await service.list_links(pg_access, "demo", 0, 25)).items[0].id
-    await asyncio.gather(*(service.record_opening(pg_access, token) for _ in range(4)))
+    await asyncio.gather(
+        *(service.record_opening(pg_access, token, user()) for _ in range(4))
+    )
     assert (await service.list_links(pg_access, "demo", 0, 25)).items[
         0
     ].opening_count == 4
@@ -1245,6 +1784,8 @@ async def test_block_policy_preserves_exceptions_and_live_team_revocation(access
     assert not await access.admitted(blocked)
     await service.set_team(access, actor, "demo", False, True)
     access.rebac.members[blocked.uid] = {"demo"}
+    assert not await access.admitted(blocked)
+    await free_joiner(access, blocked.uid)
     assert await access.admitted(blocked)
     access.rebac.members[blocked.uid].clear()
     assert not await access.admitted(blocked)
@@ -1404,6 +1945,7 @@ async def test_population_preview_live_free_membership_and_conflicted_evidence(a
         (await access.store.user(UUID(member.uid), session)).admission_conflicted = True
     access.rebac.members[member.uid] = {"demo"}
     await service.set_team(access, actor, "demo", False, True)
+    await free_joiner(access, member.uid)
     preview = await service.activation_preview(access)
     assert (
         next(row for row in preview.users if row.user_id == member.uid).outcome
@@ -1437,6 +1979,7 @@ async def test_population_preview_suspension_overrides_exception_and_requires_ad
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
     app.dependency_overrides[api.get_current_user] = lambda: actor
     access.rebac.admin = False
     async with AsyncClient(
@@ -1445,3 +1988,494 @@ async def test_population_preview_suspension_overrides_exception_and_requires_ad
         assert (
             await client.get("/admin/platform/access/activation-preview")
         ).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_users_listing_restricts_to_individual_exceptions_newest_first(
+    access, monkeypatch
+):
+    from datetime import datetime, timedelta, timezone
+
+    actor = user("other")
+    names = ["zoe", "Bob", "alice", None]
+    ids = [UUID(int=500 - index) for index in range(len(names))]
+    day = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    grants = {0: (1, "manual"), 1: (3, "t0"), 3: (1, "manual")}
+    async with access.store.mutation() as session:
+        session.add_all(
+            [UserRow(id=uid, username=name) for uid, name in zip(ids, names)]
+        )
+        await session.flush()
+        session.add_all(
+            [
+                PlatformAccessUserRow(
+                    user_id=ids[index],
+                    source=source,
+                    granted_by=actor.uid,
+                    granted_at=day + timedelta(days=offset),
+                )
+                for index, (offset, source) in grants.items()
+            ]
+        )
+    access.rebac.members[str(ids[0])] = {"demo"}
+    async with access.store.mutation() as session:
+        (await access.store.team("demo", session)).platform_access_allowed = True
+
+    # The page query already carries each exception: no read per row.
+    async def no_row_read(*args, **kwargs):
+        raise AssertionError("exception read per row")
+
+    monkeypatch.setattr(access.store, "exception", no_row_read)
+
+    everyone = await service.users_page(access, 0, 25, "")
+    assert [item.username for item in everyone.items] == [
+        "alice",
+        "Bob",
+        "zoe",
+        str(ids[3]),
+    ]
+    assert everyone.total == 4
+    # No exception: no individual source, hence no grant date.
+    assert everyone.items[0].sources == []
+
+    listed = await service.users_page(access, 0, 25, "", True)
+    assert [item.user_id for item in listed.items] == [
+        str(ids[1]),
+        str(ids[0]),
+        str(ids[3]),
+    ]
+    assert listed.total == 3
+
+    # SQLite hands the stored dates back without their zone.
+    def moment(value):
+        return value.replace(tzinfo=None) if value else None
+
+    first, later = moment(day + timedelta(days=1)), moment(day + timedelta(days=3))
+    assert [
+        [(source.kind, moment(source.granted_at)) for source in item.sources]
+        for item in listed.items
+    ] == [
+        [("t0", later)],
+        [("manual", first), ("team", None)],
+        [("manual", first)],
+    ]
+    # The same row carries the same sources without the filter.
+    assert everyone.items[2].sources == listed.items[1].sources
+    second = await service.users_page(access, 2, 2, "", True)
+    assert [item.user_id for item in second.items] == [str(ids[3])]
+    assert second.total == 3
+    searched = await service.users_page(access, 0, 25, "o", True)
+    assert [item.username for item in searched.items] == ["Bob", "zoe"]
+    assert searched.total == 2
+
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        default = await client.get("/admin/platform/access/users")
+        assert default.status_code == 200 and default.json()["total"] == 3
+        filtered = await client.get(
+            "/admin/platform/access/users",
+            params={"exceptions_only": "true", "query": "o", "limit": 1, "offset": 1},
+        )
+        assert filtered.status_code == 200
+        assert filtered.json()["total"] == 2
+        item = filtered.json()["items"][0]
+        assert item["username"] == "zoe"
+        assert [source["kind"] for source in item["sources"]] == ["manual", "team"]
+        assert item["sources"][0]["granted_at"].startswith("2026-01-02T00:00:00")
+
+
+@pytest.mark.asyncio
+async def test_pg_user_search_ignores_accents_and_case(pg_access):
+    names = [
+        ("lea", "Léa"),
+        ("elodie", "ÉLODIE"),
+        ("helene", "Helene"),
+        ("olga", "Ольга"),
+    ]
+    async with pg_access.store.mutation() as session:
+        session.add_all(
+            [
+                UserRow(id=UUID(int=index + 1), username=username, first_name=first)
+                for index, (username, first) in enumerate(names)
+            ]
+        )
+
+    async def found(query: str) -> list[str | None]:
+        page = await service.users_page(pg_access, 0, 25, query)
+        assert page.total == len(page.items)
+        return [item.username for item in page.items]
+
+    assert await found("LEA") == await found("léa") == ["lea"]
+    assert await found("élodie") == await found("elodie") == ["elodie"]
+    assert await found("hélène") == ["helene"]
+    assert await found("ольга") == ["olga"]
+    assert await found("zzz") == []
+
+
+def refresh_request(
+    preview: PlatformT0Preview, mode: PlatformT0RefreshMode = "preserve_removals"
+) -> RefreshPlatformT0:
+    assert preview.completed_at is not None
+    return RefreshPlatformT0(
+        mode=mode,
+        expected_revision=preview.revision,
+        expected_completed_at=preview.completed_at.replace(tzinfo=timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["manual", "t0"])
+@pytest.mark.parametrize("filtering", [False, True])
+async def test_refresh_preserves_removals_and_can_explicitly_restore_them(
+    access, source, filtering
+):
+    actor, removed, manual, newcomer = user("accepted"), user(), user(), user()
+    for person in (removed, manual):
+        await access.observe(person)
+    await service.set_user(access, actor, UUID(manual.uid), True)
+    first = await service.t0(access, actor)
+    if source == "manual":
+        removed = manual
+    await service.set_user(access, actor, UUID(removed.uid), False)
+    async with access.store.read() as session:
+        history = await session.get(PlatformAccessRemovalRow, UUID(removed.uid))
+        assert history.removed_by == actor.uid
+        removed_at = history.removed_at
+    await service.set_user(access, actor, UUID(removed.uid), False)
+    async with access.store.read() as session:
+        assert (
+            await session.get(PlatformAccessRemovalRow, UUID(removed.uid))
+        ).removed_at == removed_at
+    await access.observe(newcomer)
+    if filtering:
+        await service.set_filtering(access, actor, True)
+        assert not await access.admitted(newcomer)
+    preview = await service.t0(access, refresh_mode="preserve_removals")
+    assert preview.candidates == 1 and preview.removed_skipped == 1
+    result, count = await service.import_t0(
+        access, actor, refresh=refresh_request(preview)
+    )
+    assert count == result.imported_count == 1
+    assert await access.store.exception(UUID(removed.uid)) is None
+    assert (await access.store.exception(UUID(newcomer.uid))).source == "t0"
+    assert (await access.state()).filtering_enabled is filtering
+    if filtering:
+        assert await access.admitted(newcomer)
+        assert not await access.admitted(removed)
+    assert result.completed_at is not None and first.completed_at is not None
+    assert result.completed_at > first.completed_at.replace(tzinfo=timezone.utc)
+    preview = await service.t0(access, refresh_mode="include_removed")
+    result, count = await service.import_t0(
+        access, actor, refresh=refresh_request(preview, "include_removed")
+    )
+    assert count == 1
+    assert (await access.store.exception(UUID(removed.uid))).source == "t0"
+    assert (await access.state()).filtering_enabled is filtering
+    if filtering:
+        assert await access.admitted(removed)
+        assert not await access.admitted(user())
+    # A replay cannot undo a removal performed after the confirmed refresh.
+    await service.set_user(access, actor, UUID(removed.uid), False)
+    with pytest.raises(HTTPException) as error:
+        await service.import_t0(
+            access, actor, refresh=refresh_request(preview, "include_removed")
+        )
+    assert error.value.status_code == 409
+    assert await access.store.exception(UUID(removed.uid)) is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_requires_full_reset_for_legacy_history(access):
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.t0(access, actor)
+    await service.set_user(access, actor, UUID(person.uid), False)
+    async with access.store.mutation() as session:
+        (await access.state(session)).t0_removal_history_complete = False
+    status = await service.t0(access)
+    assert not status.removal_history_complete
+    with pytest.raises(HTTPException) as error:
+        await service.import_t0(access, actor, refresh=refresh_request(status))
+    assert error.value.detail == "platform_access_t0_full_refresh_required"
+    assert not (await service.t0(access)).removal_history_complete
+    preview = await service.t0(access, refresh_mode="include_removed")
+    result, count = await service.import_t0(
+        access, actor, refresh=refresh_request(preview, "include_removed")
+    )
+    assert count == 1 and result.removal_history_complete
+    assert (await service.t0(access, refresh_mode="preserve_removals")).candidates == 0
+
+
+@pytest.mark.asyncio
+async def test_refresh_retains_grant_provenance_and_advances_empty_completion(access):
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.set_user(access, actor, UUID(person.uid), True)
+    grant = await access.store.exception(UUID(person.uid))
+    await service.t0(access, actor)
+    preview = await service.t0(access, refresh_mode="include_removed")
+    result, count = await service.import_t0(
+        access, actor, refresh=refresh_request(preview, "include_removed")
+    )
+    retained = await access.store.exception(UUID(person.uid))
+    assert (retained.source, retained.granted_by, retained.granted_at) == (
+        grant.source,
+        grant.granted_by,
+        grant.granted_at,
+    )
+    assert result.completed_at is not None and preview.completed_at is not None
+    assert count == 0 and result.completed_at > preview.completed_at.replace(
+        tzinfo=timezone.utc
+    )
+
+
+@pytest.mark.asyncio
+async def test_refresh_rejects_changed_policy(access):
+    actor = user("accepted")
+    await service.t0(access, actor)
+    preview = await service.t0(access, refresh_mode="include_removed")
+    later = user()
+    await access.observe(later)
+    await service.save_policy(access, actor, draft("different"), preview.revision)
+    with pytest.raises(HTTPException) as error:
+        await service.import_t0(
+            access, actor, refresh=refresh_request(preview, "include_removed")
+        )
+    assert error.value.status_code == 409
+    assert await access.store.exception(UUID(later.uid)) is None
+    assert (await service.t0(access)).completed_at == preview.completed_at
+
+
+@pytest.mark.asyncio
+async def test_keycloak_refresh_imports_new_directory_identity(access):
+    actor = user("accepted")
+    directory = keycloak_directory(FakeDirectoryAdmin([]))
+    await service.import_t0(access, actor, directory)
+    later = user()
+    directory = keycloak_directory(
+        FakeDirectoryAdmin([{"id": later.uid, "username": "new-in-directory"}])
+    )
+    preview = await service.t0(
+        access, directory=directory, refresh_mode="preserve_removals"
+    )
+    assert preview.candidates == 1
+    result, count = await service.import_t0(
+        access, actor, directory, refresh=refresh_request(preview)
+    )
+    assert count == 1 and result.imported_count == 1
+    assert (await access.store.exception(UUID(later.uid))).source == "t0"
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_concurrent_pg_refresh_commits_only_once(pg_access):
+    import asyncio
+
+    actor = user("accepted")
+    await service.t0(pg_access, actor)
+    later = user()
+    await pg_access.observe(later)
+    preview = await service.t0(pg_access, refresh_mode="include_removed")
+    request = refresh_request(preview, "include_removed")
+    results = await asyncio.gather(
+        service.import_t0(pg_access, actor, refresh=request),
+        service.import_t0(pg_access, actor, refresh=request),
+        return_exceptions=True,
+    )
+    assert (
+        sum(
+            isinstance(result, HTTPException) and result.status_code == 409
+            for result in results
+        )
+        == 1
+    )
+    assert (await pg_access.store.exception(UUID(later.uid))).source == "t0"
+
+
+@pytest.mark.asyncio
+async def test_failed_revocation_rolls_back_removal_record(access, monkeypatch):
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.set_user(access, actor, UUID(person.uid), True)
+
+    async def reject(*args):
+        raise HTTPException(409, "platform_access_actor_lockout")
+
+    monkeypatch.setattr(service, "preserve_actor", reject)
+    with pytest.raises(HTTPException):
+        await service.set_user(access, actor, UUID(person.uid), False)
+    assert await access.store.exception(UUID(person.uid)) is not None
+    async with access.store.read() as session:
+        assert await session.get(PlatformAccessRemovalRow, UUID(person.uid)) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_pg_t0_removal_history_migration(pg_access):
+    import runpy
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import text
+
+    migration = runpy.run_path(
+        str(
+            Path(__file__).parents[1]
+            / "alembic/versions/d4e8b2a6f091_add_t0_removal_history.py"
+        )
+    )
+    async with pg_access.store.engine.begin() as connection:
+        await connection.execute(text("DROP TABLE platform_access_removals"))
+        await connection.execute(
+            text(
+                "ALTER TABLE platform_access_settings DROP COLUMN t0_removal_history_complete"
+            )
+        )
+        await connection.execute(
+            text(
+                "UPDATE platform_access_settings SET t0_completed_at = now() WHERE id = 1"
+            )
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO platform_access_settings (id, revision, filtering_enabled) VALUES (2, 0, false)"
+            )
+        )
+
+        def upgrade(sync_connection):
+            with Operations.context(MigrationContext.configure(sync_connection)):
+                migration["upgrade"]()
+
+        await connection.run_sync(upgrade)
+        flags = (
+            await connection.execute(
+                text(
+                    "SELECT id, t0_removal_history_complete FROM platform_access_settings ORDER BY id"
+                )
+            )
+        ).all()
+        assert flags == [(1, False), (2, True)]
+        assert (
+            await connection.execute(
+                text("SELECT count(*) FROM platform_access_removals")
+            )
+        ).scalar_one() == 0
+        await connection.execute(
+            text(
+                "INSERT INTO platform_access_settings (id, revision, filtering_enabled) VALUES (3, 0, false)"
+            )
+        )
+        assert (
+            await connection.execute(
+                text(
+                    "SELECT t0_removal_history_complete FROM platform_access_settings WHERE id = 3"
+                )
+            )
+        ).scalar_one()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["filtering", "policy"])
+async def test_refresh_rechecks_state_after_directory_preparation(
+    access, monkeypatch, change
+):
+    import asyncio
+    import threading
+
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.t0(access, actor)
+    newcomer = user()
+    await access.observe(newcomer)
+    preview = await service.t0(access, refresh_mode="include_removed")
+    entered, release = threading.Event(), threading.Event()
+    original = access.observed_match
+
+    def pause(row, policy):
+        entered.set()
+        assert release.wait(5)
+        return original(row, policy)
+
+    monkeypatch.setattr(access, "observed_match", pause)
+    task = asyncio.create_task(
+        service.import_t0(
+            access, actor, refresh=refresh_request(preview, "include_removed")
+        )
+    )
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        if change == "filtering":
+            await service.set_filtering(access, actor, True)
+        else:
+            await service.save_policy(
+                access, actor, draft("different"), preview.revision
+            )
+    finally:
+        release.set()
+    if change == "filtering":
+        result, count = await task
+        assert count == 1 and result.completed_at != preview.completed_at
+        assert (await access.state()).filtering_enabled
+        assert await access.admitted(newcomer)
+        assert not await access.admitted(user())
+    else:
+        with pytest.raises(HTTPException) as error:
+            await task
+        assert error.value.status_code == 409
+        assert (await service.t0(access)).completed_at == preview.completed_at
+        assert await access.store.exception(UUID(newcomer.uid)) is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_audit_reports_actual_additions_and_mode_once(
+    access, monkeypatch
+):
+    actor = user("accepted")
+    await service.t0(access, actor)
+    later = user()
+    await access.observe(later)
+    preview = await service.t0(access, refresh_mode="preserve_removals")
+    request = refresh_request(preview)
+    events = []
+    monkeypatch.setattr(
+        api, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/admin/platform/access/t0-import", json=request.model_dump(mode="json")
+        )
+        replay = await client.post(
+            "/admin/platform/access/t0-import", json=request.model_dump(mode="json")
+        )
+    assert response.status_code == 200 and replay.status_code == 409
+    assert response.json()["imported_count"] == 1
+    assert len(events) == 1
+    assert events[0][1]["mode"] == "preserve_removals"
+    assert events[0][1]["imported_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_first_import_still_requires_inactive_filtering(access):
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.set_filtering(access, actor, True)
+    with pytest.raises(HTTPException) as error:
+        await service.import_t0(access, actor)
+    assert error.value.detail == "t0_requires_inactive_filtering"
+    assert (await access.state()).filtering_enabled
+    assert (await service.t0(access)).completed_at is None
+    assert await access.store.exception(UUID(person.uid)) is None

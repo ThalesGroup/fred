@@ -53,6 +53,45 @@ permissions) is entirely OpenFGA-owned — see [REBAC.md](./REBAC.md). No
 Keycloak group-management client role (`query-groups`, `view-groups`,
 `manage-users` for group membership) is required for authorization.
 
+### 1.2.1 Optional local login when SSO is the default
+
+Open Fred with `?keycloak-login=true` to request local Keycloak login:
+
+```text
+https://fred.example/?keycloak-login=true
+https://fred.example/help?topic=agents&keycloak-login=true#tools
+```
+
+This works with both `security.user.provider: keycloak` and `oidc`, including
+Keycloak connected as a generic OIDC issuer. Fred uses its normal Authorization
+Code flow with PKCE S256 and adds `kc_idp_hint=` (an intentionally empty value,
+skipping the default identity-provider redirector) and `prompt=login` (fresh
+authentication even with an existing Keycloak session).
+
+The explicit link clears the previous local Fred session without logging out of
+the provider. After successful login, Fred returns to the requested page with
+its other query parameters and fragment preserved. The flag is consumed before
+redirecting, so reloads resume normal session restoration. Reopen the explicit
+link to retry a failed attempt. Ordinary URLs keep their existing behavior.
+
+Keycloak must permit the local login path. In the client's effective Browser
+flow, keep the Identity Provider Redirector before Forms, set both to
+`ALTERNATIVE`, and keep Username Password Form `REQUIRED` inside Forms. Configure
+the redirector's Default Identity Provider with the SSO alias. If using Keycloak's
+standard Organization branch, its outer subflow is also `ALTERNATIVE`; retain
+the nested conditional steps and any deliberately required membership or MFA
+checks. Duplicate a shared flow before changing it and select the copy under
+Clients > app > Advanced > Authentication flow overrides > Browser Flow.
+
+The account needs a usable credential in Fred's realm. A master-realm
+administrator or an SSO-linked account without a local password is insufficient.
+Organization settings can show an identity-first username/email screen before
+the password screen. This option grants no role, membership or admission bypass.
+
+On other OIDC servers, `prompt=login` requests fresh authentication, while
+`kc_idp_hint` has no standard OIDC meaning; a local Keycloak form is only promised
+with a compatible Keycloak server. Security-disabled Fred ignores the flag.
+
 ### 1.3 Roles for user RBAC
 
 Create **client roles on `app`** (not realm roles) so Knowledge Flow receives them in `realm_access.roles`:
@@ -218,82 +257,11 @@ FRED_JWT_CLOCK_SKEW=0
 FRED_AUTH_VERBOSE=false
 ```
 
-### 2.4 Whitelist (optional, file-based)
+### 2.4 Platform access filtering
 
-You can restrict access to **only** users whose email is listed in a file.
+The administrator-managed Platform access page is the only platform admission filter. Administrators can configure rules and user/team exceptions, then explicitly enable filtering. Disabling it admits all active authenticated people while preserving the saved configuration. Authentication, account suspension, required terms and resource permissions continue to apply.
 
-**Activation rules**
-
-- `users.txt` **absent** → whitelist **disabled**
-- `users.txt` present but **empty / comments only (# at the beginning of the line)** → whitelist **disabled**
-- `users.txt` present and **non-empty** → whitelist **enabled**
-- `users.txt` present but **unreadable** → whitelist **disabled** (logged)
-
-**Format**
-
-- One email per line
-- Blank lines allowed
-- Lines starting with `#` are comments and ignored
-- Emails are normalized with `strip().lower()`
-
-**Example**
-
-```
-# Allowed users
-alice@app.com
-simon.cariou@thalesgroup.com
-```
-
-**Kubernetes (Helm chart)**
-Use the file-based ConfigMap shipped in the chart:
-
-1. Put the whitelist in the chart:
-
-```
-deploy/charts/fred/files/whitelist/users.txt
-```
-
-2. Enable the whitelist in `values.yaml`:
-
-```yaml
-global:
-  whitelist:
-    enabled: true
-    filePath: "files/whitelist/users.txt"
-    # Optional: custom file location inside the chart
-    # filePath: "contrib/whitelist/users.txt"
-    # Optional: inline content (useful with --set-file)
-    # user_list_inline: |
-    #   alice@app.com
-    #   bob@app.com
-```
-
-3. The ConfigMap is mounted into both backends at:
-
-```
-/fred-core/fred_core/security/whitelist_access_control/users.txt
-```
-
-**Dev (no k8s)**
-Edit the local file directly:
-
-```
-fred-core/fred_core/security/whitelist_access_control/users.txt
-```
-
-**Installing from a `.tgz` without chart changes**
-You can inject the file content at install time:
-
-```bash
-helm upgrade --install fred ./fred-<version>.tgz \
-  --set global.whitelist.enabled=true \
-  --set-file global.whitelist.user_list_inline=/path/to/users.txt
-```
-
-**Behavior**
-
-- When enabled, non-whitelisted users receive `HTTP 403` with `detail="user_not_whitelisted"`.
-- The UI redirects those users to `/coming-soon`.
+The former `users.txt` file whitelist, `global.whitelist` Helm values, ConfigMap and pod mount are no longer supported. Before upgrading a deployment that uses them, recreate its intended restrictions in Platform access and remove `global.whitelist` from the chart values. The generated values schema rejects that retired key.
 
 ---
 

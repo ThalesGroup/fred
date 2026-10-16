@@ -28,6 +28,17 @@ jobs:
           - name: fred
             chart_path: ./deploy/charts/fred
             registry_name: fred
+            app_version_from_tag: true
+          # Generic pod charts: their appVersion is the Fred libraries' version whose
+          # configuration model they embed, set by `make libs-version`, not the tag.
+          - name: agent-pod
+            chart_path: ./deploy/charts/agent-pod
+            registry_name: agent-pod
+            app_version_from_tag: false
+          - name: knowledge-base
+            chart_path: ./deploy/charts/knowledge-base
+            registry_name: knowledge-base
+            app_version_from_tag: false
 
     # what each job will play
 
@@ -76,6 +87,10 @@ jobs:
 
           # Define appVersion, it doesn't have to be semver2
           APP_VERSION="${{ steps.image_tag.outputs.image_tag }}"
+
+          if [ "${{ matrix.app_version_from_tag }}" != "true" ]; then
+            APP_VERSION="$(yq -r '.appVersion' "$CHART_FILE")"
+          fi
 
           # Inject both Version and appversion in Chart.yaml
           echo "Injecting version=${{ steps.meta.outputs.version }} and appVersion=$APP_VERSION into $CHART_FILE"
@@ -144,6 +159,10 @@ jobs:
             ```bash
             # Install charts
             helm install fred oci://ghcr.io/thalesgroup/fred-helm/fred --version ${{ steps.meta.outputs.version }}
+
+            # An agent pod or a Knowledge Base pod built on Fred's libraries: what to set first
+            helm show readme oci://ghcr.io/thalesgroup/fred-helm/agent-pod --version ${{ steps.meta.outputs.version }}
+            helm show readme oci://ghcr.io/thalesgroup/fred-helm/knowledge-base --version ${{ steps.meta.outputs.version }}
             ```
           files: docs/swift/ops/releases/v${{ steps.meta.outputs.version }}/migration.md
           fail_on_unmatched_files: true

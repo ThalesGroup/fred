@@ -124,6 +124,13 @@ def test_escape_neutralises_only_the_reserved_tags() -> None:
     assert escape("plain text, no tags") == "plain text, no tags"
 
 
+def test_strip_removes_only_the_reserved_tag_markup() -> None:
+    strip = prompt_utils.strip_reserved_prompt_tags
+    assert strip("<tools>use search</ tools >") == "use search"
+    assert strip("a <Agent_Instructions x='1'/> b <example> c") == "a  b <example> c"
+    assert prompt_utils.find_reserved_prompt_tag(strip("<platform_prompt>x")) is None
+
+
 def test_finder_reports_opening_closing_and_self_closing_forms() -> None:
     assert find_reserved_prompt_tag("x <tools> y") == "tools"
     assert find_reserved_prompt_tag("x </agent_instructions> y") == "agent_instructions"

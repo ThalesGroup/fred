@@ -98,6 +98,11 @@ operations:
     review_status: approved
     required_permission: can_manage_platform
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/joiners
+    review_status: approved
+    required_permission: can_manage_platform
+  - service: control-plane
     method: POST
     path: /control-plane/v1/admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/reveal
     review_status: approved
@@ -116,7 +121,7 @@ operations:
     method: POST
     path: /control-plane/v1/platform-access/free/{token}/opening
     review_status: approved
-    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_or_admitted_for_team_link
   - service: control-plane
     method: GET
     path: /control-plane/v1/platform-access/status
@@ -126,17 +131,17 @@ operations:
     method: GET
     path: /control-plane/v1/platform-access/free/{token}
     review_status: approved
-    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_or_admitted_for_team_link
   - service: control-plane
     method: POST
     path: /control-plane/v1/platform-access/free/{token}/gcu
     review_status: approved
-    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_or_admitted_for_team_link
   - service: control-plane
     method: POST
     path: /control-plane/v1/platform-access/free/{token}/enroll
     review_status: approved
-    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_and_cgu
+    required_permission: authenticated_unsuspended_own_credential_and_valid_free_link_or_admitted_for_team_link_and_cgu
   - service: control-plane
     method: GET
     path: /control-plane/v1/evaluation-campaigns
@@ -249,6 +254,11 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/creation_assistant_usage
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/documents_total
     review_status: pending_review
     required_permission: pending_review
@@ -267,6 +277,11 @@ operations:
     path: /control-plane/v1/kpi/presets/sessions_over_time
     review_status: pending_review
     required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/skill_usage
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform scope) or team.can_read_members (team scope)
   - service: control-plane
     method: GET
     path: /control-plane/v1/kpi/presets/storage_by_team
@@ -322,6 +337,11 @@ operations:
     path: /control-plane/v1/kpi/presets/user_sessions_total
     review_status: pending_review
     required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_skill_usage
+    review_status: approved
+    required_permission: authenticated user; query restricted to requesting user's dims.user_id
   - service: control-plane
     method: GET
     path: /control-plane/v1/kpi/presets/user_token_usage_by_agent
@@ -486,7 +506,7 @@ operations:
     method: PATCH
     path: /control-plane/v1/teams/{team_id}/routing-policy
     review_status: approved
-    required_permission: can_update_resources # TEAM-05, #2118, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — team_editor only, team_admin has zero write authority (hard cross-write rule)
+    required_permission: can_update_info # 2026-10-09: narrowed from can_update_resources (team_editor) to team_admin by owner decision — once per-template overrides left the policy, every remaining field (default, enabled models, reasoning defaults) belongs to the team's Models section; editors keep a read-only view and edit each agent's recommended model through the agent form. Personal-space owners pass via require_team_access's system-team bypass. CONTROL-PLANE-PRODUCT-CONTRACT.md §37
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/routing-policy/available-models
@@ -494,9 +514,14 @@ operations:
     required_permission: can_read_members+elevated_team_role # TEAM-05.1, #2167, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — same read gate as GET .../routing-policy (team_admin/team_editor/team_analyst); team-facing can_use-enabled model list backing the routing-policy picker
   - service: control-plane
     method: GET
+    path: /control-plane/v1/teams/{team_id}/routing-policy/disable-impact
+    review_status: approved
+    required_permission: can_update_info # team_admin only, same gate as the PATCH it precedes: it lists the team's agent names whose recommended model a disable would clear
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/{team_id}/routing-policy/effective-chat-model
     review_status: approved
-    required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model answers a conversation, and anyone entitled to hold that conversation is entitled to know. Editing the policy stays team_editor-only; this is read-only and derives nothing a chat participant cannot already observe from the turn itself
+    required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model a new conversation starts on and the models a member may pick for it, and anyone entitled to hold that conversation is entitled to know. It names models only, never which policy level chose them. Editing the policy is team_admin-only
   - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/wiki/proposals/page
@@ -623,6 +648,21 @@ operations:
     required_permission: team.can_update_agents
   - service: control-plane
     method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/publish
+    review_status: pending_review
+    required_permission: team.can_publish_marketplace_agents # agent_marketplace/service.publish_agent. Also needs an enabled, unsuspended agent, a public team, publication enabled for the team, a public agent type, not a personal space, and for a new publication published count < quota (409 with a code otherwise). expected_version mismatch 409. Pod export with the caller's token; any failure keeps the previous snapshot (422 capability cause, 503 pod). Emits audit event agent.published.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/unpublish
+    review_status: pending_review
+    required_permission: team.can_unpublish_marketplace_agents OR organization.can_manage_platform # agent_marketplace/service.can_remove_from_marketplace. `reason` from a platform admin only (403 otherwise). A team removal sets dismissed, a platform admin's sets removed. expected_version mismatch 409. Emits audit event agent.unpublished.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/marketplace-dismiss
+    review_status: pending_review
+    required_permission: team.can_unpublish_marketplace_agents # agent_marketplace/service.dismiss_marketplace_removal. Editors and team admin; hides a Removed state for the whole team.
+  - service: control-plane
+    method: POST
     path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/prepare-execution
     review_status: pending_review
     required_permission: pending_review
@@ -633,9 +673,29 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills
+    review_status: approved
+    required_permission: team.can_use_team_agents
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills/{skill_name}
+    review_status: approved
+    required_permission: team.can_use_team_agents
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/{team_id}/agent-templates
     review_status: pending_review
     required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-templates/{template_id}/draft-agent
+    review_status: approved
+    required_permission: can_update_agents # same gate as creating an agent, whose form it serves; offered capabilities are narrowed to the team's can_use set and the pod re-checks can_update_agents on the team
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/creation-assistant/settings
+    review_status: approved
+    required_permission: can_update_agents # read by the pod while drafting, with the caller's token, so a browser-reachable pod never takes the admin meta-prompt or model from a request body; returns only the saved override text, model profile id and reasoning effort
   - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/avatar
@@ -646,6 +706,21 @@ operations:
     path: /control-plane/v1/teams/{team_id}/candidate-members
     review_status: approved
     required_permission: can_administer_members
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/join-link
+    review_status: approved
+    required_permission: can_administer_members_and_own_human_credential
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/join-link
+    review_status: approved
+    required_permission: can_administer_members_and_own_human_credential
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/join-link/regenerate
+    review_status: approved
+    required_permission: can_administer_members_and_own_human_credential
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/members
@@ -761,6 +836,36 @@ operations:
     path: /control-plane/v1/marketplace/prompts/{prompt_id}/import
     review_status: pending_review
     required_permission: can_update_resources (checked per target team)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/agents
+    review_status: external_or_public
+    required_permission: authenticated (any user; lists only published agent snapshots)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/agents/{entry_id}
+    review_status: external_or_public
+    required_permission: authenticated (any user; published snapshots only; file metadata, never content)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/marketplace/agents/{entry_id}/like
+    review_status: external_or_public
+    required_permission: authenticated (any user, own team included; published snapshots only)
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/marketplace/agents/{entry_id}/like
+    review_status: external_or_public
+    required_permission: authenticated (any user; published snapshots only)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/agents/{entry_id}/import-targets
+    review_status: pending_review
+    required_permission: authenticated; lists the caller's personal space and teams where it holds can_update_agents, publishing team excluded
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/marketplace/agents/{entry_id}/import
+    review_status: pending_review
+    required_permission: team.can_update_agents (checked per target team; publishing team refused) # Reuses the agent copy on the stored snapshot; never reads the publishing team.
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/prompt-categories
@@ -913,7 +1018,7 @@ operations:
     method: PUT
     path: /control-plane/v1/knowledge-bases/definitions/{name}
     review_status: approved
-    required_permission: none # Deliberately not a ReBAC check. A Knowledge Base image publishes its own declaration with its confidential M2M client; the first publication claims the declared PREFIX for that client and every later publication under it must present the same client, so nobody writes under another contributor's prefix. The binding is enforced inside the writing transaction, so two concurrent first publications cannot both win. A broad service role alone never authorizes. Existence is not usage: a published definition stays unusable until a platform admin enables it for a team. Deliberately outside the GCU gate: accepting conditions of use is a human admission control, and the publisher is a confidential client with no user row and nobody to accept them — `get_current_user` would make the route unreachable wherever `app.gcu_version` is set.
+    required_permission: none # Deliberately not a ReBAC check. A Knowledge Base image publishes its own declaration with its confidential M2M client. The client must be listed in the Control Plane's `knowledge_bases.publishers` (empty by default: nobody publishes), the request must present the prefix registered for it, and the declaration must fall under that prefix, so nobody writes under another contributor's prefix. The store also binds the prefix to its client inside the writing transaction and refuses any other. A broad service role alone never authorizes, and a user session is refused even when its `azp` is listed. Existence is not usage: a published definition stays unusable until a platform admin enables it for a team. Deliberately outside the GCU gate: accepting conditions of use is a human admission control, and the publisher is a confidential client with no user row and nobody to accept them — `get_current_user` would make the route unreachable wherever `app.gcu_version` is set.
   - service: control-plane
     method: GET
     path: /control-plane/v1/knowledge-bases/definitions/{definition_id}/fields
@@ -991,6 +1096,21 @@ operations:
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Writes the FIRST block of every agent's system prompt platform-wide, so this gate is the only thing between an actor and prepending text ahead of every agent on the deployment. Carved out of can_manage_platform so this one surface can be delegated to a prompt_editor without import/export, tasks and platform reset coming with it. Body length-capped by SetPlatformPromptRequest (max_length) at parsing, before authz runs. Saving "" suppresses the block; there is no DELETE (row absence means "never set", which is a distinct state).
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/platform/creation-assistant
+    review_status: approved
+    required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt, same gate as the platform prompt. Returns the creation assistant's settings: meta-prompt (saved override or the pod's built-in default, plus the default itself), the chosen model profile and reasoning effort, and the chat profiles it may use.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/creation-assistant
+    review_status: approved
+    required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Sets the meta-prompt override, the model profile and the reasoning effort every creation assistant draft uses; the pod reads them from GET /teams/{team_id}/creation-assistant/settings, never from a request body. A model profile equal to the stored one is kept without re-checking the catalog. SetCreationAssistantSettingsRequest rejects blank text, >20k chars and reserved tags at parsing; a missing {language} placeholder is accepted and flagged; a new model profile absent from the pods' chat catalog is refused (422); a reasoning effort outside off/low/medium/high is refused (422).
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/creation-assistant
+    review_status: approved
+    required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Clears the meta-prompt override so the pod's built-in text applies again; the chosen model and reasoning effort are kept.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/ui-settings
     review_status: pending_review
     required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform, same catch-all gate as announcements. Returns the platform default UI theme and hidden theme ids; defaults (null / []) when never saved. The same two values are public on /frontend/config (theme ids only, no admin-authored content) so the frontend can resolve the theme before its first paint.
@@ -1001,6 +1121,31 @@ operations:
     required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Replaces both settings; SetPlatformUiSettingsRequest bounds ids to [a-z][a-z0-9-]{0,31}, at most 32 distinct hidden ids, default not hidden (422 at parsing, before authz). Emits audit event platform.ui_settings.updated.
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/marketplace-settings
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service._require_manage_platform. Agents marketplace default (built-in switch off, quota 5 when never saved) and, per collaborative team, its overrides, effective values and published count. Team admins have no access: these settings are platform-level.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/marketplace-settings/default/impact
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service.preview_default_change. Read-only preview: teams following Default whose effective switch would turn off, with their published agents.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/marketplace-settings/default
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service.set_marketplace_default. Quota >= 1 enforced at parsing (422). Every team whose effective switch turns off loses its published agents in the same request. Emits audit event marketplace.settings.default_updated.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/teams/{team_id}/marketplace-settings/impact
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service.preview_team_change. Read-only preview of one team's switch override (omitted = back to Default). 404 for an unknown team.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/teams/{team_id}/marketplace-settings
+    review_status: pending_review
+    required_permission: can_manage_platform # marketplace_settings/service.set_team_marketplace_settings. Replaces both overrides, null = back to Default; quota >= 1 (422). Deliberately NOT can_update_info: a team admin cannot change its own team's marketplace settings. An effective switch turning off removes the team's published agents. Emits audit event marketplace.settings.team_updated.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/instructions
     review_status: approved
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt, same gate as its editable sibling above — this pane is the reference an editor needs to know what agents are already told. Read-only: returns the `platform_instructions` field of the pod's `config/platform_prompt.json`, the text shipped with the platform and composed into every agent prompt. No row, no PUT, no DELETE — it exists so an admin can see what agents are told, not change it.
@@ -1008,32 +1153,72 @@ operations:
     method: GET
     path: /control-plane/v1/announcements/active
     review_status: approved
-    required_permission: authenticated # Delivery surface for the platform announcement banners. Authentication is the ONLY gate on purpose: an enabled announcement is content the deployment means every user to see, and the response carries nothing but admin-authored banner text. Deliberately NOT on the public pre-auth /frontend/config, where the retired deployer-configured info_banner used to ride — these rows are written at runtime from the admin console, so an unauthenticated visitor must not be able to read them. Returns enabled announcements only; disabled ones never leave the store.
+    required_permission: authenticated # Delivery surface for the platform announcement banners. Authentication is the ONLY gate on purpose: an enabled announcement is content the deployment means every user to see, and the response carries nothing but admin-authored banner text. Deliberately NOT on the public pre-auth /frontend/config, where the retired deployer-configured info_banner used to ride — these rows are written at runtime from the admin console, so an unauthenticated visitor must not be able to read them. Returns enabled banners only; disabled ones never leave the store, and patch notes are delivered by /announcements/patch-notes instead.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/announcements
     review_status: approved
-    required_permission: can_manage_platform # Admin listing: every announcement, enabled or not. The catch-all platform gate, checked inline (organization_authz keeps no helper for it by design, so a delegated surface cannot reuse it). Read shares the write gate because the draft of an unpublished announcement is not user-facing content.
+    required_permission: can_manage_platform # Admin listing: every announcement, enabled or not. The catch-all platform gate, checked inline (organization_authz keeps no helper for it by design, so a delegated surface cannot reuse it). Read shares the write gate because the draft of an unpublished announcement is not user-facing content. Banners first, then patch notes in the administrator's order (position).
   - service: control-plane
     method: POST
     path: /control-plane/v1/admin/platform/announcements
     review_status: approved
-    required_permission: can_manage_platform # Creates an announcement. This gate is the only thing between an actor and putting arbitrary markdown at the top of every user's screen. Body validated by AnnouncementWriteRequest (severity Literal, per-locale length caps, at least one non-empty locale for title and description_short) at parsing, before authz runs. Created disabled by default.
+    required_permission: can_manage_platform # Creates an announcement. This gate is the only thing between an actor and putting arbitrary markdown at the top of every user's screen. Body validated by AnnouncementWriteRequest (severity Literal, per-locale length caps, at least one non-empty locale for title and description_short for a banner, for description_long for a patch note, whose title and body must cover the same locales) at parsing, before authz runs. Created disabled by default; a new patch note takes position 1 and creating an enabled banner starts a history line. A patch note only joins a working area users never read.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}
     review_status: approved
-    required_permission: can_manage_platform # Replaces an announcement's content wholesale, never its delivery. Bumps content_version when a reader-visible field actually changed, which makes the banner reappear for users who had dismissed the previous wording.
+    required_permission: can_manage_platform # Replaces an announcement's content wholesale, never its delivery. Bumps content_version when a reader-visible field actually changed, which makes the banner reappear for users who had dismissed the previous wording. A patch note never bumps here, and an edit reaches users only through the next announcement. Reads the row with SELECT ... FOR UPDATE. Changing kind is refused (422).
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}/enabled
     review_status: approved
-    required_permission: can_manage_platform # Toggles delivery only, without resubmitting content. Bumps content_version on the off -> on transition: putting an announcement back on air is a relaunch and must reach the users who closed the previous run.
+    required_permission: can_manage_platform # Toggles delivery only, without resubmitting content. Bumps content_version on the off -> on transition: putting a banner back on air is a relaunch and must reach the users who closed the previous run. For a patch note the toggle only decides whether the next announcement includes it: it reaches no user and writes no history. Reads the row with SELECT ... FOR UPDATE so concurrent toggles cannot record the change twice. Enabling a banner starts a history line and disabling it ends that line.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}
     review_status: approved
-    required_permission: can_manage_platform # Removes the announcement permanently. Dismissal state lives in each user's browser keyed by id, so a deleted id simply stops matching anything.
+    required_permission: can_manage_platform # Removes the announcement permanently. Banner dismissal state lives in each user's browser keyed by id, so a deleted id simply stops matching anything. Deleting an enabled banner ends its history line (row read with SELECT ... FOR UPDATE, so concurrent deletes end it once); the history outlives the row. Deleting a patch note changes nothing users read: an announced package keeps its own copy.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/announcements/patch-notes
+    review_status: pending_review
+    required_permission: authenticated # The patch notes of the announcement in effect, as frozen when it was announced (empty when none is in effect), and pending_announcement_id when the caller has not recorded it as seen. Identity from the token only; reads the caller's own seen row and nobody else's. The administrators' working area never leaves the store on this route.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/announcements/patch-note-announcements/{announcement_id}/seen
+    review_status: pending_review
+    required_permission: authenticated # Records that the caller saw that announcement (one row per user); idempotent, 404 unless the id is an announced package, and never moves the caller back to an older announcement. The user id comes from the token, never the request, so no caller can write another user's record.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/announcements/patch-notes/order
+    review_status: pending_review
+    required_permission: can_manage_platform # Rewrites every patch note's position from the full ordered id list, in one transaction. 409, changing nothing, unless the list names each existing patch note exactly once (a stale page, a banner id, a duplicate). Emits audit event platform.announcement.patch_notes_reordered; no history line.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/announcements/patch-notes/announcement
+    review_status: pending_review
+    required_permission: can_manage_platform # The announcement in effect (id, time, acting administrator's uid), or null when none was made or the last one was withdrawn. Same catch-all gate as the other announcement admin routes.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/platform/announcements/patch-notes/announcement
+    review_status: pending_review
+    required_permission: can_manage_platform # Freezes the included patch notes (title and body, every language) as a package on a new history line and ends the previous one; from then on users read that package and every user's client opens the dialog once. This gate is the only thing between an actor and a dialog on every user's screen. The body names the patch notes the administrator confirmed, in order: 409, announcing nothing, when the included ones are not exactly that list, when none is included, or when more than 10 are. Serialized with withdraw, create and reorder by a transaction-scoped advisory lock. Emits audit event platform.announcement.patch_notes_announced.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/announcements/patch-notes/announcement
+    review_status: pending_review
+    required_permission: can_manage_platform # Withdraws the announcement in effect: ends its history line, after which users read no patch note and no dialog opens until the next announcement. The working area is untouched. 404 when none is in effect. Emits audit event platform.announcement.patch_notes_withdrawn.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/announcements/patch-notes/announcements/{announcement_id}
+    review_status: pending_review
+    required_permission: can_manage_platform # The package of one history line, as users saw it, whatever happened since to its patch notes. 404 for an unknown line, a banner line, or an older patch-note line that kept no package.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/announcements/activation-history
+    review_status: pending_review
+    required_permission: can_manage_platform # The 100 newest exposure lines (a banner on air, an announced package) with their start, their end and the acting administrator's uid; packages themselves are read one at a time by the route above. Same catch-all gate as the other announcement admin routes.
 
   - service: knowledge-flow
     method: GET

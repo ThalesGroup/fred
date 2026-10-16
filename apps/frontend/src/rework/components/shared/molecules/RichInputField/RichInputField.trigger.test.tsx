@@ -103,7 +103,7 @@ describe("RichInputField command trigger", () => {
 
     expect(trigger.onQueryChange).not.toHaveBeenCalled();
     type("/");
-    expect(trigger.onQueryChange).toHaveBeenCalledWith("");
+    expect(trigger.onQueryChange).toHaveBeenCalledWith("", { start: 0, end: 1 });
   });
 
   it("reports nothing for a slash inside text", () => {
@@ -114,14 +114,26 @@ describe("RichInputField command trigger", () => {
     expect(trigger.onQueryChange).not.toHaveBeenCalled();
   });
 
+  it("reports an inline prefix only for the host's available command names", () => {
+    const trigger = binding({ inlineCommandNames: ["meeting-minutes"] });
+    render(<Host trigger={trigger} onSend={vi.fn()} />);
+    type("Notes /meet");
+    expect(trigger.onQueryChange).toHaveBeenLastCalledWith("meet", { start: 6, end: 11 });
+    type("Notes /tmp/file");
+    expect(trigger.onQueryChange).toHaveBeenLastCalledWith(null);
+    vi.mocked(trigger.onQueryChange).mockClear();
+    type("Notes /summary");
+    expect(trigger.onQueryChange).not.toHaveBeenCalled();
+  });
+
   it("updates the query as the user types after the slash", () => {
     const trigger = binding();
     render(<Host trigger={trigger} onSend={vi.fn()} />);
 
     type("/");
     type("/su");
-    expect(trigger.onQueryChange).toHaveBeenNthCalledWith(1, "");
-    expect(trigger.onQueryChange).toHaveBeenNthCalledWith(2, "su");
+    expect(trigger.onQueryChange).toHaveBeenNthCalledWith(1, "", { start: 0, end: 1 });
+    expect(trigger.onQueryChange).toHaveBeenNthCalledWith(2, "su", { start: 0, end: 3 });
   });
 
   it("closes when the slash is deleted away", () => {
@@ -142,23 +154,35 @@ describe("RichInputField command trigger", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  // Running a command IS sending, so it obeys the same gate as the send button:
-  // an attachment still uploading or an over-limit draft must not let Enter
-  // through the menu into a send the field itself refuses.
-  it("withholds Enter from the menu while sending is blocked, but not the other keys", () => {
-    const onKeyDown = vi.fn(() => true);
+  // Enter on a row only inserts it, so the menu gets the key whatever the send
+  // state: an upload in progress or an over-limit draft must not turn the pick
+  // into a newline.
+  it("hands Enter to the menu while sending is blocked, and sends nothing", () => {
+    const onKeyDown = vi.fn((event: { preventDefault: () => void }) => {
+      event.preventDefault();
+      return true;
+    });
     const onSend = vi.fn();
     render(<Host trigger={binding({ open: true, onKeyDown })} onSend={onSend} sendDisabled />);
 
-    type("/summary");
-    pressEnter();
-    expect(onKeyDown).not.toHaveBeenCalled();
-    expect(onSend).not.toHaveBeenCalled();
-
+    type("/su");
+    let enter!: KeyboardEvent;
     act(() => {
-      textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+      enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+      textarea().dispatchEvent(enter);
     });
     expect(onKeyDown).toHaveBeenCalledOnce();
+    expect(enter.defaultPrevented).toBe(true);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("still refuses to send on Enter while sending is blocked and the menu leaves the key", () => {
+    const onSend = vi.fn();
+    render(<Host trigger={binding({ onKeyDown: () => false })} onSend={onSend} sendDisabled />);
+
+    type("hello");
+    pressEnter();
+    expect(onSend).not.toHaveBeenCalled();
   });
 
   it("reports focus leaving and returning, so the menu can follow it", () => {

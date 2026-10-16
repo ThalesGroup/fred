@@ -485,6 +485,22 @@ Convergence rule for future work:
   agent-to-agent calls if the existing runtime execute transport can carry the
   needed typed fields.
 
+The optional `runtime_context.skills: list[SkillInvocation]` carries name-only
+selections, deduplicated in request order. Legacy `skill` remains accepted; sending
+both non-null forms is rejected, as are extra fields such as client instruction
+bodies. ReAct admission validates every selected name before inference. All
+procedures enter ordinary checkpoint messages through the common tool boundary;
+resume does not repeat the preload.
+Deep preserves canonical user invocation text and delegates loading to native
+DeepAgents discovery and filesystem reads. It does not validate selected bodies
+against the snapshot, preload instructions, or count a selection as a load.
+Successful native parent/child instruction reads use user origin when their name
+matches any current selection, and agent origin otherwise.
+Selections persist in `metadata.extras.skill_invocations`; readers retain legacy
+`skill_invocation` compatibility. Same-exchange resumes restore the collection;
+fresh turns do not inherit selection intent. Graph agents and deployments with
+skills disabled reject selections. `/skill <name>` remains a legacy submit form.
+
 ### 2.4 Pre-execution authorization gate — `_authorize_and_resolve`
 
 There is no `validate_execution_grant` helper. Every execute / execute-stream /
@@ -542,6 +558,27 @@ Managed execution invariant:
 
 ---
 
+### Platform skill metadata
+
+`GET /agents/skills?agent_instance_id=...&team_id=...` uses the same verified
+caller, team-use authorization and managed-instance resolution as execution.
+It returns `SkillCatalog`: `supported`, a snapshot `revision` and skill
+`name`, `description`, optional nullable `argument_hint` (1–256 characters).
+The hint comes from `argument-hint` frontmatter; non-string, blank or oversized
+hints are ignored with bounded diagnostics. It is advisory, never mandatory-input
+validation or argument substitution. No bodies, filesystem paths or cross-source
+aggregation are returned. See the product contract for the authenticated frontend
+proxy.
+
+`GET /agents/skills/{skill_name}?agent_instance_id=...&team_id=...` is a separate,
+authenticated read-only preview. It reuses catalog authorization and managed-instance
+resolution and returns `SkillDetail` (`skill: SkillSummary`, `revision`, `content`).
+Content is the bounded `SKILL.md` from the current startup snapshot, read in memory;
+no arbitrary path, inference, agent-context load or filesystem scan is performed.
+Invalid names return 422; unavailable or unsupported skills return 404. Historical
+attribution does not store a skill body, so the preview identifies its version as
+current. Catalog payloads remain metadata-only.
+
 ## 4. OpenAI Compatibility — `fred-sdk/contracts/openai_compat.py`
 
 The `/v1/chat/completions` endpoint is a **secondary interface** for external
@@ -560,6 +597,11 @@ Key models:
 
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
+
+The `finish_reason` chunk carries the `final` event's `content` in `delta.content`
+when no `assistant_delta` was streamed since the last `tool_call` (non-streaming
+model, graph answer, tool error surfaced as the answer); a streamed answer is
+never repeated.
 
 Session ownership uses the native route's shared gate: with authentication enabled,
 `X-Fred-Session-Id` targeting another user's existing history session returns HTTP 403
@@ -593,6 +635,15 @@ Runtime events emitted during agent execution (both native SSE and OpenAI compat
 | `final`            | Turn complete; carries content, sources, token_usage, ui_parts    |
 | `turn_persisted`   | **Schema only — not emitted over SSE in Phase 1** (see gap below) |
 | `status`           | Internal status update (dropped by OpenAI compat layer)           |
+
+`StatusRuntimeEvent.skill_load` optionally carries `SkillLoadAttribution`:
+`name`, `origin` (`user` or `agent`), `revision`, `load_id`, `agent_id`, `child`
+and optional `child_id`. ReAct preloads use user origin. Native Deep instruction
+reads matching the current typed selection use user origin; other model-selected
+skills use agent origin. Native child loads use a namespace-derived opaque child identity.
+The event projects to `system/system_note` history with the same typed object in
+`metadata.extras.skill_load`. The UI renders a compact step and deduplicates by
+exchange/load identity; successful load bodies are not exposed in a trace inspector.
 
 ### SSE stream termination
 
@@ -713,6 +764,76 @@ MUST remain runtime-environment concerns and MUST NOT appear in frontend-facing
 contracts.
 
 ---
+
+### Platform skill resources and continuity
+
+Optional pod `skills.directory` enables platform skills. `package` resolves
+`fred_runtime/skills` from the installed package; other paths resolve against
+the configuration file parent. Absence disables the feature.
+
+ReAct and the web catalog, ReAct explicit preload and instruction previews retain
+the validated, bounded startup snapshot. ReAct uses
+`SnapshotSkillsMiddleware`, `load_skill(name)` and `read_skill_file(name, path)`.
+Invalid/duplicate/unreadable entries are excluded with bounded diagnostics. Its
+snapshot limits remain 64 skills, 128 files and directories per skill, 64 KiB
+per file, 4 MiB total, depth 8 and 512 entries per directory; supported text
+extensions are `.md`, `.txt`, `.json`, `.yaml`, `.yml` and `.csv`. Refresh this
+catalog and its bodies by restarting pods.
+
+Deep parents and explicit native children use
+`create_deep_agent(skills=["/skills/"])` and the child's `skills` field. Fred does
+not construct skills middleware or generate a second native catalog prompt.
+The existing composite backend routes `/skills/` to upstream
+`FilesystemBackend(root_dir=directory, virtual_mode=True)`, preserving
+scratchpad, `/.deep/`, artifacts and quotas. This native backend is constructed
+once during offloaded bootstrap and reused by request composites. Discovery, metadata validation,
+per-conversation metadata caching, reference reads, listing/search and pagination
+belong to DeepAgents. Native reads see the physical files, including edits made
+before restart; they are not filtered or rebased through Fred's snapshot. Native
+skills should use matching directory/frontmatter names and a trusted resource
+folder. The packaged directory is the normal source; custom configured folders
+remain supported. Disabled activation adds no route; an enabled empty folder is
+handled by native discovery.
+
+Existing parent/child filesystem permissions deny agent writes to `/skills` and
+its descendants. Capability ports also refuse system-origin writes there;
+production skill files/volumes must remain read-only. The upstream filesystem
+backend is not wrapped or subclassed. Virtual paths confine reads to the mounted
+root, and script execution stays unavailable. Route collisions fail activation.
+Deep registers neither Fred loading tool. Only ReAct uses explicit preload.
+Deep selections remain canonical user text without snapshot body validation or
+Fred skill-body injection. A name-only reminder of the current selected procedures
+appears in the existing per-turn system context, without duplicating the catalog.
+Native successful
+reads retain the existing attribution/KPI and stored reference previews; reserved
+Fred tags in returned reads/searches are escaped at the model boundary.
+
+Loaded instructions remain ordinary messages under existing context limits.
+They apply according to the current request, grant no tools/permissions, and
+can be reloaded after trimming. No persistent active-skill mode or automatic
+checkpoint reset is introduced. Prompt assembly is defined in `PROMPTS.md`.
+
+The shipped platform instructions recognize matching slash invocations as
+requests to apply catalog procedures and direct instruction/reference reads
+before drafting or calling task tools. Catalog-loaded procedures and runtime
+ReAct preloads remain subordinate to platform rules; arbitrary content cannot
+claim this procedural exception through a skill name, path or tag. This guidance
+does not inject skill bodies or force native model calls.
+
+Successful shared skill loads emit `agent.skill_loaded_total` once per actual
+read of the procedure, with `skill_name`, trusted `skill_origin` (`user` or
+`agent`) and bound team/session/exchange/user/instance dimensions (2026-10-07).
+Successful native `read_file` windows starting at normalized offset zero on a
+mounted `SKILL.md` emit a load through the existing tool boundary, attributed to
+the user for the current selected name and to the agent for other skills;
+zero-length windows and failed reads do not. Further pages and reference reads
+do not count. Native child reads use the same selection-aware origin rule.
+Reusing context, replaying history/status,
+resuming HITL, reading references and opening previews do not emit this counter;
+a new actual reload does. Existing best-effort queued KPI handling remains in
+place. Contents and requests are never metric dimensions; Prometheus keeps its
+existing label allow-list.
+
 
 ## 7. Kubernetes-Native Platform Boundary
 
@@ -993,48 +1114,13 @@ introduced on the branch are retained.
 pod→OpenFGA, pod→Keycloak, deny inter-agent) and end-to-end TLS to the pod are not
 yet in the chart; no GitHub issue tracks this specifically.
 
-### 8.12 ✅ Global base prompt injected at runtime, not baked — RUNTIME-09 (June 2026)
+### 8.12 Global base prompt migration — RUNTIME-09 (June 2026; superseded)
 
-**What changed.** Fred's shared global base prompt (currently the Mermaid output
-contract, `fred_sdk.resources.prompts/mermaid_output_contract.md`) was previously
-composed into each shipped agent's default `system_prompt_template` at authoring
-time via `apply_global_base_prompts(...)` /
-`load_agent_prompt_markdown(..., include_global_base_prompts=True)`. It is now
-**injected at execution time** as a system-prompt suffix and is no longer part of
-any editable template.
-
-**Final system-prompt composition (ReAct).** In `ReActRuntime` the effective
-prompt is now assembled as:
-
-```
-system_prompt
-  + _build_runtime_tool_prompt_suffix(bound_tools)
-  + _build_guardrail_suffix(definition)
-  + _build_global_base_prompt_suffix()          # NEW — GLOBAL_BASE_PROMPT_MARKDOWN
-  + _build_attachment_context_suffix(binding)
-```
-
-`DeepAgentRuntime` adds the same `_build_global_base_prompt_suffix()` before its
-filesystem suffix. `build_global_base_prompt_suffix()` lives in
-`fred_runtime.react.react_prompting` and returns `GLOBAL_BASE_PROMPT_MARKDOWN`
-(the SDK-owned single source of truth) with a leading blank-line separator, or
-`""` when the bundle is empty.
-
-**Consequences.**
-
-- The contract no longer appears in the operator-editable system prompt (agent
-  editor) and cannot be deleted by an operator.
-- An operator-overridden prompt (`prompts.system`) now **keeps** the contract,
-  fixing a prior inconsistency where a custom prompt silently dropped it.
-- Graph agents (mindmap, `GraphRuntime`) do not pass through this suffix path —
-  unchanged; they never carried the bundle.
-- `fred-sdk` retains `GLOBAL_BASE_PROMPT_RESOURCES` / `GLOBAL_BASE_PROMPT_MARKDOWN`
-  as the content source; `apply_global_base_prompts` and the
-  `include_global_base_prompts` flag are removed.
-- **No data migration.** Agent instances created before this change keep the
-  baked contract frozen in their persisted `tuning.values["prompts.system"]`;
-  the editor still shows it for those until the operator clears the field. Only
-  newly created instances get the clean default. (Decision: new agents only.)
+The June migration moved shared rules out of editable agent templates into runtime
+system-prompt assembly. §8.105 subsequently removed the automatic Mermaid bundle;
+its current rules load only through the configured platform skill. Old persisted
+operator prompts can still contain previously baked rules until edited. No data
+migration removes that user-owned text.
 
 ### 8.13 ✅ `UiPart` union extended by capability registration — CAPAB-01 #1977 (July 2026)
 
@@ -1430,7 +1516,7 @@ class DocumentTreePort(ABC):
         *,
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
-        max_chars: int = 6000,
+        max_chars: int = 20_000,
     ) -> DocumentTreeResult: ...
 
 class DocumentSummarizePort(ABC):
@@ -1468,6 +1554,25 @@ capability renders `is_error` tool results without importing the HTTP stack.
 `read_timeout` override (`RuntimeTimeouts.summarize_read`, default 300s) for
 the long-running summarize path. First consumer: `document_access`'s
 `list_document_tree` + `summarize_document` tools (RFC §10.1).
+
+**Document tree budget (2026-10-12).** The default `max_chars` is 20,000 in the
+capability, SDK port, runtime adapter/client and HTTP request; its supported range
+is 500-60,000. Whole-branch/item pruning remains in place beyond the requested
+budget. The tool retains incomplete-listing information for the model; the UI
+uses a discreet Truncated footer. Request/response shapes are unchanged, and the
+Knowledge Flow OpenAPI/client generation was rerun for the updated constraints.
+
+**Document tree metadata (2026-10-12).** The existing `{tree, truncated}` response
+and `DocumentTreeResult` remain unchanged. Folder records carry `folder` and optional internal `folder_id`; document leaves are compact JSON records with `uid`, `name`,
+`added_to_kb`, `created`, `modified`, plus available title, format/MIME, language,
+page/row counts, labels and source. `added_to_kb` projects the stored
+`source.date_added_to_kb`; an omitted legacy field remains null instead of using a
+read-time default. Dates retain timezone, time and available precision. Creation
+is file metadata, modification can include Fred metadata edits, and arrival is
+not ingestion completion. Both ReAct text content and Graph text blocks include
+the metadata and an explicit notice when the tree is incomplete. The frontend's
+folder/document view hides internal ids and supports earlier text tree results.
+Observable behavior is specified in `openspec/specs/team-resource-spaces/spec.md`.
 
 ---
 
@@ -1744,16 +1849,13 @@ now the KPI metric a dashboard or alert would actually query.
 
 ### 8.27 ✅ Tool-failure recovery notice added to the ReAct/Deep system prompt (2026-07-23)
 
-**What changed.** The §8.12 suffix chain gains one more hard-invariant
-suffix. `fred_runtime.react.react_prompting.build_tool_failure_recovery_suffix()`
-is now composed in `compose_system_prompt` right after
-`build_global_base_prompt_suffix()` and before `runtime_suffixes`:
+`fred_runtime.react.react_prompting.build_tool_failure_recovery_suffix()` is
+composed after guardrails and before `runtime_suffixes`:
 
 ```
 system_prompt
   + tool_suffix
   + build_guardrail_suffix(definition)
-  + build_global_base_prompt_suffix()
   + build_tool_failure_recovery_suffix()        # NEW
   + *runtime_suffixes
   + build_context_prompt_suffix(binding, agent_id=agent_id)
@@ -1886,6 +1988,11 @@ config) and 4 (composer control) are phase 2 and not implemented here.
 Levels 3-4 of REASON-01 (per-agent and per-question reasoning), plus its three
 tool-loop-safety preconditions. Builds on §8.29 (levels 1-2); read that first.
 
+**2026-10-09 — superseded in part by §8.114.** Level 3 (the agent offer,
+`AgentTuning.reasoning_enabled`) is removed: the platform activation alone is
+the ceiling. The tri-state below is redefined: only `True` reasons, `None`
+no longer defers to the ceiling.
+
 **Reasoning is not a capability** (RFC §15, Amendment A). It was built as one, as
 §7 specified, and withdrawn before release: an agent does not *use* reasoning the
 way it uses a tool, so the Tools tab was the wrong place to enable it. What ships:
@@ -2004,6 +2111,11 @@ model — see §C.9 and the note below.
 ---
 
 ### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
+
+**2026-10-09 — `agent_profile_overrides` and `resolve_team_override` removed
+(§8.114).** The user's choice (`chat_profile_id`) and the instance
+recommendation now sit between the pod override and the team default;
+`chat_default_profile_id` below is unchanged.
 
 **2026-08-16 — chat-only drift enforcement (#2365).** A team-selected profile
 whose declared capability is not `chat` now raises
@@ -2601,6 +2713,9 @@ persisted before this fix.
 ---
 
 ### 8.42 ✅ Tool error claims the final response only when the whole round failed (issue #2244, 2026-08-05)
+
+> **Final-response half superseded by §8.115 (2026-10-14):** a wholly-failed
+> round's error is now only the fallback when the model writes no answer.
 
 **Refines §8.27's runtime half.** Since the v2 loop shipped, any
 `is_error=True` tool result made the ReAct stream surface that error text
@@ -5592,7 +5707,7 @@ is_error = status_is_error or artifact_is_error
 
 The text shown to the user for a failed call comes from the same trust
 boundary and feeds both `ToolResultRuntimeEvent.content` and
-`FinalRuntimeEvent.content`:
+`FinalRuntimeEvent.content` (the latter only as a fallback since §8.115):
 
 - A typed `is_error=True` `ToolInvocationResult` that reaches this boundary
   is Fred-owned: its text is rendered fresh from the artifact via
@@ -6388,7 +6503,11 @@ model middleware and MCP prompt injection remain specific to ReAct/Deep.
 
 `RuntimeContext` gains an optional `command` — the prompt command a turn was
 launched from, carrying the command string, the text the user appended after
-it, and the prompt's id and name. `ChatMetadata` gains the matching optional
+it, and the prompt's id and name. Managed-chat inline composition also carries optional
+`draft_text` and `draft_command_offset`, preserving the canonical draft and the
+chosen prompt occurrence among homonyms. Surrounding text stays on its original
+side of the expanded prompt; `appended_text` records both sides for old readers.
+`ChatMetadata` gains the matching optional
 `command` on the stored turn. Both are optional and purely presentational: a
 turn's parts still hold the full assembled text, which is what replays to the
 model, and the agent never sees the descriptor. A client that omits it and a
@@ -6402,6 +6521,9 @@ selects a renderer and nothing more, and a malformed value is dropped rather
 than failing the turn. `prompt_id` is attribution, never resolved at display
 time — a prompt is overwritten on edit and can be deleted, so the turn's own
 text is the record of what was sent.
+
+A turn can hold several prompt commands since 8.112, which adds a list to this
+descriptor and leaves the fields above describing the first one.
 
 ### 8.99 Agent-initiated human questions
 
@@ -6616,9 +6738,338 @@ filter.
 This is a ceiling for one port; the
 general agent scope descriptor stays open in `CAPABILITY-SCOPE-CEILING-RFC.md`.
 
+### 8.105 Mermaid instructions become a platform skill (2026-10-08)
+
+The Mermaid output rules move from the SDK global prompt bundle to
+`fred_runtime/skills/mermaid/SKILL.md`, with English metadata and optional
+`[diagram goal or source] [constraints]` input guidance. Configured ReAct
+agents discover it through the snapshot catalog and `load_skill`; Deep parents
+and children use native discovery and `read_file` on the physical mount.
+Explicit ReAct selection preloads the body; Deep selection records intent and
+native reads perform loading, with the shared attribution and KPI paths. No tool named
+`mermaid` is created. Ordinary history and reload rules apply.
+
+`compose_system_prompt` no longer imports or injects
+`GLOBAL_BASE_PROMPT_MARKDOWN`; the SDK bundle/resource and their registration are
+removed. Generic packaged Markdown loaders remain. This intentionally changes
+the no-skills baseline: deployments without a configured catalog receive no
+Mermaid syntax guidance. Custom directories must include the skill to advertise
+it. Restart agent pods to publish the new packaged snapshot. Frontend Mermaid
+rendering/sanitization and static renderer-testing fixtures are unchanged.
+Acceptance: `openspec/specs/platform-agent-skills/spec.md`.
 
 
-### 8.106 Tabular discovery includes authorized conversation attachments (2026-10-12)
+### 8.106 Deep skill access uses native filesystem tools (2026-10-08)
+
+Deep parent/native-child model bindings no longer register Fred `load_skill` or
+`read_skill_file`. Their catalog directs reads to the read-only physical
+`/skills/<name>/` mount through native `read_file`; discovery still uses upstream
+`SkillsMiddleware`. ReAct retains its confined Fred tools. ReAct user preload remains internal and tool-neutral. Subsequent §8.108 removes
+Deep preload; §8.109 attributes native instruction reads to their requester.
+Pagination and stored-result previews remain supported.
+Acceptance: `openspec/specs/platform-agent-skills/spec.md`, native filesystem access.
+
+
+### 8.107 Deep skills use native directory loading (2026-10-08)
+
+Deep now mounts the physical configured skill folder with unmodified upstream
+`FilesystemBackend` and uses the native parent/child `skills` configuration.
+Fred's Deep skills middleware construction, synthetic discovery files, duplicate
+native catalog prompt and immutable Deep filesystem adapter are removed.
+Native reads see current disk contents; web metadata/preview and ReAct
+retain their startup snapshots. Refresh web metadata through the existing pod
+restart procedure. Conversation/artifact routing, agent/capability write denial,
+load events/KPI and stored reference previews remain in place.
+Acceptance: `openspec/specs/platform-agent-skills/spec.md`, native directory loading.
+
+
+### 8.108 Native Deep skills without Fred preload (2026-10-09)
+
+Deep invoke and streaming now pass canonical user messages directly to the
+compiled agent even when a typed skill selection is supplied. Admission no longer
+reads a selected Deep skill from the startup snapshot. Upstream `skills=`
+discovery and native filesystem reads own loading; actual reads retain
+requester-origin events/KPI as described in §8.109. ReAct preload, previews, filesystem permissions and
+existing checkpoint/HITL behavior remain unchanged. Historical preloaded
+messages already stored in a conversation are not deleted by this change.
+
+
+### 8.109 User-requested native Deep skill attribution (2026-10-09)
+
+A successful native parent/child SKILL.md read uses user origin when its mounted
+skill name matches the current typed user selection, and agent origin otherwise.
+This refines the attribution described in §8.108: it records the requester
+independently of who executes read_file. Same-exchange web HITL resumes carry the original name-only selection from user
+message metadata; fresh turns do not inherit it. No preload, extra read,
+instruction wrapper or selection-only count is added. Reference and
+continuation reads, failures and selections from other exchanges remain excluded
+from load attribution. ReAct loading and native discovery/content remain unchanged.
+
+### 8.110 Catalog procedures under platform instruction precedence (2026-10-12)
+
+The shipped agent-pod instructions clarify that matching slash invocations request
+application of a catalog skill before task tools, including required references.
+Configured catalog procedures loaded through their declared tool, and runtime
+ReAct preloads, can be followed under the platform hierarchy; external content
+remains data and cannot claim that exception through a skill name, path or tag.
+No permission or tool is added. Deep canonical input, upstream discovery and
+model-driven reads remain unchanged. The existing per-turn system context lists
+current selected skill names as user requests, without paths or bodies. Fresh
+turns without selections remove that reminder; same-exchange resumes retain it.
+Custom platform-prompt files need the same
+guidance and a coordinated pod restart. Acceptance remains in
+`openspec/specs/platform-agent-skills/spec.md`.
+
+### 8.111 Agent creation assistant (2026-10-08)
+
+Additive. `POST /agents/creation-assistant/draft` (body `AgentDraftPodRequest`:
+the control plane's `AgentDraftRequest`, up to 500 capabilities, plus the
+canonical `team_id`; no admin setting, extra fields ignored) returns
+`AgentDraftResult` (`name`, `role`, `description`, `system_prompt`,
+`capability_ids`). With an enabled ReBAC engine the
+pod checks `team.can_update_agents` on `team_id`. The pod then reads the admin
+settings (`CreationAssistantRuntimeSettings`: `creation_assistant_prompt`,
+`model_profile_id`, `reasoning_effort`: `off`/`low`/`medium`/`high`,
+`off` when omitted) from the control plane's
+`GET /teams/{team_id}/creation-assistant/settings` (`team_id` URL-encoded,
+2 s read timeout) with the caller's bearer,
+since a browser can reach the pod directly; no `platform.control_plane_url`
+or any read failure means the pod defaults (warning log, error type only).
+Team editors can read the admin's meta-prompt override and model id there.
+One structured call (JSON schema, retried once with tool calling only when
+that call is refused for its shape: HTTP 400, or a client-side
+`ValueError`/`NotImplementedError`; never on 401/403/429, connection errors or
+timeouts), through the new
+`RoutedChatModelFactory.build_chat_for_profile(profile_id, reasoning_effort="off")`,
+which returns the model, its name and, when it reasons, the same model without
+reasoning: the admin's chat profile, or the pod default when none is set or
+this pod has no chat profile by that id (one warning log saying which); no
+agent definition, turn binding or team routing.
+The effort applies to this call only, on a copy of the profile config:
+`off` or no `supports_thinking` strips the reasoning settings; a profile
+declaring two or more `reasoning_efforts` gets the nearest declared level
+(ties to the stronger); any other thinking profile sends, for every non-`off`
+value, its own `settings.reasoning_effort`, else its single declared level
+(`ModelProfile.reasoning_on_effort`); with neither it does not reason. The per-model
+`model_reasoning` toggle of agent chat is not consulted. A reasoning call
+passes the schema as a JSON-schema dict (thinking blocks beside the JSON text
+break the OpenAI SDK's Pydantic parse) and is hedged, never cut: still running
+after 23 s (`REASONING_HEDGE_AFTER_S`), the same call without reasoning starts
+beside it, the first usable draft wins and the other is cancelled; an unusable
+answer or a request refused as above before then starts the call without
+reasoning at once. Neither start happens with less than 12 s
+(`MIN_PLAIN_CALL_S`) left before the deadline: the reasoning call is then
+awaited alone, or its early failure returned
+(`event=creation_assistant_plain_skipped`); after the hedge one failure waits for the other call
+(`event=creation_assistant_call_failed call=reasoning|plain`, error type only).
+The meta-prompt (`fred_runtime/app/creation_assistant.py`, overridable by
+`creation_assistant_prompt`, `{language}` substituted) describes the four-block
+prompt assembly so the draft covers only the agent's own block, and asks for a
+name of about 20, a role of at most 40 and a one-sentence description of at
+most 140 characters.
+The pod strips reserved tags (`fred_sdk.contracts.prompt_utils.strip_reserved_prompt_tags`),
+collapses whitespace and cuts name, role and description at a word boundary to
+60 / 120 / 300 characters (`null` when empty), and drops ids outside the
+offered capabilities. One 50 s deadline covers the settings read, the model
+build and the structured calls (retries included): 504; no routable chat model or any failure
+to build it: 503; model error, unparseable or schema-invalid answer, or empty
+prompt: 502. An empty prompt (or reserved tags only) is an unusable answer, so
+a reasoning call returning one never wins the hedge.
+
+Model catalog: `ModelProfile` gains optional `reasoning_efforts`
+(`low`/`medium`/`high`, stored weakest first), the levels the provider really
+accepts, declared explicitly (never inferred from `settings.reasoning_effort`:
+Mistral rejects `low`/`medium` with a 400). Absent or a single level means
+on/off. The pod refuses to boot when it is empty, set without
+`supports_thinking`, or leaves out the profile's own `reasoning_effort`.
+`GET /agents/models-catalog` entries add `reasoning_efforts`
+(`{profile_id: [levels]}`: profiles with two or more, and `[]` for a thinking
+profile with no level to send, neither its own `reasoning_effort` nor a single
+declared level, which the control plane reports as not supporting reasoning),
+carried by the
+control plane as `CapabilityCatalogEntry.model_reasoning_efforts` (fred-sdk);
+older pods omit it, read as on/off. Only the creation assistant reads it; agent
+chat reasoning is unchanged.
+
+`GET /agents/platform-prompt` adds `creation_assistant_prompt` (the built-in
+meta-prompt) and `creation_assistant_prompt_revised_at` (ISO date,
+`CREATION_ASSISTANT_REVISED_AT`, pinned to the text's hash by a unit test);
+older pods omit both.
+
+Observability: no `llm.call_latency_ms` (agent model calls only; the draft
+bypasses the tracing middleware) but an
+`event=creation_assistant_completed` log line of counts and timings, and for
+every outcome (timeout and provider error included) `agent.creation_assistant_completed`
+(timer, ms) with the caller as actor (system actor when security is off), dims
+`team_id`, `model_name`, `status`, `calls` (`1`/`2`), `hedged` (`true`/`false`),
+`winner` (`reasoning`/`plain`/`none`), quantities `input_tokens`/`output_tokens`
+only when the model answered (an unusable answer included; summed over every
+call that answered; a cancelled call counts none, though the
+provider may bill it). The log line adds the same fields and `reasoning`
+(`used`/`off`/`fallback`).
+Never the description or any drafted text. Acceptance:
+`openspec/changes/add-agent-creation-assistant/`.
+
+### 8.112 Several prompt commands on a user turn (2026-10-13)
+
+Additive. `TurnCommand` (the `command` of `RuntimeContext`) and the stored
+`CommandDescriptor` (`ChatMetadata.command`) gain an optional `prompts` list:
+one entry per prompt command occurrence of the turn, in the order of the typed
+line, 1 to 16 entries (`TurnCommandPrompt` / `CommandPromptDescriptor`).
+
+| Field | Meaning |
+| --- | --- |
+| `command` | the command, without its slash (required, not empty) |
+| `prompt_id`, `prompt_name` | attribution, optional, never resolved at display time |
+| `draft_offset` | index of the command's `/` in `draft_text` (>= 0) |
+| `text_offset`, `text_length` | where that prompt's text sits in the turn's stored text (>= 0, >= 1) |
+
+The three positions are the client's string indices (UTF-16 code units), like
+`draft_command_offset`. The runtime stores and serves them and never compares
+them to the text: a Python length counts code points and would disagree on any
+character outside the basic plane. A reader checks that a list fits its turn
+before using it, and otherwise falls back to the single fields.
+
+The single fields of 8.98 are unchanged and describe the first entry
+(`command`, `prompt_id`, `prompt_name`, `draft_command_offset`);
+`appended_text` is the user's own text and `draft_text` the typed line. The
+list points into the stored text and copies none of it, so the turn's own text
+stays the record of what was sent, and the agent still receives nothing about
+commands.
+
+A request whose list is empty, longer than 16 or malformed is refused as
+invalid (422), like any other invalid request field. On the internal context
+path a malformed list drops the whole descriptor and the turn is stored as
+plain text, as in 8.98. No schema change: the descriptor is JSON in
+`session_history.metadata_json`.
+
+Mixed versions. No model on the path forbids unknown keys, so nothing is
+rejected. A pod whose fred-sdk predates the list ignores it: the turn runs on
+the full assembled text and is stored with the single fields only, so a client
+renders its first prompt command and shows the others as the `/name` the user
+typed. A pod rolled back after such rows were written keeps serving their
+list. Deploy runtime pods before the web client to avoid that rendering for
+the turns sent in between. Acceptance:
+`openspec/specs/platform-agent-skills/spec.md`.
+
+### 8.113 Capability config export and inline copy files (2026-10-11)
+
+Additive, extends §8.102. `POST /agents/capabilities/{id}/export-config` (body
+`CapabilityConfigExportRequest`: envelope, team and agent instance) returns
+`CapabilityConfigExportResult`: the upgraded envelope with scope-private settings reset
+and every `AssetKey` file as `files` (asset key → base64), read with the caller's token.
+404 when the capability is not installed, 422 when the config or a file cannot be read.
+`CapabilityConfigCopyRequest` gains optional `asset_files` (same shape): when set, the
+pod takes the files from it instead of reading the source instance (a key missing or
+not valid base64 → 422). Together they let a copy be prepared from a stored snapshot
+without access to the source team. Acceptance: `openspec/changes/add-agent-marketplace/`.
+
+### 8.114 Per-conversation model choice, instance recommendation and model-led reasoning (2026-10-09, #3029)
+
+Supersedes the team per-agent level of §8.32 and the agent gate and tri-state
+of §8.30. OpenSpec change `chat-model-and-reasoning-picker`; product side in
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 / §41 (2026-10-09 entries).
+
+**Chat model precedence**, highest first. `resolve_effective_chat_profile`
+(fred-sdk) stays the one shared implementation, used by the pod and by the
+control-plane effective-chat-model read:
+
+1. platform binding (`BoundRuntimeContext.platform_chat_model_binding`, §8.55),
+   short-circuited by the caller;
+2. pod per-agent override (`models_catalog.yaml` `agent_profile_overrides`);
+3. user's per-conversation choice — new `RuntimeContext.chat_profile_id`;
+4. instance recommendation — new `AgentTuning.recommended_chat_profile_id`;
+5. team default (`RuntimeContext.chat_default_profile_id`);
+6. pod default.
+
+`RuntimeContext.agent_profile_overrides`, `resolve_team_override` and
+`ChatProfileOrigin.TEAM_AGENT_OVERRIDE` are removed. `ChatProfileOrigin` and
+`ModelSelectionSource` gain `user_choice` and `instance_recommendation`; both
+are logged at info on `[V2][MODEL_ROUTING]`. No KPI label changes.
+`chat_profile_id` is bound on managed-instance turns only: a direct template
+run (`agent_id`, no `agent_instance_id`) drops it.
+
+**Trust boundary.**
+
+- `chat_profile_id` is client-forwarded. `RoutedChatModelFactory.select`
+  accepts it, and the recommendation, only when the profile is a known chat
+  profile, its model is in `usable_model_ids` (`can_use`; `None` = ReBAC off)
+  and not in `team_disabled_model_ids`. Otherwise it logs
+  `[V2][MODEL_ROUTING] <level> ignored: … reason=…` at debug (it runs on every
+  model call and names client input) and falls through. A stale or spoofed
+  choice never fails the turn. The resolver stays pure: the caller
+  passes `None` for an invalid level.
+- `BoundRuntimeContext.team_disabled_model_ids` and
+  `BoundRuntimeContext.recommended_chat_profile_id` are TRUSTED: filled from
+  the per-turn `ManagedAgentRuntimeBinding` (the disabled set) and the
+  server-resolved instance tuning (the recommendation). No `ctx.get` exists
+  for either, so a request body cannot set them. Empty / `None` outside
+  managed turns; an older control plane that omits the disabled set stays
+  compatible.
+- The team default keeps failing closed: unknown or non-chat →
+  `TeamRoutingProfileDriftError`; model team-disabled → `ModelNotUsableError`
+  (never a silent substitution). The team-disabled set narrows the user,
+  instance and team levels only; the pod default stays gated by `can_use`.
+- The choice applies to the top-level agent only. Registry children get a
+  `PortableContext` without it and keep their own resolution; native Deep
+  sub-agents reuse the parent's client.
+
+**Reasoning.**
+
+- Ceiling: on a managed instance turn, `reasoning_enabled_model_ids` is the
+  platform list from the runtime binding, with no agent gate
+  (`AgentTuning.reasoning_enabled` / `reasoning_default_on` are removed; the
+  `AgentDefinition` fields are deprecated no-ops). A turn without a managed
+  instance binds `[]`.
+- Tri-state redefined: only `reasoning is True` reasons, within the ceiling.
+  `False` and `None` both strip, so callers that send nothing
+  (OpenAI-compatible router, evaluation) never reason by accident. The field
+  stays `bool | None` for wire compatibility. `build_for_chat` strips unless
+  `reasoning is True`; the composer always sends an explicit value while its
+  row is shown.
+- The effort picker stays withdrawn (§8.48).
+
+**Deprecated for pod authors (design Q1, decided 2026-10-09).**
+`AgentDefinition.reasoning_enabled` / `reasoning_default_on` stay for one SDK
+minor as deprecated, inert fields: a definition setting them (class attribute
+or constructor) still loads, logs one deprecation warning per definition
+class, and changes nothing. They will be removed in a later minor. `AgentTuning`
+no longer has them and ignores them in stored payloads.
+Migration note: `docs/swift/ops/migrations/chat-model-and-reasoning-picker.md`.
+
+### 8.115 A model answer after a failed tool round is the final response (2026-10-14, #2588)
+
+**Supersedes the final-response half of §8.42 and §8.74.** Until now, when
+every tool call of a round failed, `react_runtime.py` suppressed the model's
+assistant deltas and replaced its final answer with the failed call's
+user-facing error text (often the generic "This step failed unexpectedly and
+could not be completed."). Honest answers were lost: Deep's filesystem gate
+(#2588), the per-turn tool-call cap (`ToolCallLimitMiddleware`, contrary to
+`tool_pacing.py`'s "a normal answer, never a crash"), and a tool's revision
+request flagged `is_error`.
+
+**Rule.** `FinalRuntimeEvent.content` is the model's non-empty answer written
+after the last error that claimed the final response; its deltas stream
+normally. The claimed error text (§8.74 boundary, unchanged) is used only when
+the model wrote nothing after the failure — a blank answer, or no model turn at
+all; the runtime logs `event=final_from_tool_error` then. The round rules of
+§8.42 still decide which error, if any, is the fallback.
+
+**Trust boundary.** The original override guarded against a model misreporting
+a failure. The same safeguards that already applied to partial failures since
+§8.42 now cover a wholly-failed round: every failed call keeps `is_error=True`
+and its bounded text on its tool row, and the read-only platform instructions
+forbid claiming a call not made or pasting a raw tool error. No policy-refusal
+marker is needed: refusals and genuine failures follow the same rule.
+
+**Scope.** `react_runtime.py` only (shared by ReAct and Deep). No event, SDK,
+OpenAPI or configuration change. Tests:
+`libs/fred-runtime/tests/test_react_tool_error_final_2244.py`.
+OpenSpec: `openspec/changes/keep-model-answer-after-failed-tool-round/`.
+Migration note: `docs/swift/ops/migrations/2588-keep-model-answer-after-failed-tool-round.md`.
+
+
+### 8.116 Tabular discovery includes authorized conversation attachments (2026-10-12)
 
 `list_tabular_documents` combines enabled corpus documents and ready CSV/Excel
 attachments of the current conversation. The existing MCP wrapper obtains the

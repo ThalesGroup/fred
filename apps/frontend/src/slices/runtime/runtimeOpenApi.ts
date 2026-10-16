@@ -35,6 +35,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.capabilityConfigCopyRequest,
       }),
     }),
+    exportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPost: build.mutation<
+      ExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostApiResponse,
+      ExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/${queryArg.capabilityId}/export-config`,
+        method: "POST",
+        body: queryArg.capabilityConfigExportRequest,
+      }),
+    }),
     validateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPost: build.mutation<
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse,
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg
@@ -72,6 +82,16 @@ const injectedRtkApi = api.injectEndpoints({
       GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiArg
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/checkpoints/${queryArg.sessionId}` }),
+    }),
+    draftAgentPodV1AgentsCreationAssistantDraftPost: build.mutation<
+      DraftAgentPodV1AgentsCreationAssistantDraftPostApiResponse,
+      DraftAgentPodV1AgentsCreationAssistantDraftPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/creation-assistant/draft`,
+        method: "POST",
+        body: queryArg.agentDraftPodRequest,
+      }),
     }),
     evaluateAgent: build.mutation<EvaluateAgentApiResponse, EvaluateAgentApiArg>({
       query: (queryArg) => ({
@@ -167,6 +187,27 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/messages` }),
     }),
+    getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/skills`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getRuntimeInstanceSkillDetail: build.query<
+      GetRuntimeInstanceSkillDetailApiResponse,
+      GetRuntimeInstanceSkillDetailApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/skills/${queryArg.skillName}`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     listAgentTemplatesPodV1AgentsTemplatesGet: build.query<
       ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse,
       ListAgentTemplatesPodV1AgentsTemplatesGetApiArg
@@ -218,6 +259,12 @@ export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPos
   capabilityId: string;
   capabilityConfigCopyRequest: CapabilityConfigCopyRequest;
 };
+export type ExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostApiResponse =
+  /** status 200 Successful Response */ CapabilityConfigExportResult;
+export type ExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostApiArg = {
+  capabilityId: string;
+  capabilityConfigExportRequest: CapabilityConfigExportRequest;
+};
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse =
   /** status 200 Successful Response */ StoredCapabilityConfig;
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg = {
@@ -242,6 +289,11 @@ export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiResponse =
   /** status 200 Successful Response */ CheckpointThreadDetail;
 export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiArg = {
   sessionId: string;
+};
+export type DraftAgentPodV1AgentsCreationAssistantDraftPostApiResponse =
+  /** status 200 Successful Response */ AgentDraftResult;
+export type DraftAgentPodV1AgentsCreationAssistantDraftPostApiArg = {
+  agentDraftPodRequest: AgentDraftPodRequest;
 };
 export type EvaluateAgentApiResponse = /** status 200 Successful Response */ EvalTrace;
 export type EvaluateAgentApiArg = {
@@ -338,6 +390,17 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
   sessionId: string;
 };
+export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetRuntimeInstanceSkillsApiArg = {
+  agentInstanceId: string;
+  teamId: string;
+};
+export type GetRuntimeInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
+export type GetRuntimeInstanceSkillDetailApiArg = {
+  skillName: string;
+  agentInstanceId: string;
+  teamId: string;
+};
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
@@ -410,11 +473,29 @@ export type CapabilityConfigCopyResult = {
   schema_version: string;
 };
 export type CapabilityConfigCopyRequest = {
+  /** Configuration files by asset key, base64-encoded. When set, the pod reads the files from here instead of the source agent instance, so a copy can be prepared from an exported snapshot. */
+  asset_files?: {
+    [key: string]: string;
+  } | null;
   config: StoredCapabilityConfig;
   source_agent_instance_id: string;
   source_team_id: string;
   target_agent_instance_id: string;
   target_team_id: string;
+};
+export type CapabilityConfigExportResult = {
+  config?: {
+    [key: string]: any;
+  };
+  files?: {
+    [key: string]: string;
+  };
+  schema_version: string;
+};
+export type CapabilityConfigExportRequest = {
+  agent_instance_id: string;
+  config: StoredCapabilityConfig;
+  team_id: string;
 };
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
@@ -451,6 +532,30 @@ export type CheckpointThreadDetail = {
   checkpoints: CheckpointEntry[];
   session_id: string;
 };
+export type AgentDraftResult = {
+  /** Recommended capabilities, always a subset of the request's. */
+  capability_ids?: string[];
+  /** One sentence; None when the model gave none. */
+  description?: string | null;
+  name?: string | null;
+  role?: string | null;
+  system_prompt: string;
+};
+export type AgentDraftCapabilityCandidate = {
+  description?: string;
+  id: string;
+  name: string;
+};
+export type AgentDraftPodRequest = {
+  agent_name?: string | null;
+  agent_role?: string | null;
+  capabilities?: AgentDraftCapabilityCandidate[];
+  /** The user's own words: role, mission, audience, constraints. */
+  description: string;
+  /** UI language (BCP 47, e.g. 'fr', 'en'); the prompt is written in it. */
+  language?: string;
+  team_id: string;
+};
 export type EvalStep = {
   arguments?: {
     [key: string]: any;
@@ -485,25 +590,37 @@ export type ConversationTurn = {
   agent_response: string;
   user_message: string;
 };
+export type TurnCommandPrompt = {
+  command: string;
+  draft_offset: number;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  text_length: number;
+  text_offset: number;
+};
 export type TurnCommand = {
   appended_text?: string;
   command: string;
+  draft_command_offset?: number | null;
+  draft_text?: string | null;
   prompt_id?: string | null;
   prompt_name?: string | null;
+  prompts?: TurnCommandPrompt[] | null;
+};
+export type SkillInvocation = {
+  name: string;
 };
 export type RuntimeContext = {
   access_token?: string | null;
   access_token_expires_at?: number | null;
   agent_instance_id?: string | null;
-  /** Team-authored per-agent model-profile overrides (`agent_id -> profile_id`), same resolution/precedence notes as chat_default_profile_id above. `None`, not `{}`, when unset — matches every other Group C field so `model_dump(exclude_none=True)` (`to_legacy_context`) omits it for the common case of no team policy. For the `chat` capability, a platform-operator binding (`BoundRuntimeContext.platform_chat_model_binding`, resolved trusted per turn — never on this client-forwarded context) wins over this field unconditionally when set — that is the feature's intended precedence, not a bug: the platform operator is the authority on what is actually reachable/licensed in a given deployment; a pod-local ops-authored override can never beat that. */
-  agent_profile_overrides?: {
-    [key: string]: string;
-  } | null;
   /** Whether this interactive conversation offers the agent's ask_user tool. True mounts it, False disables it for new turns, and None means no interactive control was offered. */
   ask_user?: boolean | null;
   attachments_markdown?: string | null;
   /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
+  /** The user's per-conversation chat model choice: a chat profile id picked in the composer and sent on every turn. Client-forwarded, so the pod accepts it only if the profile is a known chat profile whose model is in `usable_model_ids` and not in `team_disabled_model_ids`; otherwise it is ignored and logged. Ranks below the platform binding and the pod's per-agent override, above the instance recommendation and the team default. */
+  chat_profile_id?: string | null;
   command?: TurnCommand | null;
   context_prompt_text?: string | null;
   correlation_id?: string | null;
@@ -515,16 +632,13 @@ export type RuntimeContext = {
   language?: string | null;
   /** The user's per-question reasoning choice (REASON-01 level 4, `MODEL-REASONING-ENABLEMENT-RFC.md` §7), set by the composer toggle. Travels per turn on this context exactly like `search_policy`/`search_rag_scope` — reasoning is a property of the model call, not a tool, so it is a platform chat option and NOT a capability's `turn_options` slice.
     
-    TRI-STATE, and the distinction matters:
-    - `None` — the agent does not offer the choice (its author left reasoning off), so no per-question decision was made and levels 1-2 alone decide. This is the default and the pre-REASON-01 behaviour.
-    - `False` — the agent offers it and the user left it off: the turn must NOT reason, even on a model whose reasoning is enabled platform-wide.
-    - `True` — the user asked for it. Permission to reason, never a guarantee: level 2 remains a ceiling this cannot raise (§5.3). */
+    Only `True` reasons, and only on a model within `reasoning_enabled_model_ids` (a ceiling this cannot raise). `False` and `None` both mean no reasoning: callers that send nothing (OpenAI-compatible, evaluation) never reason by accident. Kept `bool | None` for wire compatibility. */
   reasoning?: boolean | null;
   /** kind="model" capability ids whose reasoning a platform admin has switched ON (`MODEL-REASONING-ENABLEMENT-RFC.md` §5, REASON-01), resolved by control-plane at prepare-execution and forwarded unchanged for the rest of the session — same channel and same 'not re-fetched per turn' contract as chat_default_profile_id above. GLOBAL, not per team: this is an activation ('does this model run with reasoning'), not a permission — per-team model authorization is the separate, untouched `usable_model_ids` (§5.1/§5.4).
     
     OFF BY DEFAULT, and this is a real semantic difference from `usable_model_ids`: there, `None` means 'unrestricted'; here `None` and `[]` mean the same thing as any absent id — reasoning does NOT run. A model reasons only by being named in this list (§5.6). RoutedChatModelFactory enforces it by STRIPPING the reasoning settings at client construction (§5.6.2).
     
-    As BOUND, this is the EFFECTIVE ceiling, not the raw platform list: `agent_app` intersects it with level 3 (the agent's own `AgentTuning.reasoning_enabled`, resolved server-side) before building the RuntimeContext, so an agent whose author left reasoning off carries an empty list whatever the request said (§14.5). What the FRONTEND sends is the platform list alone — the two differ on purpose, and the pod-side one is the one that counts. */
+    As BOUND on a managed instance turn, this is the platform list resolved server-side on the runtime binding; a turn without a managed instance binds an empty list. No agent-level setting narrows it. */
   reasoning_enabled_model_ids?: string[] | null;
   refresh_token?: string | null;
   search_policy?: ("strict" | "hybrid" | "semantic") | null;
@@ -533,6 +647,8 @@ export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
   selected_document_uids?: string[] | null;
   session_id?: string | null;
+  skill?: SkillInvocation | null;
+  skills?: SkillInvocation[] | null;
   team_id?: string | null;
   template_agent_id?: string | null;
   trace_id?: string | null;
@@ -779,10 +895,20 @@ export type NodeErrorRuntimeEvent = {
   routed_to: string;
   sequence?: number;
 };
+export type SkillLoadAttribution = {
+  agent_id: string;
+  child?: boolean;
+  child_id?: string | null;
+  load_id: string;
+  name: string;
+  origin: "user" | "agent";
+  revision: string;
+};
 export type StatusRuntimeEvent = {
   detail?: string | null;
   kind?: "status";
   sequence?: number;
+  skill_load?: SkillLoadAttribution | null;
   status: string;
 };
 export type ThoughtDeltaEvent = {
@@ -876,6 +1002,9 @@ export type ModelCatalogEntry = {
   name: string;
   profile_ids?: string[];
   provider: string;
+  reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
@@ -886,6 +1015,8 @@ export type ModelCatalogResponse = {
   models: ModelCatalogEntry[];
 };
 export type PlatformPromptFileResponse = {
+  creation_assistant_prompt: string;
+  creation_assistant_prompt_revised_at: string;
   platform_instructions: string;
   platform_prompt: string;
 };
@@ -903,11 +1034,23 @@ export type Channel =
   | "system_note"
   | "hitl_request"
   | "hitl_response";
+export type CommandPromptDescriptor = {
+  command: string;
+  draft_offset: number;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  text_length: number;
+  text_offset: number;
+  [key: string]: any;
+};
 export type CommandDescriptor = {
   appended_text?: string;
   command: string;
+  draft_command_offset?: number | null;
+  draft_text?: string | null;
   prompt_id?: string | null;
   prompt_name?: string | null;
+  prompts?: CommandPromptDescriptor[] | null;
   [key: string]: any;
 };
 export type ChatTokenUsage = {
@@ -1021,6 +1164,21 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
+export type SkillSummary = {
+  argument_hint?: string | null;
+  description: string;
+  name: string;
+};
+export type SkillCatalog = {
+  revision?: string;
+  skills?: SkillSummary[];
+  supported?: boolean;
+};
+export type SkillDetail = {
+  content: string;
+  revision: string;
+  skill: SkillSummary;
+};
 export type AssetSlot = {
   accepted_types: string[];
   key: string;
@@ -1114,6 +1272,9 @@ export type CapabilityCatalogEntry = {
   model_chat_profile_ids?: string[];
   model_display_name?: string | null;
   model_profile_ids?: string[];
+  model_reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;
@@ -1167,12 +1328,8 @@ export type AgentTuning = {
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
-  /** Does a NEW conversation start with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control — where the switch starts, never where it stays. Inert unless `reasoning_enabled`; kept rather than reset so withdrawing and restoring the offer does not lose the author's choice. */
-  reasoning_default_on?: boolean;
-  /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
-    
-    True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
-  reasoning_enabled?: boolean;
+  /** The chat profile this instance's conversations start on, set by the agent's editor. `None` follows the team default, including later changes to it. Ranks above the team default and below the user's per-conversation choice; the pod ignores it when its model is not usable by the team or is team-disabled. */
+  recommended_chat_profile_id?: string | null;
   /** The agent's mandatory role for discovery. */
   role: string;
   /** Capability activation policy (RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises. */
@@ -1232,6 +1389,7 @@ export const {
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
   useCopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostMutation,
+  useExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostMutation,
   useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,
   useListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useLazyListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
@@ -1240,6 +1398,7 @@ export const {
   useDeleteCheckpointThreadPodV1AgentsCheckpointsSessionIdDeleteMutation,
   useGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
   useLazyGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
+  useDraftAgentPodV1AgentsCreationAssistantDraftPostMutation,
   useEvaluateAgentMutation,
   useExecuteAgentMutation,
   useExecuteAgentStreamMutation,
@@ -1257,6 +1416,10 @@ export const {
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
+  useGetRuntimeInstanceSkillsQuery,
+  useLazyGetRuntimeInstanceSkillsQuery,
+  useGetRuntimeInstanceSkillDetailQuery,
+  useLazyGetRuntimeInstanceSkillDetailQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useListWebResearchActivityPodV1AgentsWebResearchActivityGetQuery,

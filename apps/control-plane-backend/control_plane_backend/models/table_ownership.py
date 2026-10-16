@@ -38,16 +38,22 @@ import fred_core.users.user_models  # noqa: F401 — registers users with CoreBa
 # cleanup could make lazy, leaving a claimed table out of the metadata and
 # turning it into an autogenerate DROP proposal.
 import control_plane_backend.models.agent_instance_models  # noqa: F401
+
+# codeql[py/unused-import]
+import control_plane_backend.models.agent_marketplace_models  # noqa: F401 — registers agent_marketplace_* with Base
 import control_plane_backend.models.announcement_models  # noqa: F401 — registers platform_announcement with Base
 import control_plane_backend.models.bootstrap_models  # noqa: F401 — registers platformbootstrap with Base
 import control_plane_backend.models.capability_settings_models  # noqa: F401
 import control_plane_backend.models.knowledge_base_models  # noqa: F401
+
+# codeql[py/unused-import]
+import control_plane_backend.models.marketplace_settings_models  # noqa: F401 — registers platform_marketplace_settings with Base
 import control_plane_backend.models.model_reasoning_models  # noqa: F401
 
 # codeql[py/unused-import]
 import control_plane_backend.models.platform_default_team_models  # noqa: F401 - registers platform_default_teams with Base
 import control_plane_backend.models.platform_model_binding_models  # noqa: F401 — registers platform_model_binding with Base
-import control_plane_backend.models.platform_prompt_models  # noqa: F401 — registers platform_prompt with Base
+import control_plane_backend.models.platform_prompt_models  # noqa: F401 — registers platform_prompt / creation_assistant_settings with Base
 import control_plane_backend.models.platform_ui_settings_models  # noqa: F401 — registers platform_ui_settings with Base
 import control_plane_backend.models.prompt_models  # noqa: F401
 import control_plane_backend.models.purge_queue_models  # noqa: F401
@@ -70,6 +76,7 @@ SHARED_CORE_TABLES: frozenset[str] = frozenset(
         "teammetadata",
         "platform_access_settings",
         "platform_access_users",
+        "platform_access_removals",
         "platform_access_links",
     }
 )

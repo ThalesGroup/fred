@@ -384,6 +384,55 @@ Do not model platform-owned selectors as generic tuning fields. In particular:
 - `require_tools: list[str]` — tool names the agent requires
 - `config_fields: list[ManagedAgentFieldSpec]` — configurable parameters owned by the MCP tool and persisted via `mcp_config_values`
 
+#### Skill catalog for a managed instance
+
+`GET /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills`
+requires `CAN_USE_TEAM_AGENTS`, verifies the instance belongs to that team and
+is enabled, and proxies only its enabled `source_runtime_id`. It forwards the
+verified bearer identity to that runtime's authenticated metadata route; it never
+merges other pod catalogs. `SkillCatalog` contains only support, revision and
+name/description and optional advisory `argument_hint` metadata (defined by the
+runtime contract). A 404 from an older runtime means unsupported during
+rolling upgrades; an unavailable source and invalid upstream metadata fail safely.
+The composer fetches the actual selected instance and ignores stale data from
+previous selections. Runtime selection and load attribution are defined in the
+runtime execution contract.
+
+`GET /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills/{skill_name}`
+provides a separate `SkillDetail` preview with the same `CAN_USE_TEAM_AGENTS`, team,
+instance availability and configured-source checks. It forwards verified identity,
+validates the typed response and selected skill name, and never falls back to another
+runtime. Runtime 404 remains an unavailable preview; malformed responses return 502.
+Only opening the inline skill label requests content. Preview leaves the composer
+and execution state intact and reads the current runtime snapshot. Technical
+version details are not exposed in the user preview.
+
+Successful `read_skill_file` trace activation previews the exact stored tool
+result in the same resizable right-hand panel (2026-10-07), replacing its current
+skill/file view. It performs no new read and leaves the draft intact; activating
+the same reference again closes it. Pending/failed reads retain ordinary trace
+details. Markdown is sanitized; other accepted text references are escaped.
+Successful native Deep `read_file` references under `/skills/<name>/` use the
+same panel. They are labeled as excerpts and render the exact returned window,
+including native pagination/line information, as escaped text.
+
+`GET /control-plane/v1/kpi/presets/skill_usage` reports successful procedure loads
+by skill and user/model origin on the existing date range. It shares KPI scope:
+`can_read_members` for an explicit team, `can_observe_platform` for the platform.
+The typed response contains `rows` (`skill_name`, `user_count`, `model_count`,
+`total`), `since`, `until` and `truncated`. It returns at most 100 skills ranked
+by total descending/name ascending. Platform, team and personal dashboards reuse a dedicated subsection, sortable table and
+five-minute query cache. Each space shows only its matching skill subsection;
+team display retains existing elevated-role gating and does not query personal
+skill usage.
+`GET /control-plane/v1/kpi/presets/user_skill_usage` (2026-10-07) returns the same
+shape for the authenticated user's own conversations across teams. Like existing
+personal presets it requires authentication, filters `dims.user_id` server-side,
+and rejects team parameters; user/model columns describe invocation origin,
+not which user's conversations are included. Members can view personal usage
+without elevated team permissions.
+Collection starts with instrumentation deployment, with no historical backfill.
+
 ### 3.3 Runtime binding stays internal
 
 `RuntimeBinding` is not a primary frontend product contract.
@@ -409,12 +458,11 @@ Execution semantics:
   - ReAct/Deep runtime also mirrors non-blank `prompts.system` onto
     `ReActAgentDefinition.system_prompt_template`
   - blank value means "keep the author-defined default prompt"
-  - Fred's shared global base prompt (the Mermaid output contract) is **not**
-    part of this editable value or the author-defined default. It is appended by
-    the runtime at execution time, after the effective/overridden prompt
-    (RUNTIME-09; see RUNTIME-EXECUTION-CONTRACT §8.12), so it applies uniformly
-    even when an operator overrides `prompts.system` and never appears in the
-    agent editor.
+  - Platform skill bodies, including Mermaid diagram rules, are **not** part
+    of this editable value or the author-defined default. Configured runtime
+    catalogs advertise metadata; explicit user or model loading supplies the
+    instructions through the ordinary conversation context. Overriding
+    `prompts.system` does not alter the runtime catalog or skill-loading tools.
 - Graph agents read prompt and setting values through `context.tuning_values`
 - tool-owned chat affordances are computed on the pod by
   `capability.chat_controls(config)` and shipped as
@@ -674,6 +722,7 @@ managed agent instances:
 Rules:
 
 - prompt ownership is team-scoped
+- `skill` is reserved for platform skills; command assignment/copy rules and legacy handling are defined in `PROMPTS.md` §3.2
 - the reserved system team `personal` is the personal prompt library; do not
   introduce a parallel user-scoped prompt API
 - prompt `text` uses the same template-validation contract as agent
@@ -1202,8 +1251,7 @@ Live impact before the fix: 6 frontend routes and 3 in-page controls were
 unreachable/disabled for all users.
 
 `PermissionSummary` now carries exactly `is_platform_admin` and
-`is_platform_observer` — unchanged, already OpenFGA-derived since review item
-4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
+`is_platform_observer` — unchanged, already OpenFGA-derived since review item 4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
 Team-scoped gating was never this field's job; it goes through
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
 by every team-fetching endpoint and unaffected by this change.
@@ -2121,6 +2169,10 @@ freshness treatment — see `RUNTIME-EXECUTION-CONTRACT.md` §8.55.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 
+**2026-10-09 — retired by §63.** The per-agent offer and default below, and
+the Amendment B, Capabilities-tab and #2473 addenda, no longer apply: the
+platform activation alone gates reasoning, and the team sets per-model defaults.
+
 Levels 3-4 shipped (`RUNTIME-EXECUTION-CONTRACT.md` §8.30). Reasoning is **not**
 a capability (RFC §15, Amendment A) — it was built as one and withdrawn before
 release, because an agent does not _use_ reasoning the way it uses a tool.
@@ -2475,6 +2527,12 @@ values inside `series`/`rows`.
 
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118; simplified 2026-08, `llm-routing-simplify`)
 
+**2026-10-09 — amended by §63.** Per-agent overrides removed, team disabled
+models and reasoning defaults added, write gate narrowed to `team_admin`. The
+data model, resolution, authorization and frontend paragraphs below describe
+the pre-§63 policy where they mention `agent_profile_overrides` or
+`team_editor` writes.
+
 **2026-08-16 — chat profile typing (#2365).** The pod catalog now projects
 `model_chat_profile_ids` explicitly alongside the complete
 `model_profile_ids` inventory. Team picker, universal multi-pod intersection,
@@ -2557,9 +2615,10 @@ panel with every input disabled (read-only), not a second component.
 **Explicit non-goals (V1):** per-user routing inside a shared multi-member
 team (distinct from personal-space support, which is just a team routing
 policy scoped to a one-member team), model temperature/timeout tuning, a
-per-message composer picker, direct `models_catalog.yaml` editing from the
-product. Per-agent routing (`agent_profile_overrides`) is in scope, not a
-non-goal.
+per-message composer picker (**reversed 2026-10-09, §63**), direct
+`models_catalog.yaml` editing from the product. Per-agent routing
+(`agent_profile_overrides`) was in scope until §63 replaced it with the
+instance recommended model.
 
 ## 38. Contract Notes — team image renamed banner → avatar (2026-08-08, #2300)
 
@@ -2774,7 +2833,7 @@ deciding level is visible.
 elevated-role gate** §37's policy reads use. Anyone entitled to hold a
 conversation with an agent is entitled to know which model answers them, and
 that is safe precisely because the response carries no policy detail (above).
-Editing the policy stays `team_editor`-only.
+Editing the policy is `team_admin`-only since §63.
 
 **`reasoning_enabled` and the reasoning toggle.** The `reasoning_toggle` control
 on `ExecutionPreparation` answers "the platform enabled reasoning on _some_
@@ -2830,7 +2889,8 @@ error — the same diagnosability rule REASON-01 §8 applies to the reasoning
 control. Always `true` when a platform binding decided, which bypasses team
 enablement by design (§40's ReBAC exemption).
 
-**Explicit non-goals:** making the chip a model _picker_ (it stays read-only),
+**Explicit non-goals:** making the chip a model _picker_ (**reversed
+2026-10-09, §63**: the chip lists `selectable_models`),
 surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
@@ -4074,7 +4134,6 @@ version: existing admins become pending at the next startup and see the charter
 when they open their team. Unsetting the version promotes every pending admin
 at the next startup.
 
-
 ## 55. Contract Notes - platform announcements (2026-09-25, issue #2805)
 
 **What it is.** A platform admin authors announcements at runtime; every
@@ -4084,13 +4143,13 @@ configuration and is **removed** — see "Removal" below.
 
 **Model.** One `platform_announcement` row per announcement.
 
-| Field                                                | Meaning                                                                                        |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `severity`                                           | `info \| warning \| error \| success`, the same `Literal` as `platform.frontend.upload_warning`. Fixes the banner's colour and icon; neither is separately authorable. |
-| `title`, `description_short`, `description_long`     | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
-| `enabled`                                            | Whether it is delivered. Created disabled.                                                     |
-| `dismissible`                                        | Whether a user may close the banner.                                                           |
-| `content_version`                                    | Bumped when a reader-visible field changes — severity, any text, or `dismissible` — and when a disabled announcement is enabled again. **Never** when one is disabled. |
+| Field                                            | Meaning                                                                                                                                                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `severity`                                       | `info \| warning \| error \| success`, the same `Literal` as `platform.frontend.upload_warning`. Fixes the banner's colour and icon; neither is separately authorable.                                                          |
+| `title`, `description_short`, `description_long` | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
+| `enabled`                                        | Whether it is delivered. Created disabled.                                                                                                                                                                                      |
+| `dismissible`                                    | Whether a user may close the banner.                                                                                                                                                                                            |
+| `content_version`                                | Bumped when a reader-visible field changes — severity, any text, or `dismissible` — and when a disabled announcement is enabled again. **Never** when one is disabled.                                                          |
 
 **`content_version` is the dismissal key.** The frontend records a dismissal in
 `localStorage` as `<id>@<content_version>`, so bumping the version is the only
@@ -4108,17 +4167,17 @@ banner show again.
 
 **Endpoints.**
 
-| Method | Path                                                             | Permission           |
-| ------ | ---------------------------------------------------------------- | -------------------- |
-| GET    | `/announcements/active`                                          | authenticated        |
-| GET    | `/admin/platform/announcements`                                  | `can_manage_platform` |
-| POST   | `/admin/platform/announcements`                                  | `can_manage_platform` |
-| PUT    | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
-| PUT    | `/admin/platform/announcements/{id}/enabled`                     | `can_manage_platform` |
-| DELETE | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
+| Method | Path                                         | Permission            |
+| ------ | -------------------------------------------- | --------------------- |
+| GET    | `/announcements/active`                      | authenticated         |
+| GET    | `/admin/platform/announcements`              | `can_manage_platform` |
+| POST   | `/admin/platform/announcements`              | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}`         | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}/enabled` | `can_manage_platform` |
+| DELETE | `/admin/platform/announcements/{id}`         | `can_manage_platform` |
 
-`/announcements/active` returns the enabled set and is gated by authentication
-only — an announcement is content every user is meant to see. Every admin
+`/announcements/active` returns the enabled banners (patch notes excluded since
+section 61) and is gated by authentication only — an announcement is content every user is meant to see. Every admin
 mutation emits an audit record (`platform.announcement.created` / `.updated` /
 `.toggled` / `.deleted`).
 
@@ -4163,7 +4222,9 @@ uncapped.
 **Error shape — one new code.** A prompt write that collides on the command
 returns 409 with an **object** detail, `{"code": "prompt_command_conflict",
 "message": ...}`, so a form can mark the command field rather than the name.
-Every other prompt error keeps the plain-string detail. The two conflicts are
+Reserved `skill` assignment also returns an object detail with
+`prompt_command_reserved`; legacy and batch-import rules are in `PROMPTS.md`
+§3.2. Other prompt errors keep plain-string detail. Name and command conflicts are
 told apart by asking the database which constraint fired, not by parsing the
 driver's message; a name collision wins when both apply.
 
@@ -4181,7 +4242,7 @@ about prompts.
 
 **What it is.** A platform admin sets the UI theme users get by default and the
 themes withdrawn from their choice. Theme ids are opaque to the control plane:
-the frontend owns the theme catalog and ignores ids it does not ship.
+the frontend owns the theme catalog (shipped themes plus valid deployment ZIP entries) and ignores ids outside it.
 
 **Model.** One `platform_ui_settings` row at most (`id = 'default'`, CHECK
 constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
@@ -4203,8 +4264,10 @@ constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
 `hidden_themes`) on the unauthenticated `GET /frontend/config`, omitted while
 no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
 admin-authored content. The frontend caches it so its boot script can apply the
-theme before the next load's config arrives; a change applies to each user at
-their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
+theme before the next load's config arrives. A running client refreshes the
+public config after its own admin save, on window focus and every 60 seconds,
+keeping the last good settings on failure. Full behavior: OpenSpec
+`platform-ui-theme-settings`.
 
 ## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
 
@@ -4220,7 +4283,7 @@ the audit event.
   `template_enabled` and `missing_capabilities` (`id`, `name` i18n key).
   Advisory; the copy re-checks everything.
 - `POST …/agent-instances/{id}/copy` with `AgentCopyRequest`
-  (`target_team_ids`, optional `display_name`) → `AgentCopyResponse`, one
+  (`target_team_ids`, optional `display_name` and `locale`) → `AgentCopyResponse`, one
   `AgentCopyResult` per distinct target (`agent` or `error`, plus
   `dropped_capabilities` and `notices`, each naming the capability by `id` and
   `name` i18n key; a notice says what an editor must redo there). Each target needs `team.can_update_agents` and is
@@ -4231,7 +4294,7 @@ the audit event.
   `error_code: "agent_name_conflict"` on its result (§60).
 
 **What a copy carries.** Name (kept when free in the destination, else the
-first free `<name>_imported-<n>`), description, template, tuning values and
+first free `<name> (copy <n>)`, n from 1, see §65 Names), description, template, tuning values and
 reasoning settings. Each selected capability the destination can use goes
 through the pod's `copy-config` (`RUNTIME-EXECUTION-CONTRACT.md` §8.102):
 scope-private settings are reset when the team changes, configuration files
@@ -4270,7 +4333,6 @@ display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
 OpenSpec `user-profile-picture`.
 
-
 ## 60. Contract Notes — agent names unique per team (2026-10-11, #3042)
 
 **Rule.** Two agents of one team or personal space cannot share a name. Names
@@ -4285,13 +4347,471 @@ the unique index `uq_agent_instance_team_name` on
 agent's own name in another case is accepted. A Duplicate reports the same
 code as `AgentCopyResult.error_code`. Create checks before any pod call.
 
-**Resolutions.** A copy to another team keeps `<name>_imported-<n>`, compared
-the same way, and retries once with the next free name if a concurrent copy
-took it. A platform import renames a conflicting agent the same way.
+**Resolutions.** A copy to another team takes the first free `<name> (copy <n>)`
+(n from 1, word per §65 Names; `<name>_imported-<n>` before #3044), compared the same way, and
+retries once with the next free name if a concurrent copy took it. A platform
+import renames a conflicting agent the same way.
 
 **Upgrade.** Migration `a4d85307ea0e` trims every name and renames later
 duplicates `<name> (2)`, `<name> (3)`… in creation order (the oldest keeps its
 name) before creating the index. Full behavior: OpenSpec `agent-names`.
+
+## 61. Contract Notes - patch-note announcements and activation history (2026-10-09)
+
+Extends section 55. OpenSpec change `add-patch-note-announcements`.
+
+**Kind.** `platform_announcement.kind` is `banner` (default, every pre-existing
+row) or `patch_note`, fixed at creation (an update changing it is refused,
+`422`). `Announcement.kind` is always present; `AnnouncementWriteRequest.kind`
+defaults to `banner`. A patch note keeps one markdown body per locale in
+`description_long` (same 20,000-character cap); the server stores it with
+`severity="info"`, `dismissible=true` and an empty `description_short`. Its
+`title` is a plain-text locale map validated like a banner's (200 characters),
+and must cover exactly the locales that have a body.
+
+**One active patch note; dismissal and re-show.** Superseded by 61.1
+(2026-10-13): any number of patch notes can be enabled, and the per-note
+dismissals, the unique index, its `409` and `dismissal_count` are gone. Toggle,
+content update and delete still read the row `FOR UPDATE`.
+
+**Activation history.** Superseded by 61.1: one line per exposure
+(`platform_announcement_exposure`) instead of one event per change.
+
+### 61.1 Patch-note packages, order and exposure history (2026-10-13)
+
+OpenSpec change `browse-patch-note-history`. Replaces "one active patch note,
+shown when enabled, dismissible for good" and the event history.
+
+**Working area.** The `patch_note` rows of `platform_announcement` are what
+administrators edit; users never read them. `enabled` means "included in the
+next announcement": any number can be enabled, a patch note is created
+disabled, and toggling writes no history. Its `content_version` keys nothing.
+
+**Order.** `Announcement.position` (`platform_announcement.position`, nullable
+integer): 1 at the top for a patch note, `null` for a banner. A new patch note
+takes position 1 and the others move down. `GET /admin/platform/announcements`
+returns `Announcement[]`: banners newest first, then patch notes by position.
+
+**Announcement = frozen package.** Announcing snapshots the enabled patch
+notes, in position order, as `PatchNoteSnapshot { id, title, description_long }`
+with every locale they hold. Users read that package, and only that, until the
+next announcement or a withdrawal; later edits, reorders, toggles and deletions
+do not reach it. Every announcement is a new package, pending again for every
+user. Withdrawing leaves no package in effect: the user read is empty and
+nothing is pending.
+
+The announce request carries the ids the administrator confirmed, in order;
+the package is frozen only when the enabled patch notes are exactly that list,
+so a change made meanwhile by someone else is refused, not announced. A
+package holds at most 10 patch notes (`MAX_PATCH_NOTES_PER_ANNOUNCEMENT`).
+Announce, withdraw, create and reorder take one transaction-scoped advisory
+lock on PostgreSQL, so at most one package is ever in effect.
+
+**Exposures.** `platform_announcement_exposure` holds one row per exposure, no
+foreign key so it outlives the announcement: `id`, `kind`, `announcement_id`
+(the banner; for a package, its first patch note), `label` and `severity` as
+they were at the start, `actor_uid`, `activated_at`, `deactivated_at` (null
+while it lasts), and for a package `note_count` and `package`. A banner's row
+starts when it is enabled (toggle, or created enabled) and ends when it is
+disabled or deleted. A package's row starts at the announcement and ends when
+the next one replaces it or when it is withdrawn. The announcement *in effect*
+is the open `patch_note` row with a non-null `note_count`. Rows are written in
+the same transaction as the change.
+
+**Seen.** `platform_announcement_seen`, one row per user (`user_id`,
+`announcement_id`, `seen_at`), replaces `platform_announcement_dismissal`. An
+announcement is pending for a user when one is in effect, it opens the dialog
+(every package does, except the one the upgrade creates, see below) and the
+user's row does not name it. A record never moves a user back to an older
+announcement (one guarded upsert). Rows are removed with the user
+(`DELETE /users/{id}`).
+
+| Method | Path                                                         | Permission            | Request / response |
+| ------ | ------------------------------------------------------------ | --------------------- | ------------------ |
+| GET    | `/announcements/patch-notes`                                 | authenticated         | `PatchNoteHistory { patch_notes: PatchNoteSnapshot[], pending_announcement_id: str \| null }`: the package in effect, empty when none |
+| PUT    | `/announcements/patch-note-announcements/{id}/seen`          | authenticated         | `204`, idempotent; `404` when the id is not an announced package. Identity from the token only |
+| PUT    | `/admin/platform/announcements/patch-notes/order`            | `can_manage_platform` | `PatchNoteOrderRequest { ids: str[] }` (at most 1000) → `204`; `409`, changing nothing, unless the list names each patch note exactly once |
+| GET    | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnouncement { id, announced_at, announced_by } \| null`: the announcement in effect |
+| POST   | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | `PatchNoteAnnounceRequest { ids: str[] }` (1 to 1000) → `201` `PatchNoteAnnouncement`; `409`, announcing nothing, when no patch note is included, when more than 10 are, or when the included ones are not exactly `ids` in order |
+| DELETE | `/admin/platform/announcements/patch-notes/announcement`     | `can_manage_platform` | withdraw, `204`; `404` when none is in effect |
+| GET    | `/admin/platform/announcements/patch-notes/announcements/{id}` | `can_manage_platform` | `PatchNoteSnapshot[]`: the package of a history line; `404` for an unknown line or one without package |
+| GET    | `/admin/platform/announcements/activation-history`           | `can_manage_platform` | `AnnouncementExposure[]`, 100 newest first |
+
+`AnnouncementExposure` is `{ id, kind, announcement_id, label, severity,
+note_count, activated_at, deactivated_at, actor_uid }`; there is no `action`.
+For a patch-note line `label` is the first note's title and `note_count` the
+size of the package; `note_count` is null for a banner and for a line that
+kept no package, which cannot be opened. `GET /announcements/patch-notes` is
+read once per application load (no polling). Audit records:
+`platform.announcement.patch_notes_reordered`, `.patch_notes_announced`,
+`.patch_notes_withdrawn`.
+
+**Removed.** `GET /announcements/patch-note` and `ActivePatchNote`;
+`PUT /announcements/{id}/dismissal`; `AdminAnnouncement` and its
+`dismissal_count`; the `409` on concurrent activation; `auto_disabled_ids` in
+the `.created` and `.toggled` audit records; `AnnouncementActivationEvent` and
+its `action`; `platform_announcement_activation_event`.
+
+**Upgrade.** Migration `e5ff6d80cc9f` drops the unique index and the dismissal
+table and numbers existing patch notes newest first. Migration `a6c1d94e27b3`
+converts the events to exposure rows (each activation paired with the
+deactivation that followed; earlier patch-note activations become ended rows
+without package) and makes the enabled patch note the first package, with
+`opens_dialog = false`: readable from "What's new", pending for nobody. No
+user gets a dialog until an administrator announces.
+
+## 62. Contract Notes — agent creation assistant (2026-10-08)
+
+**What it is.** In the agent form header, a user describes in plain words what
+the agent should do; the platform drafts a short name, role and description, a
+system prompt and a capability selection. Nothing is saved: the form applies
+the items the user ticks. Templates without free capability selection offer
+no capability recommendations; their included capabilities and saved
+configuration remain unchanged.
+
+**Endpoint.** `POST …/teams/{team_id}/agent-templates/{template_id}/draft-agent`,
+body `AgentDraftRequest` (`description` 1-4000 chars, `language`,
+optional `agent_name` / `agent_role`, `capabilities`: `{id, name, description}`
+already translated by the client) → `AgentDraftResult` (`name` ≤ 60,
+`role` ≤ 120, `description` ≤ 300 chars, each nullable; `system_prompt`,
+`capability_ids`). At most 500 candidate
+capabilities. Requires `team.can_update_agents`; the
+template is resolved exactly as for agent creation (404 when missing or not
+usable by the team). Only candidate ids the template advertises and the team
+`can_use` reach the pod, and only those can come back. Forwarded with the
+caller's token to the pod's `/agents/creation-assistant/draft`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.111); the pod reads the admin settings
+below itself. The 404 also covers edit mode when the agent's template is no
+longer usable; the frontend shows its "not available" copy for 404 and 501.
+Errors: 422 invalid body or pod 422; 403/503/504 passed through; 504 when the
+pod does not answer within 55 s; 503 unreachable pod, or no free connection
+to it within 5 s (shared runtime client pool); 501 pod without the
+operation; 502 otherwise, including a pod 401. Full behavior: OpenSpec
+`agent-creation-assistant`.
+
+**Admin settings.** `GET`/`PUT`/`DELETE
+/control-plane/v1/admin/platform/creation-assistant`, gated like the platform
+prompt (`can_edit_platform_prompt`). Stored in the single-row
+`creation_assistant_settings` table (Alembic `93427a5fe874`): `text` and
+`model_profile_id`, both nullable (`NULL` = pod default), and
+`reasoning_effort` (text not null, default `off`, check constraint
+`off`/`low`/`medium`/`high`). All three return
+`CreationAssistantSettings`: `text` (override or pod default), `default_text`
+(from the pod's `/agents/platform-prompt`), `default_revised_at`,
+`default_changed_since_override` (an override exists and the pod's revision
+date is later than the row's `updated_at` date; `updated_at`/`updated_by` date
+the meta-prompt, so a model-only or reasoning-only save leaves them unchanged),
+`is_default`, `source_unavailable`, `missing_language_placeholder`,
+`model_profile_id`, `reasoning_effort`, `default_model_profile_id` (the pods'
+default chat profile when every reachable pod names the same one, else
+`null`), `model_options` (`{profile_id, name, supports_reasoning,
+reasoning_efforts}`: the chat profiles every enabled pod advertises whose
+model is activated platform-wide (`default_on`); team-only and personal-space
+grants do not qualify,
+`supports_reasoning` when the profile is among the catalog's
+`model_thinking_profile_ids` and `model_reasoning_efforts` does not map it to
+`[]` (nothing the pod can send), `reasoning_efforts` its selectable levels from
+`model_reasoning_efforts`, empty for on/off), `updated_by`, `updated_at`. PUT
+`{text, model_profile_id, reasoning_effort}` (`reasoning_effort` defaults to
+`off`) replaces all three: `text` is `null` (keep the built-in text) or non-blank, at most
+20,000 characters and free of reserved tags (422); a missing `{language}`
+placeholder is accepted and flagged; a new `model_profile_id` outside
+`model_options` is refused (422); the stored one is accepted without
+re-checking the catalog; a `reasoning_effort` outside the four values is
+refused (422), but it is never checked against the model: the pod clamps it
+(any non-`off` value is "on" for an on/off profile, the nearest declared level
+otherwise), so a catalog change cannot block a save. DELETE clears `text`
+only, keeping model and effort. The pod reads both from
+`GET /teams/{team_id}/creation-assistant/settings` (`can_update_agents`,
+returns `CreationAssistantRuntimeSettings`: `creation_assistant_prompt`,
+`model_profile_id`, `reasoning_effort`) with the caller's bearer while drafting; no request body,
+to the control plane or to the pod, can set them. The model only selects
+what the assistant calls; the drafted agent keeps its routed model.
+
+**Token usage.** The six token-usage KPI presets (`user_token_usage_*`,
+`token_usage_*`: over time, by model, by agent) sum `agent.turn_completed` and
+the pod's `agent.creation_assistant_completed` events that carry tokens (a
+timeout or provider error is emitted without them), so a draft counts for the
+calling user and the team in the path even if the agent is never saved.
+By-agent rows put these calls under `__creation_assistant__`, translated by the
+frontend. Turn, conversation and activity presets are unchanged. The platform
+preset `creation_assistant_usage` (`can_observe_platform`, no `team_id`)
+returns `CreationAssistantUsageResponse`: `total_tokens`, `input_tokens`,
+`output_tokens` and `drafts` (calls the provider answered, usable or not) for
+the period, read from `agent.creation_assistant_completed` only.
+
+## 63. Contract Notes — team model settings, recommended model and composer model choice (2026-10-09, #3029)
+
+Amends §33 (per-agent reasoning), §37 (team routing policy) and §41 (effective
+chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.114. OpenSpec
+change `chat-model-and-reasoning-picker`.
+
+### §37 amended — the team policy becomes the team's Models section
+
+**Policy shape** (`TeamRoutingPolicy`, `PATCH` still a full typed replacement):
+
+| Field                             | Meaning                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `chat_default_profile_id`         | Unchanged: the team default, `null` = pod default                          |
+| `disabled_model_ids`              | Model capability ids the team disabled for its members (exceptions)        |
+| `reasoning_default_off_model_ids` | Model capability ids whose composer reasoning row starts OFF (exceptions)  |
+
+Both lists are stored as **exceptions**, keyed by model capability id (as
+`can_use` and the reasoning store are), in the new
+`disabled_model_ids_json` / `reasoning_default_off_model_ids_json` columns. So a
+model the platform newly allows arrives enabled, with reasoning on by default,
+with no team write.
+
+**`agent_profile_overrides` is removed** from the policy, its schemas,
+`ExecutionPreparation` and the runtime. Alembic revision `e9026d8e4db6` copies
+each override into `recommended_chat_profile_id` of the team's instances of that
+template that have none, then drops the column (lossy downgrade). An imported
+old bundle is mapped the same way; `legacy_overrides_mapped` counts it in the
+import report.
+
+**Write validation.** The default's model must be usable and not disabled
+(`ModelDisabledForTeamError`, 422). The default model, explicit or effective,
+cannot be disabled (`DefaultModelNotDisableableError`, 422). Exception ids the
+team can no longer use are pruned silently. Newly disabled models clear the
+team's agent recommendations naming them in the same transaction. A write that
+disables models is refused with 503 (`ModelCatalogUnavailableError`) when one
+of the team's pod catalogs cannot be read and either no default is stored (the
+pod defaults it must protect are unknown) or a model is newly disabled (the
+recommendations to clear are unknown): it never fails open.
+
+**Optimistic concurrency.** The request takes an optional `expected_version`
+(the `version` last read, 0 before any write). When set and the stored
+version differs, the write is refused with 409
+(`RoutingPolicyVersionConflictError`); the Models section reloads and warns.
+Omitted, the write is unconditional as before.
+
+**Write gate narrowed: `team_editor` → `team_admin`** (`can_update_info`,
+owner decision 2026-10-09). Every remaining field belongs to the Models section.
+A personal space's owner keeps the write through the system-team bypass. Team
+editors and analysts get a read-only view and keep steering models per agent
+through the recommended model. Reads (`GET …/routing-policy`,
+`…/available-models`) keep their elevated-role gate.
+
+**New read.** `GET /teams/{team_id}/routing-policy/disable-impact?capability_id=`
+(`team_admin`, it exposes agent names) → `DisableImpact { agents:
+[{agent_instance_id, display_name}] }`: the instances whose recommendation maps
+to that model. One instance query plus the shared catalog aggregation.
+
+**`available-models`** gains `display_name` and `reasoning_available` per
+profile, and `effective_default_profile_id`: the stored default, else the pod
+default of the team's pods when they agree. It now carries the routing-policy
+cache tag, invalidated by an agent `PATCH`.
+
+**Platform revocation.** When a model loses `can_use` for a team (grant removal,
+personal-space scope revoke) or platform-wide (default-on switched off, for
+teams without an explicit grant), `capabilities/service.py` clears the matching
+recommendations and prunes the team exception lists. A stored team default on
+that model is cleared too, so the pod default takes over and turns keep
+working; the Models section then shows the pod default as the default. No team
+dialog.
+
+**Disable fallback.** Agents recommending a disabled model follow the team
+default. A conversation whose member chose that model goes back to the agent's
+recommended model (itself the team default when the agent has none) on its
+next refresh.
+
+**Agent save vs disable.** An agent create or update re-checks its
+recommendation against the team policy inside its own write transaction, under
+a shared lock on the policy row, and an update that does not set
+`recommended_chat_profile_id` keeps the stored value rather than the one loaded
+before the write, so a recommendation a concurrent disable cleared is never
+written back.
+
+**Non-goal reversed.** "A per-message composer picker" (§37 V1 non-goals) is
+now in scope: see §41 below. Per-user routing *policy* stays out: the user's
+choice is per conversation and never stored server-side.
+
+### Agent instance — `recommended_chat_profile_id`
+
+On `ManagedAgentTuning` (inside `tuning_json`, no schema change),
+`CreateAgentInstanceRequest`, `UpdateAgentInstanceRequest` (absent = unchanged,
+`null` = follow the team) and `ManagedAgentInstanceSummary`. Validated on write
+against `can_use` ∩ team-enabled ∩ the instance pod's chat profiles (422). It
+reaches the pod on the trusted runtime binding, never on request content.
+
+### §33 amended — per-agent reasoning retired
+
+`reasoning_enabled` / `reasoning_default_on` leave `ManagedAgentTuning`, the
+create/update requests, `ManagedAgentInstanceSummary`, `AgentTemplateSummary`
+and the agent form. Stored rows and old bundles still load, with the keys
+ignored. The two Amendment B and #2473 addenda above no longer apply.
+
+`_platform_reasoning_control` keeps one gate: the descriptor is emitted whenever
+at least one model has reasoning enabled platform-wide, for every agent, without
+`params.default`. The composer seeds the row from the chosen model's team
+default. `ManagedAgentRuntimeBinding` gains `team_disabled_model_ids`, read
+with the policy row. The call's short reads run on two concurrent sessions
+(instance, team settings, policy / reasoning, platform binding, platform
+prompt): at most 2 pooled connections per turn instead of 5.
+
+`ExecutionPreparation.chat_profile_id` replaces `agent_profile_overrides`. It
+is set only from the evaluator's `agent_model_override` (service identity
+only, validated like a recommendation) and forwarded as
+`RuntimeContext.chat_profile_id`. The chat UI does not forward it.
+
+### §41 amended — the composer reads the selectable models
+
+`EffectiveChatModel` gains:
+
+| Field               | Meaning                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selectable_models` | `SelectableChatModel { profile_id, capability_id, name, display_name, reasoning_enabled, reasoning_default_on }`: chat models served by the instance's pod, `can_use`, not team-disabled. One row per model; the resolved model's row is keyed by the resolved profile |
+| `choice_locked`     | `true` when a platform binding or a pod per-agent override fixes the model; `selectable_models` is then empty                                                                    |
+
+The resolution now includes the instance recommendation (validated like the
+pod does) and no user level, so `name` names what a new conversation starts on.
+No I/O is added. Unreachable pod: empty, as before. Still members-readable;
+still no precedence level revealed.
+
+**Non-goal reversed.** "Making the chip a model picker" is now in scope: the
+composer's model control lists `selectable_models` and keeps the choice per
+conversation in browser session storage (`chat.composer.{sessionId}`), sent as
+`runtime_context.chat_profile_id` on each turn. The page re-reads this route on
+mount, window focus (both at most once per 30 s) and conversation switch; a
+choice missing from a refetch is dropped with a notice. Component: `docs/swift/ux/COMPONENT-UX.md`
+`ReasoningChip`.
+
+## 64. Contract Notes — agents marketplace publication settings (2026-10-12, #3044)
+
+**Settings.** Whether the team's editors may publish ("publication enabled") and how many agents it may publish. A default every collaborative team follows, `platform_marketplace_settings`
+(one row at most, `id = 'default'`; absent = switch off, quota 5), and two
+nullable overrides on `teammetadata`, `agents_publishing_enabled` and
+`agents_publish_quota` (null = Default; quota `>= 1` by CHECK). Effective value =
+override, else default, per setting; a team created later follows the default.
+
+**Endpoints** (all `organization#can_manage_platform`; team admins get 403):
+
+- `GET /control-plane/v1/admin/marketplace-settings` → `MarketplaceSettings`:
+  `default` (switch, quota, `updated_by`, `updated_at`) and per team its
+  overrides, effective values and `published_count`.
+- `PUT /control-plane/v1/admin/marketplace-settings/default` and
+  `PUT /control-plane/v1/admin/teams/{team_id}/marketplace-settings` (both
+  fields replaced, null = back to Default) → `MarketplaceSettingsUpdateResult`
+  (`settings` + `impact`). Quota below 1 or missing: 422.
+- `GET …/marketplace-settings/default/impact?agents_publishing_enabled=` and
+  `GET /control-plane/v1/admin/teams/{team_id}/marketplace-settings/impact?agents_publishing_enabled=`
+  (omitted = Default) → `MarketplaceSettingsImpact` (`affected_team_ids`,
+  `removed_published_agents`), read-only.
+- Any change turning a team's effective switch from on to off removes the
+  team's published agents in the same request (§65, reason `switch_off`); the
+  write response reports the count. Audit events
+  `marketplace.settings.default_updated` and `marketplace.settings.team_updated`.
+  `published_count` and `removed_published_agents` count marketplace entries in
+  state `published`.
+- A switch-off always wins over a concurrent publication: the publish write
+  re-reads the switch and the team's visibility under share locks on the
+  `platform_marketplace_settings` row then the `teammetadata` row, which the
+  Default, override and visibility writes lock (Postgres only).
+
+**Permissions.** No dedicated role: `TeamPermission` gains
+`can_publish_marketplace_agents` (`team_editor`) and
+`can_unpublish_marketplace_agents` (`team_editor or team_admin`).
+`TeamWithPermissions.marketplace` (null for personal spaces) carries the
+effective switch and quota and `published_count`. ReBAC detail: `REBAC.md`
+§Team editor.
+
+## 65. Contract Notes — agents marketplace (2026-10-12, #3044)
+
+**Storage** (revision `24c2f88374fe`). `agent_marketplace_entry`: one row per
+agent (unique `agent_instance_id`, FK cascade), `state` `published | removed |
+dismissed`, removal reason, optional platform admin message and date, the
+snapshot (template, name, description, `tuning_json`, captured capabilities
+with their i18n name, description and icon), `version`, `first_published_at`
+(listing order), `published_at`, `snapshot_source_updated_at`.
+`agent_marketplace_entry_file` holds the snapshot's configuration files keyed by
+`(entry_id, capability_id, asset_key)`. `agent_marketplace_like` (soft unlike
+`removed_at`, one active like per user and entry by partial unique index) and
+`agent_marketplace_import` (destination, importer, resulting agent `SET NULL`)
+are dated rows kept across removal and republication; everything cascades with
+the agent, and team deletion now deletes the team's agents, first keeping each
+agent's name on its sessions (`agent_display_name`) as a single deletion does,
+then emitting one `agent.deleted_total` KPI per agent (same dims as a single
+deletion) and one audit `agent.unpublished` with reason `team_deleted` per
+published entry.
+
+**Version.** `version` grows on every publication and every removal; publish,
+republish and unpublish send `expected_version` (absent for a first
+publication) and get **409** `marketplace_version_conflict` on a mismatch. A
+team's publications are serialized (row lock plus a per-team advisory lock).
+
+**Team endpoints** (`/control-plane/v1/teams/{team_id}/agent-instances/{id}/…`):
+
+- `POST …/publish` `{expected_version}` → `AgentMarketplaceState`. Requires
+  `can_publish_marketplace_agents` (403), not a personal space (403), an
+  enabled and unsuspended agent, a public team, the effective switch on, a
+  public agent type and, for a new publication (first one or after a
+  removal), a published count below the quota (409 with codes
+  `marketplace_agent_inactive`, `marketplace_team_private`,
+  `marketplace_switch_off`, `marketplace_template_not_public`,
+  `marketplace_quota_reached`). For a template without free selection the
+  selection is its included defaults usable by the team, whatever is stored
+  (older saves kept `[]`); Copy to… resolves it the same way. Each
+  selected capability goes through the pod's `export-config` (runtime §8.113)
+  with the caller's token; any failure keeps the previous snapshot: 422
+  `marketplace_capability_not_exportable` (with `capability_id`) or 503
+  `marketplace_runtime_unavailable`. Audit `agent.published`. Values of a
+  field typed `secret` (by the agent's stored fields or its template's) are
+  left out of the snapshot, so the detail never shows them and an import
+  leaves them unset.
+- `POST …/unpublish` `{expected_version, reason?}` → 204. Editors and the
+  team admin (`can_unpublish_marketplace_agents`) set `dismissed`; a platform
+  admin (`can_manage_platform`) sets `removed` with reason
+  `removed_by_platform_admin` and the optional message, which only they may
+  send (403 otherwise). Audit `agent.unpublished`.
+- `POST …/marketplace-dismiss` → 204: hides a `removed` state for the team
+  (editors and team admin).
+
+**Automatic removal** (state `removed`, files deleted, likes and imports kept,
+audit `agent.unpublished`): suspension (`AgentInstanceStore.set_suspension`,
+reason `suspended`), deactivation (status update to disabled, `deactivated`),
+team made private (`team_private`), effective switch turned off
+(`switch_off`). Team deletion audits `team_deleted` and a single agent deletion `deleted` before the entries cascade.
+Reactivation never republishes.
+
+**Team card.** `ManagedAgentInstanceSummary.marketplace` (`state`, `version`,
+`published_at`, `modified`, removal reason, message and date, `like_count`,
+`import_count`) on `GET /teams/{team_id}/agent-instances`. `modified` compares
+the agent's `updated_at` with `snapshot_source_updated_at`; a save that changes
+nothing no longer moves `updated_at`, a real save stamps it to the
+microsecond. Members without `can_unpublish_marketplace_agents` only get
+`published` (never `modified`);
+other states are omitted for them. `CapabilityImpactPreview.published_instances`
+counts the published agents a revoke would suspend.
+
+**Marketplace endpoints** (`/control-plane/v1/marketplace/agents`, any
+authenticated user, published entries only, else 404):
+
+- `GET /marketplace/agents?q=&team_id=` → `MarketplaceAgentSummary[]`, newest
+  first publication first (a republication keeps its place), with the team's
+  current name, `like_count`, `import_count`, `liked_by_me`, `published_at`.
+- `GET /marketplace/agents/{entry_id}` → `MarketplaceAgentDetail`: adds
+  `agent_instance_id` (the published agent, which a platform admin's removal
+  addresses through the team-scoped `…/unpublish`), `likes_since_update`
+  (likes on the current version), tuning values, capabilities and files as
+  capability, name and size. No endpoint returns a file's content.
+- `PUT | DELETE /marketplace/agents/{entry_id}/like` → summary; idempotent,
+  own team included.
+- `GET /marketplace/agents/{entry_id}/import-targets` → the copy readiness
+  (§58) for the personal space and teams where the caller updates agents,
+  publishing team excluded.
+- `POST /marketplace/agents/{entry_id}/import` `{target_team_ids, locale?}` →
+  `AgentCopyResult[]`: the agent copy (§58) from the snapshot, files passed
+  inline as `asset_files` so the publishing team is never read; the publishing
+  team is refused per destination (`error_code` `marketplace_publishing_team`);
+  one import row per success. Both import routes answer 409
+  `marketplace_template_not_public` to a caller other than a platform admin
+  when the agent type is no longer public, as Copy to… refuses it.
+
+**Names.** A free name is kept. On a conflict, Copy to… and marketplace import
+take the first free `<name> (<word> <n>)`, n from 1, `<word>` from a fixed
+server map of the optional `locale` field of the copy and import bodies
+(`fr` → `copie`, `en` → `copy`; absent → `copy`). A platform import keeps `<name> (2)`, n from 2.
+The frontend sends its UI language (OpenSpec `agent-names`, `agent-copy`).
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
@@ -4382,7 +4902,6 @@ With the Keycloak directory and account status disabled, deletion writes no susp
 scenarios are maintained in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
-
 ## Knowledge Flow ingestion admission and relaunch — 2026-09-26
 
 `POST /process-documents` returns `task_ids` keyed by document UID as well as the
@@ -4443,24 +4962,45 @@ remains for its other consumers. Current behaviour:
 
 Public `/frontend/config` includes `platform_access_enabled`, indicating admission administration availability in authenticated deployments with enforced ReBAC, independently of the SQL filtering switch. Support destinations reuse static frontend `contactSupportLink` before protected bootstrap; there is no admission-specific support override. Platform admission remains independent of resource permissions and starts with filtering inactive. Administrators save and activate the shared SQL policy in the UI without deployment settings.
 
-`/admin/platform/access` exposes persisted filtering and versioned all/any rules with allow/block mode under `CAN_MANAGE_PLATFORM`. `policy-preview` tests the actor's own verified human token without saving or observing draft-only values; `policy` saves with an expected revision, conflict detection and the active-filter actor safeguard. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit one-time existing-user snapshot. Independent enrollment links support optional notes/expiration and per-link revocation. Creation and explicit reveal require the acting administrator's own human credential and return uncached plaintext tokens; ordinary paginated history excludes tokens. Tokens are recoverable in SQL for copying the original URL later. Removing Free suspends links; restoring Free resumes unrevoked, unexpired links. An authenticated caller-only opening POST increments the link's aggregate count and last-opening time without persisting visits or visitor identity. Preview and enrollment do not increment counts.
+`/admin/platform/access` exposes persisted filtering and versioned all/any rules with allow/block mode under `CAN_MANAGE_PLATFORM`. `policy-preview` tests the actor's own verified human token without saving or observing draft-only values; `policy` saves with an expected revision, conflict detection and the active-filter actor safeguard. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit existing-user import that administrators can refresh with filtering on or off. Independent enrollment links support optional notes/expiration and per-link revocation. Creation and explicit reveal require the acting administrator's own human credential and return uncached plaintext tokens; ordinary paginated history excludes tokens. Tokens are recoverable in SQL for copying the original URL later. Removing Free suspends links; restoring Free resumes unrevoked, unexpired links. An authenticated caller-only opening POST increments the link's aggregate count and last-opening time without persisting visits or visitor identity. Preview and enrollment do not increment counts.
+
+Disabling filtering admits every authenticated, active person while retaining the saved rule, revision, user/team exceptions, Free flags and links for later reactivation. Current `CAN_MANAGE_PLATFORM` authority is an independent admission source while filtering is active, including delegated human requests; role removal withdraws it on the next request. Account suspension, terms acceptance and resource authorization still apply. An unavailable role authority produces an availability error. The activation preview and user list identify the administrator source.
+
+`GET /admin/platform/access/teams/{team_id}/enrollment-links/{link_id}/joiners` returns bounded, paginated successful joiners for a link to platform administrators. Entries use the user's current first name, last name and username while active, or the last recorded values and a deleted flag after account deletion, plus the original join time. The record is written only when enrollment grants a new team membership, not on opening, preview, terms acceptance or an already-member retry. It survives team departure, account deletion, and link suspension, revocation or expiration. Explicit link-history cleanup removes those records. Existing historical joins are not backfilled.
+
+Successful Platform access mutations emit structured `fred.security.audit` events with the actor and relevant state or target identifiers, independently of ordinary application log verbosity. Filtering changes include the resulting revision, and link creation identifies the new link without exposing its token. Bulk manual grants and each committed T0 import or refresh emit one bounded summary with counts; they do not create one log event per user. The T0 event includes the number of exceptions actually added and, for a refresh, its explicit mode; an ordinary completed initial-import retry emits no import event. Each successful new Free-link team join emits one event with user, team and link IDs. Openings and already-member retries do not emit a join event. Failed requests emit no success event. Link tokens and rule claim values are not written to audit events. Audit-log retention is controlled by the deployment's downstream log pipeline, as described in `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`.
 
 Invitation history supports an optional `status` query (`active`, `revoked`, `expired`, `suspended`) and returns filtered `total` plus team-wide `inactive_count` (2026-10-09). Revoked takes precedence over expired; one server timestamp determines each listing. `DELETE /admin/platform/access/teams/{team_id}/enrollment-links/inactive` requires platform administration and atomically deletes only that team's revoked or expired records under the existing mutation lock. It returns the actual `deleted_count` and audits actor, team and count after commit. Usable suspended links, membership and access settings are preserved; notes and aggregate counters of deleted links are permanently removed. No additional schema migration is required.
 
 `GET /admin/platform/access/own-claims` (2026-10-07) returns a bounded JSON projection and exact selectable paths from the acting administrator's freshly verified own human access token. It rejects workload/delegated credentials and disables HTTP caching. The payload is transient: it is not added to principal serialization, SQL evidence or audit logs. The former observed `claims` route and catalog collection are retired (2026-10-08); the pending admission migration creates no catalog table. Claim selection reads only this own-token projection.
 
-The own-credential `/platform-access/status` endpoint exposes only admission and legal status. `/platform-access/free/{token}` provides a bounded preview, legal acceptance and caller-only member enrollment, without `/user` personal-team provisioning or normal `/gcu` default-team side effects. Normal pre-CGU endpoints stay admission-gated. Current behavioral requirements: `openspec/specs/platform-access-control/spec.md`. Deployment ordering and rollback: [migration note](../ops/migrations/2965-platform-access-planning.md).
+The own-credential `/platform-access/status` endpoint exposes only admission and legal status. `/platform-access/free/{token}` provides a bounded preview, legal acceptance and caller-only member enrollment, without `/user` personal-team provisioning or normal `/gcu` default-team side effects. Normal pre-CGU endpoints stay admission-gated. Current behavioral requirements: `openspec/specs/platform-access-control/spec.md`. Deployment ordering and rollback: [initial migration note](../ops/migrations/2965-platform-access-planning.md); configured-directory upgrade: [directory migration note](../ops/migrations/3122-platform-access-directory.md).
 
-Platform admission administration also accepts an atomic manual grant of any positive number of existing Fred user UUIDs through `POST /admin/platform/access/users`.
+#### Explicit whitelist refresh (2026-10-16)
+
+`GET /admin/platform/access/t0-preview` accepts optional `refresh_mode` (`preserve_removals` or `include_removed`). Without it, a completed import is read without a directory scan. Refresh previews return missing candidate counts excluding current grants, recorded removals skipped, `revision`, `completed_at` and `removal_history_complete`; these counts are estimates because confirmation recomputes the configured directory. `POST .../t0-import` without a body keeps the initial-import behavior. Its optional refresh body is `{mode, expected_revision, expected_completed_at}`; it requires a completed import and current confirmation preconditions, with filtering on or off. A stale confirmation returns 409 `platform_access_t0_snapshot_changed`. Refresh leaves the filtering switch unchanged. Only the first import requires inactive filtering (`t0_requires_inactive_filtering`). Success advances completion even with no additions and returns `imported_count`.
+
+Individual revocation records the latest actor and removal time in `platform_access_removals`, atomically with deleting the grant. Preservation skips recorded removals; inclusion can re-add them. Existing grants keep their original source, actor and date. Migration `d4e8b2a6f091` adds that table and `platform_access_settings.t0_removal_history_complete`, initially false for a pre-upgrade completed import. False requires inclusion mode (preservation returns 409 `platform_access_t0_full_refresh_required`) and an explicit UI warning/confirmation about full recalculation and possible return of removed people. A successful full refresh establishes the baseline and sets the flag true. Startup and upgrade never run an import. No history is reconstructed from missing grants or external audit logs. Apply the control-plane migration before upgrading readers. See [migration note](../ops/migrations/3140-t0-refresh.md).
+
+#### Team join links (2026-10-15, #3116)
+
+`platform_access_links` gains `kind` (`free` for the enrollment links above, unchanged, or `team`) and `paused`. A team has at most one `team` link. `GET /teams/{team_id}/join-link` returns `{enabled, token}` (`token` null before the first enabling); `PUT` with `{enabled}` creates the link on first enabling and otherwise pauses or resumes the same token; `POST .../regenerate` deletes the team's link and returns a new enabled one, so the old URL stops working for good. All three require `TeamPermission.CAN_ADMINISTER_MEMBERS` (higher consistency) and the caller's own human credential, return `Cache-Control: no-store`, and emit `team.join_link.enabled|paused|regenerated` without the token. The admin `enrollment-link(s)` routes, history, cleanup and joiners cover `free` links only; a team link id answers 404 there. A team link does not depend on the Free flag, joining mode or visibility.
+
+On the `/platform-access/free/{token}` endpoints a paused or replaced team link answers `404 free_enrollment_link_invalid`, like any invalid link. A valid team link answers `403 team_link_requires_platform_access`, without the team name, to a caller who is not admitted; the check runs before preview, opening count, terms acceptance and membership (only the caller's ordinary user-row observation precedes it), and the frontend then shows `/platform-access-denied`. An admitted caller is granted `team_member` only, emits `team.join_link.joined`, and no joiner row is written. `POST /platform-access/free/{token}/enroll` now returns `EnrollmentResult` (`PlatformAccessStatus` plus `team_id`) for both link kinds: `team_id` is set when the caller is a member and admitted after the call, including an already-member retry, and is absent otherwise; previews and refusals never carry it. The join page opens `team/{team_id}/agents`, or `/` without it.
+
+Free admission source (2026-10-15, #3116): a Free team admits only members recorded in `platform_access_link_joiners` for one of its `free` links (account not deleted), while they remain members and Free stays on; authorized teams still admit every member. This applies to request admission on every backend (`PlatformAccess.team_sources`, which now returns team, `allowed` and `free` per source), the activation preview and the whitelist `sources`. Members added by hand or through a team invite link get no Free source. Every successful Free enrollment records a joiner if that person has none on that link, including an existing member (it then emits `platform.access.free.enrolled`). Deleting revoked or expired Free-link history removes its joiners and the Free source they provided. Existing Free-team members without a joiner row lose that source on upgrade. Platform-access readers now require `platform_access_links` and `platform_access_link_joiners` at startup and read them (columns `id`, `team_id`, `kind`; `link_id`, `user_id`, `deleted_at`) on filtered requests. Removing a member from a team, including leaving it, deletes their joiner rows on that team's Free links before and again after the ReBAC removal, so only a new Free enrollment restores the source; a team with no Free link skips this (no policy lock), and so does a deployment without platform access. A Free team without joiners does not count in `has_admission_sources`. A 503 `platform_access_unavailable` is logged at WARNING with the error type and SQLSTATE only, at most once a minute per kind. Migration: `c3a7e5d9f1b2`. Requirements: `openspec/changes/team-join-link/`.
+
+Platform admission administration also accepts an atomic manual grant of any positive number of existing configured-directory user UUIDs through `POST /admin/platform/access/users`. In Keycloak mode, an identity created manually or known from federation can be granted before it has a Fred `users` row; Fred creates an ID-only reference row needed by the exception without treating it as a local identity or rule evidence. In local mode, the directory is Fred `users`.
 Unknown identities reject the whole request; duplicate IDs do not duplicate
-exceptions and existing manual/T0 provenance is preserved. The UI retains its
-selection across searches and pages. Every admission administrator check uses
+exceptions and existing manual/T0 provenance is preserved. Every admission administrator check uses
 higher-consistency OpenFGA authorization so revoking administrator authority
 withdraws these mutations on subsequent requests.
 
-User listing includes `first_name` and `last_name` alongside username/email and searches these same fields (2026-10-08). Manual grants validate and insert in bounded SQL batches within one transaction, without an arbitrary 100-user cap.
+User listing includes `first_name` and `last_name` alongside username/email. Keycloak mode resolves current directory profiles by stable ID for exceptions, searches the Keycloak directory for additions, and reports an availability error rather than silently using Fred profiles when Keycloak fails. An exception whose identity has disappeared remains visible by ID and removable. Manual grants validate against the configured directory and insert in bounded SQL batches within one transaction, without an arbitrary 100-user cap.
 
-`PlatformAccessState.has_admission_sources` identifies a saved rule, individual exception or eligible authorized/Free team. Filtering can activate with independent sources alone. `PATCH /admin/platform/access` accepts `expected_revision`, rejecting stale confirmations with 409 while preserving legacy-gate and actor-lockout safeguards. `GET /admin/platform/access/activation-preview` returns all known local users with identity metadata and allowed/blocked/unknown outcomes, counts, `revision` and `checked_at` (2026-10-08). It evaluates saved policy, fresh selected evidence, suspension, individual exceptions and live higher-consistency team membership without mutating admission or exposing claim values. Missing/stale/conflicting rule evidence produces unknown unless another authoritative source suffices; unavailable account status remains unknown. A membership-authority error fails the preview instead of claiming a complete classification. Bounded concurrent checks and a 120-second total deadline protect this explicit administrative read; unavailable or changed policy snapshots return errors. The preview is an observation, not a frozen authorization decision. The UI requires explicit confirmation, uses the returned revision and never implicitly saves a draft.
+`GET /admin/platform/access/users` accepts the optional boolean query parameter `exceptions_only` (default `false`). When `true`, the page and `total` cover only users holding an individual exception (manual or T0); it combines with `query`, `offset` and `limit`. The exception page remains ordered by grant date descending, then by the stored username and user ID, while current profile fields come from the configured directory. Without the parameter, the configured directory supplies searched and paged identities, including Keycloak users without a Fred row. The response shape is unchanged: each row's `sources` still carries origin and grant date. Local SQL search ignores accents and case; Keycloak add search uses the provider's server search semantics, while Keycloak exception search folds accents and case in the current profiles of exception holders. The whitelist Users tab requests `exceptions_only=true`; its add dialog and the rule tester's own-row lookup do not. Keycloak add searches count only selectable human identities. A query matching more than 1000 raw Keycloak records tries an exact username or email match before returning `platform_access_search_too_broad` (422); the dialog then asks the administrator to refine it. A UUID query resolves the specific identity in either directory mode, which the rule editor uses for the connected administrator.
+
+`PlatformAccessState.has_admission_sources` identifies a saved rule, individual exception or eligible authorized/Free team. Filtering can activate with independent sources alone. `PATCH /admin/platform/access` accepts `expected_revision`, rejecting stale confirmations with 409 while preserving legacy-gate and actor-lockout safeguards. `GET /admin/platform/access/activation-preview` returns human identities from the configured directory with identity metadata and allowed/blocked/unknown outcomes, counts, `revision` and `checked_at`. It evaluates saved policy, fresh selected evidence, suspension, individual exceptions and live higher-consistency team membership without mutating admission or exposing claim values. Missing/stale/conflicting rule evidence produces unknown unless another authoritative source suffices; unavailable account status remains unknown. A membership-authority error fails the preview instead of claiming a complete classification. Bounded concurrent checks and a 120-second total deadline protect this explicit administrative read; unavailable or changed policy snapshots return errors. The preview is an observation, not a frozen authorization decision. The UI requires explicit confirmation, uses the returned revision and never implicitly saves a draft.
 
 Authorizing a team or marking it Free derives admission from current
 higher-consistency membership without copying members into permanent user
@@ -4515,4 +5055,3 @@ and persisted in `capability_config`, as for any capability (a 422 when no
 default is usable by the team, as for any template declaring defaults). Chat controls such
 as `document_scope.bound_library_ids` then follow from it. An instance saved
 earlier keeps `selected_capability_ids: []` until it is edited and saved.
-

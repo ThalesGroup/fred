@@ -4,11 +4,20 @@ import { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import type { PlatformAccessState } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-const hooks = vi.hoisted(() => ({ preview: vi.fn(), save: vi.fn() }));
+import type { AdmissionSource } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+const hooks = vi.hoisted(() => ({
+  preview: vi.fn(),
+  save: vi.fn(),
+  users: vi.fn(),
+  ownSources: undefined as AdmissionSource[] | undefined,
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: { number: number }) => (values ? `${key} ${values.number}` : key),
+    t: (key: string, values?: Record<string, unknown>) => (values ? `${key} ${Object.values(values).join(" ")}` : key),
   }),
+}));
+vi.mock("../../../../../security/KeycloakService", () => ({
+  KeyCloakService: { GetUserName: () => "me", GetUserId: () => "me-id" },
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePlatformAccessOwnClaimsQuery: () => ({
@@ -27,15 +36,32 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       truncated: false,
     },
   }),
+  usePlatformAccessUsersQuery: (args: unknown, options: { skip: boolean }) => {
+    hooks.users(args, options);
+    return {
+      currentData:
+        options.skip || !hooks.ownSources
+          ? undefined
+          : {
+              total: 2,
+              items: [
+                { user_id: "other", username: "meadow", email: null, sources: [{ kind: "manual" }] },
+                { user_id: "me-id", username: "me", email: null, sources: hooks.ownSources },
+              ],
+            },
+    };
+  },
   usePreviewPlatformPolicyMutation: () => [hooks.preview],
   useSavePlatformPolicyMutation: () => [hooks.save],
 }));
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
+import styles from "./PlatformAccessPage.module.css";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root, state: PlatformAccessState;
 const reload = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
+  hooks.ownSources = undefined;
   state = {
     filtering_enabled: false,
     has_admission_sources: true,
@@ -61,13 +87,15 @@ afterEach(() => {
 });
 const render = () =>
   act(() => root.render(<PlatformAccessRuleEditor state={state} disabled={false} reload={reload} />));
+const banners = () => [...host.querySelectorAll<HTMLElement>(`.${styles.banner}`)];
+const text = (banner: HTMLElement) => banner.querySelector("span:last-child")!.textContent;
 const button = (name: string) =>
   [...host.querySelectorAll("button")].find(
     (node) => node.textContent?.trim() === `rework.platformAccess.rule.${name}`,
   )!;
 const input = (label: string) =>
   [...host.querySelectorAll("input")].find(
-    (node) => node.labels?.[0]?.textContent === `rework.platformAccess.rule.${label}`,
+    (node) => node.getAttribute("aria-label") === `rework.platformAccess.rule.${label}`,
   )!;
 const change = (node: HTMLInputElement, value: string) =>
   act(() => {
@@ -102,8 +130,8 @@ it("previews without saving and distinguishes rule match from independent admiss
   expect(hooks.preview).toHaveBeenCalledWith({ platformAccessPolicy: state.policy });
   expect(hooks.save).not.toHaveBeenCalled();
   expect(host.textContent).toContain("rework.platformAccess.rule.result.missing");
-  expect(host.textContent).toContain("rework.platformAccess.rule.ruleDoesNotMatch");
-  expect(host.textContent).toContain("rework.platformAccess.rule.admitted");
+  expect(host.textContent).toContain("rework.platformAccess.rule.ruleRejects");
+  expect(host.textContent).toContain("rework.platformAccess.rule.accessKept");
   change(input("value"), "new");
   expect(host.textContent).not.toContain("rework.platformAccess.rule.result.missing");
 });
@@ -229,17 +257,134 @@ it("changes combination without saving and identifies each removable condition",
   act(() => button("addCondition").click());
   confirmField();
   valuePrompt(true);
-  const removal = host.querySelector<HTMLButtonElement>(
-    'button[aria-label="rework.platformAccess.rule.removeConditionNumber 2"]',
-  )!;
-  expect(removal).not.toBeNull();
-  act(() => removal.click());
+  expect(host.querySelector('button[aria-label="rework.platformAccess.rule.removeConditionNumber 2"]')).not.toBeNull();
+  expect(host.querySelector('[role="radiogroup"]')?.getAttribute("aria-label")).toBe(
+    "rework.platformAccess.rule.combination",
+  );
   act(() => button("any").click());
-  expect(button("any").getAttribute("aria-pressed")).toBe("true");
-  expect(button("all").getAttribute("aria-pressed")).toBe("false");
+  expect(button("any").getAttribute("aria-checked")).toBe("true");
+  expect(button("all").getAttribute("aria-checked")).toBe("false");
   await act(async () => button("test").click());
   expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.combination).toBe("any");
   expect(hooks.save).not.toHaveBeenCalled();
+});
+
+it("offers the combination choice only when several conditions exist", () => {
+  render();
+  expect(host.querySelector('[role="radiogroup"]')).toBeNull();
+  act(() => button("addCondition").click());
+  confirmField();
+  valuePrompt(true);
+  expect(host.querySelector('[role="radiogroup"]')).not.toBeNull();
+  act(() =>
+    host
+      .querySelector<HTMLButtonElement>('button[aria-label="rework.platformAccess.rule.removeConditionNumber 2"]')!
+      .click(),
+  );
+  expect(host.querySelector('[role="radiogroup"]')).toBeNull();
+});
+
+it("groups test, discard and save in one row with the save state beside the button", async () => {
+  render();
+  const actions = button("save").closest(`.${styles.ruleActions}`)!;
+  expect(actions.contains(button("test"))).toBe(true);
+  const status = actions.querySelector('[role="status"]')!;
+  expect(status.textContent).toBe("");
+  change(input("value"), "draft");
+  expect(actions.contains(button("reload"))).toBe(true);
+  expect(status.textContent).toBe("rework.platformAccess.rule.unsaved");
+  await act(async () => button("save").click());
+  expect(status.textContent).toBe("rework.platformAccess.rule.saved");
+  expect(host.textContent?.split("rework.platformAccess.rule.saved")).toHaveLength(2);
+});
+
+it("shows a failed test after a save instead of the saved state", async () => {
+  render();
+  change(input("value"), "draft");
+  await act(async () => button("save").click());
+  const status = button("save").closest(`.${styles.ruleActions}`)!.querySelector('[role="status"]')!;
+  expect(status.textContent).toBe("rework.platformAccess.rule.saved");
+  hooks.preview.mockReturnValue({
+    unwrap: async () => {
+      throw { status: 500, data: { detail: "unexpected" } };
+    },
+  });
+  await act(async () => button("test").click());
+  expect(host.textContent).toContain("rework.platformAccess.rule.invalidOrFailed");
+  expect(host.textContent).not.toContain("rework.platformAccess.rule.saved");
+  expect(status.textContent).toBe("");
+});
+
+it("keeps the saved state after a successful test", async () => {
+  render();
+  change(input("value"), "draft");
+  await act(async () => button("save").click());
+  await act(async () => button("test").click());
+  expect(host.textContent?.split("rework.platformAccess.rule.saved")).toHaveLength(2);
+  expect(banners()).toHaveLength(2);
+});
+
+it("keeps the add button in the conditions header, before the list", () => {
+  render();
+  const header = host.querySelector(`.${styles.conditionsHeader}`)!;
+  expect(header.querySelector("h2")?.textContent).toBe("rework.platformAccess.rule.conditions");
+  expect(host.querySelector("h3")).toBeNull();
+  expect(header.contains(button("addCondition"))).toBe(true);
+  expect(
+    header.compareDocumentPosition(host.querySelector("fieldset")!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  act(() => button("addCondition").click());
+  confirmField();
+  valuePrompt(true);
+  expect(host.querySelectorAll("fieldset")).toHaveLength(2);
+  expect(header.contains(button("addCondition"))).toBe(true);
+  expect(header.querySelector('[role="radiogroup"]')).not.toBeNull();
+});
+
+it("lays each condition out as one row under a single heading line and names every control", () => {
+  render();
+  const [labels, row] = host.querySelectorAll<HTMLElement>(`.${styles.conditionRow}`);
+  expect(labels.getAttribute("aria-hidden")).toBe("true");
+  expect(labels.children).toHaveLength(6);
+  expect(row.children).toHaveLength(6);
+  expect(row.closest("fieldset")?.querySelector("legend")?.textContent).toBe("rework.platformAccess.rule.condition 1");
+  expect(row.querySelector('button[aria-haspopup="listbox"]')?.getAttribute("aria-label")).toBe(
+    "rework.platformAccess.rule.operator",
+  );
+  expect(input("value")).toBeDefined();
+  expect(row.querySelector('input[type="checkbox"]')?.getAttribute("aria-label")).toBe(
+    "rework.platformAccess.rule.caseSensitiveCondition 1",
+  );
+  expect(row.querySelector('button[aria-label="rework.platformAccess.rule.removeConditionNumber 1"]')).not.toBeNull();
+});
+
+it("keeps the regex hint and the test result inside the condition block", async () => {
+  state.policy!.conditions[0].operator = "regex";
+  render();
+  await act(async () => button("test").click());
+  const block = host.querySelector("fieldset")!;
+  expect(block.textContent).toContain("rework.platformAccess.rule.regexHint");
+  expect(block.textContent).toContain("rework.platformAccess.rule.result.missing");
+});
+
+it("shows the picked field in the picker's action bar, beside its buttons", () => {
+  const dialog = openPicker();
+  const chip = dialog.querySelector('code[aria-live="polite"]')!;
+  expect(chip.textContent).toBe("rework.platformAccess.picker.noSelection");
+  expect(chip.closest('[role="region"]')).toBeNull();
+  const confirm = pickerButton(dialog, "rework.platformAccess.picker.useField")!;
+  expect(chip.parentElement?.parentElement?.parentElement?.contains(confirm)).toBe(true);
+  act(() => pickerButton(dialog, '"department"')!.click());
+  expect(chip.textContent).toBe("department");
+});
+
+it("labels the case switch with its visible text", () => {
+  render();
+  const toggle = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  const label = host.querySelector<HTMLLabelElement>(`label[for="${toggle.id}"]`)!;
+  expect(label.textContent).toBe("rework.platformAccess.rule.caseSensitive");
+  act(() => label.click());
+  expect(toggle.checked).toBe(true);
 });
 
 it("shows the operand counter only near its unchanged limit", () => {
@@ -410,6 +555,10 @@ it("reports an empty simple search without exposing hidden token metadata", () =
   change(dialog.querySelector("input")!, "DEPART");
   expect(pickerButton(dialog, '"department"')).toBeDefined();
   expect(dialog.textContent).not.toContain("rework.platformAccess.picker.simpleEmpty");
+  // Accents are ignored as well as case.
+  change(dialog.querySelector("input")!, "DÉpàrt");
+  expect(pickerButton(dialog, '"department"')).toBeDefined();
+  expect(pickerButton(dialog, '"name"')).toBeUndefined();
 });
 
 it("opens the own JSON directly and preserves its original revision while selecting", async () => {
@@ -461,12 +610,111 @@ it("places persisted allow/block mode before conditions and submits the selected
   expect(hooks.save).not.toHaveBeenCalled();
   await act(async () => button("test").click());
   expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.mode).toBe("block");
-  expect(host.querySelector('[data-outcome="allowed"] h3')?.textContent).toContain("rule.testAllowed");
+  expect(banners().map((banner) => [banner.dataset.outcome, text(banner)])).toEqual([
+    ["success", "rework.platformAccess.rule.ruleDoesNotBlock"],
+    ["success", "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.rule"],
+  ]);
 });
 it("shows an explicit readable refusal when preview denies effective admission", async () => {
   hooks.preview.mockReturnValue({ unwrap: async () => ({ matched: false, admitted: false, conditions: ["missing"] }) });
   render();
   await act(async () => button("test").click());
-  expect(host.querySelector('[data-outcome="denied"] h3')?.textContent).toContain("rule.testDenied");
-  expect(host.textContent).toContain("rule.ruleDoesNotMatch");
+  expect(banners().map((banner) => [banner.dataset.outcome, text(banner)])).toEqual([
+    ["error", "rework.platformAccess.rule.ruleRejects"],
+    ["error", "rework.platformAccess.rule.accessLost"],
+  ]);
+  expect(hooks.users.mock.calls.every(([, options]) => options.skip)).toBe(true);
+});
+
+const runTest = async (
+  outcome: { matched: boolean; admitted: boolean; conditions?: string[] },
+  mode?: "allow" | "block",
+) => {
+  if (mode) state.policy!.mode = mode;
+  hooks.preview.mockReturnValue({ unwrap: async () => ({ conditions: ["matched"], ...outcome }) });
+  act(() => root.unmount());
+  root = createRoot(host);
+  render();
+  await act(async () => button("test").click());
+  return banners().map((banner) => [banner.dataset.outcome, text(banner)]);
+};
+const kept = (...sources: string[]) =>
+  `rework.platformAccess.rule.accessKeptBy ${sources.map((source) => `rework.platformAccess.rule.accessSource.${source}`).join(", ")}`;
+
+it("judges the rule banner from the selected filtering mode", async () => {
+  expect((await runTest({ matched: true, admitted: true }, "allow"))[0]).toEqual([
+    "success",
+    "rework.platformAccess.rule.ruleAccepts",
+  ]);
+  expect((await runTest({ matched: false, admitted: true }, "allow"))[0]).toEqual([
+    "error",
+    "rework.platformAccess.rule.ruleRejects",
+  ]);
+  expect((await runTest({ matched: true, admitted: true }, "block"))[0]).toEqual([
+    "error",
+    "rework.platformAccess.rule.ruleBlocks",
+  ]);
+  expect((await runTest({ matched: false, admitted: true }, "block"))[0]).toEqual([
+    "success",
+    "rework.platformAccess.rule.ruleDoesNotBlock",
+  ]);
+});
+
+it("never counts a rule that could not be checked as accepting, in either mode", async () => {
+  for (const mode of ["allow", "block"] as const)
+    for (const reason of ["timeout", "unavailable"])
+      expect((await runTest({ matched: false, admitted: false, conditions: [reason] }, mode))[0]).toEqual([
+        "error",
+        "rework.platformAccess.rule.ruleUnchecked",
+      ]);
+});
+
+it("colours the access banner by its own outcome, whatever the rule banner says", async () => {
+  expect(await runTest({ matched: false, admitted: true })).toEqual([
+    ["error", "rework.platformAccess.rule.ruleRejects"],
+    ["success", "rework.platformAccess.rule.accessKept"],
+  ]);
+  expect(host.querySelector(`.${styles.testResults}`)?.getAttribute("role")).toBe("status");
+  expect(host.querySelector("fieldset")?.textContent).toContain("rework.platformAccess.rule.result.matched");
+});
+
+it("names what keeps the access: none known, one source, several sources", async () => {
+  expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe("rework.platformAccess.rule.accessKept");
+  expect(hooks.users.mock.lastCall).toEqual([{ offset: 0, limit: 1, query: "me-id" }, { skip: false }]);
+  hooks.ownSources = [{ kind: "manual" }];
+  expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe(kept("manual"));
+  hooks.ownSources = [
+    { kind: "attribute" },
+    { kind: "admin" },
+    { kind: "t0" },
+    { kind: "team", team_id: "t1", team_name: "Demos" },
+    { kind: "free", team_id: "t2", team_name: "Guests" },
+  ];
+  expect((await runTest({ matched: true, admitted: true }))[1][1]).toBe(
+    "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.rule, " +
+      "rework.platformAccess.rule.accessSource.admin, rework.platformAccess.rule.accessSource.manual, " +
+      "rework.platformAccess.rule.accessSource.team Demos, rework.platformAccess.rule.accessSource.free Guests",
+  );
+});
+
+it("does not name the saved rule as a source when the tested rule refuses the account", async () => {
+  hooks.ownSources = [{ kind: "attribute" }, { kind: "team", team_id: "t1", team_name: "Demos" }];
+  expect((await runTest({ matched: false, admitted: true }))[1][1]).toBe(
+    "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.team Demos",
+  );
+});
+
+it("never shows a team identifier when a team has no name", async () => {
+  hooks.ownSources = [
+    { kind: "team", team_id: "team-uid-1", team_name: null },
+    { kind: "team", team_id: "team-uid-2" },
+    { kind: "free", team_id: "team-uid-3", team_name: "" },
+    { kind: "team", team_id: "t4", team_name: "Demos" },
+  ];
+  const access = (await runTest({ matched: false, admitted: true }))[1][1];
+  expect(access).toBe(
+    "rework.platformAccess.rule.accessKeptBy rework.platformAccess.rule.accessSource.teamUnnamed 2, " +
+      "rework.platformAccess.rule.accessSource.freeUnnamed 1, rework.platformAccess.rule.accessSource.team Demos",
+  );
+  expect(access).not.toContain("uid");
 });

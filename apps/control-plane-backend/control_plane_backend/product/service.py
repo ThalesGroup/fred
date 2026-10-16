@@ -20,6 +20,7 @@ import contextvars
 import hashlib
 import json
 import logging
+import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -62,9 +63,14 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     StoredCapabilityConfig,
 )
+from fred_sdk.contracts.capability.manifest import (
+    REASONING_EFFORT_LEVELS,
+    ReasoningEffortLevel,
+)
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.names import normalize_agent_name
 from control_plane_backend.agent_instances.store import (
@@ -87,6 +93,7 @@ from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
+    RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -908,6 +915,21 @@ async def _model_capabilities_for_source(
     return await _model_capabilities_for_source_uncached(base_url)
 
 
+def _reasoning_efforts(raw: object) -> dict[str, tuple[ReasoningEffortLevel, ...]]:
+    """A pod's `reasoning_efforts` map, keeping known levels only; an empty
+    list (a thinking profile with nothing to send) is kept as is."""
+    if not isinstance(raw, dict):
+        return {}
+    known = set(REASONING_EFFORT_LEVELS)
+    return {
+        str(profile_id): tuple(
+            level for level in REASONING_EFFORT_LEVELS if level in levels
+        )
+        for profile_id, levels in raw.items()
+        if isinstance(levels, list) and (not levels or known.intersection(levels))
+    }
+
+
 async def _model_capabilities_for_source_uncached(
     base_url: str,
 ) -> PodModelCatalog | None:
@@ -979,6 +1001,9 @@ async def _model_capabilities_for_source_uncached(
             # then reads as "no reasoning-capable profile" and shows no
             # reasoning control — the safe direction (§5.6).
             model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
+            # Selectable levels per thinking profile; absent on an older pod,
+            # which then reads as on/off only.
+            model_reasoning_efforts=_reasoning_efforts(entry.get("reasoning_efforts")),
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
@@ -1151,89 +1176,24 @@ PLATFORM_CHAT_CONTROL_OWNER = "platform"
 
 def _platform_reasoning_control(
     *,
-    reasoning_enabled: bool,
-    reasoning_default_on: bool,
     reasoning_enabled_model_ids: Sequence[str],
 ) -> ChatControlDescriptor | None:
-    """The composer's reasoning toggle, or `None` when a gate upstream is closed
-    (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
+    """The composer's reasoning row, or `None` when no model has its reasoning
+    enabled platform-wide (`MODEL-REASONING-ENABLEMENT-RFC.md` §8: a control
+    that cannot do anything must be absent, never present-and-inert).
 
-    Emitted here, not by a capability, because reasoning is not a tool: an agent
-    does not "use" reasoning the way it uses document search, so putting it in
-    the capability/tool system would ask an author to enable it in the wrong
-    place. Level 3 is a plain agent property (`tuning.reasoning_enabled`, set in
-    the General section of the agent form) and this function is where it meets
-    the platform gate.
-
-    §8's diagnosability rule decides the return type. Three of the four gates are
-    invisible from the chat page, so a control that cannot do anything must be
-    **absent**, never present-and-inert — otherwise the predictable support
-    ticket is "I turned reasoning on and nothing happened" with no way to tell
-    which gate blocked:
-
-    - the agent's author did not offer it → no control;
-    - no model has its reasoning enabled platform-wide → no control.
-
-    `reasoning_default_on` (Amendment B) is read only once past those gates: it
-    decides where the emitted switch *starts*, never whether one is emitted.
-    An author who left the offer off but the default on gets no control — the
-    stored value simply stays inert until the offer comes back.
-
-    Checking "is any model's reasoning on?" also covers the aptitude gate,
-    because the write path already enforces it: `set_model_reasoning` refuses
-    (409 `ReasoningNotSupported`) a model with no `supports_thinking` profile, so
-    a stored enabled row can only ever name a reasoning-capable model. No catalog
-    fetch is needed on this send path.
-
-    NOT narrowed to the model this turn routes to, and that is now a deliberate
-    division of labour rather than the compromise it used to be (#2387). The
-    reason recorded here before — "routing resolves per *operation* at runtime
-    while chat controls are computed once per session" — had become false twice
-    over: #2365 removed operations, and prepare-execution returns a fresh
-    `chat_controls` on every send.
-
-    Narrowing it here is still not possible, for a different and durable reason:
-    resolving the routed model needs the pod's `/agents/models-catalog`, and this
-    send path must stay free of pod-catalog fetches. So this function answers
-    only "did the platform enable reasoning anywhere, and does this agent offer
-    it" — the two gates it can answer cheaply — and the composer combines that
-    with `EffectiveChatModel.reasoning_enabled` from its own read to decide
-    whether the toggle is worth showing for the model actually answering.
+    Emitted by the platform, not a capability: reasoning is how the model is
+    called, not a tool. It is not narrowed to the routed model because that
+    needs a pod-catalog fetch this send path must not make; the composer shows
+    the row only for a chosen model whose `reasoning_enabled` is true, and
+    seeds it from that model's team default (no `params.default` here).
     """
 
-    if not reasoning_enabled:
-        return None
     if not reasoning_enabled_model_ids:
-        logger.debug(
-            "[reasoning] no %s control: the agent offers it but no model has "
-            "its reasoning enabled platform-wide (REASON-01 §8)",
-            _REASONING_TOGGLE_WIDGET,
-        )
         return None
-    # NOTE (#2387): this control used to carry three more params —
-    # `model_id`/`display_name` (the single reasoning-enabled model's identity,
-    # which the composer showed as its model label) and `effort` (that model's
-    # ops-authored `settings.reasoning_effort`, snapshotted at toggle time).
-    #
-    # All three are gone. The identity was simply wrong: it named the model
-    # whose REASONING was on, not the model a turn routes to, so the composer
-    # contradicted every platform binding and team override. The effort went
-    # with it because the menu is now a plain on/off — the level a turn runs
-    # with is the pod's business (it applies the live `settings.reasoning_effort`
-    # either way), not something the user picks or needs quoted back at them.
-    #
-    # What remains is the only thing this function is authoritative about:
-    # whether a reasoning toggle should exist at all, and where it starts.
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
-        # Seeds the composer's initial value only (RFC §3.7) — the user can
-        # still flip it off for this question. Author-chosen since Amendment B
-        # (`tuning.reasoning_default_on`); it was hardcoded False before, and
-        # False remains the default because `AGENT-THINKING-API-RFC.md`
-        # Amendment C measured reasoning re-issuing duplicate tool calls in
-        # 10/10 turns on this stack. Starting ON is an author's opt-in.
-        params={"default": reasoning_default_on},
     )
 
 
@@ -1381,18 +1341,45 @@ async def _validate_capability_config_via_pod(
         for upload in asset_files
     ]
     headers = {"Authorization": authorization} if authorization else None
+    started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 url, data=data, files=files or None, headers=headers
             )
     except httpx.RequestError as exc:
-        raise EnrollmentError(
-            f"Agent runtime service at {base_url} is not reachable to "
-            f"validate capability '{capability_id}' configuration. Start the "
-            "corresponding agent runtime, then try again.",
-            http_status=503,
-        ) from exc
+        if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+            code, status, message = (
+                "capability_validation_unavailable",
+                503,
+                "The agent runtime could not be reached to validate the configuration. "
+                "Please try again in a moment.",
+            )
+        elif isinstance(exc, httpx.TimeoutException):
+            code, status, message = (
+                "capability_validation_timeout",
+                504,
+                "Configuration validation took too long. Please try again.",
+            )
+        else:
+            code, status, message = (
+                "capability_validation_interrupted",
+                502,
+                "Communication with the agent runtime was interrupted during "
+                "configuration validation. Please try again.",
+            )
+        # The request logging scope supplies existing request/correlation IDs.
+        logger.warning(
+            "Capability validation transport failed: exception_type=%s duration_ms=%.1f",
+            type(exc).__name__,
+            (time.monotonic() - started) * 1000,
+            extra={
+                "capability_id": capability_id,
+                "outcome": "failed",
+                "error_code": code,
+            },
+        )
+        raise EnrollmentError(message, http_status=status, code=code) from exc
     if response.status_code in (400, 404, 422):
         try:
             detail = response.json().get("detail") or response.text
@@ -1418,6 +1405,29 @@ async def _validate_capability_config_via_pod(
             http_status=502,
         )
     return envelope
+
+
+def _advertised_defaults(
+    available: Sequence[CapabilityCatalogEntry], default_capability_ids: Sequence[str]
+) -> list[str]:
+    available_ids = frozenset(entry.id for entry in available)
+    return [cap_id for cap_id in default_capability_ids if cap_id in available_ids]
+
+
+async def template_default_capability_ids(
+    available: Sequence[CapabilityCatalogEntry],
+    default_capability_ids: Sequence[str],
+    team_id: TeamId,
+    deps: ProductServiceDependencies | None,
+) -> list[str]:
+    """The template defaults the pod advertises, narrowed to what the team may use."""
+    candidate_ids = _advertised_defaults(available, default_capability_ids)
+    if deps is None or not candidate_ids:
+        return candidate_ids
+    usable_ids = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
+    if usable_ids is None:
+        return candidate_ids
+    return [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
 
 
 async def _apply_capability_selection(
@@ -1501,21 +1511,10 @@ async def _apply_capability_selection(
         # use. No 403 — an implicit default silently degrades to "whatever
         # this team already has" rather than blocking every fresh team's
         # first save.
-        available_ids = frozenset(entry.id for entry in available)
-        candidate_ids = [
-            cap_id for cap_id in default_capability_ids if cap_id in available_ids
-        ]
-        if deps is not None and candidate_ids:
-            usable_ids = await usable_capability_ids(
-                deps.team_dependencies.rebac, team_id
-            )
-            effective_ids = (
-                candidate_ids
-                if usable_ids is None
-                else [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
-            )
-        else:
-            effective_ids = candidate_ids
+        candidate_ids = _advertised_defaults(available, default_capability_ids)
+        effective_ids = await template_default_capability_ids(
+            available, default_capability_ids, team_id, deps
+        )
         # 2026-07-19 fix B (GitHub #2004 item 5, depends_on fast-follow
         # defense-in-depth): the template declared defaults, but every one of
         # them got filtered out by the team's ReBAC grants — persisting `[]`
@@ -1652,14 +1651,6 @@ async def list_agent_templates(
                     # rendered) — same result as filtering here, without
                     # making the field lie about what the template declares.
                     default_capability_ids=list(template.default_capability_ids),
-                    # REASON-01 level 3 + Amendment B (#2473), read off the
-                    # pod's `default_tuning`. Unfiltered by platform state on
-                    # purpose: this is what the template DECLARES. Levels 1-2
-                    # are send-path gates (`_platform_reasoning_control`), so a
-                    # declared True on a deployment with no reasoning-enabled
-                    # model simply never produces a composer control.
-                    reasoning_enabled=template.default_tuning.reasoning_enabled,
-                    reasoning_default_on=template.default_tuning.reasoning_default_on,
                 )
             )
     return templates
@@ -2373,8 +2364,7 @@ def _record_to_summary(
         description=record.description,
         role=record.tuning.role,
         usage_statement=record.tuning.usage_statement,
-        reasoning_enabled=record.tuning.reasoning_enabled,
-        reasoning_default_on=record.tuning.reasoning_default_on,
+        recommended_chat_profile_id=record.tuning.recommended_chat_profile_id,
         status="enabled" if record.enabled else "disabled",
         suspension_reason=(
             SuspensionReason(record.suspension_reason)
@@ -2452,6 +2442,7 @@ async def ensure_agent_name_free(
 # conflict share the status and the endpoint, and the form marks a different
 # input for each.
 PROMPT_COMMAND_CONFLICT = "prompt_command_conflict"
+PROMPT_COMMAND_RESERVED = "prompt_command_reserved"
 
 
 class PromptRequestError(Exception):
@@ -2658,6 +2649,131 @@ async def _delete_knowledge_flow_attachment(
     )
 
 
+async def _recommendation_capability_id(
+    profile_id: str | None,
+    *,
+    team_id: TeamId,
+    source_runtime_id: str,
+    deps: ProductServiceDependencies,
+) -> str | None:
+    """The model capability id of `profile_id` once it is a usable,
+    team-enabled chat profile served by the instance's pod (`None` for no
+    recommendation); raises a 422 `EnrollmentError` otherwise."""
+
+    if profile_id is None:
+        return None
+    from control_plane_backend.routing_policy.schemas import (
+        ModelDisabledForTeamError,
+        ProfileNotUsableError,
+        UnknownProfileError,
+    )
+    from control_plane_backend.routing_policy.service import (
+        check_profile_usable_for_team,
+    )
+
+    try:
+        return await check_profile_usable_for_team(
+            deps,
+            team_id=team_id,
+            profile_id=profile_id,
+            source_runtime_ids={source_runtime_id},
+        )
+    except (
+        UnknownProfileError,
+        ProfileNotUsableError,
+        ModelDisabledForTeamError,
+    ) as exc:
+        raise EnrollmentError(str(exc), http_status=422) from exc
+
+
+async def _resolve_enrollable_template(
+    *,
+    user: KeycloakUser,
+    team_id: TeamId,
+    template_id: str,
+    deps: ProductServiceDependencies,
+) -> tuple[RuntimeCatalogSourceConfig, _RuntimeTemplatePayload]:
+    """
+    Resolve `{source_runtime_id}:{source_agent_id}` to its enabled source and
+    the live template this team may use, raising `EnrollmentError` otherwise.
+    """
+    parts = template_id.split(":", 1)
+    if len(parts) != 2:
+        raise EnrollmentError(
+            f"Invalid template_id {template_id!r}. "
+            "Expected format: '{source_runtime_id}:{source_agent_id}'."
+        )
+    source_runtime_id, source_agent_id = parts
+
+    source = next(
+        (
+            s
+            for s in deps.configuration.platform.runtime_catalog_sources
+            if s.runtime_id == source_runtime_id and s.enabled
+        ),
+        None,
+    )
+    if source is None:
+        raise EnrollmentError(
+            f"Runtime source {source_runtime_id!r} is not available or not enabled.",
+            http_status=404,
+        )
+
+    # Internal (non-public) templates are admin-only to enroll: resolve with the
+    # caller's OpenFGA platform_admin privilege (same check as the read-side
+    # `get_team_agent_templates`'s `include_non_public`, api.py) so a Keycloak
+    # `admin` role alone is not sufficient and a non-admin who guesses a hidden
+    # template_id simply gets "template not found" (404) below, exactly as if
+    # it did not exist.
+    can_see_non_public_templates = (
+        await deps.team_dependencies.rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+    )
+    runtime_templates = await _fetch_runtime_templates(
+        source.base_url, include_non_public=can_see_non_public_templates
+    )
+    template = next(
+        (
+            item
+            for item in runtime_templates
+            if item.template_agent_id == source_agent_id
+        ),
+        None,
+    )
+    if template is None:
+        raise EnrollmentError(
+            f"Template {template_id!r} was not found on runtime source "
+            f"{source_runtime_id!r}.",
+            http_status=404,
+        )
+    # Defense in depth (CAPAB-01, RFC §8.6): `list_agent_templates` already
+    # hides a template the team isn't granted, but never trust the frontend
+    # filter alone — re-check here too, same pattern as every other ReBAC gate
+    # in this codebase. 404, not 403: a team that guesses a hidden
+    # `template_id` gets exactly the same response as a nonexistent one (RFC
+    # §7.2/§10 anti-guessing rule, matching the non-public-template check
+    # above).
+    #
+    # An explicitly allowlisted internal harness template (e.g. self-test) is
+    # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
+    # above (`capability_gate_exempt`) — never any `public=False` template,
+    # which has its own, independent meaning.
+    gate_exempt = capability_gate_exempt(source_agent_id)
+    if not gate_exempt and not await can_team_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        capability_id=template_capability_id(source_runtime_id, source_agent_id),
+    ):
+        raise EnrollmentError(
+            f"Template {template_id!r} was not found on runtime source "
+            f"{source_runtime_id!r}.",
+            http_status=404,
+        )
+
+    return source, template
+
+
 async def enroll_agent_instance(
     *,
     user: KeycloakUser,
@@ -2686,94 +2802,23 @@ async def enroll_agent_instance(
     Example:
     - `item = await enroll_agent_instance(user=user, team_id=team_id, request=body, deps=deps)`
     """
-    parts = request.template_id.split(":", 1)
-    if len(parts) != 2:
-        raise EnrollmentError(
-            f"Invalid template_id {request.template_id!r}. "
-            "Expected format: '{source_runtime_id}:{source_agent_id}'."
-        )
-    source_runtime_id, source_agent_id = parts
     await ensure_agent_name_free(team_id, request.display_name, deps)
-
-    source = next(
-        (
-            s
-            for s in deps.configuration.platform.runtime_catalog_sources
-            if s.runtime_id == source_runtime_id and s.enabled
-        ),
-        None,
+    source, template = await _resolve_enrollable_template(
+        user=user, team_id=team_id, template_id=request.template_id, deps=deps
     )
-    if source is None:
-        raise EnrollmentError(
-            f"Runtime source {source_runtime_id!r} is not available or not enabled.",
-            http_status=404,
-        )
-
     agent_instance_id = str(uuid4())
-    # Internal (non-public) templates are admin-only to enroll: resolve with the
-    # caller's OpenFGA platform_admin privilege (same check as the read-side
-    # `get_team_agent_templates`'s `include_non_public`, api.py) so a Keycloak
-    # `admin` role alone is not sufficient and a non-admin who guesses a hidden
-    # template_id simply gets "template not found" (404) below, exactly as if
-    # it did not exist.
-    can_see_non_public_templates = (
-        await deps.team_dependencies.rebac.has_user_permission(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-        )
+    recommended_capability_id = await _recommendation_capability_id(
+        request.recommended_chat_profile_id,
+        team_id=team_id,
+        source_runtime_id=source.runtime_id,
+        deps=deps,
     )
-    runtime_templates = await _fetch_runtime_templates(
-        source.base_url, include_non_public=can_see_non_public_templates
-    )
-    template = next(
-        (
-            item
-            for item in runtime_templates
-            if item.template_agent_id == source_agent_id
-        ),
-        None,
-    )
-    if template is None:
-        raise EnrollmentError(
-            f"Template {request.template_id!r} was not found on runtime source "
-            f"{source_runtime_id!r}.",
-            http_status=404,
-        )
-    # Defense in depth (CAPAB-01, RFC §8.6): `list_agent_templates` already
-    # hides a template the team isn't granted, but never trust the frontend
-    # filter alone — re-check here too, same pattern as every other ReBAC gate
-    # in this codebase. 404, not 403: a team that guesses a hidden
-    # `template_id` gets exactly the same response as a nonexistent one (RFC
-    # §7.2/§10 anti-guessing rule, matching the non-public-template check
-    # above).
-    #
-    # An explicitly allowlisted internal harness template (e.g. self-test) is
-    # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
-    # above (`capability_gate_exempt`) — never any `public=False` template,
-    # which has its own, independent meaning.
-    gate_exempt = capability_gate_exempt(source_agent_id)
-    if not gate_exempt and not await can_team_use_capability(
-        deps.team_dependencies.rebac,
-        team_id,
-        capability_id=template_capability_id(source_runtime_id, source_agent_id),
-    ):
-        raise EnrollmentError(
-            f"Template {request.template_id!r} was not found on runtime source "
-            f"{source_runtime_id!r}.",
-            http_status=404,
-        )
-
     tuning = template.default_tuning.model_copy(
         update={
             "role": request.role or request.display_name,
             "description": request.description or request.display_name,
             "usage_statement": request.usage_statement,
-            # REASON-01 level 3 — a plain agent property set on the General
-            # section of the form, alongside role/description. Not a capability.
-            "reasoning_enabled": request.reasoning_enabled,
-            # Amendment B — where the composer's toggle starts on a new
-            # conversation. Stored even when the offer above is off: inert, but
-            # it survives the author toggling the offer off and back on.
-            "reasoning_default_on": request.reasoning_default_on,
+            "recommended_chat_profile_id": request.recommended_chat_profile_id,
         }
     )
     if request.tuning_field_values:
@@ -2813,8 +2858,8 @@ async def enroll_agent_instance(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
         template_id=request.template_id,
-        source_runtime_id=source_runtime_id,
-        source_agent_id=source_agent_id,
+        source_runtime_id=source.runtime_id,
+        source_agent_id=template.template_agent_id,
         display_name=request.display_name,
         description=request.description,
         enabled=True,
@@ -2824,7 +2869,9 @@ async def enroll_agent_instance(
 
     store = deps.get_agent_instance_store()
     try:
-        created = await store.create(record)
+        created = await store.create(
+            record, recommended_capability_id=recommended_capability_id
+        )
     except AgentNameAlreadyExistsError as exc:
         raise agent_name_conflict(team_id, request.display_name) from exc
     emit_agent_created_kpi(created, user=user, deps=deps)
@@ -3045,20 +3092,18 @@ async def update_agent_instance(
             update={"usage_statement": request.usage_statement}
         )
 
-    if request.reasoning_enabled is not None:
-        # REASON-01 level 3, same "None means unchanged" convention as role and
-        # usage_statement above: a partial update (e.g. the enable/disable
-        # toggle) must not silently switch an agent's reasoning offer off.
-        new_tuning = (new_tuning or record.tuning).model_copy(
-            update={"reasoning_enabled": request.reasoning_enabled}
+    recommendation_set = "recommended_chat_profile_id" in tuning_fields_set
+    recommended_capability_id: str | None = None
+    if recommendation_set:
+        # Absent leaves it unchanged; an explicit null follows the team again.
+        recommended_capability_id = await _recommendation_capability_id(
+            request.recommended_chat_profile_id,
+            team_id=team_id,
+            source_runtime_id=record.source_runtime_id,
+            deps=deps,
         )
-
-    if request.reasoning_default_on is not None:
-        # Amendment B, same "None means unchanged" convention. Independent of
-        # reasoning_enabled above on purpose: switching the offer off must not
-        # erase the author's default, so the two fields never write each other.
         new_tuning = (new_tuning or record.tuning).model_copy(
-            update={"reasoning_default_on": request.reasoning_default_on}
+            update={"recommended_chat_profile_id": request.recommended_chat_profile_id}
         )
 
     try:
@@ -3070,6 +3115,9 @@ async def update_agent_instance(
             enabled=request.status == "enabled" if request.status is not None else None,
             tuning=new_tuning,
             updated_by=user.uid,
+            recommended_capability_id=recommended_capability_id,
+            # Never write back a recommendation a policy write cleared meanwhile.
+            keep_stored_recommendation=not recommendation_set,
         )
     except AgentNameAlreadyExistsError as exc:
         raise agent_name_conflict(team_id, exc.display_name) from exc
@@ -3129,7 +3177,9 @@ async def unenroll_agent_instance(
     - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
     store = deps.get_agent_instance_store()
-    deleted = await store.delete(agent_instance_id, team_id)
+    deleted = await store.delete(
+        agent_instance_id, team_id, actor_uid=user.uid if user else None
+    )
     if deleted:
         try:
             deps.get_kpi_writer().count(
@@ -3306,9 +3356,9 @@ async def prepare_execution(
     - pass request-scoped product dependencies when available
     - the returned payload now includes `effective_chat_options`, the typed
       chat-affordance surface resolved from the stored managed-agent config
-    - `agent_model_override`, when set, replaces this instance's entry in the
-      `agent_profile_overrides` snapshot for THIS call only — never persisted,
-      never visible via `GET .../routing-policy`. Restricted to the evaluator's
+    - `agent_model_override`, when set, is returned as `chat_profile_id` (the
+      user level, above the instance recommendation) for THIS call only —
+      never persisted, never visible via `GET .../routing-policy`. Restricted to the evaluator's
       service identity (`is_service_agent`, without the delegation caller role);
       rejected outright for any other caller, and rejected if the profile isn't
       `can_use`-enabled for the team.
@@ -3464,10 +3514,7 @@ async def prepare_execution(
     # Two independent reads, so gathered rather than chained — this is a
     # user-facing send path.
     (
-        (
-            chat_default_profile_id,
-            agent_profile_overrides,
-        ),
+        chat_default_profile_id,
         reasoning_enabled_ids,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
@@ -3478,8 +3525,8 @@ async def prepare_execution(
         deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
 
-    # One-shot evaluator override (fred-agent-evaluator): replaces this
-    # instance's entry in the snapshot for this call only, never persisted.
+    # One-shot evaluator override (fred-agent-evaluator): a user-level choice
+    # for this call only, never persisted.
     # Fails closed rather than silently falling back to the team default —
     # a caller who asked for model X and silently got the team default would
     # draw wrong conclusions from the resulting evaluation scores.
@@ -3497,6 +3544,7 @@ async def prepare_execution(
         # cycle (same reason routing_policy/service.py imports this module
         # lazily for `_pod_catalog_fetch_scope`).
         from control_plane_backend.routing_policy.schemas import (
+            ModelDisabledForTeamError,
             ProfileNotUsableError,
             UnknownProfileError,
         )
@@ -3511,23 +3559,21 @@ async def prepare_execution(
                 profile_id=agent_model_override,
                 source_runtime_ids={instance.source_runtime_id},
             )
-        except (UnknownProfileError, ProfileNotUsableError) as exc:
+        except (
+            UnknownProfileError,
+            ProfileNotUsableError,
+            ModelDisabledForTeamError,
+        ) as exc:
             # 422, not 400: fred-agent-evaluator's error mapper only classifies
             # 401/403/404/409/422 from this endpoint, and 422 ("target_invalid")
             # is the closest existing fit for a bad request parameter.
             raise ExecutionPreparationError(str(exc), http_status=422) from exc
-        agent_profile_overrides = {
-            **agent_profile_overrides,
-            instance.source_agent_id: agent_model_override,
-        }
 
     sorted_reasoning_model_ids = sorted(reasoning_enabled_ids)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
     # the composer menu, and omitted entirely when a gate upstream is closed (§8).
     reasoning_control = _platform_reasoning_control(
-        reasoning_enabled=instance.tuning.reasoning_enabled,
-        reasoning_default_on=instance.tuning.reasoning_default_on,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
     )
     if reasoning_control is not None:
@@ -3554,10 +3600,20 @@ async def prepare_execution(
         context_prompt_text=context_prompt_text,
         capability_base_urls=capability_base_urls,
         chat_default_profile_id=chat_default_profile_id,
-        agent_profile_overrides=agent_profile_overrides,
+        chat_profile_id=agent_model_override,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
         max_chat_input_chars=max_chat_input_chars,
     )
+
+
+async def _in_read_session(deps: ProductServiceDependencies, reads):
+    """Run `reads(session)` on one pooled connection when a session factory is
+    wired, else let each store open its own session."""
+
+    if deps.get_sql_session_factory is None:
+        return await reads(None)
+    async with deps.get_sql_session_factory()() as session, session.begin():
+        return await reads(session)
 
 
 async def get_runtime_binding_for_team(
@@ -3595,28 +3651,45 @@ async def get_runtime_binding_for_team(
     - call from the team-scoped resolution endpoint after a team ReBAC check
     - returns None when no instance with that id exists in that team
     """
-    store = deps.get_agent_instance_store()
-    instance = await store.get_for_team(agent_instance_id, team_id)
-    if instance is None:
-        return None
-    # Resolve this team's per-capability enablement settings and ship only the
-    # slices for the capabilities this instance actually selected (CAPAB-01 /
-    # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
-    selected = set(instance.tuning.selected_capability_ids or [])
-    # Independent reads (none depends on another's result) — run concurrently
-    # rather than stacking sequential DB round trips on the per-turn
-    # runtime-binding path (2026-08-04, PR #2204 review).
-    (
-        all_team_settings,
-        reasoning_enabled_model_ids,
-        platform_chat_model_binding,
-        platform_prompt,
-    ) = await asyncio.gather(
-        deps.get_team_capability_settings_store().list_for_team(team_id),
-        deps.get_model_reasoning_store().list_enabled_model_ids(),
-        resolve_platform_chat_model_binding(deps),
-        resolve_platform_prompt_text(deps),
+
+    # Two concurrent sessions of short sequential reads: at most 2 pooled
+    # connections per turn instead of one per read (design.md, D12 notes).
+    async def _team_reads(session: AsyncSession | None):
+        instance = await deps.get_agent_instance_store().get_for_team(
+            agent_instance_id, team_id, session=session
+        )
+        if instance is None:
+            return None
+        settings = await deps.get_team_capability_settings_store().list_for_team(
+            team_id, session=session
+        )
+        # Primary-key read; the pod trusts only this copy of the disabled set.
+        policy = await deps.get_team_routing_policy_store().get(
+            team_id=team_id, session=session
+        )
+        return instance, settings, policy
+
+    async def _platform_reads(session: AsyncSession | None):
+        reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
+            session=session
+        )
+        binding = await resolve_platform_chat_model_binding(deps, session=session)
+        prompt = await resolve_platform_prompt_text(deps, session=session)
+        return reasoning, binding, prompt
+
+    team_result, platform_result = await asyncio.gather(
+        _in_read_session(deps, _team_reads),
+        _in_read_session(deps, _platform_reads),
     )
+    if team_result is None:
+        return None
+    instance, all_team_settings, routing_policy = team_result
+    reasoning_enabled_model_ids, platform_chat_model_binding, platform_prompt = (
+        platform_result
+    )
+    # Ship only the settings slices of the capabilities this instance selected
+    # (CAPAB-01, RFC §8.2); the pod carries each to `CapabilityContext`.
+    selected = set(instance.tuning.selected_capability_ids or [])
     team_capability_settings = {
         cap_id: settings
         for cap_id, settings in all_team_settings.items()
@@ -3631,6 +3704,11 @@ async def get_runtime_binding_for_team(
         tuning=instance.tuning,
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
+        team_disabled_model_ids=(
+            sorted(routing_policy.disabled_model_ids)
+            if routing_policy is not None
+            else []
+        ),
         platform_chat_model_binding=platform_chat_model_binding,
         platform_prompt=platform_prompt,
     )
@@ -3722,6 +3800,16 @@ def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
     )
 
 
+def _reject_reserved_prompt_command(command: str | None) -> None:
+    """Reserve the platform skill dispatcher while preserving legacy rows."""
+    if command == "skill":
+        raise PromptRequestError(
+            "The /skill command is reserved for platform skills; rename this prompt command.",
+            http_status=409,
+            code=PROMPT_COMMAND_RESERVED,
+        )
+
+
 async def create_prompt(
     *,
     user: KeycloakUser,
@@ -3744,6 +3832,7 @@ async def create_prompt(
     - `summary = await create_prompt(user=user, team_id=team_id, request=body, deps=deps)`
     """
 
+    _reject_reserved_prompt_command(request.command)
     record = PromptRecord(
         prompt_id=str(uuid4()),
         team_id=team_id,
@@ -3842,6 +3931,7 @@ async def list_prompt_commands(
             emoji=record.emoji,
         )
         for record in records
+        if record.command != "skill"
     ]
 
 
@@ -3912,6 +4002,12 @@ async def update_prompt(
     - `summary = await update_prompt(team_id, prompt_id, request, deps)`
     """
 
+    if request.command == "skill":
+        existing = await deps.get_prompt_store().get_for_team(prompt_id, team_id)
+        if existing is None:
+            return None
+        if existing.command != "skill":
+            _reject_reserved_prompt_command(request.command)
     try:
         updated = await deps.get_prompt_store().update(
             prompt_id,
@@ -4029,6 +4125,7 @@ async def promote_prompt(
         raise PromptRequestError(
             f"Prompt {prompt_id!r} not found for team {team_id!r}.", http_status=404
         )
+    _reject_reserved_prompt_command(source.command)
     target_team_id = TeamId(request.target_team_id)
     record = PromptRecord(
         prompt_id=str(uuid4()),
@@ -4222,6 +4319,7 @@ async def _next_imported_command(
     still fits the 64-character column.
     """
 
+    _reject_reserved_prompt_command(base_command)
     if base_command is None:
         return None
     taken = await store.list_commands_by_team(target_team_id)
@@ -4258,11 +4356,11 @@ async def import_published_prompt_into_team(
             f"Published prompt {prompt_id!r} not found in the marketplace.",
             http_status=404,
         )
-    name = await _next_imported_name(store, target_team_id, source.name)
     # Copied, unlike `category_id` just below: a category is an id pointing at
     # a row the destination team does not have, while a command is a plain
     # string meaning the same thing everywhere.
     command = await _next_imported_command(store, target_team_id, source.command)
+    name = await _next_imported_name(store, target_team_id, source.name)
     record = PromptRecord(
         prompt_id=str(uuid4()),
         team_id=target_team_id,

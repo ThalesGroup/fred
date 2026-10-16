@@ -14,8 +14,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
+from fred_sdk.contracts.agent_draft import (
+    MAX_CREATION_ASSISTANT_PROMPT_CHARS,
+    CreationAssistantReasoningEffort,
+)
+from fred_sdk.contracts.capability.manifest import ReasoningEffortLevel
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -83,12 +88,16 @@ class SetPlatformPromptRequest(BaseModel):
     def _refuse_reserved_tags(cls, value: str) -> str:
         # The runtime wraps this text in <platform_prompt>; a reserved tag
         # inside it could close that block and open another.
-        reserved = find_reserved_prompt_tag(value)
-        if reserved is not None:
-            raise ValueError(
-                f"reserved system-prompt tag <{reserved}> is not allowed in the platform prompt"
-            )
-        return value
+        return _refuse_reserved_tags(value, "the platform prompt")
+
+
+def _refuse_reserved_tags(value: str, where: str) -> str:
+    reserved = find_reserved_prompt_tag(value)
+    if reserved is not None:
+        raise ValueError(
+            f"reserved system-prompt tag <{reserved}> is not allowed in {where}"
+        )
+    return value
 
 
 class PlatformInstructions(BaseModel):
@@ -123,3 +132,127 @@ class PlatformInstructions(BaseModel):
             "the two rather than render an empty read-only panel."
         ),
     )
+
+
+# The creation assistant substitutes the user's language here; without it the
+# draft may come back in the wrong language.
+CREATION_ASSISTANT_LANGUAGE_PLACEHOLDER = "{language}"
+
+
+class CreationAssistantModelOption(BaseModel):
+    """A chat profile the creation assistant may use."""
+
+    profile_id: str
+    name: str = Field(description="Catalog model name, for display.")
+    supports_reasoning: bool = Field(
+        default=False,
+        description=(
+            "True when this profile declares `supports_thinking` and has a "
+            "reasoning effort the pod can send."
+        ),
+    )
+    reasoning_efforts: list[ReasoningEffortLevel] = Field(
+        default_factory=list,
+        description=(
+            "Selectable reasoning levels, weakest first; empty for an on/off "
+            "profile (or one that cannot reason)."
+        ),
+    )
+
+
+class CreationAssistantSettings(BaseModel):
+    """The creation assistant's settings as the admin surface reports them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(
+        description=(
+            "The meta-prompt in force: the saved override, or the pod default "
+            "when `is_default` is true (empty if no pod could be reached)."
+        )
+    )
+    default_text: str | None = Field(
+        default=None,
+        description="The pod's built-in meta-prompt; None when no pod answered.",
+    )
+    default_revised_at: date | None = Field(
+        default=None,
+        description="Date of the last edit of the built-in meta-prompt; None for an older or unreachable pod.",
+    )
+    default_changed_since_override: bool = Field(
+        default=False,
+        description=(
+            "True when an override is saved and the built-in meta-prompt was "
+            "revised on a later date. The admin UI shows it as a warning."
+        ),
+    )
+    is_default: bool = Field(description="True when no override is saved.")
+    source_unavailable: bool = Field(
+        default=False,
+        description="True when no runtime pod could report its built-in meta-prompt.",
+    )
+    missing_language_placeholder: bool = Field(
+        default=False,
+        description=(
+            "True when `text` lacks the `{language}` placeholder. Saving is "
+            "allowed; the admin UI shows it as a warning."
+        ),
+    )
+    model_profile_id: str | None = Field(
+        default=None,
+        description="Chat profile the creation assistant uses; None = the pod default.",
+    )
+    reasoning_effort: CreationAssistantReasoningEffort = Field(
+        default="off",
+        description=(
+            "Reasoning of the assistant's own call. Any non-'off' value means "
+            "on for an on/off profile; a level the profile does not offer is "
+            "clamped by the pod to the nearest one."
+        ),
+    )
+    default_model_profile_id: str | None = Field(
+        default=None,
+        description=(
+            "The pods' default chat profile, when every reachable pod names "
+            "the same one; tells the UI which reasoning control the platform "
+            "default offers."
+        ),
+    )
+    model_options: list[CreationAssistantModelOption] = Field(
+        default_factory=list,
+        description="Chat profiles every enabled pod advertises; empty when none answered.",
+    )
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class SetCreationAssistantSettingsRequest(BaseModel):
+    """Replaces the creation assistant settings. DELETE clears `text` only."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_CREATION_ASSISTANT_PROMPT_CHARS,
+        description="Meta-prompt override; None keeps the pod's built-in text.",
+    )
+    model_profile_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="One of `model_options`; None uses the pod default.",
+    )
+    reasoning_effort: CreationAssistantReasoningEffort = Field(
+        default="off",
+        description="Reasoning of the assistant's call; clamped to the model by the pod.",
+    )
+
+    @field_validator("text")
+    @classmethod
+    def _validate(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip():
+            raise ValueError("the creation assistant prompt cannot be blank")
+        return _refuse_reserved_tags(value, "the creation assistant prompt")

@@ -17,8 +17,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint --config eslint.config.mjs --no-error-on-unmatched-pattern \"src/**/*.{ts,tsx}\"",
     "format": "prettier --config .prettierrc --ignore-path .prettierignore --ignore-path .gitignore --check .",
-    "test": "npm run applications:test && vitest run",
-    "test:coverage": "npm run applications:test && vitest run --coverage",
+    "test": "npm run applications:test && npm run themes:test && vitest run",
+    "test:coverage": "npm run applications:test && npm run themes:test && vitest run --coverage",
+    "themes:test": "node --test scripts/theme-overlay.test.mjs",
     "applications:test": "node --test scripts/application-proxy.test.mjs && sh tests/application-proxy-smoke.sh"
   },
   "dependencies": {
@@ -27,6 +28,9 @@
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@fontsource/inter": "^5.2.6",
     "@fontsource/nunito": "^5.3.0",
     "@lezer/highlight": "^1.2.3",

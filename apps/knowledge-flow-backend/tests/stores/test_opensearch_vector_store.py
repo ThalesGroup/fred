@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 
 import pytest
@@ -123,7 +124,7 @@ class FakeOpenSearchClient:
         self.update_by_query_calls.append((index, deepcopy(body)))
         return self.update_by_query_response
 
-    def search(self, *, index: str, body: dict, request_timeout: int | None = None) -> dict:
+    def search(self, *, index: str, body: dict, request_timeout: int | None = None, params: dict | None = None) -> dict:
         self.search_calls.append(deepcopy(body))
         self.search_request_timeouts.append(request_timeout)
         if self.search_responses:
@@ -989,3 +990,21 @@ def test_scan_document_uids_composite_swallows_and_returns_empty_on_first_page_f
     fake_client.search = _raise  # type: ignore[method-assign]
 
     assert ovs.scan_document_uids_composite(fake_client, "fred-vectors") == []
+
+
+@pytest.mark.parametrize("policy", ["ann_search", "hybrid_search", "full_text_search"])
+def test_search_diagnostics_do_not_expose_unchecked_candidates(monkeypatch, caplog, policy):
+    client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: client)
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8), embedding_model_name="test", kpi=None, host="http://localhost:9200", index="fred-vectors", username="admin", password=TEST_OPENSEARCH_PASSWORD
+    )
+    client.search_responses = [
+        {"hits": {"hits": [{"_id": "chunk", "_score": 1.0, "_source": {"text": "PRIVATE_CONTENT_SENTINEL", "metadata": {"document_uid": "private-doc", "title": "PRIVATE_TITLE_SENTINEL"}}}]}}
+    ]
+    with caplog.at_level(logging.DEBUG, logger=ovs.__name__):
+        hits = getattr(store, policy)("query", **({"k": 2} if policy == "ann_search" else {"top_k": 2}))
+    assert hits[0].document.page_content == "PRIVATE_CONTENT_SENTINEL"
+    assert "PRIVATE_CONTENT_SENTINEL" not in caplog.text
+    assert "PRIVATE_TITLE_SENTINEL" not in caplog.text
+    assert "built hits count=1" in caplog.text

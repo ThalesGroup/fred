@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -8,19 +10,44 @@ from uuid import UUID
 from fastapi import HTTPException
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
-from sqlalchemy import ColumnElement, func, or_, select, text
+from sqlalchemy import ColumnElement, delete, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
 from fred_core.security.platform_access.rules import Fact, path_key
 from fred_core.sql import make_session_factory, use_session
+from fred_core.sql.accent_folding import fold_accents, search_spellings
 from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
+
+logger = logging.getLogger(__name__)
+_WARNING_INTERVAL = 60.0
+_last_warning: dict[str, float] = {}
+
+
+def warn_unavailable(kind: str, error: BaseException) -> None:
+    """Log why platform access answered 503, at most once a minute per kind.
+
+    The limit is per kind: another cause of the same kind inside the window is
+    not logged. Only the exception type and SQLSTATE: messages and statement
+    parameters can carry link tokens."""
+    now = time.monotonic()
+    if now - _last_warning.get(kind, -_WARNING_INTERVAL) < _WARNING_INTERVAL:
+        return
+    _last_warning[kind] = now
+    code = getattr(getattr(error, "orig", None), "pgcode", None)
+    logger.warning(
+        "Platform access %s unavailable: %s%s",
+        kind,
+        type(error).__name__,
+        f" (SQLSTATE {code})" if code else "",
+    )
 
 
 class PlatformAccessStore:
@@ -48,7 +75,8 @@ class PlatformAccessStore:
                     yield active
         except HTTPException:
             raise
-        except Exception:
+        except Exception as error:
+            warn_unavailable("store", error)
             raise HTTPException(503, "platform_access_unavailable") from None
 
     @asynccontextmanager
@@ -97,19 +125,130 @@ class PlatformAccessStore:
                 )
             return list((await s.scalars(query.order_by(TeamMetadataRow.id))).all())
 
+    async def free_joined_teams(
+        self, user_id: UUID | None = None, session: AsyncSession | None = None
+    ) -> dict[UUID, set[str]]:
+        """Teams each person joined through a Free link: the only Free admission evidence."""
+        async with self.read(session) as s:
+            query = (
+                select(
+                    PlatformAccessLinkJoinerRow.user_id, PlatformAccessLinkRow.team_id
+                )
+                .join(
+                    PlatformAccessLinkRow,
+                    PlatformAccessLinkRow.id == PlatformAccessLinkJoinerRow.link_id,
+                )
+                .where(
+                    PlatformAccessLinkRow.kind == "free",
+                    PlatformAccessLinkJoinerRow.deleted_at.is_(None),
+                )
+                .distinct()
+            )
+            if user_id is not None:
+                query = query.where(PlatformAccessLinkJoinerRow.user_id == user_id)
+            joined: dict[UUID, set[str]] = {}
+            for uid, team_id in (await s.execute(query)).all():
+                joined.setdefault(uid, set()).add(team_id)
+            return joined
+
+    async def has_free_links(self, team_id: str) -> bool:
+        async with self.read() as s:
+            return bool(
+                await s.scalar(
+                    select(
+                        select(PlatformAccessLinkRow.id)
+                        .where(
+                            PlatformAccessLinkRow.team_id == team_id,
+                            PlatformAccessLinkRow.kind == "free",
+                        )
+                        .exists()
+                    )
+                )
+            )
+
+    async def forget_free_joins(
+        self, team_id: str, user_id: UUID, session: AsyncSession | None = None
+    ) -> None:
+        """Leaving a team ends its Free source: only a new Free enrollment restores it."""
+        async with self.read(session) as s:
+            links = select(PlatformAccessLinkRow.id).where(
+                PlatformAccessLinkRow.team_id == team_id,
+                PlatformAccessLinkRow.kind == "free",
+            )
+            await s.execute(
+                delete(PlatformAccessLinkJoinerRow).where(
+                    PlatformAccessLinkJoinerRow.user_id == user_id,
+                    PlatformAccessLinkJoinerRow.link_id.in_(links),
+                )
+            )
+
     @staticmethod
     def user_search(query: str) -> ColumnElement[bool]:
+        # Accents and case are ignored on both sides: "helene" finds "Hélène" and back.
+        # The typed text is bound and folded by the database, exactly like the columns.
+        patterns = [
+            fold_accents(literal(spelling)) for spelling in search_spellings(query)
+        ]
         return or_(
             *(
-                column.ilike(f"%{query}%")
+                fold_accents(column).contains(pattern)
                 for column in (
                     UserRow.username,
                     UserRow.email,
                     UserRow.first_name,
                     UserRow.last_name,
                 )
+                for pattern in patterns
             )
         )
+
+    @staticmethod
+    def user_filter(query: str) -> list[ColumnElement[bool]]:
+        if not query:
+            return []
+        try:
+            return [UserRow.id == UUID(query)]
+        except ValueError:
+            return [PlatformAccessStore.user_search(query)]
+
+    async def users_with_exceptions(
+        self,
+        offset: int,
+        limit: int | None,
+        query: str = "",
+        session: AsyncSession | None = None,
+        *,
+        exceptions_only: bool = False,
+        identities_only: bool = False,
+    ) -> list[tuple[UserRow, PlatformAccessUserRow | None]]:
+        """One page of users, each with their individual exception when they hold one."""
+        async with self.read(session) as s:
+            # Explicit NULLS LAST: PostgreSQL and SQLite disagree on the default.
+            alphabetical = (
+                func.lower(UserRow.username).asc().nulls_last(),
+                UserRow.id,
+            )
+            statement = (
+                select(UserRow, PlatformAccessUserRow)
+                .join(
+                    PlatformAccessUserRow,
+                    PlatformAccessUserRow.user_id == UserRow.id,
+                    isouter=not exceptions_only,
+                )
+                .where(*self.user_filter(query))
+            )
+            if identities_only:
+                statement = statement.where(UserRow.username.is_not(None))
+            # The whitelist reads newest grant first; a batch shares one date and stays alphabetical.
+            statement = (
+                statement.order_by(
+                    PlatformAccessUserRow.granted_at.desc(), *alphabetical
+                )
+                if exceptions_only
+                else statement.order_by(*alphabetical)
+            )
+            result = await s.execute(statement.offset(offset).limit(limit))
+            return [(user, exception) for user, exception in result.all()]
 
     async def users(
         self,
@@ -117,18 +256,13 @@ class PlatformAccessStore:
         limit: int,
         query: str = "",
         session: AsyncSession | None = None,
+        *,
+        exceptions_only: bool = False,
     ) -> list[UserRow]:
-        async with self.read(session) as s:
-            statement = select(UserRow)
-            if query:
-                statement = statement.where(self.user_search(query))
-            return list(
-                (
-                    await s.scalars(
-                        statement.order_by(UserRow.id).offset(offset).limit(limit)
-                    )
-                ).all()
-            )
+        page = await self.users_with_exceptions(
+            offset, limit, query, session, exceptions_only=exceptions_only
+        )
+        return [user for user, _ in page]
 
     async def add_exception(
         self, uid: UUID, actor: str, source: str, session: AsyncSession
@@ -212,12 +346,24 @@ class PlatformAccessStore:
             await session.flush()
             return row
 
-    async def user_count(self, query: str = "") -> int:
+    async def user_count(
+        self,
+        query: str = "",
+        *,
+        exceptions_only: bool = False,
+        identities_only: bool = False,
+    ) -> int:
         async with self.read() as session:
             statement = select(func.count()).select_from(UserRow)
-            if query:
-                statement = statement.where(self.user_search(query))
-            return int((await session.scalar(statement)) or 0)
+            if exceptions_only:
+                statement = statement.join(
+                    PlatformAccessUserRow, PlatformAccessUserRow.user_id == UserRow.id
+                )
+            if identities_only:
+                statement = statement.where(UserRow.username.is_not(None))
+            return int(
+                (await session.scalar(statement.where(*self.user_filter(query)))) or 0
+            )
 
     async def team(self, team_id: str, session: AsyncSession) -> TeamMetadataRow | None:
         return await session.get(TeamMetadataRow, team_id)
@@ -236,7 +382,12 @@ class PlatformAccessStore:
                     PlatformAccessLinkRow.expires_at.is_(None),
                     PlatformAccessLinkRow.expires_at > now,
                 ),
-                TeamMetadataRow.platform_access_free.is_(True),
+                or_(
+                    (PlatformAccessLinkRow.kind == "team")
+                    & PlatformAccessLinkRow.paused.is_(False),
+                    (PlatformAccessLinkRow.kind == "free")
+                    & TeamMetadataRow.platform_access_free.is_(True),
+                ),
                 ~TeamMetadataRow.id.startswith("personal-"),
             )
         )

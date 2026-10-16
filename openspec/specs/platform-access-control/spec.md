@@ -6,6 +6,109 @@ Control platform admission using administrator-managed verified IdP claim rules 
 
 ## Requirements
 
+### Requirement: Filtering can be paused without losing admission configuration
+
+A platform administrator SHALL be able to turn filtering off from the existing administration action. While filtering is off, every authenticated, active person SHALL pass platform admission, including people who do not match a saved rule or exception. The saved rule, revision, individual exceptions, team authorization, Free flags and links SHALL remain unchanged and available for a later explicit activation. Authentication, account suspension, required terms acceptance and resource permissions SHALL continue to apply.
+
+#### Scenario: Pause and resume configured filtering
+
+- **GIVEN** filtering is active with a saved rule, individual exceptions and Free-team links
+- **WHEN** an administrator disables filtering
+- **THEN** a person outside every admission source SHALL pass platform admission on their next request
+- **AND** the saved configuration SHALL remain visible and unchanged
+- **WHEN** the administrator re-enables filtering through the existing review and confirmation
+- **THEN** the retained configuration SHALL govern the next request without rebuilding it
+
+#### Scenario: Other gates continue while filtering is off
+
+- **WHEN** filtering is off and a person is suspended, has not accepted required terms, or lacks a resource permission
+- **THEN** the corresponding existing refusal SHALL remain effective
+
+### Requirement: Platform administrators cannot be denied by admission filtering
+
+An active person holding the current platform-management permission SHALL pass platform admission when filtering is active, independently of rule results and individual or team exceptions. This admission SHALL use the authoritative current role on direct and delegated requests; it SHALL not grant a role, team membership or resource permission. A removed role SHALL stop providing this admission source on the next request. An unavailable authorization authority SHALL remain an availability failure, not a definitive admission denial.
+
+#### Scenario: Administrator is outside every configured source
+
+- **GIVEN** filtering is active and a platform administrator matches no saved rule or exception
+- **WHEN** that administrator makes a direct or delegated human request
+- **THEN** platform admission SHALL pass while ordinary authorization remains enforced
+
+#### Scenario: Platform role is removed
+
+- **GIVEN** an administrator was admitted only through the platform role
+- **WHEN** that role is removed
+- **THEN** the next direct or delegated human request SHALL no longer use the administrator admission source
+
+#### Scenario: Unavailable role authority
+
+- **WHEN** the current platform-management permission cannot be checked reliably
+- **THEN** admission SHALL fail with the existing availability error rather than inventing an administrator role or returning a policy denial
+
+### Requirement: Platform access mutations remain attributable in the security audit stream
+
+Successful administrator changes to filtering, saved rules, manual exceptions, team access and Free links SHALL emit structured security audit events with the acting administrator and relevant non-secret state or target identifiers, independently of the ordinary application log level. Link creation SHALL identify the new link without exposing its token. Bulk manual grants and T0 imports SHALL emit one summary with counts, without one event per user. A successful new Free-link team join SHALL identify the joining user, team and link. Failed or unauthorized changes SHALL NOT emit success events. Audit events SHALL NOT contain link tokens or rule claim values.
+
+#### Scenario: Bulk grants have a bounded audit summary
+
+- **WHEN** an administrator grants admission to a selected user list
+- **THEN** the security audit stream SHALL identify the acting administrator, the number of distinct selected users and the number of newly granted users in one event
+- **WHEN** the operation fails or is unauthorized
+- **THEN** no successful grant audit event SHALL be emitted
+
+#### Scenario: New Free-link membership is audited
+
+- **WHEN** a valid Free link adds a person to a team
+- **THEN** one success event SHALL identify the joining user, team and link without the token
+- **WHEN** a person only opens the link or repeats enrollment while already a member
+- **THEN** no new join success event SHALL be emitted
+
+#### Scenario: T0 import is recorded once
+
+- **WHEN** the initial T0 import completes
+- **THEN** one audit summary SHALL include the acting administrator and number of exceptions actually added
+- **WHEN** T0 has already completed and an administrator repeats the request
+- **THEN** no new import success event SHALL be emitted
+
+### Requirement: Administrators can inspect successful Free-link joiners
+
+Each Free-team link SHALL retain a bounded, paginated history of distinct people who successfully became members by enrolling through that link. Only platform administrators SHALL read the history. Each entry SHALL expose that person's current first name, last name and username while the account is active, or the last recorded values with a deleted marker after account deletion, plus the time of the successful join. This history SHALL remain visible if the person later leaves the team, the account is deleted, or the link is suspended, revoked or expired. An explicit deletion of the link history SHALL delete its joiner entries. Opening, previewing, accepting terms, unsuccessful enrollment and a repeated enrollment while already a member SHALL NOT create a joiner entry or change the page-opening aggregate.
+
+#### Scenario: Two links have different joiners
+
+- **GIVEN** a team has links A and B
+- **WHEN** one person successfully joins through A and another through B
+- **THEN** each link's joiner list SHALL contain only the person who joined through that link
+
+#### Scenario: Member leaves and link is revoked
+
+- **WHEN** a person joins through a link, later leaves the team and the link is revoked or expires
+- **THEN** that person's join entry SHALL remain visible on that link until the link history is deleted
+
+#### Scenario: Joiner account is deleted
+
+- **WHEN** a person joins through a link and their account is later deleted
+- **THEN** the join entry SHALL remain visible with their last recorded username and names, join time, and a deleted marker
+- **AND** a missing local user row SHALL NOT erase or hide the entry
+
+#### Scenario: Opening or repeat enrollment
+
+- **WHEN** a person opens a link without joining, enrollment fails, or an existing member enrolls again
+- **THEN** no new joiner entry SHALL be created
+- **AND** the existing page-opening aggregate SHALL retain its established meaning
+
+#### Scenario: Joiner history is restricted and paginated
+
+- **WHEN** an ordinary team manager or person requests a link's joiner history
+- **THEN** no joiner identity SHALL be returned
+- **WHEN** a platform administrator opens a link with more joiners than one page
+- **THEN** the complete history SHALL be reachable through bounded pages for that link only
+
+#### Scenario: Explicit link-history cleanup
+
+- **WHEN** an administrator deletes a revoked or expired link's history through the existing cleanup action
+- **THEN** its joiner entries SHALL be deleted with the link, without changing team membership
+
 ### Requirement: Admission policy is managed and activated by administrators
 
 Admission administration SHALL be available in authenticated Fred deployments with enforced ReBAC after the required shared SQL migration. Its policy and activation SHALL be controlled exclusively by versioned durable administrator state. There SHALL be no admission-specific YAML, Helm, SDK environment or Pydantic configuration model, and no deployment seed. An absent authority SHALL initialize with no policy, revision zero and filtering inactive. Restarts SHALL preserve administrator state. Authentication-disabled development SHALL retain its existing behavior. Support destinations SHALL reuse frontend `contactSupportLink`.
@@ -39,11 +142,11 @@ Admission administration SHALL be available in authenticated Fred deployments wi
 
 ### Requirement: Admission sources are independent of resource permissions
 
-When filtering is active, the system SHALL admit a non-suspended person if their verified claim evaluation permits admission under the current allow/block mode, they have a current individual exception, or they are a current member of an authorized team, including a Free team. Ordinary public-team visibility SHALL not count as membership. Admission SHALL neither grant a platform role nor extend team or resource permissions. Account suspension and required CGU acceptance SHALL still apply.
+When filtering is active, the system SHALL admit a non-suspended person if their verified claim evaluation permits admission under the current allow/block mode, they have a current individual exception, they are a current member of an authorized team (including a Free team), or they hold the current platform-management permission. Ordinary public-team visibility SHALL not count as membership. Admission SHALL neither grant a platform role nor extend team or resource permissions. Account suspension and required CGU acceptance SHALL still apply.
 
 #### Scenario: New non-matching person is refused
 
-- **WHEN** a new person is not admitted by the current rule mode and has no individual exception or eligible membership
+- **WHEN** a new person is not admitted by the current rule mode and has no individual exception, eligible membership or platform-management permission
 - **THEN** normal platform access SHALL return HTTP 403 with `detail="platform_access_denied"`
 
 #### Scenario: One source is removed while another remains
@@ -63,19 +166,55 @@ When filtering is active, the system SHALL admit a non-suspended person if their
 
 ### Requirement: Platform administrators manage live exceptions
 
-Only people holding the existing platform-management permission SHALL read or modify the platform access administration surface. It SHALL provide paginated individual exception management using Fred's local users, team authorization and Free-team controls, filtering state, effective admission sources displayed by type and team name without team UIDs, own-session claim selection, rule editing and draft preview. Team administrators and team managers SHALL NOT obtain this authority through their existing roles. Removing an individual exception SHALL NOT remove an identity or revoke independent team sources. Rule updates SHALL be explicit, atomic and versioned; stale concurrent saves SHALL return a conflict without overwriting another administrator's changes. Preview SHALL NOT change filtering, policy, T0, membership or evidence selected only by the proposed rule.
+Only people holding the existing platform-management permission SHALL read or modify the platform access administration surface. It SHALL provide paginated individual exception management using the configured user directory for identity lookup and Fred for admission state, team authorization and Free-team controls, filtering state, effective admission sources displayed by type and team name without team UIDs, own-session claim selection, rule editing and draft preview. In `user_directory: keycloak`, both federated identities known to Keycloak and identities created directly there SHALL be selectable before their first Fred request; in `user_directory: local`, identities SHALL come from Fred's `users` table. Team administrators and team managers SHALL NOT obtain this authority through their existing roles. Removing an individual exception SHALL NOT remove an identity or revoke independent team sources. Rule updates SHALL be explicit, atomic and versioned; stale concurrent saves SHALL return a conflict without overwriting another administrator's changes. Preview SHALL NOT change filtering, policy, T0, membership or evidence selected only by the proposed rule.
 
 #### Scenario: Administrator authorizes a Fred user or team
 
-- **WHEN** an administrator adds an existing Fred user or authorizes an existing team
+- **WHEN** an administrator adds an existing identity from the configured directory or authorizes an existing team
 - **THEN** eligible users SHALL be admitted on their next request without restart or JWT renewal
 
 #### Scenario: Administrator authorizes a selected user list
 
-- **WHEN** a platform administrator selects any nonempty list of existing Fred users and grants admission
+- **WHEN** a platform administrator selects any nonempty list of existing directory identities and grants admission
 - **THEN** the operation SHALL atomically add removable manual exceptions without overwriting existing sources
-- **WHEN** the list includes an unknown user or is submitted by a non-platform administrator
+- **WHEN** the list includes an unknown identity or is submitted by a non-platform administrator
 - **THEN** no exceptions SHALL be granted
+
+#### Scenario: Keycloak identity has not visited Fred
+
+- **GIVEN** `user_directory: keycloak` and a human identity created directly in Keycloak or made known there by federation
+- **WHEN** the identity has no Fred profile row and an administrator searches and selects it
+- **THEN** the directory profile SHALL be displayed and the administrator SHALL be able to grant it an individual exception
+
+#### Scenario: Local directory remains selectable
+
+- **GIVEN** `user_directory: local`
+- **WHEN** an administrator searches, lists, or grants an individual exception
+- **THEN** Fred's local identities SHALL supply the profile and unknown local identities SHALL be rejected
+- **AND** ID-only rows created as Keycloak exception references SHALL NOT become local identities
+
+#### Scenario: Directory profile changes or disappears
+
+- **WHEN** a directory profile changes after an exception was granted
+- **THEN** a later whitelist read SHALL show the current directory profile for the same identity id without changing the exception
+- **WHEN** an existing exception's identity cannot be resolved
+- **THEN** the entry SHALL remain visible with its identity id and origin, and SHALL remain removable
+
+#### Scenario: Directory lookup fails
+
+- **WHEN** the configured directory is unavailable during a search, grant validation, or initial-import preparation
+- **THEN** the operation SHALL report an availability error and SHALL NOT treat an empty fallback as authoritative or partially grant exceptions
+
+#### Scenario: Keycloak search is too broad
+
+- **WHEN** an add-user query matches more than 1000 raw Keycloak records
+- **THEN** an exact username or email match SHALL remain selectable
+- **AND** otherwise the search SHALL request a narrower query without offering an incomplete result as the full population
+
+#### Scenario: Administrator finds their own sources by identity ID
+
+- **WHEN** an administrator previews their own admission sources from the rule editor
+- **THEN** the lookup SHALL use the connected identity ID rather than a potentially broad username search
 
 #### Scenario: Leaving an allowed or Free team revokes its global source
 
@@ -103,7 +242,7 @@ Only people holding the existing platform-management permission SHALL read or mo
 - **WHEN** a save uses an older revision than the active policy
 - **THEN** the system SHALL return HTTP 409 and retain the newer policy, while the UI preserves the unsaved draft and explains the conflict
 
-User rows SHALL show identifier, first name and last name using the team-member table presentation, with email and source information retained. Selection SHALL survive paging without a fixed total cap; SQL batches SHALL remain bounded and grants atomic. The user search SHALL NOT load the directory or display cached results for an empty or whitespace-only query. Typing the first non-whitespace character SHALL request paginated server results using the existing search bar and table. Only the current search response SHALL provide rows; loading, failed or cleared searches SHALL hide previous rows without clearing user selection.
+User rows SHALL show identifier, first name and last name using the team-member table presentation. The whitelist SHALL list individual exceptions only, and its search and add dialog SHALL use the configured directory's current profiles. Searches and pages SHALL not show stale results from a previous request. Large selections SHALL use bounded work and grants SHALL remain atomic.
 
 #### Scenario: Grant more than 100 people
 
@@ -114,17 +253,25 @@ User rows SHALL show identifier, first name and last name using the team-member 
 
 ### Requirement: T0 grandfathering is an explicit fixed snapshot
 
-The system SHALL provide an administrator-triggered preview and one atomic import of existing human users in Fred's database before filtering activation. Known current claim matches SHALL not require individual entries; unknown classifications SHALL be included conservatively so missing profile data does not lock out existing users. T0 entries SHALL be individually removable. Import completion SHALL fix the population; later registrations SHALL not be grandfathered by a retry, restart or upgrade.
+The system SHALL provide an administrator-triggered preview and one atomic import of existing human identities in the configured directory before filtering activation. Keycloak mode SHALL include identities known to Keycloak through federation or direct creation; local mode SHALL use Fred's `users` table. Known current matches from Fred's verified claim observations SHALL not require individual entries; unknown classifications SHALL be included conservatively without inferring token claims from directory profile fields. T0 entries SHALL be individually removable. Import completion SHALL fix the population; later registrations SHALL not be grandfathered by a retry, restart or upgrade. Activation's population review SHALL use the same configured directory population rather than an unrelated local-user subset.
 
 #### Scenario: Existing user without a stored attribute
 
-- **WHEN** an administrator imports T0 and an existing Fred human has no reliable attribute classification
-- **THEN** that user SHALL receive a removable T0 exception
+- **WHEN** an administrator imports T0 and an existing human in the configured directory has no reliable verified-claim classification
+- **THEN** that identity SHALL receive a removable T0 exception
+
+#### Scenario: Keycloak population differs from Fred profiles
+
+- **GIVEN** `user_directory: keycloak` and Keycloak contains a human identity absent from Fred's `users` table
+- **WHEN** an administrator previews and commits the initial import
+- **THEN** the preview SHALL count that identity and the import SHALL create its T0 exception if the rule cannot reliably accept it
+- **AND** a Fred-only row without a current Keycloak human identity SHALL NOT be newly imported
 
 #### Scenario: Removed entry and later registration stay excluded
 
 - **WHEN** T0 has completed, one imported exception is removed, and another person registers afterward
 - **THEN** neither a repeated import request nor restart SHALL restore the removed entry or admit the later registration
+- **AND** the completed status SHALL remain readable without scanning the directory again
 
 #### Scenario: Concurrent imports
 
@@ -214,19 +361,19 @@ The same authoritative live policy and exception state SHALL govern normal direc
 - **WHEN** authoritative policy, exceptions or required membership cannot be read reliably
 - **THEN** normal human platform requests SHALL fail closed with HTTP 503
 
-### Requirement: Refusal and enrollment screens remain reachable
+### Requirement: Refusal and enrollment routes keep distinct support actions
 
-The frontend SHALL display a standalone localized refusal page for `platform_access_denied`, with contact-support wording and the existing `contactSupportLink` when configured. Refusal, Free enrollment and other support consumers SHALL use the same frontend property, available before protected bootstrap. The removed backend/public `supportLink` SHALL NOT override it. Other authentication, CGU, resource-permission and transient errors SHALL retain their handling. The valid Free route and narrow own-credential status/legal/enrollment operations SHALL remain reachable to authenticated denied people without admitting normal product access.
+The frontend SHALL display a standalone localized refusal page for `platform_access_denied`, with contact-support wording and the existing `contactSupportLink` when configured. Refusal and other support consumers SHALL use that frontend property, available before protected bootstrap; the Free enrollment route SHALL NOT present a contact-support action. The removed backend/public `supportLink` SHALL NOT override it. Other authentication, CGU, resource-permission and transient errors SHALL retain their handling. The valid Free route and narrow own-credential status/legal/enrollment operations SHALL remain reachable to authenticated denied people without admitting normal product access.
 
 #### Scenario: Denied bootstrap displays support
 
 - **WHEN** a protected request returns `platform_access_denied`
-- **THEN** refusal SHALL render without successful protected bootstrap or a redirect loop and its support destination SHALL equal configured `contactSupportLink`
+- **THEN** refusal SHALL render without successful protected bootstrap or a redirect loop and its request-access destination SHALL equal configured `contactSupportLink`
 
-#### Scenario: Free enrollment reuses support
+#### Scenario: Free enrollment omits support
 
-- **WHEN** an otherwise denied person opens a Free enrollment route
-- **THEN** its support destination SHALL equal the refusal and profile support destinations
+- **WHEN** an otherwise denied person opens a Free enrollment route with `contactSupportLink` configured
+- **THEN** the route SHALL show no contact-support action while preserving its invitation, legal, join and retry actions as applicable
 
 #### Scenario: Different error remains distinct
 
@@ -235,7 +382,7 @@ The frontend SHALL display a standalone localized refusal page for `platform_acc
 
 ### Requirement: Activation and migration are explicit
 
-An absent admission authority SHALL initialize with filtering inactive until explicit administrator activation. Activation SHALL require a saved valid rule or at least one independent individual/team source and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. Activation concurrent with a nonempty legacy-file gate SHALL be rejected; readers SHALL refuse an active conflicting gate. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
+An absent admission authority SHALL initialize with filtering inactive until explicit administrator activation. Activation SHALL require a saved valid rule or at least one independent individual/team source and SHALL be refused if the acting administrator would lose their last admission source. Saving a policy or changing access exceptions while filtering is active SHALL apply the same actor safeguard atomically. Existing root bootstrap safeguards SHALL remain intact. The retired file-based whitelist SHALL NOT affect direct or delegated admission or activation. The administrator-managed SQL filter SHALL be the only platform admission filter. Policy, imported entries and membership SHALL survive restarts and temporary filtering disablement.
 
 #### Scenario: Upgrade does not silently activate filtering
 
@@ -254,8 +401,8 @@ An absent admission authority SHALL initialize with filtering inactive until exp
 
 #### Scenario: Conflicting whitelist modes
 
-- **WHEN** an administrator attempts activation while a nonempty legacy file gate is active
-- **THEN** activation SHALL be refused without changing state, and readers SHALL fail closed if conflicting active state exists
+- **WHEN** an obsolete `users.txt` file remains on disk after upgrading
+- **THEN** it SHALL NOT restrict a direct or delegated person or block activation of the administrator-managed filter
 
 The page SHALL offer a top-right filtering action in the page header across every tab with explicit confirmation. Before activation, a read-only population review SHALL show identifiable users in counted Allowed and Blocked lists under the saved rule and current independent sources, with observation time. Stale/missing/conflicted evidence SHALL appear in a separate expandable Verification unavailable section rather than be declared allowed or blocked. A missing field in an available verified token SHALL be evaluated normally. The initial view SHALL show Blocked when that group is nonempty, otherwise Allowed; empty groups SHALL show a short message without table pagination. An Update action SHALL reread the database snapshot, reference policy and import status without changing admission state; stale rows SHALL be hidden and confirmation disabled during loading, failure or revision conflict. A preview SHALL NOT grant access or save drafts. Activation confirmation SHALL reject a changed policy revision and retain the actor safeguard.
 
@@ -459,25 +606,65 @@ The modal SHALL scroll only its JSON region, keeping the field search, display t
 - **WHEN** an administrator opens the picker regardless of the number of users
 - **THEN** only their own verified claims SHALL be requested and no directory/catalog scan SHALL occur
 
-### Requirement: Admission feedback uses the shared Fred error presentation
+### Requirement: Admission feedback uses one welcoming card family
 
-Admission denial, invalid Free enrollment links and admission verification failures SHALL use the existing Fred error visual language and shared presentation, with localized actionable messages. Support SHALL use contactSupportLink when configured, alongside appropriate retry actions. Sign-out SHALL remain available for admission denial but SHALL NOT appear in the invitation or its error state. These screens SHALL remain reachable without protected bootstrap or team/resource loading; ordinary error pages SHALL retain their existing action.
+Admission denial, every state of the Free enrollment route and transient admission-verification failures SHALL be presented in one compact card showing the deployment's configured site display name, a single page heading that labels the card, a body and an optional footer. These states SHALL NOT use the generic error page or an error icon. The platform name SHALL always come from the configured site display name. These screens SHALL remain reachable without protected bootstrap or team/resource loading; ordinary error pages SHALL retain their existing action.
+
+The denial screen SHALL greet the signed-in person by first name, falling back to a greeting without a name, SHALL show the signed-in account (name and email, whichever is known) and SHALL list two numbered steps: request access from support, then come back and check access. It SHALL offer sign-out, an access re-check, and a request-access action that opens `contactSupportLink` in a new tab. When `contactSupportLink` is not configured the request-access action SHALL be hidden and no alternative contact SHALL be invented. When no email is known, the steps SHALL NOT refer to a displayed address, and an account block with neither name nor email SHALL NOT be rendered.
+
+The enrollment screen SHALL announce an invitation, show the team in its own surface and offer a single join action; it SHALL NOT display a contact-support action in any state. A preview refused as `404 free_enrollment_link_invalid` SHALL be reported as a link that is no longer valid, with guidance to ask the inviter for a new link, without a retry action and without a team name. A terms acceptance or a join refused with that same answer (a link revoked or expired while the page was open) SHALL be reported the same way. Any other failure of the preview, of the terms acceptance or of the join SHALL be reported as a temporary problem with a retry action and SHALL NOT be reported as an invalid link. Sign-out SHALL NOT appear on the enrollment route in any state.
 
 #### Scenario: Denied or invalid enrollment route
 
 - **WHEN** a denied person opens the refusal route or an invalid Free link
-- **THEN** the screen SHALL use Fred's shared error presentation and its configured support destination without normal protected product loading
+- **THEN** the screen SHALL use the shared card without normal protected product loading; the refusal SHALL offer configured support while the invalid-link card SHALL offer none
+
+#### Scenario: Denied person is greeted and guided
+
+- **WHEN** a denied person whose session carries a first name, a full name and an email opens the refusal route with `contactSupportLink` configured
+- **THEN** the card SHALL greet them by first name, show their name and email, list the two steps, and offer sign-out, an access re-check and a request-access action targeting `contactSupportLink`
+
+#### Scenario: Denied session lacks identity details
+
+- **WHEN** the session carries no first name or no email
+- **THEN** the greeting SHALL omit the name, the first step SHALL NOT mention a displayed address, and no empty account block SHALL be rendered
+
+#### Scenario: Support link is not configured
+
+- **WHEN** a denied person opens the refusal route and `contactSupportLink` is empty
+- **THEN** the request-access action SHALL be absent while sign-out and the access re-check remain
+
+#### Scenario: Invitation link is no longer valid
+
+- **WHEN** the enrollment preview is refused with `404 free_enrollment_link_invalid`
+- **THEN** the card SHALL say the link is no longer valid and to ask the inviter for a new one
+- **AND** it SHALL offer no retry, join, sign-out or support action and SHALL have no footer
+
+#### Scenario: Invitation link stops being valid while the page is open
+
+- **WHEN** the invitation was shown and accepting the terms or joining is then refused as `404 free_enrollment_link_invalid`
+- **THEN** the card SHALL say the link is no longer valid, as for a preview refused that way, without a retry, join or support action
+
+#### Scenario: Invitation cannot be checked or joined right now
+
+- **WHEN** the enrollment preview, the terms acceptance or the join fails for any reason other than `404 free_enrollment_link_invalid`
+- **THEN** the card SHALL report a temporary problem with a retry action, no support action, and SHALL NOT state that the link is invalid
 
 #### Scenario: Transient verification failure
 
 - **WHEN** admission verification fails transiently
-- **THEN** the shared error presentation SHALL offer a retry without falsely reporting definitive denial
+- **THEN** the same card SHALL offer a retry and configured support without falsely reporting definitive denial
+
+#### Scenario: Invitation checking and valid states omit support
+
+- **WHEN** a person opens a Free invitation that is still checking or is valid
+- **THEN** the card SHALL show no contact-support action while retaining the join action for a valid invitation
 
 ### Requirement: Administrators manage independent Free-link history
 
-Only platform administrators SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL and an immediately available Copy URL action.
+Only platform administrators SHALL create, list and revoke Free-team links. The platform administration Teams registry SHALL expose the Free toggle and Manage links action for each eligible team; ordinary team managers SHALL NOT see these controls or issue admission administration queries. Platform access SHALL group individual exceptions and independent team authorization in its Whitelist panel and SHALL NOT duplicate Free/link controls. The bounded paginated history SHALL expose the link identifier, note, creation and expiry dates, revocation state, suspension state and authenticated opening count, without reusable tokens or visitor identity. Administrators SHALL be able to inspect and revoke links while Free is disabled. Manage links SHALL open on the bounded invitation list with a Create link action; note and expiry inputs SHALL appear only in a separate creation view. That view SHALL place the optional note before optional expiration and reuse the platform KPI selector presentation, with a single future date/time input, future duration shortcuts, a No expiration option and Apply. The date draft SHALL prevent creation until applied or dismissed; Escape SHALL close only the selector and restore trigger focus. Empty expiration SHALL mean no expiry; invalid or past expiration SHALL prevent creation without losing the note. Generation success SHALL show the original URL in the platform's monospace font and an immediately available Copy URL action, and SHALL attempt to copy that URL to the clipboard automatically.
 
-History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds through temporary feedback on the clicked button and a screen-reader status, without changing the dialog layout. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
+History SHALL use an explicit Copy URL action that recovers the original token and attempts clipboard writing without generating another link. Clipboard success SHALL be announced only after the write succeeds through temporary feedback on the corresponding Copy URL button and a screen-reader status, without changing the dialog layout. If clipboard writing is unavailable or rejected, the UI SHALL retain the usable URL with a clear manual-copy fallback; a copy failure SHALL NOT be presented as generation failure or cause another invitation to be created. Creation/recovery URL state SHALL remain transient and clear on manager dismissal, without logging URLs or retaining reusable mutation payloads.
 
 The opening-count column SHALL use the short localized label Accesses (Accès) without showing the last-access timestamp, and explain that it counts authenticated page openings rather than unique users, anonymous clicks or message delivery. The UI SHALL identify manual sharing and explicit URL recovery; it SHALL NOT claim message delivery.
 
@@ -519,7 +706,9 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 
 - **WHEN** generation succeeds
 - **THEN** the usable invitation URL and Copy URL action SHALL be shown with successful creation feedback
-- **AND** generating the link SHALL NOT claim that clipboard writing or message delivery succeeded
+- **AND** the displayed URL SHALL use the platform's monospace font
+- **AND** the UI SHALL attempt to copy that URL to the clipboard automatically
+- **AND** clipboard success SHALL be announced only after the write succeeds; creation SHALL NOT claim message delivery
 
 #### Scenario: Copy from invitation history
 
@@ -532,6 +721,11 @@ The opening-count column SHALL use the short localized label Accesses (Accès) w
 - **WHEN** the browser refuses clipboard access after generation or recovery
 - **THEN** the usable URL SHALL remain available for manual copying with specific feedback
 - **AND** no replacement invitation SHALL be created and the failure SHALL NOT be announced as a failed creation
+
+#### Scenario: Delayed clipboard result after dismissal
+
+- **WHEN** an administrator dismisses the generated URL or begins a newer copy while a clipboard write is pending
+- **THEN** a later result from the earlier write SHALL NOT reopen the dismissed dialog or replace the newer copy feedback
 
 #### Scenario: Short counter heading retains its meaning
 
@@ -592,9 +786,24 @@ The page SHALL provide localized Rules and Whitelist tabs using the shared Fred 
 - **WHEN** an administrator changes top-level or whitelist sub-tabs
 - **THEN** the filtering action SHALL remain at the top right of the page header with the same activation guards
 
+### Requirement: Optional invitation notes have no placeholder identity
+
+An invitation without a note SHALL have an empty note cell in history and a generic localized joiner-dialog title. An invitation with a note SHALL retain that note in history and use it to identify the joiner dialog.
+
+#### Scenario: Invitation without a note
+
+- **WHEN** an administrator views an invitation whose optional note is absent
+- **THEN** its note cell SHALL be empty
+- **AND** its joiner dialog SHALL use a generic title without a placeholder note
+
+#### Scenario: Invitation with a note
+
+- **WHEN** an administrator opens the joiner history for an invitation with a note
+- **THEN** the note SHALL remain visible in the invitation row and joiner-dialog title
+
 ### Requirement: Administrators filter invitation history by lifecycle status
 
-Platform administrators SHALL be able to filter one team's complete invitation history by All, Active, Revoked or Expired. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Filtering SHALL NOT change validity, membership, counters or access settings. The history table SHALL have a bounded fixed height with internal row scrolling, while its header, pagination and surrounding controls remain visible.
+Platform administrators SHALL be able to filter one team's complete invitation history by All, Active, Revoked or Expired. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Filtering SHALL NOT change validity, membership, counters or access settings. The history table SHALL have a bounded fixed height with internal row scrolling, while its header, pagination and surrounding controls remain visible. When Link access is disabled, the invitation manager SHALL state that link sharing is disabled and valid links are suspended until it is enabled again.
 
 #### Scenario: Filter beyond the first page
 
@@ -610,7 +819,14 @@ Platform administrators SHALL be able to filter one team's complete invitation h
 
 - **WHEN** a team's Link access is disabled
 - **THEN** its unrevoked, unexpired links SHALL appear in All with grayscale rows at reduced opacity, rather than appearing under Active
-- **AND** no separate Suspended filter, visible status label or explanatory paragraph SHALL be offered, while copying, revocation and an accessible status remain available
+- **AND** those rows SHALL display Suspended in the visible Status column
+- **AND** the manager SHALL explain that Link access is disabled and valid invitations cannot be used until it is enabled again
+- **AND** no separate Suspended filter SHALL be offered, while copying, revocation and an accessible status remain available
+
+#### Scenario: Another administrator changes Link access
+
+- **WHEN** the Link access setting changes while an administrator keeps the invitation manager open
+- **THEN** the manager SHALL refresh the setting so its disabled notice and creation controls match the current team state
 
 ### Requirement: Administrators delete obsolete invitation history explicitly
 
@@ -641,3 +857,24 @@ Only platform administrators SHALL permanently delete a team's revoked or expire
 
 - **WHEN** a person without platform-management permission requests cleanup
 - **THEN** the request SHALL be refused without removing history or changing admission
+
+### Requirement: Team invitations use the join route
+
+The frontend SHALL generate and recover Free-team invitation URLs at `/join/:token`, respecting its configured basename. An authenticated person, including one denied normal platform admission, SHALL reach the standalone enrollment page at that route. The previous `/join-free/:token` route SHALL not be served. Fred access logs SHALL redact the opaque token from the new route.
+
+#### Scenario: Create and open an invitation
+
+- **WHEN** a platform administrator creates or recovers a Free-team invitation
+- **THEN** the displayed and copied URL SHALL use `/join/:token`
+- **AND** opening that URL SHALL render the standalone enrollment page through the authentication redirect when needed
+
+#### Scenario: Protect the new capability path
+
+- **WHEN** admission denies normal platform access while a person opens `/join/:token`
+- **THEN** the person SHALL remain on the enrollment route
+- **AND** Fred access logs SHALL not expose the token
+
+#### Scenario: Retired route
+
+- **WHEN** a person requests `/join-free/:token`
+- **THEN** the frontend SHALL not route that path to the enrollment page

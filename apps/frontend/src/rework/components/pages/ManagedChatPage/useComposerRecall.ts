@@ -12,25 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
+import { useCallback, useMemo, useState } from "react";
+import type { CommandKeyEvent } from "@shared/molecules/RichInputField/RichInputField";
+import { skillInvocationsText, usablePromptList } from "@rework/utils/skillInvocation";
 import type { ThreadMessage } from "@rework/types/thread";
 
 /** The line the person typed: a command turn stores the expanded prompt as its text. */
 export function recallLineOf(message: ThreadMessage): string {
   const { command } = message;
-  if (!command) return message.text.trim();
+  if (command?.draft_text != null) return command.draft_text;
+  const names = message.skillNames ?? (message.skillName ? [message.skillName] : []);
+  if (!command || names.length) return skillInvocationsText(message.text, names, command).trim();
   return command.appended_text ? `/${command.command} ${command.appended_text}` : `/${command.command}`;
 }
 
-/** Sent lines of the conversation, newest first, consecutive repeats collapsed. */
-export function recallLinesOf(messages: ThreadMessage[]): string[] {
-  const lines: string[] = [];
+/** Sent turns newest first, collapsing only repetitions with the same invocation. */
+function recallTurnsOf(messages: ThreadMessage[]): { line: string; message: ThreadMessage }[] {
+  const turns: { line: string; message: ThreadMessage }[] = [];
+  let previousIdentity: string | null = null;
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role !== "user") continue;
-    const line = recallLineOf(messages[i]);
-    if (line && line !== lines[lines.length - 1]) lines.push(line);
+    const message = messages[i];
+    if (message.role !== "user") continue;
+    const line = recallLineOf(message);
+    // Every listed prompt counts: the same line may have run other prompts.
+    const identity = JSON.stringify([
+      line,
+      message.command?.prompt_id ?? null,
+      message.command?.draft_command_offset ?? null,
+      usablePromptList(message.command, message.text)?.map((entry) => [entry.prompt_id ?? null, entry.draft_offset]) ??
+        null,
+      message.skillNames ?? (message.skillName ? [message.skillName] : []),
+    ]);
+    if (!line || identity === previousIdentity) continue;
+    turns.push({ line, message });
+    previousIdentity = identity;
   }
-  return lines;
+  return turns;
+}
+
+export function recallLinesOf(messages: ThreadMessage[]): string[] {
+  return recallTurnsOf(messages).map((turn) => turn.line);
 }
 
 /**
@@ -43,29 +64,29 @@ export function useComposerRecall(params: {
   input: string;
   menuOpen: boolean;
   disabled: boolean;
-  onRecall: (line: string) => void;
-}): (event: KeyboardEvent<HTMLTextAreaElement>) => boolean {
+  onRecall: (line: string, message?: ThreadMessage) => void;
+}): (event: CommandKeyEvent) => boolean {
   const { messages, input, menuOpen, disabled, onRecall } = params;
-  const lines = useMemo(() => recallLinesOf(messages), [messages]);
-  // Index into `lines` of the shown entry. It only counts while the composer
+  const turns = useMemo(() => recallTurnsOf(messages), [messages]);
+  // Index into `turns` of the shown entry. It only counts while the composer
   // still holds that exact line, so no change handler is needed to end browsing.
   const [index, setIndex] = useState<number | null>(null);
-  const shown = index !== null && lines[index] === input ? index : null;
+  const shown = index !== null && turns[index]?.line === input ? index : null;
 
   return useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    (event: CommandKeyEvent): boolean => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
       if (disabled || menuOpen || event.nativeEvent.isComposing) return false;
       if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
       if (shown === null && input !== "") return false;
 
       if (event.key === "ArrowUp") {
-        if (lines.length === 0) return false;
+        if (turns.length === 0) return false;
         event.preventDefault();
-        const next = shown === null ? 0 : Math.min(shown + 1, lines.length - 1);
+        const next = shown === null ? 0 : Math.min(shown + 1, turns.length - 1);
         if (next !== shown) {
           setIndex(next);
-          onRecall(lines[next]);
+          onRecall(turns[next].line, turns[next].message);
         }
         return true;
       }
@@ -74,9 +95,9 @@ export function useComposerRecall(params: {
       event.preventDefault();
       const next = shown - 1;
       setIndex(next < 0 ? null : next);
-      onRecall(next < 0 ? "" : lines[next]);
+      onRecall(next < 0 ? "" : turns[next].line, next < 0 ? undefined : turns[next].message);
       return true;
     },
-    [disabled, menuOpen, shown, input, lines, onRecall],
+    [disabled, menuOpen, shown, input, turns, onRecall],
   );
 }

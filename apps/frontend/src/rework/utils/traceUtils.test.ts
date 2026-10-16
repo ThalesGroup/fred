@@ -15,6 +15,8 @@
 import { describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import {
+  skillLoadOf,
+  skillFileReadOf,
   asFailedSqlQueryResult,
   asRagSearchResult,
   asSqlQueryResult,
@@ -1412,3 +1414,126 @@ describe("native web research trace rows", () => {
     expect(toolDiscriminator(fetch)).toBeNull();
   });
 });
+
+it("redacts historical tag ids and document ids without losing bracketed names", () => {
+  expect(stripDocumentUids("Sales [draft] [old-tag]/\n  Report [draft].pdf [old-document] (uploaded 2026-01-01)")).toBe(
+    "Sales [draft]/\n  Report [draft].pdf (uploaded 2026-01-01)",
+  );
+});
+
+describe("skill load history", () => {
+  it.each(["user", "agent"] as const)("retains compact %s attribution and hides successful body traces", (origin) => {
+    const step = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { skill_load: { name: "meeting-minutes", origin, load_id: "load", child: false } } },
+    });
+    const rows = groupTraceEntries([
+      toolCallMsg("load", "load_skill", { name: "meeting-minutes" }),
+      step,
+      toolResultMsg("load", "PRIVATE BODY"),
+      step,
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kind).toBe("solo");
+    expect(skillLoadOf(step)).toMatchObject({ name: "meeting-minutes", origin, child: false });
+    expect(entryLabel(rows[0], (key) => key)).toBe("chatbot.skills.loaded");
+    expect(traceRows(rows).map((row) => row.index)).toEqual([1]);
+  });
+  it("retains child identity and leaves failed loads inspectable", () => {
+    const step = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: {
+        extras: {
+          skill_load: {
+            name: "meeting-minutes",
+            origin: "agent",
+            load_id: "child:load",
+            child: true,
+            child_id: "child",
+          },
+        },
+      },
+    });
+    expect(skillLoadOf(step)?.child).toBe(true);
+    const rows = groupTraceEntries([
+      step,
+      toolCallMsg("failed", "load_skill"),
+      toolResultMsg("failed", "Unavailable", false),
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].kind).toBe("combo");
+    expect(traceRows(rows).map((row) => row.index)).toEqual([1, 2]);
+  });
+});
+
+describe("skill file read preview", () => {
+  it("opens only a successful canonical read and preserves the exact returned text", () => {
+    const call = toolCallMsg("ref", "read_skill_file", { name: "meeting-minutes", path: "references/model.md" });
+    const result = toolResultMsg("ref", "## Archived model\n**Exact** text");
+    const [entry] = groupTraceEntries([call, result]);
+    expect(skillFileReadOf(entry)).toEqual({
+      name: "meeting-minutes",
+      path: "references/model.md",
+      content: "## Archived model\n**Exact** text",
+    });
+    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.readSkillFile");
+    expect(primaryTextForEntry(entry)).toBe("references/model.md");
+    expect(skillFileReadOf(groupTraceEntries([call])[0])).toBeNull();
+    expect(skillFileReadOf(groupTraceEntries([call, toolResultMsg("ref", "failed", false)])[0])).toBeNull();
+    expect(
+      skillFileReadOf(
+        groupTraceEntries([
+          toolCallMsg("ref", "custom_read_skill_file", { name: "meeting-minutes", path: "model.md" }),
+          result,
+        ])[0],
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("native Deep skill reference preview", () => {
+  it("uses the returned paginated excerpt and localized file label", () => {
+    const call = toolCallMsg("native-ref", "read_file", {
+      file_path: "/skills/meeting-minutes/references/model.md",
+      offset: 1,
+      limit: 1,
+    });
+    const content = "File: /skills/meeting-minutes/references/model.md\n2: **Exact window**";
+    const [entry] = groupTraceEntries([call, toolResultMsg("native-ref", content)]);
+    expect(skillFileReadOf(entry)).toEqual({
+      name: "meeting-minutes",
+      path: "references/model.md",
+      content,
+      excerpt: true,
+    });
+    expect(entryLabel(entry, (key) => key)).toBe("rework.chatTrace.toolLabels.readSkillFile");
+    expect(primaryTextForEntry(entry)).toBe("references/model.md");
+    expect(skillFileReadOf(groupTraceEntries([call])[0])).toBeNull();
+    expect(skillFileReadOf(groupTraceEntries([call, toolResultMsg("native-ref", "failed", false)])[0])).toBeNull();
+  });
+  it.each([
+    "/ordinary.md",
+    "/skills/meeting-minutes/SKILL.md",
+    "/skills/meeting-minutes/../secret.md",
+    "/skills/meeting-minutes/a\\secret.md",
+    "/skills/meeting-minutes/a\u0000.md",
+  ])("rejects non-reference paths: %s", (file_path) => {
+    const [entry] = groupTraceEntries([toolCallMsg("ref", "read_file", { file_path }), toolResultMsg("ref", "text")]);
+    expect(skillFileReadOf(entry)).toBeNull();
+  });
+});
+
+it.each(["/skills/meeting-minutes/references//model.md", "skills/meeting-minutes/./references/model.md"])(
+  "previews native paths normalized by the backend: %s",
+  (file_path) => {
+    const [entry] = groupTraceEntries([toolCallMsg("ref", "read_file", { file_path }), toolResultMsg("ref", "exact")]);
+    expect(skillFileReadOf(entry)).toEqual({
+      name: "meeting-minutes",
+      path: "references/model.md",
+      content: "exact",
+      excerpt: true,
+    });
+  },
+);

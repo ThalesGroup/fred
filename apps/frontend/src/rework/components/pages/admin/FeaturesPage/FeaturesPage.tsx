@@ -297,6 +297,7 @@ export default function FeaturesPage() {
   const impact = revokeImpact.data;
   const impactSuspended = impact?.suspended_instances ?? 0;
   const impactUnknown = impact?.health_unknown_instances ?? 0;
+  const impactPublished = impact?.published_instances ?? 0;
   const impactInstances = impact?.instances ?? [];
 
   // Concrete impact for the disable-confirmation dialog: how many working agents
@@ -313,6 +314,11 @@ export default function FeaturesPage() {
             ? t("rework.admin.capabilities.defaultOffConfirm.impact", { count: impactSuspended })
             : t("rework.admin.capabilities.defaultOffConfirm.impactNone")}
         </p>
+        {impactPublished > 0 && (
+          <p className={styles.impactWarn}>
+            {t("rework.admin.capabilities.defaultOffConfirm.impactPublished", { count: impactPublished })}
+          </p>
+        )}
         {impactUnknown > 0 && (
           <p className={styles.impactUnknown}>
             {t("rework.admin.capabilities.defaultOffConfirm.impactUnknown", { count: impactUnknown })}

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState, ReactNode } from "react";
+import { useLayoutEffect, useState, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 const portalOwners = new WeakMap<HTMLElement, { count: number; created: boolean }>();
@@ -20,6 +20,14 @@ const portalOwners = new WeakMap<HTMLElement, { count: number; created: boolean 
 /** Prefer the originating consumer-owned theme root; legacy FRED callers retain body portals. */
 export function uiPortalRoot(anchor: Element | null): HTMLElement {
   return (anchor?.closest(".fred-ui") as HTMLElement | null) ?? document.body;
+}
+
+const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
+
+/** Keyboard handling (Escape, Tab trap) belongs to the modal opened last, i.e. last in the document. */
+export function isTopmostModal(modal: Element | null): boolean {
+  const modals = document.querySelectorAll(MODAL_SELECTOR);
+  return modals.length === 0 || modals[modals.length - 1] === modal;
 }
 
 interface PortalProps {
@@ -31,7 +39,7 @@ interface PortalProps {
 export const Portal = ({ children, id = "portal-root", root }: PortalProps) => {
   const [container, setContainer] = useState<HTMLElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = root ?? document.body;
     let portalElement = [...host.children].find((child) => child.id === id) as HTMLElement | undefined;
     let created = false;

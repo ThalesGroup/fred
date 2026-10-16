@@ -17,7 +17,7 @@ import { act, useCallback, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
-import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
+import { RichInputField, type CommandChoice } from "@shared/molecules/RichInputField/RichInputField";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { CommandDescriptor } from "../../../../slices/runtime/runtimeOpenApi";
 import { useComposerCommands } from "./useComposerCommands";
@@ -39,7 +39,8 @@ const PROMPTS = [
 ];
 
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ data: PROMPTS }),
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ currentData: PROMPTS }),
+  useGetAgentInstanceSkillsQuery: () => ({ currentData: { supported: true, skills: [] } }),
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [vi.fn()],
 }));
 
@@ -68,6 +69,15 @@ function summaryCommand(appended?: string): CommandDescriptor {
 }
 
 let messages: ThreadMessage[] = [];
+let latestChoices: readonly CommandChoice[] = [];
+/** The restored choices, reduced to what identifies each one. */
+const restoredChoices = () =>
+  latestChoices.map((choice) => ({
+    kind: choice.kind,
+    name: choice.name,
+    promptId: choice.kind === "prompt" ? choice.promptId : undefined,
+    from: choice.from,
+  }));
 let disabled = false;
 
 // Wired the way ManagedChatPage wires it: the menu first, then the recall.
@@ -82,10 +92,11 @@ function Host() {
     onSend: vi.fn(),
     onResolveError: vi.fn(),
   });
+  latestChoices = commands.trigger.choices ?? [];
   const { dismiss } = commands;
   const onRecall = useCallback(
-    (line: string) => {
-      dismiss(line);
+    (line: string, message?: ThreadMessage) => {
+      dismiss(line, message);
       setInput(line);
       setFocusEndRequestId((n) => n + 1);
     },
@@ -100,8 +111,8 @@ function Host() {
   });
   return (
     <RichInputField
-      value={input}
-      onChange={setInput}
+      value={commands.composerValue}
+      onChange={commands.onComposerChange}
       onSend={commands.submit}
       commandTrigger={commands.trigger}
       onRecallKeyDown={recallKeyDown}
@@ -190,6 +201,31 @@ describe("recallLinesOf", () => {
   });
 });
 
+it("recalls canonical mixed drafts and legacy skill selections without exposing prompt bodies", () => {
+  const draft = "  Before /meeting-minutes /summary after  ";
+  expect(
+    recallLinesOf([
+      {
+        ...turn("user", "Expanded instructions", { ...summaryCommand("after"), draft_text: draft }),
+        skillNames: ["meeting-minutes"],
+      },
+    ]),
+  ).toEqual([draft]);
+  expect(recallLinesOf([{ ...turn("user", "Notes"), skillName: "meeting-minutes" }])).toEqual([
+    "/meeting-minutes Notes",
+  ]);
+});
+
+it("keeps identical drafts with different selected prompt identities available in recall", () => {
+  const line = "/summary Notes";
+  expect(
+    recallLinesOf([
+      turn("user", "Team body", { ...summaryCommand(), prompt_id: "team", draft_text: line }),
+      turn("user", "Personal body", { ...summaryCommand(), prompt_id: "personal", draft_text: line }),
+    ]),
+  ).toEqual([line, line]);
+});
+
 describe("recalling sent messages in the composer", () => {
   it("recalls the last message with the caret at the end", () => {
     const event = press("ArrowUp");
@@ -263,6 +299,54 @@ describe("recalling sent messages in the composer", () => {
 
     expect(menuOpen()).toBe(true);
     expect(textarea().value).toBe("/");
+  });
+});
+
+describe("recalling a message that listed several prompt commands", () => {
+  const line = "/summary then /search now";
+  const listed = (first: string, second: string): CommandDescriptor => ({
+    command: "summary",
+    prompt_id: first,
+    draft_text: line,
+    draft_command_offset: 0,
+    prompts: [
+      { command: "summary", prompt_id: first, draft_offset: 0, text_offset: 0, text_length: 5 },
+      { command: "search", prompt_id: second, draft_offset: 14, text_offset: 13, text_length: 5 },
+    ],
+  });
+  const body = "Sum A\n\nthen\n\nFind B\n\nnow";
+
+  it("keeps the same line recallable once per set of prompts, and collapses a true repetition", () => {
+    expect(
+      recallLinesOf([
+        turn("user", body, listed("p-summary", "p-search")),
+        turn("user", body, listed("p-summary", "personal-search")),
+        turn("user", body, listed("p-summary", "personal-search")),
+      ]),
+    ).toEqual([line, line]);
+  });
+
+  it("restores every prompt as a choice bound to the prompt it was sent with", () => {
+    messages = [turn("user", body, listed("p-summary", "p-search"))];
+    mount();
+    press("ArrowUp");
+
+    expect(textarea().value).toBe(line);
+    expect(menuOpen()).toBe(false);
+    expect(restoredChoices()).toEqual([
+      { kind: "prompt", name: "summary", promptId: "p-summary", from: 0 },
+      { kind: "prompt", name: "search", promptId: "p-search", from: 14 },
+    ]);
+  });
+
+  it("restores the single prompt of a turn stored without the list", () => {
+    const { prompts: _prompts, ...single } = listed("p-summary", "p-search");
+    messages = [turn("user", body, single)];
+    mount();
+    press("ArrowUp");
+
+    expect(textarea().value).toBe(line);
+    expect(restoredChoices()).toEqual([{ kind: "prompt", name: "summary", promptId: "p-summary", from: 0 }]);
   });
 });
 

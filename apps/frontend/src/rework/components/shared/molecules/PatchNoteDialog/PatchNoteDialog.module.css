@@ -1,0 +1,42 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* "What's new" dialog, see PatchNoteDialog.tsx; the body's typography is
+   PatchNoteBody's. Fluid width: the Dialog molecule owns the outer size. */
+/* A fixed surface height: notes differ in length, and the dialog must not
+   resize while the user steps through the history. Dialog caps it to the viewport. */
+.dialog {
+  height: 46rem;
+}
+
+.body {
+  padding-bottom: var(--spacing-l);
+  width: 100%;
+}
+
+.navigation {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.position {
+  min-width: 3.5rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}

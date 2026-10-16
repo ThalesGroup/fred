@@ -20,6 +20,7 @@ import {
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
+  skillLoadOf,
   toolDiscriminator,
 } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
@@ -29,7 +30,7 @@ import styles from "./TraceEntryRow.module.css";
 
 interface TraceEntryRowProps {
   entry: TraceEntry;
-  /** 1-based tool step number. Null for notes/errors, which are not steps. */
+  /** 1-based activity step number. Null for ordinary notes/errors. */
   index?: number | null;
   /** call_ids of every tool call currently gated behind an unanswered HITL prompt, if any — see statusForEntry(). */
   pendingToolCallIds?: readonly string[] | null;
@@ -47,6 +48,34 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const label = entryLabel(entry, (key) => t(key));
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
+  const skill = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
+  if (skill)
+    return (
+      <button
+        type="button"
+        className={`${styles.row} ${styles.skillRow}`}
+        aria-label={`${index !== null ? `${index}. ` : ""}${t("chatbot.skills.loaded")}: ${skill.name}`}
+        onClick={() => openTrace(entry)}
+      >
+        <span className={styles.marker}>
+          <DotStatus status="ok" />
+          <span className={styles.index} aria-hidden="true">
+            {index ?? ""}
+          </span>
+        </span>
+        <span className={styles.label}>{t("chatbot.skills.loaded")}</span>
+        <span className={styles.primary}>{skill.name}</span>
+        <span className={styles.secondary}>
+          {t(
+            skill.origin === "user"
+              ? "chatbot.skills.originUser"
+              : skill.child
+                ? "chatbot.skills.originChild"
+                : "chatbot.skills.originAgent",
+          )}
+        </span>
+      </button>
+    );
   const isPending = status === "pending";
   const isAwaitingConfirmation = status === "awaiting_confirmation";
   // The turn-crash line is a solo error-channel entry (execution_error). A
@@ -69,7 +98,12 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
       tabIndex={0}
       aria-label={`${index !== null ? `${index}. ` : ""}${label}${primary ? `: ${primary}` : ""}${hitlAnswerSummary ? `. ${hitlAnswerSummary.question}: ${hitlAnswerSummary.skipped ? t("rework.hitlPrompt.skipped") : (hitlAnswerSummary.answer ?? "")}` : ""}`}
       onClick={() => openTrace(entry)}
-      onKeyDown={(e) => e.key === "Enter" && openTrace(entry)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openTrace(entry);
+        }
+      }}
     >
       {/* Own gap from .row's, so the marker cluster (dot + number) can sit
           closer together than the wider spacing before the label. */}

@@ -20,9 +20,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  padding: var(--spacing-l) var(--spacing-xl);
+  box-sizing: border-box;
+  padding: var(--spacing-m);
   height: 100%;
-  overflow-y: auto;
+  min-height: 0;
 }
 
 .list {
@@ -59,4 +60,24 @@
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-2xs);
+}
+
+/* Either view fills the page body below the header; the list scrolls here,
+   the history table scrolls its own rows. */
+.main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Phone width: the controls go under the banner instead of squeezing it to nothing. */
+@media (max-width: 600px) {
+  .row {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .preview {
+    flex-basis: 100%;
+  }
 }

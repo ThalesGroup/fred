@@ -20,7 +20,9 @@ import { ConversationThread } from "./ConversationThread/ConversationThread";
 import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRail/ConversationOutlineRail";
 import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
+import type { InlinePromptTarget } from "@shared/molecules/RichInputField/InlineSkillInput";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
+import SkillDetailPanel from "@shared/molecules/SkillDetailPanel/SkillDetailPanel";
 import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandPromptPanel";
 import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
@@ -31,7 +33,14 @@ import { DocumentScopePanel } from "@shared/molecules/DocumentScopePanel/Documen
 import { AgentTodoPanel } from "@shared/molecules/AgentTodoPanel/AgentTodoPanel";
 import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
-import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
+import {
+  findTraceEntry,
+  skillFileReadOf,
+  skillLoadOf,
+  traceEntryKey,
+  type TraceEntry,
+} from "../../../utils/traceUtils";
+import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocation";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
@@ -45,11 +54,13 @@ import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel
 import type { CommandDescriptor } from "../../../../slices/runtime/runtimeOpenApi";
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
+import { useRefetchOnWindowFocus } from "../../../core/hooks/crossSessionRefresh";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
 import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
+import type { ThreadMessage } from "@rework/types/thread";
 import { useComposerRecall } from "./useComposerRecall";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
@@ -60,6 +71,7 @@ import {
   useGetTeamQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
+  useGetAgentInstanceSkillDetailQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   type ContextPromptSummary,
   type ManagedAgentInstanceSummary,
@@ -103,8 +115,8 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
   return (
     <div className={styles.welcomeBlock}>
       {agent && (
-        <div className={styles.welcomeAgent}>
-          <span className={styles.welcomeAgentIcon}>
+        <div className={styles.welcomeAgent} data-chat-welcome-agent>
+          <span className={styles.welcomeAgentIcon} data-chat-agent-icon>
             <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
           </span>
           <span className={styles.welcomeAgentIdentity}>
@@ -123,6 +135,8 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
 }
 
 type ActivePushDrawer =
+  | { kind: "skill"; name: string }
+  | { kind: "skill-file"; entryKey: string }
   | { kind: "attachments" }
   | { kind: "capability"; key: string }
   | { kind: "document-scope" }
@@ -132,7 +146,12 @@ type ActivePushDrawer =
   // Carries the turn's own stored text: the prompt is overwritten on edit
   // and gone once deleted, so it cannot be re-fetched by id.
   | { kind: "command-prompt"; text: string; command: string | null; promptName: string | null }
+  // A composer token: nothing is sent yet, so the prompt is read as it is now.
+  | { kind: "prompt-preview"; promptId: string; promptTeamId: string; command: string; promptName: string }
   | null;
+
+// A focus refetch of the composer's model list waits this long after the last read.
+const MODEL_READ_MIN_AGE_MS = 30_000;
 
 export default function ManagedChatPage() {
   const { t, i18n } = useTranslation();
@@ -150,6 +169,30 @@ export default function ManagedChatPage() {
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
   // a time so their widths never cumulate.
   const [activePushDrawer, setActivePushDrawer] = useState<ActivePushDrawer>(null);
+  const openSkill = useCallback(
+    (name: string) =>
+      setActivePushDrawer((drawer) =>
+        drawer?.kind === "skill" && drawer.name === name ? null : { kind: "skill", name },
+      ),
+    [],
+  );
+  const previewSkillName = activePushDrawer?.kind === "skill" ? activePushDrawer.name : null;
+  const promptPreviewDrawer = activePushDrawer?.kind === "prompt-preview" ? activePushDrawer : null;
+  const previewPromptIdRef = useRef<string | null>(null);
+  previewPromptIdRef.current = promptPreviewDrawer?.promptId ?? null;
+  const skillPreview = useGetAgentInstanceSkillDetailQuery(
+    { teamId, agentInstanceId, skillName: previewSkillName ?? "" },
+    { skip: !previewSkillName, refetchOnMountOrArgChange: true },
+  );
+  const previewScope = useRef({ teamId, agentInstanceId });
+  useEffect(() => {
+    if (previewScope.current.teamId !== teamId || previewScope.current.agentInstanceId !== agentInstanceId) {
+      setActivePushDrawer((drawer) =>
+        drawer?.kind === "skill" || drawer?.kind === "skill-file" || drawer?.kind === "prompt-preview" ? null : drawer,
+      );
+      previewScope.current = { teamId, agentInstanceId };
+    }
+  }, [teamId, agentInstanceId]);
   const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
 
   const activeCapabilityKey = activePushDrawer?.kind === "capability" ? activePushDrawer.key : null;
@@ -160,8 +203,24 @@ export default function ManagedChatPage() {
   // as deltas arrive. Trace rows open it through TraceDrawerProvider.
   const [selectedTraceKey, setSelectedTraceKey] = useState<string | null>(null);
   const traceDrawerApi = useMemo(
-    () => ({ openTrace: (entry: TraceEntry) => setSelectedTraceKey(traceEntryKey(entry)) }),
-    [],
+    () => ({
+      openTrace: (entry: TraceEntry) => {
+        const skill = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
+        if (skillFileReadOf(entry)) {
+          setSelectedTraceKey(null);
+          const entryKey = traceEntryKey(entry);
+          setActivePushDrawer((drawer) =>
+            drawer?.kind === "skill-file" && drawer.entryKey === entryKey ? null : { kind: "skill-file", entryKey },
+          );
+        } else if (skill) {
+          setSelectedTraceKey(null);
+          openSkill(skill.name);
+        } else {
+          setSelectedTraceKey(traceEntryKey(entry));
+        }
+      },
+    }),
+    [openSkill],
   );
 
   const { activeTeam } = useFrontendBootstrap();
@@ -171,7 +230,37 @@ export default function ManagedChatPage() {
   const { canAdministerAdmins } = useTeamCapabilities(team);
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
-  const chat = useManagedChat({ teamId, agentInstanceId });
+  // The agent's recommended model and the models a member may pick. Its own
+  // read: prepare-execution runs on every send and stays free of pod-catalog
+  // fetches. Saving the team's models or the agent refetches it; an admin change
+  // made in another browser lands on window focus (at most every 30 s: each read
+  // also asks the pod for its catalog) or when a conversation opens.
+  // `currentData`: another agent's model list must never judge this agent's choice.
+  // A deleted agent has no model to read: its conversation is read-only.
+  const [agentDeleted, setAgentDeleted] = useState(false);
+  const {
+    currentData: effectiveChatModel,
+    fulfilledTimeStamp: modelReadAt,
+    refetch: refetchEffectiveChatModel,
+  } = useEffectiveChatModelQuery(
+    { teamId, agentInstanceId },
+    { skip: agentDeleted, refetchOnMountOrArgChange: MODEL_READ_MIN_AGE_MS / 1000 },
+  );
+  const refetchStaleModelRead = useCallback(() => {
+    if (modelReadAt !== undefined && Date.now() - modelReadAt < MODEL_READ_MIN_AGE_MS) return;
+    void refetchEffectiveChatModel();
+  }, [modelReadAt, refetchEffectiveChatModel]);
+  useRefetchOnWindowFocus(refetchStaleModelRead, agentDeleted);
+  const chat = useManagedChat({ teamId, agentInstanceId, effectiveChatModel });
+  // The chat hook needs the model read, so its verdict comes back through state.
+  if (chat.isReadOnly !== agentDeleted) setAgentDeleted(chat.isReadOnly);
+  const lastModelReadSessionId = useRef(chat.sessionId);
+  useEffect(() => {
+    if (lastModelReadSessionId.current === chat.sessionId) return;
+    lastModelReadSessionId.current = chat.sessionId;
+    // A skipped query cannot be refetched; it starts by itself once the agent is live.
+    if (!agentDeleted) void refetchEffectiveChatModel();
+  }, [chat.sessionId, agentDeleted, refetchEffectiveChatModel]);
 
   // Opening a push drawer is a statement about ONE conversation, so switching
   // conversations closes it: the panels (capability, attachments, document
@@ -256,19 +345,12 @@ export default function ManagedChatPage() {
     recordedPanelKeyRef.current = activeCapabilityKey;
   }, [chat.sessionId, activeCapabilityKey]);
 
-  // The model this agent's next turn will actually route to (#2387) — the
-  // composer's label. Its own read rather than part of prepare-execution:
-  // prepare runs on every send and is contractually free of pod-catalog
-  // fetches, while resolving the pod-owned precedence levels needs one.
-  // Tagged ControlPlaneRoutingPolicy/teamId, so saving a routing policy
-  // refetches this instead of leaving a stale model name on screen.
-  const { data: effectiveChatModel } = useEffectiveChatModelQuery(
-    { teamId, agentInstanceId },
-    { skip: chat.executionDisabled },
-  );
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
+  const fileTraceEntry =
+    activePushDrawer?.kind === "skill-file" ? findTraceEntry(chat.messages, activePushDrawer.entryKey) : null;
+  const previewFile = fileTraceEntry ? skillFileReadOf(fileTraceEntry) : null;
   const isInitialState =
     chat.threadMessages.length === 0 &&
     !chat.waitResponse &&
@@ -560,29 +642,62 @@ export default function ManagedChatPage() {
   const composerControlsDisabled =
     chat.executionDisabled || chat.waitResponse || chat.isLoadingHistory || awaitingHumanAnswer;
 
-  // `/` at the start of an empty composer. Owns the menu and resolves the
+  // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
   // menu reach the same send.
   const commands = useComposerCommands({
     teamId,
+    agentInstanceId,
+    personalTeamId: activeTeam?.id,
+    onRunSkill: (run) => void chat.runSkill(run),
+    onSkillError: (reason) =>
+      showError({
+        summary: t("chatbot.skills.errorTitle"),
+        detail: t(reason === "usage" ? "chatbot.skills.usage" : "chatbot.skills.unavailable"),
+      }),
     input: chat.input,
     setInput: chat.setInput,
     onRunCommand: (run) => void chat.runCommand(run),
     onSend: () => void chat.handleSend(),
-    onResolveError: () =>
+    onResolveError: (reason, command) =>
       showError({
         summary: t("chatbot.commandMenu.runErrorSummary"),
-        detail: t("chatbot.commandMenu.runErrorDetail"),
+        detail:
+          reason === "tooMany"
+            ? t("chatbot.commandMenu.runErrorTooMany", { limit: MAX_TURN_PROMPTS })
+            : t(reason === "stale" ? "chatbot.commandMenu.runErrorStale" : "chatbot.commandMenu.runErrorDetail", {
+                command,
+              }),
       }),
   });
+
+  // A composer prompt token opens its own prompt; a second click closes it.
+  const [fetchPromptPreview, promptPreview] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  // One identity for every token and across keystrokes, so no token is
+  // rebuilt as the user types: the activated token says which prompt it is.
+  const openPromptPreview = useCallback(
+    ({ promptId, promptTeamId, command, name }: InlinePromptTarget) => {
+      const open = previewPromptIdRef.current === promptId;
+      setActivePushDrawer(open ? null : { kind: "prompt-preview", promptId, promptTeamId, command, promptName: name });
+      if (!open) void fetchPromptPreview({ teamId: promptTeamId, promptId });
+    },
+    [fetchPromptPreview],
+  );
+  const promptPreviewStatus = !promptPreviewDrawer
+    ? undefined
+    : promptPreview.isFetching
+      ? ("loading" as const)
+      : promptPreview.isError || promptPreview.originalArgs?.promptId !== promptPreviewDrawer.promptId
+        ? ("error" as const)
+        : undefined;
 
   // Arrow keys bring back the messages sent in this conversation. A recalled
   // line keeps the command menu shut until the person edits it.
   const { setInput: setChatInput } = chat;
   const { dismiss: dismissCommandQuery } = commands;
   const recallLine = useCallback(
-    (line: string) => {
-      dismissCommandQuery(line);
+    (line: string, message?: ThreadMessage) => {
+      dismissCommandQuery(line, message);
       setChatInput(line);
       setFocusEndRequestId((n) => n + 1);
     },
@@ -598,17 +713,24 @@ export default function ManagedChatPage() {
 
   const composer = (
     <RichInputField
-      value={chat.input}
-      onChange={chat.setInput}
+      value={commands.composerValue}
+      onChange={commands.onComposerChange}
       onSend={commands.submit}
       onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
-      placeholder={t(chat.isReadOnly ? "chatbot.readOnlyComposerPlaceholder" : "chatbot.composerPlaceholder")}
+      placeholder={
+        chat.isReadOnly
+          ? t("chatbot.readOnlyComposerPlaceholder")
+          : (commands.selectedSkillArgumentHint ??
+            t(commands.selectedSkills.length ? "chatbot.skills.requestPlaceholder" : "chatbot.composerPlaceholder"))
+      }
       accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentTooltip" : "chatbot.composerPlaceholder", {
         agentsNicknameSingular,
       })}
       commandTrigger={commands.trigger}
       onRecallKeyDown={recallKeyDown}
-      aboveFieldSlot={!chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
+      aboveFieldSlot={
+        !chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} teamName={team?.name} /> : undefined
+      }
       disabled={composerControlsDisabled}
       sendDisabled={composerControlsDisabled || chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}
@@ -619,6 +741,15 @@ export default function ManagedChatPage() {
       onVoiceInputError={reportVoiceInputError}
       focusEndRequestId={focusEndRequestId}
       showSendButton
+      inlineSkills={{
+        promptTokens: commands.selectedPrompts.map((prompt) => ({ ...prompt, teamName: team?.name })),
+        onOpenPrompt: openPromptPreview,
+        tokens: commands.selectedSkills.map((token) => ({
+          ...token,
+          description: commands.skillDescriptions.get(token.name),
+          onOpen: openSkill,
+        })),
+      }}
       aboveTextSlot={
         chat.attachments.length > 0 ? (
           <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
@@ -630,6 +761,8 @@ export default function ManagedChatPage() {
           composer={composerState}
           disabled={composerControlsDisabled}
           effectiveModel={effectiveChatModel}
+          chatProfileId={chat.chatProfileId}
+          onChatProfileChange={chat.setChatProfileId}
         />
       }
       leftSlot={
@@ -672,12 +805,16 @@ export default function ManagedChatPage() {
   // already readable in the trace drawer — the raw message dump for admins only.
   // Stable identity: an inline arrow here would defeat ConversationThread's
   // memo and re-render the whole transcript on every composer keystroke.
-  const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor }) => {
+  const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => {
+    // A listed prompt shows its own part of the stored text; a turn without
+    // a usable list shows the whole text under its single command.
+    const entry =
+      turn.promptIndex === undefined ? undefined : usablePromptList(turn.command, turn.text)?.[turn.promptIndex];
     setActivePushDrawer({
       kind: "command-prompt",
-      text: turn.text,
-      command: turn.command.command,
-      promptName: turn.command.prompt_name ?? null,
+      text: entry ? turn.text.slice(entry.text_offset, entry.text_offset + entry.text_length) : turn.text,
+      command: (entry ?? turn.command).command,
+      promptName: (entry ?? turn.command).prompt_name ?? null,
     });
   }, []);
 
@@ -798,7 +935,7 @@ export default function ManagedChatPage() {
             {/* Conversation column — holds only the main column now; the push drawers
             moved up to the page body so they reflow the header too. */}
             <div className={styles.contentRow}>
-              <div className={styles.mainColumn}>
+              <div className={styles.mainColumn} data-chat-main>
                 {allowChatAttachments && dragActive && (
                   <div className={styles.dropOverlay} aria-hidden>
                     <div className={styles.dropOverlayContent}>
@@ -846,6 +983,8 @@ export default function ManagedChatPage() {
                         hitlFreeText={chat.hitlFreeText}
                         onHitlFreeTextChange={chat.setHitlFreeText}
                         onOpenCommandPrompt={openCommandPrompt}
+                        onOpenSkill={openSkill}
+                        skillDescriptions={commands.skillDescriptions}
                       />
                     )}
                   </div>
@@ -893,12 +1032,42 @@ export default function ManagedChatPage() {
             onActiveKeyChange={handleCapabilityPanelChange}
           />
 
+          <SkillDetailPanel
+            open={!!previewSkillName || activePushDrawer?.kind === "skill-file"}
+            file={activePushDrawer?.kind === "skill-file" ? previewFile : undefined}
+            name={previewSkillName ?? ""}
+            onClose={() =>
+              setActivePushDrawer((drawer) =>
+                drawer?.kind === "skill" || drawer?.kind === "skill-file" ? null : drawer,
+              )
+            }
+            detail={skillPreview.currentData}
+            loading={skillPreview.isFetching}
+            error={!!skillPreview.error}
+            onRetry={() => void skillPreview.refetch()}
+          />
+
           <CommandPromptPanel
-            open={activePushDrawer?.kind === "command-prompt"}
-            onClose={() => setActivePushDrawer((v) => (v?.kind === "command-prompt" ? null : v))}
-            text={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.text : ""}
-            command={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.command : null}
-            promptName={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.promptName : null}
+            open={activePushDrawer?.kind === "command-prompt" || promptPreviewDrawer !== null}
+            onClose={() =>
+              setActivePushDrawer((v) => (v?.kind === "command-prompt" || v?.kind === "prompt-preview" ? null : v))
+            }
+            text={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.text
+                : (promptPreview.currentData?.text ?? "")
+            }
+            command={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.command
+                : (promptPreviewDrawer?.command ?? null)
+            }
+            promptName={
+              activePushDrawer?.kind === "command-prompt"
+                ? activePushDrawer.promptName
+                : (promptPreviewDrawer?.promptName ?? null)
+            }
+            status={promptPreviewStatus}
           />
 
           <FullReasoningPanel

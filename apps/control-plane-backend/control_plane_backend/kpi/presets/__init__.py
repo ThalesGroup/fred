@@ -38,6 +38,9 @@ from control_plane_backend.kpi.presets.conversations_per_user import (
 from control_plane_backend.kpi.presets.conversations_per_user_trend import (
     CONVERSATIONS_PER_USER_TREND_PRESET,
 )
+from control_plane_backend.kpi.presets.creation_assistant_usage import (
+    CREATION_ASSISTANT_USAGE_PRESET,
+)
 from control_plane_backend.kpi.presets.documents_total import DOCUMENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.messages_over_time import (
     MESSAGES_OVER_TIME_PRESET,
@@ -47,6 +50,10 @@ from control_plane_backend.kpi.presets.sessions_by_scope import (
 )
 from control_plane_backend.kpi.presets.sessions_over_time import (
     SESSIONS_OVER_TIME_PRESET,
+)
+from control_plane_backend.kpi.presets.skill_usage import (
+    SKILL_USAGE_PRESET,
+    USER_SKILL_USAGE_PRESET,
 )
 from control_plane_backend.kpi.presets.storage_by_team import STORAGE_BY_TEAM_PRESET
 from control_plane_backend.kpi.presets.token_usage_by_agent import (
@@ -93,6 +100,8 @@ from control_plane_backend.kpi.presets.web_research_summary import (
 )
 
 PRESETS: list[PresetDef] = [
+    SKILL_USAGE_PRESET,
+    USER_SKILL_USAGE_PRESET,
     ACTIVE_USERS_OVER_TIME_PRESET,
     UNIQUE_USERS_TOTAL_PRESET,
     SESSIONS_OVER_TIME_PRESET,
@@ -121,6 +130,7 @@ PRESETS: list[PresetDef] = [
     TOKEN_USAGE_OVER_TIME_PRESET,
     TOKEN_USAGE_BY_AGENT_PRESET,
     TOKEN_USAGE_BY_MODEL_PRESET,
+    CREATION_ASSISTANT_USAGE_PRESET,
     STORAGE_BY_TEAM_PRESET,
     WEB_RESEARCH_SUMMARY_PRESET,
 ]

@@ -4,7 +4,9 @@ import { act, StrictMode } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
-  invalid: false,
+  error: undefined as unknown,
+  loading: false,
+  support: "https://support.example.org",
   required: true,
   markdown: "Terms of use",
   refetch: vi.fn(),
@@ -19,14 +21,19 @@ vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({
 }));
 vi.mock("@hooks/useLegalMarkdown", () => ({ useLegalMarkdown: () => state.markdown }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
-  useFrontendProperties: () => ({ gcuVersion: "v1", contactSupportLink: "https://support.example.org" }),
+  useFrontendProperties: () => ({ gcuVersion: "v1", contactSupportLink: state.support, siteDisplayName: "Acme" }),
+}));
+vi.mock("../../../../common/platformAccess", () => ({
+  platformPath: (path: string) => `/${path.replace(/^\//, "")}`,
 }));
 vi.mock("../../../../security/KeycloakService", () => ({ KeyCloakService: { CallLogout: vi.fn() } }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useFreeEnrollmentPreviewQuery: () => ({
-    data: state.invalid ? undefined : { team_name: "Demo", cgu_required: state.required },
-    isError: state.invalid,
-    isSuccess: !state.invalid,
+    data: state.error || state.loading ? undefined : { team_name: "Demo", cgu_required: state.required },
+    error: state.error,
+    isError: Boolean(state.error),
+    isLoading: state.loading,
+    isSuccess: !state.error && !state.loading,
     refetch: state.refetch,
   }),
   useAcceptFreeCguMutation: () => [state.accept, {}],
@@ -46,11 +53,14 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root;
 let reachBottom: () => void;
 beforeEach(() => {
-  state.invalid = false;
+  state.error = undefined;
+  state.loading = false;
+  state.support = "https://support.example.org";
   state.required = true;
   state.markdown = "Terms of use";
   vi.clearAllMocks();
   state.accept.mockReturnValue({ unwrap: async () => undefined });
+  state.enroll.mockReturnValue({ unwrap: async () => ({ admitted: false }) });
   state.refetch.mockReturnValue({
     unwrap: async () => {
       state.required = false;
@@ -76,11 +86,12 @@ afterEach(() => {
   host.remove();
   vi.unstubAllGlobals();
 });
+const invalidLink = { status: 404, data: { detail: "free_enrollment_link_invalid" } };
 const button = (key: string) => [...host.querySelectorAll("button")].find((node) => node.textContent?.endsWith(key));
 it("uses the common terms page before offering explicit team enrollment", async () => {
   act(() => root.render(<FreeEnrollmentPage />));
   expect(host.textContent).toContain("rework.gcu.title");
-  expect(host.textContent).not.toContain("rework.platformAccess.joinTeam");
+  expect(host.textContent).not.toContain("rework.platformAccess.join.title");
   expect(host.querySelector('input[type="checkbox"]')).toBeNull();
   expect(button("rework.gcu.validate")!.disabled).toBe(true);
   act(() => reachBottom());
@@ -91,9 +102,9 @@ it("uses the common terms page before offering explicit team enrollment", async 
   expect(state.enroll).not.toHaveBeenCalled();
   act(() => root.render(<FreeEnrollmentPage />));
   expect(host.textContent).not.toContain("rework.gcu.title");
-  expect(host.textContent).toContain("rework.platformAccess.joinTeam");
+  expect(host.textContent).toContain("rework.platformAccess.join.title");
   expect(host.textContent).not.toContain("rework.platformAccess.signOut");
-  await act(async () => button("rework.platformAccess.join")!.click());
+  await act(async () => button("rework.platformAccess.join.action")!.click());
   expect(state.enroll).toHaveBeenCalledWith({ token: "opaque-token" });
   expect(state.accept).toHaveBeenCalledTimes(1);
 });
@@ -101,7 +112,7 @@ it("skips the legal page when current terms are already accepted", async () => {
   state.required = false;
   act(() => root.render(<FreeEnrollmentPage />));
   expect(host.textContent).not.toContain("rework.gcu.title");
-  await act(async () => button("rework.platformAccess.join")!.click());
+  await act(async () => button("rework.platformAccess.join.action")!.click());
   expect(state.accept).not.toHaveBeenCalled();
   expect(state.enroll).toHaveBeenCalledTimes(1);
 });
@@ -115,7 +126,7 @@ it("does not enroll when invitation legal acceptance fails", async () => {
   act(() => reachBottom());
   await act(async () => button("rework.gcu.validate")!.click());
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("rework.platformAccess.failed");
-  expect(button("rework.platformAccess.join")).toBeUndefined();
+  expect(button("rework.platformAccess.join.action")).toBeUndefined();
   expect(state.refetch).not.toHaveBeenCalled();
   expect(state.enroll).not.toHaveBeenCalled();
 });
@@ -125,12 +136,83 @@ it("cannot accept terms before their document loads", () => {
   act(() => reachBottom());
   expect(button("rework.gcu.validate")!.disabled).toBe(true);
 });
-it("invalid links expose no enrollment action", () => {
-  state.invalid = true;
+it("reports an invalid link without a retry", () => {
+  state.error = invalidLink;
   act(() => root.render(<FreeEnrollmentPage />));
-  expect(host.textContent).toContain("rework.platformAccess.invalidLink");
-  expect(host.textContent).not.toContain("rework.platformAccess.joinTeam");
+  expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.invalidTitle");
+  expect(host.textContent).toContain("rework.platformAccess.join.invalidMessage");
+  expect(host.querySelector("footer")).toBeNull();
+  expect(host.querySelectorAll("button")).toHaveLength(0);
+  expect(host.textContent).not.toContain("Demo");
+  expect(state.record).not.toHaveBeenCalled();
+});
+it("drops the footer of an invalid link when no support link is configured", () => {
+  state.error = invalidLink;
+  state.support = "";
+  act(() => root.render(<FreeEnrollmentPage />));
+  expect(host.querySelector("footer")).toBeNull();
+});
+it.each([
+  ["a network failure", { status: "FETCH_ERROR", error: "Failed to fetch" }],
+  ["a server error", { status: 503, data: { detail: "platform_access_unavailable" } }],
+  ["another 404", { status: 404, data: { detail: "Not Found" } }],
+])("keeps a retry for %s instead of calling the link invalid", (_name, error) => {
+  state.error = error;
+  act(() => root.render(<FreeEnrollmentPage />));
+  expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.uncheckedTitle");
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("rework.platformAccess.join.uncheckedMessage");
+  expect(host.textContent).not.toContain("rework.platformAccess.join.invalid");
   expect(host.textContent).not.toContain("rework.platformAccess.signOut");
+  expect(host.querySelector('a[href="https://support.example.org"]')).toBeNull();
+  act(() => button("rework.platformAccess.retry")!.click());
+  expect(state.refetch).toHaveBeenCalledTimes(1);
+});
+it("keeps a retry when joining fails", async () => {
+  state.required = false;
+  state.enroll.mockReturnValue({
+    unwrap: async () => {
+      throw { status: 500, data: { detail: "boom" } };
+    },
+  });
+  act(() => root.render(<FreeEnrollmentPage />));
+  await act(async () => button("rework.platformAccess.join.action")!.click());
+  expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.failedTitle");
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("rework.platformAccess.failed");
+  expect(button("rework.platformAccess.retry")).toBeDefined();
+  expect(host.querySelector('a[href="https://support.example.org"]')).toBeNull();
+});
+it("reports a link revoked while the page was open as no longer valid", async () => {
+  state.required = false;
+  state.enroll.mockReturnValue({
+    unwrap: async () => {
+      throw invalidLink;
+    },
+  });
+  act(() => root.render(<FreeEnrollmentPage />));
+  await act(async () => button("rework.platformAccess.join.action")!.click());
+  expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.invalidTitle");
+  expect(button("rework.platformAccess.retry")).toBeUndefined();
+  expect(host.querySelector("footer")).toBeNull();
+});
+it("shows the invitation with the team and a single join action", () => {
+  state.required = false;
+  act(() => root.render(<FreeEnrollmentPage />));
+  const headings = host.querySelectorAll("h1");
+  expect(headings).toHaveLength(1);
+  expect(headings[0].textContent).toBe("rework.platformAccess.join.title");
+  expect(host.querySelector("section")?.getAttribute("aria-labelledby")).toBe(headings[0].id);
+  expect(host.querySelector("h2")?.textContent).toBe("Demo");
+  expect(host.textContent).toContain("Acme");
+  expect(host.querySelectorAll("button")).toHaveLength(1);
+  expect(host.querySelector('a[href="https://support.example.org"]')).toBeNull();
+});
+it("announces that the invitation is being checked", () => {
+  state.loading = true;
+  act(() => root.render(<FreeEnrollmentPage />));
+  expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.join.checking");
+  expect(host.querySelector('[role="status"]')?.textContent).toBe("rework.platformAccess.loading");
+  expect(host.querySelectorAll("button")).toHaveLength(0);
+  expect(host.querySelector("footer")).toBeNull();
 });
 
 it("records one authenticated arrival independently of legal acceptance and enrollment", async () => {
@@ -154,4 +236,45 @@ it("records once under duplicate StrictMode effects", async () => {
     ),
   );
   expect(state.record).toHaveBeenCalledTimes(1);
+});
+const noPlatformAccess = { status: 403, data: { detail: "team_link_requires_platform_access" } };
+it("sends a person without platform access to the refusal page instead of the invitation", () => {
+  const replace = vi.fn();
+  vi.stubGlobal("location", { ...window.location, origin: window.location.origin, replace });
+  state.error = noPlatformAccess;
+  act(() => root.render(<FreeEnrollmentPage />));
+  expect(replace).toHaveBeenCalledWith("/platform-access-denied");
+  expect(host.textContent).toBe("");
+  expect(state.record).not.toHaveBeenCalled();
+});
+it("sends a person who lost platform access while the page was open to the refusal page", async () => {
+  const replace = vi.fn();
+  vi.stubGlobal("location", { ...window.location, origin: window.location.origin, replace });
+  state.required = false;
+  state.enroll.mockReturnValue({
+    unwrap: async () => {
+      throw noPlatformAccess;
+    },
+  });
+  act(() => root.render(<FreeEnrollmentPage />));
+  await act(async () => button("rework.platformAccess.join.action")!.click());
+  expect(replace).toHaveBeenCalledWith("/platform-access-denied");
+  expect(host.textContent).not.toContain("rework.platformAccess.join.failedTitle");
+});
+
+it.each([
+  [
+    "the team page when the join returns the team",
+    { admitted: true, cgu_required: false, team_id: "demo team" },
+    "/team/demo%20team/agents",
+  ],
+  ["the home page when it does not", { admitted: true, cgu_required: false }, "/"],
+])("opens %s", async (_name, result, target) => {
+  const replace = vi.fn();
+  vi.stubGlobal("location", { ...window.location, origin: window.location.origin, replace });
+  state.required = false;
+  state.enroll.mockReturnValue({ unwrap: async () => result as never });
+  act(() => root.render(<FreeEnrollmentPage />));
+  await act(async () => button("rework.platformAccess.join.action")!.click());
+  expect(replace).toHaveBeenCalledWith(target);
 });
