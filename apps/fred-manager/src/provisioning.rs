@@ -172,6 +172,8 @@ impl Importer<'_> {
         let resolved = self.resolve_spaces(&mut tx, bundle).await?;
         self.validate_parents(bundle, &resolved, &subjects, None)
             .await?;
+        self.validate_organizations(&mut tx, bundle, &resolved, &subjects, None)
+            .await?;
         tx.rollback().await?;
         Ok(())
     }
@@ -294,6 +296,42 @@ impl Importer<'_> {
         Ok(())
     }
 
+    /// Validate the entire declaration, including users not yet created in IAM.
+    /// Existing roles are read through this transaction so earlier published subtrees
+    /// cannot disappear from attachment checks before the final SQL commit.
+    async fn validate_organizations(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        bundle: &Bundle,
+        resolved: &[(Space, bool)],
+        subjects: &BTreeMap<String, String>,
+        only: Option<Uuid>,
+    ) -> Result<()> {
+        let mut attachments = BTreeMap::new();
+        for (declaration, (space, _)) in bundle.spaces.iter().zip(resolved) {
+            for (username, roles) in &declaration.roles {
+                if roles.is_empty() {
+                    continue;
+                }
+                if attachments
+                    .insert(username, space.organization)
+                    .is_some_and(|previous| previous != space.organization)
+                {
+                    return Err(conflict("a person cannot belong to multiple organizations"));
+                }
+            }
+        }
+        for (username, organization) in attachments {
+            if only.is_some_and(|id| id != organization) {
+                continue;
+            }
+            if let Some(subject) = subjects.get(username) {
+                spaces::may_attach(&mut **tx, self.fga, subject, organization).await?;
+            }
+        }
+        Ok(())
+    }
+
     pub async fn run(&self, bundle: &Bundle) -> Result<Report> {
         let mut report = Report::default();
         // Error causes from SQL may contain user-supplied values. Return only safe phase
@@ -348,6 +386,8 @@ impl Importer<'_> {
         // after capturing its guard, so a late revoke cannot invalidate the decision.
         self.validate_parents(bundle, &resolved, subjects, None)
             .await?;
+        self.validate_organizations(&mut tx, bundle, &resolved, subjects, None)
+            .await?;
         // Verify every owner before publishing any subtree. External IAM deletion is
         // not transactional with OpenFGA; this is an existence check, not an account lease.
         let owners: std::collections::BTreeSet<_> = bundle
@@ -384,6 +424,8 @@ impl Importer<'_> {
                 .await?;
             let actor = self.authorize().await?;
             self.validate_parents(bundle, &resolved, subjects, Some(org.id))
+                .await?;
+            self.validate_organizations(&mut tx, bundle, &resolved, subjects, Some(org.id))
                 .await?;
             let mut wrote = false;
             for (declaration, (space, is_new)) in bundle

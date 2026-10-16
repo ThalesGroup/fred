@@ -47,12 +47,35 @@ Every error body is `{"detail": "<message>"}`, as FastAPI.
 | 401 | Missing or invalid bearer ([authentication details](03-security.md#authentication)) |
 | 403 | Permission denied (`forbidden`), wrong bootstrap secret, `user_not_accept_gcu` |
 | 404 | Unknown id |
-| 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, ingestion already running, `gcu_version_changed` |
+| 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, ingestion already running, `gcu_version_changed`, second or ambiguous organization attachment |
 | 413 | Import exceeds 50 MiB compressed or 100 MiB expanded |
 | 422 | Invalid ZIP/declarations, `not_yet_supported` import format; invalid JSON body (optional ones included), short bootstrap token, half a cursor |
 | 503 | Bootstrap or platform-role administration with authentication disabled; grant with no directory or incompatible subject/realm mapping |
 | 500 | Anything else, logged, answered `internal error` |
 
+
+## Organization conflict recovery
+
+A `multiple organization attachments` conflict means existing canonical roles place
+the subject in more than one organization. It is invalid data, not a supported
+multi-organization mode. Manager blocks business context instead of choosing one.
+An attachment conflict during import is reported through the sanitized preflight
+or roles/spaces error and existing acknowledgment counters.
+
+Inspect the subject's direct OpenFGA roles and the committed SQL spaces, including
+personal links and governance-only roles. Agree the intended organization, then
+have administrators authorized in each affected organization revoke its unwanted
+grants bottom-up:
+projects, teams/personal spaces, then organization. Keep the required administrator
+and owner in every non-personal space. Platform owners can correct organization
+owner grants through their independent platform authority. Revocation does not
+require the target to have a valid unique context; it still checks the caller.
+No role or content is deleted automatically, and granting platform ownership does
+not bypass content or ordinary space-administration checks.
+
+Upgrade all manager role writers together; an old writer can still create conflicting
+data. There is no SQL/FGA schema migration for this rule. Deployment and rollback
+steps are in the [migration note](../swift/ops/migrations/manager-single-organization.md).
 
 ## Configuration
 

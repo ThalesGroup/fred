@@ -25,9 +25,14 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserGivenName: () => givenName },
 }));
-const state = vi.hoisted(() => ({ spaces: [] as unknown[], selected: "", failed: false, loading: false }));
+const state = vi.hoisted(() => ({
+  spaces: [] as unknown[],
+  selected: null as string | null,
+  failed: false,
+  loading: false,
+}));
 vi.mock("react-router-dom", () => ({
-  useSearchParams: () => [new URLSearchParams(state.selected ? { space: state.selected } : {})],
+  useSearchParams: () => [new URLSearchParams(state.selected !== null ? { space: state.selected } : {})],
 }));
 vi.mock("../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
   useMySpacesQuery: () => ({ data: state.spaces, isError: state.failed, isLoading: state.loading, refetch: vi.fn() }),
@@ -63,7 +68,7 @@ const project = {
 };
 beforeEach(() => {
   state.spaces = [];
-  state.selected = "";
+  state.selected = null;
   state.failed = false;
   state.loading = false;
 });
@@ -98,4 +103,21 @@ it("shows loading without an empty-membership claim", () => {
   const html = renderToStaticMarkup(<HomePage />);
   expect(html).toContain('role="status"');
   expect(html).not.toContain("rework.manager.empty");
+});
+
+it("enters the unique organization without a URL selection and keeps team navigation separate", () => {
+  state.spaces = [team, org, project];
+  const html = renderToStaticMarkup(<HomePage />);
+  expect(html).toContain('aria-label="Org"');
+  expect(html).not.toContain('aria-label="Team"');
+  expect(html).not.toContain('aria-label="Project"');
+});
+
+it("treats a present-empty space parameter as invalid rather than showing all memberships", () => {
+  state.spaces = [org, team];
+  state.selected = "";
+  const html = renderToStaticMarkup(<HomePage />);
+  expect(html).toContain("rework.manager.missingSpace");
+  expect(html).not.toContain('aria-label="Org"');
+  expect(html).not.toContain('aria-label="Team"');
 });

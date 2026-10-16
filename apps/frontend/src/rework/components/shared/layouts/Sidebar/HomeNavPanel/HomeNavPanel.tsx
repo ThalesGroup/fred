@@ -52,7 +52,7 @@ export default function HomeNavPanel() {
           .map((space) => (
             <div key={space.id} className={styles[space.kind]}>
               <TeamSelectionListItem
-                redirection={{ pathname: "/home", search: `?space=${space.id}` }}
+                redirection={{ pathname: "/home", search: space.kind === "organization" ? "" : `?space=${space.id}` }}
                 name={space.name}
                 avatarName={space.name}
                 description={[

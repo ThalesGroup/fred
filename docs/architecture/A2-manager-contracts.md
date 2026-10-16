@@ -6,7 +6,12 @@ Read [Security](03-security.md) and [Organizations](04-organizations.md) for mea
 ## fred-manager HTTP surface
 
 Health and frontend configuration are public. Other routes require a bearer token
-([security](03-security.md)); business routes also require current personal CGU acceptance.
+([security](03-security.md)); business routes also require current personal CGU acceptance
+and the unique organization context described in [Organizations](04-organizations.md#one-person-one-organization).
+`/me` remains platform-role metadata; `/me/spaces` validates business context and
+returns 409 for contradictory attachments. No organization request parameter
+selects a tenant. Business authorization probes return `allowed: false` for a missing or
+foreign context, and 409 for ambiguity.
 
 <!-- generated: routes apps/fred-manager/src/api.rs /fred-manager/v1 -->
 | Method | Path | Handler |

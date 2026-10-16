@@ -71,6 +71,72 @@ pub async fn place(fga: &Fga, row: SpaceRow) -> AppResult<Space> {
     })
 }
 
+/// I23: attachment is derived from direct roles on committed spaces, including
+/// governance-only roles. SQL stores no duplicate membership or permission matrix.
+/// Read every page and placement; stale tuples on uncommitted spaces grant nothing.
+pub async fn organization<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    fga: &Fga,
+    user: &str,
+) -> AppResult<Option<Uuid>> {
+    let roles = fga.roles_of(user).await?;
+    let ids: Vec<_> = roles.iter().map(|(id, _)| *id).collect();
+    let rows = db::spaces(ex, &ids).await?;
+    let mut organization = None;
+    for row in rows {
+        let space = place(fga, row).await?;
+        if organization.is_some_and(|id| id != space.organization) {
+            return Err(AppError::Conflict(
+                "multiple organization attachments".into(),
+            ));
+        }
+        organization = Some(space.organization);
+    }
+    Ok(organization)
+}
+
+/// Call under the platform lock and after capturing its guard before a grant.
+/// The same check is usable with the importer's transaction-local rows.
+pub(crate) async fn may_attach<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    fga: &Fga,
+    user: &str,
+    target: Uuid,
+) -> AppResult<()> {
+    if organization(ex, fga, user)
+        .await?
+        .is_some_and(|id| id != target)
+    {
+        return Err(AppError::Conflict(
+            "the user already belongs to another organization".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Context limits the organization, while OpenFGA still evaluates all permissions.
+pub async fn in_organization<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    fga: &Fga,
+    user: &str,
+    target: Uuid,
+) -> AppResult<bool> {
+    Ok(organization(ex, fga, user).await? == Some(target))
+}
+
+pub async fn require_context<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    fga: &Fga,
+    user: &str,
+    target: Uuid,
+) -> AppResult<()> {
+    if in_organization(ex, fga, user, target).await? {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
 /// Search scope: the space and its ancestors, organization first, never descendants;
 /// a personal space's scope is itself. `levels` only removes spaces.
 pub async fn scope(
@@ -80,9 +146,9 @@ pub async fn scope(
     space_id: Uuid,
     levels: Option<&[SpaceKind]>,
 ) -> AppResult<Vec<Uuid>> {
-    let row = db::space(pool, space_id).await?;
-    require(fga, user, Permission::Read, row.id).await?;
-    let space = place(fga, row).await?;
+    let space = load(pool, fga, space_id).await?;
+    require_context(pool, fga, user, space.organization).await?;
+    require(fga, user, Permission::Read, space.id).await?;
     let kinds: &[SpaceKind] = if space.personal_owner.is_some() {
         &[SpaceKind::Team]
     } else {
@@ -131,6 +197,41 @@ pub async fn memberships(pool: &PgPool, fga: &Fga, user: &str) -> AppResult<Vec<
             &mut parent
         };
         target.extend(links.into_iter().filter_map(|(id, link)| Some((id, link?))));
+    }
+    // Resolve missing project ancestors too, including inconsistent legacy grants.
+    let mut context = None;
+    for row in rows.values() {
+        let mut id = row.id;
+        let org = if row.personal_owner.is_some() {
+            *organization
+                .get(&id)
+                .ok_or_else(|| anyhow::anyhow!("missing organization link"))?
+        } else {
+            if row.kind != SpaceKind::Organization && !parent.contains_key(&id) {
+                return Err(anyhow::anyhow!("missing parent link").into());
+            }
+            for _ in 0..2 {
+                if let Some(up) = parent.get(&id).copied() {
+                    id = up;
+                } else if row.kind == SpaceKind::Project && id != row.id {
+                    let up = fga
+                        .link_of(id, false)
+                        .await?
+                        .ok_or_else(|| anyhow::anyhow!("missing parent link"))?;
+                    parent.insert(id, up);
+                    id = up;
+                } else {
+                    break;
+                }
+            }
+            id
+        };
+        if context.is_some_and(|previous| previous != org) {
+            return Err(AppError::Conflict(
+                "multiple organization attachments".into(),
+            ));
+        }
+        context = Some(org);
     }
     let mut inherited: BTreeMap<Uuid, BTreeSet<Role>> = BTreeMap::new();
     let descending = |id: Uuid, inherited: &BTreeMap<Uuid, BTreeSet<Role>>| -> BTreeSet<Role> {
@@ -250,24 +351,16 @@ async fn may_change(fga: &Fga, caller: &str, space: &Space, role: Role) -> AppRe
     }
 }
 
-/// Owner changes depend on platform authority: they also take the platform lock and guard.
+/// Role mutations serialize with import and organization creation across organizations.
+/// Lock order is always platform, then organization; both guards fence late writes.
 async fn lock_for(
     pool: &PgPool,
     fga: &Fga,
     space: &Space,
-    role: Role,
 ) -> AppResult<(Transaction<'static, Postgres>, Guard)> {
-    let platform = role == Role::Owner;
-    let mut tx = if platform {
-        bootstrap::locked(pool).await?
-    } else {
-        pool.begin().await?
-    };
+    let mut tx = bootstrap::locked(pool).await?;
     lock_organization(&mut tx, space).await?;
-    let mut scopes = vec![Scope::Organization(space.organization)];
-    if platform {
-        scopes.insert(0, Scope::Platform);
-    }
+    let scopes = vec![Scope::Platform, Scope::Organization(space.organization)];
     let guard = fga.guard(&scopes).await?;
     Ok((tx, guard))
 }
@@ -312,7 +405,7 @@ async fn persist(
     Ok(())
 }
 
-/// Organizations are created by an operator: no parent, so no invariant to check.
+/// Organizations are created by an operator; the first person must be unattached.
 /// The first person becomes owner, admin and member: technical and business roles may be
 /// held by the same person.
 pub async fn create_organization(
@@ -349,18 +442,13 @@ pub async fn create_organization(
             space: id,
         },
     ];
+    let mut tx = bootstrap::locked(pool).await?;
     fga.initialize_guard(Scope::Organization(id)).await?;
-    let mut guard = fga.guard(&[Scope::Organization(id)]).await?;
-    persist(
-        pool.begin().await?,
-        fga,
-        &mut guard,
-        &org,
-        &[],
-        &tuples,
-        None,
-    )
-    .await?;
+    let mut guard = fga
+        .guard(&[Scope::Platform, Scope::Organization(id)])
+        .await?;
+    may_attach(&mut *tx, fga, admin, id).await?;
+    persist(tx, fga, &mut guard, &org, &[], &tuples, None).await?;
     Ok(org)
 }
 
@@ -381,10 +469,12 @@ pub async fn create_space(
     let mut guard = fga
         .guard(&[Scope::Organization(parent.organization)])
         .await?;
+    require_context(&mut *tx, fga, caller, parent.organization).await?;
     require(fga, caller, Permission::Manage, parent.id).await?;
     if !holds_parent_content(fga, admin, parent.id).await? {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
+    require_context(&mut *tx, fga, admin, parent.organization).await?;
     if children(&mut tx, fga, parent.id)
         .await?
         .iter()
@@ -434,6 +524,7 @@ pub async fn create_personal_space(
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &org).await?;
     let mut guard = fga.guard(&[Scope::Organization(org.id)]).await?;
+    require_context(&mut *tx, fga, caller, org.id).await?;
     require(fga, caller, Permission::Read, org.id).await?;
     let personal = fga.linked_to(org.id, true).await?;
     if db::spaces(&mut *tx, &personal)
@@ -487,7 +578,10 @@ pub async fn grant(
     if space.personal_owner.is_some() {
         return Err(AppError::Conflict(PERSONAL_FIXED.into()));
     }
-    let (tx, mut guard) = lock_for(pool, fga, &space, role).await?;
+    let (mut tx, mut guard) = lock_for(pool, fga, &space).await?;
+    if role != Role::Owner {
+        require_context(&mut *tx, fga, caller, space.organization).await?;
+    }
     may_change(fga, caller, &space, role).await?;
     if role == Role::Owner {
         let directory = directory
@@ -501,6 +595,7 @@ pub async fn grant(
     {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
+    may_attach(&mut *tx, fga, target, space.organization).await?;
     fga.write(
         &mut guard,
         &[Tuple {
@@ -534,7 +629,10 @@ pub async fn revoke(
     target: &str,
 ) -> AppResult<()> {
     let space = load(pool, fga, space_id).await?;
-    let (mut tx, mut guard) = lock_for(pool, fga, &space, role).await?;
+    let (mut tx, mut guard) = lock_for(pool, fga, &space).await?;
+    if role != Role::Owner {
+        require_context(&mut *tx, fga, caller, space.organization).await?;
+    }
     if space.personal_owner.is_some() {
         require(fga, caller, Permission::Manage, space.organization).await?;
     } else {
@@ -609,6 +707,7 @@ pub async fn authorized_write(
     let mut guard = fga
         .guard(&[Scope::Organization(space.organization)])
         .await?;
+    require_context(&mut *tx, fga, caller, space.organization).await?;
     require(fga, caller, Permission::Write, space_id).await?;
     fga.fence(&mut guard).await?;
     Ok(tx)

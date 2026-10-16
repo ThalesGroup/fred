@@ -1666,6 +1666,11 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
             assert!(server.users.lock().await.is_empty());
         }
     }
+    server
+        .users
+        .lock()
+        .await
+        .insert("operator".into(), "operator".into());
     // The operator CLI cannot seed an owner outside the configured IAM.
     for case in ["missing", "unavailable", "mapping", "disabled", "valid"] {
         let mut current = config.clone();
@@ -1682,7 +1687,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
         .unwrap();
         let alice = server
             .directory()
-            .find_username("alice")
+            .find_username("operator")
             .await
             .unwrap()
             .unwrap()
@@ -1821,9 +1826,9 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
     assert_eq!(report.grants_acknowledged, 317);
     {
         let fault = proxy.fault.lock().await;
-        // U=105, B=ceil(107/96)+ceil(211/96)=5, G=0, new organization and team=1 each.
+        // U=105, B=5, G=0, new org/team=1 each; +3*105 context Reads.
         assert_eq!(fault.calls.get("check"), Some(&114));
-        assert_eq!(fault.calls.get("read"), Some(&107));
+        assert_eq!(fault.calls.get("read"), Some(&422));
         assert_eq!(fault.calls.get("write"), Some(&111));
         let operations: Vec<_> = fault
             .written
@@ -2057,6 +2062,12 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         };
         assert!(grants.contains(&(subject, role)));
     }
+    // Same IAM identities, separate Fred instance: one person cannot join a second
+    // organization on the original instance. Identity preservation is still tested.
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, &e.fga, &root.uid)
+        .await
+        .unwrap();
     // Acceptance uses the artifact built by the actual public Make command over HTTP.
     let output = std::env::temp_dir().join(format!("manager-demo-{}.zip", Uuid::new_v4()));
     assert!(
@@ -2100,7 +2111,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         let fault = proxy.fault.lock().await;
         // Actual Make artifact: U=15, O=1, B=4, G=4, C=3; HTTP adds one owner Check.
         assert_eq!(fault.calls.get("check"), Some(&28));
-        assert_eq!(fault.calls.get("read"), Some(&18));
+        assert_eq!(fault.calls.get("read"), Some(&44));
         assert_eq!(fault.calls.get("write"), Some(&24));
         let operations: usize = fault
             .written
@@ -2220,8 +2231,9 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         let fault = proxy.fault.lock().await;
         // U=2, O=1, B=2, H=2 existing-parent fallbacks, E=2 existing parents whose
         // children resolve names, N=G=Z=0; HTTP adds one admin Check.
+        // Two subjects with organization+team roles: 3*(2+2) context Reads.
         assert_eq!(fault.calls.get("check"), Some(&9));
-        assert_eq!(fault.calls.get("read"), Some(&14));
+        assert_eq!(fault.calls.get("read"), Some(&26));
         assert_eq!(fault.calls.get("write"), Some(&4));
     }
     let project = named_space(&e.pool, &e.fga, Some(north.id), "Project")
@@ -3431,7 +3443,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     assert_ne!(ids[0], ids[1]);
     // Internal SQL failures expose a phase and counters, never database diagnostics.
     sqlx::raw_sql("CREATE FUNCTION fail_import_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name = 'Internal failure' THEN RAISE EXCEPTION 'private-password'; END IF; RETURN NEW; END $$; CREATE TRIGGER fail_import_fixture BEFORE INSERT ON space FOR EACH ROW EXECUTE FUNCTION fail_import_fixture();").execute(&e.pool).await.unwrap();
-    let failing=fixture_zip(br#"{"users":[{"username":"alice"}],"organizations":[{"ref":"bad","name":"Internal failure","roles":{"alice":["admin","owner"]}}],"teams":[],"projects":[]}"#);
+    let failing=fixture_zip(br#"{"users":[{"username":"failure-owner","password":"private-password"}],"organizations":[{"ref":"bad","name":"Internal failure","roles":{"failure-owner":["admin","owner"]}}],"teams":[],"projects":[]}"#);
     let (status, body) = http_import(&app, &token, &failing).await;
     assert_eq!(status, 500, "{body}");
     assert!(body["detail"].as_str().unwrap().contains("roles/spaces"));
@@ -4050,17 +4062,17 @@ async fn sibling_names_are_unique_and_uncommitted_links_are_ignored() {
     )
     .await;
     assert!(matches!(duplicate, Err(AppError::Conflict(_))));
-    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "alice")
+    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "carol")
         .await
         .unwrap();
     spaces::create_space(
         &e.pool,
         &e.fga,
-        "alice",
+        "carol",
         SpaceKind::Team,
         other.id,
         "BID".into(),
-        "alice",
+        "carol",
     )
     .await
     .unwrap();
@@ -4165,15 +4177,15 @@ async fn hierarchy_reads_have_fixed_request_budgets() {
         4
     );
     assert_eq!(budget().await, (0, 4));
-    // One Check, then the project's two parent links.
+    // Context: direct roles + personal link, plus target placement and Check.
     spaces::scope(&e.pool, &fga, "ana", project.id, None)
         .await
         .unwrap();
-    assert_eq!(budget().await, (1, 2));
+    assert_eq!(budget().await, (1, 4));
     spaces::scope(&e.pool, &fga, "ana", team.id, None)
         .await
         .unwrap();
-    assert_eq!(budget().await, (1, 1));
+    assert_eq!(budget().await, (1, 3));
 }
 
 // Proves: I8, I14, I21
@@ -4573,7 +4585,7 @@ async fn import_checks_distinct_owners_once_with_bounded_concurrency() {
     }
     server.control.lock().await.subject_delay = true;
     let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({
-        "users":users,"organizations":[{"ref":"a","name":"A","roles":roles},{"ref":"b","name":"B","roles":roles}],"teams":[],"projects":[]
+        "users":users,"organizations":[{"ref":"a","name":"A","roles":roles}],"teams":[],"projects":[]
     })).unwrap()).unwrap();
     let auth = server.auth().await;
     let directory = server.directory();
@@ -4596,5 +4608,529 @@ async fn import_checks_distinct_owners_once_with_bounded_concurrency() {
         control.subject_peak > 1 && control.subject_peak <= 8,
         "{} concurrent lookups",
         control.subject_peak
+    );
+}
+
+// Proves: I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn concurrent_attachments_choose_one_organization_and_creation_cannot_bypass_it() {
+    let e = env().await;
+    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+        .await
+        .unwrap();
+    let b = spaces::create_organization(&e.pool, &e.fga, "B", "carol")
+        .await
+        .unwrap();
+    let (first, second) = tokio::join!(
+        spaces::grant(&e.pool, &e.fga, None, "alice", a.id, Role::Admin, "bob"),
+        spaces::grant(&e.pool, &e.fga, None, "carol", b.id, Role::Member, "bob"),
+    );
+    assert_ne!(first.is_ok(), second.is_ok());
+    let (winner, loser) = if first.is_ok() {
+        (a.id, second)
+    } else {
+        (b.id, first)
+    };
+    assert!(matches!(loser, Err(AppError::Conflict(_))));
+    assert_eq!(
+        spaces::organization(&e.pool, &e.fga, "bob").await.unwrap(),
+        Some(winner)
+    );
+    assert!(matches!(
+        spaces::create_organization(&e.pool, &e.fga, "Third", "bob").await,
+        Err(AppError::Conflict(_))
+    ));
+    assert!(
+        named_space(&e.pool, &e.fga, None, "Third")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        spaces::organization(&e.pool, &e.fga, "unattached")
+            .await
+            .unwrap(),
+        None
+    );
+    // Governance-only attachment is still an attachment, never content permission.
+    assert!(
+        !spaces::in_organization(
+            &e.pool,
+            &e.fga,
+            "bob",
+            if winner == a.id { b.id } else { a.id }
+        )
+        .await
+        .unwrap()
+    );
+}
+
+// Proves: I23, I5
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn a_late_attachment_cannot_publish_after_assignment_elsewhere() {
+    let e = env().await;
+    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+        .await
+        .unwrap();
+    let b = spaces::create_organization(&e.pool, &e.fga, "B", "carol")
+        .await
+        .unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let gate = std::sync::Arc::new(support::Gate::default());
+    {
+        let mut fault = proxy.fault.lock().await;
+        fault.gate = Some(gate.clone());
+        fault.gate_before = true;
+    }
+    let delayed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_millis(500)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    let pool = e.pool.clone();
+    let pending = tokio::spawn(async move {
+        spaces::grant(&pool, &delayed, None, "alice", a.id, Role::Member, "bob").await
+    });
+    tokio::time::timeout(Duration::from_secs(3), gate.entered.notified())
+        .await
+        .unwrap();
+    assert!(pending.await.unwrap().is_err());
+    spaces::grant(&e.pool, &e.fga, None, "carol", b.id, Role::Member, "bob")
+        .await
+        .unwrap();
+    gate.release.notify_one();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while proxy.fault.lock().await.acknowledged.is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(proxy.fault.lock().await.acknowledged, vec![400]);
+    assert_eq!(
+        spaces::organization(&e.pool, &e.fga, "bob").await.unwrap(),
+        Some(b.id)
+    );
+}
+
+// Proves: I23, I8
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn ambiguous_legacy_context_fails_closed_and_remains_repairable() {
+    use fred_manager::fga::Tuple;
+    let e = env().await;
+    let (a, _, project) = tree(&e).await;
+    let b = spaces::create_organization(&e.pool, &e.fga, "B", "carol")
+        .await
+        .unwrap();
+    grant(&e, a.id, Role::Admin, "bob").await;
+    assert_eq!(
+        spaces::organization(&e.pool, &e.fga, "bob").await.unwrap(),
+        Some(a.id)
+    );
+    assert!(!reads(&e, "bob", a.id).await);
+    // Simulate pre-invariant data: direct orphan project role and another organization.
+    e.fga
+        .write(
+            &mut e.fga.guard(&[Scope::Organization(a.id)]).await.unwrap(),
+            &[Tuple {
+                user: "orphan",
+                role: Role::Editor,
+                space: project.id,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        spaces::organization(&e.pool, &e.fga, "orphan")
+            .await
+            .unwrap(),
+        Some(a.id)
+    );
+    assert_eq!(
+        spaces::memberships(&e.pool, &e.fga, "orphan")
+            .await
+            .unwrap()[0]
+            .space
+            .organization,
+        a.id
+    );
+    e.fga
+        .write(
+            &mut e.fga.guard(&[Scope::Organization(b.id)]).await.unwrap(),
+            &[
+                Tuple {
+                    user: "bob",
+                    role: Role::Member,
+                    space: b.id,
+                },
+                Tuple {
+                    user: "orphan",
+                    role: Role::Member,
+                    space: b.id,
+                },
+            ],
+            &[],
+        )
+        .await
+        .unwrap();
+    for subject in ["bob", "orphan"] {
+        assert!(matches!(
+            spaces::organization(&e.pool, &e.fga, subject).await,
+            Err(AppError::Conflict(_))
+        ));
+        assert!(matches!(
+            spaces::memberships(&e.pool, &e.fga, subject).await,
+            Err(AppError::Conflict(_))
+        ));
+        assert!(matches!(
+            spaces::scope(&e.pool, &e.fga, subject, b.id, None).await,
+            Err(AppError::Conflict(_))
+        ));
+        assert!(matches!(
+            spaces::authorized_write(&e.pool, &e.fga, subject, b.id).await,
+            Err(AppError::Conflict(_))
+        ));
+        spaces::revoke(&e.pool, &e.fga, "carol", b.id, Role::Member, subject)
+            .await
+            .unwrap();
+        assert_eq!(
+            spaces::organization(&e.pool, &e.fga, subject)
+                .await
+                .unwrap(),
+            Some(a.id)
+        );
+    }
+}
+
+// Proves: I23, I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn import_rejects_cross_organization_declarations_before_identity_writes() {
+    use fred_manager::provisioning::Importer;
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let directory = server.directory();
+    let auth = server.auth().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let token = server.token("root");
+    let value = serde_json::json!({"users":[{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"bob":["admin","owner","member"]}},{"ref":"b","name":"B","roles":{"bob":["admin","owner","member"]}}],"teams":[],"projects":[]});
+    let bundle = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let importer = Importer {
+        pool: &e.pool,
+        fga: &e.fga,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    };
+    let failure = importer.run(&bundle).await.unwrap_err();
+    assert!(failure.to_string().contains("preflight"));
+    assert!(server.users.lock().await.is_empty());
+    assert!(server.control.lock().await.created.is_empty());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from space")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    server.users.lock().await.insert("bob".into(), "bob".into());
+    spaces::create_organization(&e.pool, &e.fga, "Existing", "bob")
+        .await
+        .unwrap();
+    let mut other = value;
+    other["organizations"].as_array_mut().unwrap().truncate(1);
+    let bundle = parse_blueprint(&serde_json::to_vec(&other).unwrap()).unwrap();
+    assert!(
+        importer
+            .run(&bundle)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("preflight")
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from space")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        1
+    );
+}
+
+// Proves: I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn organization_context_exhausts_pages_and_grant_budget_includes_global_fencing() {
+    let e = env().await;
+    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+        .await
+        .unwrap();
+    grant(&e, a.id, Role::Editor, "alice").await;
+    grant(&e, a.id, Role::Analyst, "alice").await;
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let fga = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    {
+        let mut fault = proxy.fault.lock().await;
+        fault.calls.clear();
+        fault.reads.clear();
+        fault.read_page_size = Some(2);
+    }
+    // Five direct roles, two per page: 3 role Reads, no placement lookup for a root.
+    assert_eq!(
+        spaces::organization(&e.pool, &fga, "alice").await.unwrap(),
+        Some(a.id)
+    );
+    {
+        let mut fault = proxy.fault.lock().await;
+        assert_eq!(fault.calls.get("read"), Some(&3));
+        assert!(fault.reads.iter().all(
+            |r| r["tuple_key"]["user"] == "user:alice" && r["tuple_key"]["object"] == "space:"
+        ));
+        assert!(
+            fault.reads[1]["continuation_token"]
+                .as_str()
+                .is_some_and(|s| !s.is_empty())
+        );
+        fault.calls.clear();
+        fault.reads.clear();
+        fault.written.clear();
+    }
+    spaces::grant(&e.pool, &fga, None, "alice", a.id, Role::Member, "bob")
+        .await
+        .unwrap();
+    {
+        let fault = proxy.fault.lock().await;
+        // Platform/org guards (2), caller context (3), target context empty (1).
+        assert_eq!(fault.calls.get("read"), Some(&6));
+        assert_eq!(fault.calls.get("check"), Some(&1));
+        assert_eq!(fault.calls.get("write"), Some(&1));
+        assert_eq!(
+            fault.written[0]["writes"]["tuple_keys"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(
+            fault.written[0]["deletes"]["tuple_keys"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+    // An uncommitted ghost grant cannot manufacture a second organization.
+    e.fga
+        .write(
+            &mut e.fga.guard(&[Scope::Organization(a.id)]).await.unwrap(),
+            &[fred_manager::fga::Tuple {
+                user: "bob",
+                role: Role::Member,
+                space: Uuid::new_v4(),
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        spaces::organization(&e.pool, &fga, "bob").await.unwrap(),
+        Some(a.id)
+    );
+}
+
+// Proves: I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn business_http_checks_context_while_platform_metadata_stays_available() {
+    use serde_json::json;
+    use tower::ServiceExt;
+    let e = env().await;
+    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+        .await
+        .unwrap();
+    let b = spaces::create_organization(&e.pool, &e.fga, "B", "carol")
+        .await
+        .unwrap();
+    grant(&e, a.id, Role::Editor, "bob").await;
+    let identity = support::IdentityServer::start().await;
+    let temporal = temporal::Temporal::start().await;
+    let app = content_app(&e, &identity, &temporal).await;
+    let doc = document(b.id, None, "foreign.pdf");
+    db::insert_document(&e.pool, &doc).await.unwrap();
+    let token = identity.token("bob");
+    assert_eq!(
+        content_request(
+            app.clone(),
+            &token,
+            "GET",
+            &format!("/documents/{}", doc.id),
+            ""
+        )
+        .await,
+        403
+    );
+    assert_eq!(
+        content_request(
+            app.clone(),
+            &token,
+            "POST",
+            &format!("/documents/{}/ingest", doc.id),
+            ""
+        )
+        .await,
+        403
+    );
+    for suffix in ["folders", "documents"] {
+        assert_eq!(
+            content_request(
+                app.clone(),
+                &token,
+                "GET",
+                &format!("/spaces/{}/{suffix}", Uuid::new_v4()),
+                ""
+            )
+            .await,
+            404
+        );
+    }
+    // A corrupt legacy second grant must not make either organization readable.
+    e.fga
+        .write(
+            &mut e.fga.guard(&[Scope::Organization(b.id)]).await.unwrap(),
+            &[fred_manager::fga::Tuple {
+                user: "bob",
+                role: Role::Editor,
+                space: b.id,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+    for (path, body) in [
+        (
+            "/authorize/document",
+            json!({"document_id":doc.id,"permission":"read"}),
+        ),
+        (
+            "/authorize/space",
+            json!({"space_id":b.id,"permission":"read"}),
+        ),
+        ("/authorize/scope", json!({"space_id":a.id})),
+    ] {
+        assert_eq!(
+            content_request(app.clone(), &token, "POST", path, &body.to_string()).await,
+            409,
+            "{path}"
+        );
+    }
+    assert_eq!(
+        content_request(app.clone(), &token, "GET", "/me/spaces", "").await,
+        409
+    );
+    assert_eq!(
+        content_request(
+            app.clone(),
+            &token,
+            "GET",
+            &format!("/documents/{}", doc.id),
+            ""
+        )
+        .await,
+        409
+    );
+    // /me exposes platform-role metadata independently; no content or tenant choice.
+    let response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/fred-manager/v1/me")
+                .header("authorization", format!("Bearer {token}"))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+}
+
+// Proves: I23, I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
+    let e = env().await;
+    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+        .await
+        .unwrap();
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let server = support::IdentityServer::start().await;
+    server.users.lock().await.insert("bob".into(), "bob".into());
+    let gate = std::sync::Arc::new(support::Gate::default());
+    server.control.lock().await.create_gate = Some(gate.clone());
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("root");
+    let bundle = parse_blueprint(br#"{"users":[{"username":"carol","password":"private-password"},{"username":"bob"}],"organizations":[{"ref":"b","name":"B","roles":{"carol":["owner","admin"],"bob":["member"]}}],"teams":[],"projects":[]}"#).unwrap();
+    let (pool, fga) = (e.pool.clone(), e.fga.clone());
+    let import = tokio::spawn(async move {
+        fred_manager::provisioning::Importer {
+            pool: &pool,
+            fga: &fga,
+            directory: &directory,
+            auth: &auth,
+            bearer: &token,
+        }
+        .run(&bundle)
+        .await
+    });
+    // Preflight has passed; identity dispatch holds platform lock. Queue a grant
+    // before reconciliation can acquire it, then release the identity dispatch.
+    tokio::time::timeout(Duration::from_secs(3), gate.entered.notified())
+        .await
+        .unwrap();
+    let (pool, fga) = (e.pool.clone(), e.fga.clone());
+    let grant = tokio::spawn(async move {
+        spaces::grant(&pool, &fga, None, "alice", a.id, Role::Member, "bob").await
+    });
+    wait_for_advisory_waiter(&e.pool).await;
+    gate.release.notify_one();
+    grant.await.unwrap().unwrap();
+    let failure = import.await.unwrap().unwrap_err();
+    assert!(failure.to_string().contains("roles/spaces"), "{failure}");
+    assert_eq!(
+        spaces::organization(&e.pool, &e.fga, "bob").await.unwrap(),
+        Some(a.id)
+    );
+    assert!(
+        named_space(&e.pool, &e.fga, None, "B")
+            .await
+            .unwrap()
+            .is_none()
     );
 }

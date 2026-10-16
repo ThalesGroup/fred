@@ -3,6 +3,41 @@
 Execution context: Fred's organization/team/project model implemented by manager.
 Authentication, consent and role authority are defined in [Security](03-security.md).
 
+## One person, one organization
+
+A Fred instance can host several organizations, but a person belongs to at most one
+of them (I23). Before assignment, the person belongs to none. An organization is the
+person's business context, not a space selector or a login preference.
+
+| Concept | Meaning |
+| --- | --- |
+| Identity | The authenticated Keycloak subject, not an email domain or a browser parameter. |
+| Organization | The unique organization containing the person's committed direct space roles, including owner and admin roles. |
+| Team and project | Selectable workspaces inside that organization, subject to their own permissions. |
+| Personal space | A private workspace managed by the same organization; attachment does not create it. |
+| Platform role | Authority to administer Fred independently of organization membership; no implicit access to business content. |
+
+Manager resolves this context from canonical OpenFGA direct roles and immutable
+placement, joined to committed SQL spaces. SQL holds no second membership record.
+Every granted role counts towards attachment, including governance-only roles;
+attachment itself grants no extra permission. Removing the last role in an
+organization removes attachment, subject to the existing dependent-role rules.
+
+Bob's provisioning roles attach him to TSN. After authentication and personal CGU,
+`GET /me/spaces` returns his authorized memberships within that context, and Home
+opens TSN at `/home`. The organization link also targets `/home`; team/project
+selection can use a space identifier. There is no organization picker, switch or
+organization identifier required in the landing URL. A supplied identifier never
+changes server authority. An explicit invalid space selection shows no space.
+
+Creation, direct grants and ZIP import reject a second organization attachment,
+including concurrent attempts. Business reads, authorization probes and mutations
+check context as well as OpenFGA permissions. Unattached people receive no business
+access; platform-only people retain their authorized administration paths.
+Contradictory existing grants cause a conflict, not an arbitrary tenant choice.
+Administrators can remove unwanted grants using the existing revocation rules;
+no data or roles are automatically removed. See [operations](A3-manager-operations.md#organization-conflict-recovery).
+
 ## Spaces and memberships
 
 An organization is a root. A team belongs to one organization; a project belongs
@@ -63,8 +98,9 @@ is the exact wire reference; the [user journey](02-user-journeys.md#from-an-empt
 shows its observable effects.
 
 Whole-bundle preflight rejects predictable errors before provisioning writes,
-including noncanonical usernames and known effective-email conflicts for new
-identities. Names are never silently normalized.
+including contradictory organization assignments, noncanonical usernames and known
+effective-email conflicts for new identities. Existing attachments are checked again
+after capturing the guards before publishing each organization subtree. Names are never silently normalized.
 Organizations resolve by root name, teams by organization/name and projects by
 team/name. Existing identity fields, passwords, committed space IDs and undeclared
 roles are preserved. Requested grants are repaired; no content role or CGU

@@ -257,7 +257,10 @@ try {
   await root.page.getByRole("button", { name: "Home", exact: true }).click();
   await expect(root.page.getByRole("heading", { name: "Your spaces", exact: true })).toBeVisible();
   await expect(root.page.getByRole("heading", { name: "Demo", exact: true })).toBeVisible();
-  await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toBeVisible();
+  await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toHaveCount(0);
+  assert.equal(new URL(root.page.url()).pathname, "/home");
+  assert.equal(new URL(root.page.url()).search, "");
+  await expect(root.page.getByRole("link", { name: "Demo", exact: true })).toHaveAttribute("href", "/home");
   await expect(root.page.getByText("You do not belong to any organization or space.")).toHaveCount(0);
   await root.page.getByRole("link", { name: "Browser project", exact: true }).click();
   await expect(root.page.getByRole("region", { name: "Browser project", exact: true })).toContainText(

@@ -103,7 +103,15 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         .layer(axum::middleware::from_fn(logging::request_logging))
 }
 
-async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> AppResult<()> {
+async fn require(
+    pool: &PgPool,
+    fga: &Fga,
+    user: &str,
+    permission: Permission,
+    space: Uuid,
+) -> AppResult<()> {
+    let placed = spaces::load(pool, fga, space).await?;
+    spaces::require_context(pool, fga, user, placed.organization).await?;
     if fga.check(user, permission, space).await? {
         Ok(())
     } else {
@@ -317,6 +325,7 @@ struct MySpace {
         (status = 200, description = "Success", body = [MySpace]),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -489,6 +498,8 @@ struct FolderQuery {
         (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Unknown space", body = crate::error::ErrorBody),
+        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -498,7 +509,7 @@ async fn list_folders(
     Path(space): Path<Uuid>,
     Query(q): Query<FolderQuery>,
 ) -> AppResult<Json<Vec<Folder>>> {
-    require(&s.fga, &user, Permission::Read, space).await?;
+    require(&s.pool, &s.fga, &user, Permission::Read, space).await?;
     Ok(Json(db::folders(&s.pool, space, q.parent_id).await?))
 }
 
@@ -620,6 +631,8 @@ struct DocumentQuery {
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 404, description = "Unknown space", body = crate::error::ErrorBody),
+        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -629,7 +642,7 @@ async fn list_documents(
     Path(space): Path<Uuid>,
     Query(q): Query<DocumentQuery>,
 ) -> AppResult<Json<Vec<Document>>> {
-    require(&s.fga, &user, Permission::Read, space).await?;
+    require(&s.pool, &s.fga, &user, Permission::Read, space).await?;
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let after = match (q.after_name.as_deref(), q.after_id) {
         (Some(name), Some(id)) => Some((name, id)),
@@ -716,6 +729,7 @@ async fn create_document(
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -725,7 +739,7 @@ async fn get_document(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Document>> {
     let document = db::document(&s.pool, id).await?;
-    require(&s.fga, &user, Permission::Read, document.space_id).await?;
+    require(&s.pool, &s.fga, &user, Permission::Read, document.space_id).await?;
     Ok(Json(document))
 }
 
@@ -879,6 +893,7 @@ struct Allowed {
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -888,10 +903,11 @@ async fn authorize_document(
     ApiJson(req): ApiJson<AuthorizeDocument>,
 ) -> AppResult<Json<Allowed>> {
     let document = db::document(&s.pool, req.document_id).await?;
-    let allowed = s
-        .fga
-        .check(&user, req.permission, document.space_id)
-        .await?;
+    let space = spaces::load(&s.pool, &s.fga, document.space_id).await?;
+    let allowed = spaces::in_organization(&s.pool, &s.fga, &user, space.organization).await?
+        && s.fga
+            .check(&user, req.permission, document.space_id)
+            .await?;
     Ok(Json(Allowed { allowed }))
 }
 
@@ -920,6 +936,7 @@ struct Scope {
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -1086,6 +1103,7 @@ struct SpaceCheck {
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -1094,12 +1112,12 @@ async fn authorize_space(
     AdmittedUser(user): AdmittedUser,
     ApiJson(req): ApiJson<SpaceCheck>,
 ) -> AppResult<Json<Allowed>> {
-    db::space(&s.pool, req.space_id).await?;
+    let space = spaces::load(&s.pool, &s.fga, req.space_id).await?;
     Ok(Json(Allowed {
-        allowed: s
-            .fga
-            .check_space(&user.uid, req.permission, req.space_id)
-            .await?,
+        allowed: spaces::in_organization(&s.pool, &s.fga, &user.uid, space.organization).await?
+            && s.fga
+                .check_space(&user.uid, req.permission, req.space_id)
+                .await?,
     }))
 }
 #[derive(Deserialize, utoipa::ToSchema)]

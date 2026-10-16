@@ -23,7 +23,7 @@ flowchart LR
     caller -- "authorize document,<br/>authorize scope" --> manager
     client -- "login" --> keycloak
     manager -- "signing keys,<br/>service-account directory lookup/create" --> keycloak
-    manager -- "one check per access,<br/>role writes" --> openfga
+    manager -- "context reads, checks,<br/>role writes" --> openfga
     manager -- "consent, spaces, folders, documents" --> postgres
     manager -- "IngestDocument,<br/>DeleteDocument" --> temporal
 ```
@@ -81,9 +81,9 @@ flowchart TB
 
 | Module | Owns | Rule it enforces |
 | --- | --- | --- |
-| `api` | HTTP surface, one OpenFGA check per content access | handlers stay thin; mutations live in `spaces` and `platform` |
+| `api` | HTTP surface, context validation and OpenFGA permission checks | handlers stay thin; mutations live in `spaces` and `platform` |
 | `auth` | `CurrentUser` extractor, JWKS cache | [security](03-security.md) |
-| `spaces` | placement from OpenFGA links, space/role mutations, memberships, search scope, folder creation and local write authorization | organization lock plus atomic guard (I4, I5) |
+| `spaces` | placement from OpenFGA links, space/role mutations, memberships, search scope, folder creation and local write authorization | platform/organization locks and atomic guards (I4, I5, I23) |
 | `onboarding` | versioned consent, admitted/own-human extractors | acceptance is independent of roles and memberships (I19) |
 | `bootstrap` | the one-time root grant | two steps under the bootstrap lock (I9) |
 | `domain` | `Space`, `Folder`, `Document`, roles, parent rules | pure functions, unit-tested (I1, I7) |
@@ -128,7 +128,8 @@ control-plane roles. The page uses the shared `PageHeader`, `FileDropzone` and
 `GcuGuard` reads manager onboarding and gates `BootstrapGuard` and admitted routes;
 the same layout keeps the account menu available before admission without protected
 queries. Home and its navigation consume generated `/me/spaces` data directly.
-Selecting a membership displays its hierarchy and effective roles on Home,
+Home defaults to the unique organization at `/home`; selecting a team or project
+displays its hierarchy and effective roles on Home,
 distinguishing those inherited from an ancestor. There is
 no synthetic Python team or permission mapping. Unsupported routes redirect home;
 agent widgets, task polling, announcements and Python bootstrap consumers are not
@@ -136,8 +137,9 @@ mounted. Theme presentation uses configuration loaded at startup.
 
 ## Content access
 
-One OpenFGA check on the space that owns the content, whatever the content is: a
-document, its metadata, a page of a folder.
+Manager resolves the caller's unique organization, verifies the target space belongs
+to it, then asks OpenFGA for permission on that space. The same rule covers a
+document, its metadata and a folder page. Ambiguous attachment fails with 409.
 
 ```mermaid
 sequenceDiagram
@@ -153,7 +155,10 @@ sequenceDiagram
     end
     Note over M: RS256, exp, iat, lifetime ceiling, then user_id bound
     M->>PG: check current personal CGU acceptance
-    M->>PG: select document
+    M->>PG: select document and its space
+    M->>FGA: read target placement, then caller direct roles
+    M->>PG: select committed direct-grant spaces
+    M->>FGA: read their placement, validate unique organization
     M->>FGA: check user can_read space:{document.space_id}
     alt allowed
         M-->>C: 200 document
@@ -201,9 +206,10 @@ decision remains a Check (I20).
 
 ## Role and space mutations
 
-`grant`, `revoke`, `create_space` and `create_personal_space` take a transaction-scoped
-advisory lock keyed by the organization, capture its guard revision, then check and
-write under it (I4, I5). The organization comes from the space's immutable links,
+`grant` and `revoke` take the platform lock, then the organization lock, and capture
+both guard revisions before context and permission checks (I4, I5, I23).
+`create_space` and `create_personal_space` retain the organization lock and guard:
+the required existing parent membership already binds their nominated person. The organization comes from the space's immutable links,
 read before locking. SQL locks order live callers; OpenFGA guard consumption
 rejects stale remote writes that outlive their caller or transaction.
 
@@ -221,10 +227,12 @@ sequenceDiagram
     C->>M: PUT /spaces/{id}/roles/{role}/{user}
     M->>PG: select space
     M->>FGA: read parent links up to the organization
-    M->>PG: begin, pg_advisory_xact_lock(organization)
-    M->>FGA: read organization guard revision
+    M->>PG: begin, lock platform then organization
+    M->>FGA: read platform and organization guard revisions
+    M->>FGA: validate caller context
     M->>FGA: check caller can_manage space
     M->>FGA: read target's direct roles on the parent
+    M->>FGA: validate target attachment
     M->>FGA: atomic role write and guard replacement, strict old-guard delete
     M->>PG: commit, lock released
     M-->>C: 204
@@ -373,6 +381,7 @@ sequenceDiagram
     C->>PG: lock platform, resolve roots, lock organizations in UUID order
     C->>FGA: read children of existing parents
     C->>PG: resolve child names, validate collisions and new-space admins
+    C->>FGA: validate unique assignments and existing attachments
     C->>FGA: read existing direct parent roles when not declared
     C->>PG: release read-only locks
     loop each identity
@@ -382,11 +391,11 @@ sequenceDiagram
         C->>PG: release lock
     end
     C->>PG: lock platform, resolve roots, lock organizations, resolve children
-    C->>FGA: validate all parent requirements
+    C->>FGA: validate all parent requirements and attachments
     C->>KC: verify distinct organization owner subjects, at most eight concurrently
     loop each organization subtree
         C->>FGA: initialize new guard, capture platform and organization revisions
-        C->>FGA: recheck authority and subtree parent requirements
+        C->>FGA: recheck authority, attachments and subtree parent requirements
         C->>PG: insert missing rows in parent-first order
         C->>FGA: guarded parent-first batches: a new space's parent link with its first grants, audit acknowledgments
     end
@@ -396,7 +405,7 @@ sequenceDiagram
 ```
 
 Predictable bundle, passwordless-identity, email-conflict, missing new-space-admin and parent-access
-errors fail whole-bundle preflight before provisioning writes (I18). Directory
+and conflicting-attachment errors fail whole-bundle preflight before provisioning writes (I18). Directory
 traversal holds no mutation lock. Child names are read only after acquiring all
 organization locks. Reconciliation retains those locks and the platform lock through
 SQL commit. It captures revisions before rechecking authority and parent access,
@@ -442,10 +451,11 @@ remote effects have the dispatch boundary described by I5 in [invariants](09-qua
 | D10 | Shared infrastructure, own OpenFGA store. | No dedicated infrastructure to run. | Table names are unique in `fred`; `fred-manager` is the logical store name; SQL pins its active store/model IDs. |
 | D11 | Deployed with fred's chart as a separate release. | One chart for every Fred service. | The release references the chart without its `values.schema.json` ([operations reference](A3-manager-operations.md)). |
 | D12 | Owner is technical, on the platform and on organizations; admin, editor, analyst and member are business roles on every space. Admin and content roles remain orthogonal; a child role requires a direct parent content role. | Technical and business administration were confused under one word. | An organization owner names admins and reads nothing; analyst is a content role; revocation never adds a fallback role. |
-| D13 | Platform mutations and organization-owner changes share the bootstrap lock, acquired before the organization lock. | Platform revocation must serialize with dependent writes. | A revoked platform owner cannot finish a waiting mutation; the platform and each organization keep an owner. |
+| D13 | Platform mutations, all direct space-role changes, organization creation and import share the platform lock/guard, before organization locks. | Different organization locks cannot prevent competing person assignments; stale remote writes also need a shared fence. | Attachments remain unique, at the cost of serializing role mutations across unrelated organizations. |
 | D14 | Directory operations use a dedicated service client and raw Keycloak subjects in the same realm as callers. | Caller tokens do not carry directory administration privileges. | Grants validate identity existence; revocation tolerates deleted identities. |
 | D15 | Import uses authenticated, read-only initialization and a distinct Keycloak service identity. | Service-client credentials must not substitute for Fred operator authority. | Bootstrap and compatible schema/model initialization precede import; Temporal is not involved. |
 | D16 | Provisioning is additive and replayable, with identity phases separate from the space transaction. | Keycloak, SQL and OpenFGA do not share a transaction. | Partial effects remain; replay preserves committed IDs and repairs grants. Rolled-back space IDs are not reused. |
 | D17 | Strict guard deletion and role changes share one OpenFGA Write. | A consumed revision rejects stale decisions without copying the role set. | One guard Read and two additional tuple operations per guarded scope; conflicting attempts reauthorize on replay. |
 | D18 | Startup publishes a fresh store only for an empty installation, once, in SQL. | Existing state cannot be converted safely into a different model. | Existing state without a matching publication requires a data reset. |
 | D19 | One version-2 ZIP with explicit organizations, teams, projects and direct roles serves CLI and HTTP. | Reconciliation needs unambiguous parent scope and complete preflight. | Legacy formats are explicitly unsupported; bundle-local references do not add persistent identity or imply content grants. |
+| D20 | The unique organization is derived from canonical direct roles and full placement of committed spaces. Home uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |

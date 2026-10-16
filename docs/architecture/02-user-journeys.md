@@ -19,7 +19,7 @@ Other product pages and their Python data consumers are not mounted.
 | 4. Open the platform | Root sees an empty Home view and Provisioning in the administration console. | Platform governance grants no organization membership or content access. |
 | 5. Import the ZIP | Select the Make-generated bundle and read the completed report. | Manager uses its own Keycloak service identity to resolve/create users and reconciles declared organizations, teams, projects and direct roles. |
 | 6. Change accounts | Sign out, then sign in as an imported person. | The browser starts a fresh session; the previous person's data is not retained. |
-| 7. Enter the organization | Accept personal CGU, then select an organization, team or project in the Home navigation to read its hierarchy and roles. | Import has not accepted terms for this person. Membership comes from the bundle's roles, not from accepting terms or logging in. |
+| 7. Enter the organization | Accept personal CGU and arrive in the unique organization at `/home`; select its teams or projects to read their hierarchy and roles. | Import has not accepted terms for this person. Manager resolves the unique organization from canonical roles. No organization selector, tenant URL parameter or personal-space creation is involved. |
 
 ```mermaid
 sequenceDiagram
@@ -63,6 +63,15 @@ See [personal consent and bootstrap](03-security.md),
 Deployment commands remain in the [manager README](../../apps/fred-manager/README.md).
 
 ## Joining and governing organizations, teams and projects
+
+Bob's TSN roles attach him to TSN; Priya's demo roles attach her to Demo. Each person
+enters their own organization after login and personal consent. Changing accounts
+clears the previous person's cached data. A second assignment is refused, whether
+requested through provisioning or direct role administration. An account without
+space roles sees the empty Home state; platform governance remains independent.
+
+The [organization chapter](04-organizations.md#one-person-one-organization) defines
+attachment, workspace selection and the separate meanings of identity and permissions.
 
 ## From a document upload to an authorized answer
 

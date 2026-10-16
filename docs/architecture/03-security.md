@@ -124,7 +124,9 @@ one immutable `parent` link. The model evaluates permissions, including roles
 descending from ancestors; manager stores no inherited grant and computes no
 permission. Manager enforces the parent-membership rule when changing roles: a role
 on a child requires a direct content role on its parent, which inherited access
-does not satisfy. Every decision remains one Check on the owning space.
+does not satisfy. Business access first verifies the caller's unique organization
+context, then lets OpenFGA evaluate permission on the owning space. Resolving context
+does not confer read or management authority (I23).
 
 See the [space rules](04-organizations.md#spaces-and-memberships),
 [generated model](A2-manager-contracts.md#openfga-model),
@@ -136,7 +138,10 @@ and [request costs](09-quality.md#openfga-request-costs).
 An organization lock serializes live callers. Each authorized mutation also
 consumes an OpenFGA guard revision captured before its checks; a delayed remote
 write cannot reuse a consumed revision. Platform operations acquire the platform
-lock before organization locks. Role revocation cannot silently leave a child role,
+lock before organization locks. All direct space-role grants and revocations,
+operator organization creation and import share this platform serialization and
+guard, preventing competing assignments in different organizations. Team/personal
+creation and content mutations retain their organization lock and guard. Role revocation cannot silently leave a child role,
 or a personal space role in an organization, without a direct parent content role,
 nor remove a non-personal space's last administrator.
 

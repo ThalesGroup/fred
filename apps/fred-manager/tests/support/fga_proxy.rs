@@ -21,6 +21,8 @@ pub struct Fault {
     pub gate_before: bool,
     pub gate_role_write: bool,
     pub written: Vec<serde_json::Value>,
+    pub reads: Vec<serde_json::Value>,
+    pub read_page_size: Option<u64>,
 }
 pub struct Proxy {
     pub base: String,
@@ -46,7 +48,16 @@ impl Proxy {
                 let http = http.clone();
                 async move {
                     let (parts, body) = request.into_parts();
-                    let body = to_bytes(body, 1024 * 1024).await.unwrap();
+                    let mut body = to_bytes(body, 1024 * 1024).await.unwrap();
+                    if parts.uri.path().ends_with("/read") {
+                        let mut value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                        let mut fault = state.lock().await;
+                        if let Some(size) = fault.read_page_size {
+                            value["page_size"] = size.into();
+                        }
+                        fault.reads.push(value.clone());
+                        body = serde_json::to_vec(&value).unwrap().into();
+                    }
                     *state
                         .lock()
                         .await

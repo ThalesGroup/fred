@@ -27,8 +27,8 @@ export default function HomePage() {
   const [params] = useSearchParams();
   const spaces = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
   const firstName = KeyCloakService.GetUserGivenName() || undefined;
-  const selected = params.get("space");
-  const visible = (spaces.data ?? []).filter((space) => !selected || space.id === selected);
+  const selected = params.get("space") ?? spaces.data?.find((space) => space.kind === "organization")?.id;
+  const visible = (spaces.data ?? []).filter((space) => selected === undefined || space.id === selected);
   const byId = new Map(spaces.data?.map((space) => [space.id, space.name]));
   return (
     <div className={styles.page}>
@@ -48,7 +48,7 @@ export default function HomePage() {
           </Button>
         </div>
       ) : visible.length === 0 ? (
-        <p>{t(selected ? "rework.manager.missingSpace" : "rework.manager.empty")}</p>
+        <p>{t(selected !== undefined ? "rework.manager.missingSpace" : "rework.manager.empty")}</p>
       ) : (
         visible.map((space) => (
           <section key={space.id} className={styles.membership} aria-label={space.name}>
