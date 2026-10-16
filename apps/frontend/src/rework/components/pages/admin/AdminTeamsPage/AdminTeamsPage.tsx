@@ -158,6 +158,7 @@ export default function AdminTeamsPage() {
                 const access = accessTeams.get(team.id);
                 return (
                   <Switch
+                    size="small"
                     aria-label={`${t("rework.platformAccess.free")} ${team.name}`}
                     checked={access?.free ?? false}
                     disabled={admissionLocked || !access}
@@ -204,7 +205,8 @@ export default function AdminTeamsPage() {
         ? [
             {
               label: "",
-              size: "3rem",
+              // Cell padding plus the 40px medium button: narrower squeezes it into an oval.
+              size: "4rem",
               cellRenderer: (team: Team) => (
                 <IconButton
                   variant="icon"

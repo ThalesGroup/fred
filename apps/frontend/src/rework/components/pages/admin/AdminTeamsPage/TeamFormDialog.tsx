@@ -159,11 +159,13 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
       onConfirm={() => void handleConfirm()}
       onCancel={onClose}
       maxWidth={560}
+      dense
     >
       <div className={styles.teamForm}>
         <TextInput
           label={t("rework.adminTeams.createTeam.nameLabel")}
           placeholder={t("rework.adminTeams.createTeam.namePlaceholder")}
+          size="small"
           value={name}
           maxLength={MAX_TEAM_NAME_LENGTH}
           onChange={(event) => setName(event.target.value)}
@@ -194,6 +196,7 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
             <Autocomplete<UserSummary>
               textInput={{
                 placeholder: t("rework.adminTeams.createTeam.adminsPlaceholder"),
+                size: "small",
                 icon: { category: "outlined", type: "search" },
               }}
               onFieldValueChange={setAdminQuery}

@@ -22,7 +22,7 @@
   margin: 0 auto;
   padding: var(--spacing-xl);
   width: 100%;
-  max-width: 760px;
+  max-width: 1080px;
 }
 
 .existingTeamsSection,
@@ -37,7 +37,7 @@
 .teamForm {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-m);
+  gap: var(--spacing-s);
   width: 100%;
 }
 

@@ -2247,8 +2247,11 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
 - **`AdminTeamsPage` team dialog (`TeamFormDialog`).** "Create team" in the
   page header opens it for anyone allowed to create teams; platform admins
   also get an Edit `IconButton` (`medium`, `on-surface-retreat`) at the end of
-  each row, opening it prefilled. Built on the shared `Dialog` (560px, fluid
-  content); confirm stays disabled while a field is invalid or, in edit,
+  each row (a `4rem` track: the cell padding plus the 40px button, or the
+  flex cell squeezes it into an oval), opening it prefilled. The page column
+  is 1080px like the other admin table pages, and the row `Switch`es are
+  `small`. Built on the shared `Dialog` (560px, `dense`, fluid content,
+  fields `--spacing-s` apart, `small` name and admin-search inputs); confirm stays disabled while a field is invalid or, in edit,
   nothing changed, and an edit sends only the changed fields and the admin
   diff. A default description starts empty and may stay empty. Each row
   shows the description on one ellipsed line under the name.
@@ -4863,8 +4866,8 @@ is stored; a failed read is shown explicitly and leaves that value unchanged.
 **Status:** `Functional`
 
 Admin-sidebar entry "Platform roles" (`admin_panel_settings` icon), gated
-`Protected requires="admin"`. Layout mirrors `AdminTeamsPage` (760px column,
-uppercase section titles): a holders table then a grant form. (A dedicated
+`Protected requires="admin"`. Layout: a 760px column and
+uppercase section titles: a holders table then a grant form. (A dedicated
 root card above the table was tried on 2026-08-21 and removed the same day
 — the pinned first row with its badge is prominence enough.)
 
