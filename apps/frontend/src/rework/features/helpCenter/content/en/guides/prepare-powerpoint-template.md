@@ -59,7 +59,7 @@ The word in brackets is the one to write in a note (see below).
 | Quote (`quote`)               | The quote and its author                            |
 | Image and text (`image_text`) | A picture and a text besides the title              |
 | Table (`table`)               | A table to fill                                     |
-| Chart (`chart`)               | A chart area, or one chart over the slide           |
+| Chart (`chart`)               | A chart area, or one to four charts on the slide    |
 | Closing (`closing`)           | Thanks or contacts. Always last in the presentation |
 | Other (`other`)               | The agent does not use it                           |
 
@@ -149,6 +149,13 @@ editable in PowerPoint.
   change the theme's accent colours. If your example chart is already the type
   requested (say, a bar chart for a bar chart), its own formatting is kept;
   otherwise the chart is rebuilt in the template's look.
+- **Several charts side by side**: an example slide may hold two, three or
+  four charts, each covering at least a twentieth of the slide. The agent fills
+  every one of them, left to right then top to bottom, and uses that slide only
+  when it has exactly as many charts to show; each chart gets its own title. A
+  text box placed right above a chart shows that chart's title. Offer one
+  example slide for each number of charts you want; for any other number, the
+  agent splits its charts over several slides or groups them.
 - Without a chart slide, a large content area (the one PowerPoint's "Title and
   Content" layout offers) takes the chart when the slide has no other text.
 - The agent never draws a chart elsewhere, and asks for fewer categories or
@@ -160,10 +167,10 @@ These slides stay visible in **Review slides**, with the reason:
 
 | Reason shown     | What causes it                                                    |
 | ---------------- | ----------------------------------------------------------------- |
-| Chart            | Two charts or more share the slide                                |
+| Chart            | More than four charts share the slide, or a chart inside a group  |
 | Table            | A table that is not a data table (merged cells, per-cell colours) |
 | Icon bank        | Twenty or so pictures or more, with no text                       |
-| Cannot be copied | A SmartArt, a small chart or an embedded object (Excel…)          |
+| Cannot be copied | A SmartArt, a very small chart or an embedded object (Excel…)     |
 | No placeholder   | A layout with nothing to fill                                     |
 | Excluded by you  | You set it aside                                                  |
 
@@ -199,4 +206,4 @@ file.
 | Realistic sample text, different on each slide | The same sample text everywhere      |
 | Simple tables, no merges or per-cell colours   | A schedule drawn with coloured cells |
 | SmartArt converted to shapes                   | Embedded objects to fill             |
-| One chart per chart slide                      | Several charts on one slide          |
+| Up to four charts per slide, each large enough | Five charts or more on one slide     |

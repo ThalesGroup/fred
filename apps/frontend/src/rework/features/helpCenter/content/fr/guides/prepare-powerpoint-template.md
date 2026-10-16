@@ -61,7 +61,7 @@ Le mot entre parenthèses est celui à écrire dans une note (voir plus bas).
 | Citation (`quote`)               | La citation et son auteur                                  |
 | Image et texte (`image_text`)    | Une image et un texte en plus du titre                     |
 | Tableau (`table`)                | Un tableau à remplir                                       |
-| Graphique (`chart`)              | Une zone de graphique, ou un graphique sur la diapositive  |
+| Graphique (`chart`)              | Une zone de graphique, ou un à quatre graphiques           |
 | Conclusion (`closing`)           | Remerciements ou contacts. Toujours en dernière position   |
 | Autre (`other`)                  | L'agent ne s'en sert pas                                   |
 
@@ -156,6 +156,15 @@ mesures), qui reste modifiable dans PowerPoint.
   thème. Si votre graphique d'exemple est déjà du type demandé (par exemple
   des barres pour un graphique en barres), sa mise en forme est conservée ;
   sinon le graphique est reconstruit avec l'apparence du template.
+- **Plusieurs graphiques côte à côte** : une diapositive d'exemple peut
+  contenir deux, trois ou quatre graphiques, chacun couvrant au moins un
+  vingtième de la diapositive. L'agent les remplit tous, de gauche à droite
+  puis de haut en bas, et n'utilise cette diapositive que s'il a exactement
+  autant de graphiques à montrer ; chaque graphique a son propre titre. Une
+  zone de texte placée juste au-dessus d'un graphique affiche le titre de ce
+  graphique. Prévoyez une diapositive d'exemple pour chaque nombre de
+  graphiques souhaité ; pour un autre nombre, l'agent répartit ses graphiques
+  sur plusieurs diapositives ou les regroupe.
 - Sans diapositive de graphique, une grande zone de contenu (celle du masque
   « Titre et contenu » de PowerPoint) reçoit le graphique quand la diapositive
   n'a pas d'autre texte.
@@ -168,10 +177,10 @@ Ces diapositives restent visibles dans **Vérifier les slides**, avec la raison 
 
 | Raison affichée      | Ce qui la provoque                                                                         |
 | -------------------- | ------------------------------------------------------------------------------------------ |
-| Graphique            | Deux graphiques ou plus se partagent la diapositive                                        |
+| Graphique            | Plus de quatre graphiques sur la diapositive, ou un graphique dans un groupe               |
 | Tableau              | Un tableau qui n'est pas un tableau de données (cellules fusionnées, couleurs par cellule) |
 | Banque d'icônes      | Une vingtaine d'images ou plus, sans texte                                                 |
-| Non copiable         | Un SmartArt, un petit graphique ou un objet incorporé (Excel…)                             |
+| Non copiable         | Un SmartArt, un très petit graphique ou un objet incorporé (Excel…)                        |
 | Aucun espace réservé | Un masque sans rien à remplir                                                              |
 | Exclu par vous       | Vous l'avez mise de côté                                                                   |
 
@@ -208,4 +217,4 @@ les notes et les noms de formes, eux, voyagent avec le fichier.
 | Un texte d'exemple réaliste, différent sur chaque diapositive | Le même texte d'exemple partout                 |
 | Des tableaux simples, sans fusion ni couleur par cellule      | Un planning dessiné en cellules colorées        |
 | Les SmartArt convertis en formes                              | Des objets incorporés à remplir                 |
-| Un seul graphique par diapositive de graphique                | Plusieurs graphiques sur une diapositive        |
+| Jusqu'à quatre graphiques par diapositive, assez grands       | Cinq graphiques ou plus sur une diapositive     |

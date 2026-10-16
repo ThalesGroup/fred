@@ -48,7 +48,7 @@ has none.
 - **Charts** (`charts.py`): the model sends data only (`chart {type,
   categories, series, title, unit, show}`, `show` saying whether a pie's labels
   hold percentages, values or both); the code draws a native python-pptx chart
-  in a chart zone (a chart placeholder, or an example slide's one main chart),
+  in a chart zone (a chart placeholder, or an example slide's chart frames),
   else in a free large content placeholder, in the theme's accent colours and
   body font. When an example slide's own chart already shows the type asked,
   it is kept instead (copied with its workbook, data replaced): the designer's
@@ -58,7 +58,11 @@ has none.
   (`series [{name, points [{x, y, size, label}]}]`, `x_title`/`y_title`
   required, one unit per axis, point names shown up to 12 points). The type
   mapping, chart data, legend rule and length check are adapted from
-  `fred-capability-pptx-generator` (PR #3058, by Shuigami).
+  `fred-capability-pptx-generator` (PR #3058, by Shuigami). An example slide
+  may hold up to four charts, each at least 1/20 of the slide: a plan slide
+  sends `charts [chart, …]` (each titled) and only goes to a slide with exactly
+  that many frames, filled in reading order; a free text box right above a
+  frame shows that chart's title.
 
 - **Storytelling** (`story.py`, `notes.py`): before the assignment, every
   content slide needs a `takeaway` (what the audience concludes, as a
@@ -76,7 +80,8 @@ Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
 Design: `openspec/changes/ppt-builder-capability/`, charts:
 `openspec/changes/ppt-builder-charts/` and
-`openspec/changes/ppt-builder-more-chart-types/`, storytelling:
+`openspec/changes/ppt-builder-more-chart-types/`,
+`openspec/changes/ppt-builder-multi-chart-slides/`, storytelling:
 `openspec/changes/ppt-builder-storytelling/`.
 
 ### Evaluation (opt-in)
