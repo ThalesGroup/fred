@@ -185,6 +185,7 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
               : undefined
           }
           maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
+          rows={6}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           onBlur={() => setDescriptionTouched(true)}
