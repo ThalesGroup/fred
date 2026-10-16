@@ -503,7 +503,7 @@ def _weigh(
         )
     reasons: List[Misfit] = []
     lost: List[str] = []
-    text = _assign_text(pattern, slide, lost)
+    text = _assign_text(pattern, slide, lost, size)
     images = list(dict.fromkeys(([slide.image] if slide.image else []) + slide.images))
     image_zones = sum(1 for z in pattern.zones if z.role == "image")
     if len(images) > image_zones:

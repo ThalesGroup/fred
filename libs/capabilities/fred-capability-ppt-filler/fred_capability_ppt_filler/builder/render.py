@@ -963,8 +963,8 @@ def _column_order(zones: Sequence[Zone]) -> List[Zone]:
 
 
 class _ZoneMap:
-    def __init__(self, pattern: Pattern) -> None:
-        titled = {z.key for z in chart_headings(pattern).values()}
+    def __init__(self, pattern: Pattern, taken: Collection[str] = ()) -> None:
+        titled = {z.key for z in chart_headings(pattern).values()} | set(taken)
         zones = [z for z in pattern.zones if z.role != "keep" and z.key not in titled]
         self.titles = [z for z in zones if z.role == "title"]
         self.subtitles = [z for z in zones if z.role == "subtitle"]
@@ -987,12 +987,34 @@ class _ZoneMap:
         )
 
 
+# A 16:9 slide: the size a zone's room is measured on when none is given.
+_SLIDE_SIZE = (12192000, 6858000)
+
+
+def _takeaway_zone(
+    pattern: Pattern, plan: SlidePlan, size: Tuple[int, int]
+) -> Optional[Zone]:
+    """The template's takeaway zone, when the user asked for the key messages
+    on the slides and this one fits it whole."""
+    if not plan.takeaway_shown or not (plan.takeaway or "").strip():
+        return None
+    zone = next((z for z in pattern.zones if z.takeaway), None)
+    if zone is None:
+        return None
+    lines = _lines_from_bullets([plan.takeaway or ""], "takeaway")
+    return zone if zone.grows or not _fit(zone, lines, *size)[2] else None
+
+
 def _assign_text(
-    pattern: Pattern, plan: SlidePlan, lost: Optional[List[str]] = None
+    pattern: Pattern,
+    plan: SlidePlan,
+    lost: Optional[List[str]] = None,
+    size: Tuple[int, int] = _SLIDE_SIZE,
 ) -> Dict[str, List[_Line]]:
     """Decide which lines go into which text zone (by zone key). Plan content
     no zone receives is named in ``lost``, so the agent hears about it."""
-    out = _place_text(pattern, plan, lost)
+    takeaway = _takeaway_zone(pattern, plan, size)
+    out = _place_text(pattern, plan, lost, takeaway)
     headings = chart_headings(pattern)
     for zone, (at, chart) in zip(_chart_frames(pattern), shown_charts(plan)):
         box = headings.get(zone.key)
@@ -1002,10 +1024,16 @@ def _assign_text(
 
 
 def _place_text(
-    pattern: Pattern, plan: SlidePlan, lost: Optional[List[str]] = None
+    pattern: Pattern,
+    plan: SlidePlan,
+    lost: Optional[List[str]] = None,
+    takeaway: Optional[Zone] = None,
 ) -> Dict[str, List[_Line]]:
-    zmap = _ZoneMap(pattern)
+    # The takeaway's zone is no longer one the slide's content can fall into.
+    zmap = _ZoneMap(pattern, [takeaway.key] if takeaway else ())
     out: Dict[str, List[_Line]] = {}
+    if takeaway is not None:
+        out[takeaway.key] = _lines_from_bullets([plan.takeaway or ""], "takeaway")
     lost = lost if lost is not None else []
 
     def put(zone: Optional[Zone], lines: List[_Line], what: str) -> None:
@@ -1511,7 +1539,7 @@ class _Renderer:
         index = _shape_index(slide)
         report = self.report.slide(position)
         lost: List[str] = []
-        text = _assign_text(pattern, plan, lost)
+        text = _assign_text(pattern, plan, lost, (self.width, self.height))
         image_ids: Dict[str, Optional[str]] = {}
         zmap = _ZoneMap(pattern)
         # Both fields are offered, so a model names the hero picture in `image`

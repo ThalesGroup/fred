@@ -108,6 +108,7 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanTable,
     SlidePlan,
     Trend,
+    as_flag,
     field_hints,
     has_content,
     without_hidden,
@@ -280,6 +281,11 @@ def trend_figures(inventory: TemplateInventory) -> bool:
     )
 
 
+def takeaway_zones(inventory: TemplateInventory) -> bool:
+    """Whether a slide can show its takeaway (`show_takeaways` is offered)."""
+    return any(z.takeaway for p in assignable(inventory) for z in p.zones)
+
+
 def catalogue(inventory: TemplateInventory) -> str:
     """One line per kind the template offers, with every distinct variant: its
     label and what it holds. A hidden variant is one the model never writes for."""
@@ -308,6 +314,7 @@ def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
         bool(chart_hosts(inventory)),
         multi_chart(inventory),
         trend_figures(inventory),
+        takeaway_zones(inventory),
     )
 
 
@@ -350,6 +357,7 @@ def _schema_for(
     charts: bool = False,
     several: bool = False,
     trends: bool = False,
+    takeaways: bool = False,
 ) -> type[BaseModel]:
     rooms = dict(hints)
     # Offered only where an item shows a figure: the arrow leads it.
@@ -433,7 +441,8 @@ def _schema_for(
         __base__=BaseModel,
         __config__=ConfigDict(extra="ignore"),
         __validators__={
-            "_lists": field_validator("slides", "changes", mode="before")(_listed)
+            "_lists": field_validator("slides", "changes", mode="before")(_listed),
+            "_show": field_validator("show_takeaways", mode="before")(_flag_or_none),
         },
         slides=(
             List[slide_model],
@@ -479,8 +488,24 @@ def _schema_for(
                 "without a plan first: quote their words.",
             ),
         ),
+        show_takeaways=(
+            (Optional[bool], Field(default=None, description=_SHOW_TAKEAWAYS))
+            if takeaways
+            else (SkipJsonSchema[Optional[bool]], None)
+        ),
     )
     return model
+
+
+_SHOW_TAKEAWAYS = (
+    "true only when the user explicitly asks to show the key messages (takeaways) on "
+    "the slides; otherwise leave it out: they stay in the speaker notes."
+)
+
+
+def _flag_or_none(value: Any) -> Optional[bool]:
+    """Left out keeps the delivered deck's choice; any spelling of yes is true."""
+    return None if value is None else as_flag(value)
 
 
 def _listed(value: Any, info: ValidationInfo) -> Any:
@@ -537,7 +562,31 @@ def _to_plan(validated: Any) -> DeckPlan:
         file_name=validated.file_name,
         audience=validated.audience,
         main_message=validated.main_message,
+        show_takeaways=bool(getattr(validated, "show_takeaways", None)),
     )
+
+
+_NOT_ASKED = (
+    "`show_takeaways` was not applied: the user did not ask to show the key messages "
+    "on the slides, so the takeaways stay in the speaker notes. Nothing to do; set it "
+    "only when the user asks."
+)
+
+
+def _shown_takeaways(
+    plan: DeckPlan, conversation: story.Conversation
+) -> Tuple[DeckPlan, List[str]]:
+    """Each slide told whether its takeaway may go on the slide: only when the
+    user asked for the key messages there. Returns the agent note, if any."""
+    shown = plan.show_takeaways and conversation.asks_show_takeaways()
+    slides = [
+        s
+        if s.takeaway_shown == shown
+        else s.model_copy(update={"takeaway_shown": shown})
+        for s in plan.slides
+    ]
+    note = [_NOT_ASKED] if plan.show_takeaways and not shown else []
+    return plan.model_copy(update={"slides": slides}), note
 
 
 def _to_changes(validated: Any) -> List[SlideChange]:
@@ -1168,6 +1217,12 @@ def _description(
         rules += " The first slide is always the template's cover."
     if "closing" in kinds:
         rules += " A closing slide can only be the last one."
+    if takeaway_zones(inventory):
+        rules += (
+            " Takeaways stay in the speaker notes; set show_takeaways: true only when the "
+            "user explicitly asks to show the key messages on the slides: a slide listing a "
+            "takeaway zone then shows its takeaway there, in place of bullets."
+        )
     return (
         "Build a PowerPoint presentation from a plan of slides, on the agent's template. "
         "A NEW deck: write out every slide in `slides`, in order, in ONE call - an eight-slide deck means "
@@ -1358,17 +1413,20 @@ def build_builder_tools(
                     "deck (nothing was changed). Fix them and call again:\n"
                     + "\n".join(exc.problems)
                 )
+            show = getattr(validated, "show_takeaways", None)
             plan = changed.model_copy(
                 update={
                     "file_name": validated.file_name or changed.file_name,
                     "audience": validated.audience or changed.audience,
                     "main_message": validated.main_message or changed.main_message,
+                    "show_takeaways": changed.show_takeaways if show is None else show,
                 }
             )
             # Rebuilt, an identical deck would read as a change done.
             if (
                 base.delivered
                 and plan.file_name == base.file_name
+                and plan.show_takeaways == base.show_takeaways
                 and unchanged(base, plan, _kinds(inventory))
             ):
                 return _answer(_UNCHANGED)
@@ -1409,6 +1467,8 @@ def build_builder_tools(
         kept = {id(s) for s in base.slides} if base is not None else set()
         checked = [n for n, s in enumerate(plan.slides, start=1) if id(s) not in kept]
         talk = conversation()
+        # After `checked`: the copies it makes are not slides the call changed.
+        plan, takeaway_note = _shown_takeaways(plan, talk)
         assignment, plan, bad, told = await asyncio.to_thread(
             _evaluate,
             inventory,
@@ -1488,8 +1548,10 @@ def build_builder_tools(
         )
         if base is None and turn_delivered:
             delivered, delivered_name = turn_delivered[0]
-            if delivered.file_name == deck.file_name and unchanged(
-                delivered, deck, _kinds(inventory)
+            if (
+                delivered.file_name == deck.file_name
+                and delivered.show_takeaways == deck.show_takeaways
+                and unchanged(delivered, deck, _kinds(inventory))
             ):
                 return _answer(_already_delivered(delivered_name, len(deck.slides)))
 
@@ -1570,6 +1632,7 @@ def build_builder_tools(
             plan,
             result.report.issues(),
             result.report.notes
+            + takeaway_note
             + unloadable
             + assignment.notes
             + _cleared_lines(cleared, plan, numbers),

@@ -1108,6 +1108,9 @@ class SlidePlan(BaseModel):
     # Summary notes a storytelling check accepted the slide with
     # (`figures_unverified`, `wide_range_chart`): set by the tool only.
     story_notes: SkipJsonSchema[List[str]] = Field(default_factory=list)
+    # The user asked for the key messages on the slides: the takeaway goes in
+    # the template's takeaway zone when it fits. Set by the tool only.
+    takeaway_shown: SkipJsonSchema[bool] = False
 
     @model_validator(mode="before")
     @classmethod
@@ -1154,7 +1157,13 @@ class SlidePlan(BaseModel):
 
 
 # Set by delivery, `like` and the checks only: never read from the model's call.
-HIDDEN_FIELDS = ("built_on", "asked_design", "asked_from", "story_notes")
+HIDDEN_FIELDS = (
+    "built_on",
+    "asked_design",
+    "asked_from",
+    "story_notes",
+    "takeaway_shown",
+)
 
 
 def without_hidden(slide: SlidePlan) -> SlidePlan:
@@ -1174,6 +1183,8 @@ class DeckPlan(BaseModel):
     )
     audience: Optional[str] = None
     main_message: Optional[str] = None
+    # Asked by the model; honoured only when the user asked for key messages.
+    show_takeaways: bool = False
     # The deck as a file holds it, not a plan still under revision.
     delivered: SkipJsonSchema[bool] = False
     # Shown to the user as an outline, waiting for their answer.
@@ -1393,6 +1404,10 @@ def zone_summary(pattern: Pattern) -> str:
     if frames:
         parts.append(chart_summary(frames))
     parts.extend(group_summary(g) for g in pattern.groups)
+    # Shows the takeaway only when the user asks for key messages on the slides.
+    for zone in (z for z in pattern.zones if z.takeaway):
+        room = _room([zone])
+        parts.append("takeaway zone" + (f" {word_budget(*room)}" if room else ""))
     return "; ".join(parts) or "no editable zone"
 
 

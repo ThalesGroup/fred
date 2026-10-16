@@ -602,4 +602,5 @@ def apply_changes(
         file_name=base.file_name,
         audience=base.audience,
         main_message=base.main_message,
+        show_takeaways=base.show_takeaways,
     )

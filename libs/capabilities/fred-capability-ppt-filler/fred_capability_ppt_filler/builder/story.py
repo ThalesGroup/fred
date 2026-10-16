@@ -328,6 +328,9 @@ class Conversation:
     def allows_illustrative(self) -> bool:
         return lexicon.says_any(self.users, lexicon.ILLUSTRATIVE_WORDS)
 
+    def asks_show_takeaways(self) -> bool:
+        return lexicon.says_any(self.users, lexicon.SHOW_TAKEAWAY_WORDS)
+
     def asks_skip_plan(self) -> bool:
         return bool(self.users) and lexicon.says_any(
             self.users[-1:], lexicon.SKIP_PLAN_WORDS
