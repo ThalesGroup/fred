@@ -39,10 +39,13 @@ export default function PlatformAccessActivationDialog({
     refetchOnMountOrArgChange: true,
   });
   const authority = usePlatformAccessStateQuery(undefined, { skip: !enabling });
-  const initialImport = usePlatformAccessT0Query(undefined, {
-    skip: !enabling,
-    refetchOnMountOrArgChange: true,
-  });
+  const initialImport = usePlatformAccessT0Query(
+    {},
+    {
+      skip: !enabling,
+      refetchOnMountOrArgChange: true,
+    },
+  );
   const refresh = () => void Promise.all([preview.refetch(), authority.refetch(), initialImport.refetch()]);
   const importKnown = !initialImport.isFetching && !initialImport.isError && !!initialImport.data;
   const missingImport = enabling && importKnown && !initialImport.data?.completed_at;

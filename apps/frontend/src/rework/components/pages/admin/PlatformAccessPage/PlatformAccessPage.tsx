@@ -5,6 +5,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import Chip from "@shared/atoms/Chip/Chip";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
@@ -31,6 +32,7 @@ import {
 import type { AdmissionSource, PlatformAccessUser } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import PlatformAccessActivationDialog from "./PlatformAccessActivationDialog";
 import PlatformAccessAddUsersDialog from "./PlatformAccessAddUsersDialog";
+import PlatformAccessT0RefreshDialog from "./PlatformAccessT0RefreshDialog";
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
 
@@ -72,6 +74,7 @@ export default function PlatformAccessPage() {
   const [teamQuery, setTeamQuery] = useState("");
   const [teamFilter, setTeamFilter] = useState<"allowed" | null>(null);
   const [adding, setAdding] = useState(false);
+  const [refreshingT0, setRefreshingT0] = useState(false);
   const [busy, setBusy] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
@@ -97,7 +100,7 @@ export default function PlatformAccessPage() {
   const userTotal = users.isError ? 0 : (users.currentData?.total ?? users.data?.total ?? 0);
   // A removal that empties the last page needs nothing here: the table snaps the offset back to the last page.
   // Each tab requests only what it shows: the import preview with Users, the teams listing with Teams.
-  const t0 = usePlatformAccessT0Query(undefined, { skip: !usersShown });
+  const t0 = usePlatformAccessT0Query({}, { skip: !usersShown });
   const teamsShown = enabled && tabIndex === 2;
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !teamsShown });
   // Teams arrive in one response, so the search only narrows what is already loaded.
@@ -232,7 +235,20 @@ export default function PlatformAccessPage() {
               </div>
               <div className={styles.importRow}>
                 {t0.data?.completed_at ? (
-                  <span role="status">{t("rework.platformAccess.t0Done")}</span>
+                  <>
+                    <span role="status">{t("rework.platformAccess.t0Done")}</span>
+                    <IconButton
+                      type="button"
+                      color="primary"
+                      variant="icon"
+                      size="2xs"
+                      icon={{ category: "outlined", type: "refresh" }}
+                      title={t("rework.platformAccess.t0Refresh.title")}
+                      aria-label={t("rework.platformAccess.t0Refresh.title")}
+                      disabled={locked || t0.isFetching || t0.isError}
+                      onClick={() => setRefreshingT0(true)}
+                    />
+                  </>
                 ) : (
                   <>
                     {t0.data && (
@@ -249,7 +265,7 @@ export default function PlatformAccessPage() {
                       size="small"
                       title={t("rework.platformAccess.t0Hint")}
                       disabled={locked || !t0.data || t0.isFetching || t0.isError}
-                      onClick={() => void run(() => importT0().unwrap())}
+                      onClick={() => void run(() => importT0({ body: null }).unwrap())}
                     >
                       {t("rework.platformAccess.t0Import")}
                     </Button>
@@ -474,6 +490,7 @@ export default function PlatformAccessPage() {
               })
             }
           />
+          {refreshingT0 && <PlatformAccessT0RefreshDialog onClose={() => setRefreshingT0(false)} />}
           {filterConfirmation !== undefined && state.data && (
             <PlatformAccessActivationDialog
               enabling={filterConfirmation}

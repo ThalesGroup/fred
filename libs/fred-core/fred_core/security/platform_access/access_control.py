@@ -255,6 +255,7 @@ async def initialize_platform_access(
         [
             "platform_access_settings",
             "platform_access_users",
+            "platform_access_removals",
             "users",
             "teammetadata",
             # Free admission is derived from Free-link joins on every backend.

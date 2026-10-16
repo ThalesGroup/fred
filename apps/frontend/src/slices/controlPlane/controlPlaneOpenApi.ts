@@ -129,13 +129,22 @@ const injectedRtkApi = api.injectEndpoints({
       PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiResponse,
       PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/admin/platform/access/t0-preview` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/t0-preview`,
+        params: {
+          refresh_mode: queryArg.refreshMode,
+        },
+      }),
     }),
     importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: build.mutation<
       ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiResponse,
       ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/admin/platform/access/t0-import`, method: "POST" }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/t0-import`,
+        method: "POST",
+        body: queryArg.body,
+      }),
     }),
     listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet: build.query<
       ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiResponse,
@@ -2229,10 +2238,14 @@ export type RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserId
 };
 export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiResponse =
   /** status 200 Successful Response */ PlatformT0Preview;
-export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg = void;
+export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg = {
+  refreshMode?: ("preserve_removals" | "include_removed") | null;
+};
 export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiResponse =
   /** status 200 Successful Response */ PlatformT0Preview;
-export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg = void;
+export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg = {
+  body: RefreshPlatformT0 | null;
+};
 export type ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiResponse =
   /** status 200 Successful Response */ PlatformAccessTeam[];
 export type ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiArg = void;
@@ -3709,6 +3722,15 @@ export type PlatformT0Preview = {
   candidates: number;
   matching: number;
   completed_at: string | null;
+  revision?: number;
+  removal_history_complete?: boolean;
+  removed_skipped?: number;
+  imported_count?: number | null;
+};
+export type RefreshPlatformT0 = {
+  mode: "preserve_removals" | "include_removed";
+  expected_revision: number;
+  expected_completed_at: string;
 };
 export type PlatformAccessTeam = {
   team_id: string;
