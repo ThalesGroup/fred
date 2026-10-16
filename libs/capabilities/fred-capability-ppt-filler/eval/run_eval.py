@@ -55,7 +55,12 @@ from fred_capability_ppt_filler.builder.capability import (
     PptBuilderConfig,
 )
 from fred_capability_ppt_filler.builder.models import Pattern, TemplateInventory
-from fred_capability_ppt_filler.builder.plan import DeckPlan, SlidePlan, has_content
+from fred_capability_ppt_filler.builder.plan import (
+    DeckPlan,
+    SlidePlan,
+    has_content,
+    slide_charts,
+)
 from fred_capability_ppt_filler.builder.render import RenderResult
 from fred_capability_ppt_filler.fill import PptPreviewPart
 from fred_core.common import ModelConfiguration
@@ -330,6 +335,11 @@ class RunResult:
     chart_types: List[str] = field(default_factory=list)
     xy_charts: int = 0
     xy_titled: int = 0
+    # Slides sent with several charts, those built on a slide with as many
+    # frames, and those whose every chart has a title.
+    multi_given: int = 0
+    multi_placed: int = 0
+    multi_titled: int = 0
     leftovers: List[str] = field(default_factory=list)
     removed_by_check: int = 0
     truncated: int = 0
@@ -653,15 +663,22 @@ def _measure(
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
     )
     _variety(run, inventory, slides, chosen)
-    with_chart = [(s, p) for s, p in zip(plan.slides, assigned) if s.chart is not None]
+    with_chart = [(s, p) for s, p in zip(plan.slides, assigned) if slide_charts(s)]
     run.charts_given = len(with_chart)
     run.charts_on_chart_slides = sum(
         1 for _, p in with_chart if p is not None and p.kind == "chart"
     )
-    run.chart_style_keys = sum(
-        len(s.chart.style_fields) for s, _ in with_chart if s.chart is not None
+    sent = [c for s, _ in with_chart for c in slide_charts(s)]
+    run.chart_style_keys = sum(len(c.style_fields) for c in sent)
+    multi = [(s, p) for s, p in with_chart if len(slide_charts(s)) > 1]
+    run.multi_given = len(multi)
+    run.multi_placed = sum(
+        1
+        for s, p in multi
+        if p is not None
+        and sum(z.role == "chart" for z in p.zones) == len(slide_charts(s))
     )
-    sent = [s.chart for s, _ in with_chart if s.chart is not None]
+    run.multi_titled = sum(1 for s, _ in multi if all(c.title for c in slide_charts(s)))
     run.chart_types = [c.type for c in sent]
     xy = [c for c in sent if c.type in ("scatter", "bubble")]
     run.xy_charts = len(xy)
@@ -695,6 +712,7 @@ _NOT_TEXT = {
     "notes",
     "file_name",
     "chart",
+    "charts",
 }
 
 
@@ -840,8 +858,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         "| patterns used | tables used/given | table shape kept | table overflow "
         "| charts on chart slides/given | chart style keys "
         "| expected chart type | scatter/bubble axes titled "
+        "| multi-chart slides placed/titled/given "
         "| leftovers | removed by check | truncated | lost | split lists | variety asks | avg wall s | tokens in / out (k) | reply chars (mean) | tool call instead of reply |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -877,6 +896,8 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(EXPECTED_CHART_TYPES[r.prompt] in r.chart_types for r in expected)}"
             f"/{len(expected)} "
             f"| {sum(r.xy_titled for r in ok)}/{sum(r.xy_charts for r in ok)} "
+            f"| {sum(r.multi_placed for r in ok)}/{sum(r.multi_titled for r in ok)}"
+            f"/{sum(r.multi_given for r in ok)} "
             f"| {sum(len(r.leftovers) for r in ok)} "
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "

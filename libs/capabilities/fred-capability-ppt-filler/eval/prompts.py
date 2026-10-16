@@ -144,6 +144,18 @@ PROMPTS: dict[str, str] = {
         "d'affaires : France 4 %, 32 %, 120 M€ ; Allemagne 6 %, 18 %, 85 M€ ; Espagne 9 %, 12 %, "
         "40 M€ ; Italie 3 %, 22 %, 60 M€ ; Pologne 12 %, 8 %, 25 M€."
     ),
+    # Related measures side by side: two charts, then a 2 × 2 grid (on a template
+    # whose example slides hold several charts).
+    "charts_pair": (
+        "Prépare 3 slides sur nos régions : côte à côte, le chiffre d'affaires 2026 par région "
+        "(Europe 45, Amériques 30, Asie 18 M€) et la marge par région (Europe 11 %, Amériques "
+        "12 %, Asie 9 %)."
+    ),
+    "charts_grid": (
+        "Build a 3-slide KPI review showing four indicators over the four quarters of 2026 on "
+        "one slide: revenue 12, 15, 17, 21 M€; margin 8, 9, 9, 11 %; customers 120, 135, 150, "
+        "170; churn 4, 3.5, 3.2, 3 %."
+    ),
 }
 
 # The chart type each chart prompt calls for, measured as "expected type chosen".
@@ -204,4 +216,6 @@ EDITS: dict[str, str] = {
     "chart_radar": "L'offre B a 7 en sécurité, pas 6 : corrige le graphique.",
     "chart_scatter": "Theta sold 450 units, not 420: fix the chart.",
     "chart_bubble": "La Pologne fait 30 M€, pas 25 : corrige le graphique.",
+    "charts_pair": "La marge des Amériques est de 14 %, pas 12 : corrige le second graphique.",
+    "charts_grid": "Q4 churn was 2.8 %, not 3: fix that chart.",
 }
