@@ -113,9 +113,11 @@ sequenceDiagram
         UI->>M: GET /spaces/{id}/folders?parent_id=folder
     and Document page
         UI->>M: GET /spaces/{id}/documents?folder_id=folder&limit=51
+    and Write permission
+        UI->>M: POST /authorize/space (write)
     end
     Note over M: Each request validates bearer and personal admission
-    M->>FGA: Resolve unique organization and Check can_read on space
+    M->>FGA: Resolve unique organization, Check can_read for lists or can_write for probe
     M->>PG: Validate folder belongs to space, then list contents
     M-->>UI: Folder and document metadata, or refusal/error
     UI-->>Priya: Existing explorer, breadcrumb and page controls
@@ -126,6 +128,24 @@ space or team therefore displays an empty result until metadata exists. The auto
 browser fixture creates its sample metadata separately in its disposable database.
 See [content ownership and read contract](05-documents.md) and
 [request costs and acceptance](09-quality.md#resource-browsing-acceptance).
+
+## Priya creates a folder
+
+Priya's personal space grants her `editor`; the demo bundle also grants her `editor`
+on fredlab. In Resources, the UI checks `write` through manager and displays the
+existing New folder control only after a successful permission response and resource
+reads. Its existing dialog names the current destination. Priya enters a name and
+confirms; the generated client posts `space_id`, optional `parent_id` and `name` to
+`/folders`. The server checks current authority again and returns the persisted folder.
+
+The dialog closes after success and the first page of that location reloads, so the
+new folder is visible and can be opened. A duplicate keeps the dialog open with its
+entered name and a conflict message. Refresh rereads resources and write permission.
+Read-only users retain navigation and refresh. This journey calls manager only;
+control-plane and knowledge-flow do not receive a request.
+
+See [folder validation and failures](05-documents.md#folder-creation) and the
+[action/role matrix](03a-action-role-matrix.md), including the differences from Python.
 
 ## Joining and governing organizations, teams and projects
 

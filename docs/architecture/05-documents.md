@@ -26,6 +26,33 @@ cursor, retains cursors for Previous/First, and resets them on folder/space chan
 Folder lists are unpaginated. Cursor pages are live reads, not a snapshot: concurrent
 renames can move documents across page boundaries.
 
+## Folder creation
+
+`POST /folders` creates one root folder or one child in its owning space. It checks
+current organization and `can_write` under the organization lock and fences the
+OpenFGA guard before the SQL insert. A local or inherited editor writes; member,
+analyst, administrator and organization owner alone do not. Personal spaces inherit
+no authority. The [action/role matrix](03a-action-role-matrix.md) details the scope.
+
+Creation trims the name, accepts 1..255 Unicode scalar values, and rejects slashes,
+backslashes and control characters. A root has depth 1; depth 15 is accepted and
+16 is refused. Invalid name/depth returns 422, missing parent 404, foreign-space
+parent 400 and duplicate sibling name 409. SQL uniqueness also applies at the root;
+the same name in another parent is permitted. Concurrent identical creations yield
+one folder and one conflict. These validation rules describe creation, not renaming
+or rewriting pre-existing rows.
+
+The existing dialog keeps its name and reports localized errors on failure. During
+submission it prevents duplicate Enter/click requests and dismissal. A successful
+creation refreshes page one of the same location; navigation discards the old
+dialog's completion. A 403 disables further submission until the user closes and
+refreshes permissions. Creation is not automatically replayed after a 401; after
+an uncertain response the user can refresh Resources to inspect the persisted state.
+
+The folder handler makes no Temporal call and belongs to the governance router,
+which is constructible without an ingestion client. The full `serve` binary still
+connects to Temporal during startup.
+
 ## Uploads, connectors and storage
 
 ## Ingestion, extraction and indexing

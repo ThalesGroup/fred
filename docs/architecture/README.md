@@ -10,6 +10,7 @@ Read the journeys first, then follow the relevant domain chapter.
 | [1. System overview](01-system-overview.md) | What makes up Fred, and where are its boundaries? |
 | [2. User journeys](02-user-journeys.md) | How do the architectural rules work together in practice? |
 | [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
+| [Action and role matrix](03a-action-role-matrix.md) | Exactly which actions does each role allow, at which scope, and how does Rust differ from Python? |
 | [4. Organizations and provisioning](04-organizations.md) | How are people, spaces and their relationships organized? |
 | [5. Documents and knowledge](05-documents.md) | How does knowledge enter, circulate and leave Fred? |
 | [6. Agents and conversations](06-agents.md) | How does a conversation become an agent execution? |

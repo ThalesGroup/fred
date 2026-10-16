@@ -753,6 +753,18 @@ pub async fn create_folder(
     parent_id: Option<Uuid>,
     name: String,
 ) -> AppResult<Folder> {
+    let name = name.trim();
+    if name.is_empty()
+        || name.chars().count() > 255
+        || name
+            .chars()
+            .any(|c| c.is_control() || c == '/' || c == '\\')
+    {
+        return Err(AppError::Unprocessable(
+            "folder name must contain 1..255 characters without slashes or control characters"
+                .into(),
+        ));
+    }
     let mut tx = authorized_write(pool, fga, caller, space_id).await?;
     let parent = match parent_id {
         Some(id) => Some(db::folder(&mut *tx, id).await?),
@@ -763,12 +775,20 @@ pub async fn create_folder(
             "the parent folder belongs to another space".into(),
         ));
     }
+    if parent
+        .as_ref()
+        .is_some_and(|p| p.path.split('/').filter(|s| !s.is_empty()).count() >= 15)
+    {
+        return Err(AppError::Unprocessable(
+            "at most 15 folder levels are allowed".into(),
+        ));
+    }
     let id = Uuid::new_v4();
     let folder = Folder {
         id,
         space_id,
         parent_id,
-        name,
+        name: name.to_owned(),
         path: domain::folder_path(parent.as_ref(), id),
     };
     db::insert_folder(&mut *tx, &folder).await?;

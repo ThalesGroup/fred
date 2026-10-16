@@ -17,10 +17,15 @@ assert(manager && realm && bundle && port, "Run make test-provisioning-browser t
 for (const url of [manager, realm]) assert.equal(new URL(url).hostname, "127.0.0.1");
 process.env.VITE_BACKEND_URL_FRED_MANAGER = manager;
 const { createServer } = await import("vite");
-const server = await createServer({ server: { host: "127.0.0.1", port, strictPort: true }, logLevel: "error" });
+const server = await createServer({
+  cacheDir: `node_modules/.vite-browser-${port}`,
+  server: { host: "127.0.0.1", port, strictPort: true },
+  logLevel: "error",
+});
 let browser;
 const unexpected = [];
 const pageErrors = [];
+const assetFailures = [];
 const origin = `http://127.0.0.1:${port}`;
 const expect = baseExpect.configure({ timeout: 60_000 });
 
@@ -34,6 +39,10 @@ async function login(username, password, path = "/admin/provisioning") {
     await context.route("**/fred-manager/v1/frontend/config", (route) => route.abort(), { times: 1 });
   const page = await context.newPage();
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("requestfailed", (request) => {
+    if (request.resourceType() === "script")
+      assetFailures.push({ path: new URL(request.url()).pathname, error: request.failure()?.errorText });
+  });
   let bearer;
   page.on("request", (request) => {
     if (request.url() === `${origin}/fred-manager/v1/me/onboarding`) bearer = request.headers().authorization;
@@ -153,6 +162,8 @@ async function get(context, bearer, path) {
 
 try {
   await server.listen();
+  await server.warmupRequest("/src/common/router.tsx");
+  await server.waitForRequestsIdle();
   browser = await chromium.launch({ headless: true });
   const root = await login("root", "it-root", "/admin");
   await expect(root.page.getByRole("link", { name: "Provisioning", exact: true })).toBeVisible();
@@ -391,12 +402,55 @@ try {
   await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
   await expect(priya.page.getByText("Priya private.txt", { exact: true })).toBeVisible();
   await expect(priya.page.getByText("Team root.txt", { exact: true })).toHaveCount(0);
+  const createFolderInUi = async (name) => {
+    await priya.page.getByRole("button", { name: "New folder", exact: true }).click();
+    const dialog = priya.page.getByRole("dialog");
+    await dialog.getByRole("textbox").fill(name);
+    await dialog.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(priya.page.getByRole("button", { name: name.trim(), exact: true })).toBeVisible();
+  };
+  await createFolderInUi("Personal notes");
+  await priya.page.getByRole("button", { name: "Personal notes", exact: true }).click();
+  await createFolderInUi("Nested notes");
+  await priya.page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("button", { name: "Resources", exact: true })
+    .click();
+  await priya.page.getByRole("button", { name: "New folder", exact: true }).click();
+  const folderDialog = priya.page.getByRole("dialog");
+  await folderDialog.getByRole("textbox").fill("Personal notes");
+  await folderDialog.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(folderDialog.getByRole("alert")).toContainText("A folder with this name already exists here.");
+  await expect(folderDialog.getByRole("textbox")).toHaveValue("Personal notes");
+  await priya.page.screenshot({ path: "target/folder-create-conflict.png", fullPage: true });
+  await folderDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  const longFolder = "x".repeat(255);
+  await createFolderInUi(longFolder);
+  await priya.page.getByRole("button", { name: longFolder, exact: true }).click();
+  await priya.page.setViewportSize({ width: 390, height: 844 });
+  assert(await priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
+  await priya.page.getByRole("button", { name: "New folder", exact: true }).click();
+  const longDialog = priya.page.getByRole("dialog");
+  const closeBox = await longDialog.getByRole("button", { name: "Close", exact: true }).boundingBox();
+  const dialogBox = await longDialog.boundingBox();
+  assert(closeBox.x >= dialogBox.x && closeBox.x + closeBox.width <= dialogBox.x + dialogBox.width);
+  assert(closeBox.x + closeBox.width <= 390);
+  await priya.page.screenshot({ path: "target/folder-create-long-parent.png", fullPage: true });
+  await longDialog.getByRole("button", { name: "Close", exact: true }).click();
+  await priya.page.setViewportSize({ width: 1280, height: 900 });
+  await priya.page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("button", { name: "Resources", exact: true })
+    .click();
   await priya.page.screenshot({ path: "target/resources-personal.png", fullPage: true });
   await priya.page.getByRole("button", { name: "Home", exact: true }).click();
   await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
   await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
   await expect(priya.page.getByText("Team root.txt", { exact: true })).toBeVisible();
   await expect(priya.page.getByText("Priya private.txt", { exact: true })).toHaveCount(0);
+  await expect(priya.page.getByRole("button", { name: "Personal notes", exact: true })).toHaveCount(0);
+  await createFolderInUi("Team notes");
   await priya.page.getByRole("button", { name: "Library", exact: true }).focus();
   await priya.page.keyboard.press("Enter");
   await expect(priya.page.getByText("Document 00.txt", { exact: true })).toHaveCount(1);
@@ -449,10 +503,10 @@ try {
   assert.deepEqual(unexpected, [], "Unexpected control-plane dependency");
   assert.deepEqual(pageErrors, [], "Browser application errors");
   console.log(
-    "Provisioning browser acceptance passed: OIDC login, personal terms, root bootstrap, logout/account switch, empty root memberships, navigation, multipart import, pending state, reports, replay, project hierarchy/roles, legacy rejection, personal/team resource browsing, folders, cursor pages, empty/error/denied states and access refusals.",
+    "Provisioning browser acceptance passed: OIDC login, personal terms, root bootstrap, logout/account switch, empty root memberships, navigation, multipart import, pending state, reports, replay, project hierarchy/roles, legacy rejection, personal/team folder creation, nested folders, duplicate refusal, resource browsing, cursor pages, empty/error/denied states and access refusals.",
   );
 } catch (error) {
-  console.error({ pageErrors, unexpected });
+  console.error({ pageErrors, assetFailures, unexpected });
   throw error;
 } finally {
   await browser?.close();

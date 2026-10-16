@@ -2356,7 +2356,8 @@
         "namePlaceholder": "ex. Rapports 2026",
         "nameNoSlash": "Un nom de dossier ne peut pas contenir « / » ni « \\ ».",
         "title": "Nouveau dossier",
-        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence."
+        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence.",
+        "invalidName": "Utilisez au plus {{max}} caractères, sans caractères de contrôle."
       },
       "renameModal": {
         "title": "Renommer",
@@ -2464,7 +2465,14 @@
       "pageTitlePersonal": "Vos ressources personnelles",
       "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel.",
       "relaunchProfileHelp": "Choisissez un profil pour les documents dont le profil d’ingestion initial est inconnu. Les autres conservent leur profil initial.",
-      "relaunchProfileLabel": "Profil d’ingestion"
+      "relaunchProfileLabel": "Profil d’ingestion",
+      "managerCreate": {
+        "denied": "Vous n'avez plus le droit de créer des dossiers ici.",
+        "conflict": "Un dossier de ce nom existe déjà ici.",
+        "missing": "Le dossier de destination est indisponible. Actualisez les ressources.",
+        "invalid": "Le nom du dossier ou la profondeur est invalide.",
+        "unavailable": "La création n'a pas pu être confirmée. Actualisez les ressources avant de réessayer."
+      }
     },
     "save": "Sauvegarder",
     "serviceNotice": {

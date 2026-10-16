@@ -2356,7 +2356,8 @@
         "namePlaceholder": "e.g. Reports 2026",
         "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
         "title": "New folder",
-        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
+        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up.",
+        "invalidName": "Use at most {{max}} characters, without control characters."
       },
       "renameModal": {
         "title": "Rename",
@@ -2464,7 +2465,14 @@
       "pageTitlePersonal": "Your personal resources",
       "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space.",
       "relaunchProfileHelp": "Choose a profile for documents whose original ingestion profile is unknown. Other documents keep their original profile.",
-      "relaunchProfileLabel": "Ingestion profile"
+      "relaunchProfileLabel": "Ingestion profile",
+      "managerCreate": {
+        "denied": "You no longer have permission to create folders here.",
+        "conflict": "A folder with this name already exists here.",
+        "missing": "The destination folder is unavailable. Refresh the resources.",
+        "invalid": "The folder name or nesting depth is invalid.",
+        "unavailable": "Creation could not be confirmed. Refresh the resources before trying again."
+      }
     },
     "save": "Save",
     "serviceNotice": {

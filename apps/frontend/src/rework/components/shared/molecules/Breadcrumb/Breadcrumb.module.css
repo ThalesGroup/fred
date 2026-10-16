@@ -30,6 +30,8 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-2xs);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .link {
@@ -75,8 +77,16 @@
   font: var(--font-label-large);
 }
 
+.link,
+.current,
+.plain {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .separator {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   color: var(--on-surface-retreat);
   font-size: 1rem;

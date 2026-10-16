@@ -7,15 +7,19 @@ import { Navigate, useParams } from "react-router-dom";
 import ResourceExplorer from "@shared/organisms/ResourceExplorer/ResourceExplorer.tsx";
 import TablePagination from "@shared/molecules/TablePagination/TablePagination.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
+import FolderNameDialog from "./CreateFolderModal/FolderNameDialog";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import {
+  useAuthorizeSpaceMutation,
   useLazyListDocumentsQuery,
   useLazyListFoldersQuery,
   type Document,
   type Folder,
 } from "../../../../slices/fredManager/fredManagerOpenApi";
-import { useMySpacesQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements";
+import { useMySpacesQuery, useCreateFolderMutation } from "../../../../slices/fredManager/fredManagerApiEnhancements";
 import styles from "./TeamResourcesPage.module.css";
 import nameStyles from "@shared/molecules/DocumentNameCell/DocumentNameCell.module.css";
 import { fileIconSpec, FOLDER_ICON } from "../../../utils/fileIconSpec.ts";
@@ -40,6 +44,7 @@ function SpaceResources({ spaceId }: { spaceId: string }) {
   const [trail, setTrail] = useState<Folder[]>([]);
   const [cursors, setCursors] = useState<Cursor[]>([undefined]);
   const [page, setPage] = useState(0);
+  const [revision, setRevision] = useState(0);
   const folderId = trail[trail.length - 1]?.id;
   const cursor = cursors[page];
   const navigate = (next: Folder[]) => {
@@ -62,9 +67,15 @@ function SpaceResources({ spaceId }: { spaceId: string }) {
       <div className={styles.panel}>
         <div className={styles.workspace}>
           <ResourcePage
-            key={`${spaceId}/${folderId ?? "root"}/${page}/${cursor?.id ?? "first"}`}
+            key={`${spaceId}/${folderId ?? "root"}/${page}/${cursor?.id ?? "first"}/${revision}`}
             spaceId={spaceId}
             folderId={folderId}
+            parentPath={trail.map((folder) => folder.name).join("/")}
+            onCreated={() => {
+              setPage(0);
+              setCursors([undefined]);
+              setRevision((value) => value + 1);
+            }}
             cursor={cursor}
             page={page}
             breadcrumb={{
@@ -95,6 +106,8 @@ function SpaceResources({ spaceId }: { spaceId: string }) {
 function ResourcePage({
   spaceId,
   folderId,
+  parentPath,
+  onCreated,
   cursor,
   page,
   breadcrumb,
@@ -104,6 +117,8 @@ function ResourcePage({
 }: {
   spaceId: string;
   folderId?: string;
+  parentPath: string;
+  onCreated: () => void;
   cursor: Cursor;
   page: number;
   breadcrumb: import("@shared/organisms/ResourceExplorer/ResourceExplorer.tsx").ResourceExplorerBreadcrumbProps;
@@ -114,6 +129,10 @@ function ResourcePage({
   const { t } = useTranslation();
   const [loadFolders, folders] = useLazyListFoldersQuery();
   const [loadDocuments, documents] = useLazyListDocumentsQuery();
+  const [authorize] = useAuthorizeSpaceMutation();
+  const [createFolder] = useCreateFolderMutation();
+  const [canWrite, setCanWrite] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   // A keyed mount begins uninitialized even when RTK has cached this page.
@@ -151,6 +170,22 @@ function ResourcePage({
       });
     };
   }, [load, attempt]);
+  useEffect(() => {
+    let active = true;
+    setCanWrite(false);
+    const request = authorize({ spaceCheck: { space_id: spaceId, permission: "write" } });
+    void request.then((result) => {
+      if (active) setCanWrite(result.data?.allowed === true);
+    });
+    return () => {
+      active = false;
+      request.abort();
+    };
+  }, [authorize, spaceId, attempt]);
+  const refresh = () => {
+    setReady(false);
+    setAttempt((value) => value + 1);
+  };
   const loading =
     !ready || folders.isUninitialized || documents.isUninitialized || folders.isFetching || documents.isFetching;
   const errors = [folders.error, documents.error].filter(Boolean);
@@ -161,85 +196,134 @@ function ResourcePage({
   const rows: (Folder | Document)[] =
     loading || failed ? [] : [...(page === 0 ? (folders.currentData ?? []) : []), ...docs];
   return (
-    <ResourceExplorer<Folder | Document>
-      breadcrumb={breadcrumb}
-      selectable={false}
-      loading={loading}
-      loadingMessage={t("rework.resources.loading")}
-      empty={failed || rows.length === 0}
-      emptyMessage={
-        failed ? (
-          <div role="alert">
-            <p>{t(`rework.resources.managerRead.${errorKey}`)}</p>
-            <Button
-              color="primary"
-              variant="text"
-              size="small"
-              onClick={() => {
-                setReady(false);
-                setAttempt((value) => value + 1);
+    <>
+      <ResourceExplorer<Folder | Document>
+        breadcrumb={breadcrumb}
+        toolbarActions={
+          <>
+            <Tooltip text={t("rework.resources.action.refresh")}>
+              <IconButton
+                variant="icon"
+                size="medium"
+                icon={{ category: "outlined", type: "refresh" }}
+                aria-label={t("rework.resources.action.refresh")}
+                disabled={loading}
+                onClick={refresh}
+              />
+            </Tooltip>
+            {!loading && !failed && canWrite && (
+              <Tooltip text={t("rework.resources.menu.newFolder")}>
+                <IconButton
+                  color="primary"
+                  variant="icon"
+                  size="medium"
+                  icon={{ category: "outlined", type: "create_new_folder" }}
+                  aria-label={t("rework.resources.menu.newFolder")}
+                  onClick={() => setCreateOpen(true)}
+                />
+              </Tooltip>
+            )}
+          </>
+        }
+        selectable={false}
+        loading={loading}
+        loadingMessage={t("rework.resources.loading")}
+        empty={failed || rows.length === 0}
+        emptyMessage={
+          failed ? (
+            <div role="alert">
+              <p>{t(`rework.resources.managerRead.${errorKey}`)}</p>
+              <Button color="primary" variant="text" size="small" onClick={refresh}>
+                {t("rework.bootstrap.reload")}
+              </Button>
+            </div>
+          ) : (
+            t("rework.resources.empty.folder")
+          )
+        }
+        rows={rows}
+        rowKey={(row) => row.id}
+        columns={[
+          {
+            label: t("rework.resources.columns.name"),
+            size: "minmax(8rem, 2fr)",
+            cellRenderer: (row) =>
+              "mime" in row ? (
+                <span className={nameStyles.nameCell}>
+                  <span
+                    className={nameStyles.rowIcon}
+                    style={{ color: fileIconSpec(row.name.split(".").pop()?.toLowerCase()).color }}
+                  >
+                    <Icon category="outlined" type={fileIconSpec(row.name.split(".").pop()?.toLowerCase()).type} />
+                  </span>
+                  <span>{row.name}</span>
+                </span>
+              ) : (
+                <button type="button" className={rowStyles.nameButton} onClick={() => onFolder(row)}>
+                  <span className={rowStyles.rowIcon} style={{ color: FOLDER_ICON.color }}>
+                    <Icon category="outlined" type="folder" filled />
+                  </span>
+                  <span>{row.name}</span>
+                </button>
+              ),
+          },
+          {
+            label: t("rework.resources.columns.size"),
+            size: "minmax(0, 6.5rem)",
+            cellRenderer: (row) => ("mime" in row ? formatBytes(row.size) : "-"),
+          },
+        ]}
+        paginationFooter={
+          !loading && !failed && (rows.length > 0 || page > 0) ? (
+            <TablePagination
+              currentPage={page}
+              currentPageLabel={t("rework.resources.managerRead.page", { page: page + 1 })}
+              hasNext={(documents.currentData?.length ?? 0) > PAGE_SIZE}
+              rowsPerPage={PAGE_SIZE}
+              rowsPerPageOptions={[]}
+              labels={{
+                first: t("dataTable.pagination.first"),
+                prev: t("dataTable.pagination.prev"),
+                next: t("dataTable.pagination.next"),
               }}
-            >
-              {t("rework.bootstrap.reload")}
-            </Button>
-          </div>
-        ) : (
-          t("rework.resources.empty.folder")
-        )
-      }
-      rows={rows}
-      rowKey={(row) => row.id}
-      columns={[
-        {
-          label: t("rework.resources.columns.name"),
-          size: "minmax(8rem, 2fr)",
-          cellRenderer: (row) =>
-            "mime" in row ? (
-              <span className={nameStyles.nameCell}>
-                <span
-                  className={nameStyles.rowIcon}
-                  style={{ color: fileIconSpec(row.name.split(".").pop()?.toLowerCase()).color }}
-                >
-                  <Icon category="outlined" type={fileIconSpec(row.name.split(".").pop()?.toLowerCase()).type} />
-                </span>
-                <span>{row.name}</span>
-              </span>
-            ) : (
-              <button type="button" className={rowStyles.nameButton} onClick={() => onFolder(row)}>
-                <span className={rowStyles.rowIcon} style={{ color: FOLDER_ICON.color }}>
-                  <Icon category="outlined" type="folder" filled />
-                </span>
-                <span>{row.name}</span>
-              </button>
-            ),
-        },
-        {
-          label: t("rework.resources.columns.size"),
-          size: "minmax(0, 6.5rem)",
-          cellRenderer: (row) => ("mime" in row ? formatBytes(row.size) : "-"),
-        },
-      ]}
-      paginationFooter={
-        !loading && !failed && (rows.length > 0 || page > 0) ? (
-          <TablePagination
-            currentPage={page}
-            currentPageLabel={t("rework.resources.managerRead.page", { page: page + 1 })}
-            hasNext={(documents.currentData?.length ?? 0) > PAGE_SIZE}
-            rowsPerPage={PAGE_SIZE}
-            rowsPerPageOptions={[]}
-            labels={{
-              first: t("dataTable.pagination.first"),
-              prev: t("dataTable.pagination.prev"),
-              next: t("dataTable.pagination.next"),
-            }}
-            onFirst={() => onPage(0)}
-            onPrev={() => onPage(page - 1)}
-            onNext={() => {
-              if (docs.length) onNext(docs[docs.length - 1]);
-            }}
-          />
-        ) : undefined
-      }
-    />
+              onFirst={() => onPage(0)}
+              onPrev={() => onPage(page - 1)}
+              onNext={() => {
+                if (docs.length) onNext(docs[docs.length - 1]);
+              }}
+            />
+          ) : undefined
+        }
+      />
+      {createOpen && (
+        <FolderNameDialog
+          open
+          parentPath={parentPath}
+          maxNameLength={255}
+          canSubmit={canWrite}
+          onClose={() => setCreateOpen(false)}
+          onCreated={onCreated}
+          onSubmit={async (name) => {
+            try {
+              await createFolder({ createFolder: { space_id: spaceId, parent_id: folderId ?? null, name } }).unwrap();
+            } catch (error) {
+              const code = error && typeof error === "object" && "status" in error ? error.status : undefined;
+              if (code === 403) setCanWrite(false);
+              const key =
+                code === 403
+                  ? "denied"
+                  : code === 409
+                    ? "conflict"
+                    : code === 404 || code === 400
+                      ? "missing"
+                      : code === 422
+                        ? "invalid"
+                        : "unavailable";
+              throw new Error(t(`rework.resources.managerCreate.${key}`));
+            }
+          }}
+        />
+      )}
+    </>
   );
 }

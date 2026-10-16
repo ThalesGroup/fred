@@ -39,7 +39,7 @@ let root: Root;
 let host: HTMLDivElement;
 let store: ReturnType<typeof makeStore>;
 let requests: URL[];
-let reply: (url: URL) => Promise<Response>;
+let reply: (url: URL, request: Request) => Promise<Response>;
 let navigate: ReturnType<typeof useNavigate>;
 function makeStore() {
   return configureStore({ reducer: { [api.reducerPath]: api.reducer }, middleware: (g) => g().concat(api.middleware) });
@@ -48,6 +48,7 @@ function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 }
 async function standard(url: URL) {
+  if (url.pathname.endsWith("/authorize/space")) return json({ allowed: false });
   if (url.pathname.endsWith("/me/spaces")) return json([]);
   if (url.pathname.includes(secondSpace)) return json([]);
   if (url.pathname.endsWith("/folders")) return json(url.searchParams.has("parent_id") ? [] : [folder]);
@@ -69,7 +70,7 @@ async function flush() {
   });
 }
 async function click(label: string) {
-  const button = [...host.querySelectorAll("button")].find(
+  const button = [...document.querySelectorAll("button")].find(
     (b) => b.getAttribute("aria-label") === label || b.textContent?.endsWith(label),
   );
   expect(button, label).toBeDefined();
@@ -91,7 +92,7 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", async (request: Request) => {
     const url = new URL(request.url);
     requests.push(url);
-    return reply(url);
+    return reply(url, request);
   });
   store = makeStore();
   host = document.createElement("div");
@@ -207,4 +208,115 @@ it("re-entering an in-flight folder must revalidate instead of accepting the ear
   await flush();
   expect(host.textContent).not.toContain("Document 0");
   expect(host.textContent).toContain("rework.resources.managerRead.denied");
+});
+
+function typeFolderName(value: string) {
+  const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return input;
+}
+
+it("creates once through the generated mutation and refreshes the first page of the same folder", async () => {
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const posted: unknown[] = [];
+  let created = false;
+  reply = async (url, request) => {
+    if (url.pathname.endsWith("/authorize/space")) return json({ allowed: true });
+    if (request.method === "POST" && url.pathname.endsWith("/folders")) {
+      posted.push(await request.json());
+      await pending;
+      created = true;
+      return json({ ...folder, id: "new", name: "Notes", parent_id: folder.id }, 201);
+    }
+    if (created && url.pathname.endsWith("/folders") && url.searchParams.has("parent_id"))
+      return json([{ ...folder, id: "new", name: "Notes", parent_id: folder.id }]);
+    return standard(url);
+  };
+  await click("Library");
+  await click("dataTable.pagination.next");
+  await click("rework.resources.menu.newFolder");
+  const input = typeFolderName("  Notes  ");
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await flush();
+  expect(posted).toEqual([{ space_id: firstSpace, parent_id: folder.id, name: "Notes" }]);
+  await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  await act(async () => finish());
+  await flush();
+  await flush();
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(host.textContent).toContain("Notes");
+  expect(host.textContent).toContain("Document 0");
+  expect(requests.every((url) => url.pathname.startsWith("/fred-manager/v1/"))).toBe(true);
+});
+
+it("fails closed, preserves the name after a conflict, and disables creation after revocation", async () => {
+  expect(document.querySelector('[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
+  let status = 409,
+    posts = 0;
+  reply = async (url, request) => {
+    if (url.pathname.endsWith("/authorize/space")) return json({ allowed: true });
+    if (request.method === "POST" && url.pathname.endsWith("/folders")) {
+      posts++;
+      return json({ detail: "failure" }, status);
+    }
+    return standard(url);
+  };
+  await click("rework.resources.action.refresh");
+  await click("rework.resources.menu.newFolder");
+  typeFolderName("existing");
+  await click("rework.resources.folderModal.create");
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("rework.resources.managerCreate.conflict");
+  expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')?.value).toBe("existing");
+  status = 403;
+  await click("rework.resources.folderModal.create");
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("rework.resources.managerCreate.denied");
+  expect(posts).toBe(2);
+  await click("rework.resources.folderModal.cancel");
+  expect(document.querySelector('[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
+});
+
+it("does not replay a 401 write or change a different space after a pending creation", async () => {
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let delayed = false,
+    posts = 0;
+  reply = async (url, request) => {
+    if (url.pathname.endsWith("/authorize/space")) return json({ allowed: true });
+    if (request.method === "POST" && url.pathname.endsWith("/folders")) {
+      posts++;
+      if (delayed) {
+        await pending;
+        return json(folder, 201);
+      }
+      return json({ detail: "expired" }, 401);
+    }
+    return standard(url);
+  };
+  await click("rework.resources.action.refresh");
+  await click("rework.resources.menu.newFolder");
+  typeFolderName("Late folder");
+  await click("rework.resources.folderModal.create");
+  expect(posts).toBe(1);
+  delayed = true;
+  await click("rework.resources.folderModal.create");
+  await act(async () => navigate(`/team/${secondSpace}/resources`));
+  await flush();
+  const before = requests.length;
+  await act(async () => finish());
+  await flush();
+  expect(requests).toHaveLength(before);
+  expect(host.textContent).not.toContain("Late folder");
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
 });

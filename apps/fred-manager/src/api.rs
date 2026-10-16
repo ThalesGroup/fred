@@ -568,7 +568,7 @@ struct CreateFolder {
     )
 )]
 async fn create_folder(
-    State(s): State<AppState>,
+    State(s): State<GovernanceState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreateFolder>,
 ) -> AppResult<(StatusCode, Json<Folder>)> {
@@ -1247,6 +1247,7 @@ fn governance_routes() -> OpenApiRouter<GovernanceState> {
         .routes(routes!(my_spaces))
         .routes(routes!(create_personal_space))
         .routes(routes!(list_folders))
+        .routes(routes!(create_folder))
         .routes(routes!(list_documents))
         .routes(
             routes!(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
@@ -1266,7 +1267,6 @@ fn content_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(health))
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
-        .routes(routes!(create_folder))
         .routes(routes!(rename_folder, delete_folder))
         .routes(routes!(create_document))
         .routes(routes!(get_document, rename_document, delete_document))

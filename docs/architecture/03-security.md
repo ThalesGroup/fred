@@ -94,6 +94,10 @@ always keeps one (I15).
 
 ## Roles, permissions and ReBAC
 
+The [action/role matrix](03a-action-role-matrix.md) enumerates every manager HTTP
+action, operator entry point and evaluable permission, including additional gates
+and verified differences from Python. The following explains the security model.
+
 Roles are cumulative and granted on one space. Member grants content read; editor
 grants content read and write. Analyst grants content read and the capabilities
 `run_evaluations`, `manage_evaluation_corpus` and `read_conversations_for_evaluation`.
@@ -124,8 +128,10 @@ projects have no owner.
 Platform owner implies all platform capabilities. Feature manager grants
 `manage_capabilities` and team registry listing; prompt editor grants
 `edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply
-space membership or content access: a platform owner creates organizations and names
-their owners, and creates teams only through an organization admin role.
+space membership or content access: a platform owner provisions organizations through authenticated import and names
+their owners, and creates teams through ordinary space routes only with an organization
+admin role. The operator `create-org` command uses deployment credentials and does
+not check a caller role.
 
 Direct role tuples and the space tree are canonical in OpenFGA: each space carries
 one immutable `parent` link. The model evaluates permissions, including roles

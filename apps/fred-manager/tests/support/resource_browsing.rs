@@ -279,3 +279,248 @@ async fn organization_placement_reads_overlap_with_a_bounded_request_budget() {
     );
     assert_eq!(fault.active_reads, 0);
 }
+
+async fn create(
+    app: &axum::Router,
+    token: &str,
+    space: Uuid,
+    parent: Option<Uuid>,
+    name: &str,
+) -> (u16, Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/folders")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"space_id":space,"parent_id":parent,"name":name})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status().as_u16();
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    (status, serde_json::from_slice(&body).unwrap())
+}
+
+// Proves: I1, I2, I5, I6, I8, I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn folder_creation_governance_contract_and_request_budget() {
+    let e = env().await;
+    let identity = support::IdentityServer::start().await;
+    let (org, team) = org_and_team(&e).await;
+    for (user, role) in [
+        ("writer", Role::Editor),
+        ("reader", Role::Member),
+        ("analyst", Role::Analyst),
+        ("admin", Role::Admin),
+    ] {
+        grant(&e, org.id, Role::Member, user).await;
+        grant(&e, team.id, role, user).await;
+    }
+    grant(&e, org.id, Role::Editor, "inherited").await;
+    grant(&e, org.id, Role::PersonalSpaceCreator, "writer").await;
+    let personal = spaces::create_personal_space(&e.pool, &e.fga, "writer", org.id)
+        .await
+        .unwrap()
+        .0;
+    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "outsider")
+        .await
+        .unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+        onboarding: Default::default(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        pool: e.pool.clone(),
+        fga: observed,
+        directory: None,
+    });
+    let token = identity.token("writer");
+    let (status, root) = create(&app, &token, team.id, None, "  Dossiers été  ").await;
+    assert_eq!(status, 201, "{root}");
+    assert_eq!(root["name"], "Dossiers été");
+    let root_id = Uuid::parse_str(root["id"].as_str().unwrap()).unwrap();
+    let (status, child) = create(&app, &token, team.id, Some(root_id), "child").await;
+    assert_eq!(status, 201, "{child}");
+    assert_eq!(child["parent_id"], root["id"]);
+    assert_eq!(
+        create(&app, &token, team.id, None, "Dossiers été").await.0,
+        409
+    );
+    assert_eq!(
+        create(&app, &token, team.id, Some(root_id), "Dossiers été")
+            .await
+            .0,
+        201
+    );
+    assert_eq!(
+        create(&app, &token, team.id, Some(Uuid::new_v4()), "missing")
+            .await
+            .0,
+        404
+    );
+    let (status, private) = create(&app, &token, personal.id, None, "private").await;
+    assert_eq!(status, 201);
+    let private_id = Uuid::parse_str(private["id"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        create(&app, &token, team.id, Some(private_id), "foreign")
+            .await
+            .0,
+        400
+    );
+    for name in ["", "   ", "a/b", "a\\b", "x\0y", "x\ny", &"é".repeat(256)] {
+        assert_eq!(
+            create(&app, &token, team.id, None, name).await.0,
+            422,
+            "{name:?}"
+        );
+    }
+    assert_eq!(
+        create(&app, &token, team.id, None, &"🦀".repeat(255))
+            .await
+            .0,
+        201
+    );
+    let mut parent = root_id;
+    for depth in 2..=15 {
+        let (status, folder) = create(
+            &app,
+            &token,
+            team.id,
+            Some(parent),
+            &format!("depth-{depth}"),
+        )
+        .await;
+        assert_eq!(status, 201, "{folder}");
+        parent = Uuid::parse_str(folder["id"].as_str().unwrap()).unwrap();
+    }
+    assert_eq!(
+        create(&app, &token, team.id, Some(parent), "too-deep")
+            .await
+            .0,
+        422
+    );
+    for user in ["reader", "analyst", "admin", "alice", "outsider"] {
+        assert_eq!(
+            create(&app, &identity.token(user), team.id, None, "forbidden")
+                .await
+                .0,
+            403,
+            "{user}"
+        );
+    }
+    assert_eq!(
+        create(&app, &token, other.id, None, "foreign-org").await.0,
+        403
+    );
+    assert_eq!(
+        create(
+            &app,
+            &identity.token("inherited"),
+            personal.id,
+            None,
+            "private"
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        create(
+            &app,
+            &identity.token("inherited"),
+            team.id,
+            None,
+            "inherited"
+        )
+        .await
+        .0,
+        201
+    );
+    // One inherited org-editor tuple, one HTTP request at a time, one tuple/page.
+    *proxy.fault.lock().await = support::fga_proxy::Fault {
+        read_page_size: Some(1),
+        ..Default::default()
+    };
+    let started = std::time::Instant::now();
+    assert_eq!(
+        create(&app, &identity.token("inherited"), team.id, None, "budget")
+            .await
+            .0,
+        201
+    );
+    let fault = proxy.fault.lock().await;
+    assert_eq!(fault.calls.get("read"), Some(&3));
+    assert_eq!(fault.calls.get("check"), Some(&1));
+    assert_eq!(fault.calls.get("write"), Some(&1));
+    assert_eq!(fault.calls.len(), 3);
+    assert_eq!(
+        fault.written[0]["writes"]["tuple_keys"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        fault.written[0]["deletes"]["tuple_keys"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        fault.written[0]["writes"]["tuple_keys"][0]["object"]
+            .as_str()
+            .unwrap()
+            .starts_with("guard:")
+    );
+    eprintln!(
+        "folder create: 1 org-editor tuple, HTTP concurrency 1, 3 Reads/1 Check/1 Write; elapsed {:?}",
+        started.elapsed()
+    );
+    drop(fault);
+    let (a, b) = tokio::join!(
+        create(&app, &token, team.id, None, "concurrent"),
+        create(&app, &token, team.id, None, "concurrent")
+    );
+    assert!(matches!((a.0, b.0), (201, 409) | (409, 201)));
+    let held = hold_organization_lock(&e, org.id).await;
+    let waiting_app = app.clone();
+    let waiting_token = token.clone();
+    let waiting = tokio::spawn(async move {
+        create(
+            &waiting_app,
+            &waiting_token,
+            team.id,
+            None,
+            "revoked-waiter",
+        )
+        .await
+    });
+    wait_for_advisory_waiter(&e.pool).await;
+    delete_tuple(&e, "writer", "editor", &format!("space:{}", team.id)).await;
+    held.commit().await.unwrap();
+    assert_eq!(waiting.await.unwrap().0, 403);
+    assert_eq!(create(&app, &token, team.id, None, "revoked").await.0, 403);
+    let count:i64 = sqlx::query_scalar("select count(*) from folder where name in ('forbidden','foreign','foreign-org','revoked','revoked-waiter','too-deep')").fetch_one(&e.pool).await.unwrap();
+    assert_eq!(count, 0);
+}

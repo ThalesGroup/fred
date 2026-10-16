@@ -96,7 +96,7 @@ flowchart TB
 `roles` defines typed platform roles and scoped capabilities. `platform` serializes
 role mutations with bootstrap. `keycloak` owns one shared HTTP client and a synchronized
 service-token cache. `api::governance_router` groups identity, platform administration,
-space listing, personal opening, folder/document listing, ZIP import and self-capability
+space listing, personal opening, folder/document listing, folder creation, ZIP import and self-capability
 routes independently of the Temporal client.
 
 The same `utoipa-axum` registrations build the runtime routers and OpenAPI paths.
@@ -489,3 +489,17 @@ remote effects have the dispatch boundary described by I5 in [invariants](09-qua
 | D19 | One version-2 ZIP with explicit organizations, teams, projects and direct roles serves CLI and HTTP. | Reconciliation needs unambiguous parent scope and complete preflight. | Legacy formats are explicitly unsupported; bundle-local references do not add persistent identity or imply content grants. |
 | D20 | The unique organization is derived from canonical direct roles and full placement of committed spaces. Home uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
 | D21 | Personal creation requires explicit organization eligibility; opening reuses current authority. | Some people have no personal workspace; opening must not undo revocations. | First explicit open creates, repeats write nothing, and organization content remains a prerequisite. |
+
+## Folder creation from Resources
+
+The generated manager client probes `write`, then sends `POST /folders` with the
+current space and parent. The existing folder-name presentation is independent of
+the legacy corpus adapter. The manager mutation disables automatic unauthorized
+replay. Keyed resource/dialog mounts isolate late responses from navigation.
+
+The handler uses `GovernanceState` and the existing `spaces::create_folder` write
+boundary. Placement lookup precedes the transaction; organization lock, guard read,
+current context and `can_write` Check, then fence precede parent lookup and insertion
+on the held connection. No Temporal call occurs. `main::serve` still constructs its
+Temporal ingestion client before binding HTTP; governance-router independence does
+not imply independent startup of the complete binary.

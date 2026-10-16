@@ -12,16 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import { Portal } from "@shared/utils/Portal.tsx";
-import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useCreateTagMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { MAX_FOLDER_DEPTH, folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
-import styles from "./CreateFolderModal.module.css";
+import { MAX_FOLDER_DEPTH } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
+import FolderNameDialog from "./FolderNameDialog";
 
 interface CreateFolderModalProps {
   open: boolean;
@@ -38,152 +31,21 @@ interface CreateFolderModalProps {
   onCreated: () => void;
 }
 
-/**
- * Small centred modal for the single "folder name" field. Replaces the old MUI
- * `LibraryCreateDrawer`. The header makes the destination explicit ("In CIR /"
- * or "At the top level") so top-level vs subfolder is never ambiguous.
- */
-export default function CreateFolderModal({
-  open,
-  onClose,
-  parentPath,
-  teamId,
-  onSubmit,
-  onCreated,
-}: CreateFolderModalProps) {
-  const { t } = useTranslation();
-  const { showError } = useToast();
-  const [createTag, { isLoading }] = useCreateTagMutation();
-  const [name, setName] = useState("");
-
-  // Reset the field each time the modal opens (it mounts fresh, so the input's
-  // autoFocus handles focus).
-  useEffect(() => {
-    if (open) setName("");
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  const trimmed = name.trim();
-  const parentLeaf = parentPath?.split("/").filter(Boolean).pop();
-
-  // Mirror the backend's TagCreate guards (#2355) so the user learns BEFORE
-  // clicking Create, not from a 422 toast: a folder name is a single level
-  // (no slashes — a slashed name would smuggle several levels past the depth
-  // cap), and corpus folders stop nesting at MAX_FOLDER_DEPTH. The fs `mkdir`
-  // variant (custom onSubmit) is not tag-backed, so the depth cap — a
-  // ReBAC-chain constraint — doesn't apply there; the slash rule does.
-  const nameHasSlash = trimmed.includes("/") || trimmed.includes("\\");
-  const tooDeep = !onSubmit && folderPathDepth(parentPath) + 1 > MAX_FOLDER_DEPTH;
-  const blocked = !trimmed || nameHasSlash || tooDeep;
-  const inlineError = tooDeep
-    ? t("rework.resources.folderModal.tooDeep", { max: MAX_FOLDER_DEPTH })
-    : nameHasSlash
-      ? t("rework.resources.folderModal.nameNoSlash")
-      : undefined;
-
-  const submit = async () => {
-    if (blocked || isLoading) return;
-    try {
-      if (onSubmit) {
-        await onSubmit(trimmed);
-      } else {
-        await createTag({
-          tagCreate: {
-            name: trimmed,
-            path: parentPath ?? null,
-            type: "document",
-            team_id: teamId ?? null,
-          },
-        }).unwrap();
-      }
-      onCreated();
-      onClose();
-    } catch (e: unknown) {
-      showError?.({
-        summary: t("validation.error"),
-        detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.folderModal.error"),
-      });
-    }
-  };
-
+// Legacy corpus callers retain their transport; the dialog owns only interaction.
+export default function CreateFolderModal({ teamId, onSubmit, ...props }: CreateFolderModalProps) {
+  const [createTag] = useCreateTagMutation();
   return (
-    <Portal id="modal-portal">
-      <div className={styles.overlay} onClick={onClose}>
-        <div
-          className={styles.dialog}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="create-folder-title"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className={styles.body}>
-            <div className={styles.header}>
-              <div>
-                <p id="create-folder-title" className={styles.title}>
-                  {t("rework.resources.folderModal.title")}
-                </p>
-                <p className={styles.context}>
-                  {parentLeaf ? (
-                    <>
-                      {t("rework.resources.folderModal.inFolder")} <code className={styles.path}>{parentLeaf}</code> /
-                    </>
-                  ) : (
-                    t("rework.resources.folderModal.atRoot")
-                  )}
-                </p>
-              </div>
-              <IconButton
-                variant="icon"
-                size="small"
-                icon={{ category: "outlined", type: "close" }}
-                aria-label={t("common.close")}
-                onClick={onClose}
-              />
-            </div>
-
-            <TextInput
-              autoFocus
-              label={t("rework.resources.folderModal.nameLabel")}
-              placeholder={t("rework.resources.folderModal.namePlaceholder")}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void submit();
-              }}
-            />
-            {inlineError && (
-              <p className={styles.inlineError} role="alert">
-                {inlineError}
-              </p>
-            )}
-          </div>
-
-          <div className={styles.actions}>
-            <Button color="on-surface" variant="outlined" size="medium" onClick={onClose}>
-              {t("rework.resources.folderModal.cancel")}
-            </Button>
-            <Button
-              color="primary"
-              variant="filled"
-              size="medium"
-              disabled={blocked || isLoading}
-              onClick={() => void submit()}
-            >
-              {t("rework.resources.folderModal.create")}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </Portal>
+    <FolderNameDialog
+      {...props}
+      maxDepth={onSubmit ? null : MAX_FOLDER_DEPTH}
+      onSubmit={
+        onSubmit ??
+        (async (name) => {
+          await createTag({
+            tagCreate: { name, path: props.parentPath ?? null, type: "document", team_id: teamId ?? null },
+          }).unwrap();
+        })
+      }
+    />
   );
 }
