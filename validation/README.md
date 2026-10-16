@@ -365,7 +365,7 @@ directly on port 8080. Its pods trust the internal realm authority
 `keycloak:8080`. A token requested through `localhost` has a different issuer
 and is rejected even though login succeeds. Use the realm URL below, with
 `keycloak` resolving to `127.0.0.1` on the workstation, as required by
-`deploy/k3d/finish` for browser login too (`getent hosts keycloak` to check).
+fred-deployment-factory's `k3d-apps/fred/finish` for browser login too (`getent hosts keycloak` to check).
 
 A healthy cluster and a working browser login are not sufficient. Prepare the
 following once for your local integration-testing session, before running Make:

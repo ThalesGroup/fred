@@ -1,10 +1,10 @@
 ---
 schema: 1
-title: "Deploy a published Fred release on the local k3d instance"
+title: "Fred's k3d values move to fred-deployment-factory, which deploys published releases"
 impact: none
 configuration: local
-configuration_reason: "deploy/k3d/values.yaml declares evaluator 1.2.0 for the local k3d instance only; production charts, chart values and schemas are unchanged."
-no_action_reason: "No deployed workload, data or API changes; RELEASE is an opt-in for local k3d deployments only."
+configuration_reason: "deploy/k3d/values.yaml and the k3d hooks move to fred-deployment-factory (k3d-apps/fred/); only the local k3d instance is affected, production charts, chart values and schemas are unchanged."
+no_action_reason: "No deployed workload, data or API changes; only the local k3d command changes, to make k3d-app APP=fred [DIR=<fred checkout>]."
 ---
 ## Applicability
 
@@ -24,8 +24,8 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-From fred-deployment-factory, run `make k3d-app DIR=<fred checkout> RELEASE=<version>`
-and check that every Fred pod runs `ghcr.io/thalesgroup/fred-agent/*:v<version>`.
+From fred-deployment-factory, run `make k3d-app APP=fred` and check that every Fred pod
+runs `ghcr.io/thalesgroup/fred-agent/*:v<pinned version>`.
 
 ## Rollback
 
