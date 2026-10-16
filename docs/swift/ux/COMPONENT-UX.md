@@ -2285,9 +2285,8 @@ visibility PATCH — the resulting `joining_mode`, if it changes, comes back
 from the server on refetch.
 
 **Joining mode while private — one disabled button, no toggle (#2398,
-2026-08-20).** A `private` team can never be `open`, and the product has no
-invitation flow at all (there is no invite endpoint — a team admin adds
-members by hand from `TeamSettingsMembers`). So while
+2026-08-20).** A `private` team can never be `open`; a team admin adds
+members by hand or shares an invite link from `TeamSettingsMembers`. So while
 `visibility === "private"` the joining-mode row renders no `ButtonGroup`:
 the control slot holds a single **disabled** `Button` (`secondary` /
 `outlined` / `small`, `lock` icon) reading "Manual only", and the row's
@@ -2414,6 +2413,25 @@ closing gives focus back to the element that opened it. A Dialog or
 - Not yet design-reviewed. First functional pass only.
 
 ---
+
+### Team invite links — Members tab (2026-10-15, #3116)
+
+`TeamSettingsMembers` shows an **Invite link** button (`primary` / `outlined` /
+`medium`) to the left of **Add members**, for team admins on deployments with
+platform access (`platform_access_enabled`). It opens `TeamInviteLinkDialog`
+(same folder): a card (`surface-container-low`, `--radius-s`, `outline-variant`
+border, `primary` border while enabled) holding "Enable invitation by link" and a
+`Switch`; the whole card toggles, the switch stays the only focusable control
+(focus ring on the card) and stops its own click from reaching the card. Then a
+`body-medium` hint, the full URL in a read-only monospace `TextInput` with a **Copy** button
+(content_copy → check; on clipboard refusal the URL is focused and selected with
+an alert) and a `text` / `small` **Generate a new link** button. While the switch is off,
+the URL (if any) and both buttons are disabled. The first enabling creates the
+link; toggling keeps the same URL; regenerating replaces it and leaves the
+switch on. No expiry, history, counters or joiners. On `/join/:token`, a paused
+or replaced link shows the existing "no longer valid" state; a person without
+platform access is sent to `/platform-access-denied`. The private-team
+joining-mode support line mentions invite links; "Manual only" is unchanged.
 
 ### `DataTable` — opt-in pagination, `TeamSettingsMembers` full-height layout (#2108)
 

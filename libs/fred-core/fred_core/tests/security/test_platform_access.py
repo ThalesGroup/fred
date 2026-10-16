@@ -17,7 +17,7 @@ from fred_pod.security.structure import (
     Principal,
 )
 from pydantic import ValidationError
-from sqlalchemy import Table
+from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from fred_core.security.models import Resource
@@ -25,6 +25,8 @@ from fred_core.security.platform_access.access_control import (
     PlatformAccess,
 )
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
+    PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -103,6 +105,8 @@ async def access(tmp_path):
             TeamMetadataRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
+            PlatformAccessLinkRow,
+            PlatformAccessLinkJoinerRow,
         ):
             await connection.run_sync(cast(Table, model.__table__).create)
     value = PlatformAccess(PlatformAccessStore(engine), MembershipEngine())
@@ -270,7 +274,34 @@ async def test_live_independent_sources_and_revocation_across_instances(access):
     access.rebac.members[user.uid] = {"demo"}
     async with access.store.mutation() as session:
         await session.delete(await access.store.exception(UUID(user.uid), session))
+    # Membership alone (added by hand or by a team link) is no Free source.
+    assert not await second.admitted(user)
+    link_id = uuid4()
+    async with access.store.mutation() as session:
+        session.add(
+            PlatformAccessLinkRow(
+                id=link_id,
+                team_id="demo",
+                token_hash="0" * 64,
+                created_by="admin",
+                created_at=datetime.now(timezone.utc),
+                opening_count=0,
+            )
+        )
+        await session.flush()
+        session.add(
+            PlatformAccessLinkJoinerRow(
+                link_id=link_id,
+                user_id=UUID(user.uid),
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
     assert await second.admitted(user)
+    async with access.store.mutation() as session:
+        (await session.get(PlatformAccessLinkRow, link_id)).kind = "team"
+    assert not await second.admitted(user)
+    async with access.store.mutation() as session:
+        (await session.get(PlatformAccessLinkRow, link_id)).kind = "free"
     async with access.store.mutation() as session:
         team = await access.store.team("demo", session)
         team.platform_access_free = False
@@ -838,3 +869,53 @@ def test_accent_folding_table_and_postgresql_expression():
     assert "Hé" not in str(compiled)
     assert "%he%" not in compiled.params.values()
     assert str(compiled).count("translate(lower(%(") == 4
+
+
+@pytest.fixture
+def fresh_warnings(monkeypatch):
+    from fred_core.security.platform_access import store
+
+    monkeypatch.setattr(store, "_last_warning", {})
+
+
+@pytest.mark.asyncio
+async def test_unreadable_joiner_table_fails_closed_and_logs_the_cause(
+    access, caplog, fresh_warnings
+):
+    # A runtime role without SELECT on the joiner table broke the Free source
+    # derivation in a live deployment; the cause must reach the logs.
+    user = person("other")
+    async with access.store.engine.begin() as connection:
+        await connection.run_sync(
+            cast(Table, PlatformAccessLinkJoinerRow.__table__).drop
+        )
+    logger = "fred_core.security.platform_access.store"
+    with caplog.at_level("WARNING", logger=logger):
+        for _ in range(3):
+            with pytest.raises(HTTPException) as error:
+                await access.admitted(user)
+            assert (error.value.status_code, error.value.detail) == (
+                503,
+                "platform_access_unavailable",
+            )
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    # One line per kind and minute, naming the error type, so an outage cannot flood.
+    assert warnings == ["Platform access store unavailable: OperationalError"]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_warning_never_logs_statement_parameters(
+    access, caplog, fresh_warnings
+):
+    link_token = "plaintext-link-token-" + "x" * 22  # pragma: allowlist secret
+    async with access.store.engine.begin() as connection:
+        await connection.run_sync(cast(Table, PlatformAccessLinkRow.__table__).drop)
+    with caplog.at_level("WARNING"):
+        with pytest.raises(HTTPException):
+            async with access.store.read() as session:
+                await session.execute(
+                    select(PlatformAccessLinkRow).where(
+                        PlatformAccessLinkRow.token == link_token
+                    )
+                )
+    assert caplog.records and link_token not in caplog.text

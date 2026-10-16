@@ -1,3 +1,33 @@
+**v3.6.0** - 2026-10-15
+
+- **Summary**
+
+  Team administrators can invite people who already have platform access with one link. Platform administrators can find accounts in their configured directory, and document searches now respect current access. Operators can control which Knowledge Base services publish to Fred.
+
+- **Features**
+
+  - Share a team invitation link with people who already have platform access (#3116)
+
+- **Improvements**
+
+  - Find and whitelist people from your configured account directory, including Keycloak users who have not signed in to Fred (#3122)
+  - Browse theme choices with aligned light and dark previews in platform settings (#3027)
+
+- **Security**
+
+  - Restrict Knowledge Base publication to services approved by your organization (#3104)
+  - Search excludes documents outside the selected team or removed from a library (#3091)
+
+- **Bug Fixes**
+
+  - Folders show their complete document lists and preserve files linked elsewhere when deleted (#2845)
+  - The Case sensitive switch is visible when editing platform access rules (#3117)
+  - Team invitation pages no longer offer an unrelated contact-support action (#3119)
+
+- **Deployment note**
+
+  Operators must review Free-team admission and database access before upgrading. Deployments with Knowledge Base pods must register their publishers. Follow the operator guide for the staged rollout; no document re-ingestion is needed.
+
 **v3.5.0** - 2026-10-14
 
 - **Summary**

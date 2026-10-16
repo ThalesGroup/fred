@@ -26,6 +26,9 @@ vi.mock("@hooks/useLegalMarkdown", () => ({
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ gcuVersion: "v1", contactSupportLink: state.support, siteDisplayName: "Acme" }),
 }));
+vi.mock("../../../../common/platformAccess", () => ({
+  platformPath: (path: string) => `/${path.replace(/^\//, "")}`,
+}));
 vi.mock("../../../../security/KeycloakService", () => ({ KeyCloakService: { CallLogout: vi.fn() } }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useFreeEnrollmentPreviewQuery: () => ({
@@ -236,4 +239,45 @@ it("records once under duplicate StrictMode effects", async () => {
     ),
   );
   expect(state.record).toHaveBeenCalledTimes(1);
+});
+const noPlatformAccess = { status: 403, data: { detail: "team_link_requires_platform_access" } };
+it("sends a person without platform access to the refusal page instead of the invitation", () => {
+  const replace = vi.fn();
+  vi.stubGlobal("location", { ...window.location, origin: window.location.origin, replace });
+  state.error = noPlatformAccess;
+  act(() => root.render(<FreeEnrollmentPage />));
+  expect(replace).toHaveBeenCalledWith("/platform-access-denied");
+  expect(host.textContent).toBe("");
+  expect(state.record).not.toHaveBeenCalled();
+});
+it("sends a person who lost platform access while the page was open to the refusal page", async () => {
+  const replace = vi.fn();
+  vi.stubGlobal("location", { ...window.location, origin: window.location.origin, replace });
+  state.required = false;
+  state.enroll.mockReturnValue({
+    unwrap: async () => {
+      throw noPlatformAccess;
+    },
+  });
+  act(() => root.render(<FreeEnrollmentPage />));
+  await act(async () => button("rework.platformAccess.join.action")!.click());
+  expect(replace).toHaveBeenCalledWith("/platform-access-denied");
+  expect(host.textContent).not.toContain("rework.platformAccess.join.failedTitle");
+});
+
+it.each([
+  [
+    "the team page when the join returns the team",
+    { admitted: true, cgu_required: false, team_id: "demo team" },
+    "/team/demo%20team/agents",
+  ],
+  ["the home page when it does not", { admitted: true, cgu_required: false }, "/"],
+])("opens %s", async (_name, result, target) => {
+  const replace = vi.fn();
+  vi.stubGlobal("location", { ...window.location, origin: window.location.origin, replace });
+  state.required = false;
+  state.enroll.mockReturnValue({ unwrap: async () => result as never });
+  act(() => root.render(<FreeEnrollmentPage />));
+  await act(async () => button("rework.platformAccess.join.action")!.click());
+  expect(replace).toHaveBeenCalledWith(target);
 });

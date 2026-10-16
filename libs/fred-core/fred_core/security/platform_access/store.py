@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -8,10 +10,11 @@ from uuid import UUID
 from fastapi import HTTPException
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser
-from sqlalchemy import ColumnElement, func, literal, or_, select, text
+from sqlalchemy import ColumnElement, delete, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
+    PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -22,6 +25,29 @@ from fred_core.sql.accent_folding import fold_accents, search_spellings
 from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
+
+logger = logging.getLogger(__name__)
+_WARNING_INTERVAL = 60.0
+_last_warning: dict[str, float] = {}
+
+
+def warn_unavailable(kind: str, error: BaseException) -> None:
+    """Log why platform access answered 503, at most once a minute per kind.
+
+    The limit is per kind: another cause of the same kind inside the window is
+    not logged. Only the exception type and SQLSTATE: messages and statement
+    parameters can carry link tokens."""
+    now = time.monotonic()
+    if now - _last_warning.get(kind, -_WARNING_INTERVAL) < _WARNING_INTERVAL:
+        return
+    _last_warning[kind] = now
+    code = getattr(getattr(error, "orig", None), "pgcode", None)
+    logger.warning(
+        "Platform access %s unavailable: %s%s",
+        kind,
+        type(error).__name__,
+        f" (SQLSTATE {code})" if code else "",
+    )
 
 
 class PlatformAccessStore:
@@ -49,7 +75,8 @@ class PlatformAccessStore:
                     yield active
         except HTTPException:
             raise
-        except Exception:
+        except Exception as error:
+            warn_unavailable("store", error)
             raise HTTPException(503, "platform_access_unavailable") from None
 
     @asynccontextmanager
@@ -97,6 +124,63 @@ class PlatformAccessStore:
                     )
                 )
             return list((await s.scalars(query.order_by(TeamMetadataRow.id))).all())
+
+    async def free_joined_teams(
+        self, user_id: UUID | None = None, session: AsyncSession | None = None
+    ) -> dict[UUID, set[str]]:
+        """Teams each person joined through a Free link: the only Free admission evidence."""
+        async with self.read(session) as s:
+            query = (
+                select(
+                    PlatformAccessLinkJoinerRow.user_id, PlatformAccessLinkRow.team_id
+                )
+                .join(
+                    PlatformAccessLinkRow,
+                    PlatformAccessLinkRow.id == PlatformAccessLinkJoinerRow.link_id,
+                )
+                .where(
+                    PlatformAccessLinkRow.kind == "free",
+                    PlatformAccessLinkJoinerRow.deleted_at.is_(None),
+                )
+                .distinct()
+            )
+            if user_id is not None:
+                query = query.where(PlatformAccessLinkJoinerRow.user_id == user_id)
+            joined: dict[UUID, set[str]] = {}
+            for uid, team_id in (await s.execute(query)).all():
+                joined.setdefault(uid, set()).add(team_id)
+            return joined
+
+    async def has_free_links(self, team_id: str) -> bool:
+        async with self.read() as s:
+            return bool(
+                await s.scalar(
+                    select(
+                        select(PlatformAccessLinkRow.id)
+                        .where(
+                            PlatformAccessLinkRow.team_id == team_id,
+                            PlatformAccessLinkRow.kind == "free",
+                        )
+                        .exists()
+                    )
+                )
+            )
+
+    async def forget_free_joins(
+        self, team_id: str, user_id: UUID, session: AsyncSession | None = None
+    ) -> None:
+        """Leaving a team ends its Free source: only a new Free enrollment restores it."""
+        async with self.read(session) as s:
+            links = select(PlatformAccessLinkRow.id).where(
+                PlatformAccessLinkRow.team_id == team_id,
+                PlatformAccessLinkRow.kind == "free",
+            )
+            await s.execute(
+                delete(PlatformAccessLinkJoinerRow).where(
+                    PlatformAccessLinkJoinerRow.user_id == user_id,
+                    PlatformAccessLinkJoinerRow.link_id.in_(links),
+                )
+            )
 
     @staticmethod
     def user_search(query: str) -> ColumnElement[bool]:
@@ -298,7 +382,12 @@ class PlatformAccessStore:
                     PlatformAccessLinkRow.expires_at.is_(None),
                     PlatformAccessLinkRow.expires_at > now,
                 ),
-                TeamMetadataRow.platform_access_free.is_(True),
+                or_(
+                    (PlatformAccessLinkRow.kind == "team")
+                    & PlatformAccessLinkRow.paused.is_(False),
+                    (PlatformAccessLinkRow.kind == "free")
+                    & TeamMetadataRow.platform_access_free.is_(True),
+                ),
                 ~TeamMetadataRow.id.startswith("personal-"),
             )
         )

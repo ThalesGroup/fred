@@ -113,11 +113,14 @@ release choices or operational details that cannot be established from the notes
 2. **Consolidate:** generate one guide from all PR notes. Review dependencies,
    duplicate actions and contradictions; fix source notes and regenerate. Separate
    required upgrade actions from optional activation. Group no-action notes compactly.
-3. **Present:** show the proposed version, user-facing notes and the complete
-   DevOps guide, including validation, rollback and remaining limitations.
-4. **Approve, then publish:** after your explicit approval, commit the documents,
-   verify the committed guide, create the paired code/chart tags and push. Confirm
-   both publication workflows succeed and attach the same guide.
+3. **Review in a PR:** commit the release inputs on a topic branch and open a
+   PR targeting `swift`, ready for review. Show the proposed version, Python package and
+   lockfile changes, user-facing notes and complete DevOps guide. Wait for PR CI
+   and developer review before merge.
+4. **Approve, then publish:** after merge, verify the committed guide and release
+   inputs on `swift`. Obtain explicit approval for the version and paired code/chart
+   tags, then push the tags. Confirm both publication workflows succeed and attach
+   the same guide.
 
 **Developer: one short note per PR. Integrator: one reviewed guide before tagging.
 DevOps: one document to follow.** The common note format makes collection automatic;

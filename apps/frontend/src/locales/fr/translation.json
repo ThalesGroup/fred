@@ -2840,6 +2840,18 @@
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
           "updateRoleSummary": "Échec de la mise à jour du rôle"
         },
+        "inviteLink": {
+          "buttonLabel": "Lien d'invitation",
+          "copied": "Copié",
+          "copy": "Copier",
+          "copyFailed": "Le lien n'a pas pu être copié automatiquement. Il est sélectionné : copiez-le avec votre clavier.",
+          "enable": "Activer l'invitation par lien",
+          "failed": "Le lien d'invitation n'a pas pu être mis à jour. Réessayez.",
+          "hint": "Toute personne ayant déjà accès à la plateforme peut rejoindre l'équipe en tant que membre avec ce lien.",
+          "regenerate": "Générer un nouveau lien",
+          "title": "Lien d'invitation",
+          "urlLabel": "Lien"
+        },
         "moreActions": "Plus d'actions",
         "search": {
           "ariaLabel": "Rechercher un membre",
@@ -2916,7 +2928,7 @@
           "open": "Ouverte",
           "inviteOnly": "Sur invitation",
           "manual": "Ajout manuel",
-          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : ses membres sont ajoutés manuellement par un administrateur de l'équipe."
+          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation."
         },
         "visibility": {
           "label": "Visibilité de l'équipe",
@@ -3324,8 +3336,6 @@
       "hint": "Un thème retiré disparaît du profil. Les utilisateurs qui l'utilisent passent au thème par défaut ; leur préférence est conservée si ce thème est proposé à nouveau. Le thème par défaut reste toujours disponible.",
       "offeredLabel": "Proposer le thème {{theme}} aux utilisateurs",
       "offeredTooltip": "Proposé aux utilisateurs",
-      "available": "Disponible",
-      "hidden": "Masqué",
       "defaultAvailabilityHint": "Le thème par défaut doit rester disponible aux utilisateurs.",
       "setDefault": "Définir par défaut",
       "isDefault": "Par défaut",
@@ -3799,7 +3809,7 @@
       "team": "Équipe",
       "allowTeam": "Autoriser l'équipe",
       "free": "Accès par lien",
-      "freeHint": "L'accès par lien autorise les membres de l'équipe à accéder à la plateforme. Le désactiver suspend les invitations et retire cette source d'accès.",
+      "freeHint": "L'accès par lien autorise les personnes inscrites par ce lien à accéder à la plateforme. Le désactiver suspend les invitations et retire cette source d'accès.",
       "link": "Invitations",
       "createLink": "Créer un lien",
       "copyLink": "Lien d'invitation",
@@ -3965,7 +3975,7 @@
         "cleanup": "Supprimer les liens inactifs",
         "cleanupTitle": "Supprimer les liens inactifs de {{team}} ?",
         "cleanupConfirm": "Supprimer les liens",
-        "cleanupHint": "{{count}} liens expirés ou révoqués de {{team}} seront définitivement supprimés, avec leurs notes et leur nombre d'ouvertures. Les membres et les liens actifs sont conservés.",
+        "cleanupHint": "{{count}} liens expirés ou révoqués de {{team}} seront définitivement supprimés, avec leurs notes et leur nombre d'ouvertures. Les personnes inscrites par ces liens restent membres de l'équipe mais perdent l'accès à la plateforme que ces liens leur donnaient. Les liens actifs sont conservés.",
         "deleted": "{{count}} liens inactifs supprimés.",
         "loading": "Chargement des liens...",
         "noteColumn": "Note",

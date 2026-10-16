@@ -1580,7 +1580,15 @@ async def remove_team_member(
             skip_permission_check=user.uid == user_id,
             metadata=metadata,
         )
+        from fred_core.security.platform_access.access_control import (
+            forget_free_joins,
+        )
+
+        # Before, so a failure keeps the membership rather than a stale Free join;
+        # again after, for a Free enrollment that raced the relation removal.
+        await forget_free_joins(team_id, user_id)
         await _remove_all_team_member_relations(rebac, team_id, user_id)
+        await forget_free_joins(team_id, user_id)
         # Favorites are personal data about this team's prompts: they go with the access.
         await deps.get_prompt_store().delete_favorites_for_team(user_id, team_id)
 

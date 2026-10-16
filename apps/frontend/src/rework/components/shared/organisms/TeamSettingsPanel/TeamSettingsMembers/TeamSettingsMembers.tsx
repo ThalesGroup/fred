@@ -22,6 +22,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import TeamInviteLinkDialog from "./TeamInviteLinkDialog/TeamInviteLinkDialog.tsx";
+import { getConfig } from "../../../../../../common/config";
 import styles from "./TeamSettingsMembers.module.scss";
 
 interface TeamSettingsMembersProps {
@@ -34,6 +36,9 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
   const { canAdministerMembers: can_administer_members } = useTeamCapabilities(team);
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isInviteLinkOpen, setIsInviteLinkOpen] = useState(false);
+  // Invite links live in platform access, only available on deployments that enable it.
+  const canShareInviteLink = can_administer_members && (getConfig()?.platform_access_enabled ?? false);
   const [search, setSearch] = useState("");
 
   return (
@@ -53,6 +58,11 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
                 size="small"
               />
             </div>
+            {canShareInviteLink && (
+              <Button color="primary" variant="outlined" size="medium" onClick={() => setIsInviteLinkOpen(true)}>
+                {t("rework.teamSettings.members.inviteLink.buttonLabel")}
+              </Button>
+            )}
             {can_administer_members && (
               <Button color="primary" variant="filled" size="medium" onClick={() => setIsAddDialogOpen(true)}>
                 {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
@@ -66,6 +76,9 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
       </div>
       {can_administer_members && (
         <AddTeamMembersDialog open={isAddDialogOpen} team={team} onClose={() => setIsAddDialogOpen(false)} />
+      )}
+      {canShareInviteLink && isInviteLinkOpen && (
+        <TeamInviteLinkDialog teamId={team.id} onClose={() => setIsInviteLinkOpen(false)} />
       )}
     </div>
   );
