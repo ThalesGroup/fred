@@ -78,7 +78,7 @@ has none.
 
 - **Intents** (meaning, never style): `chart.highlight` / `sort` /
   `stacked_as`, `table.total_row` (the table style's own total row, else bold)
-  / `highlight_row` / `highlight_column` (bold and a light tint of the style's
+  / `highlight_row` / `highlight_column` (bold and a tint of the style's
   accent; `table_intents.py` lists PowerPoint's predefined styles), and
   `items[].trend` (an arrow before the figure, in its own font). A template
   zone named or read as the key message (`takeaway`, `key message`, `à

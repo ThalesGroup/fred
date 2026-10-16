@@ -13,12 +13,13 @@
 # limitations under the License.
 
 """A table's intents (total row, highlighted row and column), drawn from its
-style: the style's own total-row formatting, a light tint of its accent.
+style: the style's own total-row formatting, a tint of its accent.
 PowerPoint's predefined styles are referenced by GUID and never written in
 the file, so the accent each is built on is listed here."""
 
 from __future__ import annotations
 
+import colorsys
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
@@ -236,8 +237,12 @@ _ACCENTS = (
     MSO_THEME_COLOR.ACCENT_5,
     MSO_THEME_COLOR.ACCENT_6,
 )
-# The tint's brightness: lumMod 20 % lumOff 80 %, a light shade of the accent.
-_TINT = 0.8
+# The tint's brightness: lumMod 60 % lumOff 40 %, stronger than the 20 % and
+# 40 % bands of the predefined styles; lumMod 40 % lumOff 60 % when dark text
+# would not read on it.
+_TINT = 0.4
+_PALE_TINT = 0.6
+_READABLE = 4.5  # WCAG contrast of body text
 
 
 def _listed(texts: Sequence[str]) -> str:
@@ -277,11 +282,51 @@ def _bold(tc: Any) -> None:
         run.get_or_add_rPr().set("b", "1")
 
 
-def _tint(tc: Any, accent: int) -> None:
+def _theme_rgb(presentation: Any, names: Sequence[str]) -> List[Optional[str]]:
+    """The hex colours ``names`` take in the first master's theme."""
+    try:
+        master = presentation.slide_masters[0].part
+        scheme = parse_xml(master.part_related_by(RT.THEME).blob).find(
+            f".//{qn('a:clrScheme')}"
+        )
+    except (IndexError, KeyError, ValueError, SyntaxError):
+        return [None] * len(names)
+    found: List[Optional[str]] = []
+    for name in names:
+        slot = scheme.find(qn(f"a:{name}")) if scheme is not None else None
+        colour = slot[0] if slot is not None and len(slot) else None
+        found.append(
+            None if colour is None else colour.get("val") or colour.get("lastClr")
+        )
+    return found
+
+
+def _luminance(rgb: Sequence[float]) -> float:
+    linear = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def tint_level(presentation: Any, accent: int) -> float:
+    """The strong tint, unless the theme's dark text would not read on it."""
+    hexes = _theme_rgb(presentation, [f"accent{min(max(accent, 1), 6)}", "dk1"])
+    known = [h for h in hexes if h and len(h) == 6]
+    try:
+        fill, text = [[int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)] for h in known]
+    except ValueError:  # an unreadable colour, or one of the two missing
+        return _TINT
+    hue, light, sat = colorsys.rgb_to_hls(*fill)
+    light = min(1.0, light * (1 - _TINT) + _TINT)  # what lumMod/lumOff do
+    tinted = _luminance(colorsys.hls_to_rgb(hue, light, sat))
+    dark = _luminance(text)
+    ratio = (max(tinted, dark) + 0.05) / (min(tinted, dark) + 0.05)
+    return _TINT if ratio >= _READABLE else _PALE_TINT
+
+
+def _tint(tc: Any, accent: int, level: float) -> None:
     fill = FillFormat.from_fill_parent(tc.get_or_add_tcPr())
     fill.solid()
     fill.fore_color.theme_color = _ACCENTS[min(max(accent, 1), 6) - 1]
-    fill.fore_color.brightness = _TINT
+    fill.fore_color.brightness = level
 
 
 def _total_row(
@@ -316,11 +361,13 @@ def _total_row(
     ]
 
 
-def _emphasise(cells: List[Any], name: str, style: TableStyle) -> List[Told]:
+def _emphasise(
+    cells: List[Any], name: str, style: TableStyle, level: float
+) -> List[Told]:
     for tc in cells:
         _bold(tc)
         if not style.dark:
-            _tint(tc, style.accent)
+            _tint(tc, style.accent, level)
     if not style.dark:
         return []
     return [
@@ -334,7 +381,7 @@ def _emphasise(cells: List[Any], name: str, style: TableStyle) -> List[Told]:
 
 
 def _row(
-    body: List[Any], table: PlanTable, shift: int, style: TableStyle
+    body: List[Any], table: PlanTable, shift: int, style: TableStyle, level: float
 ) -> List[Told]:
     reference = table.highlight_row
     if reference is None:
@@ -343,7 +390,7 @@ def _row(
     found = _find(reference, firsts)
     at = None if found is None else found - shift
     if found is not None and at is not None and 0 <= at < len(body):
-        return _emphasise(body[at].findall(qn("a:tc")), "highlight_row", style)
+        return _emphasise(body[at].findall(qn("a:tc")), "highlight_row", style, level)
     why = (
         f"table.highlight_row '{reference}' is rows[0], shown as the table's header"
         if at is not None and at < 0
@@ -361,7 +408,7 @@ def _row(
 
 
 def _column(
-    body: List[Any], table: PlanTable, shift: int, style: TableStyle
+    body: List[Any], table: PlanTable, shift: int, style: TableStyle, level: float
 ) -> List[Told]:
     reference = table.highlight_column
     if reference is None:
@@ -378,7 +425,10 @@ def _column(
     if at is not None:
         cells = [tr.findall(qn("a:tc")) for tr in body]
         return _emphasise(
-            [row[at] for row in cells if at < len(row)], "highlight_column", style
+            [row[at] for row in cells if at < len(row)],
+            "highlight_column",
+            style,
+            level,
         )
     headers = f"headers: {_listed(names)}" if any(names) else "no header"
     return [
@@ -403,8 +453,10 @@ def emphasise(
         tblPr = tbl.makeelement(qn("a:tblPr"), {})
         tbl.insert(0, tblPr)
     body = tbl.findall(qn("a:tr"))[1 if head else 0 :]
+    wanted = table.highlight_row is not None or table.highlight_column is not None
+    level = tint_level(presentation, style.accent) if wanted else _TINT
     return (
         _total_row(tblPr, body, table, style)
-        + _row(body, table, shift, style)
-        + _column(body, table, shift, style)
+        + _row(body, table, shift, style, level)
+        + _column(body, table, shift, style, level)
     )

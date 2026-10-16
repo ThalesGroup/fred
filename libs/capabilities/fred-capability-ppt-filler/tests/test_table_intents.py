@@ -19,10 +19,10 @@ show is drawn in bold and told."""
 from __future__ import annotations
 
 import io
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pytest
-from fred_capability_ppt_filler.builder import tools
+from fred_capability_ppt_filler.builder import table_intents, tools
 from fred_capability_ppt_filler.builder.assign import assign
 from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.changes import SlideChange, apply_changes
@@ -117,14 +117,34 @@ def _bold(tc: Any) -> bool:
     return bool(runs) and all(r.find(qn("a:rPr")).get("b") == "1" for r in runs)
 
 
-def _tint(tc: Any) -> Optional[str]:
-    """The accent of a cell's own fill, when it is the light tint."""
+STRONG = {"lumMod": "60000", "lumOff": "40000"}
+PALE = {"lumMod": "40000", "lumOff": "60000"}
+
+
+def _tint(tc: Any, strength: Dict[str, str] = STRONG) -> Optional[str]:
+    """The accent of a cell's own fill, when it is the tint of ``strength``."""
     colour = tc.find(f"{qn('a:tcPr')}/{qn('a:solidFill')}/{qn('a:schemeClr')}")
     if colour is None:
         return None
     mods = {child.tag.split("}")[1]: child.get("val") for child in colour}
-    assert mods == {"lumMod": "20000", "lumOff": "80000"}
+    assert mods == strength
     return colour.get("val")
+
+
+def _dark_accent(content: bytes) -> bytes:
+    """The built-in template with a navy accent 1, too dark under black text
+    at the strong tint."""
+    presentation = Presentation(io.BytesIO(content))
+    theme = presentation.slide_masters[0].part.part_related_by(RT.THEME)
+    xml = theme.blob.decode()
+    start = xml.index("<a:accent1>")
+    end = xml.index("</a:accent1>")
+    theme._blob = (
+        xml[:start] + "<a:accent1><a:srgbClr val='000080'/>" + xml[end:]
+    ).encode()
+    out = io.BytesIO()
+    presentation.save(out)
+    return out.getvalue()
 
 
 def _notes(result: RenderResult) -> List[Tuple[str, Optional[str]]]:
@@ -234,6 +254,32 @@ def test_the_tint_follows_the_style_accent(builtin):
     content = _restyled(template, _style_id(ACCENT_2))
     _, tbl = _render(builtin, {**OFFERS, "highlight_row": 0}, content)
     assert {_tint(tc) for tc in _rows(tbl)[1].findall(qn("a:tc"))} == {"accent2"}
+
+
+@pytest.mark.parametrize(
+    "guid",
+    [
+        "5C22544A-7EE6-4342-B048-85BDC9FD1C3A",  # Medium Style 2 - Accent 1
+        "3B4B98B0-60AC-42C2-AFA5-B58CD77FA1E5",  # Light Style 1 - Accent 1
+    ],
+)
+def test_the_highlight_stands_out_from_the_style_bands(builtin, guid):
+    """Medium Style 2 fills its rows with 20 % and 40 % tints of the accent:
+    the highlight takes a stronger one that dark text still reads on."""
+    template, _ = builtin
+    content = _restyled(template, _style_id(guid))
+    _, tbl = _render(builtin, {**OFFERS, "highlight_row": 1}, content)
+    assert {_tint(tc, STRONG) for tc in _rows(tbl)[2].findall(qn("a:tc"))} == {
+        "accent1"
+    }
+    presentation = Presentation(io.BytesIO(template))
+    assert table_intents.tint_level(presentation, 1) == 0.4
+
+
+def test_a_dark_accent_takes_a_paler_tint_so_the_text_stays_readable(builtin):
+    template, _ = builtin
+    _, tbl = _render(builtin, {**OFFERS, "highlight_row": 1}, _dark_accent(template))
+    assert {_tint(tc, PALE) for tc in _rows(tbl)[2].findall(qn("a:tc"))} == {"accent1"}
 
 
 def test_a_custom_style_tints_with_its_header_accent(builtin):
