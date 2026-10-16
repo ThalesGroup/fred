@@ -2,7 +2,7 @@
 
 ### Requirement: Intent fields express meaning, never style
 
-The system SHALL accept on a plan optional intent fields — `chart.highlight`, `chart.sort`, `chart.stacked_as`, `chart.target`, `table.total_row`, `table.highlight_row`, `table.highlight_column`, `items[].trend` — whose values are a short enumeration, a boolean, a number, or a reference to content already in the plan, and SHALL NOT accept a colour, font, size or position through them. Each field SHALL default to the rendering without it. The system SHALL decide how an intent looks from the template (theme colours, table style, the text style of the content it marks, a zone the template designed). When an intent cannot be rendered — its value or reference matches nothing, or the template or chart type cannot show it — the system SHALL still build the deck, SHALL send the agent a note naming the field and a remedy, and SHALL record `intent_not_shown` (or `intent_shown_otherwise` when a fallback rendered it) with the field on that slide's "What was built" entry. Intent fields SHALL be editable through `changes` like any other field, and SHALL be offered in the tool schema only when the template can render them.
+The system SHALL accept on a plan optional intent fields — `chart.highlight`, `chart.sort`, `chart.stacked_as`, `table.total_row`, `table.highlight_row`, `table.highlight_column`, `items[].trend` — whose values are a short enumeration, a boolean, or a reference to content already in the plan, and SHALL NOT accept a colour, font, size or position through them. Each field SHALL default to the rendering without it. The system SHALL decide how an intent looks from the template (theme colours, table style, the text style of the content it marks, a zone the template designed). When an intent cannot be rendered — its value or reference matches nothing, or the template or chart type cannot show it — the system SHALL still build the deck, SHALL send the agent a note naming the field and a remedy, and SHALL record `intent_not_shown` (or `intent_shown_otherwise` when a fallback rendered it) with the field on that slide's "What was built" entry. Intent fields SHALL be editable through `changes` like any other field, and SHALL be offered in the tool schema only when the template can render them.
 
 #### Scenario: Intent left out
 
@@ -28,7 +28,7 @@ The system SHALL accept on a plan optional intent fields — `chart.highlight`, 
 
 ### Requirement: Chart emphasis
 
-The system SHALL reorder a chart's categories with all their values for `sort: desc | asc` (by the first series, or by category totals for a stacked column), SHALL keep the given order for `given` and for line and area charts (with a note when a sort was asked), and SHALL draw a sorted bar chart with the first category of the resulting order on top, leaving an unsorted bar chart's order unchanged. For `highlight`, the system SHALL draw the named category (one-series column, bar and stacked column charts, pie, doughnut) or the named series (several series) in the theme's first accent and every other point or series in a muted colour derived from the theme text colour, and SHALL NOT write a literal colour; a category named on a one-series line or area chart SHALL be noted as `intent_not_shown`. For `stacked_as: percent` on a stacked column, the system SHALL build a 100 % stacked column. For `target` on a column, stacked column, line or area chart, the system SHALL draw the value as a native line series sharing the chart's axes, editable with the chart's data, and SHALL NOT draw it as a free shape.
+The system SHALL reorder a chart's categories with all their values for `sort: desc | asc` (by the first series, or by category totals for a stacked column), SHALL keep the given order for `given` and for line and area charts (with a note when a sort was asked), and SHALL draw a sorted bar chart with the first category of the resulting order on top, leaving an unsorted bar chart's order unchanged. For `highlight`, the system SHALL draw the named category (one-series column, bar and stacked column charts, pie, doughnut) or the named series (several series) in the theme's first accent and every other point or series in a muted colour derived from the theme text colour, and SHALL NOT write a literal colour; a category named on a one-series line or area chart SHALL be noted as `intent_not_shown`. For `stacked_as: percent` on a stacked column, the system SHALL build a 100 % stacked column.
 
 #### Scenario: Sorted bar chart
 
@@ -49,11 +49,6 @@ The system SHALL reorder a chart's categories with all their values for `sort: d
 
 - **WHEN** the model sends a `stacked_column` chart with `stacked_as: percent`
 - **THEN** the chart is a 100 % stacked column with a percent value axis; and **WHEN** it sends `stacked_as: percent` on a `line` chart **THEN** the line chart is built and the summary holds `intent_not_shown` for `stacked_as`
-
-#### Scenario: Target line
-
-- **WHEN** the model sends a column chart with `target: {value: 15, label: "Target"}`
-- **THEN** the chart holds a line plot sharing the column chart's axes with one series of value 15 per category, labelled once, and the series is part of the chart's embedded data; and **WHEN** the chart is a pie **THEN** no line is drawn and the summary holds `intent_not_shown` for `target`
 
 ### Requirement: Table and key-figure emphasis
 
@@ -88,7 +83,7 @@ For `table.total_row: true`, the system SHALL apply the table style's own total-
 
 ### Requirement: Slide takeaway
 
-The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. By default the system SHALL fill a takeaway zone as before this change, from the slide's content, and SHALL leave the takeaway in the speaker notes only. The system SHALL write the takeaway into the zone only when the plan sets `show_takeaways`, a user message of the conversation explicitly asks for key messages or takeaways to be shown, the assigned template slide has a takeaway zone and the takeaway fits its room; it SHALL then NOT fill that zone from `bullets`. In every other case the zone SHALL be filled as before and the takeaway SHALL stay in the speaker notes only, without a refusal or a summary note; `show_takeaways` without such a user message SHALL be ignored with an agent note. The takeaway SHALL NOT change which template slide is assigned.
+The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. By default the system SHALL fill a takeaway zone as before this change, from the slide's content, and SHALL leave the takeaway in the speaker notes only. The system SHALL write the takeaway into the zone only when the plan sets `show_takeaways`, a user message of the conversation explicitly asks for key messages or takeaways to be shown, the assigned template slide has a takeaway zone and the takeaway fits its room; it SHALL then NOT fill that zone from `bullets`. In every other case the zone SHALL be filled as before and the takeaway SHALL stay in the speaker notes only, without a refusal or a summary note; `show_takeaways` without such a user message SHALL be ignored with an agent note. The takeaway SHALL NOT change which kind of slide is assigned; a takeaway written into its zone SHALL count as filling that zone when slides of one kind are compared on the zones they leave empty.
 
 #### Scenario: Takeaway kept off the slide by default
 

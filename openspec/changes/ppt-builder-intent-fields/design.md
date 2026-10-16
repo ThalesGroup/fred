@@ -24,7 +24,7 @@ Facts (drafted at `4d0057e41`; phase A facts re-checked at `25727177d`, phase B�
 
 - **Shape.** Optional, default = today's rendering. Enumerations are short and coerced from common spellings (en/fr: `descending`, `décroissant`, `largest first` → `desc`; `hausse`, `increase`, `↑`, `+` → `up`; `stable` → `flat`); references name content already in the plan (a category, a series name, a header, a row's first cell, an index), compared after `lexicon.normalize`.
 - **Validation never blocks.** An intent is not content: a value that reads as nothing, a reference that matches nothing, or a template that cannot render it leaves the deck built without that intent. This differs on purpose from content (D8/D21 of the base change: refuse rather than drop), because a revision round spent on emphasis costs more than the emphasis is worth, and a weak model would loop on it.
-- **Never silent.** Each such case sends one agent note with the remedy (`Slide 4: highlight 'Nord' matches no category (Q1, Q2, Q3, Q4); built without highlight. To set it, edit chart.highlight to one of those.`) and records a summary note on the slide: `intent_not_shown` (not rendered) or `intent_shown_otherwise` (rendered by a fallback: total row in bold only). `BuildNote` gains `field: Optional[str]` (`highlight`, `sort`, `stacked_as`, `target`, `total_row`, `highlight_row`, `highlight_column`, `trend`); `DeckReport.note` merges on `(code, field)`; the frontend words each pair for a non-technical reader, with a generic wording for a field it does not know yet. An identical agent note on several slides is one line naming them (`Slides 2, 4: …`). Phase A adds `intent_not_shown` only; `intent_shown_otherwise` arrives with the first fallback (phase B).
+- **Never silent.** Each such case sends one agent note with the remedy (`Slide 4: highlight 'Nord' matches no category (Q1, Q2, Q3, Q4); built without highlight. To set it, edit chart.highlight to one of those.`) and records a summary note on the slide: `intent_not_shown` (not rendered) or `intent_shown_otherwise` (rendered by a fallback: total row in bold only). `BuildNote` gains `field: Optional[str]` (`highlight`, `sort`, `stacked_as`, `total_row`, `highlight_row`, `highlight_column`, `trend`); `DeckReport.note` merges on `(code, field)`; the frontend words each pair for a non-technical reader, with a generic wording for a field it does not know yet. An identical agent note on several slides is one line naming them (`Slides 2, 4: …`). Phase A adds `intent_not_shown` only; `intent_shown_otherwise` arrives with the first fallback (phase B).
 - **Not style.** Keys that are style (`highlight_color`, `bold`, `emphasis_style`…) stay in `style_fields` (charts) or `ignored_fields` (elsewhere) as today; the intent fields never accept a colour value (`highlight: "red"` matches no category → `intent_not_shown`).
 - **Plan keeps what the model wrote.** Sorting, matching and fallbacks happen at render; the plan (and so every `changes` path and index) stays in the order given.
 - **Schema.** One-line descriptions; each field offered only when the template can use it (`_schema_for`): chart fields with a chart host, table fields with a `table` kind, `trend` when a repeat group holds a `number` zone. `takeaway` is offered by `ppt-builder-storytelling` on every slide (D9).
@@ -52,17 +52,9 @@ One reference, matched against series names first when the chart has several ser
 
 Default `value`. `percent` → `XL_CHART_TYPE.COLUMN_STACKED_100`, value axis `0%`, unit ignored for the axis (the series' `unit` stays in the workbook format). Only on `stacked_column`; on any other type `intent_not_shown` ("percent stacking needs type stacked_column"). Not folded into `type` (a new type value would double the type list a weak model reads) — see Q4 for the relation to `show`. Effort **S**.
 
-### D5. `chart.target: number | {value, label?}` (phase D)
+### D5. `chart.target` (phase D) — dropped
 
-A reference value drawn as a horizontal dashed line across the plot.
-
-Options studied (python-pptx 1.0, native charts):
-
-1. **Combo chart, chosen.** The target is added to `CategoryChartData` as one more series (constant value per category), so the embedded workbook holds it and "Edit Data" in PowerPoint keeps it. After `add_chart`, its `c:ser` is moved out of the `c:barChart`/`c:areaChart` into a new `c:lineChart` (grouping `standard`, the same two `c:axId`), inserted after the first plot in `c:plotArea` — PowerPoint's own "Combo: clustered column – line". On a `line` chart it stays in the `c:lineChart`. Styled by the code: `tx1` at 75 % opacity, 1.5 pt, `prstDash dash`, no markers, not stacked, never sorted or highlighted. One data label on its last point: `label` + the value in the chart's number format (`Target 15 M€`, or `15 M€` without a label), so no legend appears just for it; in a chart that already has a legend its entry is deleted (`c:legendEntry/c:delete`).
-2. Line shape drawn over the plot area: rejected. The plot area's position is computed by the reader (PowerPoint and LibreOffice differ), so the line lands off the value; it detaches when the chart is resized or edited.
-3. Error bars or high-low lines on a hidden series: rejected; unreadable in "Edit Data" and inconsistently rendered by LibreOffice.
-
-Limits: a line joins the category centres, so it stops half a category short of the plot edges (accepted; PowerPoint's own combo does the same). Not on `bar` (its value axis is horizontal: a line plot would run along the categories), `pie`, `doughnut`, nor with `stacked_as: percent` (a value target on a percent axis has no meaning): `intent_not_shown`. The value axis range includes the target automatically. Effort **M**, risk on LibreOffice rendering of combo charts: phase D starts with a spike (tasks 7.1) and is deferred with recorded evidence if PowerPoint or the preview fails.
+Dropped by the owner on 2026-10-16 (see Owner decisions (2026-10-16)): the only native rendering studied was a combo chart (a line plot over the bars), which the owner refused for `ppt-builder-more-chart-types`; python-pptx has no direct support for it, and a target line mixes a second measure into a chart, against the storytelling one-measure-per-chart rule. No `target` field, path or note exists.
 
 ### D6. `table.total_row: bool`
 
@@ -88,14 +80,14 @@ The capacity check counts the glyph and space as one character of the figure's s
 
 `SlidePlan.takeaway` is defined, required and checked by `ppt-builder-storytelling` (its D2): the conclusion the audience draws from the slide, always the first line of the speaker notes, not necessarily on the slide (owner, 2026-10-15). Phase C only lets a template that designed a takeaway zone show it.
 
-- **Detection (analysis).** A text zone (body, caption, subtitle on a non-cover slide) is a takeaway zone (`Zone.takeaway = True`) when (1) its shape name — or for a placeholder, the layout placeholder's name — matches `lexicon.TAKEAWAY_NAMES` (`takeaway`, `key takeaway`, `key message`, `message cle`, `a retenir`, `so what`, `conclusion`), or (2) vision gave it a purpose containing those words; the labelling prompt's slot examples add "key message". Never by geometry alone (Q1). At most one per pattern (the first in reading order). `ANALYSIS_VERSION` 12 → 13; stored analyses refresh in the background (D20 of the base change). The built-in "Fred Chart" pattern gets its takeaway zone from the `takeaway` name; no deck edit needed.
+- **Detection (analysis).** A text zone (body, caption, subtitle on a non-cover slide) is a takeaway zone (`Zone.takeaway = True`) when (1) its shape name — or for a placeholder, the layout placeholder's name — matches `lexicon.TAKEAWAY_NAMES` (`takeaway`, `key takeaway`, `key message`, `message cle`, `a retenir`, `so what`, `conclusion`), or (2) vision gave it a purpose containing those words; the labelling prompt's slot examples add "key message". Never by geometry alone (Q1). At most one per pattern (the first in reading order). `ANALYSIS_VERSION` 16 → 17 (12 → 13 when drafted; the version moved on with later changes); stored analyses refresh in the background (D20 of the base change). The built-in "Fred Chart" pattern gets its takeaway zone from the `takeaway` name; no deck edit needed.
 - **Shown only on request (owner, 2026-10-15 final answers).** The takeaway is not meant to appear on the slide. By default the takeaway zone keeps today's behaviour (filled from the slide's content: `bullets`, else empty) and the takeaway stays in the notes. A deck-level flag `show_takeaways: bool` (default false; one schema line: "only when the user explicitly asks to show the key messages / takeaways on the slides") lets it in, honoured only when a user message of the conversation matches a fr/en lexicon (`lexicon.SHOW_TAKEAWAY_WORDS`: `messages clés`, `message clé`, `à retenir`, `points clés`, `key message(s)`, `takeaway(s)`, `key points`), through the same lexicon match as the storytelling change's illustrative allowance and `skip_plan`. The flag without such a message is ignored, with one agent note ("the user did not ask to show the key messages; they stay in the notes"). Kept from the base when a `changes` call omits it.
-- **Placement.** When the flag is honoured, the assigned template slide has a takeaway zone and the takeaway fits its room, the zone holds the takeaway and `bullets` do not fall into it. Otherwise the zone keeps today's behaviour and the takeaway is in the notes only: no body lead-line fallback, no misfit, no `needs_revision`, no summary note. The assignment does not score the takeaway: slide choice is unchanged.
+- **Placement.** When the flag is honoured, the assigned template slide has a takeaway zone and the takeaway fits its room, the zone holds the takeaway and `bullets` do not fall into it. Otherwise the zone keeps today's behaviour and the takeaway is in the notes only: no body lead-line fallback, no misfit, no `needs_revision`, no summary note. The assignment does not score the takeaway; but since `ppt-builder-chart-slide-choice` keeps, among slides of one kind, those leaving the fewest zones empty (`_fullest`), a takeaway placed in its zone counts as a filled zone there (reconciled 2026-10-16), so a chart slide with a takeaway card stays the pick over a wide chart slide when the takeaway is shown.
 - **Catalogue.** `takeaway zone ≤N words` on patterns holding the zone, so the model can keep a takeaway short enough when the user asked to show key messages. Effort **S**.
 
 ### D10. Edits, validation, summary
 
-- `changes.py` `_FIELDS`: `chart` gains `highlight`, `sort`, `stacked_as` (text), `target` (`{value: number, label: text}`, also settable whole); `table` gains `highlight_row`, `highlight_column` (text or number), `total_row` (flag); `item` gains `trend`; the `takeaway` path comes from `ppt-builder-storytelling`. A kind edit clears intent fields with their parent (a cleared `chart` takes its `highlight`). `null` resets a field to its default.
+- `changes.py` `_FIELDS`: `chart` gains `highlight`, `sort`, `stacked_as` (text); `table` gains `highlight_row`, `highlight_column` (text or number), `total_row` (flag); `item` gains `trend`; the `takeaway` path comes from `ppt-builder-storytelling`. A kind edit clears intent fields with their parent (a cleared `chart` takes its `highlight`). `null` resets a field to its default.
 - `unchanged` (identical-resend check, D26) compares intent fields too: changing only `highlight` rebuilds.
 - Summary codes: `intent_not_shown`, `intent_shown_otherwise` with `field`; added to `BuildNoteCode`, `ppt_filler/types.ts`, `DeckSummaryButton.tsx` and fr/en locales ("Emphasis on Q3 could not be shown").
 
@@ -110,7 +102,7 @@ The capacity check counts the glyph and space as one character of the figure's s
 | 5 | `items[].trend` | medium | S | B |
 | 6 | `table.highlight_row/column` | medium | M | B |
 | 7 | takeaway zone | medium | S | C |
-| 8 | `chart.target` | medium | M, risky | D (spike first) |
+| 8 | `chart.target` | — | — | D, dropped (2026-10-16) |
 
 The takeaway zone comes third because it alone needs a re-analysis; A and B touch only rendering and plan coercion. Phases land in order on the same branch (`feat/ppt-builder-capability`), each tested by the owner before the next; there is no PR per phase: the owner opens a single PR for the whole capability. One change rather than four because the D1 rule, the note codes and the schema gating are shared.
 
@@ -118,13 +110,13 @@ The takeaway zone comes third because it alone needs a re-analysis; A and B touc
 
 - [More schema per call] → one-line descriptions, gated per template (D1); measured in the eval (tool-schema size before/after).
 - [Weak models fill intents wrongly] → never blocks (D1), coerced spellings, notes name valid values; the eval checks first-call success does not drop.
-- [LibreOffice preview: chart `a:alpha`, combo charts, `lastRow` of predefined styles] → each checked on rendered evidence (tasks); `.pptx` stays authoritative; a failing preview downgrades the decision (alpha → brightness by background luminance; target deferred).
+- [LibreOffice preview: chart `a:alpha`, `lastRow` of predefined styles] → each checked on rendered evidence (tasks); `.pptx` stays authoritative; a failing preview downgrades the decision (alpha → brightness by background luminance).
 - [Predefined table-style accent map is data to maintain] → fixed by the OOXML predefined list; unknown GUID → `accent1`.
 - [Takeaway names miss a template's wording] → vision purpose as second signal; the author can rename the shape; the takeaway stays in the notes.
 
 ## Migration Plan
 
-`ANALYSIS_VERSION` 13 in phase C only (automatic background re-analysis). No setting, no dependency. Migration note: impact none → patch; mention the cleared template `lastRow` (phase B). Existing bar charts keep their order.
+`ANALYSIS_VERSION` 17 in phase C only (automatic background re-analysis). No setting, no dependency. Migration note: impact none → patch; mention the cleared template `lastRow` (phase B). Existing bar charts keep their order.
 
 ## Owner decisions (2026-10-14)
 
@@ -135,9 +127,27 @@ The draft's recommendations were accepted on every open question:
 - **Q3** Trend: glyph only; template icons in a later change if a real template asks; never semantic colours.
 - **Q4** `stacked_as` stays separate from `show`: `show` decides pie/doughnut labels, `stacked_as` the stack's geometry (re-checked at `25727177d`: `show: share` applies to pie and doughnut only and builds no 100 % stack).
 - **Q5** Table highlight: bold + light tint of the table style's accent (needs the predefined GUID → accent map).
-- **Q6** Target: combo chart on column, stacked column, line and area, after a spike; deferred with evidence if the preview fails.
-- **Q7** One change, phases A–D on the same branch; the owner opens a single PR for the whole capability later (no PR per phase).
+- **Q6** ~~Target: combo chart on column, stacked column, line and area, after a spike; deferred with evidence if the preview fails.~~ Superseded 2026-10-16: phase D dropped.
+- **Q7** One change, phases A–C on the same branch (D dropped 2026-10-16); the owner opens a single PR for the whole capability later (no PR per phase).
 - **Q8** Category highlight on a multi-series chart: not rendered, noted (`intent_not_shown`).
+
+## Owner decisions (2026-10-16)
+
+- **Phases B and C go ahead** on `feat/ppt-builder-capability`, after the later changes on that branch (`ppt-builder-storytelling`, `ppt-builder-more-chart-types`, `ppt-builder-chart-slide-choice`, `ppt-builder-multi-chart-slides`).
+- **Phase D (chart target line) is dropped.** It would be a combo chart, which the owner refused for `ppt-builder-more-chart-types`: python-pptx has no direct support for it, and a target line mixes a second measure into a chart, against the storytelling one-measure-per-chart rule. D5, the `target` requirement and scenario, and tasks 7.x are removed or marked dropped.
+
+### Reconciled with the current code (2026-10-16, at `32d18627a`)
+
+- `ANALYSIS_VERSION` is 16 now: phase C bumps it to 17.
+- `stacked_as: percent` already covers `stacked_bar` (`ppt-builder-more-chart-types`); phases B and C do not touch charts.
+- One takeaway per slide (`ppt-builder-multi-chart-slides`): a slide of several charts has one takeaway zone at most; the boxes above its charts are chart headings, never takeaway zones.
+- `show_takeaways` is a top-level build argument like `skip_plan`, checked against every user message of the conversation (`Conversation.users`) through the storytelling lexicon match; a `changes` call that omits it keeps the delivered deck's value. The tool marks each slide with the honoured flag (a hidden slide field, as `story_notes`), so the assignment and the renderer read it without a new parameter.
+- `_fullest` (`ppt-builder-chart-slide-choice`) counts the takeaway zone as filled when the takeaway goes in it (D9).
+- A slide kind that carries no takeaway (storytelling's exempt kinds: cover, agenda, section, closing, quote) gets no takeaway zone: there is nothing to put in it.
+- A takeaway "fits" when it is not cut: shrinking within the template's minimum size is allowed, as for any text.
+- The body beside a chart: detection covers it when its shape or layout-placeholder name, or its vision purpose, names a takeaway or key message (the built-in "Fred Chart" `takeaway` placeholder is found by name). An unnamed body beside a chart that vision reads as "chart description" or "commentary" is not a takeaway zone: geometry is excluded (Q1), and such a body keeps being filled from `bullets`.
+- Table styles: the predefined-style accent map is the list LibreOffice ships for PowerPoint's 74 predefined styles (Accent 2's GUID checked against real templates). The two "No Style" styles have no total-row formatting (bold fallback). On Dark Style 1/2 and Themed Style 2 (light text over a dark or accent fill) the tint is skipped and bold alone shows the highlight. A highlighted column tints its body cells only: the header keeps its style. A row that became the table's header (a template table with a header row and a plan without one) cannot be highlighted: noted.
+- A trend glyph needs a written figure: an item with `trend` and no `number` (an auto-numbered `01` would read as a figure) is noted, not drawn.
 
 ## Open Questions
 

@@ -42,7 +42,7 @@
 ### 5. Analysis and labelling
 
 - [ ] 5.1 `lexicon.py`: `TAKEAWAY_NAMES`; `models.py`: `Zone.takeaway: bool = False`
-- [ ] 5.2 `analysis.py`: takeaway flag from the shape or layout-placeholder name, one per pattern; `ANALYSIS_VERSION` 13
+- [ ] 5.2 `analysis.py`: takeaway flag from the shape or layout-placeholder name, one per pattern; `ANALYSIS_VERSION` 16 → 17
 - [ ] 5.3 `labelling.py`: a vision purpose matching the names sets the flag; prompt slot example "key message"
 - [ ] 5.4 Regenerate `assets/fred_template.inventory.json` (`make builtin-inventory`): "Fred Chart" takeaway zone flagged
 - Verification: `test_builder_analysis.py` (named placeholder flagged, unnamed body not, two candidates → first only), `test_labelling.py` (purpose "key message" flags), `test_builtin_template.py` on the regenerated JSON
@@ -56,15 +56,9 @@ Needs `SlidePlan.takeaway` from `ppt-builder-storytelling` (field, checks, notes
 - [ ] 6.3 `tools.py` catalogue: `takeaway zone ≤N words` on patterns holding the zone
 - Verification: `test_takeaway.py` — default (no flag): built-in chart slide's card filled from the bullets as before and the takeaway in the notes only; flag + "affiche les messages clés" in a user message: a short takeaway in the card; flag without such a message: card as before plus the agent note; a takeaway longer than the card left in the notes only with bullets filling the card; bullets slide without a zone unchanged; edit of `takeaway` refills the card when the flag is honoured
 
-## Phase D — chart target (after a spike)
+## Phase D — chart target (dropped)
 
-### 7. Target line
-
-- [ ] 7.1 Spike: build a column + target combo by moving the series into a `c:lineChart`; open in python-pptx, render through LibreOffice, record whether PowerPoint opens it and "Edit Data" keeps the series (owner check); stop and defer with evidence if it fails
-- [ ] 7.2 `plan.py` `PlanTarget {value, label?}` accepting a bare number or `"15 M€"`; `PlanChart.target`
-- [ ] 7.3 `charts.py`: target series, combo move, dashed `tx1` 75 % style, end-of-line data label, legend entry deleted; not on `bar`/`pie`/`doughnut`/percent stacking → note (D5)
-- [ ] 7.4 `changes.py`: `chart.target`, `chart.target.value`, `chart.target.label`; `tools.py` schema line
-- Verification: `test_chart_target.py` — `c:lineChart` holding one series with the target values sharing the bar chart's `c:axId`s, workbook holds the column, data label text, no legend added on a single-series chart, note per unsupported type; preview evidence
+Dropped by the owner on 2026-10-16 (design D5, Owner decisions (2026-10-16)): a target line would be a combo chart, refused for the chart types change; no task left.
 
 ## Close-out (each phase, one PR for the whole capability)
 
