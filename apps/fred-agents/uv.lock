@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 
 [[package]]
@@ -1044,7 +1044,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -1188,7 +1188,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1263,7 +1263,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
