@@ -1013,10 +1013,39 @@ def _section_slide_ids(presentation) -> list[str]:
     ]
 
 
+_P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
+
+
+def _with_sections(content: bytes) -> bytes:
+    """The deck with one section naming all its slides, as PowerPoint saves it."""
+    deck = Presentation(io.BytesIO(content))
+    root = deck.part._element
+    ext_lst = root.find(qn("p:extLst"))
+    if ext_lst is None:
+        ext_lst = root.makeelement(qn("p:extLst"), {})
+        root.append(ext_lst)
+    ext = ext_lst.makeelement(
+        qn("p:ext"), {"uri": "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"}
+    )
+    ext_lst.insert(0, ext)
+    section = ext.makeelement(f"{{{_P14}}}sectionLst", {})
+    ext.append(section)
+    one = section.makeelement(f"{{{_P14}}}section", {"name": "All", "id": "{0}"})
+    section.append(one)
+    ids = one.makeelement(f"{{{_P14}}}sldIdLst", {})
+    one.append(ids)
+    for slide in deck.slides:
+        ids.append(ids.makeelement(f"{{{_P14}}}sldId", {"id": str(slide.slide_id)}))
+    out = io.BytesIO()
+    deck.save(out)
+    return out.getvalue()
+
+
 def test_rendered_and_patterns_decks_carry_no_stale_sections():
-    """The built-in template's sections name its own slides, which the render
-    removes: a section list naming vanished slides makes PowerPoint repair."""
+    """A template's sections name its own slides, which the render removes: a
+    section list naming vanished slides makes PowerPoint repair."""
     content, inventory = builtin.builtin_template()
+    content = _with_sections(content)
     assert _section_slide_ids(Presentation(io.BytesIO(content)))
     cover = next(p for p in inventory.patterns if p.kind == "cover")
     _, deck = _render(_on(cover, title="Titre"), template=content, inventory=inventory)

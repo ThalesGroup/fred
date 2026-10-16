@@ -18,7 +18,7 @@ and colour, never a colour that claims good or bad news."""
 from __future__ import annotations
 
 import io
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 from builder_decks import build_slides
@@ -61,9 +61,18 @@ def _figures(result: RenderResult) -> List[List[Tuple[str, Optional[str]]]]:
             for paragraph in shape.text_frame.paragraphs
             for run in paragraph.runs
         ]
-        for shape in cast(Any, slide.shapes)
-        if shape.name.endswith("_value")
+        for shape in _values(slide)
     ]
+
+
+def _values(slide: Any) -> List[Any]:
+    """The slide's figure placeholders: their layout names them `*_value`."""
+    named = {
+        ph.placeholder_format.idx
+        for ph in slide.slide_layout.placeholders
+        if ph.name.endswith("_value")
+    }
+    return [s for s in slide.placeholders if s.placeholder_format.idx in named]
 
 
 def _notes(result: RenderResult) -> List[Tuple[str, Optional[str]]]:
@@ -107,7 +116,7 @@ def test_each_figure_leads_with_its_arrow_in_a_smaller_run(builtin):
         assert glyph is not None and figure is not None
         assert int(glyph) == int(int(figure) * 0.6)
     slide = Presentation(io.BytesIO(result.pptx)).slides[1]
-    xml = "".join(s._element.xml for s in slide.shapes if s.name.endswith("_value"))
+    xml = "".join(s._element.xml for s in _values(slide))
     assert "srgbClr" not in xml and "schemeClr" not in xml
     assert _notes(result) == []
 

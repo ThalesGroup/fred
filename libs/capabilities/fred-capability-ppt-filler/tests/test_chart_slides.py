@@ -106,12 +106,14 @@ def test_builtin_chart_slides_are_chart_patterns(builtin):
     charts = [p for p in inventory.patterns if p.kind == "chart"]
     assert [(p.name, p.included, p.source) for p in charts] == [
         ("Fred Chart", True, "slide"),
-        ("Fred Chart Wide", True, "slide"),
+        ("Fred Chart Full", True, "slide"),
+        ("Fred Two Charts", True, "slide"),
+        ("Fred Chart and Figures", True, "slide"),
     ]
-    takeaway, wide = charts
+    takeaway, wide = charts[:2]
     zone = next(z for z in takeaway.zones if z.role == "chart")
     assert (zone.key, zone.chart_type, zone.max_lines) == ("ph:101", "column", 12)
-    assert [z.role for z in wide.zones] == ["title", "chart"]
+    assert [z.role for z in wide.zones] == ["title", "chart", "body"]
     assert next(z for z in wide.zones if z.role == "chart").box.w == 910
     assert kind_fits_slots("chart", takeaway)
     assert not kind_fits_slots("bullets", takeaway)
@@ -145,11 +147,11 @@ def test_only_a_large_content_placeholder_can_hold_a_chart(builtin):
     content = next(p for p in inventory.patterns if p.name == "Title and Content")
     assert [z.chart_capable for z in content.zones] == [False, True]
     assert not kind_fits_slots("chart", content)
-    # The built-in deck types its text bodies as such: only its table layout's
-    # content placeholder could host a chart.
+    # The built-in deck types its placeholders (text, chart, table): none is a
+    # content placeholder that could host a chart.
     _, fred = builtin
     capable = [p.name for p in fred.patterns if any(z.chart_capable for z in p.zones)]
-    assert capable == ["Fred Table"]
+    assert capable == []
 
 
 # --- the plan -----------------------------------------------------------------------
@@ -308,20 +310,22 @@ def test_a_takeaway_goes_beside_the_chart_and_a_bare_chart_spans_the_slide(built
     labels = [p.label for p in assignment.patterns if p is not None]
     assert labels[1:] == [
         "Charts stay native and editable",
-        "One chart across the slide",
+        "Generated decks per month grew steadily",
     ]
 
 
 def _three_chart_slides(inventory: TemplateInventory) -> TemplateInventory:
     """A centred chart and two chart slides with a text box beside it, as a
     customer template draws them."""
-    takeaway, wide = [p for p in inventory.patterns if p.kind == "chart"]
+    takeaway, wide = [p for p in inventory.patterns if p.kind == "chart"][:2]
     others = [p for p in inventory.patterns if p.kind != "chart"]
     side = [
         takeaway.model_copy(update={"id": f"slide:{n}", "label": label})
         for n, label in ((901, "Left"), (902, "Right"))
     ]
-    centred = wide.model_copy(update={"label": "Centred"})
+    # The built-in full chart slide has a caption: drop it for a bare centred chart.
+    bare = [z for z in wide.zones if z.role != "body"]
+    centred = wide.model_copy(update={"label": "Centred", "zones": bare})
     return inventory.model_copy(update={"patterns": [*others, centred, *side]})
 
 
@@ -417,14 +421,15 @@ def test_a_template_without_any_chart_place_asks_for_another_form(builtin):
     inventory = _chartless(builtin[1])
     found = _problem(_assigned(inventory, _chart_slide(REVENUE)))
     assert found["problem"] == "chart: this template has no slide for a chart"
-    assert "give the 4 values as items of a 'figures' slide" not in " ".join(
-        found["options"]
-    )  # the built-in figures slide holds 3
+    # The built-in figures slides hold 4 at most.
+    assert any(
+        "give the 4 values as items of a 'figures' slide" in o for o in found["options"]
+    )
     assert found["options"][-1] == "keep the key numbers as bullets"
-    small = {**REVENUE, "categories": ["Q1", "Q2", "Q3"]}
-    small["series"] = [{"name": "Revenue", "values": [1, 2, 3]}]
-    found = _problem(_assigned(inventory, _chart_slide(small)))
-    assert any("as items of a 'figures' slide" in o for o in found["options"])
+    five = {**REVENUE, "categories": ["Q1", "Q2", "Q3", "Q4", "Q5"]}
+    five["series"] = [{"name": "Revenue", "values": [1, 2, 3, 4, 5]}]
+    found = _problem(_assigned(inventory, _chart_slide(five)))
+    assert not any("as items of a 'figures' slide" in o for o in found["options"])
 
 
 def test_a_chart_slide_needs_a_chart(builtin):
@@ -469,8 +474,10 @@ def test_each_type_builds_a_native_chart(builtin, kind, xl_type):
 
 def test_colours_and_fonts_come_from_the_theme(builtin):
     template, inventory = builtin
+    # No built-in example chart is an area chart: a fresh chart is drawn.
     three = {
         **REVENUE,
+        "type": "area",
         "series": [{"name": f"S{n}", "values": [1, 2, 3, 4]} for n in range(3)],
     }
     result = _render(template, inventory, _chart_slide(three))
@@ -672,9 +679,9 @@ def test_a_type_fallback_and_design_keys_are_told(builtin):
 
 # --- the template's own example chart (D11) ---------------------------------------------
 
-# The "Fred Chart" example slide's column chart: one series in a literal colour,
-# with its own value labels.
-DESIGNER_FILL = '<a:srgbClr val="4851C3"/>'
+# The "Fred Chart" example slide's column chart: one series in the style's
+# colour, the designer's literal gridline colour and plot-wide value labels.
+DESIGNER_GRID = '<a:srgbClr val="E3E5EF"/>'
 
 
 def _parts(result: RenderResult) -> List[str]:
@@ -695,9 +702,11 @@ def test_the_example_chart_keeps_its_design_and_takes_the_plans_data(builtin):
     assert list(built.plots[0].categories) == ["Q1", "Q2", "Q3", "Q4"]
     assert list(built.plots[0].series[0].values) == [1.5, 2, 3, 4]
     xml = built._chartSpace.xml
-    assert DESIGNER_FILL in xml and "schemeClr" not in xml.split("<c:ser>")[1]
-    # Its own series labels stay, in the plan's unit.
-    labels = built.plots[0]._element.find(f"{qn('c:ser')}/{qn('c:dLbls')}")
+    assert (
+        DESIGNER_GRID in xml and "Clr val=" not in built.plots[0].series[0]._element.xml
+    )
+    # Its own value labels stay, in the plan's unit.
+    labels = built.plots[0]._element.find(qn("c:dLbls"))
     assert labels.find(qn("c:numFmt")).get("formatCode") == '#,##0.0" M€"'
     assert not built.has_legend and not built.has_title
     assert built.value_axis.tick_labels.number_format == '#,##0.0" M€"'
@@ -754,7 +763,7 @@ def test_series_beyond_the_examples_take_theme_accents(builtin):
     }
     built = _chart(_render(template, inventory, _chart_slide(two, bullets=["Up"])))
     first, second = [s._element.xml for s in built.plots[0].series]
-    assert DESIGNER_FILL in first and '<a:schemeClr val="accent2"/>' in second
+    assert "Clr val=" not in first and '<a:schemeClr val="accent2"/>' in second
     # Several series: a legend, and no value labels.
     assert built.has_legend and "<c:dLbls>" not in built._chartSpace.xml
 
@@ -767,7 +776,7 @@ def test_an_intent_on_the_example_chart_keeps_the_designers_colour(builtin):
     assert list(built.plots[0].categories) == ["Q4", "Q3", "Q2", "Q1"]
     ser = built.plots[0]._element.find(qn("c:ser"))
     muted = [d.find(qn("c:idx")).get("val") for d in ser.findall(qn("c:dPt"))]
-    assert muted == ["0", "2", "3"] and DESIGNER_FILL in built._chartSpace.xml
+    assert muted == ["0", "2", "3"] and DESIGNER_GRID in built._chartSpace.xml
     (label,) = ser.findall(f"{qn('c:dLbls')}/{qn('c:dLbl')}")
     assert label.find(qn("c:idx")).get("val") == "1"
     assert [n.code for n in result.report.built[1].notes if n.field] == []
@@ -798,11 +807,12 @@ def _with_chart_style(template: bytes) -> bytes:
 
 def test_a_chart_style_part_is_copied_with_its_chart(builtin):
     template, inventory = builtin
+    # Variety puts the second on the full chart slide, whose example is a line.
     result = _render(
         _with_chart_style(template),
         inventory,
         _chart_slide(REVENUE, bullets=["Up"]),
-        _chart_slide(REVENUE, bullets=["Up"]),
+        _chart_slide({**REVENUE, "type": "line"}, bullets=["Up"]),
     )
     styles = {
         rel.target_part.partname

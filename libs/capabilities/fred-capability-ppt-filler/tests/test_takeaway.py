@@ -68,7 +68,17 @@ async def _built(monkeypatch, slides, user: str, workspace=None, **kwargs: Any):
 
 
 def _card(slide: Any) -> List[str]:
-    return [s.text_frame.text for s in slide.shapes if s.name == "takeaway"]
+    """The text of the slide's placeholder its layout names `takeaway`."""
+    named = {
+        ph.placeholder_format.idx
+        for ph in slide.slide_layout.placeholders
+        if ph.name == "takeaway"
+    }
+    return [
+        s.text_frame.text
+        for s in slide.placeholders
+        if s.placeholder_format.idx in named
+    ]
 
 
 # --- analysis and labelling ------------------------------------------------------------
@@ -93,8 +103,8 @@ def _pattern(kind: Any, *zones: Zone) -> Pattern:
 def test_the_builtin_chart_slide_s_card_is_its_takeaway_zone():
     _, inventory = builtin_template()
     flagged = [(p.id, z.key) for p in inventory.patterns for z in p.zones if z.takeaway]
-    assert flagged == [("slide:265", "ph:103")]
-    summary = zone_summary(inventory.pattern("slide:265") or _pattern("chart"))
+    assert flagged == [("slide:284", "ph:103"), ("slide:293", "ph:111")]
+    summary = zone_summary(inventory.pattern("slide:284") or _pattern("chart"))
     assert "takeaway zone ≤" in summary and "bullets" in summary
 
 
@@ -195,10 +205,17 @@ async def test_the_flag_without_the_user_s_request_is_ignored_and_told(monkeypat
 
 @pytest.mark.asyncio
 async def test_on_request_bullets_no_longer_fall_into_the_card(monkeypatch):
-    text, _, _ = await _built(
+    text, _, workspace = await _built(
         monkeypatch, [COVER, WITH_BULLET], ASK, show_takeaways=True
     )
-    assert "needs_revision" in text and "bullets" in text
+    # The built-in full chart slide holds the bullet in its caption; no chart
+    # slide shows both, so the takeaway stays in the notes and that is told.
+    assert text.startswith("Delivered"), text
+    slide = deck(workspace).slides[1]
+    assert _card(slide) == []
+    assert "Q3 porté par l'export" in texts(slide)
+    assert notes(slide).split("\n")[0] == TAKEAWAY
+    assert "has no key-message zone, so the takeaway stays" in text
 
 
 @pytest.mark.asyncio

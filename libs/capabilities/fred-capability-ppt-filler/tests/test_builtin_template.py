@@ -59,22 +59,45 @@ def test_builtin_deck_reads_its_example_slides():
     assert not by_name["Fred Comparison"].groups
 
 
+def test_builtin_deck_offers_every_common_kind():
+    """Its kicker lines left out, the deck offers the kinds a deck needs."""
+    _, inventory = builtin.builtin_template()
+    offered = {p.kind for p in inventory.patterns if p.included and p.reusable}
+    assert {
+        "cover",
+        "agenda",
+        "section",
+        "bullets",
+        "two_columns",
+        "comparison",
+        "cards",
+        "quote",
+        "image_text",
+        "timeline",
+        "table",
+        "chart",
+        "figures",
+        "closing",
+    } <= offered
+    charts = [p for p in inventory.patterns if p.kind == "chart"]
+    assert max(sum(z.role == "chart" for z in p.zones) for p in charts) == 2
+
+
 def test_builtin_deck_offers_a_data_table_slide():
     """The "Fred Table" example slide is a header-row data table to fill."""
     _, inventory = builtin.builtin_template()
-    pattern = next(p for p in inventory.patterns if p.id == "slide:266")
+    pattern = next(p for p in inventory.patterns if p.id == "slide:288")
     assert (pattern.kind, pattern.included) == ("table", True)
     assert not any(p.exclusion_reason == "table" for p in inventory.patterns)
     zone = next(z for z in pattern.zones if z.role == "table")
     assert zone.table is not None and zone.table.header
-    assert len(zone.table.columns) == 5
-    # The first column holds the criterion: the widest one.
-    assert zone.table.columns[0] > max(zone.table.columns[1:])
+    assert len(zone.table.columns) == 3
     schema = _args_schema(inventory).model_json_schema()
     assert "table" in schema["$defs"]["BuildSlide"]["properties"]
-    rooms = "/".join(str(c) for c in zone.table.columns)
+    # Equal columns are quoted once.
+    rooms = "/".join(str(c) for c in dict.fromkeys(zone.table.columns))
     assert (
-        f"table 2 to 5 columns (≈{rooms} chars per cell line), "
+        f"table 2 to 3 columns (≈{rooms} chars per cell line), "
         f"header + ≈{zone.max_lines} lines of rows"
     ) in _description(inventory, "template_slide", 2)
 

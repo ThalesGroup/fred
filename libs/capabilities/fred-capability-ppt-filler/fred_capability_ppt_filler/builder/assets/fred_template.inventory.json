@@ -1,5 +1,5 @@
 {
- "template_sha256": "c64f30247f07d08c61622b571ca7f440ef2935c7efc58341133bec2f8b6c9ca3",
+ "template_sha256": "fbb1498b873eb0066bdd711ac551a491156b54ae52ff343d8641a2e2941578cd",
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
@@ -18,14 +18,14 @@
       "role": "title",
       "box": {
        "x": 45,
-       "y": 267,
-       "w": 615,
-       "h": 267
+       "y": 277,
+       "w": 548,
+       "h": 287
       },
       "sample": "Fred default presentation template",
       "font_pt": 44.0,
-      "chars_per_line": 26,
-      "max_lines": 2,
+      "chars_per_line": 22,
+      "max_lines": 3,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -36,16 +36,16 @@
      },
      {
       "key": "ph:104",
-      "role": "subtitle",
+      "role": "body",
       "box": {
        "x": 45,
-       "y": 560,
-       "w": 615,
-       "h": 133
+       "y": 587,
+       "w": 525,
+       "h": 127
       },
-      "sample": "The fallback design the slide-generator agent uses when no custom template is pr",
+      "sample": "The design the slide-generator agent uses when no custom template is provided",
       "font_pt": 20.0,
-      "chars_per_line": 59,
+      "chars_per_line": 51,
       "max_lines": 2,
       "grows": false,
       "purpose": null,
@@ -61,12 +61,191 @@
       "box": {
        "x": 45,
        "y": 840,
-       "w": 615,
-       "h": 67
+       "w": 525,
+       "h": 53
       },
       "sample": "Fred open source project · Apache-2.0",
       "font_pt": 14.0,
-      "chars_per_line": 86,
+      "chars_per_line": 76,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:259",
+    "source": "slide",
+    "source_index": 4,
+    "name": "Fred Title Image",
+    "label": "Knowledge assistants for every team",
+    "kind": "image_text",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 277,
+       "w": 405,
+       "h": 287
+      },
+      "sample": "Knowledge assistants for every team",
+      "font_pt": 40.0,
+      "chars_per_line": 18,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 587,
+       "w": 398,
+       "h": 147
+      },
+      "sample": "How Fred agents turned 4,800 documents into answers",
+      "font_pt": 18.0,
+      "chars_per_line": 42,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 840,
+       "w": 398,
+       "h": 53
+      },
+      "sample": "Product team · October 2026",
+      "font_pt": 14.0,
+      "chars_per_line": 57,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:106",
+      "role": "image",
+      "box": {
+       "x": 525,
+       "y": 80,
+       "w": 430,
+       "h": 840
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:260",
+    "source": "slide",
+    "source_index": 5,
+    "name": "Fred Title Light",
+    "label": "Designing agent workflows that people trust",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 277,
+       "w": 548,
+       "h": 287
+      },
+      "sample": "Designing agent workflows that people trust",
+      "font_pt": 44.0,
+      "chars_per_line": 22,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 587,
+       "w": 525,
+       "h": 127
+      },
+      "sample": "A light opening for document-style and printed decks",
+      "font_pt": 20.0,
+      "chars_per_line": 51,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 840,
+       "w": 525,
+       "h": 53
+      },
+      "sample": "UX guild · Paris · 2026",
+      "font_pt": 14.0,
+      "chars_per_line": 76,
       "max_lines": 1,
       "grows": false,
       "purpose": null,
@@ -97,13 +276,13 @@
       "role": "title",
       "box": {
        "x": 45,
-       "y": 80,
+       "y": 127,
        "w": 262,
-       "h": 200
+       "h": 213
       },
       "sample": "Agenda",
       "font_pt": 36.0,
-      "chars_per_line": 11,
+      "chars_per_line": 12,
       "max_lines": 2,
       "grows": false,
       "purpose": null,
@@ -118,230 +297,14 @@
       "role": "body",
       "box": {
        "x": 398,
-       "y": 120,
-       "w": 555,
-       "h": 760
+       "y": 127,
+       "w": 557,
+       "h": 747
       },
-      "sample": "Why a default template\nThe 15 layouts at a glance\nHow the agent fills them\nUsing",
+      "sample": "Design principles\nOpenings and sections\nText and comparison layouts\nVisual layou",
       "font_pt": 20.0,
-      "chars_per_line": 51,
+      "chars_per_line": 53,
       "max_lines": 9,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     }
-    ],
-    "groups": [],
-    "included": true,
-    "exclusion_reason": null,
-    "reusable": true,
-    "labelled_by": "heuristic",
-    "warnings": []
-   },
-   {
-    "id": "slide:258",
-    "source": "slide",
-    "source_index": 3,
-    "name": "Fred Section",
-    "label": "Layouts at a glance",
-    "kind": "section",
-    "zones": [
-     {
-      "key": "ph:103",
-      "role": "body",
-      "box": {
-       "x": 45,
-       "y": 213,
-       "w": 225,
-       "h": 133
-      },
-      "sample": "01",
-      "font_pt": 54.0,
-      "chars_per_line": 7,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:104",
-      "role": "title",
-      "box": {
-       "x": 45,
-       "y": 373,
-       "w": 615,
-       "h": 213
-      },
-      "sample": "Layouts at a glance",
-      "font_pt": 40.0,
-      "chars_per_line": 28,
-      "max_lines": 2,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:105",
-      "role": "subtitle",
-      "box": {
-       "x": 45,
-       "y": 600,
-       "w": 615,
-       "h": 133
-      },
-      "sample": "Every slide frame is a named layout with named placeholders",
-      "font_pt": 18.0,
-      "chars_per_line": 66,
-      "max_lines": 2,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     }
-    ],
-    "groups": [],
-    "included": true,
-    "exclusion_reason": null,
-    "reusable": true,
-    "labelled_by": "heuristic",
-    "warnings": []
-   },
-   {
-    "id": "slide:259",
-    "source": "slide",
-    "source_index": 4,
-    "name": "Fred Title and Content",
-    "label": "Why a default template",
-    "kind": "bullets",
-    "zones": [
-     {
-      "key": "ph:100",
-      "role": "title",
-      "box": {
-       "x": 45,
-       "y": 60,
-       "w": 910,
-       "h": 127
-      },
-      "sample": "Why a default template",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:101",
-      "role": "body",
-      "box": {
-       "x": 45,
-       "y": 220,
-       "w": 910,
-       "h": 660
-      },
-      "sample": "Users without a corporate template still get a consistent, readable deck\nNamed l",
-      "font_pt": 18.0,
-      "chars_per_line": 98,
-      "max_lines": 10,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     }
-    ],
-    "groups": [],
-    "included": true,
-    "exclusion_reason": null,
-    "reusable": true,
-    "labelled_by": "heuristic",
-    "warnings": []
-   },
-   {
-    "id": "slide:260",
-    "source": "slide",
-    "source_index": 5,
-    "name": "Fred Two Content",
-    "label": "What the agent controls, and what it does not",
-    "kind": "two_columns",
-    "zones": [
-     {
-      "key": "ph:100",
-      "role": "title",
-      "box": {
-       "x": 45,
-       "y": 60,
-       "w": 910,
-       "h": 127
-      },
-      "sample": "What the agent controls, and what it does not",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:101",
-      "role": "body",
-      "box": {
-       "x": 45,
-       "y": 220,
-       "w": 440,
-       "h": 660
-      },
-      "sample": "Which layout each slide uses\nText in every placeholder\nCharts, tables and images",
-      "font_pt": 16.0,
-      "chars_per_line": 50,
-      "max_lines": 11,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:102",
-      "role": "body",
-      "box": {
-       "x": 515,
-       "y": 220,
-       "w": 440,
-       "h": 660
-      },
-      "sample": "Colours, fonts and sizes\nPositions and margins\nSlide numbers and backgrounds",
-      "font_pt": 16.0,
-      "chars_per_line": 50,
-      "max_lines": 11,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -362,43 +325,22 @@
     "id": "slide:261",
     "source": "slide",
     "source_index": 6,
-    "name": "Fred Comparison",
-    "label": "Default template or custom template",
-    "kind": "comparison",
+    "name": "Fred Section",
+    "label": "Openings and sections",
+    "kind": "section",
     "zones": [
      {
-      "key": "ph:100",
-      "role": "title",
+      "key": "ph:103",
+      "role": "body",
       "box": {
        "x": 45,
-       "y": 60,
-       "w": 910,
-       "h": 127
+       "y": 127,
+       "w": 300,
+       "h": 200
       },
-      "sample": "Default template or custom template",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:103",
-      "role": "heading",
-      "box": {
-       "x": 71,
-       "y": 260,
-       "w": 387,
-       "h": 80
-      },
-      "sample": "Default",
-      "font_pt": 22.0,
-      "chars_per_line": 34,
+      "sample": "01",
+      "font_pt": 88.0,
+      "chars_per_line": 6,
       "max_lines": 1,
       "grows": false,
       "purpose": null,
@@ -410,17 +352,17 @@
      },
      {
       "key": "ph:104",
-      "role": "body",
+      "role": "title",
       "box": {
-       "x": 71,
-       "y": 360,
-       "w": 387,
-       "h": 480
+       "x": 45,
+       "y": 380,
+       "w": 570,
+       "h": 227
       },
-      "sample": "Used when the user uploads nothing\nKnown layouts, predictable output\nShips with ",
-      "font_pt": 16.0,
-      "chars_per_line": 44,
-      "max_lines": 8,
+      "sample": "Openings and sections",
+      "font_pt": 40.0,
+      "chars_per_line": 27,
+      "max_lines": 2,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -431,38 +373,17 @@
      },
      {
       "key": "ph:105",
-      "role": "heading",
-      "box": {
-       "x": 541,
-       "y": 260,
-       "w": 387,
-       "h": 80
-      },
-      "sample": "Custom",
-      "font_pt": 22.0,
-      "chars_per_line": 34,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:106",
       "role": "body",
       "box": {
-       "x": 541,
-       "y": 360,
-       "w": 387,
-       "h": 480
+       "x": 45,
+       "y": 620,
+       "w": 540,
+       "h": 133
       },
-      "sample": "Uploaded by the user or the team\nLayouts discovered at upload time\nBrand stays u",
-      "font_pt": 16.0,
-      "chars_per_line": 44,
-      "max_lines": 8,
+      "sample": "Navy for structure, with the tile grid as the signature",
+      "font_pt": 18.0,
+      "chars_per_line": 58,
+      "max_lines": 3,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -483,23 +404,281 @@
     "id": "slide:262",
     "source": "slide",
     "source_index": 7,
-    "name": "Fred Content with Image",
-    "label": "Pairing text with a visual",
-    "kind": "image_text",
+    "name": "Fred Section Accent",
+    "label": "Text and comparison",
+    "kind": "section",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 127,
+       "w": 300,
+       "h": 200
+      },
+      "sample": "02",
+      "font_pt": 88.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 380,
+       "w": 570,
+       "h": 227
+      },
+      "sample": "Text and comparison",
+      "font_pt": 40.0,
+      "chars_per_line": 27,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 620,
+       "w": 540,
+       "h": 133
+      },
+      "sample": "Indigo dividers break the rhythm in long decks",
+      "font_pt": 18.0,
+      "chars_per_line": 58,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:289",
+    "source": "slide",
+    "source_index": 34,
+    "name": "Fred Section Light",
+    "label": "Process, people and code",
+    "kind": "section",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 127,
+       "w": 300,
+       "h": 200
+      },
+      "sample": "04",
+      "font_pt": 88.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 380,
+       "w": 570,
+       "h": 227
+      },
+      "sample": "Process, people and code",
+      "font_pt": 40.0,
+      "chars_per_line": 27,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 620,
+       "w": 540,
+       "h": 133
+      },
+      "sample": "Sequences, roadmaps, matrices, teams and snippets",
+      "font_pt": 18.0,
+      "chars_per_line": 58,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:274",
+    "source": "slide",
+    "source_index": 19,
+    "name": "Fred Section Image",
+    "label": "Visual layouts",
+    "kind": "section",
+    "zones": [
+     {
+      "key": "ph:106",
+      "role": "image",
+      "box": {
+       "x": 0,
+       "y": 0,
+       "w": 465,
+       "h": 1000
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 518,
+       "y": 127,
+       "w": 300,
+       "h": 200
+      },
+      "sample": "03",
+      "font_pt": 88.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "title",
+      "box": {
+       "x": 518,
+       "y": 380,
+       "w": 437,
+       "h": 227
+      },
+      "sample": "Visual layouts",
+      "font_pt": 36.0,
+      "chars_per_line": 21,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 518,
+       "y": 620,
+       "w": 437,
+       "h": 160
+      },
+      "sample": "Images, screenshots and galleries, always cropped to fit",
+      "font_pt": 18.0,
+      "chars_per_line": 46,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:263",
+    "source": "slide",
+    "source_index": 8,
+    "name": "Fred Title and Content",
+    "label": "Why a default template matters",
+    "kind": "bullets",
     "zones": [
      {
       "key": "ph:100",
       "role": "title",
       "box": {
        "x": 45,
-       "y": 60,
-       "w": 465,
+       "y": 99,
+       "w": 910,
        "h": 127
       },
-      "sample": "Pairing text with a visual",
-      "font_pt": 32.0,
-      "chars_per_line": 28,
-      "max_lines": 1,
+      "sample": "Why a default template matters",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -513,14 +692,1380 @@
       "role": "body",
       "box": {
        "x": 45,
-       "y": 220,
-       "w": 465,
-       "h": 660
+       "y": 247,
+       "w": 910,
+       "h": 633
+      },
+      "sample": "Users without a corporate template still get a consistent, readable deck\nNamed l",
+      "font_pt": 18.0,
+      "chars_per_line": 99,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:264",
+    "source": "slide",
+    "source_index": 9,
+    "name": "Fred Two Content",
+    "label": "What the agent controls, and what it does not",
+    "kind": "two_columns",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "What the agent controls, and what it does not",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 440,
+       "h": 633
+      },
+      "sample": "Which layout each slide uses\nText in every placeholder\nCharts, tables and images",
+      "font_pt": 16.0,
+      "chars_per_line": 52,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 515,
+       "y": 247,
+       "w": 440,
+       "h": 633
+      },
+      "sample": "Colours, fonts and sizes\nPositions and margins\nSlide numbers and backgrounds\nDec",
+      "font_pt": 16.0,
+      "chars_per_line": 52,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:265",
+    "source": "slide",
+    "source_index": 10,
+    "name": "Fred Three Columns",
+    "label": "Three rules behind every layout",
+    "kind": "cards",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Three rules behind every layout",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 440,
+       "w": 278,
+       "h": 440
+      },
+      "sample": "Each layout answers one communication need: compare, prove, explain, show. The a",
+      "font_pt": 16.0,
+      "chars_per_line": 32,
+      "max_lines": 7,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 361,
+       "y": 440,
+       "w": 278,
+       "h": 440
+      },
+      "sample": "No hard-coded colour. Decorations and placeholders use scheme colours, so a new ",
+      "font_pt": 16.0,
+      "chars_per_line": 32,
+      "max_lines": 7,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:106",
+      "role": "body",
+      "box": {
+       "x": 677,
+       "y": 440,
+       "w": 278,
+       "h": 440
+      },
+      "sample": "Empty placeholders disappear, generous boxes absorb long text, and every image i",
+      "font_pt": 16.0,
+      "chars_per_line": 32,
+      "max_lines": 7,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:101",
+      "count": 3,
+      "item_zones": [
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:101",
+         "role": "body",
+         "box": {
+          "x": 45,
+          "y": 353,
+          "w": 278,
+          "h": 80
+         },
+         "sample": "Intent first",
+         "font_pt": 20.0,
+         "chars_per_line": 27,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:103",
+         "role": "body",
+         "box": {
+          "x": 361,
+          "y": 353,
+          "w": 278,
+          "h": 80
+         },
+         "sample": "Theme driven",
+         "font_pt": 20.0,
+         "chars_per_line": 27,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "body",
+         "box": {
+          "x": 677,
+          "y": 353,
+          "w": 278,
+          "h": 80
+         },
+         "sample": "Fail-safe",
+         "font_pt": 20.0,
+         "chars_per_line": 27,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:101",
+       "ph:103",
+       "ph:105"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:266",
+    "source": "slide",
+    "source_index": 11,
+    "name": "Fred Comparison",
+    "label": "Default template or custom template",
+    "kind": "comparison",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Default template or custom template",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:103",
+      "role": "heading",
+      "box": {
+       "x": 75,
+       "y": 293,
+       "w": 380,
+       "h": 73
+      },
+      "sample": "Default",
+      "font_pt": 22.0,
+      "chars_per_line": 34,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 75,
+       "y": 387,
+       "w": 380,
+       "h": 447
+      },
+      "sample": "Used when the user uploads nothing\nKnown layouts, predictable output\nShips with ",
+      "font_pt": 16.0,
+      "chars_per_line": 45,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "heading",
+      "box": {
+       "x": 545,
+       "y": 293,
+       "w": 380,
+       "h": 73
+      },
+      "sample": "Custom",
+      "font_pt": 22.0,
+      "chars_per_line": 34,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:106",
+      "role": "body",
+      "box": {
+       "x": 545,
+       "y": 387,
+       "w": 380,
+       "h": 447
+      },
+      "sample": "Uploaded by the user or the team\nLayouts discovered at upload time\nBrand stays u",
+      "font_pt": 16.0,
+      "chars_per_line": 45,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:267",
+    "source": "slide",
+    "source_index": 12,
+    "name": "Fred Before After",
+    "label": "From hand-made slides to generated decks",
+    "kind": "comparison",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "From hand-made slides to generated decks",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:103",
+      "role": "heading",
+      "box": {
+       "x": 75,
+       "y": 293,
+       "w": 368,
+       "h": 73
+      },
+      "sample": "Before",
+      "font_pt": 22.0,
+      "chars_per_line": 33,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 75,
+       "y": 387,
+       "w": 368,
+       "h": 447
+      },
+      "sample": "Hours spent aligning boxes\nEvery deck looks different\nCharts pasted as pictures",
+      "font_pt": 16.0,
+      "chars_per_line": 44,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "heading",
+      "box": {
+       "x": 555,
+       "y": 293,
+       "w": 370,
+       "h": 73
+      },
+      "sample": "After",
+      "font_pt": 22.0,
+      "chars_per_line": 33,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:106",
+      "role": "body",
+      "box": {
+       "x": 555,
+       "y": 387,
+       "w": 370,
+       "h": 447
+      },
+      "sample": "A first draft in minutes\nOne coherent visual language\nNative, editable charts an",
+      "font_pt": 16.0,
+      "chars_per_line": 44,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:268",
+    "source": "slide",
+    "source_index": 13,
+    "name": "Fred Four Cards",
+    "label": "What a Fred agent brings to a team",
+    "kind": "cards",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "What a Fred agent brings to a team",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:101",
+      "count": 4,
+      "item_zones": [
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:101",
+         "role": "heading",
+         "box": {
+          "x": 105,
+          "y": 287,
+          "w": 357,
+          "h": 60
+         },
+         "sample": "Search your documents",
+         "font_pt": 18.0,
+         "chars_per_line": 39,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:102",
+         "role": "body",
+         "box": {
+          "x": 105,
+          "y": 360,
+          "w": 357,
+          "h": 150
+         },
+         "sample": "Answers grounded in your own libraries, with sources quoted.",
+         "font_pt": 14.0,
+         "chars_per_line": 49,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:103",
+         "role": "heading",
+         "box": {
+          "x": 571,
+          "y": 287,
+          "w": 357,
+          "h": 60
+         },
+         "sample": "Automate reports",
+         "font_pt": 18.0,
+         "chars_per_line": 39,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:104",
+         "role": "body",
+         "box": {
+          "x": 571,
+          "y": 360,
+          "w": 357,
+          "h": 150
+         },
+         "sample": "Recurring syntheses written and formatted without manual work.",
+         "font_pt": 14.0,
+         "chars_per_line": 49,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "heading",
+         "box": {
+          "x": 105,
+          "y": 623,
+          "w": 357,
+          "h": 60
+         },
+         "sample": "Compare versions",
+         "font_pt": 18.0,
+         "chars_per_line": 39,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 105,
+          "y": 697,
+          "w": 357,
+          "h": 150
+         },
+         "sample": "Changes between two contracts or specs, highlighted clause by clause.",
+         "font_pt": 14.0,
+         "chars_per_line": 49,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:107",
+         "role": "heading",
+         "box": {
+          "x": 571,
+          "y": 623,
+          "w": 357,
+          "h": 60
+         },
+         "sample": "Generate decks",
+         "font_pt": 18.0,
+         "chars_per_line": 39,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:108",
+         "role": "body",
+         "box": {
+          "x": 571,
+          "y": 697,
+          "w": 357,
+          "h": 150
+         },
+         "sample": "Presentations built on this template, ready to edit in PowerPoint.",
+         "font_pt": 14.0,
+         "chars_per_line": 49,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:101",
+       "ph:103",
+       "ph:105",
+       "ph:107"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:269",
+    "source": "slide",
+    "source_index": 14,
+    "name": "Fred Six Cards",
+    "label": "Six building blocks, one platform",
+    "kind": "cards",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Six building blocks, one platform",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:101",
+      "count": 6,
+      "item_zones": [
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:101",
+         "role": "heading",
+         "box": {
+          "x": 68,
+          "y": 347,
+          "w": 243,
+          "h": 56
+         },
+         "sample": "Agents",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:102",
+         "role": "body",
+         "box": {
+          "x": 68,
+          "y": 407,
+          "w": 243,
+          "h": 117
+         },
+         "sample": "Specialised assistants with their own tools.",
+         "font_pt": 14.0,
+         "chars_per_line": 33,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:103",
+         "role": "heading",
+         "box": {
+          "x": 378,
+          "y": 347,
+          "w": 243,
+          "h": 56
+         },
+         "sample": "Knowledge",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:104",
+         "role": "body",
+         "box": {
+          "x": 378,
+          "y": 407,
+          "w": 243,
+          "h": 117
+         },
+         "sample": "Libraries indexed for retrieval.",
+         "font_pt": 14.0,
+         "chars_per_line": 33,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "heading",
+         "box": {
+          "x": 689,
+          "y": 347,
+          "w": 243,
+          "h": 56
+         },
+         "sample": "Connectors",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 689,
+          "y": 407,
+          "w": 243,
+          "h": 117
+         },
+         "sample": "Drive, SharePoint, Git and more.",
+         "font_pt": 14.0,
+         "chars_per_line": 33,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:107",
+         "role": "heading",
+         "box": {
+          "x": 68,
+          "y": 683,
+          "w": 243,
+          "h": 56
+         },
+         "sample": "Security",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:108",
+         "role": "body",
+         "box": {
+          "x": 68,
+          "y": 743,
+          "w": 243,
+          "h": 117
+         },
+         "sample": "Access rights follow your sources.",
+         "font_pt": 14.0,
+         "chars_per_line": 33,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:109",
+         "role": "heading",
+         "box": {
+          "x": 378,
+          "y": 683,
+          "w": 243,
+          "h": 56
+         },
+         "sample": "Monitoring",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:110",
+         "role": "body",
+         "box": {
+          "x": 378,
+          "y": 743,
+          "w": 243,
+          "h": 117
+         },
+         "sample": "Usage, cost and quality dashboards.",
+         "font_pt": 14.0,
+         "chars_per_line": 33,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:111",
+         "role": "heading",
+         "box": {
+          "x": 689,
+          "y": 683,
+          "w": 243,
+          "h": 56
+         },
+         "sample": "Open source",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:112",
+         "role": "body",
+         "box": {
+          "x": 689,
+          "y": 743,
+          "w": 243,
+          "h": 117
+         },
+         "sample": "Apache-2.0, self-hostable anywhere.",
+         "font_pt": 14.0,
+         "chars_per_line": 33,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:101",
+       "ph:103",
+       "ph:105",
+       "ph:107",
+       "ph:109",
+       "ph:111"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:270",
+    "source": "slide",
+    "source_index": 15,
+    "name": "Fred Statement",
+    "label": "Fred Statement (15)",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 253,
+       "w": 720,
+       "h": 387
+      },
+      "sample": "A template is a promise: whatever the user asks for, the deck will belong togeth",
+      "font_pt": 40.0,
+      "chars_per_line": 33,
+      "max_lines": 4,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 667,
+       "w": 630,
+       "h": 173
+      },
+      "sample": "Consistency is what makes a generated deck look designed rather than assembled.",
+      "font_pt": 18.0,
+      "chars_per_line": 68,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:271",
+    "source": "slide",
+    "source_index": 16,
+    "name": "Fred Statement Accent",
+    "label": "Fred Statement Accent (16)",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 253,
+       "w": 720,
+       "h": 387
+      },
+      "sample": "Pick the layout by intent, fill it by name, and let the theme do the rest.",
+      "font_pt": 40.0,
+      "chars_per_line": 33,
+      "max_lines": 4,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 667,
+       "w": 630,
+       "h": 173
+      },
+      "sample": "Three steps, the same for every slide the agent creates.",
+      "font_pt": 18.0,
+      "chars_per_line": 68,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:272",
+    "source": "slide",
+    "source_index": 17,
+    "name": "Fred Quote",
+    "label": "Fred Quote (17)",
+    "kind": "quote",
+    "zones": [
+     {
+      "key": "ph:101",
+      "role": "title",
+      "box": {
+       "x": 120,
+       "y": 267,
+       "w": 765,
+       "h": 387
+      },
+      "sample": "The best template is the one users never notice: their message is all they see.",
+      "font_pt": 30.0,
+      "chars_per_line": 49,
+      "max_lines": 5,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "subtitle",
+      "box": {
+       "x": 120,
+       "y": 687,
+       "w": 765,
+       "h": 100
+      },
+      "sample": "UX guild, Fred project",
+      "font_pt": 16.0,
+      "chars_per_line": 95,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:273",
+    "source": "slide",
+    "source_index": 18,
+    "name": "Fred Quote Image",
+    "label": "Fred Quote Image (18)",
+    "kind": "quote",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "image",
+      "box": {
+       "x": 45,
+       "y": 80,
+       "w": 345,
+       "h": 840
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "title",
+      "box": {
+       "x": 472,
+       "y": 267,
+       "w": 482,
+       "h": 400
+      },
+      "sample": "We went from a blank page to a reviewed deck in one afternoon.",
+      "font_pt": 28.0,
+      "chars_per_line": 31,
+      "max_lines": 5,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "subtitle",
+      "box": {
+       "x": 472,
+       "y": 700,
+       "w": 482,
+       "h": 100
+      },
+      "sample": "Programme manager, pilot team",
+      "font_pt": 16.0,
+      "chars_per_line": 59,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:275",
+    "source": "slide",
+    "source_index": 20,
+    "name": "Fred Content with Image",
+    "label": "Pairing text with a visual",
+    "kind": "image_text",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 450,
+       "h": 133
+      },
+      "sample": "Pairing text with a visual",
+      "font_pt": 28.0,
+      "chars_per_line": 30,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 450,
+       "h": 633
       },
       "sample": "The image placeholder fills the right panel\nScreenshots, diagrams or photos all ",
       "font_pt": 16.0,
       "chars_per_line": 54,
-      "max_lines": 11,
+      "max_lines": 10,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -534,12 +2079,12 @@
       "role": "image",
       "box": {
        "x": 544,
-       "y": 60,
+       "y": 80,
        "w": 411,
-       "h": 820
+       "h": 840
       },
       "sample": "",
-      "font_pt": 32.0,
+      "font_pt": null,
       "chars_per_line": null,
       "max_lines": null,
       "grows": false,
@@ -559,25 +2104,225 @@
     "warnings": []
    },
    {
-    "id": "slide:263",
+    "id": "slide:276",
     "source": "slide",
-    "source_index": 8,
-    "name": "Fred Key Figures",
-    "label": "Three numbers worth remembering",
-    "kind": "figures",
+    "source_index": 21,
+    "name": "Fred Image Left",
+    "label": "Alternate sides to keep the rhythm",
+    "kind": "image_text",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "image",
+      "box": {
+       "x": 45,
+       "y": 80,
+       "w": 411,
+       "h": 840
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 505,
+       "y": 99,
+       "w": 450,
+       "h": 133
+      },
+      "sample": "Alternate sides to keep the rhythm",
+      "font_pt": 28.0,
+      "chars_per_line": 30,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 505,
+       "y": 247,
+       "w": 450,
+       "h": 633
+      },
+      "sample": "Same placeholders as the right-hand version\nUse it for the next slide of a seque",
+      "font_pt": 16.0,
+      "chars_per_line": 54,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:277",
+    "source": "slide",
+    "source_index": 22,
+    "name": "Fred Full Image",
+    "label": "Let one visual carry the slide",
+    "kind": "image_text",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "image",
+      "box": {
+       "x": 0,
+       "y": 0,
+       "w": 1000,
+       "h": 1000
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 567,
+       "w": 495,
+       "h": 193
+      },
+      "sample": "Let one visual carry the slide",
+      "font_pt": 28.0,
+      "chars_per_line": 29,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 760,
+       "w": 495,
+       "h": 160
+      },
+      "sample": "A full-bleed image with a caption panel. Keep the subject on the right half.",
+      "font_pt": 16.0,
+      "chars_per_line": 54,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:278",
+    "source": "slide",
+    "source_index": 23,
+    "name": "Fred Two Images",
+    "label": "Two visuals, side by side",
+    "kind": "image_text",
     "zones": [
      {
       "key": "ph:100",
       "role": "title",
       "box": {
        "x": 45,
-       "y": 60,
+       "y": 99,
        "w": 910,
        "h": 127
       },
-      "sample": "Three numbers worth remembering",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
+      "sample": "Two visuals, side by side",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "image",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 440,
+       "h": 480
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "heading",
+      "box": {
+       "x": 45,
+       "y": 753,
+       "w": 440,
+       "h": 53
+      },
+      "sample": "Light theme",
+      "font_pt": 16.0,
+      "chars_per_line": 55,
       "max_lines": 1,
       "grows": false,
       "purpose": null,
@@ -588,18 +2333,466 @@
       "takeaway": false
      },
      {
-      "key": "ph:110",
-      "role": "caption",
+      "key": "ph:103",
+      "role": "body",
       "box": {
        "x": 45,
-       "y": 787,
+       "y": 807,
+       "w": 440,
+       "h": 73
+      },
+      "sample": "The interface as most users see it.",
+      "font_pt": 14.0,
+      "chars_per_line": 62,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "image",
+      "box": {
+       "x": 515,
+       "y": 247,
+       "w": 440,
+       "h": 480
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "heading",
+      "box": {
+       "x": 515,
+       "y": 753,
+       "w": 440,
+       "h": 53
+      },
+      "sample": "Dark theme",
+      "font_pt": 16.0,
+      "chars_per_line": 55,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:106",
+      "role": "body",
+      "box": {
+       "x": 515,
+       "y": 807,
+       "w": 440,
+       "h": 73
+      },
+      "sample": "Same components, inverted surfaces.",
+      "font_pt": 14.0,
+      "chars_per_line": 62,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:279",
+    "source": "slide",
+    "source_index": 24,
+    "name": "Fred Three Images",
+    "label": "Where teams use Fred today",
+    "kind": "cards",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
        "w": 910,
-       "h": 80
+       "h": 127
+      },
+      "sample": "Where teams use Fred today",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "image",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 286,
+       "h": 440
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "image",
+      "box": {
+       "x": 357,
+       "y": 247,
+       "w": 286,
+       "h": 440
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:107",
+      "role": "image",
+      "box": {
+       "x": 669,
+       "y": 247,
+       "w": 286,
+       "h": 440
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:102",
+      "count": 3,
+      "item_zones": [
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:102",
+         "role": "heading",
+         "box": {
+          "x": 45,
+          "y": 713,
+          "w": 286,
+          "h": 53
+         },
+         "sample": "Engineering",
+         "font_pt": 16.0,
+         "chars_per_line": 36,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:103",
+         "role": "body",
+         "box": {
+          "x": 45,
+          "y": 767,
+          "w": 286,
+          "h": 113
+         },
+         "sample": "Specs and design reviews searched in seconds.",
+         "font_pt": 14.0,
+         "chars_per_line": 38,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "heading",
+         "box": {
+          "x": 357,
+          "y": 713,
+          "w": 286,
+          "h": 53
+         },
+         "sample": "Support",
+         "font_pt": 16.0,
+         "chars_per_line": 36,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 357,
+          "y": 767,
+          "w": 286,
+          "h": 113
+         },
+         "sample": "Draft answers grounded in past tickets.",
+         "font_pt": 14.0,
+         "chars_per_line": 38,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:108",
+         "role": "heading",
+         "box": {
+          "x": 669,
+          "y": 713,
+          "w": 286,
+          "h": 53
+         },
+         "sample": "Legal",
+         "font_pt": 16.0,
+         "chars_per_line": 36,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:109",
+         "role": "body",
+         "box": {
+          "x": 669,
+          "y": 767,
+          "w": 286,
+          "h": 113
+         },
+         "sample": "Clause comparison across contract versions.",
+         "font_pt": 14.0,
+         "chars_per_line": 38,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:102",
+       "ph:105",
+       "ph:108"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:280",
+    "source": "slide",
+    "source_index": 25,
+    "name": "Fred Screenshot",
+    "label": "Knowledge bases at a glance",
+    "kind": "image_text",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Knowledge bases at a glance",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:103",
+      "role": "image",
+      "box": {
+       "x": 56,
+       "y": 307,
+       "w": 596,
+       "h": 553
+      },
+      "sample": "",
+      "font_pt": null,
+      "chars_per_line": null,
+      "max_lines": null,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": true,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 694,
+       "y": 247,
+       "w": 261,
+       "h": 633
+      },
+      "sample": "Libraries grouped by team, with indexing progress\nOne click to create a new libr",
+      "font_pt": 16.0,
+      "chars_per_line": 29,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:281",
+    "source": "slide",
+    "source_index": 26,
+    "name": "Fred Key Figures",
+    "label": "Three numbers worth remembering",
+    "kind": "figures",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Three numbers worth remembering",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:110",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 800,
+       "w": 910,
+       "h": 67
       },
       "sample": "Figures describe this template.",
       "font_pt": 12.0,
       "chars_per_line": 151,
-      "max_lines": 1,
+      "max_lines": 2,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -624,12 +2817,12 @@
          "role": "number",
          "box": {
           "x": 71,
-          "y": 313,
-          "w": 231,
+          "y": 360,
+          "w": 233,
           "h": 173
          },
-         "sample": "15",
-         "font_pt": 54.0,
+         "sample": "45",
+         "font_pt": 60.0,
          "chars_per_line": 7,
          "max_lines": 1,
          "grows": false,
@@ -645,13 +2838,13 @@
          "role": "heading",
          "box": {
           "x": 71,
-          "y": 513,
-          "w": 231,
-          "h": 200
+          "y": 553,
+          "w": 233,
+          "h": 187
          },
-         "sample": "layouts cover most business presentations",
+         "sample": "named layouts cover most business presentations",
          "font_pt": 16.0,
-         "chars_per_line": 24,
+         "chars_per_line": 27,
          "max_lines": 4,
          "grows": false,
          "purpose": null,
@@ -667,13 +2860,13 @@
          "key": "ph:105",
          "role": "number",
          "box": {
-          "x": 385,
-          "y": 313,
-          "w": 231,
+          "x": 383,
+          "y": 360,
+          "w": 233,
           "h": 173
          },
-         "sample": "2",
-         "font_pt": 54.0,
+         "sample": "1",
+         "font_pt": 60.0,
          "chars_per_line": 7,
          "max_lines": 1,
          "grows": false,
@@ -688,14 +2881,14 @@
          "key": "ph:106",
          "role": "heading",
          "box": {
-          "x": 385,
-          "y": 513,
-          "w": 231,
-          "h": 200
+          "x": 383,
+          "y": 553,
+          "w": 233,
+          "h": 187
          },
-         "sample": "font roles, both set to Arial for faithful rendering",
+         "sample": "typeface, Arial, for faithful rendering everywhere",
          "font_pt": 16.0,
-         "chars_per_line": 24,
+         "chars_per_line": 27,
          "max_lines": 4,
          "grows": false,
          "purpose": null,
@@ -711,13 +2904,13 @@
          "key": "ph:108",
          "role": "number",
          "box": {
-          "x": 698,
-          "y": 313,
-          "w": 231,
+          "x": 695,
+          "y": 360,
+          "w": 233,
           "h": 173
          },
          "sample": "0",
-         "font_pt": 54.0,
+         "font_pt": 60.0,
          "chars_per_line": 7,
          "max_lines": 1,
          "grows": false,
@@ -732,14 +2925,14 @@
          "key": "ph:109",
          "role": "heading",
          "box": {
-          "x": 698,
-          "y": 513,
-          "w": 231,
-          "h": 200
+          "x": 695,
+          "y": 553,
+          "w": 233,
+          "h": 187
          },
-         "sample": "proprietary assets: no logo, image or embedded font",
+         "sample": "proprietary assets: no logo, photo or embedded font",
          "font_pt": 16.0,
-         "chars_per_line": 24,
+         "chars_per_line": 27,
          "max_lines": 4,
          "grows": false,
          "purpose": null,
@@ -765,9 +2958,875 @@
     "warnings": []
    },
    {
-    "id": "slide:264",
+    "id": "slide:282",
     "source": "slide",
-    "source_index": 9,
+    "source_index": 27,
+    "name": "Fred Key Figures Four",
+    "label": "Pilot results after twelve weeks",
+    "kind": "figures",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Pilot results after twelve weeks",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:114",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 800,
+       "w": 910,
+       "h": 67
+      },
+      "sample": "Illustrative figures for the showcase.",
+      "font_pt": 12.0,
+      "chars_per_line": 151,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:102",
+      "count": 4,
+      "item_zones": [
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:102",
+         "role": "heading",
+         "box": {
+          "x": 68,
+          "y": 307,
+          "w": 166,
+          "h": 160
+         },
+         "sample": "-62%",
+         "font_pt": 48.0,
+         "chars_per_line": 6,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:103",
+         "role": "body",
+         "box": {
+          "x": 68,
+          "y": 500,
+          "w": 166,
+          "h": 240
+         },
+         "sample": "time to produce a first deck draft",
+         "font_pt": 14.0,
+         "chars_per_line": 21,
+         "max_lines": 6,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "heading",
+         "box": {
+          "x": 301,
+          "y": 307,
+          "w": 166,
+          "h": 160
+         },
+         "sample": "4.6",
+         "font_pt": 48.0,
+         "chars_per_line": 6,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 301,
+          "y": 500,
+          "w": 166,
+          "h": 240
+         },
+         "sample": "average satisfaction out of 5",
+         "font_pt": 14.0,
+         "chars_per_line": 21,
+         "max_lines": 6,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:108",
+         "role": "heading",
+         "box": {
+          "x": 534,
+          "y": 307,
+          "w": 166,
+          "h": 160
+         },
+         "sample": "310",
+         "font_pt": 48.0,
+         "chars_per_line": 6,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:109",
+         "role": "body",
+         "box": {
+          "x": 534,
+          "y": 500,
+          "w": 166,
+          "h": 240
+         },
+         "sample": "decks generated by pilot teams",
+         "font_pt": 14.0,
+         "chars_per_line": 21,
+         "max_lines": 6,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:111",
+         "role": "heading",
+         "box": {
+          "x": 767,
+          "y": 307,
+          "w": 166,
+          "h": 160
+         },
+         "sample": "x3",
+         "font_pt": 48.0,
+         "chars_per_line": 6,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:112",
+         "role": "body",
+         "box": {
+          "x": 767,
+          "y": 500,
+          "w": 166,
+          "h": 240
+         },
+         "sample": "more reviews completed per week",
+         "font_pt": 14.0,
+         "chars_per_line": 21,
+         "max_lines": 6,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:102",
+       "ph:105",
+       "ph:108",
+       "ph:111"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:283",
+    "source": "slide",
+    "source_index": 28,
+    "name": "Fred Big Number",
+    "label": "Fred Big Number (28)",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 260,
+       "w": 495,
+       "h": 320
+      },
+      "sample": "87%",
+      "font_pt": 140.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 600,
+       "w": 450,
+       "h": 173
+      },
+      "sample": "of generated decks were kept with minor edits",
+      "font_pt": 22.0,
+      "chars_per_line": 38,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 596,
+       "y": 187,
+       "w": 330,
+       "h": 640
+      },
+      "sample": "Most edits touch wording, not layout\nCharts are rarely rebuilt by hand\nUsers ask",
+      "font_pt": 16.0,
+      "chars_per_line": 39,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:284",
+    "source": "slide",
+    "source_index": 29,
+    "name": "Fred Chart",
+    "label": "Charts stay native and editable",
+    "kind": "chart",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Charts stay native and editable",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "chart",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 608,
+       "h": 633
+      },
+      "sample": "",
+      "font_pt": 18.0,
+      "chars_per_line": 14,
+      "max_lines": 12,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": "column",
+      "takeaway": false
+     },
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 705,
+       "y": 373,
+       "w": 225,
+       "h": 460
+      },
+      "sample": "Charts use theme colours, so a custom template restyles them automatically.",
+      "font_pt": 18.0,
+      "chars_per_line": 22,
+      "max_lines": 7,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": true
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:285",
+    "source": "slide",
+    "source_index": 30,
+    "name": "Fred Chart Full",
+    "label": "Generated decks per month grew steadily",
+    "kind": "chart",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Generated decks per month grew steadily",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "chart",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 910,
+       "h": 567
+      },
+      "sample": "",
+      "font_pt": 18.0,
+      "chars_per_line": 21,
+      "max_lines": 12,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": "line",
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 827,
+       "w": 910,
+       "h": 53
+      },
+      "sample": "Illustrative data · decks generated per month.",
+      "font_pt": 12.0,
+      "chars_per_line": 152,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:286",
+    "source": "slide",
+    "source_index": 31,
+    "name": "Fred Two Charts",
+    "label": "Where decks come from, and what they contain",
+    "kind": "chart",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Where decks come from, and what they contain",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 440,
+       "h": 53
+      },
+      "sample": "Requests by team",
+      "font_pt": 16.0,
+      "chars_per_line": 55,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "chart",
+      "box": {
+       "x": 45,
+       "y": 313,
+       "w": 440,
+       "h": 500
+      },
+      "sample": "",
+      "font_pt": 18.0,
+      "chars_per_line": 10,
+      "max_lines": 9,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": "bar",
+      "takeaway": false
+     },
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 515,
+       "y": 247,
+       "w": 440,
+       "h": 53
+      },
+      "sample": "Slides by family",
+      "font_pt": 16.0,
+      "chars_per_line": 55,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "chart",
+      "box": {
+       "x": 515,
+       "y": 313,
+       "w": 440,
+       "h": 500
+      },
+      "sample": "",
+      "font_pt": 18.0,
+      "chars_per_line": 10,
+      "max_lines": 9,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": "doughnut",
+      "takeaway": false
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 827,
+       "w": 910,
+       "h": 53
+      },
+      "sample": "Illustrative data, in percent.",
+      "font_pt": 12.0,
+      "chars_per_line": 152,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:287",
+    "source": "slide",
+    "source_index": 32,
+    "name": "Fred Chart and Figures",
+    "label": "Quality improves as usage grows",
+    "kind": "chart",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Quality improves as usage grows",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "chart",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 608,
+       "h": 633
+      },
+      "sample": "",
+      "font_pt": 18.0,
+      "chars_per_line": 14,
+      "max_lines": 12,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": "column",
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:102",
+      "count": 2,
+      "item_zones": [
+       "number",
+       "label"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:102",
+         "role": "number",
+         "box": {
+          "x": 705,
+          "y": 280,
+          "w": 225,
+          "h": 127
+         },
+         "sample": "87%",
+         "font_pt": 40.0,
+         "chars_per_line": 11,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:103",
+         "role": "label",
+         "box": {
+          "x": 705,
+          "y": 420,
+          "w": 225,
+          "h": 107
+         },
+         "sample": "decks kept with minor edits in Q4",
+         "font_pt": 14.0,
+         "chars_per_line": 30,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:104",
+         "role": "number",
+         "box": {
+          "x": 705,
+          "y": 617,
+          "w": 225,
+          "h": 127
+         },
+         "sample": "+35",
+         "font_pt": 40.0,
+         "chars_per_line": 11,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:105",
+         "role": "label",
+         "box": {
+          "x": 705,
+          "y": 757,
+          "w": 225,
+          "h": 107
+         },
+         "sample": "points since the first quarter",
+         "font_pt": 14.0,
+         "chars_per_line": 30,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:102",
+       "ph:104"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:288",
+    "source": "slide",
+    "source_index": 33,
+    "name": "Fred Table",
+    "label": "Layout families at a glance",
+    "kind": "table",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Layout families at a glance",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "table",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 910,
+       "h": 467
+      },
+      "sample": "",
+      "font_pt": 14.0,
+      "chars_per_line": null,
+      "max_lines": 6,
+      "grows": false,
+      "purpose": null,
+      "table": {
+       "header": true,
+       "columns": [
+        42,
+        42,
+        42
+       ],
+       "widths": [
+        3698138,
+        3698138,
+        3698139
+       ],
+       "margin": 274320,
+       "line_pt": 16.8,
+       "pad_pt": 11.52,
+       "row_pt": 36.0,
+       "height_pt": 252.0
+      },
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:290",
+    "source": "slide",
+    "source_index": 35,
     "name": "Fred Process",
     "label": "How the agent builds a deck",
     "kind": "process",
@@ -777,14 +3836,14 @@
       "role": "title",
       "box": {
        "x": 45,
-       "y": 60,
+       "y": 99,
        "w": 910,
        "h": 127
       },
       "sample": "How the agent builds a deck",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -809,13 +3868,13 @@
          "role": "heading",
          "box": {
           "x": 68,
-          "y": 373,
-          "w": 166,
-          "h": 120
+          "y": 393,
+          "w": 157,
+          "h": 107
          },
          "sample": "Pick the template",
          "font_pt": 18.0,
-         "chars_per_line": 14,
+         "chars_per_line": 15,
          "max_lines": 2,
          "grows": false,
          "purpose": null,
@@ -830,14 +3889,14 @@
          "role": "body",
          "box": {
           "x": 68,
-          "y": 507,
-          "w": 166,
-          "h": 333
+          "y": 513,
+          "w": 157,
+          "h": 327
          },
-         "sample": "Custom template if the user provided one, otherwise this default",
+         "sample": "Custom template if the user provided one, otherwise this default.",
          "font_pt": 14.0,
          "chars_per_line": 19,
-         "max_lines": 6,
+         "max_lines": 9,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -852,14 +3911,14 @@
          "key": "ph:109",
          "role": "heading",
          "box": {
-          "x": 301,
-          "y": 373,
-          "w": 166,
-          "h": 120
+          "x": 303,
+          "y": 393,
+          "w": 157,
+          "h": 107
          },
          "sample": "Plan the story",
          "font_pt": 18.0,
-         "chars_per_line": 14,
+         "chars_per_line": 15,
          "max_lines": 2,
          "grows": false,
          "purpose": null,
@@ -873,15 +3932,15 @@
          "key": "ph:110",
          "role": "body",
          "box": {
-          "x": 301,
-          "y": 507,
-          "w": 166,
-          "h": 333
+          "x": 303,
+          "y": 513,
+          "w": 157,
+          "h": 327
          },
-         "sample": "One message per slide, mapped to a layout name",
+         "sample": "One message per slide, each mapped to a layout name.",
          "font_pt": 14.0,
          "chars_per_line": 19,
-         "max_lines": 6,
+         "max_lines": 9,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -896,14 +3955,14 @@
          "key": "ph:114",
          "role": "heading",
          "box": {
-          "x": 534,
-          "y": 373,
-          "w": 166,
-          "h": 120
+          "x": 539,
+          "y": 393,
+          "w": 157,
+          "h": 107
          },
          "sample": "Fill placeholders",
          "font_pt": 18.0,
-         "chars_per_line": 14,
+         "chars_per_line": 15,
          "max_lines": 2,
          "grows": false,
          "purpose": null,
@@ -917,15 +3976,15 @@
          "key": "ph:115",
          "role": "body",
          "box": {
-          "x": 534,
-          "y": 507,
-          "w": 166,
-          "h": 333
+          "x": 539,
+          "y": 513,
+          "w": 157,
+          "h": 327
          },
-         "sample": "Text, charts and images go into named placeholders",
+         "sample": "Text, charts and images go into named placeholders.",
          "font_pt": 14.0,
          "chars_per_line": 19,
-         "max_lines": 6,
+         "max_lines": 9,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -940,14 +3999,14 @@
          "key": "ph:119",
          "role": "heading",
          "box": {
-          "x": 767,
-          "y": 373,
-          "w": 166,
-          "h": 120
+          "x": 775,
+          "y": 393,
+          "w": 157,
+          "h": 107
          },
          "sample": "Check and deliver",
          "font_pt": 18.0,
-         "chars_per_line": 14,
+         "chars_per_line": 15,
          "max_lines": 2,
          "grows": false,
          "purpose": null,
@@ -961,15 +4020,15 @@
          "key": "ph:120",
          "role": "body",
          "box": {
-          "x": 767,
-          "y": 507,
-          "w": 166,
-          "h": 333
+          "x": 775,
+          "y": 513,
+          "w": 157,
+          "h": 327
          },
-         "sample": "Validate the file and render a preview",
+         "sample": "Validate the file, render a preview, hand it over.",
          "font_pt": 14.0,
          "chars_per_line": 19,
-         "max_lines": 6,
+         "max_lines": 9,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -995,221 +4054,26 @@
     "warnings": []
    },
    {
-    "id": "slide:265",
+    "id": "slide:291",
     "source": "slide",
-    "source_index": 10,
-    "name": "Fred Chart",
-    "label": "Charts stay native and editable",
-    "kind": "chart",
+    "source_index": 36,
+    "name": "Fred Process Three",
+    "label": "Three phases to roll out a team template",
+    "kind": "process",
     "zones": [
      {
       "key": "ph:100",
       "role": "title",
       "box": {
        "x": 45,
-       "y": 60,
+       "y": 99,
        "w": 910,
        "h": 127
       },
-      "sample": "Charts stay native and editable",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:101",
-      "role": "chart",
-      "box": {
-       "x": 45,
-       "y": 220,
-       "w": 608,
-       "h": 660
-      },
-      "sample": "",
-      "font_pt": 18.0,
-      "chars_per_line": 14,
-      "max_lines": 12,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": "column",
-      "takeaway": false
-     },
-     {
-      "key": "ph:103",
-      "role": "body",
-      "box": {
-       "x": 709,
-       "y": 267,
-       "w": 220,
-       "h": 567
-      },
-      "sample": "Charts use theme colours, so a custom template restyles them automatically.\n\nPut",
-      "font_pt": 16.0,
-      "chars_per_line": 23,
-      "max_lines": 9,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": true
-     }
-    ],
-    "groups": [],
-    "included": true,
-    "exclusion_reason": null,
-    "reusable": true,
-    "labelled_by": "heuristic",
-    "warnings": []
-   },
-   {
-    "id": "slide:271",
-    "source": "slide",
-    "source_index": 11,
-    "name": "Fred Chart Wide",
-    "label": "One chart across the slide",
-    "kind": "chart",
-    "zones": [
-     {
-      "key": "ph:100",
-      "role": "title",
-      "box": {
-       "x": 45,
-       "y": 60,
-       "w": 910,
-       "h": 127
-      },
-      "sample": "One chart across the slide",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:101",
-      "role": "chart",
-      "box": {
-       "x": 45,
-       "y": 220,
-       "w": 910,
-       "h": 660
-      },
-      "sample": "",
-      "font_pt": 18.0,
-      "chars_per_line": 21,
-      "max_lines": 12,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": "column",
-      "takeaway": false
-     }
-    ],
-    "groups": [],
-    "included": true,
-    "exclusion_reason": null,
-    "reusable": true,
-    "labelled_by": "heuristic",
-    "warnings": []
-   },
-   {
-    "id": "layout:11",
-    "source": "layout",
-    "source_index": 11,
-    "name": "Fred Table",
-    "label": "Fred Table",
-    "kind": "bullets",
-    "zones": [
-     {
-      "key": "ph:100",
-      "role": "title",
-      "box": {
-       "x": 45,
-       "y": 60,
-       "w": 910,
-       "h": 127
-      },
-      "sample": "Slide title",
-      "font_pt": 32.0,
-      "chars_per_line": 52,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:101",
-      "role": "body",
-      "box": {
-       "x": 45,
-       "y": 220,
-       "w": 910,
-       "h": 660
-      },
-      "sample": "Table",
-      "font_pt": 32.0,
-      "chars_per_line": 53,
-      "max_lines": 7,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": true,
-      "chart_type": null,
-      "takeaway": false
-     }
-    ],
-    "groups": [],
-    "included": true,
-    "exclusion_reason": null,
-    "reusable": true,
-    "labelled_by": "heuristic",
-    "warnings": []
-   },
-   {
-    "id": "slide:267",
-    "source": "slide",
-    "source_index": 13,
-    "name": "Fred Quote",
-    "label": "Fred Quote (13)",
-    "kind": "quote",
-    "zones": [
-     {
-      "key": "ph:101",
-      "role": "title",
-      "box": {
-       "x": 120,
-       "y": 267,
-       "w": 765,
-       "h": 387
-      },
-      "sample": "A template is a promise: whatever the user asks for, the deck will look like it ",
-      "font_pt": 30.0,
-      "chars_per_line": 48,
-      "max_lines": 4,
+      "sample": "Three phases to roll out a team template",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -1220,17 +4084,1210 @@
      },
      {
       "key": "ph:102",
-      "role": "subtitle",
+      "role": "body",
       "box": {
-       "x": 120,
-       "y": 680,
-       "w": 765,
-       "h": 107
+       "x": 45,
+       "y": 413,
+       "w": 263,
+       "h": 467
       },
-      "sample": "Design principle of the default template",
+      "sample": "Collect brand assets\nName layouts by intent",
       "font_pt": 16.0,
-      "chars_per_line": 95,
+      "chars_per_line": 30,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 365,
+       "y": 413,
+       "w": 263,
+       "h": 467
+      },
+      "sample": "Create layouts and placeholders\nDocument each one in notes",
+      "font_pt": 16.0,
+      "chars_per_line": 30,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:106",
+      "role": "body",
+      "box": {
+       "x": 665,
+       "y": 413,
+       "w": 263,
+       "h": 467
+      },
+      "sample": "Upload to Fred\nReview the first decks together",
+      "font_pt": 16.0,
+      "chars_per_line": 30,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:101",
+      "count": 3,
+      "item_zones": [
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:101",
+         "role": "body",
+         "box": {
+          "x": 71,
+          "y": 247,
+          "w": 230,
+          "h": 120
+         },
+         "sample": "Prepare",
+         "font_pt": 18.0,
+         "chars_per_line": 24,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:103",
+         "role": "body",
+         "box": {
+          "x": 391,
+          "y": 247,
+          "w": 230,
+          "h": 120
+         },
+         "sample": "Build",
+         "font_pt": 18.0,
+         "chars_per_line": 24,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "body",
+         "box": {
+          "x": 692,
+          "y": 247,
+          "w": 230,
+          "h": 120
+         },
+         "sample": "Run",
+         "font_pt": 18.0,
+         "chars_per_line": 24,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:101",
+       "ph:103",
+       "ph:105"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:292",
+    "source": "slide",
+    "source_index": 37,
+    "name": "Fred Timeline",
+    "label": "Template roadmap",
+    "kind": "timeline",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Template roadmap",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 280,
+       "w": 159,
+       "h": 60
+      },
+      "sample": "Q1 2026",
+      "font_pt": 16.0,
+      "chars_per_line": 19,
       "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 227,
+       "y": 280,
+       "w": 159,
+       "h": 60
+      },
+      "sample": "Q2 2026",
+      "font_pt": 16.0,
+      "chars_per_line": 19,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:107",
+      "role": "body",
+      "box": {
+       "x": 409,
+       "y": 280,
+       "w": 159,
+       "h": 60
+      },
+      "sample": "Q3 2026",
+      "font_pt": 16.0,
+      "chars_per_line": 19,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:110",
+      "role": "body",
+      "box": {
+       "x": 591,
+       "y": 280,
+       "w": 159,
+       "h": 60
+      },
+      "sample": "Q4 2026",
+      "font_pt": 16.0,
+      "chars_per_line": 19,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:113",
+      "role": "body",
+      "box": {
+       "x": 773,
+       "y": 280,
+       "w": 159,
+       "h": 60
+      },
+      "sample": "2027",
+      "font_pt": 16.0,
+      "chars_per_line": 19,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:102",
+      "count": 5,
+      "item_zones": [
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:102",
+         "role": "heading",
+         "box": {
+          "x": 45,
+          "y": 467,
+          "w": 159,
+          "h": 87
+         },
+         "sample": "First template",
+         "font_pt": 16.0,
+         "chars_per_line": 18,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:103",
+         "role": "body",
+         "box": {
+          "x": 45,
+          "y": 560,
+          "w": 159,
+          "h": 320
+         },
+         "sample": "15 layouts, one theme.",
+         "font_pt": 14.0,
+         "chars_per_line": 20,
+         "max_lines": 8,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "heading",
+         "box": {
+          "x": 227,
+          "y": 467,
+          "w": 159,
+          "h": 87
+         },
+         "sample": "Custom upload",
+         "font_pt": 16.0,
+         "chars_per_line": 18,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 227,
+          "y": 560,
+          "w": 159,
+          "h": 320
+         },
+         "sample": "Teams bring their own template.",
+         "font_pt": 14.0,
+         "chars_per_line": 20,
+         "max_lines": 8,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:108",
+         "role": "heading",
+         "box": {
+          "x": 409,
+          "y": 467,
+          "w": 159,
+          "h": 87
+         },
+         "sample": "Layout discovery",
+         "font_pt": 16.0,
+         "chars_per_line": 18,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:109",
+         "role": "body",
+         "box": {
+          "x": 409,
+          "y": 560,
+          "w": 159,
+          "h": 320
+         },
+         "sample": "Placeholders read automatically.",
+         "font_pt": 14.0,
+         "chars_per_line": 20,
+         "max_lines": 8,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:111",
+         "role": "heading",
+         "box": {
+          "x": 591,
+          "y": 467,
+          "w": 159,
+          "h": 87
+         },
+         "sample": "Rich layouts",
+         "font_pt": 16.0,
+         "chars_per_line": 18,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:112",
+         "role": "body",
+         "box": {
+          "x": 591,
+          "y": 560,
+          "w": 159,
+          "h": 320
+         },
+         "sample": "45 layouts, visual and data.",
+         "font_pt": 14.0,
+         "chars_per_line": 20,
+         "max_lines": 8,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:114",
+         "role": "heading",
+         "box": {
+          "x": 773,
+          "y": 467,
+          "w": 159,
+          "h": 87
+         },
+         "sample": "Design feedback",
+         "font_pt": 16.0,
+         "chars_per_line": 18,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:115",
+         "role": "body",
+         "box": {
+          "x": 773,
+          "y": 560,
+          "w": 159,
+          "h": 320
+         },
+         "sample": "Users rate and refine slides.",
+         "font_pt": 14.0,
+         "chars_per_line": 20,
+         "max_lines": 8,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:102",
+       "ph:105",
+       "ph:108",
+       "ph:111",
+       "ph:114"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:293",
+    "source": "slide",
+    "source_index": 38,
+    "name": "Fred Matrix",
+    "label": "Which layouts to build next",
+    "kind": "cards",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Which layouts to build next",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:109",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 26,
+       "h": 573
+      },
+      "sample": "Value ↑",
+      "font_pt": 12.0,
+      "chars_per_line": 1,
+      "max_lines": 19,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:110",
+      "role": "body",
+      "box": {
+       "x": 86,
+       "y": 836,
+       "w": 578,
+       "h": 40
+      },
+      "sample": "Effort →",
+      "font_pt": 12.0,
+      "chars_per_line": 96,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:111",
+      "role": "body",
+      "box": {
+       "x": 720,
+       "y": 373,
+       "w": 210,
+       "h": 460
+      },
+      "sample": "Visual and data layouts give the most value for the least effort, so they come f",
+      "font_pt": 16.0,
+      "chars_per_line": 24,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": true
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:101",
+      "count": 4,
+      "item_zones": [
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:101",
+         "role": "heading",
+         "box": {
+          "x": 109,
+          "y": 280,
+          "w": 236,
+          "h": 60
+         },
+         "sample": "Nice to have",
+         "font_pt": 18.0,
+         "chars_per_line": 25,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:102",
+         "role": "body",
+         "box": {
+          "x": 109,
+          "y": 347,
+          "w": 236,
+          "h": 147
+         },
+         "sample": "High value, high effort: animated diagrams.",
+         "font_pt": 14.0,
+         "chars_per_line": 31,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:103",
+         "role": "heading",
+         "box": {
+          "x": 405,
+          "y": 280,
+          "w": 236,
+          "h": 60
+         },
+         "sample": "Do now",
+         "font_pt": 18.0,
+         "chars_per_line": 25,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:104",
+         "role": "body",
+         "box": {
+          "x": 405,
+          "y": 347,
+          "w": 236,
+          "h": 147
+         },
+         "sample": "High value, low effort: visual and data layouts.",
+         "font_pt": 14.0,
+         "chars_per_line": 31,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "heading",
+         "box": {
+          "x": 109,
+          "y": 580,
+          "w": 236,
+          "h": 60
+         },
+         "sample": "Avoid",
+         "font_pt": 18.0,
+         "chars_per_line": 25,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 109,
+          "y": 647,
+          "w": 236,
+          "h": 147
+         },
+         "sample": "Low value, high effort: bespoke one-off frames.",
+         "font_pt": 14.0,
+         "chars_per_line": 31,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:107",
+         "role": "heading",
+         "box": {
+          "x": 405,
+          "y": 580,
+          "w": 236,
+          "h": 60
+         },
+         "sample": "Quick wins",
+         "font_pt": 18.0,
+         "chars_per_line": 25,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:108",
+         "role": "body",
+         "box": {
+          "x": 405,
+          "y": 647,
+          "w": 236,
+          "h": 147
+         },
+         "sample": "Low value, low effort: colour variants.",
+         "font_pt": 14.0,
+         "chars_per_line": 31,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:101",
+       "ph:103",
+       "ph:105",
+       "ph:107"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:294",
+    "source": "slide",
+    "source_index": 39,
+    "name": "Fred Team",
+    "label": "The people behind the template",
+    "kind": "team",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "The people behind the template",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [
+     {
+      "key": "ph:101",
+      "count": 4,
+      "item_zones": [
+       "image",
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:101",
+         "role": "image",
+         "box": {
+          "x": 64,
+          "y": 293,
+          "w": 172,
+          "h": 307
+         },
+         "sample": "",
+         "font_pt": null,
+         "chars_per_line": null,
+         "max_lines": null,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": true,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:102",
+         "role": "heading",
+         "box": {
+          "x": 45,
+          "y": 640,
+          "w": 211,
+          "h": 60
+         },
+         "sample": "Alex Martin",
+         "font_pt": 18.0,
+         "chars_per_line": 23,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:103",
+         "role": "body",
+         "box": {
+          "x": 45,
+          "y": 707,
+          "w": 211,
+          "h": 133
+         },
+         "sample": "UX designer",
+         "font_pt": 14.0,
+         "chars_per_line": 28,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:104",
+         "role": "image",
+         "box": {
+          "x": 297,
+          "y": 293,
+          "w": 172,
+          "h": 307
+         },
+         "sample": "",
+         "font_pt": null,
+         "chars_per_line": null,
+         "max_lines": null,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": true,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:105",
+         "role": "heading",
+         "box": {
+          "x": 278,
+          "y": 640,
+          "w": 211,
+          "h": 60
+         },
+         "sample": "Lina Kader",
+         "font_pt": 18.0,
+         "chars_per_line": 23,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 278,
+          "y": 707,
+          "w": 211,
+          "h": 133
+         },
+         "sample": "Front-end developer",
+         "font_pt": 14.0,
+         "chars_per_line": 28,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:107",
+         "role": "image",
+         "box": {
+          "x": 530,
+          "y": 293,
+          "w": 172,
+          "h": 307
+         },
+         "sample": "",
+         "font_pt": null,
+         "chars_per_line": null,
+         "max_lines": null,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": true,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:108",
+         "role": "heading",
+         "box": {
+          "x": 511,
+          "y": 640,
+          "w": 211,
+          "h": 60
+         },
+         "sample": "Sam Roux",
+         "font_pt": 18.0,
+         "chars_per_line": 23,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:109",
+         "role": "body",
+         "box": {
+          "x": 511,
+          "y": 707,
+          "w": 211,
+          "h": 133
+         },
+         "sample": "Agent engineer",
+         "font_pt": 14.0,
+         "chars_per_line": 28,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "ph:110",
+         "role": "image",
+         "box": {
+          "x": 763,
+          "y": 293,
+          "w": 172,
+          "h": 307
+         },
+         "sample": "",
+         "font_pt": null,
+         "chars_per_line": null,
+         "max_lines": null,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": true,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:111",
+         "role": "heading",
+         "box": {
+          "x": 744,
+          "y": 640,
+          "w": 211,
+          "h": 60
+         },
+         "sample": "Jo Durand",
+         "font_pt": 18.0,
+         "chars_per_line": 23,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:112",
+         "role": "body",
+         "box": {
+          "x": 744,
+          "y": 707,
+          "w": 211,
+          "h": 133
+         },
+         "sample": "Product owner",
+         "font_pt": 14.0,
+         "chars_per_line": 28,
+         "max_lines": 3,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:101",
+       "ph:104",
+       "ph:107",
+       "ph:110"
+      ]
+     }
+    ],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:295",
+    "source": "slide",
+    "source_index": 40,
+    "name": "Fred Code",
+    "label": "Filling a layout by name",
+    "kind": "two_columns",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Filling a layout by name",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 247,
+       "w": 345,
+       "h": 633
+      },
+      "sample": "Pick the layout by its name\nFind each placeholder by its name\nRemove placeholder",
+      "font_pt": 16.0,
+      "chars_per_line": 41,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 446,
+       "y": 327,
+       "w": 486,
+       "h": 520
+      },
+      "sample": "layout = layouts[\"Fred Key Figures\"]\nslide = prs.slides.add_slide(layout)\n\nfor p",
+      "font_pt": 14.0,
+      "chars_per_line": 67,
+      "max_lines": 14,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -1248,9 +5305,9 @@
     "warnings": []
    },
    {
-    "id": "layout:13",
+    "id": "layout:39",
     "source": "layout",
-    "source_index": 13,
+    "source_index": 39,
     "name": "Fred Title Only",
     "label": "Fred Title Only",
     "kind": "section",
@@ -1260,14 +5317,14 @@
       "role": "title",
       "box": {
        "x": 45,
-       "y": 60,
+       "y": 99,
        "w": 910,
        "h": 127
       },
       "sample": "Slide title",
-      "font_pt": 32.0,
-      "chars_per_line": 52,
-      "max_lines": 1,
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -1285,9 +5342,46 @@
     "warnings": []
    },
    {
-    "id": "slide:269",
+    "id": "layout:40",
+    "source": "layout",
+    "source_index": 40,
+    "name": "Fred Title Only Dark",
+    "label": "Fred Title Only Dark",
+    "kind": "section",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 99,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:297",
     "source": "slide",
-    "source_index": 15,
+    "source_index": 42,
     "name": "Fred Closing",
     "label": "Bring your own template, or use this one",
     "kind": "closing",
@@ -1298,12 +5392,12 @@
       "box": {
        "x": 45,
        "y": 267,
-       "w": 615,
-       "h": 213
+       "w": 548,
+       "h": 233
       },
       "sample": "Bring your own template, or use this one",
       "font_pt": 44.0,
-      "chars_per_line": 26,
+      "chars_per_line": 23,
       "max_lines": 2,
       "grows": false,
       "purpose": null,
@@ -1318,14 +5412,14 @@
       "role": "body",
       "box": {
        "x": 45,
-       "y": 520,
-       "w": 615,
-       "h": 293
+       "y": 527,
+       "w": 525,
+       "h": 307
       },
-      "sample": "github.com/ThalesGroup/fred",
+      "sample": "github.com/ThalesGroup/fred\nApache-2.0 · contributions welcome",
       "font_pt": 18.0,
-      "chars_per_line": 65,
-      "max_lines": 4,
+      "chars_per_line": 56,
+      "max_lines": 5,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -1343,9 +5437,67 @@
     "warnings": []
    },
    {
-    "id": "layout:15",
+    "id": "slide:298",
+    "source": "slide",
+    "source_index": 43,
+    "name": "Fred Closing Light",
+    "label": "Questions and feedback",
+    "kind": "closing",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 267,
+       "w": 548,
+       "h": 233
+      },
+      "sample": "Questions and feedback",
+      "font_pt": 44.0,
+      "chars_per_line": 23,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 527,
+       "w": 525,
+       "h": 307
+      },
+      "sample": "Try the template on your next deck\nShare what layout is missing",
+      "font_pt": 18.0,
+      "chars_per_line": 56,
+      "max_lines": 5,
+      "grows": false,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:43",
     "source": "layout",
-    "source_index": 15,
+    "source_index": 43,
     "name": "Fred Blank",
     "label": "Fred Blank",
     "kind": "other",
@@ -1358,26 +5510,41 @@
     "warnings": []
    },
    {
-    "id": "slide:266",
+    "id": "layout:44",
+    "source": "layout",
+    "source_index": 44,
+    "name": "Fred Blank Dark",
+    "label": "Fred Blank Dark",
+    "kind": "other",
+    "zones": [],
+    "groups": [],
+    "included": false,
+    "exclusion_reason": "no_placeholder",
+    "reusable": false,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:258",
     "source": "slide",
-    "source_index": 12,
-    "name": "Fred Table",
-    "label": "Compare options side by side",
-    "kind": "table",
+    "source_index": 3,
+    "name": "Fred Title Only",
+    "label": "One palette, one typeface, one motif",
+    "kind": "cards",
     "zones": [
      {
       "key": "ph:100",
       "role": "title",
       "box": {
        "x": 45,
-       "y": 60,
+       "y": 99,
        "w": 910,
        "h": 127
       },
-      "sample": "Compare options side by side",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
+      "sample": "One palette, one typeface, one motif",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -1387,61 +5554,449 @@
       "takeaway": false
      },
      {
-      "key": "sp:12",
-      "role": "table",
+      "key": "sp:23",
+      "role": "heading",
+      "box": {
+       "x": 746,
+       "y": 287,
+       "w": 195,
+       "h": 130
+      },
+      "sample": "Aa",
+      "font_pt": 54.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": true,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "sp:24",
+      "role": "label",
+      "box": {
+       "x": 746,
+       "y": 446,
+       "w": 195,
+       "h": 43
+      },
+      "sample": "Arial, one family",
+      "font_pt": 18.0,
+      "chars_per_line": 19,
+      "max_lines": 1,
+      "grows": true,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "sp:25",
+      "role": "label",
+      "box": {
+       "x": 746,
+       "y": 519,
+       "w": 195,
+       "h": 34
+      },
+      "sample": "Titles 28–44 pt bold",
+      "font_pt": 14.0,
+      "chars_per_line": 27,
+      "max_lines": 1,
+      "grows": true,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "sp:26",
+      "role": "label",
+      "box": {
+       "x": 746,
+       "y": 582,
+       "w": 195,
+       "h": 34
+      },
+      "sample": "Body 14–20 pt regular",
+      "font_pt": 14.0,
+      "chars_per_line": 27,
+      "max_lines": 1,
+      "grows": true,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "sp:29",
+      "role": "body",
       "box": {
        "x": 45,
-       "y": 220,
-       "w": 910,
-       "h": 660
+       "y": 633,
+       "w": 645,
+       "h": 213
       },
-      "sample": "",
+      "sample": "Navy carries openings, sections and closings; white carries content. Indigo is t",
       "font_pt": 14.0,
-      "chars_per_line": null,
-      "max_lines": 10,
+      "chars_per_line": 100,
+      "max_lines": 4,
       "grows": false,
       "purpose": null,
-      "table": {
-       "header": true,
-       "columns": [
-        33,
-        22,
-        22,
-        22,
-        22
-       ],
-       "widths": [
-        2926080,
-        2042084,
-        2042084,
-        2042084,
-        2042083
-       ],
-       "margin": 274320,
-       "line_pt": 16.8,
-       "pad_pt": 11.52,
-       "row_pt": 31.68,
-       "height_pt": 356.4
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "sp:27",
+      "role": "label",
+      "box": {
+       "x": 746,
+       "y": 645,
+       "w": 195,
+       "h": 29
       },
+      "sample": "Captions 12 pt slate",
+      "font_pt": 12.0,
+      "chars_per_line": 32,
+      "max_lines": 1,
+      "grows": true,
+      "purpose": null,
+      "table": null,
+      "framed": false,
+      "chart_capable": false,
+      "chart_type": null,
+      "takeaway": false
+     },
+     {
+      "key": "sp:28",
+      "role": "label",
+      "box": {
+       "x": 746,
+       "y": 703,
+       "w": 195,
+       "h": 26
+      },
+      "sample": "KICKER 11 PT CAPS",
+      "font_pt": 11.0,
+      "chars_per_line": 32,
+      "max_lines": 1,
+      "grows": true,
+      "purpose": null,
+      "table": null,
       "framed": false,
       "chart_capable": false,
       "chart_type": null,
       "takeaway": false
      }
     ],
-    "groups": [],
-    "included": true,
-    "exclusion_reason": null,
+    "groups": [
+     {
+      "key": "sp:5",
+      "count": 6,
+      "item_zones": [
+       "heading",
+       "label"
+      ],
+      "items": [
+       [
+        {
+         "key": "sp:5",
+         "role": "heading",
+         "box": {
+          "x": 45,
+          "y": 440,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "Navy",
+         "font_pt": 14.0,
+         "chars_per_line": 13,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:6",
+         "role": "label",
+         "box": {
+          "x": 45,
+          "y": 480,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "0F134F",
+         "font_pt": 12.0,
+         "chars_per_line": 17,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:8",
+         "role": "heading",
+         "box": {
+          "x": 158,
+          "y": 440,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "Indigo",
+         "font_pt": 14.0,
+         "chars_per_line": 13,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:9",
+         "role": "label",
+         "box": {
+          "x": 158,
+          "y": 480,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "4851C3",
+         "font_pt": 12.0,
+         "chars_per_line": 17,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:11",
+         "role": "heading",
+         "box": {
+          "x": 270,
+          "y": 440,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "Periwinkle",
+         "font_pt": 14.0,
+         "chars_per_line": 13,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:12",
+         "role": "label",
+         "box": {
+          "x": 270,
+          "y": 480,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "9CA4FF",
+         "font_pt": 12.0,
+         "chars_per_line": 17,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:14",
+         "role": "heading",
+         "box": {
+          "x": 382,
+          "y": 440,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "Teal",
+         "font_pt": 14.0,
+         "chars_per_line": 13,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:15",
+         "role": "label",
+         "box": {
+          "x": 382,
+          "y": 480,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "1C8199",
+         "font_pt": 12.0,
+         "chars_per_line": 17,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:17",
+         "role": "heading",
+         "box": {
+          "x": 495,
+          "y": 440,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "Slate",
+         "font_pt": 14.0,
+         "chars_per_line": 13,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:18",
+         "role": "label",
+         "box": {
+          "x": 495,
+          "y": 480,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "575A8A",
+         "font_pt": 12.0,
+         "chars_per_line": 17,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:20",
+         "role": "heading",
+         "box": {
+          "x": 608,
+          "y": 440,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "Mist",
+         "font_pt": 14.0,
+         "chars_per_line": 13,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:21",
+         "role": "label",
+         "box": {
+          "x": 608,
+          "y": 480,
+          "w": 105,
+          "h": 40
+         },
+         "sample": "F3F4F9",
+         "font_pt": 12.0,
+         "chars_per_line": 17,
+         "max_lines": 1,
+         "grows": true,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "sp:5",
+       "sp:8",
+       "sp:11",
+       "sp:14",
+       "sp:17",
+       "sp:20"
+      ]
+     }
+    ],
+    "included": false,
+    "exclusion_reason": "library",
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
    },
    {
-    "id": "slide:268",
+    "id": "slide:296",
     "source": "slide",
-    "source_index": 14,
-    "name": "Fred Title Only",
-    "label": "Title Only leaves the canvas free",
+    "source_index": 41,
+    "name": "Fred Title Only Dark",
+    "label": "Dark canvas for diagrams and demos",
     "kind": "cards",
     "zones": [
      {
@@ -1449,14 +6004,14 @@
       "role": "title",
       "box": {
        "x": 45,
-       "y": 60,
+       "y": 99,
        "w": 910,
        "h": 127
       },
-      "sample": "Title Only leaves the canvas free",
-      "font_pt": 32.0,
-      "chars_per_line": 56,
-      "max_lines": 1,
+      "sample": "Dark canvas for diagrams and demos",
+      "font_pt": 28.0,
+      "chars_per_line": 64,
+      "max_lines": 2,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -1469,47 +6024,25 @@
     "groups": [
      {
       "key": "sp:4",
-      "count": 3,
+      "count": 4,
       "item_zones": [
-       "heading",
        "body"
       ],
       "items": [
        [
         {
          "key": "sp:4",
-         "role": "heading",
-         "box": {
-          "x": 71,
-          "y": 313,
-          "w": 231,
-          "h": 80
-         },
-         "sample": "Diagrams",
-         "font_pt": 22.0,
-         "chars_per_line": 19,
-         "max_lines": 1,
-         "grows": false,
-         "purpose": null,
-         "table": null,
-         "framed": false,
-         "chart_capable": false,
-         "chart_type": null,
-         "takeaway": false
-        },
-        {
-         "key": "sp:5",
          "role": "body",
          "box": {
-          "x": 71,
-          "y": 413,
-          "w": 231,
-          "h": 240
+          "x": 45,
+          "y": 427,
+          "w": 195,
+          "h": 187
          },
-         "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
-         "font_pt": 16.0,
-         "chars_per_line": 26,
-         "max_lines": 5,
+         "sample": "Sources",
+         "font_pt": 18.0,
+         "chars_per_line": 16,
+         "max_lines": 2,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -1521,18 +6054,18 @@
        ],
        [
         {
-         "key": "sp:7",
-         "role": "heading",
+         "key": "sp:6",
+         "role": "body",
          "box": {
-          "x": 385,
-          "y": 313,
-          "w": 231,
-          "h": 80
+          "x": 284,
+          "y": 427,
+          "w": 195,
+          "h": 187
          },
-         "sample": "Screenshots",
-         "font_pt": 22.0,
-         "chars_per_line": 19,
-         "max_lines": 1,
+         "sample": "Index",
+         "font_pt": 18.0,
+         "chars_per_line": 16,
+         "max_lines": 2,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -1540,20 +6073,22 @@
          "chart_capable": false,
          "chart_type": null,
          "takeaway": false
-        },
+        }
+       ],
+       [
         {
          "key": "sp:8",
          "role": "body",
          "box": {
-          "x": 385,
-          "y": 413,
-          "w": 231,
-          "h": 240
+          "x": 522,
+          "y": 427,
+          "w": 195,
+          "h": 187
          },
-         "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
-         "font_pt": 16.0,
-         "chars_per_line": 26,
-         "max_lines": 5,
+         "sample": "Agents",
+         "font_pt": 18.0,
+         "chars_per_line": 16,
+         "max_lines": 2,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -1566,38 +6101,17 @@
        [
         {
          "key": "sp:10",
-         "role": "heading",
-         "box": {
-          "x": 698,
-          "y": 313,
-          "w": 231,
-          "h": 80
-         },
-         "sample": "Custom visuals",
-         "font_pt": 22.0,
-         "chars_per_line": 19,
-         "max_lines": 1,
-         "grows": false,
-         "purpose": null,
-         "table": null,
-         "framed": false,
-         "chart_capable": false,
-         "chart_type": null,
-         "takeaway": false
-        },
-        {
-         "key": "sp:11",
          "role": "body",
          "box": {
-          "x": 698,
-          "y": 413,
-          "w": 231,
-          "h": 240
+          "x": 760,
+          "y": 427,
+          "w": 195,
+          "h": 187
          },
-         "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
-         "font_pt": 16.0,
-         "chars_per_line": 26,
-         "max_lines": 5,
+         "sample": "Deck",
+         "font_pt": 18.0,
+         "chars_per_line": 16,
+         "max_lines": 2,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -1610,7 +6124,8 @@
       ],
       "item_keys": [
        "sp:4",
-       "sp:7",
+       "sp:6",
+       "sp:8",
        "sp:10"
       ]
      }
@@ -1622,11 +6137,26 @@
     "warnings": []
    },
    {
-    "id": "slide:270",
+    "id": "slide:299",
     "source": "slide",
-    "source_index": 16,
+    "source_index": 44,
     "name": "Fred Blank",
-    "label": "Fred Blank (16)",
+    "label": "Fred Blank (44)",
+    "kind": "other",
+    "zones": [],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "reusable": false,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:300",
+    "source": "slide",
+    "source_index": 45,
+    "name": "Fred Blank Dark",
+    "label": "Fred Blank Dark (45)",
     "kind": "other",
     "zones": [],
     "groups": [],

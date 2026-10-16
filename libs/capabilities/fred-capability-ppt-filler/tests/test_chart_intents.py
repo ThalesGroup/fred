@@ -211,10 +211,11 @@ def test_a_line_chart_keeps_its_order_and_says_so_once(builtin):
 def test_a_highlighted_category_takes_the_accent_and_the_rest_is_muted(builtin):
     built = _chart(_render(builtin, {**REVENUE, "highlight": "q3"}))
     points = _points(built)
-    # The template's own column chart: the emphasised bar keeps its series' accent.
+    # The template's own column chart: the emphasised bar keeps its series'
+    # colour (the built-in example sets none, so the style's accent shows).
     assert list(points) == [0, 1, 3] and all(MUTED in p for p in points.values())
-    assert ACCENT in _xml(built.plots[0]._element.find(f"{qn('c:ser')}/{qn('c:spPr')}"))
-    assert "srgbClr" not in _xml(built._chartSpace)
+    ser = built.plots[0]._element.find(qn("c:ser"))
+    assert ser.find(qn("c:spPr")) is None and "srgbClr" not in _xml(ser)
     # The emphasised bar's value label is bold; the others keep the shared labels.
     ser = built.plots[0]._element.find(qn("c:ser"))
     (label,) = ser.findall(f"{qn('c:dLbls')}/{qn('c:dLbl')}")

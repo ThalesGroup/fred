@@ -306,15 +306,16 @@ def _builtin_tables(plan: DeckPlan):
     return assignment, patterns, frames
 
 
-def test_a_comparison_of_four_offers_builds_on_the_builtin_table_slide():
+def test_a_comparison_of_two_offers_builds_on_the_builtin_table_slide():
+    # The built-in table has 3 columns: a criterion and two offers.
     offers = PlanTable(
-        header=["Critère", "Offre A", "Offre B", "Offre C", "Offre D"],
-        rows=[[f"Critère {r}", "Oui", "Non", "Partiel", "Oui"] for r in range(6)],
+        header=["Critère", "Offre A", "Offre B"],
+        rows=[[f"Critère {r}", "Oui", "Partiel"] for r in range(6)],
     )
     assignment, patterns, frames = _builtin_tables(
-        _deck(SlidePlan(title="Quatre offres", table=offers))
+        _deck(SlidePlan(title="Deux offres", table=offers))
     )
-    assert [p.id for p in patterns if p and p.kind == "table"] == ["slide:266"]
+    assert [p.id for p in patterns if p and p.kind == "table"] == ["slide:288"]
     assert not assignment.notes
     (frame,) = frames
     assert _rows(frame) == [offers.header, *offers.rows]
@@ -322,21 +323,21 @@ def test_a_comparison_of_four_offers_builds_on_the_builtin_table_slide():
     # The theme draws the table: its style, no literal colour or template text.
     assert "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" in xml
     assert "srgbClr" not in xml and "typeface" not in xml
-    assert "Option A" not in xml
+    assert "Family" not in xml
 
 
 def test_a_table_too_tall_for_the_builtin_slide_continues_with_its_header():
     assignment, _, frames = _builtin_tables(
-        _deck(SlidePlan(title="Planning", table=_table(16)))
+        _deck(SlidePlan(title="Planning", table=_table(10, cols=3)))
     )
     assert "continue on a second 'table' slide" in assignment.notes[0]
     assert len(frames) == 2
-    assert [_rows(f)[0] for f in frames] == [[f"Col {c}" for c in range(5)]] * 2
-    assert sum(len(_rows(f)) - 1 for f in frames) == 16
+    assert [_rows(f)[0] for f in frames] == [[f"Col {c}" for c in range(3)]] * 2
+    assert sum(len(_rows(f)) - 1 for f in frames) == 10
 
 
-def test_six_columns_on_the_builtin_table_need_revision():
+def test_four_columns_on_the_builtin_table_need_revision():
     _, inventory = builtin.builtin_template()
-    plan = _deck(SlidePlan(title="T", table=_table(3, cols=6)))
+    plan = _deck(SlidePlan(title="T", table=_table(3, cols=4)))
     problems = assign(inventory, plan).problems
-    assert problems and "6 columns given, max 5" in problems[0].problem
+    assert problems and "4 columns given, max 3" in problems[0].problem
