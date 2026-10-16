@@ -55,7 +55,7 @@ None.
 
 - Fred: two new charts under `deploy/charts/`, the chart workflow matrix, the
   schema generation (`scripts/generate_chart_schema.py` or a sibling, `chart-schema.mk`),
-  `deploy/charts/README.md`, the FORKING_GUIDE's pod and application sections, an English
+  `deploy/charts/fred/README.md`, the FORKING_GUIDE's pod and application sections, an English
   migration note.
   No code, API or existing chart changes.
 - Operators: optional. Nothing changes until a pod is deployed from the new charts.

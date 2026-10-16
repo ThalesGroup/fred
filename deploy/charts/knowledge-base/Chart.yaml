@@ -7,6 +7,7 @@ type: application
 version: 1.5.0-post
 appVersion: "4.5.1"
 home: https://github.com/ThalesGroup/fred
+icon: https://site.fredlab.dev/images/fred.svg
 sources:
   - https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/knowledge-base
 keywords:
