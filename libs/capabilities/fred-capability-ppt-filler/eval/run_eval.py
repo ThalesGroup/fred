@@ -340,6 +340,8 @@ class RunResult:
     multi_given: int = 0
     multi_placed: int = 0
     multi_titled: int = 0
+    # Intent fields the plan set (chart, table and figure emphasis, key messages shown).
+    intents: int = 0
     leftovers: List[str] = field(default_factory=list)
     removed_by_check: int = 0
     truncated: int = 0
@@ -683,6 +685,7 @@ def _measure(
     xy = [c for c in sent if c.type in ("scatter", "bubble")]
     run.xy_charts = len(xy)
     run.xy_titled = sum(1 for c in xy if c.x_title and c.y_title)
+    run.intents = _intents(plan)
     if renders:
         report = renders[-1].report
         for slide_report in report.slides.values():
@@ -700,6 +703,23 @@ def _measure(
             args, assigned, deck, [n for n, p in zip(numbers, rendered) if p]
         )
         run.lost = len(run.lost_texts)
+
+
+def _intents(plan: DeckPlan) -> int:
+    """Intent fields set in the plan: what the model chose to emphasise."""
+    count = int(plan.show_takeaways)
+    for slide in plan.slides:
+        for chart in slide_charts(slide):
+            count += sum(
+                bool(v) for v in (chart.highlight, chart.sort, chart.stacked_as)
+            )
+        if slide.table is not None:
+            table = slide.table
+            count += int(table.total_row) + sum(
+                v is not None for v in (table.highlight_row, table.highlight_column)
+            )
+        count += sum(1 for item in slide.items if item.trend)
+    return count
 
 
 # A chart's text lives in its chart part, not in the slide's shapes.
@@ -858,9 +878,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         "| patterns used | tables used/given | table shape kept | table overflow "
         "| charts on chart slides/given | chart style keys "
         "| expected chart type | scatter/bubble axes titled "
-        "| multi-chart slides placed/titled/given "
+        "| multi-chart slides placed/titled/given | intents used "
         "| leftovers | removed by check | truncated | lost | split lists | variety asks | avg wall s | tokens in / out (k) | reply chars (mean) | tool call instead of reply |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -898,6 +918,7 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(r.xy_titled for r in ok)}/{sum(r.xy_charts for r in ok)} "
             f"| {sum(r.multi_placed for r in ok)}/{sum(r.multi_titled for r in ok)}"
             f"/{sum(r.multi_given for r in ok)} "
+            f"| {sum(r.intents for r in ok)} "
             f"| {sum(len(r.leftovers) for r in ok)} "
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "
@@ -911,12 +932,14 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         )
     lines += [
         "",
-        "| template | mode | analysis s | example slides labelled |",
-        "|---|---|---|---|",
+        "| template | mode | analysis s | example slides labelled | tool schema chars |",
+        "|---|---|---|---|---|",
     ]
     for v in variants:
+        schema = tools_mod._args_schema(v.inventory).model_json_schema()
         lines.append(
-            f"| {v.template} | {v.mode} | {v.analysis_seconds:.0f} | {v.labelled} |"
+            f"| {v.template} | {v.mode} | {v.analysis_seconds:.0f} | {v.labelled} "
+            f"| {len(json.dumps(schema))} |"
         )
     revisions = [a for r in results for a in r.attempts[1:] if a.tool_called]
     lines += [

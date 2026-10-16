@@ -156,6 +156,24 @@ PROMPTS: dict[str, str] = {
         "one slide: revenue 12, 15, 17, 21 M€; margin 8, 9, 9, 11 %; customers 120, 135, 150, "
         "170; churn 4, 3.5, 3.2, 3 %."
     ),
+    # Emphasis the user implies (intent fields), and key messages shown on request.
+    "intent_record_quarter": (
+        "Make 3 slides on our 2026 sales by quarter: Q1 12, Q2 15, Q3 24, Q4 17 M€. Q3 is "
+        "our record quarter."
+    ),
+    "intent_total_row": (
+        "Prépare 3 slides sur le budget 2026 par poste, en tableau : salaires 4,2 M€, "
+        "locaux 1,1 M€, outils 0,6 M€, déplacements 0,3 M€ ; la dernière ligne est le total, "
+        "6,2 M€."
+    ),
+    "intent_trends": (
+        "Build 3 slides for the board: revenue 48 M€ (up), costs 31 M€ (down), headcount "
+        "320 (stable)."
+    ),
+    "intent_key_messages": (
+        "Fais 3 slides sur nos ventes 2026 (Q1 12, Q2 15, Q3 24, Q4 17 M€) et affiche les "
+        "messages clés sur les slides."
+    ),
 }
 
 # The chart type each chart prompt calls for, measured as "expected type chosen".
@@ -218,4 +236,8 @@ EDITS: dict[str, str] = {
     "chart_bubble": "La Pologne fait 30 M€, pas 25 : corrige le graphique.",
     "charts_pair": "La marge des Amériques est de 14 %, pas 12 : corrige le second graphique.",
     "charts_grid": "Q4 churn was 2.8 %, not 3: fix that chart.",
+    "intent_record_quarter": "Sort the quarters from the largest to the smallest.",
+    "intent_total_row": "Mets en avant la ligne des salaires dans le tableau.",
+    "intent_trends": "Headcount actually went up: fix it.",
+    "intent_key_messages": "Raccourcis le message clé de la slide du graphique.",
 }
