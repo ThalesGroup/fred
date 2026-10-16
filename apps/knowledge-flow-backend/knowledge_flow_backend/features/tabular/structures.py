@@ -122,6 +122,7 @@ class TabularDocumentResponse(BaseModel):
     tag_ids: list[str] = Field(default_factory=list)
     tag_names: list[str] = Field(default_factory=list)
     source_tag: Optional[str] = None
+    source_kind: Literal["corpus", "conversation_attachment"] = "corpus"
 
 
 class TabularDocumentListTableResponse(BaseModel):
@@ -138,6 +139,8 @@ class TabularDocumentListResponse(BaseModel):
     document_uid: str
     document_name: str
     tables: Optional[list[TabularDocumentListTableResponse]] = None
+    source_kind: Literal["corpus", "conversation_attachment"] = "corpus"
+    tag_names: list[str] | None = None
 
 
 class TabularTableSchema(TabularTableSummary):
@@ -210,6 +213,10 @@ class TabularQueryRequest(BaseModel):
 
     sql: str = Field(..., min_length=1)
     dataset_uids: Optional[list[str]] = None
+    attachment_uids: list[str] | None = Field(default=None, max_length=1000, description="Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory.")
+    include_session_scope: bool = True
+    include_corpus_scope: bool = True
+    corpus_document_uids: list[str] | None = None
     document_library_tags_ids: Optional[list[str]] = Field(
         default=None,
         description="Optional list of library tag IDs used to keep the query inside selected libraries.",
@@ -284,6 +291,10 @@ class TabularSearchRequest(BaseModel):
         description="Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate.",
     )
     dataset_uids: Optional[list[str]] = None
+    attachment_uids: list[str] | None = Field(default=None, max_length=1000, description="Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory.")
+    include_session_scope: bool = True
+    include_corpus_scope: bool = True
+    corpus_document_uids: list[str] | None = None
     document_library_tags_ids: Optional[list[str]] = Field(
         default=None,
         description="Optional list of library tag IDs used to keep the search inside selected libraries.",

@@ -9,7 +9,10 @@ column names. Use only the tools you need for the user's request, but
 NEVER skip `describe_tabular_documents` before `read_query`.
 
 1. `list_tabular_documents` — returns each accessible CSV or Excel document's
-   name and `document_uid`. Excel entries also list their tables with
+   name, `document_uid` and `source_kind`. `corpus` files come from accessible
+   libraries (listed in `tag_names` when available); `conversation_attachment`
+   files belong to this conversation. The listing covers both enabled sources.
+   Excel entries also list their tables with
    sheet/title when available and the exact SQL `query_alias`. CSV entries
    have no table list; use their `document_uid` for schema inspection.
    An alias shown here is for locating a table, not for querying it yet.

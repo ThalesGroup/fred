@@ -71,6 +71,10 @@ class TabularController:
                 str | None,
                 Query(description="Team ID, required when owner_filter is 'team'."),
             ] = None,
+            attachment_uids: Annotated[list[str] | None, Query(max_length=1000, description="Explicit uploader-owned attachment UIDs.")] = None,
+            include_session_scope: bool = True,
+            include_corpus_scope: bool = True,
+            corpus_document_uids: Annotated[list[str] | None, Query()] = None,
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
@@ -83,7 +87,8 @@ class TabularController:
               aliases are exposed.
 
             How to use:
-            - Call without parameters to retrieve every readable document.
+            - The runtime supplies the current conversation attachment UIDs.
+            - Direct calls without attachment scope list only corpus documents.
             - Follow up with `/tabular/documents/schemas` for a spreadsheet's
               catalog and every document's typed tables.
             """
@@ -94,11 +99,17 @@ class TabularController:
                     document_library_tags_ids=document_library_tags_ids,
                     owner_filter=owner_filter,
                     team_id=team_id,
+                    attachment_uids=attachment_uids,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
+                    corpus_document_uids=corpus_document_uids,
                 )
                 return [
                     TabularDocumentListResponse(
                         document_uid=document.document_uid,
                         document_name=document.document_name,
+                        source_kind=document.source_kind,
+                        tag_names=document.tag_names or None,
                         tables=(
                             [
                                 TabularDocumentListTableResponse(
@@ -144,6 +155,10 @@ class TabularController:
                 str | None,
                 Query(description="Team ID, required when owner_filter is 'team'."),
             ] = None,
+            attachment_uids: Annotated[list[str] | None, Query(max_length=1000, description="Explicit uploader-owned attachment UIDs.")] = None,
+            include_session_scope: bool = True,
+            include_corpus_scope: bool = True,
+            corpus_document_uids: Annotated[list[str] | None, Query()] = None,
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
@@ -177,6 +192,10 @@ class TabularController:
                     document_library_tags_ids=document_library_tags_ids,
                     owner_filter=owner_filter,
                     team_id=team_id,
+                    attachment_uids=attachment_uids,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
+                    corpus_document_uids=corpus_document_uids,
                 )
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))

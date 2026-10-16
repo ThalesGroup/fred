@@ -2125,10 +2125,14 @@ class FredMcpToolProvider(ToolProviderPort):
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        document_access_config: dict[str, Any] | None = None,
     ) -> None:
         self._settings = settings
         self._agent = _McpRuntimeAgentShim(
-            binding=binding, settings=settings, credentials=credentials
+            binding=binding,
+            settings=settings,
+            credentials=credentials,
+            document_access_config=document_access_config,
         )
         self._mcp_runtime: MCPRuntime | None = None
 
@@ -2335,7 +2339,9 @@ class _McpRuntimeAgentShim:
         binding: BoundRuntimeContext,
         settings: AgentSettingsLike,
         credentials: OutboundCredentialProvider | None = None,
+        document_access_config: dict[str, Any] | None = None,
     ) -> None:
+        self.document_access_config = document_access_config
         self.runtime_context = binding.runtime_context
         self.agent_settings = settings
         self.credential_provider = credentials
