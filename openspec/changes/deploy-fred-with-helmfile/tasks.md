@@ -21,6 +21,25 @@ Evidence: scope confirmed on 2026-10-05 with local-only simplification; tracking
 
 - [x] 3b.1 Move the release, the k3d values and the hooks into `deploy/k3d/` (helmfile, values, build, prepare, finish); the factory deploys any product through `make k3d-app DIR=...`. Verified: renders identical to the former factory values; 5 Fred and 8 factory command tests pass.
 
+## 3c. Published releases without a checkout (2026-10-16)
+
+Evidence already gathered: published chart `fred` 3.6.0 with its `v3.6.0` images and the current k3d values deployed successfully on a freshly wiped k3d (developer-run); chart `fred-evaluator` 1.2.0 renders with its k3d values, every container on `:v1.2.0`.
+
+Factory (one PR, merged first; the product-owned `DIR` contract keeps working throughout):
+- [x] 3c.1 `bin/k3d-app.sh`: `APP` resolves `k3d-apps/<APP>/`; with `DIR`, export `K3D_APP_CHECKOUT` and run the checkout's `deploy/k3d/build`; refuse a non-version `RELEASE`. Command tests in `bin/test_k3d_app.py`.
+- [x] 3c.2 `k3d-apps/fred/`: helmfile (OCI chart pinned to 3.6.0, checkout chart in development mode), values (moved from Fred, evaluator declared at 1.2.0), `prepare` (model key from the environment), `finish` (login guidance; dashboards from the checkout in development mode). Hook tests moved from Fred's `deploy/k3d/test_hooks.py`.
+- [x] 3c.3 `k3d-apps/fred-evaluator/`: helmfile (OCI chart pinned to 1.2.0), values, `identities.yaml`, `prepare`, `finish`, moved from the evaluator.
+- [x] 3c.4 Factory `CLAUDE.md` model, `docs/LOCAL-DEVELOPMENT.md` (k3d walkthrough, application contract, `APP`/`RELEASE`), Makefile help.
+
+Products (merged after the factory):
+- [x] 3c.5 Fred (PR #3135): `deploy/k3d/` reduced to `build` and its test; helmfile, values, `prepare`, `finish`, `test_hooks.py` deleted; README and chart README point at `make k3d-app APP=fred [DIR=...]`; migration note updated.
+- [x] 3c.6 fred-agent-evaluator (PR #58): `deploy/k3d/` reduced to `build`; docs updated likewise.
+
+Verification:
+- [ ] 3c.7 Real `helmfile template` for both applications in published, `RELEASE` and development modes; then, by the developer, a freshly wiped k3d with `make k3d-app APP=fred` and `APP=fred-evaluator`, no checkout, and the evaluation application opened in Fred.
+
+Evidence (2026-10-16): factory `bin/test_k3d_app.py` 15 tests and `k3d-apps/fred/test_hooks.py` 5 tests pass; fred `deploy/k3d` 2 tests pass. Real `make k3d-app-validate` passes for `APP=fred`, `APP=fred-evaluator`, `APP=fred RELEASE=3.6.0`, `APP=fred DIR=<fred>`, `APP=fred-evaluator DIR=<evaluator>` and, unchanged, `DIR=<dt-agents>`; `RELEASE=latest` is refused. Real `helmfile template`: published Fred on `:v3.6.0`, evaluator on `:v1.2.0`. `RELEASE=3.5.0` is rejected by that chart's schema: the factory's values follow the pinned version, older releases are not guaranteed. The freshly wiped k3d deployment remains to be run by the developer.
+
 ## 4. Verify and deliver
 
 - [ ] 4.1 Run targeted command tests and required repository quality checks; record exact results separately from real Helm rendering evidence.

@@ -12,7 +12,7 @@ At inspection, `fred-app` revision 2 and `fred-stack` revision 3 are deployed in
 
 ## Decisions
 
-1. **The product owns its installation composition** (revised 2026-10-05, see "Generalization" below). `deploy/k3d/helmfile.yaml.gotmpl` holds the Fred release, using the product chart and `deploy/k3d/values.yaml` (moved from the factory's `k3d-apps/fred/values.yaml`). Retain `fred-app`, namespace `fred`, and explicit `k3d-<cluster>` targeting by default. Use only the local checkout chart; keep the existing release override. OCI/published chart support is deferred by the developer's local-only scope. Do not introduce synthetic product variants; existing `STACK=base|extended` remains an infrastructure choice.
+1. **The instance owns its installation composition** (revised 2026-10-16, see "Instance definitions in the factory" below). Retain `fred-app`, namespace `fred`, and explicit `k3d-<cluster>` targeting by default. Do not introduce synthetic product variants; existing `STACK=base|extended` remains an infrastructure choice.
 2. **Explicit image preparation in Fred.** Add `deploy/k3d/` build tooling, using existing app Make targets and their image naming. Emit ordinary Helm image values and an image list as generated local artifacts. The worker mapping is owned by Fred. Do not reinterpret the CI-only image-selection change or duplicate Docker build commands.
 3. **Generic factory entrypoint.** `make k3d-app DIR=<checkout>`, `make k3d-app-validate DIR=...` and `make k3d-app-uninstall DIR=...` deploy any product whose `deploy/k3d/` follows the contract (helmfile, values, optional `build`, `prepare`, `finish`). The factory names no product. Helmfile can also be used directly against prepared image values.
 4. **Ordering and validation.** Resolve files/tools and lint/render installation values before builds. Build images, write their effective overrides, then lint/render again before importing images, secret updates or release recovery. Validation uses provided/generated image overrides when present, otherwise explicitly reports that it validates chart/installation values only. It never silently builds. A failure stops subsequent phases.
@@ -22,6 +22,26 @@ At inspection, `fred-app` revision 2 and `fred-stack` revision 3 are deployed in
 ## Generalization (2026-10-05)
 
 The developer asked for one generic command able to deploy Fred, the evaluation application, knowledge bases or other products from their own repositories. The first slice's Fred-only factory state became a contract each product implements in `deploy/k3d/`: Fred's `build-images.py` became `build` (writing to the factory-provided `$K3D_APP_OUT`), `configure.sh key|finish` became the `prepare` and `finish` hooks, and the instance values moved here. fred-agent-evaluator implements the same contract. The factory keeps the cluster side (context, image import, recovery, sync) and documents a platform contract: namespace, service names and `fred-secrets` keys.
+
+## Instance definitions in the factory (2026-10-16)
+
+The 2026-10-05 contract assumed every deployment starts from a checkout. Deploying a published release needs no checkout, and values that name the instance's services, `fred-secrets` keys and Keycloak clients belong to the instance, as in a GitOps repository. For Fred's open-source ecosystem the factory therefore holds the definition; products keep only what needs their source.
+
+| Element | Home |
+| --- | --- |
+| helmfile, k3d values, default release version | factory `k3d-apps/<app>/` |
+| `identities.yaml` | factory `k3d-apps/<app>/` |
+| `prepare` (model key from the environment), `finish` (login guidance) | factory `k3d-apps/<app>/` |
+| `build` (images from source), `reset` | product `deploy/k3d/` |
+| Grafana dashboards | product chart (separate slice, see below) |
+
+- **Commands.** `make k3d-app APP=fred` deploys the default published release; `RELEASE=<version>` another one (a release version only, never `latest`). `APP=fred DIR=<checkout>` is the development mode: the helmfile takes the chart from the checkout and the engine runs the checkout's `deploy/k3d/build`. `DIR` alone keeps the product-owned contract for proprietary applications.
+- **Engine.** `bin/k3d-app.sh` gains one resolution step: `APP` selects `k3d-apps/<APP>/`, which follows the same contract as a product's `deploy/k3d/`; with `DIR`, the checkout is exported to the helmfile (`K3D_APP_CHECKOUT`) and its `build` runs. Nothing else in the engine changes.
+- **Version pinning.** Each factory helmfile pins the published version it deploys by default; a Fred or evaluator release is followed by a factory PR bumping it, as in any GitOps repository.
+- **Coupling cost.** A product PR adding a required configuration key needs a companion factory PR; schema validation at render reports it immediately.
+- **Overlays.** Proprietary registrations (other runtimes, other applications) go in a private values file passed with `VALUES=`. Helm replaces lists, so such an overlay repeats the `evaluation` entries it keeps.
+- **Dashboards.** Until the chart ships them, the factory's `finish` loads them only in development mode, from the checkout. Shipping them in the chart is a production-chart change and stays its own slice.
+- **Factory model.** The factory's "Applications stay with their product" and "names no application" rules become: open-source ecosystem applications are defined in `k3d-apps/`, the engine stays generic.
 
 ## Risks / Trade-offs
 
