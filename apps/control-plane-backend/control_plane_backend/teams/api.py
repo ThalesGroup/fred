@@ -135,7 +135,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         _request,
         exc: TeamAdminConstraintError,
     ) -> JSONResponse:
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        return JSONResponse(
+            status_code=409, content={"detail": str(exc), "code": exc.code}
+        )
 
     @app.exception_handler(TeamAdminCharterDisabledError)
     async def team_admin_charter_disabled_handler(
@@ -149,7 +151,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         _request,
         exc: TeamAlreadyExistsError,
     ) -> JSONResponse:
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        return JSONResponse(
+            status_code=409, content={"detail": str(exc), "code": exc.code}
+        )
 
     @app.exception_handler(RetentionUpdateError)
     async def retention_update_error_handler(

@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from control_plane_backend.teams.schemas import (
@@ -26,7 +26,10 @@ from control_plane_backend.teams.schemas import (
     TeamNotFoundError,
     TeamWithPermissions,
 )
-from control_plane_backend.teams.service import edit_team_registry
+from control_plane_backend.teams.service import (
+    _bulk_team_membership,
+    edit_team_registry,
+)
 from fred_core import (
     AuthorizationError,
     OrganizationPermission,
@@ -235,13 +238,15 @@ async def test_name_taken_changes_nothing(audit: list) -> None:
     rebac = _RosterRebac({"alice": {RelationType.TEAM_ADMIN}})
     store = _store()
 
-    with pytest.raises(TeamAlreadyExistsError):
+    with pytest.raises(TeamAlreadyExistsError) as refused:
         await edit_team_registry(
             _user(),
             TeamId("t1"),
             EditTeamRegistryRequest(name="Southbridge", add_admin_ids=["carol"]),
             _deps(rebac, store),
         )
+
+    assert refused.value.code == "team_name_taken"
 
     assert store.teams["t1"].name == "Northbridge"
     assert rebac.added_relations == []
@@ -269,13 +274,17 @@ async def test_removing_the_last_admin_is_refused(audit: list) -> None:
     rebac = _RosterRebac({"alice": {RelationType.TEAM_ADMIN}})
     store = _store()
 
-    with pytest.raises(TeamAdminConstraintError, match="at least one team_admin"):
+    with pytest.raises(
+        TeamAdminConstraintError, match="at least one team_admin"
+    ) as refused:
         await edit_team_registry(
             _user(),
             TeamId("t1"),
             EditTeamRegistryRequest(description="A" * 30, remove_admin_ids=["alice"]),
             _deps(rebac, store),
         )
+
+    assert refused.value.code == "team_last_admin"
 
     assert rebac.roles == {"alice": {RelationType.TEAM_ADMIN}}
     assert store.teams["t1"].description == DESCRIPTION
@@ -286,7 +295,7 @@ async def test_removing_the_last_admin_is_refused(audit: list) -> None:
 async def test_replacing_the_only_admin_by_a_pending_nominee_is_refused() -> None:
     rebac = _RosterRebac({"alice": {RelationType.TEAM_ADMIN}})
 
-    with pytest.raises(TeamAdminConstraintError, match="charter"):
+    with pytest.raises(TeamAdminConstraintError, match="charter") as refused:
         await edit_team_registry(
             _user(),
             TeamId("t1"),
@@ -296,6 +305,7 @@ async def test_replacing_the_only_admin_by_a_pending_nominee_is_refused() -> Non
             _charter_deps(rebac, _store(), accepted=set()),
         )
 
+    assert refused.value.code == "team_admin_pending_charter"
     assert rebac.roles == {"alice": {RelationType.TEAM_ADMIN}}
 
 
@@ -400,3 +410,57 @@ async def test_route_returns_the_updated_team(monkeypatch: pytest.MonkeyPatch) -
     assert seen[0].add_admin_ids == ["carol"]
     assert refused.status_code == 422
     assert len(seen) == 1
+
+
+@pytest.mark.asyncio
+async def test_refusals_carry_a_stable_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+    refusals = iter(
+        [
+            TeamAlreadyExistsError("Southbridge"),
+            TeamAdminConstraintError("No admin left."),
+            TeamAdminConstraintError("Pending.", code="team_admin_pending_charter"),
+        ]
+    )
+
+    async def _edit(*_args) -> TeamWithPermissions:
+        raise next(refusals)
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.api.edit_team_registry_from_service", _edit
+    )
+    from control_plane_backend.main import create_app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=create_app()), base_url="http://test"
+    ) as client:
+        responses = [
+            await client.patch("/control-plane/v1/teams/t1/registry", json={})
+            for _ in range(3)
+        ]
+
+    assert [r.status_code for r in responses] == [409, 409, 409]
+    assert [r.json()["code"] for r in responses] == [
+        "team_name_taken",
+        "team_last_admin",
+        "team_admin_pending_charter",
+    ]
+    assert responses[0].json()["detail"] == "Team 'Southbridge' already exists."
+
+
+@pytest.mark.asyncio
+async def test_listing_flags_admins_awaiting_the_charter() -> None:
+    rebac = _RosterRebac(
+        {
+            "alice": {RelationType.TEAM_ADMIN},
+            "carol": {RelationType.PENDING_TEAM_ADMIN},
+            "bob": {RelationType.TEAM_MEMBER},
+        }
+    )
+
+    admins, _members, _mine, pending = await _bulk_team_membership(
+        cast(Any, rebac), [TeamId("t-pending")], "alice"
+    )
+
+    assert admins[TeamId("t-pending")] == {"alice", "carol"}
+    assert pending[TeamId("t-pending")] == {"carol"}

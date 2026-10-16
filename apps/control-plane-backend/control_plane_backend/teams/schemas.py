@@ -41,7 +41,9 @@ class TeamNotFoundError(Exception):
 class TeamAdminConstraintError(Exception):
     """Raised when an operation would leave a team with no team_admin."""
 
-    def __init__(self, detail: str):
+    # `code` is a stable discriminator the UI maps to its own localized message.
+    def __init__(self, detail: str, code: str = "team_last_admin"):
+        self.code = code
         super().__init__(detail)
 
 
@@ -86,6 +88,8 @@ class TeamMemberLastRoleError(Exception):
 class TeamAlreadyExistsError(Exception):
     """Raised when team creation collides with an existing `team_metadata.name`
     (no Keycloak group involved — teams are `team_metadata` rows)."""
+
+    code = "team_name_taken"
 
     def __init__(self, name: str):
         self.name = name
@@ -150,6 +154,8 @@ class Team(BaseModel):
     name: str
     member_count: int | None = None
     admins: list[UserSummary] = Field(default_factory=list)
+    # Ids in `admins` still awaiting the team administrator charter (listing only).
+    pending_admin_ids: list[str] = Field(default_factory=list)
     is_member: bool = False
     # The caller's own raw role relations on this team (team_admin/_editor/
     # _analyst/_member — the same set `TeamMember.relations` exposes for other

@@ -3901,6 +3901,7 @@ export type TeamWithPermissions = {
   name: string;
   member_count?: number | null;
   admins?: UserSummary[];
+  pending_admin_ids?: string[];
   is_member?: boolean;
   my_relations?: UserTeamRelation[];
   description?: string | null;
@@ -3924,6 +3925,7 @@ export type Team = {
   name: string;
   member_count?: number | null;
   admins?: UserSummary[];
+  pending_admin_ids?: string[];
   is_member?: boolean;
   my_relations?: UserTeamRelation[];
   description?: string | null;

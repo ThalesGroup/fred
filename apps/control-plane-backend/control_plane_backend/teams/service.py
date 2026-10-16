@@ -1315,7 +1315,8 @@ async def _ensure_registry_edit_keeps_an_admin(
     if len(active_added) < len(added):
         raise TeamAdminConstraintError(
             "A new admin has not accepted the team administrator charter yet: "
-            "keep the current admin until they accept."
+            "keep the current admin until they accept.",
+            code="team_admin_pending_charter",
         )
     raise TeamAdminConstraintError(
         "Operation denied: a team must keep at least one team_admin."
@@ -2017,8 +2018,11 @@ async def _bulk_team_membership(
     dict[TeamId, set[str]],
     dict[TeamId, set[str]],
     dict[TeamId, set[UserTeamRelation]],
+    dict[TeamId, set[str]],
 ]:
     """Resolve admins/members (and the caller's own roles) for every id in `team_ids`.
+
+    The fourth map holds the admins still awaiting the charter.
 
     #2065 correction: the earlier "4 bulk `list_relations` reads total"
     design does not work against a real OpenFGA store — confirmed live
@@ -2049,7 +2053,7 @@ async def _bulk_team_membership(
     value.
     """
     if not team_ids:
-        return {}, {}, {}
+        return {}, {}, {}, {}
 
     per_team_relations = await asyncio.gather(
         *(_get_team_relations_cached(rebac, team_id) for team_id in team_ids)
@@ -2062,6 +2066,7 @@ async def _bulk_team_membership(
     # ReBAC read. Discarding it (as this function used to) forced a per-team
     # refetch to show role badges in the team list (#2298).
     my_relations_map: dict[TeamId, set[UserTeamRelation]] = {}
+    pending_admin_ids_map: dict[TeamId, set[str]] = {}
     for team_id, relations in zip(team_ids, per_team_relations):
         roles_by_user = _fold_team_role_relations(relations)
         # Listing avatars identify contacts, including nominees awaiting the charter.
@@ -2072,10 +2077,16 @@ async def _bulk_team_membership(
             if roles
             & {UserTeamRelation.TEAM_ADMIN, UserTeamRelation.PENDING_TEAM_ADMIN}
         }
+        pending_admin_ids_map[team_id] = {
+            uid
+            for uid, roles in roles_by_user.items()
+            if UserTeamRelation.PENDING_TEAM_ADMIN in roles
+            and UserTeamRelation.TEAM_ADMIN not in roles
+        }
         member_ids_map[team_id] = set(roles_by_user.keys())
         my_relations_map[team_id] = roles_by_user.get(user_id, set())
 
-    return admin_ids_map, member_ids_map, my_relations_map
+    return admin_ids_map, member_ids_map, my_relations_map, pending_admin_ids_map
 
 
 async def _enrich_teams_with_membership(
@@ -2100,6 +2111,7 @@ async def _enrich_teams_with_membership(
         team_admin_ids_map,
         team_member_ids_map,
         my_relations_map,
+        pending_admin_ids_map,
     ) = await _bulk_team_membership(rebac, team_ids, user.uid)
     all_admin_ids: set[str] = (
         set().union(*team_admin_ids_map.values()) if team_admin_ids_map else set()
@@ -2113,6 +2125,7 @@ async def _enrich_teams_with_membership(
         _build_team_dto(
             metadata,
             admin_ids=team_admin_ids_map.get(metadata.id, set()),
+            pending_admin_ids=pending_admin_ids_map.get(metadata.id, set()),
             member_ids=team_member_ids_map.get(metadata.id, set()),
             is_member=user.uid in team_member_ids_map.get(metadata.id, set()),
             my_relations=my_relations_map.get(metadata.id, set()),
@@ -2134,6 +2147,7 @@ def _build_team_dto(
     admin_summaries: dict[str, UserSummary],
     content_store: ContentStore,
     default_max_resources_storage_size: int | None,
+    pending_admin_ids: set[str] | None = None,
 ) -> Team:
     """Render one `Team` DTO from metadata plus already-resolved membership.
 
@@ -2181,6 +2195,7 @@ def _build_team_dto(
         name=metadata.name,
         member_count=len(member_ids),
         admins=admins,
+        pending_admin_ids=sorted((pending_admin_ids or set()) & admin_ids),
         is_member=is_member,
         my_relations=sorted(my_relations, key=lambda relation: relation.value),
         description=metadata.description,

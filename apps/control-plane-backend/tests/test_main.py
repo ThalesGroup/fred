@@ -1069,6 +1069,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "name": "Equipe personnelle",
             "member_count": 1,
             "admins": [],
+            "pending_admin_ids": [],
             "is_member": True,
             "my_relations": ["team_editor"],
             "description_is_placeholder": False,
@@ -1659,6 +1660,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "name": "Equipe personnelle",
         "member_count": 1,
         "admins": [],
+        "pending_admin_ids": [],
         "is_member": True,
         "description_is_placeholder": False,
         "joining_mode": "invite_only",
@@ -6144,7 +6146,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
             return "https://example.test/banner.png"
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
-        return {}, {}, {}
+        return {}, {}, {}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {}
@@ -6221,7 +6223,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
         members = {"user-1", "marc"}
-        return {"team-1": members}, {"team-1": members}, {"team-1": set()}
+        return {"team-1": members}, {"team-1": members}, {"team-1": set()}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {
