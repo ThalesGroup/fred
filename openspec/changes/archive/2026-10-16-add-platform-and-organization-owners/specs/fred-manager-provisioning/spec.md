@@ -66,6 +66,44 @@ platform owner.
 - **AND** an admin of TSN creates it, naming an initial admin who holds a direct
   TSN content role
 
+
+### Requirement: Canonical provisioning identities
+Provisioning SHALL reject usernames that differ from their lowercase form, contain
+control characters or have surrounding whitespace before any writes. It SHALL NOT
+normalize declared usernames silently. Before creating any identity it SHALL reject
+conflicting effective emails among missing identities and with existing directory
+accounts. Existing identities SHALL retain their profiles. The supported Keycloak
+realm SHALL disallow duplicate emails. External concurrent directory changes MAY
+still fail after preflight and SHALL retain the additive replay contract.
+
+#### Scenario: A noncanonical username cannot create a partial identity
+- **WHEN** a bundle declares `Alice` or a username with surrounding whitespace
+- **THEN** the whole bundle is refused before identity or authorization writes
+
+#### Scenario: Email conflict cannot create a prefix
+- **WHEN** missing identities have conflicting explicit or generated emails, or an email is already in use
+- **THEN** the whole bundle is refused before any identity creation
+
+### Requirement: Known organization owner identities
+New organization owner grants, including operator creation and import, SHALL
+verify that the target subject exists in the configured Keycloak directory before
+publishing ownership. Unavailable verification SHALL fail closed. Revocation
+SHALL NOT require the identity to still exist. Bootstrap SHALL continue to act
+only on its own verified human OIDC identity, never an asserted subject.
+
+#### Scenario: A fictitious owner cannot protect removal of the real owner
+- **WHEN** a platform owner attempts to name an unknown organization owner
+- **THEN** no owner tuple is written and the existing last-owner protection remains effective
+
+### Requirement: Content existence at mutation dispatch
+Document and folder mutations SHALL recheck existence under the organization lock
+before SQL changes or external dispatch. An object deleted while the caller waits
+SHALL return not-found without dispatch or a fabricated mutation success.
+
+#### Scenario: Deletion wins over a waiting ingestion or rename
+- **WHEN** deletion commits while an ingestion or rename waits for the organization lock
+- **THEN** the waiter returns not-found and submits no workflow
+
 ## MODIFIED Requirements
 
 ### Requirement: Complete scoped role model
@@ -169,6 +207,79 @@ The first-person UI SHALL present terms before the existing secret-gated root bo
 #### Scenario: Wrong secret or completed bootstrap
 - **WHEN** the secret is invalid or bootstrap has already completed
 - **THEN** the existing 403 or 409 feedback is shown without granting a new root
+
+### Requirement: Compatible and fully validated bundle
+
+The CLI and HTTP import SHALL accept only the current version-2 ZIP containing
+exactly `manifest.json`, `users.json`, `organizations.json`, `teams.json` and
+`projects.json`. The manifest SHALL declare `format_version: 2`,
+`users_schema_version: 2`, `source_platform: "swift"`; the four data files SHALL
+be arrays. Old JSON inputs and version-1 ZIPs SHALL fail with `not_yet_supported`
+before provisioning writes; no conversion or compatibility adapter SHALL run.
+Unsupported versions or sections SHALL likewise be rejected, never ignored.
+
+Users SHALL declare unique nonempty usernames, optional identity fields `email`,
+`first_name`, `last_name`, `password`, and optional `platform_roles`. Platform
+roles SHALL use the current owner model; only `owner` and `observer` SHALL alias
+`platform_owner` and `platform_observer`. Removed role names SHALL be rejected. Every space SHALL
+contain unique nonempty `ref`, nonempty `name` and a `roles` map from declared
+usernames to arrays of `member`, `editor`, `admin`, `analyst`, plus `owner` on organizations. Teams SHALL reference
+an organization through `organization`; projects SHALL reference a team through
+`team`. All parents SHALL be declared in the bundle. At least one organization
+SHALL exist; an empty projects array SHALL be accepted.
+
+All declared roles SHALL be cumulative; repeated equivalent grants SHALL be
+deduplicated. Import SHALL NOT synthesize undeclared content roles. A new space
+SHALL require a declared admin; a new organization SHALL also require a declared
+owner. Child grants SHALL require declared or existing direct parent content roles, checked before writes and under mutation locks. Duplicate
+usernames/references/sibling names/JSON keys, unknown fields/roles, undeclared
+parents/subjects, malformed archives and predictable identity/state conflicts
+SHALL fail whole-bundle preflight without provisioning a valid prefix.
+
+#### Scenario: All established roles can be provisioned
+- **WHEN** a valid ZIP declares every assignable role, including analyst and the
+  three delegated platform roles
+- **THEN** every requested direct grant is applied with its defined permissions
+- **AND** none is ignored, downgraded or treated as a placeholder
+
+#### Scenario: Admin-only team membership grants no team content
+- **WHEN** the ZIP declares organization member and only team admin for a person
+- **THEN** that person receives exactly those roles and no team content role
+
+#### Scenario: Invalid tail does not partially provision a valid prefix
+- **WHEN** the last entry has an unknown role, duplicate username, unresolved
+  passwordless identity or an uncreatable team or project
+- **THEN** the entire preflight fails without creating earlier identities
+
+#### Scenario: Complete project provisioning
+- **WHEN** a valid ZIP declares organization and team content membership plus
+  project admin for Alice
+- **THEN** Alice can administer that project without project content access
+- **AND** all other declared roles retain their distinct permissions
+
+#### Scenario: Invalid parent membership rejects the whole bundle
+- **WHEN** a project-role holder has only admin on its parent team and no declared
+  or existing parent content role
+- **THEN** no identity, space or role is provisioned from the bundle
+
+#### Scenario: Old input is explicitly unsupported
+- **WHEN** the caller submits the old JSON or Python version-1 ZIP
+- **THEN** import reports `not_yet_supported` without provisioning writes
+
+### Requirement: Verified operator and separate service identity
+
+Import SHALL require a valid caller bearer and a current OpenFGA platform-owner
+grant. Disabled authentication and non-Keycloak identity mapping SHALL be refused.
+The CLI SHALL authenticate and authorize before mutating database schema, FGA
+store/model, identities, spaces or grants. Keycloak credentials and client roles
+SHALL NOT substitute for the operator's Fred permission. The CLI SHALL use its
+own configured service account to resolve/create identities, and SHALL NOT depend
+on the HTTP server or Temporal being available.
+
+#### Scenario: Unauthorized commands have no side effects
+- **WHEN** a caller is unauthenticated, has an invalid/expired token, holds only
+  observer/delegated roles, or supplies only service credentials
+- **THEN** import exits nonzero and no provisioning or initialization write occurs
 
 ## REMOVED Requirements
 

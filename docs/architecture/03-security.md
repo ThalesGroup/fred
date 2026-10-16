@@ -78,7 +78,8 @@ Python and manager bootstrap records or roles.
 
 A person first accepts CGU, then presents their bearer and this secret. Comparison
 is constant-time; a token shorter than 16 characters is rejected with 422, a wrong
-secret with 403. The secret cannot nominate another person or bypass consent.
+secret with 403. The secret cannot nominate another person or bypass consent. The first owner is
+a real authenticated IAM person, not a local account created by the secret.
 
 Manager commits a root reservation for that caller before the OpenFGA grant. A
 failed grant can be retried only by the claimant. Once completion is recorded,
@@ -105,7 +106,12 @@ No platform role reaches a space.
 Administration is business, ownership is technical. Each organization also has an
 `owner` role: it names and removes the organization's admins and holds no content,
 management or descending permission (I21). Platform owners name organization owners,
-and an organization always keeps one (I14). Teams and projects have no owner.
+and an organization always keeps one (I14). New owner grants verify the subject in
+the configured Keycloak realm; an unavailable directory prevents the grant. This
+also applies to operator organization creation and import. Revocation accepts a
+deleted identity so stale grants can be removed. The check proves existence at
+lookup time; external IAM deletion is not transactional with OpenFGA. Teams and
+projects have no owner.
 
 Platform owner implies all platform capabilities. Feature manager grants
 `manage_capabilities` and team registry listing; prompt editor grants

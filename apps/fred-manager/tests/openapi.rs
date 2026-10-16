@@ -226,3 +226,25 @@ fn upload_optional_body_and_empty_responses_match_the_http_contract() {
         }
     }
 }
+
+#[test]
+fn platform_role_alias_descriptions_match_the_parser() {
+    let schema = schema();
+    for method in ["put", "delete"] {
+        let parameters = schema["paths"]["/fred-manager/v1/users/{user}/platform-roles/{role}"]
+            [method]["parameters"]
+            .as_array()
+            .unwrap();
+        let role = parameters.iter().find(|p| p["name"] == "role").unwrap();
+        assert_eq!(
+            role["description"],
+            "Also accepts the owner and observer aliases."
+        );
+    }
+    for accepted in ["owner", "observer"] {
+        assert!(PlatformRole::parse(accepted).is_some());
+    }
+    for removed in ["admin", "platform_admin", "team_manager"] {
+        assert!(PlatformRole::parse(removed).is_none());
+    }
+}

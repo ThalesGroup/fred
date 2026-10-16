@@ -126,11 +126,11 @@ unique; one personal space per owner and organization.
 
 ## OpenFGA model
 
-`store_name` identifies the configured legacy/source store. The SQL singleton
+`store_name` identifies the configured source store. The SQL singleton
 `authorization_store` binds that name to the active store and model IDs; it holds
 no roles. Startup pins those IDs and verifies the model without selecting a newer
-model or falling back to the source. Empty initialization and offline migration
-publish a fresh store only after all writes succeed. User IDs are Keycloak subjects.
+model or falling back to the source. Empty initialization publishes a fresh store only after its initialization writes
+succeed; existing state without a matching publication is refused. User IDs are Keycloak subjects.
 
 Each organization and the platform has a `guard` object with an immutable
 `initialized` sentinel and one random `version` revision. A mutation captures its
@@ -209,7 +209,7 @@ other files are arrays:
 
 | File | Declaration |
 | --- | --- |
-| `users.json` | Unique `username`, optional `email`, `first_name`, `last_name`, `password`, default-empty `platform_roles` |
+| `users.json` | Unique lowercase `username` without surrounding whitespace or control characters, optional `email`, `first_name`, `last_name`, `password`, default-empty `platform_roles` |
 | `organizations.json` | `ref`, `name`, `roles`; at least one organization |
 | `teams.json` | `ref`, `name`, `organization` reference, `roles` |
 | `projects.json` | `ref`, `name`, `team` reference, `roles`; empty array accepted |
@@ -234,3 +234,8 @@ Malformed archives, unsupported compression, encryption and symlinks are rejecte
 Missing identities require a nonempty password and are created enabled with a
 non-temporary credential. Absent or empty email uses `<username>@example.com`;
 optional first/last names are passed when supplied. Existing identity fields remain intact.
+Usernames are rejected when noncanonical, never silently normalized. Preflight checks
+effective emails of missing identities, case-insensitively within the bundle and
+against Keycloak's exact email search. A known conflict refuses the whole import
+before any identity creation. The supported realm disallows duplicate emails;
+concurrent external changes remain subject to the additive replay contract.

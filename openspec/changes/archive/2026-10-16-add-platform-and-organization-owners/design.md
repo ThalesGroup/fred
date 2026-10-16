@@ -45,3 +45,24 @@ grants, as before.
   platform, not a takeover by another owner.
 - Existing manager data and Python role names differ: a local reset is required;
   Python services keep their own catalog until they move to manager.
+
+## Audit corrections
+
+- Reject usernames whose lowercase form differs, surrounding whitespace and
+  control characters before any effects. Do not silently normalize identities.
+- Before writes, check effective emails of identities that do not already exist,
+  both against each other and the directory. Existing identities keep their
+  profiles. The supported realm forbids duplicate emails. Concurrent external
+  directory writes can still fail after preflight; replay remains additive.
+- Organization owner grants verify the Keycloak subject under the existing
+  authorization lock before publishing the tuple. Missing directory or identity
+  fails closed. Revoking a deleted identity remains possible. Operator creation
+  verifies its initial owner too. Import rechecks distinct owner subjects before grants, in batches of at most
+  eight concurrent directory calls; repeated ownership does not multiply lookups.
+- Locate a content object's immutable space before locking, then reload the
+  object using the held transaction before mutation or Temporal dispatch.
+- Regressions exercise real Keycloak normalization/email conflicts, owner lookup
+  failures and deletion overtaking a waiting content HTTP mutation. A test-only
+  Temporal protocol fixture observes dispatch; no worker implementation is added.
+- Reconcile the arc42 inventory and generated OpenAPI alias descriptions; sync
+  the already implemented tree and owner deltas in dependency order at close-out.

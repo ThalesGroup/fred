@@ -477,6 +477,7 @@ pub async fn create_personal_space(
 pub async fn grant(
     pool: &PgPool,
     fga: &Fga,
+    directory: Option<&crate::keycloak::Directory>,
     caller: &str,
     space_id: Uuid,
     role: Role,
@@ -488,6 +489,13 @@ pub async fn grant(
     }
     let (tx, mut guard) = lock_for(pool, fga, &space, role).await?;
     may_change(fga, caller, &space, role).await?;
+    if role == Role::Owner {
+        let directory = directory
+            .ok_or_else(|| AppError::Unavailable("Keycloak directory is not configured".into()))?;
+        if !directory.exists(target).await? {
+            return Err(AppError::NotFound);
+        }
+    }
     if let Some(parent) = space.parent_id
         && !holds_parent_content(fga, target, parent).await?
     {

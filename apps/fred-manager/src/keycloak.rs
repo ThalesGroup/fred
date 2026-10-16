@@ -46,6 +46,14 @@ pub struct User {
     pub username: String,
 }
 
+/// The directory uses a generated address only when the declaration omits one.
+pub(crate) fn effective_email(username: &str, email: Option<&str>) -> String {
+    email
+        .filter(|v| !v.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("{username}@example.com"))
+}
+
 impl Directory {
     pub fn configured(config: Option<&M2mConfig>) -> Result<Option<Self>> {
         let Some(config) = config.filter(|c| c.enabled) else {
@@ -219,6 +227,26 @@ impl Directory {
         bail!("Keycloak username pagination did not terminate")
     }
 
+    /// An exact email lookup must succeed before provisioning a missing identity.
+    /// Any match conflicts: a username lookup already established that this is a new account.
+    pub async fn email_in_use(&self, email: &str) -> Result<bool> {
+        let mut url = self.users_url.clone();
+        url.query_pairs_mut()
+            .append_pair("email", email)
+            .append_pair("exact", "true")
+            .append_pair("first", "0")
+            .append_pair("max", "1");
+        let response = self.request(Method::GET, url, None).await?;
+        if !response.status().is_success() {
+            bail!("Keycloak email lookup rejected ({})", response.status());
+        }
+        let users: Vec<User> = response
+            .json()
+            .await
+            .map_err(|_| anyhow::anyhow!("invalid Keycloak email response"))?;
+        Ok(!users.is_empty())
+    }
+
     /// Re-resolve immediately before creation and after both success and conflict.
     /// Existing profiles/passwords are never patched; a lost response is recovered by replay.
     pub async fn ensure_user(
@@ -237,7 +265,7 @@ impl Directory {
             .context("missing identity requires a password")?;
         let mut body = serde_json::json!({
             "username": username, "enabled": true,
-            "email": email.filter(|email| !email.is_empty()).map(str::to_owned).unwrap_or_else(|| format!("{username}@example.com")),
+            "email": effective_email(username, email),
             "credentials": [{"type":"password", "value":password, "temporary":false}],
         });
         if let Some(name) = first_name {

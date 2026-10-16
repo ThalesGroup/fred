@@ -92,7 +92,7 @@ Organization admins create teams, team admins create projects. The last admin of
 non-personal space, and the last owner of an organization, cannot be revoked. Capability checks and their contracts are in the
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
 
-Directory-backed platform grants require the manager's service client. The factory
+Platform grants, organization-owner grants and operator `create-org` require the manager's service client. The factory
 consumes `deploy/k3d/identities.yaml` during `k3d-app`; copy its generated
 `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` from `fred-secrets` to the host `.env` when
 running locally against that realm. `docker-up` alone does not provision this client.
@@ -135,7 +135,9 @@ A new organization declares at least one owner and one admin. Archive limits are
 100 MiB expanded, with no filesystem extraction.
 
 Existing identities keep their profile and password; new identities need a
-nonempty password. All space roles are explicit: admin alone grants no content
+nonempty password. Usernames must already be lowercase, without surrounding
+whitespace or control characters. Noncanonical names and known new-user email
+conflicts are rejected before any provisioning writes. All space roles are explicit: admin alone grants no content
 access, and every child-role holder needs a direct parent content role. Replay
 preserves committed space IDs and undeclared grants and repairs requested grants.
 Success returns JSON counts only after completion. A failed run reports a safe

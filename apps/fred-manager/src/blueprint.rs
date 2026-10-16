@@ -164,7 +164,11 @@ impl Bundle {
         let mut names = BTreeSet::new();
         let mut users = Vec::new();
         for user in raw {
-            if !name(&user.username) || !names.insert(user.username.clone()) {
+            if !name(&user.username)
+                || user.username.trim() != user.username
+                || user.username.to_lowercase() != user.username
+                || !names.insert(user.username.clone())
+            {
                 return Err(Invalid);
             }
             let platform = user
@@ -457,7 +461,7 @@ mod tests {
             Err(InputError::Unsupported)
         ));
     }
-    // Proves: I11
+    // Proves: I11, I18
     #[test]
     fn invalid_declarations_and_duplicate_json_keys_fail_without_echoing_input() {
         for (file, data) in [
@@ -469,6 +473,10 @@ mod tests {
                 "users.json",
                 r#"[{"username":"alice"},{"username":"alice"}]"#,
             ),
+            ("users.json", r#"[{"username":"Alice"}]"#),
+            ("users.json", r#"[{"username":" alice"}]"#),
+            ("users.json", r#"[{"username":"alice "}]"#),
+            ("users.json", r#"[{"username":"al\nice"}]"#),
             ("users.json", r#"[{"username":"alice","teams":[]}]"#),
             (
                 "users.json",

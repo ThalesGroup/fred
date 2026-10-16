@@ -142,6 +142,17 @@ async fn serve(config: Config) -> Result<()> {
 
 /// Organizations are created by an operator, not through the API.
 async fn create_org(config: Config, name: &str, admin: &str) -> Result<()> {
+    let directory = fred_manager::keycloak::Directory::configured(config.security.m2m.as_ref())?
+        .context("organization creation requires configured Keycloak service credentials")?;
+    let auth = auth::Authenticator::start(config.security()?).await?;
+    anyhow::ensure!(
+        auth.directory_subjects_match(directory.realm()),
+        "organization creation requires Keycloak subject mapping in the directory realm"
+    );
+    anyhow::ensure!(
+        directory.exists(admin).await?,
+        "organization owner does not exist in Keycloak"
+    );
     let pool = pool(&config).await?;
     let fga = fga(&config).await?.load(&pool).await?;
     let org = spaces::create_organization(&pool, &fga, name, admin)

@@ -45,3 +45,10 @@ the frontend's manager platform-authority hook and role labels. Docs: arc42 chap
 
 Quotas and FinOps settings for organization owners, resource roles for agents and
 prompts, Python role catalogs.
+
+## Audit completion
+
+The approved completion includes canonical provisioning usernames, whole-bundle
+email conflict preflight, directory verification for organization owners, and
+rechecking content existence under the mutation lock. These are corrections to
+the new manager contract, without legacy conversion or compatibility aliases.

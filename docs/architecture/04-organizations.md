@@ -62,7 +62,9 @@ An empty projects array is valid. The [declaration contract](A2-manager-contract
 is the exact wire reference; the [user journey](02-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)
 shows its observable effects.
 
-Whole-bundle preflight rejects predictable errors before provisioning writes.
+Whole-bundle preflight rejects predictable errors before provisioning writes,
+including noncanonical usernames and known effective-email conflicts for new
+identities. Names are never silently normalized.
 Organizations resolve by root name, teams by organization/name and projects by
 team/name. Existing identity fields, passwords, committed space IDs and undeclared
 roles are preserved. Requested grants are repaired; no content role or CGU

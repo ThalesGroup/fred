@@ -20,6 +20,10 @@ pub struct Gate {
 }
 #[derive(Default)]
 pub struct Control {
+    pub subject_delay: bool,
+    pub subject_lookups: Vec<String>,
+    pub subject_active: usize,
+    pub subject_peak: usize,
     pub lookup_gate: Option<Arc<Gate>>,
     pub create_gate: Option<Arc<Gate>>,
     pub created: Vec<Value>,
@@ -52,6 +56,7 @@ impl IdentityServer {
         let control = Arc::new(Mutex::new(Control::default()));
         let lookup_control = control.clone();
         let create_control = control.clone();
+        let subject_control = control.clone();
         let app = Router::new()
             .route(
                 "/realms/app/protocol/openid-connect/certs",
@@ -82,6 +87,19 @@ impl IdentityServer {
                                 tokio::time::sleep(std::time::Duration::from_secs(6)).await;
                             }
                             let first: usize = query["first"].parse().unwrap();
+                            if let Some(email) = query.get("email") {
+                                let values: Vec<_> = control
+                                    .created
+                                    .iter()
+                                    .filter(|u| {
+                                        u["email"]
+                                            .as_str()
+                                            .is_some_and(|v| v.eq_ignore_ascii_case(email))
+                                    })
+                                    .map(|u| json!({"id":"email-holder", "username":u["username"]}))
+                                    .collect();
+                                return Json(values);
+                            }
                             // A deliberately capped page size exercises continuation after a short page.
                             let mut values: Vec<_> = users
                                 .lock()
@@ -148,17 +166,34 @@ impl IdentityServer {
             .route(
                 "/admin/realms/app/users/{id}",
                 get(
-                    |State(users): State<Arc<Mutex<BTreeMap<String, String>>>>,
-                     Path(id): Path<String>| async move {
-                        if id == "unavailable" {
-                            return (
-                                StatusCode::SERVICE_UNAVAILABLE,
-                                Json(json!({"error":"secret-echo"})),
-                            );
-                        }
-                        match users.lock().await.get(&id) {
-                            Some(name) => (StatusCode::OK, Json(json!({"id":id, "username":name}))),
-                            None => (StatusCode::NOT_FOUND, Json(json!({}))),
+                    move |State(users): State<Arc<Mutex<BTreeMap<String, String>>>>,
+                          Path(id): Path<String>| {
+                        let control = subject_control.clone();
+                        async move {
+                            let delayed = {
+                                let mut control = control.lock().await;
+                                control.subject_lookups.push(id.clone());
+                                control.subject_active += 1;
+                                control.subject_peak =
+                                    control.subject_peak.max(control.subject_active);
+                                control.subject_delay
+                            };
+                            if delayed {
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            }
+                            control.lock().await.subject_active -= 1;
+                            if id == "unavailable" {
+                                return (
+                                    StatusCode::SERVICE_UNAVAILABLE,
+                                    Json(json!({"error":"secret-echo"})),
+                                );
+                            }
+                            match users.lock().await.get(&id) {
+                                Some(name) => {
+                                    (StatusCode::OK, Json(json!({"id":id, "username":name})))
+                                }
+                                None => (StatusCode::NOT_FOUND, Json(json!({}))),
+                            }
                         }
                     },
                 ),

@@ -428,7 +428,27 @@ async fn grant(
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path((id, role, target)): Path<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
-    spaces::grant(&s.pool, &s.fga, &user, id, parse_role(&role)?, &target).await?;
+    let role = parse_role(&role)?;
+    if role == Role::Owner
+        && !s
+            .directory
+            .as_ref()
+            .is_some_and(|d| s.auth.directory_subjects_match(d.realm()))
+    {
+        return Err(AppError::Unavailable(
+            "owner grants require Keycloak sub mapping in the configured realm".into(),
+        ));
+    }
+    spaces::grant(
+        &s.pool,
+        &s.fga,
+        s.directory.as_ref(),
+        &user,
+        id,
+        role,
+        &target,
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -548,6 +568,7 @@ async fn rename_folder(
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
     let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, folder.space_id).await?;
+    db::folder(&mut *tx, id).await?;
     db::rename_folder(&mut *tx, id, &req.name).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -573,6 +594,7 @@ async fn delete_folder(
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
     let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, folder.space_id).await?;
+    db::folder(&mut *tx, id).await?;
     db::delete_folder(&mut *tx, id).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -730,6 +752,8 @@ async fn rename_document(
 ) -> AppResult<StatusCode> {
     let document = db::document(&s.pool, id).await?;
     let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
+    // A deletion can commit while we wait for authorization's organization lock.
+    db::document(&mut *tx, id).await?;
     db::rename_document(&mut *tx, id, &req.name).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -757,6 +781,8 @@ async fn delete_document(
 ) -> AppResult<StatusCode> {
     let document = db::document(&s.pool, id).await?;
     let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
+    // A deletion can commit while we wait for authorization's organization lock.
+    let document = db::document(&mut *tx, id).await?;
     s.ingestion
         .delete(DeleteDocument {
             document_id: id,
@@ -806,6 +832,8 @@ async fn ingest_document(
     let request = ingest_request(&body)?;
     let document = db::document(&s.pool, id).await?;
     let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
+    // A deletion can commit while we wait for authorization's organization lock.
+    let document = db::document(&mut *tx, id).await?;
     let folder_path = match document.folder_id {
         Some(f) => db::folder(&mut *tx, f).await?.path,
         None => "/".to_string(),
@@ -958,7 +986,7 @@ fn platform_role(name: &str) -> AppResult<PlatformRole> {
 }
 #[utoipa::path(
     put, path = "/users/{user}/platform-roles/{role}",
-    params(("user" = String, Path), ("role" = PlatformRole, Path, description = "Also accepts the admin and observer aliases.")),
+    params(("user" = String, Path), ("role" = PlatformRole, Path, description = "Also accepts the owner and observer aliases.")),
     responses(
         (status = 204, description = "Success"),
         (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
@@ -999,7 +1027,7 @@ async fn grant_platform_role(
 }
 #[utoipa::path(
     delete, path = "/users/{user}/platform-roles/{role}",
-    params(("user" = String, Path), ("role" = PlatformRole, Path, description = "Also accepts the admin and observer aliases.")),
+    params(("user" = String, Path), ("role" = PlatformRole, Path, description = "Also accepts the owner and observer aliases.")),
     responses(
         (status = 204, description = "Success"),
         (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),

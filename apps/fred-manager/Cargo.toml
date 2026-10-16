@@ -27,6 +27,9 @@ utoipa-axum = "0.3"
 zip = { version = "9.0.3", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+axum = { version = "0.8", features = ["http2"] }
+prost = "0.14"
+flate2 = "1"
 base64 = "0.23.1"
 rsa = "=0.9.10"
 tower = { version = "0.5", features = ["util"] }

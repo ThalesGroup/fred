@@ -167,10 +167,10 @@ pub async fn delete_folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sql
     Ok(())
 }
 
-pub async fn document(pool: &PgPool, id: Uuid) -> sqlx::Result<Document> {
+pub async fn document<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<Document> {
     sqlx::query_as(concat!(document!(), " where id = $1"))
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(ex)
         .await
 }
 

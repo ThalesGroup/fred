@@ -146,6 +146,7 @@ impl Importer<'_> {
     async fn preflight(&self, bundle: &Bundle) -> Result<()> {
         self.authorize().await?;
         let mut subjects = BTreeMap::new();
+        let mut emails = std::collections::BTreeSet::new();
         for entry in &bundle.users {
             let user = &entry.identity;
             match self.directory.find_username(&user.username).await? {
@@ -155,7 +156,15 @@ impl Importer<'_> {
                 None if !user.password.as_ref().is_some_and(|p| !p.is_empty()) => {
                     return Err(invalid("missing identity requires a password"));
                 }
-                None => (),
+                None => {
+                    let email =
+                        crate::keycloak::effective_email(&user.username, user.email.as_deref());
+                    if !emails.insert(email.to_lowercase())
+                        || self.directory.email_in_use(&email).await?
+                    {
+                        return Err(conflict("new identity email is already in use"));
+                    }
+                }
             }
         }
         let mut tx = bootstrap::locked(self.pool).await?;
@@ -339,6 +348,27 @@ impl Importer<'_> {
         // after capturing its guard, so a late revoke cannot invalidate the decision.
         self.validate_parents(bundle, &resolved, subjects, None)
             .await?;
+        // Verify every owner before publishing any subtree. External IAM deletion is
+        // not transactional with OpenFGA; this is an existence check, not an account lease.
+        let owners: std::collections::BTreeSet<_> = bundle
+            .spaces
+            .iter()
+            .flat_map(|s| &s.roles)
+            .filter(|(_, roles)| roles.contains(&Role::Owner))
+            .map(|(username, _)| subjects[username].clone())
+            .collect();
+        let owners: Vec<_> = owners.into_iter().collect();
+        for batch in owners.chunks(8) {
+            let mut checks = tokio::task::JoinSet::new();
+            for subject in batch {
+                let directory = self.directory.clone();
+                let subject = subject.clone();
+                checks.spawn(async move { directory.exists(&subject).await });
+            }
+            while let Some(result) = checks.join_next().await {
+                ensure!(result??, "identity disappeared before owner grant");
+            }
+        }
         for (org, is_new) in resolved
             .iter()
             .filter(|(s, _)| s.kind == SpaceKind::Organization)

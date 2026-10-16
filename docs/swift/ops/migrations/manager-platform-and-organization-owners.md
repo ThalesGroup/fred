@@ -20,7 +20,15 @@ Existing manager roles, spaces, consent and bootstrap state are discarded.
 
 No new setting. Provisioning bundles use `platform_owner` instead of `platform_admin`
 (alias `owner` instead of `admin`), drop `team_manager`, and declare at least one
-`owner` on every new organization.
+`owner` on every new organization. Usernames must already be lowercase without
+surrounding whitespace or control characters; manager rejects rather than normalizes
+them. Known email conflicts for new identities reject the complete import before
+writes. The Keycloak realm must disallow duplicate emails.
+
+Organization owner grants and `create-org` require the existing manager service
+client and a target subject present in the same Keycloak realm. The bootstrap
+owner remains the caller's authenticated IAM identity; the deployment secret
+creates no separate local account.
 
 ## Upgrade
 

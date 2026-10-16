@@ -270,13 +270,13 @@ export type ListPlatformRolesApiArg = void;
 export type GrantPlatformRoleApiResponse = unknown;
 export type GrantPlatformRoleApiArg = {
   user: string;
-  /** Also accepts the admin and observer aliases. */
+  /** Also accepts the owner and observer aliases. */
   role: PlatformRole;
 };
 export type RevokePlatformRoleApiResponse = unknown;
 export type RevokePlatformRoleApiArg = {
   user: string;
-  /** Also accepts the admin and observer aliases. */
+  /** Also accepts the owner and observer aliases. */
   role: PlatformRole;
 };
 export type SpaceKind = "organization" | "team" | "project";

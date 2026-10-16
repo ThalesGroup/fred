@@ -19,7 +19,7 @@
 ## 4. Documentation and close-out
 
 - [x] 4.1 Update arc42 chapters 3, 4, 9 and references A1-A3 in the present tense, the manager README, and add the migration note requiring a local reset.
-- [ ] 4.2 Record verification evidence here, then one commit on `chore/rust-rebac`; no push. Independent review is handled by the developer's batch.
+- [x] 4.2 Record verification evidence here, then one commit on `chore/rust-rebac`; no push. Independent review is handled by the developer's batch.
 
 ## Verification evidence (2026-10-15)
 
@@ -43,3 +43,11 @@
   Chromium) not run.
 - `make -C docs/architecture generate` and `check` pass; `openspec validate --strict` passes;
   `scripts/migration_guides.py check-pr --worktree` validates the migration note.
+
+## Audit close-out (2026-10-16)
+
+The implementation is committed in `098cca415`. The manager/arc42 audit and the
+owner correction lot review cover its role, hierarchy, publication and consumer
+contracts. Current verification and review dispositions are recorded in the
+`add-platform-and-organization-owners` tasks. Its later role model supersedes this
+delta's platform-admin/team-manager catalog; both are synchronized in that order.

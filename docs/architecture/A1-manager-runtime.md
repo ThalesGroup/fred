@@ -128,7 +128,8 @@ control-plane roles. The page uses the shared `PageHeader`, `FileDropzone` and
 `GcuGuard` reads manager onboarding and gates `BootstrapGuard` and admitted routes;
 the same layout keeps the account menu available before admission without protected
 queries. Home and its navigation consume generated `/me/spaces` data directly.
-Selecting a membership displays its hierarchy and direct roles on Home. There is
+Selecting a membership displays its hierarchy and effective roles on Home,
+distinguishing those inherited from an ancestor. There is
 no synthetic Python team or permission mapping. Unsupported routes redirect home;
 agent widgets, task polling, announcements and Python bootstrap consumers are not
 mounted. Theme presentation uses configuration loaded at startup.
@@ -300,6 +301,12 @@ sequenceDiagram
 | `IngestDocument` | `document_id`, `space_id`, `folder_path`, `storage_prefix`, `source_key`, `mime`, `profile` (default `medium`), `requested_by` |
 | `DeleteDocument` | `document_id`, `space_id`, `storage_prefix` |
 
+Document and folder mutations locate the immutable owning space, acquire its
+organization lock and authorize, then reread the object through the held transaction
+(I22). If deletion commits while a caller waits, that caller returns 404 without
+SQL mutation or Temporal submission. The lock remains held through submission and
+SQL commit. The extra existence read does not add an OpenFGA call.
+
 Deletion submits `DeleteDocument {document_id, space_id, storage_prefix}` before
 deleting the row, so a failure leaves a retryable document rather than orphaned chunks.
 
@@ -320,7 +327,10 @@ Deleting an absent direct grant returns 404, even when the role is effective thr
 
 An organization's `owner` is granted and revoked by platform owners, under the
 platform lock and guard as well as the organization's; owner on a team or project is
-refused with 409, as is revoking an organization's last owner (I14). The
+refused with 409, as is revoking an organization's last owner (I14). Before granting,
+manager verifies the subject with its Keycloak service account in the same realm
+and requires raw subject mapping. Missing or unavailable identity verification
+prevents the write; revocation does not depend on the directory. The
 organization's admins are granted by its owners or admins; every other space role by
 the space's admins (I21).
 
@@ -359,7 +369,7 @@ sequenceDiagram
     C->>KC: verify operator bearer using signing keys
     C->>FGA: check platform owner before reading input
     C->>C: bound and validate the complete ZIP
-    C->>KC: preflight every exact username and missing password
+    C->>KC: preflight exact usernames, missing passwords and effective email conflicts
     C->>PG: lock platform, resolve roots, lock organizations in UUID order
     C->>FGA: read children of existing parents
     C->>PG: resolve child names, validate collisions and new-space admins
@@ -373,6 +383,7 @@ sequenceDiagram
     end
     C->>PG: lock platform, resolve roots, lock organizations, resolve children
     C->>FGA: validate all parent requirements
+    C->>KC: verify distinct organization owner subjects, at most eight concurrently
     loop each organization subtree
         C->>FGA: initialize new guard, capture platform and organization revisions
         C->>FGA: recheck authority and subtree parent requirements
@@ -384,14 +395,16 @@ sequenceDiagram
     C-->>C: return completed counts
 ```
 
-Predictable bundle, passwordless-identity, missing new-space-admin and parent-access
+Predictable bundle, passwordless-identity, email-conflict, missing new-space-admin and parent-access
 errors fail whole-bundle preflight before provisioning writes (I18). Directory
 traversal holds no mutation lock. Child names are read only after acquiring all
 organization locks. Reconciliation retains those locks and the platform lock through
 SQL commit. It captures revisions before rechecking authority and parent access,
 then carries acknowledged revisions through batches of at most 96 link and space-role
 tuples plus four guard operations (I4, I5). A subtree with no role writes consumes its guard
-explicitly. Platform grants use the platform guard and recheck identity existence.
+explicitly. Organization owners are checked once per distinct subject before subtree
+publication, in batches of at most eight concurrent directory lookups. Platform
+grants use the platform guard and recheck identity existence.
 
 Organizations resolve by root name, teams by organization/name, projects by team/name,
 among the committed children linked to the parent in OpenFGA. Personal spaces are not
