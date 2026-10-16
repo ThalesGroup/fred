@@ -504,8 +504,8 @@ def test_attachment_context_suffix_routes_csv_through_tabular_tools() -> None:
     )
 
     assert "New CSV and Excel attachments are tabular datasets" in suffix
-    assert "call describe_tabular_documents directly with its uid" in suffix
-    assert "Do not call list_tabular_documents" in suffix
+    assert "call list_tabular_documents to discover enabled" in suffix
+    assert "Do not call list_tabular_documents" not in suffix
     assert "partial searchable text preview" in suffix
     assert (
         "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document (use tabular/SQL tools first"

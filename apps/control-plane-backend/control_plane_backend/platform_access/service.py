@@ -17,6 +17,7 @@ from fred_core.security.platform_access.access_control import PlatformAccess
 from fred_core.security.platform_access.models import (
     PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
+    PlatformAccessRemovalRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -59,8 +60,11 @@ from control_plane_backend.platform_access.schemas import (
     PlatformEnrollmentLinksPage,
     PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
+    PlatformT0RefreshMode,
+    RefreshPlatformT0,
     TeamJoinLink,
 )
+from control_plane_backend.platform_access.t0 import run_t0
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import _add_team_member_relation
 from control_plane_backend.users.schemas import UserSummary
@@ -242,11 +246,15 @@ async def set_user(
         if grant:
             await access.store.add_exception(uid, actor.uid, "manual", session)
         else:
-            await session.execute(
-                delete(PlatformAccessUserRow).where(
-                    PlatformAccessUserRow.user_id == uid
-                )
-            )
+            exception = await access.store.exception(uid, session)
+            if exception is not None:
+                removal = await session.get(PlatformAccessRemovalRow, uid)
+                if removal is None:
+                    removal = PlatformAccessRemovalRow(user_id=uid)
+                    session.add(removal)
+                removal.removed_at = datetime.now(timezone.utc)
+                removal.removed_by = actor.uid
+                await session.delete(exception)
         await preserve_actor(access, actor, session)
 
 
@@ -561,123 +569,13 @@ async def activation_preview(
     )
 
 
-async def _t0_with_import_count(
-    access: PlatformAccess,
-    actor: KeycloakUser | None = None,
-    directory: PlatformAccessDirectory | None = None,
-) -> tuple[PlatformT0Preview, int | None]:
-    state = await access.state()
-    if state.t0_completed_at is not None:
-        return (
-            PlatformT0Preview(
-                candidates=0, matching=0, completed_at=state.t0_completed_at
-            ),
-            None,
-        )
-    directory_profiles = (
-        await directory.search()
-        if directory is not None and not directory.local
-        else None
-    )
-    async with access.store.read() as session:
-        state = await access.state(session)
-        rows = list((await session.scalars(select(UserRow))).all())
-    revision = state.revision
-    policy = access.policy(state)
-    by_id = {UUID(str(row.id)): row for row in rows}
-    profiles = (
-        directory_profiles
-        if directory_profiles is not None
-        else [
-            UserSummary(
-                id=str(row.id),
-                username=row.username,
-                email=row.email,
-                first_name=row.first_name,
-                last_name=row.last_name,
-            )
-            for row in rows
-            if directory is None or row.username is not None
-        ]
-    )
-    matches = await asyncio.to_thread(
-        lambda: [
-            access.observed_match(by_id.get(UUID(profile.id)), policy)
-            for profile in profiles
-        ]
-    )
-    matching, candidates = sum(matches), len(profiles) - sum(matches)
-    if actor is None:
-        return (
-            PlatformT0Preview(
-                candidates=candidates,
-                matching=matching,
-                completed_at=state.t0_completed_at,
-            ),
-            None,
-        )
-    async with access.store.mutation() as session:
-        state = await access.state(session)
-        if state.t0_completed_at is not None:
-            return (
-                PlatformT0Preview(
-                    candidates=candidates,
-                    matching=matching,
-                    completed_at=state.t0_completed_at,
-                ),
-                None,
-            )
-        if state.revision != revision:
-            raise HTTPException(409, "platform_access_t0_snapshot_changed")
-        if state.filtering_enabled:
-            raise HTTPException(409, "t0_requires_inactive_filtering")
-        existing = set(
-            (await session.scalars(select(PlatformAccessUserRow.user_id))).all()
-        )
-        present = set((await session.scalars(select(UserRow.id))).all())
-        now = datetime.now(timezone.utc)
-        selected = [
-            profile
-            for profile, matched in zip(profiles, matches, strict=True)
-            if not matched and UUID(profile.id) not in existing
-        ]
-        if directory_profiles is not None:
-            session.add_all(
-                [
-                    UserRow(id=UUID(profile.id))
-                    for profile in selected
-                    if UUID(profile.id) not in present
-                ]
-            )
-            await session.flush()
-        new_rows = [
-            PlatformAccessUserRow(
-                user_id=UUID(profile.id),
-                source="t0",
-                granted_by=actor.uid,
-                granted_at=now,
-            )
-            for profile in selected
-            if directory_profiles is not None or UUID(profile.id) in present
-        ]
-        session.add_all(new_rows)
-        state.t0_completed_at = now
-        return (
-            PlatformT0Preview(
-                candidates=candidates,
-                matching=matching,
-                completed_at=state.t0_completed_at,
-            ),
-            len(new_rows),
-        )
-
-
 async def t0(
     access: PlatformAccess,
     actor: KeycloakUser | None = None,
     directory: PlatformAccessDirectory | None = None,
+    refresh_mode: PlatformT0RefreshMode | None = None,
 ) -> PlatformT0Preview:
-    result, _ = await _t0_with_import_count(access, actor, directory)
+    result, _ = await run_t0(access, actor, directory, refresh_mode)
     return result
 
 
@@ -685,8 +583,9 @@ async def import_t0(
     access: PlatformAccess,
     actor: KeycloakUser,
     directory: PlatformAccessDirectory | None = None,
+    refresh: RefreshPlatformT0 | None = None,
 ) -> tuple[PlatformT0Preview, int | None]:
-    return await _t0_with_import_count(access, actor, directory)
+    return await run_t0(access, actor, directory, refresh=refresh)
 
 
 async def require_team(

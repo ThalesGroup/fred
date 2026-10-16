@@ -1047,3 +1047,16 @@ it("shows a supported page size and lets the administrator change it", () => {
   expect(dialog.textContent).toContain("Preview person 20");
   expect(state.filter).not.toHaveBeenCalled();
 });
+
+it("offers the small refresh action after completion with filtering on or off", () => {
+  state.completed = true;
+  act(() => root.render(<PlatformAccessPage />));
+  openTab("users");
+  const action = () => host.querySelector<HTMLButtonElement>('[aria-label="rework.platformAccess.t0Refresh.title"]')!;
+  expect(action().disabled).toBe(false);
+  expect(action().title).toBe("rework.platformAccess.t0Refresh.title");
+  expect(state.importT0).not.toHaveBeenCalled();
+  state.filteringEnabled = true;
+  act(() => root.render(<PlatformAccessPage />));
+  expect(action().disabled).toBe(false);
+});

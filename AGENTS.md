@@ -95,6 +95,14 @@ Adjust this policy from that evidence; do not build another tracking system
 solely to measure the workflow. Under evaluation means the policy can evolve,
 not that substantial work may silently bypass it.
 
+## Database table reuse
+
+Before adding a table, check whether an existing table can naturally hold the
+data. Prefer extending it when that keeps the model clear and avoids unnecessary
+tables. Add a separate table when distinct meaning, lifecycle, access rules or
+compatibility makes it clearer or safer; briefly explain that choice in the
+existing change design or PR.
+
 ## Commit and verification rhythm
 
 Commit completed, reviewable blocks as work progresses instead of accumulating

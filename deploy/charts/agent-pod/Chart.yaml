@@ -5,8 +5,9 @@ type: application
 # version follows the fred chart; appVersion identifies the fred-runtime version
 # used by the embedded AgentPodConfig values.schema.json.
 version: 1.5.0-post
-appVersion: "4.5.1"
+appVersion: "4.5.2"
 home: https://github.com/ThalesGroup/fred
+icon: https://site.fredlab.dev/images/fred.svg
 sources:
   - https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/agent-pod
 keywords:

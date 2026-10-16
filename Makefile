@@ -389,11 +389,11 @@ include scripts/makefiles/help.mk
 include scripts/makefiles/chart-schema.mk
 
 # k3d: fred-deployment-factory deploys this chart on its local k3d instance
-# (`make k3d-up`, then `make k3d-app DIR=<this checkout>`) from deploy/k3d/:
-# its helmfile, its values, and the build, prepare and finish hooks.
+# (`make k3d-up`, then `make k3d-app APP=fred DIR=<this checkout>`), with the
+# images deploy/k3d/build makes from this checkout.
 
 .PHONY: k3d-tests k3d-reset-storage-tests
-k3d-tests: ## Test local k3d image preparation and configuration without a cluster
+k3d-tests: ## Test local k3d image preparation and reset safeguards without a cluster
 	python3 -m unittest discover -s deploy/k3d -p 'test_*.py'
 
 k3d-reset-storage-tests: ## Verify reset storage operations on disposable Docker services (no k3d mutation)

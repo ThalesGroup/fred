@@ -73,11 +73,12 @@ required values, the credentials and the addresses to override.
 
 ### Requirement: Local deployment uses the same chart
 
-An application's repository SHALL install the chart it publishes on the local k3d instance from
-`deploy/k3d/`, with only instance values, so that the local deployment exercises the chart
+The local k3d instance SHALL install the chart an application publishes, with only instance
+values (fred-deployment-factory's `k3d-apps/<app>/` for Fred's open-source applications, the
+application's `deploy/k3d/` otherwise), so that the local deployment exercises the chart
 operators receive.
 
 #### Scenario: Local deployment
 
-- **WHEN** a developer runs `make k3d-app DIR=<the application's checkout>`
-- **THEN** the release is the application's own chart with the values of `deploy/k3d/`
+- **WHEN** a developer runs `make k3d-app APP=<app>` or `make k3d-app DIR=<the application's checkout>`
+- **THEN** the release is the application's own chart with only the instance's k3d values

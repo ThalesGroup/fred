@@ -3813,8 +3813,21 @@
       "title": "Platform access",
       "description": "Choose who can use the platform: a rule on the account, and a whitelist of users and teams.",
       "disabled": "This page is only available when user sign-in and permission checks are enabled on this instance.",
-      "t0Hint": "Do this once before enabling filtering: current users are added to the whitelist, and you can remove them afterwards.",
+      "t0Hint": "Add existing users who are not already accepted by the rule to the whitelist. You can run this import again at any time.",
       "t0Preview": "{{count}} users to import; {{matching}} already accepted by the rule.",
+      "t0Refresh": {
+        "title": "Refresh the whitelist",
+        "mode": "Update mode",
+        "preserve_removals": "Preserve removals",
+        "include_removed": "Include removed people",
+        "confirm": "Run import again",
+        "includeWarning": "This refresh can re-add people manually removed from the whitelist.",
+        "missingHistory": "Removal history is unavailable. This refresh will recalculate the entire whitelist and can re-add people who were manually removed. A full import is required before future refreshes can preserve removals.",
+        "preview": "Estimate: {{count}} users to add; {{skipped}} removals preserved.",
+        "success_one": "Whitelist updated: {{count}} user added.",
+        "success_other": "Whitelist updated: {{count}} users added.",
+        "conflict": "The configuration or last import changed. Check the updated estimate before confirming again."
+      },
       "t0Done": "Initial import completed",
       "t0Import": "Import existing users",
       "search": "Search a whitelisted user",
@@ -4056,7 +4069,7 @@
       "origin": {
         "label": "Origin",
         "manual": "Manual",
-        "t0": "Initial import"
+        "t0": "Import"
       },
       "whitelistedUsers": "Whitelisted users",
       "whitelistedUsersHint": "Users added here can always access the platform, whatever the rule says.",

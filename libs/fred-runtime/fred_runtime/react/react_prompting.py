@@ -249,9 +249,9 @@ def build_attachment_context_suffix(
     if not safe_attachments_markdown:
         return ""
     spreadsheet_capability_sentence = (
-        "For a CSV or Excel attachment, call describe_tabular_documents "
-        "directly with its uid. Do not call list_tabular_documents: conversation "
-        "attachments are absent from that listing. An Excel schema includes "
+        "For CSV and Excel data, call list_tabular_documents to discover enabled "
+        "corpus documents and current-conversation attachments together, then "
+        "describe_tabular_documents with the selected uids. An Excel schema includes "
         "output.md, the roadmap of "
         "sheets, table names and aliases; use those aliases in tabular/SQL "
         "queries for exact counts, filters and values. If a tabular dataset "

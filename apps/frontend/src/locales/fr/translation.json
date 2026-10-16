@@ -3813,8 +3813,21 @@
       "title": "Accès plateforme",
       "description": "Choisissez qui peut utiliser la plateforme : une règle sur le compte, et une liste blanche d'utilisateurs et d'équipes.",
       "disabled": "Cette page n'est disponible que si la connexion des utilisateurs et le contrôle des droits sont activés sur cette instance.",
-      "t0Hint": "À faire une seule fois avant d'activer le filtrage : les utilisateurs actuels sont ajoutés à la liste blanche, d'où vous pourrez les retirer ensuite.",
+      "t0Hint": "Ajoutez les utilisateurs existants que la règle n'accepte pas déjà à la liste blanche. Vous pouvez relancer cet import à tout moment.",
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} déjà acceptés par la règle.",
+      "t0Refresh": {
+        "title": "Actualiser la liste blanche",
+        "mode": "Mode de mise à jour",
+        "preserve_removals": "Conserver les retraits",
+        "include_removed": "Réinclure les personnes retirées",
+        "confirm": "Relancer l'import",
+        "includeWarning": "Cette relance pourra réajouter les personnes retirées manuellement de la liste blanche.",
+        "missingHistory": "L'historique des retraits n'est pas disponible. Cette relance recalculera toute la liste blanche et pourra réajouter des personnes retirées manuellement. Une réimportation complète est nécessaire avant de pouvoir conserver les retraits lors des prochaines relances.",
+        "preview": "Estimation : {{count}} utilisateurs à ajouter ; {{skipped}} retraits conservés.",
+        "success_one": "Liste blanche mise à jour : {{count}} utilisateur ajouté.",
+        "success_other": "Liste blanche mise à jour : {{count}} utilisateurs ajoutés.",
+        "conflict": "La configuration ou le dernier import a changé. Vérifiez l'estimation actualisée avant de confirmer à nouveau."
+      },
       "t0Done": "Import initial terminé",
       "t0Import": "Importer les utilisateurs existants",
       "search": "Rechercher un utilisateur de la liste blanche",
@@ -4056,7 +4069,7 @@
       "origin": {
         "label": "Origine",
         "manual": "Manuel",
-        "t0": "Import initial"
+        "t0": "Import"
       },
       "whitelistedUsers": "Utilisateurs de la liste blanche",
       "whitelistedUsersHint": "Les utilisateurs ajoutés ici ont toujours accès à la plateforme, quelle que soit la règle.",

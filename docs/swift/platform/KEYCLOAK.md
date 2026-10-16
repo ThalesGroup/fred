@@ -53,6 +53,45 @@ permissions) is entirely OpenFGA-owned — see [REBAC.md](./REBAC.md). No
 Keycloak group-management client role (`query-groups`, `view-groups`,
 `manage-users` for group membership) is required for authorization.
 
+### 1.2.1 Optional local login when SSO is the default
+
+Open Fred with `?keycloak-login=true` to request local Keycloak login:
+
+```text
+https://fred.example/?keycloak-login=true
+https://fred.example/help?topic=agents&keycloak-login=true#tools
+```
+
+This works with both `security.user.provider: keycloak` and `oidc`, including
+Keycloak connected as a generic OIDC issuer. Fred uses its normal Authorization
+Code flow with PKCE S256 and adds `kc_idp_hint=` (an intentionally empty value,
+skipping the default identity-provider redirector) and `prompt=login` (fresh
+authentication even with an existing Keycloak session).
+
+The explicit link clears the previous local Fred session without logging out of
+the provider. After successful login, Fred returns to the requested page with
+its other query parameters and fragment preserved. The flag is consumed before
+redirecting, so reloads resume normal session restoration. Reopen the explicit
+link to retry a failed attempt. Ordinary URLs keep their existing behavior.
+
+Keycloak must permit the local login path. In the client's effective Browser
+flow, keep the Identity Provider Redirector before Forms, set both to
+`ALTERNATIVE`, and keep Username Password Form `REQUIRED` inside Forms. Configure
+the redirector's Default Identity Provider with the SSO alias. If using Keycloak's
+standard Organization branch, its outer subflow is also `ALTERNATIVE`; retain
+the nested conditional steps and any deliberately required membership or MFA
+checks. Duplicate a shared flow before changing it and select the copy under
+Clients > app > Advanced > Authentication flow overrides > Browser Flow.
+
+The account needs a usable credential in Fred's realm. A master-realm
+administrator or an SSO-linked account without a local password is insufficient.
+Organization settings can show an identity-first username/email screen before
+the password screen. This option grants no role, membership or admission bypass.
+
+On other OIDC servers, `prompt=login` requests fresh authentication, while
+`kc_idp_hint` has no standard OIDC meaning; a local Keycloak form is only promised
+with a compatible Keycloak server. Security-disabled Fred ignores the flag.
+
 ### 1.3 Roles for user RBAC
 
 Create **client roles on `app`** (not realm roles) so Knowledge Flow receives them in `realm_access.roles`:

@@ -562,9 +562,9 @@ Open <http://localhost:5173> in your browser.
 ## k3d Local Deployment
 
 Fred runs in a local [k3d](https://k3d.io) cluster with this repository's Helm chart
-(`deploy/charts/fred`), the one every deployment starts from. Its k3d values, image build
-and hooks are in `deploy/k3d/`; the k3d instance itself - its infrastructure and the
-commands - lives in
+(`deploy/charts/fred`), the one every deployment starts from, published or from this
+checkout. The image build is in `deploy/k3d/`; the k3d instance itself - its
+infrastructure, Fred's k3d values (`k3d-apps/fred/`) and the commands - lives in
 [fred-deployment-factory](https://github.com/fred-agent/fred-deployment-factory). The complete walkthrough, from a clean machine to a logged-in
 `platform_admin`, is its `docs/LOCAL-DEVELOPMENT.md` → "k3d: the full stack in Kubernetes".
 
@@ -572,10 +572,12 @@ In short, from fred-deployment-factory:
 
 ```bash
 make k3d-up                           # the infrastructure, once
-make k3d-app DIR=<this checkout>      # build this checkout, deploy it; rerun after any change
+make k3d-app APP=fred                 # the published release, no checkout (RELEASE=<version> for another)
+make k3d-app APP=fred DIR=<this checkout>   # build this checkout, deploy it; rerun after any change
 ```
 
-The model API key comes from `apps/fred-agents/config/.env` (`make setup-env` here, once).
+The model API key comes from the environment (`OPENAI_API_KEY=<key> make k3d-app ...`
+once), or with `DIR` from `apps/fred-agents/config/.env` (`make setup-env` here, once).
 Fred is then on <http://localhost:8088>. The first time, register on its login page and
 follow the token-retrieval instruction printed by `make k3d-app`: you become `platform_admin`.
 
