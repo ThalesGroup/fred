@@ -76,13 +76,24 @@ has none.
   `figures_unverified` note. The `validate_plan` setting turns a
   conversation's first build into an outline the user answers first.
 
+- **Intents** (meaning, never style): `chart.highlight` / `sort` /
+  `stacked_as`, `table.total_row` (the table style's own total row, else bold)
+  / `highlight_row` / `highlight_column` (bold and a light tint of the style's
+  accent; `table_intents.py` lists PowerPoint's predefined styles), and
+  `items[].trend` (an arrow before the figure, in its own font). A template
+  zone named or read as the key message (`takeaway`, `key message`, `à
+  retenir`…) shows the slide's takeaway only when the user asks for the key
+  messages on the slides (`show_takeaways`). An intent the slide cannot show
+  never blocks: the agent is told and "What was built" says so.
+
 Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
 Design: `openspec/changes/ppt-builder-capability/`, charts:
 `openspec/changes/ppt-builder-charts/` and
 `openspec/changes/ppt-builder-more-chart-types/`,
 `openspec/changes/ppt-builder-multi-chart-slides/`, storytelling:
-`openspec/changes/ppt-builder-storytelling/`.
+`openspec/changes/ppt-builder-storytelling/`, intents:
+`openspec/changes/ppt-builder-intent-fields/`.
 
 ### Evaluation (opt-in)
 

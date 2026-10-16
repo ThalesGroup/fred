@@ -97,6 +97,8 @@ are built identically.
 - **Provide the maximum number of items**: the agent removes the extra ones and
   recentres the others, it never adds any.
 - Icons stay the template's own; an icon goes with its item.
+- A key figure can show a small up, down or level arrow before its number, in
+  the number's own font and colour: there is nothing to prepare.
 
 ## Leave room for the text
 
@@ -133,6 +135,11 @@ The number of rows shown sets what the table can hold. The agent may remove
 columns (it keeps at least two) and add or remove rows within the table's
 height.
 
+A total line and a row or column to point out also follow the table style:
+the style's own look for a total line (bold where it has none), and bold text
+on a light shade of the style's colour for the row or column. Choose a table
+style that shows a total line if your tables often end with one.
+
 ## Charts
 
 The agent turns the numbers of a request into a real PowerPoint chart (bars,
@@ -142,7 +149,7 @@ editable in PowerPoint.
 
 - **Offer a chart slide**: a layout with a chart placeholder, or an example
   slide holding one chart over a good part of it. A text area beside the chart
-  takes a short takeaway; add a second chart slide without that area for charts
+  takes a short comment; add a second chart slide without that area for charts
   that need no comment.
 - **The template decides the look**: the chart takes the theme's accent
   colours, in order, and its body font. To change the colours of every chart,
@@ -160,6 +167,15 @@ editable in PowerPoint.
   Content" layout offers) takes the chart when the slide has no other text.
 - The agent never draws a chart elsewhere, and asks for fewer categories or
   shorter labels rather than squeeze them.
+
+## Key messages on the slides
+
+Each slide's key message, what the audience should remember, goes in the
+speaker notes. To let the agent also show it on the slide when someone asks
+for it ("show the key messages on the slides"), name the text area meant for
+it `takeaway` or `key message` in PowerPoint's Selection pane, or on its
+layout. Without such a request, that area is filled like any other text area.
+A key message too long for the area stays in the speaker notes.
 
 ## What is set aside
 

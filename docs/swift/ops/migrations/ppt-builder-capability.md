@@ -59,6 +59,14 @@ package, so every fred-agents pod that installs that package registers it.
    figures) are always on and need no action. The agent setting "Validate the
    plan before building" is off by default; a proposed plan is stored in the
    existing `cap_ppt_builder_deck_plan` row, with no schema change.
+6. Emphasis fields (a chart's highlighted category, a table's total row or
+   highlighted row and column, a key figure's trend arrow) need no action and
+   leave a deck without them unchanged, except one fix: a template table whose
+   own properties flag a total row no longer styles the last data row as a
+   total unless the plan says it is one. Template zones named for the key
+   message raise the analysis version once more (re-read in the background,
+   no action); they show a slide's takeaway only when the user asks for the
+   key messages on the slides, otherwise they are filled as before.
 
 ## Validation
 

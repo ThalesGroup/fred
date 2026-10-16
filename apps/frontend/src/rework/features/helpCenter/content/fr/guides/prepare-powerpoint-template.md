@@ -101,6 +101,9 @@ quand ils sont construits à l'identique.
 - **Prévoyez le nombre maximal d'éléments** : l'agent retire ceux qui sont en
   trop et recentre les autres, il n'en ajoute jamais.
 - Les icônes restent celles du template ; une icône part avec son élément.
+- Un chiffre clé peut afficher devant lui une petite flèche de hausse, de
+  baisse ou de stabilité, dans la police et la couleur du chiffre : rien à
+  préparer.
 
 ## Laisser de la place au texte
 
@@ -138,6 +141,13 @@ Le nombre de lignes affichées fixe ce que le tableau peut contenir. L'agent
 peut retirer des colonnes (il en garde au moins deux) et ajouter ou retirer
 des lignes dans la hauteur du tableau.
 
+Une ligne de total et une ligne ou colonne à faire ressortir suivent aussi le
+style de tableau : l'apparence que le style prévoit pour une ligne de total
+(du gras s'il n'en prévoit pas), et un texte en gras sur une teinte claire de
+la couleur du style pour la ligne ou la colonne. Choisissez un style de
+tableau qui affiche une ligne de total si vos tableaux se terminent souvent
+par un total.
+
 ## Les graphiques
 
 L'agent transforme les chiffres d'une demande en un vrai graphique PowerPoint
@@ -148,7 +158,7 @@ mesures), qui reste modifiable dans PowerPoint.
 - **Prévoyez une diapositive de graphique** : un masque avec un espace réservé
   de graphique, ou une diapositive d'exemple avec un graphique qui en occupe
   une bonne partie. Une zone de texte à côté du graphique reçoit un court
-  message clé ; ajoutez une seconde diapositive de graphique sans cette zone
+  commentaire ; ajoutez une seconde diapositive de graphique sans cette zone
   pour les graphiques qui se passent de commentaire.
 - **Le template décide de l'apparence** : le graphique prend les couleurs
   d'accentuation du thème, dans l'ordre, et sa police de corps. Pour changer
@@ -170,6 +180,16 @@ mesures), qui reste modifiable dans PowerPoint.
   n'a pas d'autre texte.
 - L'agent ne dessine jamais un graphique ailleurs, et demande moins de
   catégories ou des libellés plus courts plutôt que de les tasser.
+
+## Les messages clés sur les diapositives
+
+Le message clé de chaque diapositive, ce que le public doit en retenir, va
+dans les notes de l'orateur. Pour que l'agent l'affiche aussi sur la
+diapositive quand on le lui demande (« affiche les messages clés sur les
+slides »), nommez la zone de texte prévue pour lui `message clé`, `à retenir`
+ou `takeaway` dans le volet Sélection de PowerPoint, ou sur son masque. Sans
+cette demande, la zone est remplie comme toute autre zone de texte. Un message
+clé trop long pour la zone reste dans les notes de l'orateur.
 
 ## Ce qui est mis de côté
 
