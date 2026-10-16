@@ -32,10 +32,16 @@ export default function TextArea({
   maxLength,
   value,
   required,
+  "aria-describedby": callerDescribedBy,
+  "aria-invalid": callerInvalid,
   ...props
 }: TextAreaProps) {
   const id = useId();
   const descriptionId = useId();
+  const hintId = useId();
+  const hint = error || explanation;
+  const describedBy =
+    [callerDescribedBy, description && descriptionId, hint && hintId].filter(Boolean).join(" ") || undefined;
   const characterCounter = String(value).length;
   // No hint/error/counter to show — drop the container entirely rather than
   // leaving an empty row under the field.
@@ -60,13 +66,16 @@ export default function TextArea({
         value={value}
         maxLength={maxLength}
         required={required}
-        aria-describedby={description ? descriptionId : undefined}
+        aria-describedby={describedBy}
+        aria-invalid={error ? true : callerInvalid}
         {...props}
       />
 
       {hasInformation && (
         <span className={styles.information}>
-          <span className={styles.hint}>{error || explanation || null}</span>
+          <span className={styles.hint} id={hint ? hintId : undefined}>
+            {hint || null}
+          </span>
           <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
         </span>
       )}

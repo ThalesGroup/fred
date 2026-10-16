@@ -50,4 +50,27 @@ describe("TextArea description", () => {
     expect(container.querySelector("textarea")?.hasAttribute("aria-describedby")).toBe(false);
     expect(container.firstElementChild!.children).toHaveLength(2);
   });
+
+  it("ties the error to the field and marks it invalid, keeping the caller's own reference", () => {
+    render(
+      <TextArea
+        label="Team description"
+        description="State the team's objectives."
+        error="At least 20 characters."
+        aria-describedby="external"
+        value=""
+        readOnly
+      />,
+    );
+
+    const field = container.querySelector("textarea")!;
+    const ids = field.getAttribute("aria-describedby")!.split(" ");
+    expect(ids[0]).toBe("external");
+    expect(ids.map((id) => document.getElementById(id)?.textContent)).toEqual([
+      undefined,
+      "State the team's objectives.",
+      "At least 20 characters.",
+    ]);
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+  });
 });
