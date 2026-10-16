@@ -45,7 +45,10 @@ from fred_core import (
     Resource,
 )
 from fred_core.common import TeamId
-from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_core.teams.metadata_store import (
+    TEAM_DESCRIPTION_PLACEHOLDER,
+    TeamMetadataStore,
+)
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -76,7 +79,7 @@ def _admin() -> KeycloakUser:
 async def team_store(control_plane_sql_engine: AsyncEngine) -> TeamMetadataStore:
     store = TeamMetadataStore(control_plane_sql_engine)
     for team_id, name in (("alpha", "Alpha"), ("beta", "Beta"), ("gamma", "Gamma")):
-        await store.create(TeamId(team_id), name)
+        await store.create(TeamId(team_id), name, TEAM_DESCRIPTION_PLACEHOLDER)
     return store
 
 
@@ -201,7 +204,7 @@ async def test_a_team_created_later_follows_the_default(
         ),
         deps=deps,
     )
-    await team_store.create(TeamId("delta"), "Delta")
+    await team_store.create(TeamId("delta"), "Delta", TEAM_DESCRIPTION_PLACEHOLDER)
 
     delta = _team(await get_marketplace_settings(user=_admin(), deps=deps), "delta")
 
