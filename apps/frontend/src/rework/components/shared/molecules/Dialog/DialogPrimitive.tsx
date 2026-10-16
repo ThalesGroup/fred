@@ -84,6 +84,8 @@ export interface DialogProps {
   /** Optional content on the left of the action bar, facing the buttons (e.g. a short hint or a
    *  secondary removal); a control there never takes the opening focus. */
   footerStart?: ReactNode;
+  /** `false` keeps Escape from cancelling, for a form that is costly to lose by accident. */
+  closeOnEscape?: boolean;
 }
 
 export function DialogPrimitive({
@@ -112,6 +114,7 @@ export function DialogPrimitive({
   compactTitle = false,
   dense = false,
   footerStart,
+  closeOnEscape = true,
 }: DialogProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -120,8 +123,8 @@ export function DialogPrimitive({
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [bodyScrolls, setBodyScrolls] = useState(false);
-  const callbacks = useRef({ onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm });
-  callbacks.current = { onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm };
+  const callbacks = useRef({ onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm, closeOnEscape });
+  callbacks.current = { onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm, closeOnEscape };
   const focusDialogFirst = useRef(initialFocus === "dialog");
   focusDialogFirst.current = initialFocus === "dialog";
   const attachDialog = useCallback((node: HTMLDivElement | null) => {
@@ -159,7 +162,7 @@ export function DialogPrimitive({
       // A dialog opened over this one (e.g. a confirmation) owns the keyboard.
       if (!dialog || !isTopmostModal(dialog)) return;
       if (event.key === "Escape") {
-        if (event.defaultPrevented) return;
+        if (event.defaultPrevented || !callbacks.current.closeOnEscape) return;
         event.preventDefault();
         callbacks.current.onCancel();
         return;

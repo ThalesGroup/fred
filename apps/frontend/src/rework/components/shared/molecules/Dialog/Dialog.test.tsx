@@ -64,6 +64,20 @@ afterEach(() => {
 });
 
 describe("Dialog focus and consumer-root portal", () => {
+  it("ignores Escape when closeOnEscape is false", () => {
+    const onCancel = vi.fn();
+    render(
+      <div className="fred-ui">
+        <Dialog open title="Edit" confirmLabel="Save" onConfirm={() => {}} onCancel={onCancel} closeOnEscape={false}>
+          <input aria-label="Field" />
+        </Dialog>
+      </div>,
+    );
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
   it("keeps an inactive background dialog visible while only the foreground handles keys", () => {
     const closeHistory = vi.fn();
     function Harness() {
