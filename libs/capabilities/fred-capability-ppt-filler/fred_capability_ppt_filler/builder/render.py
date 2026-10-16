@@ -70,7 +70,10 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanItem,
     PlanTable,
     SlidePlan,
+    chart_headings,
     has_content,
+    shown_charts,
+    slide_charts,
 )
 from fred_capability_ppt_filler.fill import BuiltSlide
 from fred_capability_ppt_filler.images import fit_inside_box
@@ -925,7 +928,8 @@ def _column_order(zones: Sequence[Zone]) -> List[Zone]:
 
 class _ZoneMap:
     def __init__(self, pattern: Pattern) -> None:
-        zones = [z for z in pattern.zones if z.role != "keep"]
+        titled = {z.key for z in chart_headings(pattern).values()}
+        zones = [z for z in pattern.zones if z.role != "keep" and z.key not in titled]
         self.titles = [z for z in zones if z.role == "title"]
         self.subtitles = [z for z in zones if z.role == "subtitle"]
         self.headings = _column_order([z for z in zones if z.role == "heading"])
@@ -952,6 +956,18 @@ def _assign_text(
 ) -> Dict[str, List[_Line]]:
     """Decide which lines go into which text zone (by zone key). Plan content
     no zone receives is named in ``lost``, so the agent hears about it."""
+    out = _place_text(pattern, plan, lost)
+    headings = chart_headings(pattern)
+    for zone, (at, chart) in zip(_chart_frames(pattern), shown_charts(plan)):
+        box = headings.get(zone.key)
+        if box is not None and chart.title:
+            out[box.key] = _lines_from_bullets([chart.title], f"{at}.title")
+    return out
+
+
+def _place_text(
+    pattern: Pattern, plan: SlidePlan, lost: Optional[List[str]] = None
+) -> Dict[str, List[_Line]]:
     zmap = _ZoneMap(pattern)
     out: Dict[str, List[_Line]] = {}
     lost = lost if lost is not None else []
@@ -1157,14 +1173,18 @@ def _assign_group(
 # --- charts -------------------------------------------------------------------------------
 
 
-def chart_host(pattern: Pattern, text_keys: Collection[str]) -> Optional[Zone]:
-    """Where the slide's chart goes: its chart zone, else a content placeholder
-    able to hold one that receives no text."""
+def _chart_frames(pattern: Pattern) -> List[Zone]:
+    return _reading_order([z for z in pattern.zones if z.role == "chart"])
+
+
+def chart_hosts(pattern: Pattern, text_keys: Collection[str]) -> List[Zone]:
+    """Where the slide's charts go, in reading order: its chart zones, else one
+    content placeholder able to hold a chart that receives no text."""
+    frames = _chart_frames(pattern)
+    if frames:
+        return frames
     zones = _reading_order(pattern.zones)
-    found = next((z for z in zones if z.role == "chart"), None)
-    return found or next(
-        (z for z in zones if z.chart_capable and z.key not in text_keys), None
-    )
+    return [z for z in zones if z.chart_capable and z.key not in text_keys][:1]
 
 
 # --- rendering ------------------------------------------------------------------------------
@@ -1292,6 +1312,13 @@ class _Renderer:
                     frame.text = spoken or ""
             # A slide shown as is never keeps its example chart's made-up data.
             checks.settle_charts(slide, keep=filled)
+            planned = len(slide_charts(slide_plan)) if filled else 0
+            delivered = checks.chart_count(slide)
+            if delivered != planned:
+                raise RenderError(
+                    f"slide {position} shows {delivered} of its {planned} chart(s) after "
+                    "rendering, an internal problem. Tell the user and suggest trying again."
+                )
         if rendered == 0:
             raise RenderError(
                 "the plan holds no usable slide. Write each entry of `slides` as an "
@@ -1352,9 +1379,9 @@ class _Renderer:
         )
         if parts > 1:
             self.report.note("list_continued")
-        chart = slide_plan.chart if shown else None
+        drawn = slide_charts(slide_plan) if shown else []
         # A chart in a content area is a substitution even when no kind was asked.
-        asked = slide_plan.kind or ("chart" if chart is not None else None)
+        asked = slide_plan.kind or ("chart" if drawn else None)
         # The first slide is the cover by rule: not a substitution.
         if (
             asked
@@ -1362,8 +1389,9 @@ class _Renderer:
             and not (rendered == 1 and pattern.kind == "cover")
         ):
             self.report.note("other_kind", kind=asked)
-        if chart is not None and chart.asked_type:
-            self.report.note("chart_type_changed", kind=chart.asked_type)
+        for chart in drawn:
+            if chart.asked_type:
+                self.report.note("chart_type_changed", kind=chart.asked_type)
         if part == 1:
             if notes.is_illustrative(slide_plan):
                 self.report.note("illustrative_data")
@@ -1457,7 +1485,7 @@ class _Renderer:
         lost.extend(
             _unused_item_fields(pattern.groups, plan, (self.width, self.height))
         )
-        host = self._fill_chart(slide, pattern, plan, index, text, position, lost)
+        hosted = self._fill_charts(slide, pattern, plan, index, text, position, lost)
 
         for group in pattern.groups:
             group_text, group_images, used = _assign_group(
@@ -1509,7 +1537,7 @@ class _Renderer:
         layout_body = _layout_body_props(slide)
         scaled: Dict[str, List[Tuple[Any, Zone, float]]] = {}
         for zone in self._fillable_text_zones(pattern):
-            if host is not None and zone.key == host.key:
+            if zone.key in hosted:
                 continue
             placed = index.get(zone.key)
             shape = cast(Any, placed.shape) if placed is not None else None
@@ -1609,39 +1637,52 @@ class _Renderer:
                 continue
             self._place_image(slide, placed, prepared)
 
-    def _fill_chart(
+    def _fill_charts(
         self,
         slide,
         pattern: Pattern,
         plan: SlidePlan,
         index: Dict[str, PlacedShape],
-        text: Mapping[str, Any],
+        text: Dict[str, List[_Line]],
         position: int,
         lost: List[str],
-    ) -> Optional[Zone]:
-        """Draw the plan's chart in its host; an unfilled chart zone goes."""
-        chart = (
-            plan.chart if plan.chart is not None and plan.chart.has_content() else None
-        )
-        host = chart_host(pattern, text) if chart is not None else None
-        if chart is not None and host is None:
+    ) -> set[str]:
+        """Draw each chart of the plan in its host, in reading order; an
+        unfilled chart zone goes. Returns the hosts' keys."""
+        shown = shown_charts(plan)
+        hosts = chart_hosts(pattern, text) if shown else []
+        if len(shown) > len(hosts):
             lost.append("chart")
-        for zone in (z for z in pattern.zones if z.role == "chart" and z is not host):
+        filled = hosts[: len(shown)]
+        for zone in (z for z in pattern.zones if z.role == "chart" and z not in filled):
             placed = index.get(zone.key)
             if placed is not None:
                 _remove(placed)
-        placed = index.get(host.key) if host is not None else None
-        if chart is None or host is None or placed is None:
-            return None
-        if notes.is_illustrative(plan):
-            chart = chart.model_copy(
-                update={"title": notes.caption(chart, self.language)}
-            )
-        size_line = charts.axis_title(chart.size_title, chart.size_unit)
-        if chart.type == "bubble" and size_line:
-            title = notes.with_size_line(chart, self.language, size_line)
-            chart = chart.model_copy(update={"title": title})
-        # The designer's own chart, when it already shows the type asked.
+        headings = chart_headings(pattern)
+        for host, (at, chart) in zip(filled, shown):
+            placed = index.get(host.key)
+            if placed is None:
+                continue
+            box = headings.get(host.key)
+            if notes.is_illustrative(plan):
+                title = notes.caption(chart, self.language)
+                chart = chart.model_copy(update={"title": title})
+                if box is not None:
+                    text[box.key] = _lines_from_bullets([title], f"{at}.title")
+            if box is not None:
+                # Its heading box above shows the title, never twice.
+                chart = chart.model_copy(update={"title": None})
+            size_line = charts.axis_title(chart.size_title, chart.size_unit)
+            if chart.type == "bubble" and size_line:
+                title = notes.with_size_line(chart, self.language, size_line)
+                chart = chart.model_copy(update={"title": title})
+            self._draw(slide, placed, host, chart)
+            self._tell_chart(chart, position, at)
+        return {host.key for host in filled}
+
+    def _draw(self, slide, placed: PlacedShape, host: Zone, chart: PlanChart) -> None:
+        """The designer's own chart when it already shows the type asked, else a
+        fresh one in its place."""
         example = (
             charts.example_frame(placed, chart)
             if host.role == "chart" and host.chart_type == chart.type
@@ -1651,57 +1692,60 @@ class _Renderer:
             charts.refill(example, host, chart)
         else:
             charts.draw(slide, placed, host, chart)
+
+    def _tell_chart(self, chart: PlanChart, position: int, at: str) -> None:
+        """What the chart could not show as sent, naming it on a slide of several."""
+        where = f"Slide {position}" + ("" if at == "chart" else f", {at}")
         if chart.asked_type:
             self._tell(
-                f"Slide {position}: chart type '{chart.asked_type}' is not offered; built as "
-                f"'column'. Nothing to do; to change it, edit chart.type to one of "
+                f"{where}: chart type '{chart.asked_type}' is not offered; built as "
+                f"'column'. Nothing to do; to change it, edit {at}.type to one of "
                 f"{', '.join(charts.XL_TYPES)}."
             )
-        self._tell_labels(chart, position)
-        self._tell_axes(chart, position)
+        self._tell_labels(chart, where, at)
+        self._tell_axes(chart, where, at)
         for name, note in charts.intent_notes(chart):
             self._tell_intent(position, name, note)
         if chart.style_fields:
             self._tell(
-                f"Slide {position}: the chart's {', '.join(chart.style_fields)} "
+                f"{where}: the chart's {', '.join(chart.style_fields)} "
                 "were ignored: the template sets a chart's colours, fonts and place. "
                 "Nothing to do; never send them."
             )
-        return host
 
-    def _tell_axes(self, chart: PlanChart, position: int) -> None:
+    def _tell_axes(self, chart: PlanChart, where: str, at: str) -> None:
         """Axis fields the chart type does not draw: said, never dropped quietly."""
         drawn = _AXIS_FIELDS if chart.type == "bubble" else ()
         if chart.type == "scatter":
             drawn = _AXIS_FIELDS[:3]
         sent = [
-            f"chart.{n}" for n in _AXIS_FIELDS if getattr(chart, n) and n not in drawn
+            f"{at}.{n}" for n in _AXIS_FIELDS if getattr(chart, n) and n not in drawn
         ]
         if sent:
             self._tell(
-                f"Slide {position}: {', '.join(sent)} not drawn on a '{chart.type}' "
+                f"{where}: {', '.join(sent)} not drawn on a '{chart.type}' "
                 "chart (axis titles: scatter and bubble only; size: bubble only). "
                 "Nothing to do; drop them."
             )
 
-    def _tell_labels(self, chart: PlanChart, position: int) -> None:
+    def _tell_labels(self, chart: PlanChart, where: str, at: str) -> None:
         """A label setting the chart cannot show: said, never dropped quietly."""
         unit = (chart.unit or "").strip()
         if chart.type in charts.ROUND:
             if chart.show in (None, "share") and unit and unit != "%":
                 self.report.note("chart_shows_shares")
                 self._tell(
-                    f"Slide {position}: the {chart.type}'s labels show percentages, so "
+                    f"{where}: the {chart.type}'s labels show percentages, so "
                     f"unit '{unit}' is not shown. To show the numbers with their unit, "
-                    "set chart.show to 'value' ('both' for the number and its percentage)."
+                    f"set {at}.show to 'value' ('both' for the number and its percentage)."
                 )
             return
         show = chart.show or chart.asked_show
         if show:
             self._tell(
-                f"Slide {position}: chart.show '{show}' was not applied: it sets the slice "
+                f"{where}: {at}.show '{show}' was not applied: it sets the slice "
                 f"labels of a pie or doughnut only; a '{chart.type}' chart shows its values. "
-                "Nothing to do; drop chart.show, or set chart.type to 'pie' or 'doughnut'."
+                f"Nothing to do; drop {at}.show, or set {at}.type to 'pie' or 'doughnut'."
             )
 
     def _fill_table(

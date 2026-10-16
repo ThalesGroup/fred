@@ -30,7 +30,7 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from fred_capability_ppt_filler.builder import lexicon
+from fred_capability_ppt_filler.builder import charts, lexicon
 from fred_capability_ppt_filler.builder.assign import (
     SlideProblem,
     _sequential,
@@ -47,6 +47,8 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanChart,
     SlidePlan,
     read_number,
+    shown_charts,
+    slide_charts,
 )
 
 _TAKEAWAY_MIN_WORDS = 4
@@ -255,20 +257,14 @@ def _numeric_cells(slide: SlidePlan) -> List[str]:
     ]
 
 
-def _chart(slide: SlidePlan) -> Optional[PlanChart]:
-    chart = slide.chart
-    return chart if chart is not None and chart.has_content() else None
-
-
 def has_figures(slide: SlidePlan) -> bool:
-    return bool(_chart(slide) or _numeric_cells(slide) or _figure_items(slide))
+    return bool(slide_charts(slide) or _numeric_cells(slide) or _figure_items(slide))
 
 
 def slide_figures(slide: SlidePlan) -> List[List[Reading]]:
     """Each figure of the slide with its readings; zeros and years left out."""
     figures: List[List[Reading]] = []
-    chart = _chart(slide)
-    if chart is not None:
+    for chart in slide_charts(slide):
         scale = _unit_scale(chart.unit)
         values = [(v, scale) for s in chart.series for v in s.values]
         scales = {
@@ -351,7 +347,7 @@ class StoryResult:
 
 def _example(slide: SlidePlan) -> str:
     """A takeaway sketch from the slide's own content."""
-    chart = _chart(slide)
+    chart = next(iter(slide_charts(slide)), None)
     if chart is not None and chart.series and len(chart.categories) >= 2:
         pairs = [
             (v, c)
@@ -457,18 +453,20 @@ def _axis_units(chart: PlanChart) -> List[Tuple[str, str]]:
     return found
 
 
-def _spread(chart: PlanChart) -> Optional[Tuple[str, str]]:
+def _spread(chart: PlanChart) -> List[Tuple[str, str]]:
     if chart.type not in _SPREAD_TYPES or (chart.unit or "").strip():
-        return None
+        return []
     values = [abs(v) for s in chart.series for v in s.values if v]
     if len(values) < 2 or max(values) < _SPREAD * min(values):
-        return None
-    return (
-        f"chart values range from {_fmt(min(values))} to {_fmt(max(values))} on one axis "
-        "without a unit: do they measure the same thing?",
-        "if they do, set chart.unit to that measure (e.g. 'employees'), or send this chart "
-        "again unchanged: it is built with a note",
-    )
+        return []
+    return [
+        (
+            f"chart values range from {_fmt(min(values))} to {_fmt(max(values))} on one axis "
+            "without a unit: do they measure the same thing?",
+            "if they do, set chart.unit to that measure (e.g. 'employees'), or send this chart "
+            "again unchanged: it is built with a note",
+        )
+    ]
 
 
 def _sources(
@@ -542,11 +540,17 @@ def check(
         if kind not in lexicon.TAKEAWAY_EXEMPT_KINDS:
             hard += _takeaway(slide)
         soft: List[Tuple[str, str, str]] = []
-        chart = _chart(slide)
-        if chart is not None:
-            hard += _units(chart)
-            spread = _spread(chart)
-            if spread is not None:
+        shown = shown_charts(slide)
+        for at, chart in shown:
+            hard += charts.named(_units(chart), at)
+            if len(shown) > 1 and not (chart.title or "").strip():
+                hard.append(
+                    (
+                        f"{at} has no title: with several charts, what does it show?",
+                        f"give {at} a title naming its measure ('Revenue by region')",
+                    )
+                )
+            for spread in charts.named(_spread(chart), at):
                 soft.append((*spread, WIDE_RANGE_CHART))
         source_problems, unverified = _sources(slide, conversation)
         hard += source_problems

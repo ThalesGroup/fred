@@ -44,16 +44,19 @@ from fred_capability_ppt_filler.builder.plan import (
     ITEM_FIELDS,
     SLIDE_FIELDS,
     DeckPlan,
-    PlanChart,
     PlanItem,
     PlanTable,
     SlidePlan,
     _limit,
     capacity_text,
+    chart_headings,
     entries_text,
     group_summary,
     has_content,
     max_entries,
+    named_charts,
+    shown_charts,
+    slide_charts,
     zone_summary,
 )
 from fred_capability_ppt_filler.builder.render import (
@@ -64,7 +67,7 @@ from fred_capability_ppt_filler.builder.render import (
     _only_names_the_slide,
     _reading_order,
     _unused_item_fields,
-    chart_host,
+    chart_hosts,
     fit_table,
     floor_lines,
     zone_capacity,
@@ -256,7 +259,7 @@ def infer_kinds(slide: SlidePlan) -> List[SlideKind]:
     kinds: List[SlideKind]
     if slide.table is not None and slide.table.has_content():
         return ["table"]
-    if _chart(slide) is not None:
+    if slide_charts(slide):
         return ["chart", *CLOSE_KINDS["chart"]]
     if len(slide.columns) >= 2:
         headed = all(c.heading for c in slide.columns)
@@ -437,15 +440,12 @@ def _check_zone(
 _NO_PLACE = ": this slide has no place for it"
 
 
-def _chart(slide: SlidePlan) -> Optional[PlanChart]:
-    chart = slide.chart
-    return chart if chart is not None and chart.has_content() else None
-
-
 def _no_place(what: str, pattern: Pattern) -> Misfit:
     option = f"drop {what}"
     if what == "chart":
         option = "give the chart a slide of its own (title and chart)"
+    elif what == "charts":
+        option = "give the charts a slide of their own (title and charts)"
     if what == "bullets" and pattern.groups:
         most = max(g.count for g in pattern.groups)
         option = f"give the bullets as items (at most {most})"
@@ -552,15 +552,32 @@ def _weigh(
                 "give the content as `table`, or another kind",
             )
         )
-    chart = _chart(slide)
-    host = chart_host(pattern, text) if chart is not None else None
-    if chart is not None and host is None:
-        lost.append("chart")
-    elif chart is not None and host is not None:
-        reasons.extend(
-            Misfit(*found) for found in charts.fit_problems(host, chart, size)
+    shown = shown_charts(slide)
+    hosts = chart_hosts(pattern, text) if shown else []
+    frames = sum(1 for z in pattern.zones if z.role == "chart")
+    if shown and not hosts:
+        lost.append("charts" if slide.charts else "chart")
+    elif shown and len(hosts) != len(shown):
+        reasons.append(_chart_count(len(shown), len(hosts)))
+    elif shown:
+        headings = chart_headings(pattern)
+        for host, (at, chart) in zip(hosts, shown):
+            # A title shown in the heading box above is measured as its text.
+            drawn = (
+                chart.model_copy(update={"title": None})
+                if host.key in headings
+                else chart
+            )
+            problems = charts.named(charts.fit_problems(host, drawn, size), at)
+            reasons.extend(Misfit(*p) for p in problems)
+    elif frames > 1:
+        reasons.append(
+            Misfit(
+                f"this slide shows {frames} charts and needs `charts` with {frames}",
+                f"give `charts` with {frames} charts, or another kind",
+            )
         )
-    elif any(z.role == "chart" for z in pattern.zones):
+    elif frames:
         reasons.append(
             Misfit(
                 "this slide shows a chart and needs `chart` {type, categories, series}",
@@ -614,9 +631,9 @@ def _weigh(
             empty += 0 if images else 1
             cost += 0.0 if images else _IMAGE_HOLE
         elif (
-            zone.role not in ("keep", "table", "chart")
+            zone.role not in ("keep", "table")
             and zone.key not in text
-            and zone is not host
+            and zone not in hosts
         ):
             empty += 1
             cost += _EMPTY_ZONE
@@ -688,11 +705,12 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
                 f"columns[{n}]: {', '.join(column.ignored_fields)} is not a column field"
             )
             options.append("write columns as a list, one {heading, bullets} per column")
-    if slide.chart is not None and slide.chart.ignored_fields:
-        found.append(
-            f"chart: {', '.join(slide.chart.ignored_fields)} is not a chart field"
-        )
-        options.append("give the chart only type, categories, series, title, unit")
+    for at, chart in named_charts(slide):
+        if chart.ignored_fields:
+            found.append(
+                f"{at}: {', '.join(chart.ignored_fields)} is not a chart field"
+            )
+            options.append("give the chart only type, categories, series, title, unit")
     for n, item in enumerate(slide.items):
         if item.ignored_fields:
             found.append(
@@ -714,12 +732,26 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
     )
 
 
+def _chart_count(given: int, shown: int) -> Misfit:
+    sent = "chart: 1 given" if given == 1 else f"charts: {given} given"
+    field = "`chart`" if shown == 1 else f"`charts` with {shown} charts"
+    return Misfit(
+        f"{sent}; this slide shows {shown}", f"give {field}, or use another slide"
+    )
+
+
 def _chart_data(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
-    """The chart's data, checked once whatever slide will show it."""
-    chart = slide.chart
-    if chart is None:
-        return None
-    found = charts.data_problems(chart)
+    """The charts' data, checked once whatever slide will show them."""
+    found: List[Tuple[str, str]] = []
+    if slide.chart is not None and slide.charts:
+        found.append(
+            (
+                "both `chart` and `charts` sent",
+                "send `chart` for one chart or `charts` for several, not both",
+            )
+        )
+    for at, chart in named_charts(slide):
+        found += charts.named(charts.data_problems(chart), at)
     if not found:
         return None
     return SlideProblem(
@@ -841,7 +873,7 @@ def _tiers(slide: _Slide, has_cover: bool) -> List[List[SlideKind]]:
     tiers: List[List[SlideKind]] = [[asked]] if asked else []
     # A chart has one natural form: a content area only when no chart slide holds it.
     first: List[SlideKind] = (
-        [] if asked or _chart(slide.plan) is None else [inferred[0]]
+        [] if asked or not slide_charts(slide.plan) else [inferred[0]]
     )
     if first:
         tiers.append(first)
@@ -1047,18 +1079,58 @@ def _tableless(slide: _Slide) -> bool:
     )
 
 
+def _chart_counts(slide: _Slide) -> List[int]:
+    """How many charts the template's slides hold, one count per slide."""
+    found = {len(chart_hosts(p, ())) for p, _, _ in slide.checked}
+    return sorted(found - {0})
+
+
 def _chartless(slide: _Slide) -> bool:
-    """The slide has a chart and no template slide has a place for one."""
-    return _chart(slide.plan) is not None and not any(
-        z.role == "chart" or z.chart_capable
-        for p, _, _ in slide.checked
-        for z in p.zones
+    """No template slide holds as many charts as the slide has."""
+    given = len(slide_charts(slide.plan))
+    return bool(given) and given not in _chart_counts(slide)
+
+
+def _or(counts: Sequence[int]) -> str:
+    words = [str(c) for c in counts]
+    return ", ".join(words[:-1]) + " or " + words[-1] if len(words) > 1 else words[0]
+
+
+def _chartless_problem(slide: _Slide) -> SlideProblem:
+    """No slide for this many charts: the counts offered and how to reach one."""
+    given, counts = len(slide_charts(slide.plan)), _chart_counts(slide)
+    if not counts:
+        problem = "chart: this template has no slide for a chart"
+    elif given == 1:
+        problem = (
+            f"chart: this template has no slide for one chart, only for {_or(counts)}"
+        )
+    else:
+        problem = (
+            f"charts: {given} given; this template offers slides with {_or(counts)} "
+            "charts"
+        )
+    options = []
+    if given > 1 and counts:
+        options.append(
+            f"split the slide into slides of {_or(counts)} charts (one chart per "
+            "measure), each with its own title"
+        )
+        fewer = [c for c in counts if c < given]
+        if fewer:
+            options.append(f"or merge or drop charts to send {_or(fewer)}")
+    return SlideProblem(
+        slide.index,
+        problem,
+        options if given > 1 else _chart_options(slide),
+        slide.plan.kind,
     )
 
 
 def _chart_options(slide: _Slide) -> List[str]:
     """What the chart's data can become on this template, best first."""
-    chart = _chart(slide.plan)
+    shown = slide_charts(slide.plan)
+    chart = shown[0] if shown else None
     kinds = {p.kind: p for p, _, _ in slide.checked}
     options = []
     if "table" in kinds:
@@ -1090,13 +1162,13 @@ def _closest(slide: _Slide, has_cover: bool) -> Optional[Tuple[Pattern, List[Mis
     own = _own(slide, has_cover)
     if not own or _tableless(slide) or _chartless(slide):
         return None
-    # A chart's advice is about a slide that can show it.
-    hosts = _chart(slide.plan) is not None
+    # A chart's advice is about a slide that can show as many.
+    given = len(slide_charts(slide.plan))
     return min(
         own,
         key=lambda pr: (
             rank[pr[0].kind],
-            hosts and not any(z.role == "chart" for z in pr[0].zones),
+            bool(given) and len([z for z in pr[0].zones if z.role == "chart"]) != given,
             *_fewest(pr),
         ),
     )
@@ -1175,12 +1247,7 @@ def _problem(
             slide.plan.kind,
         )
     if _chartless(slide):
-        return SlideProblem(
-            slide.index,
-            "chart: this template has no slide for a chart",
-            _chart_options(slide),
-            slide.plan.kind,
-        )
+        return _chartless_problem(slide)
     asked, close = slide.plan.kind, _close(slide)
     if slide.closest is None and close is not None:
         problem = (
@@ -1270,7 +1337,7 @@ def _substitution(
     """What was built instead of the requested kind, why, and the edit that
     would give the requested kind."""
     # A chart in a content area is a substitution even when no kind was asked.
-    asked = slide.plan.kind or ("chart" if _chart(slide.plan) is not None else None)
+    asked = slide.plan.kind or ("chart" if slide_charts(slide.plan) else None)
     # The first slide is the cover by rule, and the description says so.
     if not asked or chosen.kind == asked or (slide.first and chosen.kind == "cover"):
         return None
@@ -1553,7 +1620,7 @@ def _suggested(
     found: Dict[Tuple[str, str], List[int]] = {}
     for slide in slides:
         # A chart's data has one natural form: never recast into another kind.
-        shape = content_shape(slide.plan) if _chart(slide.plan) is None else None
+        shape = None if slide_charts(slide.plan) else content_shape(slide.plan)
         if shape is None:
             continue
         blocked = _same_problem(slide)
@@ -1683,6 +1750,13 @@ def _repeats(
         blocked = set.intersection(*(_same_problem(s) for s, _ in group))
         # And one that would leave a zone unfilled on every slide of it.
         blocked |= set.intersection(*(s.emptier for s, _ in group))
+        # And a chart slide holding another number of charts than they send.
+        counts = {len(slide_charts(s.plan)) for s, _ in group} - {0}
+        blocked |= {
+            p.id
+            for p in pool
+            if counts and p.kind == "chart" and len(chart_hosts(p, ())) not in counts
+        }
         plans = [s.plan for s, _ in group]
         offer = [
             p for p in unused if p.id not in blocked and not _wants_picture(p, plans)

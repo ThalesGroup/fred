@@ -162,3 +162,15 @@ def settle_charts(slide, keep: bool = True) -> int:
         if rId not in shown:
             rels.pop(rId)
     return len(frames)
+
+
+def chart_count(slide) -> int:
+    """Native charts the slide shows, each linked to a chart part of its own."""
+    rels = slide.part.rels
+    parts = {
+        id(rels[rId].target_part)
+        for node in slide.shapes._spTree.iter(qn("c:chart"))
+        if (rId := node.get(qn("r:id"))) in rels
+        and rels[rId].reltype.endswith("/chart")
+    }
+    return len(parts)

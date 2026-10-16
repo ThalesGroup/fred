@@ -3,7 +3,7 @@
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
-  "analysis_version": 15,
+  "analysis_version": 16,
   "patterns": [
    {
     "id": "slide:256",

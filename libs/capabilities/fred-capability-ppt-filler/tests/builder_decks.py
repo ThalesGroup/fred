@@ -205,20 +205,51 @@ def add_icon_bank_slide(presentation, pictures: int = 24):
 
 
 def add_chart_slide(presentation):
-    """Two charts share the slide: neither is its main chart, so it stays excluded."""
+    """Five large charts share the slide, more than one slide fills (four at
+    most): it stays excluded."""
     slide = _titled(presentation, "Chart")
     data = CategoryChartData()
     data.categories = ["A", "B"]
     data.add_series("S", (1, 2))
-    for left in (0.5, 5.0):
+    for left in (0.2, 1.6, 3.0, 4.4, 5.8):
         slide.shapes.add_chart(
             XL_CHART_TYPE.COLUMN_CLUSTERED,
             Inches(left),
             Inches(1.5),
-            Inches(4.4),
+            Inches(2.5),
             Inches(5),
             data,
         )
+    return slide
+
+
+# Frames of the owner's example slides, in inches on a 10 × 7.5 slide: two
+# charts of 24 %, three of 15 % and a 2 × 2 grid of 9.3 %.
+CHART_GRIDS = {
+    2: [(1.0, 1.4, 3.7, 4.8), (5.3, 1.4, 3.7, 4.8)],
+    3: [(0.5, 1.5, 2.7, 4.2), (3.65, 1.5, 2.7, 4.2), (6.8, 1.5, 2.7, 4.2)],
+    4: [
+        (1.7, 1.25, 3.03, 2.31),
+        (5.2, 1.25, 3.03, 2.31),
+        (1.7, 3.95, 3.03, 2.31),
+        (5.2, 3.95, 3.03, 2.31),
+    ],
+}
+
+
+def add_charts_slide(presentation, count: int = 2, types=None, headings: bool = False):
+    """An example slide of ``count`` charts (``CHART_GRIDS``), shuffled in the
+    drawing order; ``headings`` puts a free text box right above each chart."""
+    slide = _titled(presentation, f"Graphiques ×{count}")
+    kinds = types or [XL_CHART_TYPE.COLUMN_CLUSTERED] * count
+    frames = list(zip(CHART_GRIDS[count], kinds))
+    for (x, y, w, h), kind in frames[::-1]:
+        data = CategoryChartData()
+        data.categories = ["A", "B", "C"]
+        data.add_series("Exemple", (3, 2, 1))
+        slide.shapes.add_chart(kind, Inches(x), Inches(y), Inches(w), Inches(h), data)
+        if headings:
+            _textbox(slide.shapes, x, y - 0.5, w, 0.4, "Titre du graphique", FONT_BODY)
     return slide
 
 

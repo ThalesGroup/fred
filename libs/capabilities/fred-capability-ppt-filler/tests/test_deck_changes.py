@@ -229,7 +229,7 @@ def test_conflicting_changes_and_bad_paths_are_reported():
         "the replacement slide instead.",
         "changes[3] (edit): slide 3: 'items' has 2 entries (items[0] to items[1]).",
         "changes[4] (edit): slide 3: 'colour' is not a field of a slide (it takes takeaway, "
-        "source, title, subtitle, bullets, columns, items, image, images, table, chart, notes, kind, repeat_layout).",
+        "source, title, subtitle, bullets, columns, items, image, images, table, chart, charts, notes, kind, repeat_layout).",
         "changes[5] (edit): slide 4: 'title' is not a list: write 'title' without [0].",
     ]
     assert _problems(

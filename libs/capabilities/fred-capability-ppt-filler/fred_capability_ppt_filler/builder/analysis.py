@@ -62,6 +62,7 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
     ZoneRole,
 )
+from fred_capability_ppt_filler.builder.plan import MAX_CHARTS_PER_SLIDE
 from fred_capability_ppt_filler.pptx_archive import open_presentation
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, walk_shapes
 
@@ -104,6 +105,8 @@ _SHARED_TEXT_MIN_SLIDES = 2
 _REPLACEABLE_PICTURE_AREA = 0.25
 # A chart/table covering this share of the slide is the slide's content.
 _MAIN_CONTENT_AREA = 0.15
+# A chart frame this large is filled; several share a slide (a 2×2 grid).
+_GRID_CHART_AREA = 0.05
 # A content placeholder this large may host a chart in place of its text.
 _CHART_MIN_AREA = 0.25
 # A library sheet lays out this many small text-free icons (pictures, groups,
@@ -183,7 +186,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 15
+ANALYSIS_VERSION = 16
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -1029,18 +1032,24 @@ class _Analyzer:
             if zone is not None:
                 zones.append(zone)
 
-        # 4c. The slide's one main chart, when no chart placeholder holds one.
-        main_charts = [
+        # 4c. The slide's chart frames, up to four, when no chart placeholder
+        # holds one; a chart left out keeps the slide excluded (step 5).
+        frames = [
             rec
             for rec in records
             if rec.kind == "chart"
             and rec.ph_idx is None
             and len(rec.path) == 1
-            and rec.area >= _MAIN_CONTENT_AREA
+            and rec.area >= _GRID_CHART_AREA
             and _declared_role(rec) != "keep"
         ]
-        if len(main_charts) == 1 and not any(z.role == "chart" for z in zones):
-            zones.append(_zone(main_charts[0], "chart", self.width, self.height))
+        if len(frames) <= MAX_CHARTS_PER_SLIDE and not any(
+            z.role == "chart" for z in zones
+        ):
+            zones.extend(
+                _zone(rec, "chart", self.width, self.height)
+                for rec in sorted(frames, key=lambda r: (r.box.y // 150, r.box.x))
+            )
         self._chart_zones(zones, records)
 
         pattern = Pattern(

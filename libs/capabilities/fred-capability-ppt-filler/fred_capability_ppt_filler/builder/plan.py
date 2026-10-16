@@ -326,6 +326,8 @@ STACKED_TYPES = ("stacked_column", "stacked_bar")
 # Readability caps of every chart, whatever its zone.
 MAX_SERIES = 4
 MAX_SLICES = 6
+# Chart frames one template slide may hold, each filled from `charts`.
+MAX_CHARTS_PER_SLIDE = 4
 _CHART_TYPE_NAMES = {
     "columns": "column",
     "histogram": "column",
@@ -974,6 +976,11 @@ class SlidePlan(BaseModel):
         "show}: "
         "numbers only, the template sets colours and fonts.",
     )
+    charts: List[PlanChart] = Field(
+        default_factory=list,
+        description="Several charts on one slide, in reading order; only on a slide the "
+        "catalogue lists with `charts×N`, exactly N charts, each with a title.",
+    )
     source: Optional[str] = Field(
         default=None,
         description="Where the slide's figures come from, required with a chart, a "
@@ -1039,7 +1046,7 @@ class SlidePlan(BaseModel):
     def _texts(cls, value: Any) -> List[str]:
         return _as_text_list(value)
 
-    @field_validator("columns", "items", mode="before")
+    @field_validator("columns", "items", "charts", mode="before")
     @classmethod
     def _entries(cls, value: Any) -> Any:
         if value is None:
@@ -1088,8 +1095,24 @@ def has_content(slide: SlidePlan) -> bool:
         or slide.image
         or slide.images
         or (slide.table is not None and slide.table.has_content())
-        or (slide.chart is not None and slide.chart.has_content())
+        or bool(slide_charts(slide))
     )
+
+
+def named_charts(slide: SlidePlan) -> List[Tuple[str, PlanChart]]:
+    """The slide's charts as sent, each with the path a problem names it by."""
+    if slide.charts:
+        return [(f"charts[{i}]", chart) for i, chart in enumerate(slide.charts)]
+    return [("chart", slide.chart)] if slide.chart is not None else []
+
+
+def shown_charts(slide: SlidePlan) -> List[Tuple[str, PlanChart]]:
+    """The charts the slide shows, named: `charts`, else its one `chart`."""
+    return [(at, chart) for at, chart in named_charts(slide) if chart.has_content()]
+
+
+def slide_charts(slide: SlidePlan) -> List[PlanChart]:
+    return [chart for _, chart in shown_charts(slide)]
 
 
 # --- what a pattern holds, in plan fields ------------------------------------------------
@@ -1179,15 +1202,53 @@ def table_summary(zone: Zone) -> str:
     )
 
 
-def chart_summary(zone: Zone) -> str:
-    """What a chart zone holds: its types and, as a column chart, its room."""
+def chart_summary(zones: Sequence[Zone]) -> str:
+    """What a slide's chart zones hold: their count and types, and as column
+    charts the smallest one's room."""
+    zone = min(zones, key=lambda z: (z.max_lines or 0, z.chars_per_line or 0))
     room = (
         f": categories max {zone.max_lines}, labels "
         f"{capacity_text(zone.chars_per_line, 2)}, series max {MAX_SERIES}"
         if zone.max_lines and zone.chars_per_line
         else ""
     )
-    return f"chart ({', '.join(CHART_TYPES)}){room}"
+    field = f"charts×{len(zones)}" if len(zones) > 1 else "chart"
+    return f"{field} ({', '.join(CHART_TYPES)}){room}"
+
+
+# A free text box this close above a chart frame of a multi-chart slide is that
+# chart's heading (per mille of the slide, as the analysis pairs text).
+_HEADING_GAP = 120
+_HEADING_OVERLAP = -40
+_HEADING_ROLES = ("heading", "label", "body", "caption", "subtitle")
+
+
+def chart_headings(pattern: Pattern) -> Dict[str, Zone]:
+    """Per chart zone key, the free text box right above it that shows its
+    title; only on a slide with several charts (one chart keeps its title)."""
+    frames = [z for z in pattern.zones if z.role == "chart"]
+    if len(frames) < 2:
+        return {}
+    texts = [
+        z for z in pattern.zones if z.role in _HEADING_ROLES and z.key.startswith("sp:")
+    ]
+    found: Dict[str, Zone] = {}
+    for frame in frames:
+        above = []
+        for text in texts:
+            gap = frame.box.y - (text.box.y + text.box.h)
+            overlap = min(text.box.x + text.box.w, frame.box.x + frame.box.w) - max(
+                text.box.x, frame.box.x
+            )
+            if (
+                _HEADING_OVERLAP <= gap <= _HEADING_GAP
+                and overlap * 2 >= min(text.box.w, frame.box.w)
+                and text not in found.values()
+            ):
+                above.append((gap, text))
+        if above:
+            found[frame.key] = min(above, key=lambda pair: pair[0])[1]
+    return found
 
 
 def _item_fields(group: RepeatGroup) -> Dict[str, List[Zone]]:
@@ -1231,7 +1292,9 @@ def zone_summary(pattern: Pattern) -> str:
     if images:
         parts.append(f"images×{len(images)}{_required(images)}")
     parts.extend(table_summary(z) for z in pattern.zones if z.role == "table")
-    parts.extend(chart_summary(z) for z in pattern.zones if z.role == "chart")
+    frames = [z for z in pattern.zones if z.role == "chart"]
+    if frames:
+        parts.append(chart_summary(frames))
     parts.extend(group_summary(g) for g in pattern.groups)
     return "; ".join(parts) or "no editable zone"
 
@@ -1241,8 +1304,12 @@ def _slide_fields(pattern: Pattern) -> List[Tuple[str, List[Zone]]]:
     fills them, each with its zones."""
     found: List[Tuple[str, List[Zone]]] = []
     seen: set[str] = set()
-    field_of = {z.key: SLIDE_FIELDS.get(z.role) for z in pattern.zones}
-    headings = [z for z in pattern.zones if z.role == "heading"]
+    titled = {z.key for z in chart_headings(pattern).values()}
+    field_of = {
+        z.key: None if z.key in titled else SLIDE_FIELDS.get(z.role)
+        for z in pattern.zones
+    }
+    headings = [z for z in pattern.zones if z.role == "heading" and z.key not in titled]
     if headings and "title" not in field_of.values():
         # The renderer writes the title into the leftmost heading (`_assign_text`).
         first = min(headings, key=lambda z: (z.box.x // 150, z.box.y))

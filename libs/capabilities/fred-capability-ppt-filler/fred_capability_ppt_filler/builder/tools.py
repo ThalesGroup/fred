@@ -265,6 +265,13 @@ def chart_hosts(inventory: TemplateInventory) -> str:
     return "content" if any(z.chart_capable for z in zones) else ""
 
 
+def multi_chart(inventory: TemplateInventory) -> bool:
+    """Whether a template slide holds several charts (`charts` is offered)."""
+    return any(
+        sum(z.role == "chart" for z in p.zones) > 1 for p in assignable(inventory)
+    )
+
+
 def catalogue(inventory: TemplateInventory) -> str:
     """One line per kind the template offers, with every distinct variant: its
     label and what it holds. A hidden variant is one the model never writes for."""
@@ -291,6 +298,7 @@ def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
         tuple(offered_kinds(inventory)),
         field_hints(assignable(inventory)),
         bool(chart_hosts(inventory)),
+        multi_chart(inventory),
     )
 
 
@@ -331,6 +339,7 @@ def _schema_for(
     kinds: Tuple[SlideKind, ...],
     hints: Tuple[Tuple[str, str], ...],
     charts: bool = False,
+    several: bool = False,
 ) -> type[BaseModel]:
     rooms = dict(hints)
     item = create_model(
@@ -352,6 +361,11 @@ def _schema_for(
         if charts
         else (SkipJsonSchema[Optional[PlanChart]], None)
     )
+    charts_field: Any = (
+        (List[PlanChart], SlidePlan.model_fields["charts"])
+        if several
+        else (SkipJsonSchema[List[PlanChart]], Field(default_factory=list))
+    )
     slide_model = create_model(
         "BuildSlide",
         __base__=SlidePlan,
@@ -360,6 +374,7 @@ def _schema_for(
         items=(List[item], Field(default_factory=list)),  # type: ignore[valid-type]
         table=table,
         chart=chart,
+        charts=charts_field,
         kind=(
             Optional[SlideKind],
             Field(
@@ -388,6 +403,7 @@ def _schema_for(
                     "takeaway, source, image, images, "
                     + ("table {header, rows}, " if "table" in kinds else "")
                     + ("chart, " if charts else "")
+                    + ("charts, " if several else "")
                     + "notes, kind."
                 ),
             ),
@@ -470,22 +486,30 @@ def _sent(slide: Any) -> SlidePlan:
     # itself so the one-measure check sees them.
     chart = getattr(slide, "chart", None)
     if isinstance(chart, PlanChart) and sent.chart is not None:
-        series = [
-            mine.model_copy(
-                update={
-                    "units": written.units,
-                    "points": [
-                        p.model_copy(update={"units": w.units})
-                        for p, w in zip(mine.points, written.points)
-                    ],
-                }
-            )
-            for mine, written in zip(sent.chart.series, chart.series)
-        ]
-        sent = sent.model_copy(
-            update={"chart": sent.chart.model_copy(update={"series": series})}
-        )
+        sent = sent.model_copy(update={"chart": _with_units(sent.chart, chart)})
+    written = getattr(slide, "charts", None) or []
+    if sent.charts and len(written) == len(sent.charts):
+        update = [_with_units(mine, w) for mine, w in zip(sent.charts, written)]
+        sent = sent.model_copy(update={"charts": update})
     return sent
+
+
+def _with_units(mine: PlanChart, written: Any) -> PlanChart:
+    if not isinstance(written, PlanChart):
+        return mine
+    series = [
+        ours.model_copy(
+            update={
+                "units": theirs.units,
+                "points": [
+                    p.model_copy(update={"units": w.units})
+                    for p, w in zip(ours.points, theirs.points)
+                ],
+            }
+        )
+        for ours, theirs in zip(mine.series, written.series)
+    ]
+    return mine.model_copy(update={"series": series})
 
 
 def _to_plan(validated: Any) -> DeckPlan:
@@ -1076,7 +1100,11 @@ _GUIDE_KINDS = ("figures", "timeline", "cards", "process", "table")
 
 
 def _guide(
-    kinds: List[SlideKind], variety: VarietyCheck, max_uses: int, charts: str = ""
+    kinds: List[SlideKind],
+    variety: VarietyCheck,
+    max_uses: int,
+    charts: str = "",
+    several: bool = False,
 ) -> str:
     """Which content suits which offered kind, and the author's max."""
     pairs = [f"{SHAPE_HINTS[k]} → {k}" for k in _GUIDE_KINDS if k in kinds]
@@ -1086,6 +1114,11 @@ def _guide(
         pairs.append("numbers that compare across categories or over time → chart")
         pairs.append("two measures per item → chart scatter (bubble for a third)")
         pairs.append("items scored on several criteria → chart radar")
+    if several:
+        pairs.append(
+            "two to four related measures side by side, one per chart → a slide with "
+            "`charts` (only the counts the catalogue lists)"
+        )
     lead = (
         f" Shape the content, within the fields and items max each variant lists below: "
         f"{'; '.join(pairs)}."
@@ -1109,6 +1142,7 @@ def _description(
 ) -> str:
     kinds = offered_kinds(inventory)
     charts = chart_hosts(inventory)
+    several = multi_chart(inventory)
     rules = ""
     if "cover" in kinds:
         rules += " The first slide is always the template's cover."
@@ -1129,6 +1163,7 @@ def _description(
             if charts
             else ""
         )
+        + (' | "charts[1].series[0].values[2]"' if several else "")
         + ' (indexes from 0), "value": ...}. The other slides stay exactly as they were and the whole deck is rebuilt. '
         "To change text inside a slide, use `edit`: the slide keeps its design; `replace` is for "
         "a different slide (one of the same kind keeps the replaced slide's design when it fits). "
@@ -1156,6 +1191,12 @@ def _description(
             if charts
             else ""
         )
+        + (
+            "charts [chart, …] for several charts on one slide, each with its title "
+            "(only on a slide listed with charts×N, exactly N), "
+            if several
+            else ""
+        )
         + "notes, `source` on a slide with figures (document name, 'user', or "
         "'illustrative' only when the user asked for made-up data); then, "
         "optionally, its `kind` from the list below (left out, it is inferred from the content; a kind "
@@ -1169,7 +1210,7 @@ def _description(
         "a document. If a slide fits no slide of the template, nothing is built and the result lists, per "
         "slide, what to change: apply it with `changes`. The result is shown to the user automatically; "
         "never write a download link. Each call's deck replaces the previous one.\n"
-        + _guide(kinds, variety, max_uses, charts)
+        + _guide(kinds, variety, max_uses, charts, several)
         + "\n"
         "Slide kinds of this template, with each variant's name and what each zone holds at full "
         "size (words, then ≈chars per line × lines; items max N; variants separated by |). Write to "

@@ -121,7 +121,7 @@ def test_an_example_slides_main_chart_is_its_zone():
     assert zone.key.startswith("sp:") and zone.chart_type == "pie"
 
 
-def test_two_charts_or_a_small_chart_keep_the_slide_out():
+def test_five_charts_or_a_small_chart_keep_the_slide_out():
     def small_chart(presentation):
         slide = add_main_chart_slide(presentation)
         frame = next(s for s in slide.shapes if s.has_chart)

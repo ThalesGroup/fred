@@ -47,7 +47,7 @@ REPEAT = "repeat_layout"
 # Slide fields (and their aliases) a model may write in the change itself.
 _SLIDE_KEYS = frozenset(
     ("title", "subtitle", "bullets", "columns", "items", "image", "images", "table")
-    + ("chart", "takeaway", "source")
+    + ("chart", "charts", "takeaway", "source")
     + ("notes", "kind", "body", "text", "pattern", "type")
 )
 
@@ -213,6 +213,7 @@ _FIELDS: Dict[str, Dict[str, _Type]] = {
         "images": ("list", "text"),
         "table": "table",
         "chart": "chart",
+        "charts": ("list", "chart"),
         "notes": "text",
         "kind": "text",
         REPEAT: "flag",
@@ -258,6 +259,12 @@ def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
     if not _PATH.match(path):
         return f"'{path}' is not a field path (write e.g. 'title', 'bullets[1]', 'items[2].label')"
     tokens = [(m.group(1), m.group(2)) for m in _TOKEN.finditer(path)]
+    held = len(slide.get("charts") or [])
+    if tokens[0][0] == "chart" and held:
+        return (
+            f"this slide has {held} chart(s) in `charts`: edit 'charts[i]"
+            f"{path.removeprefix('chart')}' (i from 0 to {held - 1})"
+        )
     node: Any = slide
     kind: _Type = "slide"
     shown = ""
@@ -431,6 +438,7 @@ CLEARABLE = (
     "images",
     "table",
     "chart",
+    "charts",
 )
 
 

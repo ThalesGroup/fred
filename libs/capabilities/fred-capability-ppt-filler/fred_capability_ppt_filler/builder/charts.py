@@ -22,6 +22,7 @@ are adapted from ``fred-capability-pptx-generator``, by Shuigami.
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any, List, Optional, Sequence, Tuple, cast
 
 from pptx.chart.data import BubbleChartData, CategoryChartData, XyChartData
@@ -179,6 +180,22 @@ def _name_room(zone: Zone, size: Tuple[int, int], count: int) -> int:
 def _title_room(zone: Zone, size: Tuple[int, int]) -> int:
     width, _ = _frame_pt(zone, size)
     return text_metrics.chars_per_line(width, chart_pt(zone) * 1.2, None, True)
+
+
+def named(found: List[Tuple[str, str]], at: str) -> List[Tuple[str, str]]:
+    """Problems of one chart of several, each naming it (``charts[1].title …``)."""
+    if at == "chart":
+        return found
+
+    def renamed(text: str) -> str:
+        return re.sub(
+            r"^chart: ", f"{at}: ", re.sub(r"\bchart\.(?=\w)", f"{at}.", text)
+        )
+
+    return [
+        (what if what.startswith(at) else f"{at}: {what}", fix)
+        for what, fix in ((renamed(w), renamed(f)) for w, f in found)
+    ]
 
 
 def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
