@@ -508,11 +508,17 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       ],
     },
     // Platform admin edit: name, description and admins of any team.
+    // Same tags as the per-role routes it replaces in one save, plus the registry list.
     editTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatch: {
-      invalidatesTags: (_, __, arg) => [
-        { type: "ControlPlaneTeam", id: arg.teamId },
+      invalidatesTags: (_, __, { teamId, editTeamRegistryRequest: body }) => [
+        "PlatformAccess",
+        { type: "ControlPlaneTeam", id: teamId },
         { type: "ControlPlaneTeam", id: "LIST" },
-        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeamMember", id: `LIST-${teamId}` },
+        ...[...(body.add_admin_ids ?? []), ...(body.remove_admin_ids ?? [])].map((userId) => ({
+          type: "ControlPlaneTeamMember" as const,
+          id: `${teamId}-${userId}`,
+        })),
         { type: "ControlPlanePlatformDefaultTeams", id: "LIST" },
       ],
     },
