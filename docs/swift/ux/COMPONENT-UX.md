@@ -2236,7 +2236,7 @@ stays visible.
 
 ### Team description — create form, settings field, reminder
 
-**Location:** `AdminTeamsPage.tsx`, `TeamSettingsParameters.tsx`,
+**Location:** `AdminTeamsPage.tsx`, `TeamFormDialog.tsx`, `TeamSettingsParameters.tsx`,
 `src/rework/components/shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx`
 **Status:** `Functional`
 
@@ -2244,13 +2244,20 @@ A team's description is required, 20 to 500 characters once trimmed. The
 bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
 (with `MAX_TEAM_NAME_LENGTH`), shared by both forms.
 
-- **`AdminTeamsPage` create form.** A required `TextArea` under the team name:
+- **`AdminTeamsPage` team dialog (`TeamFormDialog`).** "Create team" in the
+  page header opens it for anyone allowed to create teams; platform admins
+  also get an Edit `IconButton` (`medium`, `on-surface-retreat`) at the end of
+  each row, opening it prefilled. Built on the shared `Dialog` (560px, fluid
+  content); confirm stays disabled while a field is invalid or, in edit,
+  nothing changed, and an edit sends only the changed fields and the admin
+  diff. A default description starts empty and may stay empty. Each row
+  shows the description on one ellipsed line under the name.
+- **Description field.** A required `TextArea` under the team name:
   `x / 500` counter, a sentence on the team's objectives regarding AI between
   the label and the field (`TextArea` `description`, tied to the field with
   `aria-describedby` — a full sentence never goes in the one-line `explanation`
   under the field, which cuts it off), and the minimum-length error once the
-  field has been left. The create button stays
-  disabled until the trimmed description is valid; the request sends it trimmed.
+  field has been left. The request sends it trimmed.
 - **`TeamSettingsParameters`.** Same counter and description, seven rows tall.
   For a team that still has the default description the field starts empty
   (the default text is not a value the admin wrote), and leaving it empty

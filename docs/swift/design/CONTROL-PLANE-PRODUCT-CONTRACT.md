@@ -4844,6 +4844,36 @@ warning, "N teams received a default description.". The frontend shows the
 placeholder translated and reminds team admins (`can_update_info`) on the
 team home and in team settings. Full behavior: OpenSpec `team-description`.
 
+## 67. Contract Notes — platform admin team editing (2026-10-16, #3145)
+
+**Route.** `PATCH /teams/{team_id}/registry`, gated on
+`organization#can_edit_team_registry` (`platform_admin` only; `team_manager`
+keeps `POST /teams` but not this). Body `EditTeamRegistryRequest`; response
+`TeamWithPermissions`, built without the caller's `can_read` (they need not be
+a member).
+
+| Field              | Type                         | Notes                                                                       |
+| ------------------ | ---------------------------- | --------------------------------------------------------------------------- |
+| `name`             | `string`, 1-180, optional    | Trimmed; its own name is a no-op; another team's name is 409                 |
+| `description`      | `string`, 20-500, optional   | Rules of §66; `null` is 422                                                 |
+| `add_admin_ids`    | `string[]`, default `[]`     | `team_admin`, or `pending_team_admin` until the charter is accepted (§54)    |
+| `remove_admin_ids` | `string[]`, default `[]`     | Drops `team_admin` and `pending_team_admin`; the user stays a team member    |
+
+A user in both lists is 422. Unknown team or personal space: 404. Admins move
+as a diff so pending nominations and concurrent team-admin changes survive.
+
+**Order.** Under the team role lock, every refusal comes before any write: the
+name pre-check, then a 409 when no active `team_admin` would remain (a sole
+replacement still owing the charter counts as none, with its own message).
+Relations are written, then the name and description; the residual rename
+race after the pre-check answers 409 with the admins already changed, as for
+`PATCH /teams/{team_id}`. Both routes share the rename helpers.
+
+**Audit.** One `team.registry.edited` event per edit that changed something:
+`actor_uid`, `team_id`, `changed_fields`, `admins_added`, `admins_removed`
+(ids only). REBAC.md "Team registry governance" records the authority; the
+OpenSpec change `platform-admin-team-edit` the scenarios.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation
