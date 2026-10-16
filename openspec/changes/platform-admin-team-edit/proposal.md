@@ -2,11 +2,11 @@
 
 The platform admin Teams page (`/admin/teams`) can create a team but never change it afterwards: a mistyped name, an outdated description or a departed team admin can only be fixed by the team's own admins, or not at all when the team has none left reachable. The page also stacks a full-width creation form between the default-teams setting and the team list, so the list, which is what admins come for, sits below the fold. GitHub issue #3145.
 
-Depends on PR #3071 (issue #3067), still open on 2026-10-16: it makes the team description required (20 to 500 characters once trimmed, at creation and on edit) and already adds the description field to this page's creation form. This change builds on it and starts after it merges.
+Ships in the same PR as #3067 (PR #3071, owner request 2026-10-16): that work makes the team description required (20 to 500 characters once trimmed, at creation and on edit) and already adds the description field to this page's creation form. This change moves that form into the dialog and reuses its rules.
 
 ## What Changes
 
-- **Create team in a dialog.** A "Create team" button in the page header opens a dialog with the creation fields: name, description (required, rules of #3067) and team admins. The inline creation section disappears.
+- **Create team in a dialog.** A "Create team" button in the page header opens a dialog with the creation fields #3067 already defines (name, required description, team admins). The inline creation section disappears.
 - **Edit an existing team.** A platform admin opens the same dialog from an "Edit" row action in the teams table, prefilled, and changes the team's name, description and team admins in one save.
 - **New registry edit route.** `PATCH /teams/{team_id}/registry`, platform admin only, accepts a new name, a new description, admins to add and admins to remove. Name and description follow the rules of `PATCH /teams/{team_id}` (trimmed, unique name with 409 on collision, description 20-500). A team always keeps at least one active team admin. Admins added follow the team administrator charter (pending until accepted). Every save writes one audit event.
 - **New organization permission** `can_edit_team_registry`, held by `platform_admin` only. `team_manager` keeps creating teams but does not edit them.

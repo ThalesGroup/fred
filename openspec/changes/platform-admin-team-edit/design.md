@@ -1,6 +1,6 @@
 ## Context
 
-See proposal.md for why. Current state on `swift` (e980c956a), plus PR #3071:
+See proposal.md for why. Current state on `swift` (e980c956a), plus the #3067 work in the same PR:
 
 - `POST /teams` (`create_team`) is gated on `can_create_team` (`platform_admin or team_manager`) and writes the first admins through `resolve_granted_team_relation` (charter: `pending_team_admin` until accepted). PR #3071 adds the required `description`.
 - `PATCH /teams/{team_id}` (`update_team`) is gated on team `can_update_info` = `team_admin` only. It already carries the rename rules of contract §47 (trim, `get_by_name` pre-check, `IntegrityError` → 409, rename log line) and, with #3071, the description rules (`TeamDescription`, `reject_null_description`).
@@ -17,7 +17,7 @@ See proposal.md for why. Current state on `swift` (e980c956a), plus PR #3071:
 
 ## Decisions
 
-**D1. New organization permission `can_edit_team_registry: platform_admin`.** Mirrors `can_delete_team` and `can_rescue_team_admin`: a registry capability, no standing team relation. Alternatives: reuse `can_create_team` (would hand `team_manager` the right to appoint themselves admin of any existing team, a wider escalation than creating an empty team); reuse `can_manage_platform` (the catch-all REBAC.md carved narrow surfaces out of). Blocked on owner question 1.
+**D1. New organization permission `can_edit_team_registry: platform_admin`.** Mirrors `can_delete_team` and `can_rescue_team_admin`: a registry capability, no standing team relation. Alternatives: reuse `can_create_team` (would hand `team_manager` the right to appoint themselves admin of any existing team, a wider escalation than creating an empty team); reuse `can_manage_platform` (the catch-all REBAC.md carved narrow surfaces out of). Agreed (owner decision 1).
 
 **D2. New route `PATCH /teams/{team_id}/registry`, not a widened `PATCH /teams/{team_id}`.** The team PATCH also carries visibility, joining mode, avatar and retention, which stay team self-service. Body `EditTeamRegistryRequest`: `name?`, `description?` (same validators as `UpdateTeamRequest`), `add_admin_ids: list[str] = []`, `remove_admin_ids: list[str] = []`. Response `TeamWithPermissions`, built like `create_team` without the `CAN_READ` gate (the caller is not necessarily a member). Not reusing the per-role routes: they are gated on team permissions the platform admin does not hold, and the dialog needs one atomic save.
 
@@ -33,11 +33,17 @@ See proposal.md for why. Current state on `swift` (e980c956a), plus PR #3071:
 
 ## Risks / Trade-offs
 
-- [A platform admin can make themselves admin of any team, then editor, and read its content] → platform admin only, audited per save; owner/reviewer decision (question 1).
+- [A platform admin can make themselves admin of any team, then editor, and read its content] → platform admin only, audited per save; agreed by the owner and the team (decision 1).
 - [Pending nominee cannot replace the sole admin in one step] → explicit 409 message; consistent with `_ensure_team_keeps_at_least_one_admin`.
 - [Relation writes and metadata write are not one transaction] → pre-check before writes, residual race documented (D5).
 - [FGA model change] → `schema.fga.json` regenerated; if a deployment pins `authorization_model_id`, operators must point it at the new model.
 
 ## Migration Plan
 
-One migration note. Expected `impact: none` if the authorization model is written at startup with no pinned id; `minor` otherwise (to confirm in task 1.1). No database migration. Rollback: redeploy the previous release; the extra FGA permission is unused by older code.
+Merged into #3067's note (`3067-require-team-description.md`, already `impact: minor`). The model is written at startup by default (`sync_schema_on_init: true`); a deployment pinning `authorization_model_id` with sync disabled publishes the new model first. No database migration. Rollback: redeploy the previous release; the extra FGA permission is unused by older code.
+
+## Implementation notes
+
+- An unchanged description is dropped from the patch, and an edit that changes nothing writes no audit event.
+- A default (placeholder) description opens empty in the dialog and may stay empty, as in team settings (#3067).
+- The admins label becomes "Team admin(s)" for both modes ("Initial" read wrong in edit).
