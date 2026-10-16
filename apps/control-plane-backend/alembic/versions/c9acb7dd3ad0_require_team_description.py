@@ -20,7 +20,7 @@ trimmed length. Downgrade clears placeholders and cuts descriptions to 180
 characters (lossy) before restoring the nullable `VARCHAR(180)`.
 
 Revision ID: c9acb7dd3ad0
-Revises: c3a7e5d9f1b2
+Revises: d4e8b2a6f091
 Create Date: 2026-10-12 00:00:00.000000
 
 """
@@ -33,7 +33,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "c9acb7dd3ad0"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "c3a7e5d9f1b2"  # pragma: allowlist secret
+    "d4e8b2a6f091"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
