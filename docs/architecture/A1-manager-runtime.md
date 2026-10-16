@@ -95,8 +95,9 @@ flowchart TB
 
 `roles` defines typed platform roles and scoped capabilities. `platform` serializes
 role mutations with bootstrap. `keycloak` owns one shared HTTP client and a synchronized
-service-token cache. `api::governance_router` groups identity, platform administration
-space listing, personal opening, ZIP import and self-capability routes independently of the Temporal client.
+service-token cache. `api::governance_router` groups identity, platform administration,
+space listing, personal opening, folder/document listing, ZIP import and self-capability
+routes independently of the Temporal client.
 
 The same `utoipa-axum` registrations build the runtime routers and OpenAPI paths.
 `utoipa::ToSchema` derives request/response schemas from the Rust DTOs. The binary's
@@ -135,11 +136,29 @@ no synthetic Python team or permission mapping. Unsupported routes redirect home
 agent widgets, task polling, announcements and Python bootstrap consumers are not
 mounted. Theme presentation uses configuration loaded at startup.
 
+## Frontend resource browsing
+
+The router mounts `TeamResourcesPage` under `/team/:teamId/resources` with the
+existing admission guards. `TeamContentNavbar` uses manager memberships and exposes
+Resources for the selected personal/team/project space. It mounts no Python team,
+knowledge-base or conversation consumers.
+
+The page uses generated lazy folder/document hooks, `ResourceExplorer`, `Breadcrumb`
+and `TablePagination`. A keyed space/folder/page lifecycle owns current data and
+cancels abandoned reads. A readiness barrier accepts only responses to that entry's
+own request IDs, retrying RTK requests deduplicated against an earlier entry.
+Reload starts the same pair of reads. The shared footer's optional unknown-total
+mode preserves the existing count/offset consumers.
+
 ## Content access
 
 Manager resolves the caller's unique organization, verifies the target space belongs
 to it, then asks OpenFGA for permission on that space. The same rule covers a
 document, its metadata and a folder page. Ambiguous attachment fails with 409.
+Organization resolution exhausts direct-role pages, then places committed spaces
+with at most 32 independent placements in flight per resolution. A project still
+reads its parent before its organization; a failed or cancelled resolution cancels
+remaining tasks. No SQL or OpenFGA authority is written by those tasks.
 
 ```mermaid
 sequenceDiagram

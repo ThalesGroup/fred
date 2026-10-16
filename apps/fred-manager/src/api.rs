@@ -496,6 +496,27 @@ async fn revoke(
 
 // ---------------------------------------------------------------- folders
 
+// Folder filters are not authority: validate them only after authorizing the space.
+async fn require_folder_in_space(
+    pool: &PgPool,
+    space: Uuid,
+    folder: Option<Uuid>,
+) -> AppResult<()> {
+    if let Some(id) = folder {
+        let exists = sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from folder where id = $1 and space_id = $2)",
+        )
+        .bind(id)
+        .bind(space)
+        .fetch_one(pool)
+        .await?;
+        if !exists {
+            return Err(AppError::NotFound);
+        }
+    }
+    Ok(())
+}
+
 #[derive(Deserialize, utoipa::ToSchema)]
 struct FolderQuery {
     parent_id: Option<Uuid>,
@@ -509,18 +530,19 @@ struct FolderQuery {
         (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Unknown space", body = crate::error::ErrorBody),
+        (status = 404, description = "Unknown space or folder in this space", body = crate::error::ErrorBody),
         (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
 async fn list_folders(
-    State(s): State<AppState>,
+    State(s): State<GovernanceState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(space): Path<Uuid>,
     Query(q): Query<FolderQuery>,
 ) -> AppResult<Json<Vec<Folder>>> {
     require(&s.pool, &s.fga, &user, Permission::Read, space).await?;
+    require_folder_in_space(&s.pool, space, q.parent_id).await?;
     Ok(Json(db::folders(&s.pool, space, q.parent_id).await?))
 }
 
@@ -642,18 +664,19 @@ struct DocumentQuery {
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Unknown space", body = crate::error::ErrorBody),
+        (status = 404, description = "Unknown space or folder in this space", body = crate::error::ErrorBody),
         (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
 async fn list_documents(
-    State(s): State<AppState>,
+    State(s): State<GovernanceState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(space): Path<Uuid>,
     Query(q): Query<DocumentQuery>,
 ) -> AppResult<Json<Vec<Document>>> {
     require(&s.pool, &s.fga, &user, Permission::Read, space).await?;
+    require_folder_in_space(&s.pool, space, q.folder_id).await?;
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let after = match (q.after_name.as_deref(), q.after_id) {
         (Some(name), Some(id)) => Some((name, id)),
@@ -1223,6 +1246,8 @@ fn governance_routes() -> OpenApiRouter<GovernanceState> {
         .routes(routes!(me))
         .routes(routes!(my_spaces))
         .routes(routes!(create_personal_space))
+        .routes(routes!(list_folders))
+        .routes(routes!(list_documents))
         .routes(
             routes!(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
                 crate::blueprint::MAX_ARCHIVE + 64 * 1024,
@@ -1241,8 +1266,6 @@ fn content_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(health))
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
-        .routes(routes!(list_folders))
-        .routes(routes!(list_documents))
         .routes(routes!(create_folder))
         .routes(routes!(rename_folder, delete_folder))
         .routes(routes!(create_document))

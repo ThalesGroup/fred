@@ -5703,3 +5703,6 @@ async fn personal_grant_budget_and_failed_creation_preserve_authority() {
         .unwrap();
     assert!(created && reads(&e, "priya", personal.id).await);
 }
+
+#[path = "support/resource_browsing.rs"]
+mod resource_browsing;

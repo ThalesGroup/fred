@@ -115,3 +115,9 @@
   margin-top: var(--spacing-xs);
   padding: var(--spacing-2xs) 0 var(--spacing-2xs) var(--spacing-2xs);
 }
+
+@media (max-width: 720px) {
+  .mainNavPanel {
+    width: 100%;
+  }
+}

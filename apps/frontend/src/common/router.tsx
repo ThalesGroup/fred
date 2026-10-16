@@ -5,6 +5,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from "react-router-do
 import GcuGuard from "@core/guards/GcuGuard";
 import BootstrapGuard from "@core/guards/BootstrapGuard";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
+import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage";
 import HomePage from "@components/pages/HomePage/HomePage";
 import ProvisioningPage from "@components/pages/admin/ProvisioningPage/ProvisioningPage";
 import { getConfig } from "./config";
@@ -23,6 +24,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Navigate to="/home" replace /> },
       { path: "home", element: <HomePage /> },
+      { path: "team/:teamId/resources", element: <TeamResourcesPage /> },
       { path: "admin", element: <Navigate to="/admin/provisioning" replace /> },
       { path: "admin/provisioning", element: <ProvisioningPage /> },
       { path: "*", element: <Navigate to="/home" replace /> },

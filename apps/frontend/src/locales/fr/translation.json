@@ -2241,6 +2241,12 @@
       "versionsAria": "Versions des notes de version"
     },
     "resources": {
+      "managerRead": {
+        "denied": "Vous n'avez pas accès à ces ressources.",
+        "missing": "Cet espace ou ce dossier est introuvable.",
+        "unavailable": "Les ressources n'ont pas pu être chargées. Veuillez réessayer.",
+        "page": "Page {{page}}"
+      },
       "workspaceTitle": "Fichiers",
       "pageTitle": "Ressources de l'équipe",
       "pageSubtitle": "Gérer les ressources locales, manuellement ajoutées à l'équipe",

@@ -45,7 +45,7 @@ function collectPaths(items: RouteObject[]): string[] {
 
 describe("bounded Fred router", () => {
   it("registers only the implemented journey, inside admission guards", () => {
-    expect(collectPaths(routes)).toEqual(["/", "home", "admin", "admin/provisioning", "*"]);
+    expect(collectPaths(routes)).toEqual(["/", "home", "team/:teamId/resources", "admin", "admin/provisioning", "*"]);
   });
   it("redirects unknown destinations home without mounting their old components", () => {
     const catchAll = routes[0].children?.find((route) => route.path === "*");

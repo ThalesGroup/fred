@@ -10,6 +10,8 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 #[path = "support/environment.rs"]
 mod environment;
 use environment::named_space;
+#[path = "support/browser_resources.rs"]
+mod browser_resources;
 #[path = "support/real_keycloak.rs"]
 mod real_keycloak;
 
@@ -40,16 +42,22 @@ async fn provisioning_browser_journey() {
     let directory = Directory::new(&realm, "fred-manager", "it-manager".into()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let manager_url = format!("http://{}", listener.local_addr().unwrap());
-    let app = axum::Router::new().nest(
-        "/fred-manager/v1",
-        api::governance_router(api::GovernanceState {
-            onboarding: (&config).into(),
-            auth,
-            pool: e.pool.clone(),
-            fga: e.fga.clone(),
-            directory: Some(directory.clone()),
-        }),
-    );
+    let app = axum::Router::new()
+        .nest(
+            "/fred-manager/v1",
+            api::governance_router(api::GovernanceState {
+                onboarding: (&config).into(),
+                auth,
+                pool: e.pool.clone(),
+                fga: e.fga.clone(),
+                directory: Some(directory.clone()),
+            }),
+        )
+        .merge(browser_resources::router(
+            e.pool.clone(),
+            e.fga.clone(),
+            directory.clone(),
+        ));
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });

@@ -2241,6 +2241,12 @@
       "versionsAria": "Release versions"
     },
     "resources": {
+      "managerRead": {
+        "denied": "You do not have access to these resources.",
+        "missing": "This space or folder could not be found.",
+        "unavailable": "Resources could not be loaded. Please try again.",
+        "page": "Page {{page}}"
+      },
       "workspaceTitle": "Files",
       "pageTitle": "Team resources",
       "pageSubtitle": "Manage local resources, manually added to the team",

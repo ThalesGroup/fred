@@ -23,6 +23,9 @@ pub struct Fault {
     pub written: Vec<serde_json::Value>,
     pub reads: Vec<serde_json::Value>,
     pub read_page_size: Option<u64>,
+    pub read_delay: Option<std::time::Duration>,
+    pub active_reads: usize,
+    pub peak_reads: usize,
 }
 pub struct Proxy {
     pub base: String,
@@ -48,15 +51,26 @@ impl Proxy {
                 let http = http.clone();
                 async move {
                     let (parts, body) = request.into_parts();
+                    let reading = parts.uri.path().ends_with("/read");
                     let mut body = to_bytes(body, 1024 * 1024).await.unwrap();
-                    if parts.uri.path().ends_with("/read") {
+                    if reading {
                         let mut value: serde_json::Value = serde_json::from_slice(&body).unwrap();
                         let mut fault = state.lock().await;
                         if let Some(size) = fault.read_page_size {
                             value["page_size"] = size.into();
                         }
+                        fault.active_reads += 1;
+                        fault.peak_reads = fault.peak_reads.max(fault.active_reads);
                         fault.reads.push(value.clone());
                         body = serde_json::to_vec(&value).unwrap().into();
+                    }
+                    let delay = if reading {
+                        state.lock().await.read_delay
+                    } else {
+                        None
+                    };
+                    if let Some(delay) = delay {
+                        tokio::time::sleep(delay).await;
                     }
                     *state
                         .lock()
@@ -123,6 +137,9 @@ impl Proxy {
                             .await
                             .unwrap();
                         let status = reply.status();
+                        if reading {
+                            state.lock().await.active_reads -= 1;
+                        }
                         if write {
                             state.lock().await.acknowledged.push(status.as_u16());
                         }

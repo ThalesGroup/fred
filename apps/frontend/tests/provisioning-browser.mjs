@@ -347,10 +347,12 @@ try {
   const personalMembership = (await get(priya.context, priya.bearer, "/me/spaces")).find((s) => s.id === personal.id);
   assert.equal(personalMembership.organization_id, organization.id);
   assert.deepEqual(personalMembership.path, [personal.id]);
+  await priya.page.getByRole("button", { name: "Home", exact: true }).click();
   await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
   await expect(priya.page.getByRole("region", { name: "fredlab", exact: true })).toContainText(
     "Editor, Administrator, Analyst",
   );
+  await priya.page.getByRole("button", { name: "Home", exact: true }).click();
   const repeated = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
   await personalEntry.click();
   const reused = await repeated;
@@ -363,6 +365,7 @@ try {
   await priya.page.setViewportSize({ width: 390, height: 844 });
   assert(await priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
   await priya.page.screenshot({ path: "target/personal-space-narrow.png", fullPage: true });
+  await priya.page.getByRole("button", { name: "Home", exact: true }).click();
   // A transport refusal stays visible and requires a fresh deliberate action.
   await priya.page.route(
     "**/fred-manager/v1/me/personal-space",
@@ -379,11 +382,74 @@ try {
   await expect(personalEntry).toBeEnabled();
   await personalEntry.click();
   await expect(priya.page.getByRole("alert")).toHaveCount(0);
+  // The bundle provisions identities/roles only. Seed explicit metadata fixtures afterward.
+  const fixtureResponse = await priya.context.request.post(`${manager}/test-fixture/resources`);
+  assert.equal(fixtureResponse.status(), 200);
+  const resourcesFixture = await fixtureResponse.json();
+  assert.equal(resourcesFixture.personal, personal.id);
+  await priya.page.setViewportSize({ width: 1280, height: 900 });
+  await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
+  await expect(priya.page.getByText("Priya private.txt", { exact: true })).toBeVisible();
+  await expect(priya.page.getByText("Team root.txt", { exact: true })).toHaveCount(0);
+  await priya.page.screenshot({ path: "target/resources-personal.png", fullPage: true });
+  await priya.page.getByRole("button", { name: "Home", exact: true }).click();
+  await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
+  await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
+  await expect(priya.page.getByText("Team root.txt", { exact: true })).toBeVisible();
+  await expect(priya.page.getByText("Priya private.txt", { exact: true })).toHaveCount(0);
+  await priya.page.getByRole("button", { name: "Library", exact: true }).focus();
+  await priya.page.keyboard.press("Enter");
+  await expect(priya.page.getByText("Document 00.txt", { exact: true })).toHaveCount(1);
+  await expect(priya.page.getByText("Document 50.txt", { exact: true })).toHaveCount(0);
+  await priya.page.getByRole("button", { name: "Next page", exact: true }).click();
+  await expect(priya.page.getByText("Document 52.txt", { exact: true })).toBeVisible();
+  await expect(priya.page.getByRole("button", { name: "Next page", exact: true })).toBeDisabled();
+  await expect(priya.page.getByRole("button", { name: "Last page", exact: true })).toHaveCount(0);
+  await priya.page.getByRole("button", { name: "Previous page", exact: true }).click();
+  await expect(priya.page.getByText("Document 00.txt", { exact: true })).toHaveCount(1);
+  await priya.page.getByRole("button", { name: "Empty", exact: true }).click();
+  await expect(priya.page.getByText("This folder is empty.", { exact: true })).toBeVisible();
+  await priya.page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("button", { name: "Library", exact: true })
+    .click();
+  await expect(priya.page.getByText("Document 00.txt", { exact: true })).toHaveCount(1);
+  await priya.page.screenshot({ path: "target/resources-team.png", fullPage: true });
+  await priya.page.setViewportSize({ width: 390, height: 844 });
+  assert(await priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
+  await priya.page.screenshot({ path: "target/resources-team-narrow.png", fullPage: true });
+  // Re-enter a cached root: a new refusal must replace its previously visible rows.
+  await priya.page.route(
+    `**/spaces/${resourcesFixture.team}/documents*`,
+    (route) =>
+      route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ detail: "forbidden" }) }),
+    { times: 1 },
+  );
+  await priya.page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("button", { name: "Resources", exact: true })
+    .click();
+  await expect(priya.page.getByRole("alert")).toContainText("You do not have access to these resources.");
+  await expect(priya.page.getByText("Team root.txt", { exact: true })).toHaveCount(0);
+  await priya.page.route(
+    `**/spaces/${resourcesFixture.team}/documents*`,
+    (route) =>
+      route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "unavailable" }) }),
+    { times: 1 },
+  );
+  await priya.page.getByRole("button", { name: "Reload", exact: true }).click();
+  await expect(priya.page.getByRole("alert")).toContainText("Resources could not be loaded.");
+  await priya.page.getByRole("button", { name: "Reload", exact: true }).click();
+  await expect(priya.page.getByText("Team root.txt", { exact: true })).toBeVisible();
+  // Bob cannot read Priya's personal metadata through a direct resource URL.
+  await bob.page.goto(origin + `/team/${personal.id}/resources`);
+  await expect(bob.page.getByRole("alert")).toContainText("You do not have access to these resources.");
+  await expect(bob.page.getByText("Priya private.txt", { exact: true })).toHaveCount(0);
   assert(!(await get(bob.context, bob.bearer, "/me/spaces")).some((s) => s.id === personal.id));
   assert.deepEqual(unexpected, [], "Unexpected control-plane dependency");
   assert.deepEqual(pageErrors, [], "Browser application errors");
   console.log(
-    "Provisioning browser acceptance passed: OIDC login, personal terms, root bootstrap, logout/account switch, empty root memberships, navigation, multipart import, pending state, reports, replay, project hierarchy/roles, legacy rejection and access refusals.",
+    "Provisioning browser acceptance passed: OIDC login, personal terms, root bootstrap, logout/account switch, empty root memberships, navigation, multipart import, pending state, reports, replay, project hierarchy/roles, legacy rejection, personal/team resource browsing, folders, cursor pages, empty/error/denied states and access refusals.",
   );
 } catch (error) {
   console.error({ pageErrors, unexpected });

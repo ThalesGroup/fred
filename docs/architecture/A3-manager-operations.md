@@ -303,6 +303,6 @@ personal acceptance. The frontend depends on manager public configuration before
 login and displays a reload action if it is unavailable. Root bootstrap uses the
 configured secret and grants no organization membership. The Make ZIP builder and
 the UI provisioning page populate explicitly declared memberships. Fred's existing
-Home, sidebar and administration console expose this bounded journey; unrelated
+Home, scoped Resources, sidebar and administration console expose this bounded journey; unrelated
 product routes are not mounted. Rebuilding the frontend changes presentation only:
 existing manager consent, bootstrap and imported data remain valid.

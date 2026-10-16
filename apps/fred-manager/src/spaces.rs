@@ -82,8 +82,20 @@ pub async fn organization<'e>(
     let ids: Vec<_> = roles.iter().map(|(id, _)| *id).collect();
     let rows = db::spaces(ex, &ids).await?;
     let mut organization = None;
-    for row in rows {
-        let space = place(fga, row).await?;
+    let mut pending = tokio::task::JoinSet::new();
+    let mut rows = rows.into_iter();
+    // Independent placements overlap, with a fixed per-resolution concurrency cap.
+    // place() still resolves a project's parent before its organization.
+    loop {
+        while pending.len() < 32 {
+            let Some(row) = rows.next() else { break };
+            let fga = fga.clone();
+            pending.spawn(async move { place(&fga, row).await });
+        }
+        let Some(result) = pending.join_next().await else {
+            break;
+        };
+        let space = result.map_err(anyhow::Error::from)??;
         if organization.is_some_and(|id| id != space.organization) {
             return Err(AppError::Conflict(
                 "multiple organization attachments".into(),

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import MainNavBar from "./MainNavBar/MainNavBar.tsx";
+import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
@@ -20,7 +21,10 @@ import { useLocation } from "react-router-dom";
 import styles from "./Sidebar.module.scss";
 
 export default function Sidebar({ navigation = true }: { navigation?: boolean }) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const selected =
+    pathname.match(/^\/team\/([^/]+)\/resources$/)?.[1] ??
+    (pathname === "/home" ? new URLSearchParams(search).get("space") : null);
   return (
     <div className={styles["sidebar-container"]}>
       <div className={styles.rail}>
@@ -31,7 +35,13 @@ export default function Sidebar({ navigation = true }: { navigation?: boolean })
       </div>
       {navigation && (
         <div className={styles["nav-panel-card"]}>
-          {pathname.startsWith("/admin") ? <AdminNavbar /> : <HomeNavPanel />}
+          {pathname.startsWith("/admin") ? (
+            <AdminNavbar />
+          ) : selected ? (
+            <TeamContentNavbar spaceId={selected} />
+          ) : (
+            <HomeNavPanel />
+          )}
         </div>
       )}
     </div>

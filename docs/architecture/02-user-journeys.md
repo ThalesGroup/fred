@@ -8,7 +8,7 @@ Rules live in their domain chapters; this chapter shows their composition.
 
 Execution context: Fred's existing application, navigation and screens connected
 to fred-manager on `chore/rust-rebac`, using Keycloak, PostgreSQL and OpenFGA.
-The reachable journey contains onboarding, memberships and provisioning.
+The reachable journey contains onboarding, memberships, provisioning and resource browsing.
 Other product pages and their Python data consumers are not mounted.
 
 | Step | What the person sees or does | Architectural effect |
@@ -69,7 +69,8 @@ organization role includes `personal_space_creator`. The existing Personal space
 entry calls generated `POST /me/personal-space`, then refreshes `GET /me/spaces`
 before selecting the returned UUID. First opening returns 201; subsequent openings
 return 200 with the same UUID. The existing selected-space detail appears, and
-fredlab remains selectable. The entry keeps its personal avatar, label and styling.
+Resources appears in the scoped sidebar; Home returns to the list containing fredlab.
+The entry keeps its personal avatar, label and styling.
 Keyboard activation runs the command; pending state prevents duplicate submissions.
 Command or refresh failure shows an error and requires another deliberate action.
 
@@ -79,7 +80,52 @@ Priya's entitlement alone preserves reuse of her readable space. Removing editor
 is not repaired by opening; removing all personal read roles prevents opening,
 without replacement. Her organization retains revocation authority and no implicit
 private-space read. This journey uses manager only, with no control-plane,
-knowledge-flow, task or runtime request. Resources have their own feature boundary.
+knowledge-flow, task or runtime request.
+
+## Priya browses her resources
+
+From her personal-space detail, Priya clicks Resources in the existing scoped
+sidebar. `/team/<space UUID>/resources` opens that space's root. Home returns to
+her organization's list; selecting fredlab and then Resources opens fredlab's root.
+The organization remains implicit and no organization selector appears.
+
+The explorer shows folders and document names/sizes returned by manager. A folder
+opens its children; Back and breadcrumb buttons return to ancestors. Documents
+advance in pages of 50 using Next, Previous and First. Folders appear on the first
+page. The footer shows the current page without claiming an unknown total or last
+page. Refreshing the browser returns to the space root.
+
+Successful emptiness displays the existing empty-folder message. Loading hides
+previous rows; 403 shows denied access, 404 an absent space/folder, and other failures
+an unavailable-service message. Reload retries both reads. Entering a space, folder
+or page verifies current authority before showing rows, including after an abandoned
+request. A response from an earlier visit cannot populate the current view.
+
+```mermaid
+sequenceDiagram
+    actor Priya
+    participant UI as Fred Resources
+    participant M as fred-manager
+    participant FGA as OpenFGA
+    participant PG as PostgreSQL
+    Priya->>UI: Click Resources, then a folder
+    par Folder listing
+        UI->>M: GET /spaces/{id}/folders?parent_id=folder
+    and Document page
+        UI->>M: GET /spaces/{id}/documents?folder_id=folder&limit=51
+    end
+    Note over M: Each request validates bearer and personal admission
+    M->>FGA: Resolve unique organization and Check can_read on space
+    M->>PG: Validate folder belongs to space, then list contents
+    M-->>UI: Folder and document metadata, or refusal/error
+    UI-->>Priya: Existing explorer, breadcrumb and page controls
+```
+
+Importing the demo ZIP provisions users and roles, not documents. An empty personal
+space or team therefore displays an empty result until metadata exists. The automated
+browser fixture creates its sample metadata separately in its disposable database.
+See [content ownership and read contract](05-documents.md) and
+[request costs and acceptance](09-quality.md#resource-browsing-acceptance).
 
 ## Joining and governing organizations, teams and projects
 

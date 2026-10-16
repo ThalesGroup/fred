@@ -123,7 +123,7 @@ pub async fn folders(
 ) -> sqlx::Result<Vec<Folder>> {
     sqlx::query_as(concat!(
         folder!(),
-        " where space_id = $1 and parent_id is not distinct from $2 order by name"
+        " where space_id = $1 and parent_id is not distinct from $2 order by name, id"
     ))
     .bind(space)
     .bind(parent)

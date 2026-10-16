@@ -93,6 +93,21 @@ a failed query hides cached memberships.
 Integration regressions exercise version changes, timestamp-preserving retry,
 service/delegation refusal, CLI admission and absence of membership side effects.
 
+## Resource browsing acceptance
+
+The same real browser journey seeds metadata after provisioning in its disposable
+SQL database: one private document for Priya, one fredlab root document, a library
+with 53 documents and an empty child folder. It verifies personal/team separation,
+keyboard folder entry, breadcrumb return, Next/Previous, true emptiness and narrow
+layout. Injected 403/500 responses exercise denial, failure and explicit reload;
+Bob's direct personal-space URL receives a real server refusal. Python-service
+requests remain forbidden by the fixture.
+
+Frontend regressions additionally hold responses across folder/space changes and
+re-entry after revocation, including React StrictMode cleanup. API regressions
+verify invalid/foreign folder filters, role semantics, revoked access and cursor
+boundaries. These are fixture-based functional tests, not a load campaign.
+
 ## OpenFGA request costs
 
 Direct roles and the space tree live in OpenFGA. The client uses `Check`, paginated
@@ -106,8 +121,9 @@ The frontend navigation and provisioning guard share one cached `/me` query.
 Navigation and page subscribers refetch `/me` data older than 60 seconds when
 they mount; this threshold does not schedule periodic refresh.
 Concurrent subscribers deduplicate the request. Home and the space navigation
-share `/me/spaces`; Home requests a fresh result on mount, and selection within
-Home uses that result without per-space requests. Each `/me` network fetch performs
+share `/me/spaces`; Home and scoped navigation request a fresh result on mount.
+Space selection uses those memberships; opening Resources performs its separate
+folder/document reads. Each `/me` network fetch performs
 the four concurrent platform Checks listed below; it does not select an organization; `/me/spaces` uses the tuple and link Reads listed below. There is no polling or additional import-specific FGA query. The
 browser fixture (15 imported users, one organization, three teams and one project,
 one active import at a time) proves behavior, not throughput or scalability.
@@ -169,6 +185,26 @@ Sources: [client](../../apps/fred-manager/src/fga.rs),
 [space mutations, memberships and scope](../../apps/fred-manager/src/spaces.rs),
 [platform mutations](../../apps/fred-manager/src/platform.rs), and
 [HTTP handlers](../../apps/fred-manager/src/api.rs).
+
+Resource entry and each folder/document-page transition issue two concurrent manager
+list requests, in addition to admission/navigation queries. Each list costs
+`Q(caller) + L Read + 1 C`, with zero Writes and no SQL transaction/advisory lock.
+After authorization, a supplied folder adds one indexed SQL existence lookup.
+Document SQL returns at most 51 rows to the UI; folder SQL returns all direct children.
+A retry or abandoned-request recovery can issue another pair.
+
+A fixture with one organization, one team, one personal space and five direct role
+tuples for the reader forces one tuple per Read page. At HTTP concurrency 1, each
+list of either zero or 53 stored documents measures 8 Reads, 1 Check and 0 Writes.
+An additional fixture with one organization, 40 teams and 41 direct member tuples
+forces 10 tuples per page and a 20 ms proxy delay: one organization resolution uses
+45 Reads, no Checks/Writes, and overlapping Reads with a peak at most 32. The limit
+is per resolution, not global; concurrent HTTP callers multiply it. Project parent
+reads remain ordered. SQL mutation callers retain their existing locks across context
+resolution; listing takes no such lock. Cardinalities remain direct memberships,
+hierarchy depth, direct child folders and requested document-page size, not a claimed
+constant server-side authorization cost. These fixtures do not measure production
+latency or throughput.
 
 For the ZIP importer, let `U` be users, `O` organizations, `N` new organizations,
 `G` normalized platform grants, `D` space-role tuples, `C` new teams and projects,
@@ -309,14 +345,14 @@ Generated from the `// Proves:` markers.
 <!-- generated: invariants -->
 | Invariant | Proved by |
 | --- | --- |
-| I1 | `apps/fred-manager/src/domain.rs::parent_rules`<br>`apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock`<br>`apps/fred-manager/tests/integration.rs::sibling_names_are_unique_and_uncommitted_links_are_ignored` |
+| I1 | `apps/fred-manager/src/domain.rs::parent_rules`<br>`apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock`<br>`apps/fred-manager/tests/integration.rs::sibling_names_are_unique_and_uncommitted_links_are_ignored`<br>`apps/fred-manager/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics` |
 | I2 | `apps/fred-manager/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space` |
 | I3 | `apps/fred-manager/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space` |
 | I4 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::concurrent_revocations_keep_parent_access`<br>`apps/fred-manager/tests/integration.rs::concurrent_grant_and_revoke_keep_the_invariant`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::a_timed_out_child_grant_cannot_arrive_after_parent_revocation`<br>`apps/fred-manager/tests/integration.rs::a_cancelled_child_grant_is_fenced_after_client_restart`<br>`apps/fred-manager/tests/integration.rs::noop_revocation_and_multiple_scopes_fence_stale_attempts`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::inherited_access_does_not_replace_parent_membership`<br>`apps/fred-manager/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/fred-manager/tests/integration.rs::import_orders_personal_eligibility_after_content_across_failed_batches`<br>`apps/fred-manager/tests/integration.rs::personal_grant_budget_and_failed_creation_preserve_authority` |
 | I5 | `apps/fred-manager/tests/integration.rs::a_revoked_admin_cannot_finish_a_waiting_request`<br>`apps/fred-manager/tests/integration.rs::revoked_platform_actor_cannot_complete_a_waiting_platform_or_owner_grant`<br>`apps/fred-manager/tests/integration.rs::simultaneous_imports_reuse_usernames_and_space_names`<br>`apps/fred-manager/tests/integration.rs::provisioning_waiter_rechecks_revoked_or_expired_operator`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::a_timed_out_platform_grant_cannot_arrive_after_actor_revocation`<br>`apps/fred-manager/tests/integration.rs::noop_revocation_and_multiple_scopes_fence_stale_attempts`<br>`apps/fred-manager/tests/integration.rs::sql_mutation_loses_to_a_delayed_revocation_after_its_check`<br>`apps/fred-manager/tests/integration.rs::folder_creation_keeps_one_connection_through_placement_and_write`<br>`apps/fred-manager/tests/integration.rs::content_http_dispatch_preserves_payload_and_failure_boundaries`<br>`apps/fred-manager/tests/integration.rs::a_late_attachment_cannot_publish_after_assignment_elsewhere` |
-| I6 | `apps/fred-manager/tests/integration.rs::a_member_with_a_personal_space_can_leave_the_organization`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed`<br>`apps/fred-manager/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local`<br>`apps/fred-manager/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/fred-manager/tests/integration.rs::personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait`<br>`apps/fred-manager/tests/integration.rs::personal_grant_budget_and_failed_creation_preserve_authority` |
+| I6 | `apps/fred-manager/tests/integration.rs::a_member_with_a_personal_space_can_leave_the_organization`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed`<br>`apps/fred-manager/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local`<br>`apps/fred-manager/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/fred-manager/tests/integration.rs::personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait`<br>`apps/fred-manager/tests/integration.rs::personal_grant_budget_and_failed_creation_preserve_authority`<br>`apps/fred-manager/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics` |
 | I7 | `apps/fred-manager/src/domain.rs::search_scope_is_ancestors_then_self`<br>`apps/fred-manager/tests/integration.rs::scope_follows_ancestors_and_levels_only_narrow_it` |
-| I8 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::admin_roles_grant_no_content_access`<br>`apps/fred-manager/tests/integration.rs::complete_role_permission_matrix_and_space_isolation`<br>`apps/fred-manager/tests/integration.rs::teams_are_created_by_organization_admins_only`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local`<br>`apps/fred-manager/tests/integration.rs::organization_owners_name_admins_and_read_nothing`<br>`apps/fred-manager/tests/integration.rs::ambiguous_legacy_context_fails_closed_and_remains_repairable` |
+| I8 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::admin_roles_grant_no_content_access`<br>`apps/fred-manager/tests/integration.rs::complete_role_permission_matrix_and_space_isolation`<br>`apps/fred-manager/tests/integration.rs::teams_are_created_by_organization_admins_only`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local`<br>`apps/fred-manager/tests/integration.rs::organization_owners_name_admins_and_read_nothing`<br>`apps/fred-manager/tests/integration.rs::ambiguous_legacy_context_fails_closed_and_remains_repairable`<br>`apps/fred-manager/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics` |
 | I9 | `apps/fred-manager/tests/integration.rs::bootstrap_promotes_one_person_once`<br>`apps/fred-manager/tests/integration.rs::a_finished_bootstrap_stays_closed_after_its_admin_is_removed`<br>`apps/fred-manager/tests/integration.rs::concurrent_retries_finish_a_bootstrap_once`<br>`apps/fred-manager/tests/integration.rs::an_interrupted_bootstrap_is_finished_by_its_caller_only`<br>`apps/fred-manager/tests/integration.rs::consent_and_root_bootstrap_are_personal_and_do_not_create_memberships` |
 | I10 | `apps/fred-manager/src/auth.rs::rejects_expired_and_overlong_tokens`<br>`apps/fred-manager/src/auth.rs::lifetime_ceiling_cannot_be_skipped`<br>`apps/fred-manager/src/auth.rs::rejects_missing_kid_and_bad_signature`<br>`apps/fred-manager/src/auth.rs::strict_mode_checks_issuer_and_audience` |
 | I11 | `apps/fred-manager/src/blueprint.rs::invalid_declarations_and_duplicate_json_keys_fail_without_echoing_input`<br>`apps/fred-manager/src/keycloak.rs::directory_failures_do_not_echo_credentials_or_payloads`<br>`apps/fred-manager/src/logging.rs::sensitive_and_reserved_fields_never_leak`<br>`apps/fred-manager/src/logging.rs::dependencies_get_a_fixed_message_without_their_fields`<br>`apps/fred-manager/tests/integration.rs::directory_creation_conflict_pagination_preservation_and_failures` |
@@ -331,7 +367,7 @@ Generated from the `// Proves:` markers.
 | I20 | `apps/fred-manager/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local`<br>`apps/fred-manager/tests/integration.rs::memberships_list_inherited_spaces_with_their_paths`<br>`apps/fred-manager/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation` |
 | I21 | `apps/fred-manager/tests/integration.rs::import_cli_is_read_only_until_authorized_and_requires_initialized_state`<br>`apps/fred-manager/tests/integration.rs::organization_owners_name_admins_and_read_nothing`<br>`apps/fred-manager/tests/integration.rs::owner_grants_require_directory_identity_and_deleted_owners_can_be_revoked`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_owner_identity_before_publishing_spaces`<br>`apps/fred-manager/tests/integration.rs::import_checks_distinct_owners_once_with_bounded_concurrency` |
 | I22 | `apps/fred-manager/tests/integration.rs::content_http_waiters_recheck_existence_after_deletion` |
-| I23 | `apps/fred-manager/tests/integration.rs::concurrent_attachments_choose_one_organization_and_creation_cannot_bypass_it`<br>`apps/fred-manager/tests/integration.rs::a_late_attachment_cannot_publish_after_assignment_elsewhere`<br>`apps/fred-manager/tests/integration.rs::ambiguous_legacy_context_fails_closed_and_remains_repairable`<br>`apps/fred-manager/tests/integration.rs::import_rejects_cross_organization_declarations_before_identity_writes`<br>`apps/fred-manager/tests/integration.rs::organization_context_exhausts_pages_and_grant_budget_includes_global_fencing`<br>`apps/fred-manager/tests/integration.rs::business_http_checks_context_while_platform_metadata_stays_available`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_attachment_after_preflight_against_a_waiting_grant`<br>`apps/fred-manager/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/fred-manager/tests/integration.rs::personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait` |
+| I23 | `apps/fred-manager/tests/integration.rs::concurrent_attachments_choose_one_organization_and_creation_cannot_bypass_it`<br>`apps/fred-manager/tests/integration.rs::a_late_attachment_cannot_publish_after_assignment_elsewhere`<br>`apps/fred-manager/tests/integration.rs::ambiguous_legacy_context_fails_closed_and_remains_repairable`<br>`apps/fred-manager/tests/integration.rs::import_rejects_cross_organization_declarations_before_identity_writes`<br>`apps/fred-manager/tests/integration.rs::organization_context_exhausts_pages_and_grant_budget_includes_global_fencing`<br>`apps/fred-manager/tests/integration.rs::business_http_checks_context_while_platform_metadata_stays_available`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_attachment_after_preflight_against_a_waiting_grant`<br>`apps/fred-manager/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/fred-manager/tests/integration.rs::personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait`<br>`apps/fred-manager/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics`<br>`apps/fred-manager/tests/support/resource_browsing.rs::organization_placement_reads_overlap_with_a_bounded_request_budget` |
 <!-- end generated -->
 
 Provisioning tests inject failures before/after real FGA writes, fail deferred SQL commits,
