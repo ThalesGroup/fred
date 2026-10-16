@@ -76,6 +76,7 @@ export type Zone = {
   framed?: boolean;
   chart_capable?: boolean;
   chart_type?: string | null;
+  takeaway?: boolean;
 };
 export type RepeatGroup = {
   key: string;
