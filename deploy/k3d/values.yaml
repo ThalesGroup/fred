@@ -452,7 +452,7 @@ applications:
           # /apps/evaluation/ answers with an error and nothing else breaks.
           - app_id: evaluation
             ui_prefix: /apps/evaluation
-            version: 1.1.0
+            version: 1.2.0
             icon: fact_check
             display_name:
               en: "Evaluation"

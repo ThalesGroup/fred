@@ -21,6 +21,11 @@ Evidence: scope confirmed on 2026-10-05 with local-only simplification; tracking
 
 - [x] 3b.1 Move the release, the k3d values and the hooks into `deploy/k3d/` (helmfile, values, build, prepare, finish); the factory deploys any product through `make k3d-app DIR=...`. Verified: renders identical to the former factory values; 5 Fred and 8 factory command tests pass.
 
+## 3c. Deploy a published release (2026-10-16)
+
+- [x] 3c.1 `RELEASE=<version>` selects the published OCI chart in `deploy/k3d/helmfile.yaml.gotmpl`; `deploy/k3d/build` then builds nothing and lists that release's ghcr images. Verified: 7 deploy/k3d tests pass; real `helmfile template` with `RELEASE=3.6.0` pulls chart 3.6.0, validates the checkout's k3d values against its schema and renders every container on `:v3.6.0`; the four `v3.6.0` images exist on ghcr.
+- [x] 3c.2 Deploy 3.6.0 on a freshly wiped k3d (`make k3d-app DIR=../fred RELEASE=3.6.0`), done by the developer; record the outcome. Developer-reported 2026-10-16: deployment succeeded on a freshly wiped k3d.
+
 ## 4. Verify and deliver
 
 - [ ] 4.1 Run targeted command tests and required repository quality checks; record exact results separately from real Helm rendering evidence.

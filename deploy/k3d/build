@@ -2,25 +2,52 @@
 """Build Fred's four images for the local k3d instance (fred-deployment-factory).
 
 Writes $K3D_APP_OUT/images.txt, the content-tagged references to copy into the
-cluster, and $K3D_APP_OUT/images.yaml, the Helm values selecting them.
+cluster, and $K3D_APP_OUT/images.yaml, the Helm values selecting them. With
+RELEASE set, builds nothing: the published images of that release.
 """
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
+
+PUBLISHED_REPOSITORY = "ghcr.io/thalesgroup/fred-agent"
+# Each image and the chart applications running it.
+CONSUMERS = {
+    "fred-agents": ["fred-agents"],
+    "knowledge-flow-backend": ["knowledge-flow-backend", "knowledge-flow-worker"],
+    "control-plane-backend": ["control-plane-backend", "control-plane-worker"],
+    "frontend": ["frontend"],
+}
+
+
+def publish(content: dict[str, str], output: Path) -> None:
+    # Publish only a complete set of outputs; JSON is also valid Helm values YAML.
+    output.mkdir(parents=True, exist_ok=True)
+    for name, text in content.items():
+        temporary = output / f"{name}.tmp"
+        temporary.write_text(text)
+        temporary.replace(output / name)
+
+
+def use_release(version: str, output: Path) -> None:
+    # The published chart already selects these tags (its appVersion): the
+    # values stay empty and the list only lets the factory import them once.
+    if not re.fullmatch(r"\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?", version):
+        raise ValueError(
+            f"RELEASE must be a release version such as 3.6.0, not {version!r}"
+        )
+    images = [f"{PUBLISHED_REPOSITORY}/{app}:v{version}" for app in CONSUMERS]
+    print(f"No build: Fred {version}'s published images", flush=True)
+    publish({"images.yaml": "{}\n", "images.txt": "\n".join(images) + "\n"}, output)
 
 
 def build(root: Path, output: Path) -> None:
     output.mkdir(parents=True, exist_ok=True)
     applications = {}
     images = []
-    for app, consumers in {
-        "fred-agents": ["fred-agents"],
-        "knowledge-flow-backend": ["knowledge-flow-backend", "knowledge-flow-worker"],
-        "control-plane-backend": ["control-plane-backend", "control-plane-worker"],
-        "frontend": ["frontend"],
-    }.items():
+    for app, consumers in CONSUMERS.items():
         make = ["make", "--no-print-directory", "-C", str(root / "apps" / app)]
         image = subprocess.check_output(
             [
@@ -62,17 +89,18 @@ def build(root: Path, output: Path) -> None:
         for consumer in consumers:
             applications[consumer] = {"image": {"repository": repository, "tag": tag}}
         print(f"Built {app}: {reference}", flush=True)
-    # Publish only a complete build's outputs; JSON is also valid Helm values YAML.
-    for name, content in {
-        "images.yaml": json.dumps({"applications": applications}, indent=2) + "\n",
-        "images.txt": "\n".join(images) + "\n",
-    }.items():
-        temporary = output / f"{name}.tmp"
-        temporary.write_text(content)
-        temporary.replace(output / name)
+    publish(
+        {
+            "images.yaml": json.dumps({"applications": applications}, indent=2) + "\n",
+            "images.txt": "\n".join(images) + "\n",
+        },
+        output,
+    )
 
 
 if __name__ == "__main__":
-    build(
-        Path(__file__).resolve().parents[2], Path(os.environ["K3D_APP_OUT"]).resolve()
-    )
+    out = Path(os.environ["K3D_APP_OUT"]).resolve()
+    if release := os.environ.get("RELEASE"):
+        use_release(release, out)
+    else:
+        build(Path(__file__).resolve().parents[2], out)

@@ -550,7 +550,11 @@ In short, from fred-deployment-factory:
 ```bash
 make k3d-up                           # the infrastructure, once
 make k3d-app DIR=<this checkout>      # build this checkout, deploy it; rerun after any change
+make k3d-app DIR=<this checkout> RELEASE=3.6.0   # or deploy a published release: its chart and images, no build
 ```
+
+With `RELEASE`, the k3d values are still this checkout's `deploy/k3d/values.yaml`:
+check out that release's tag (`code/v<version>`) to test it exactly as published.
 
 The model API key comes from `apps/fred-agents/config/.env` (`make setup-env` here, once).
 Fred is then on <http://localhost:8088>. The first time, register on its login page and

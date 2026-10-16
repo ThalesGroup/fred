@@ -83,6 +83,28 @@ class BuildImagesTests(unittest.TestCase):
             )
             self.assertFalse((output / "images.txt").exists())
 
+    def test_release_lists_published_images_without_building(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with patch.object(module.subprocess, "run") as run:
+                module.use_release("3.6.0", output)
+            run.assert_not_called()
+            self.assertEqual((output / "images.yaml").read_text(), "{}\n")
+            self.assertEqual(
+                (output / "images.txt").read_text().splitlines(),
+                [
+                    f"ghcr.io/thalesgroup/fred-agent/{app}:v3.6.0"
+                    for app in (
+                        "fred-agents",
+                        "knowledge-flow-backend",
+                        "control-plane-backend",
+                        "frontend",
+                    )
+                ],
+            )
+            with self.assertRaises(ValueError):
+                module.use_release("latest", output)
+
 
 if __name__ == "__main__":
     unittest.main()

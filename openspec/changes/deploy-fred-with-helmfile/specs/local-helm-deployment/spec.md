@@ -16,6 +16,18 @@ The local deployment SHALL use the product chart and the product's k3d values (`
 - **WHEN** the checkout path contains spaces and the command is invoked from another directory
 - **THEN** the same files and value precedence are used without shell splitting
 
+### Requirement: A published release can be deployed instead of the checkout
+When `RELEASE` names a release version, the local deployment SHALL install that version of the published chart (`oci://ghcr.io/thalesgroup/fred-helm/fred`) with the chart's default images, build no image, and still apply the checkout's k3d values. The published images SHALL be listed for import into the cluster. A value that is not a release version MUST fail before any cluster mutation.
+
+#### Scenario: Deploying a published release
+- **WHEN** the developer deploys Fred with `RELEASE=3.6.0`
+- **THEN** the `fred-app` release uses chart `fred` 3.6.0 from the OCI registry and the `ghcr.io/thalesgroup/fred-agent/*:v3.6.0` images
+- **AND** no image is built from the checkout
+
+#### Scenario: Version is not a release
+- **WHEN** `RELEASE` is `latest` or another non-version string
+- **THEN** preparation fails and nothing is deployed
+
 ### Requirement: Image preparation preserves service and worker consistency
 The local build SHALL prepare Fred's four application images through existing product build tools, tag them according to their image content, and use each backend image for its corresponding worker. Failed builds MUST stop deployment.
 
