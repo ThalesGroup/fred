@@ -2193,6 +2193,10 @@ applications:
         # `bootstrap_token_file` here: that path is local-dev only and is
         # never rendered into a Kubernetes deployment by this chart.
         bootstrap_token_env_var: "FRED_BOOTSTRAP_TOKEN"
+        # Terms of use (CGU) to accept before using Fred, e.g. "v1"; null turns the
+        # screen off. Users accept again whenever this version changes; the text is
+        # the frontend's legal "gcu" page (FORKING_GUIDE.md, "Legal pages").
+        gcu_version: null
 
       observability:
         kpi:
