@@ -1,3 +1,17 @@
+**v3.6.1** - 2026-10-16
+
+- **Summary**
+
+  Fred itself is unchanged in this release. Its published installation package now explains how to deploy it.
+
+- **Improvements**
+
+  - The published Helm chart includes its installation guide, the Fred logo and links to the documentation (#3137)
+
+- **Deployment note**
+
+  No action needed: normal deployment is enough.
+
 **v3.6.0** - 2026-10-15
 
 - **Summary**
