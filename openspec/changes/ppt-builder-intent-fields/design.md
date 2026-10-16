@@ -151,4 +151,5 @@ The draft's recommendations were accepted on every open question:
 
 ## Open Questions
 
-None.
+- **Q9 (raised 2026-10-16, from the preview).** The highlight tint (D7, light tint `lumMod 20 % lumOff 80 %` of the style's accent) is the very colour of the unbanded rows of Medium Style 2, the built-in template's style, and lighter than its banded rows: on that style the highlighted row or column stands out by its bold text only. Recommendation: a stronger shade (the accent at about 40 %, `lumMod 40 % lumOff 60 %`) that differs from both band colours while dark text stays readable; the dark-style rule stays.
+- **Q10 (raised 2026-10-16).** When the user asks for the key messages on the slides, a chart slide with a takeaway card and the wide chart slide fill all their zones alike, so reuse and variety may still put a chart on the wide slide, without its key message and without a note (D9: the takeaway does not score the assignment). Recommendation: keep D9, and add one "What was built" note on a slide whose takeaway could not be shown while the user asked for it, so the user is not left guessing.

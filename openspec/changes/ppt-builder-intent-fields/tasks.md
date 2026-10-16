@@ -23,37 +23,37 @@
 
 ### 3. Table total row and highlights
 
-- [ ] 3.1 `plan.py` `PlanTable`: `total_row: bool = False`, `highlight_row`, `highlight_column` (int or str), coerced (`"yes"`, `"last"` → `true` for `total_row`)
-- [ ] 3.2 `render.py`: table style resolution (`a:tableStyleId`, else `tableStyles.xml` `def`); predefined GUID list with each style's accent (new data module); custom style `a:lastRow` / `firstRow` fill read
-- [ ] 3.3 `render.py` `fill_table`: `lastRow` set or cleared (D6); bold fallback with `intent_shown_otherwise`; highlight row/column resolved against the plan and mapped through the fit, bold + tinted accent, dark-style skip (D7)
-- [ ] 3.4 `changes.py`: `table.total_row`, `table.highlight_row`, `table.highlight_column`
-- [ ] 3.5 `tools.py`: the three fields only when the template has a `table` kind
+- [x] 3.1 `plan.py` `PlanTable`: `total_row: bool = False`, `highlight_row`, `highlight_column` (int or str), coerced (`"yes"`, `"last"` → `true` for `total_row`)
+- [x] 3.2 `table_intents.py` (rendered from `render.py`): table style resolution (`a:tableStyleId`, else `tableStyles.xml` `def`); predefined GUID list with each style's accent (new data module); custom style `a:lastRow` / `firstRow` fill read
+- [x] 3.3 `render.py` `fill_table`: `lastRow` set or cleared (D6); bold fallback with `intent_shown_otherwise`; highlight row/column resolved against the plan and mapped through the fit, bold + tinted accent, dark-style skip (D7)
+- [x] 3.4 `changes.py`: `table.total_row`, `table.highlight_row`, `table.highlight_column`
+- [x] 3.5 `tools.py`: the three fields only when the template has a `table` kind
 - Verification: `test_table_intents.py` — `lastRow="1"` set on a predefined style, cleared on a template table that had it, bold fallback on a style without `a:lastRow`; row by index and by first-cell text, column by header text, out-of-range → note, header-less template shifts the row; tint references the style's accent (Accent 2 style → `accent2`); preview evidence of a total row and a highlighted row through LibreOffice
 
 ### 4. Key-figure trend
 
-- [ ] 4.1 `plan.py` `PlanItem.trend: Optional[Literal["up","down","flat"]]`, coerced spellings
-- [ ] 4.2 `render.py` `_assign_group` / text writing: the glyph run before the figure in the `number` zone, copied run properties at 60 %, thin space; capacity counts it; no number zone → note (D8)
-- [ ] 4.3 `changes.py`: `items[i].trend`; `tools.py`: `trend` offered only with a number zone in a group
+- [x] 4.1 `plan.py` `PlanItem.trend: Optional[Literal["up","down","flat"]]`, coerced spellings
+- [x] 4.2 `render.py` `_assign_group` / text writing: the glyph run before the figure in the `number` zone, copied run properties at 60 %, thin space; capacity counts it; no number zone → note (D8)
+- [x] 4.3 `changes.py`: `items[i].trend`; `tools.py`: `trend` offered only with a number zone in a group (a trend needs a written number: an auto-numbered item is noted)
 - Verification: `test_figure_trend.py` — glyph per value, run properties copied (no colour written), fit with the glyph, note on a group without a number zone; preview of the built-in "Fred Key Figures" slide with three trends
 
 ## Phase C — slide takeaway
 
 ### 5. Analysis and labelling
 
-- [ ] 5.1 `lexicon.py`: `TAKEAWAY_NAMES`; `models.py`: `Zone.takeaway: bool = False`
-- [ ] 5.2 `analysis.py`: takeaway flag from the shape or layout-placeholder name, one per pattern; `ANALYSIS_VERSION` 16 → 17
-- [ ] 5.3 `labelling.py`: a vision purpose matching the names sets the flag; prompt slot example "key message"
-- [ ] 5.4 Regenerate `assets/fred_template.inventory.json` (`make builtin-inventory`): "Fred Chart" takeaway zone flagged
+- [x] 5.1 `lexicon.py`: `TAKEAWAY_NAMES`; `models.py`: `Zone.takeaway: bool = False`
+- [x] 5.2 `analysis.py`: takeaway flag from the shape or layout-placeholder name, one per pattern; `ANALYSIS_VERSION` 16 → 17
+- [x] 5.3 `labelling.py`: a vision purpose matching the names sets the flag; prompt slot example "key message"
+- [x] 5.4 Regenerate `assets/fred_template.inventory.json` (`make builtin-inventory`): "Fred Chart" takeaway zone flagged
 - Verification: `test_builder_analysis.py` (named placeholder flagged, unnamed body not, two candidates → first only), `test_labelling.py` (purpose "key message" flags), `test_builtin_template.py` on the regenerated JSON
 
 ### 6. Plan, assignment, rendering
 
 Needs `SlidePlan.takeaway` from `ppt-builder-storytelling` (field, checks, notes, `changes` path).
 
-- [ ] 6.1 `plan.py` `DeckPlan.show_takeaways: bool = False` (top-level build argument, one schema line, kept from the base by `changes`); `lexicon.py` `SHOW_TAKEAWAY_WORDS` (fr/en), matched through the storytelling change's user-message lexicon helper; the flag without a matching user message ignored with one agent note
-- [ ] 6.2 `render.py` `_assign_text`: with the flag honoured, the takeaway into the assigned slide's takeaway zone when it fits, bullets no longer fall into that zone then; otherwise (default) today's filling, no note
-- [ ] 6.3 `tools.py` catalogue: `takeaway zone ≤N words` on patterns holding the zone
+- [x] 6.1 `plan.py` `DeckPlan.show_takeaways: bool = False` (top-level build argument, one schema line, offered only with a takeaway zone, kept from the base by `changes`; the honoured flag goes on each slide as the hidden `takeaway_shown`); `lexicon.py` `SHOW_TAKEAWAY_WORDS` (fr/en), matched through the storytelling change's user-message lexicon helper; the flag without a matching user message ignored with one agent note
+- [x] 6.2 `render.py` `_assign_text`: with the flag honoured, the takeaway into the assigned slide's takeaway zone when it fits, bullets no longer fall into that zone then; otherwise (default) today's filling, no note. The filled zone counts for `_fullest` (assignment reads `_assign_text`)
+- [x] 6.3 `tools.py` catalogue: `takeaway zone ≤N words` on patterns holding the zone
 - Verification: `test_takeaway.py` — default (no flag): built-in chart slide's card filled from the bullets as before and the takeaway in the notes only; flag + "affiche les messages clés" in a user message: a short takeaway in the card; flag without such a message: card as before plus the agent note; a takeaway longer than the card left in the notes only with bullets filling the card; bullets slide without a zone unchanged; edit of `takeaway` refills the card when the flag is honoured
 
 ## Phase D — chart target (dropped)
@@ -62,7 +62,7 @@ Dropped by the owner on 2026-10-16 (design D5, Owner decisions (2026-10-16)): a 
 
 ## Close-out (each phase, one PR for the whole capability)
 
-- [ ] 8.1 `eval/prompts.py`: prompts implying emphasis ("Q3 is the record", "the last line is the total", "revenue up, costs down", a key message); metrics: intent used, first-call success unchanged, tool-schema size before/after (harness only)
-- [ ] 8.2 Package `README.md` intent section; migration note in `docs/swift/ops/migrations/` (impact none → patch; bar order and cleared `lastRow` named)
-- [ ] 8.3 Package `make test`, `ruff check` (incl. `--select I`), `ruff format --check`, basedpyright with its baseline; `openspec validate ppt-builder-intent-fields --strict`
+- [x] 8.1 `eval/prompts.py`: prompts implying emphasis ("Q3 is our record quarter", "the last line is the total", "revenue up, costs down", "show the key messages on the slides"), each with an edit turn; `run_eval.py` metrics: intents used, and the tool schema size per template beside first-call success (harness only; not run here: it needs a real LLM)
+- [x] 8.2 Package `README.md` intent section; migration note `docs/swift/ops/migrations/ppt-builder-capability.md` (item 6: no action; the cleared template `lastRow` and the analysis refresh named); Help Center fr/en (tables, key-figure arrows, key messages on the slides)
+- [x] 8.3 Package `make test`, `ruff check` (incl. `--select I`), `ruff format --check`, basedpyright with its baseline; `openspec validate ppt-builder-intent-fields --strict`
 - Verification: `verification.md` per phase with test counts, preview evidence and what stays unproven (PowerPoint rendering checked by hand only)
