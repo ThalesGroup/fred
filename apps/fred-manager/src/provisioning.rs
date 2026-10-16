@@ -127,11 +127,7 @@ pub struct Importer<'a> {
 }
 impl Importer<'_> {
     /// Verify token again at every mutation boundary, including after waiting for locks.
-    async fn authorize(
-        &self,
-        tx: &mut Transaction<'_, Postgres>,
-        bundle: &Bundle,
-    ) -> Result<String> {
+    async fn authorize(&self) -> Result<String> {
         ensure!(
             self.auth.directory_subjects_match(self.directory.realm()),
             "import requires enabled Keycloak subject authentication in the directory realm"
@@ -141,19 +137,14 @@ impl Importer<'_> {
             .authenticate(Some(self.bearer))
             .await
             .map_err(|_| Unauthorized)?;
-        platform::require_admin(self.fga, &caller.uid).await?;
-        if bundle.has_admin_grant() {
-            platform::require_root(tx, &caller.uid).await?;
-        }
+        platform::require_owner(self.fga, &caller.uid).await?;
         Ok(caller.uid)
     }
 
     /// All predictable conflicts are checked for the whole bundle before writes.
     /// Directory traversal does not hold mutation locks; reconciliation rereads state.
     async fn preflight(&self, bundle: &Bundle) -> Result<()> {
-        let mut tx = bootstrap::locked(self.pool).await?;
-        self.authorize(&mut tx, bundle).await?;
-        tx.rollback().await?;
+        self.authorize().await?;
         let mut subjects = BTreeMap::new();
         for entry in &bundle.users {
             let user = &entry.identity;
@@ -168,7 +159,7 @@ impl Importer<'_> {
             }
         }
         let mut tx = bootstrap::locked(self.pool).await?;
-        self.authorize(&mut tx, bundle).await?;
+        self.authorize().await?;
         let resolved = self.resolve_spaces(&mut tx, bundle).await?;
         self.validate_parents(bundle, &resolved, &subjects, None)
             .await?;
@@ -217,6 +208,11 @@ impl Importer<'_> {
                 } else {
                     if !declaration.roles.values().any(|r| r.contains(&Role::Admin)) {
                         return Err(invalid("new space requires a declared admin"));
+                    }
+                    if declaration.kind == SpaceKind::Organization
+                        && !declaration.roles.values().any(|r| r.contains(&Role::Owner))
+                    {
+                        return Err(invalid("new organization requires a declared owner"));
                     }
                     SpaceRow {
                         id: Uuid::new_v4(),
@@ -299,9 +295,9 @@ impl Importer<'_> {
         let mut subjects = BTreeMap::new();
         for entry in &bundle.users {
             let result = async {
-                let mut tx = bootstrap::locked(self.pool).await?;
+                let tx = bootstrap::locked(self.pool).await?;
                 let mut guard = self.fga.guard(&[Scope::Platform]).await?;
-                self.authorize(&mut tx, bundle).await?;
+                self.authorize().await?;
                 // Authorize external dispatch; a timeout is not remote rollback.
                 self.fga.fence(&mut guard).await?;
                 let user = &entry.identity;
@@ -337,7 +333,7 @@ impl Importer<'_> {
         report: &mut Report,
     ) -> Result<()> {
         let mut tx = bootstrap::locked(self.pool).await?;
-        self.authorize(&mut tx, bundle).await?;
+        self.authorize().await?;
         let resolved = self.resolve_spaces(&mut tx, bundle).await?;
         // Whole-bundle checks precede publication; each subtree is checked again
         // after capturing its guard, so a late revoke cannot invalidate the decision.
@@ -356,7 +352,7 @@ impl Importer<'_> {
                 .fga
                 .guard(&[Scope::Platform, Scope::Organization(org.id)])
                 .await?;
-            let actor = self.authorize(&mut tx, bundle).await?;
+            let actor = self.authorize().await?;
             self.validate_parents(bundle, &resolved, subjects, Some(org.id))
                 .await?;
             let mut wrote = false;
@@ -387,7 +383,7 @@ impl Importer<'_> {
                     })
                     .collect();
                 wrote |= link.is_some() || !grants.is_empty();
-                self.grant_spaces(&mut tx, &mut guard, bundle, &actor, link, &grants, report)
+                self.grant_spaces(&mut guard, &actor, link, &grants, report)
                     .await?;
             }
             if !wrote {
@@ -398,7 +394,7 @@ impl Importer<'_> {
             let mut guard = self.fga.guard(&[Scope::Platform]).await?;
             for entry in &bundle.users {
                 for role in &entry.platform {
-                    let actor = self.authorize(&mut tx, bundle).await?;
+                    let actor = self.authorize().await?;
                     let user = &subjects[&entry.identity.username];
                     ensure!(
                         self.directory.exists(user).await?,
@@ -423,12 +419,9 @@ impl Importer<'_> {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)] // One batch shares the enclosing mutation and audit context.
     async fn grant_spaces(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
         guard: &mut Guard,
-        bundle: &Bundle,
         actor: &str,
         mut link: Option<Link>,
         tuples: &[Tuple<'_>],
@@ -442,7 +435,7 @@ impl Importer<'_> {
             let room = 96 - usize::from(link.is_some());
             let (batch, tail) = rest.split_at(room.min(rest.len()));
             rest = tail;
-            self.authorize(tx, bundle).await?;
+            self.authorize().await?;
             let links: Vec<Link> = link.take().into_iter().collect();
             self.fga.write_created(guard, &links, batch).await?;
             report.grants_acknowledged += batch.len();

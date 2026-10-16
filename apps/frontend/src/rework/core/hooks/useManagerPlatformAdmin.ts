@@ -8,6 +8,6 @@ export function useManagerPlatformAdmin() {
   const query = useMeQuery(undefined, { refetchOnMountOrArgChange: 60 });
   return {
     ...query,
-    isAdmin: !query.isError && query.data?.platform_roles.includes("platform_admin") === true,
+    isAdmin: !query.isError && query.data?.platform_roles.includes("platform_owner") === true,
   };
 }

@@ -22,34 +22,30 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(rename_all = "snake_case")]
 pub enum PlatformRole {
-    PlatformAdmin,
+    PlatformOwner,
     PlatformObserver,
-    TeamManager,
     FeatureManager,
     PromptEditor,
 }
 impl PlatformRole {
-    pub const ALL: [Self; 5] = [
-        Self::PlatformAdmin,
+    pub const ALL: [Self; 4] = [
+        Self::PlatformOwner,
         Self::PlatformObserver,
-        Self::TeamManager,
         Self::FeatureManager,
         Self::PromptEditor,
     ];
     pub fn relation(self) -> &'static str {
         match self {
-            Self::PlatformAdmin => "admin",
+            Self::PlatformOwner => "owner",
             Self::PlatformObserver => "observer",
-            Self::TeamManager => "team_manager",
             Self::FeatureManager => "feature_manager",
             Self::PromptEditor => "prompt_editor",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "platform_admin" | "admin" => Some(Self::PlatformAdmin),
+            "platform_owner" | "owner" => Some(Self::PlatformOwner),
             "platform_observer" | "observer" => Some(Self::PlatformObserver),
-            "team_manager" => Some(Self::TeamManager),
             "feature_manager" => Some(Self::FeatureManager),
             "prompt_editor" => Some(Self::PromptEditor),
             _ => None,
@@ -60,7 +56,6 @@ impl PlatformRole {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum PlatformPermission {
-    CreateTeam,
     ListAllTeams,
     DeleteTeam,
     RescueTeamAdmin,
@@ -72,8 +67,7 @@ pub enum PlatformPermission {
     EditPlatformPrompt,
 }
 impl PlatformPermission {
-    pub const ALL: [Self; 10] = [
-        Self::CreateTeam,
+    pub const ALL: [Self; 9] = [
         Self::ListAllTeams,
         Self::DeleteTeam,
         Self::RescueTeamAdmin,
@@ -86,7 +80,6 @@ impl PlatformPermission {
     ];
     pub fn relation(self) -> &'static str {
         match self {
-            Self::CreateTeam => "can_create_team",
             Self::ListAllTeams => "can_list_all_teams",
             Self::DeleteTeam => "can_delete_team",
             Self::RescueTeamAdmin => "can_rescue_team_admin",
@@ -110,15 +103,18 @@ pub enum SpacePermission {
     RunEvaluations,
     ManageEvaluationCorpus,
     ReadConversationsForEvaluation,
+    /// Technical administration of an organization.
+    Own,
 }
 impl SpacePermission {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Read,
         Self::Write,
         Self::Manage,
         Self::RunEvaluations,
         Self::ManageEvaluationCorpus,
         Self::ReadConversationsForEvaluation,
+        Self::Own,
     ];
     pub fn relation(self) -> &'static str {
         match self {
@@ -128,6 +124,7 @@ impl SpacePermission {
             Self::RunEvaluations => "can_run_evaluations",
             Self::ManageEvaluationCorpus => "can_manage_evaluation_corpus",
             Self::ReadConversationsForEvaluation => "can_read_conversations_for_evaluation",
+            Self::Own => "can_own",
         }
     }
 }

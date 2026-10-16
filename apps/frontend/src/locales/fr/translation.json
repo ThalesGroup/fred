@@ -4183,7 +4183,8 @@
         "admin": "Administrateur",
         "member": "Membre",
         "editor": "Éditeur",
-        "analyst": "Analyste"
+        "analyst": "Analyste",
+        "owner": "Propriétaire"
       },
       "search": "Rechercher dans vos espaces",
       "missingSpace": "Cet espace ne figure pas dans vos appartenances.",

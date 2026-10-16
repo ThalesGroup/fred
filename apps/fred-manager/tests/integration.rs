@@ -232,7 +232,7 @@ async fn bootstrap_promotes_one_person_once() {
     bootstrap::grant_root(&e.pool, &e.fga, "alice")
         .await
         .unwrap();
-    assert!(e.fga.is_platform_admin("alice").await.unwrap());
+    assert!(e.fga.is_platform_owner("alice").await.unwrap());
     for user in ["bob", "alice"] {
         let again = bootstrap::grant_root(&e.pool, &e.fga, user).await;
         assert!(
@@ -240,7 +240,7 @@ async fn bootstrap_promotes_one_person_once() {
             "{user} must get 409"
         );
     }
-    assert!(!e.fga.is_platform_admin("bob").await.unwrap());
+    assert!(!e.fga.is_platform_owner("bob").await.unwrap());
 }
 
 // Proves: I9
@@ -251,10 +251,10 @@ async fn a_finished_bootstrap_stays_closed_after_its_admin_is_removed() {
     bootstrap::grant_root(&e.pool, &e.fga, "alice")
         .await
         .unwrap();
-    delete_tuple(&e, "alice", "admin", "platform:root").await;
+    delete_tuple(&e, "alice", "owner", "platform:root").await;
     let again = bootstrap::grant_root(&e.pool, &e.fga, "alice").await;
     assert!(matches!(again, Err(AppError::Conflict(_))));
-    assert!(!e.fga.is_platform_admin("alice").await.unwrap());
+    assert!(!e.fga.is_platform_owner("alice").await.unwrap());
 }
 
 // Proves: I9
@@ -305,8 +305,8 @@ async fn an_interrupted_bootstrap_is_finished_by_its_caller_only() {
     bootstrap::grant_root(&e.pool, &e.fga, "alice")
         .await
         .unwrap();
-    assert!(e.fga.is_platform_admin("alice").await.unwrap());
-    assert!(!e.fga.is_platform_admin("bob").await.unwrap());
+    assert!(e.fga.is_platform_owner("alice").await.unwrap());
+    assert!(!e.fga.is_platform_owner("bob").await.unwrap());
 }
 
 fn document(space: Uuid, folder: Option<Uuid>, name: &str) -> Document {
@@ -448,8 +448,14 @@ async fn complete_role_permission_matrix_and_space_isolation() {
     let space = Uuid::new_v4();
     let other = Uuid::new_v4();
     // Enumerate every subset: cumulative grants must equal the union of their individual rights.
-    let roles = [Role::Member, Role::Editor, Role::Admin, Role::Analyst];
-    for mask in 0..16 {
+    let roles = [
+        Role::Member,
+        Role::Editor,
+        Role::Admin,
+        Role::Analyst,
+        Role::Owner,
+    ];
+    for mask in 0..32 {
         let user = format!("space-{mask}");
         let held: Vec<_> = roles
             .iter()
@@ -483,6 +489,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                     matches!(role, Role::Admin | Role::Analyst)
                 }
                 SP::ReadConversationsForEvaluation => *role == Role::Analyst,
+                SP::Own => *role == Role::Owner,
             });
             assert_eq!(
                 e.fga.check_space(&user, permission, space).await.unwrap(),
@@ -492,7 +499,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
             assert!(!e.fga.check_space(&user, permission, other).await.unwrap());
         }
     }
-    for mask in 0..32 {
+    for mask in 0..16 {
         let user = format!("platform-{mask}");
         let held: Vec<_> = P::ALL
             .iter()
@@ -513,11 +520,10 @@ async fn complete_role_permission_matrix_and_space_isolation() {
         }
         for permission in PP::ALL {
             let expected = held.iter().any(|role| {
-                *role == P::PlatformAdmin
+                *role == P::PlatformOwner
                     || matches!(
                         (role, permission),
                         (P::PlatformObserver, PP::ObservePlatform)
-                            | (P::TeamManager, PP::CreateTeam | PP::ListAllTeams)
                             | (P::FeatureManager, PP::ManageCapabilities | PP::ListAllTeams)
                             | (P::PromptEditor, PP::EditPlatformPrompt)
                     )
@@ -534,7 +540,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
         let effective = e.fga.effective_platform_roles(&user).await.unwrap();
         assert_eq!(
             effective,
-            if held.contains(&P::PlatformAdmin) {
+            if held.contains(&P::PlatformOwner) {
                 P::ALL.to_vec()
             } else {
                 held
@@ -609,44 +615,51 @@ async fn concurrent_admin_revocations_leave_one_admin_at_every_level() {
             spaces::revoke(&e.pool, &e.fga, "bob", space, Role::Admin, "bob"),
         );
         assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
-        assert_eq!(e.fga.space_admins(space).await.unwrap().len(), 1);
+        assert_eq!(
+            e.fga.space_holders(space, Role::Admin).await.unwrap().len(),
+            1
+        );
     }
 }
 
 // Proves: I8
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn delegated_creation_is_team_only_and_never_grants_caller_membership() {
-    use fred_manager::roles::PlatformRole;
+async fn teams_are_created_by_organization_admins_only() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
-    e.fga
-        .write_platform(
-            &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
-            "manager",
-            PlatformRole::TeamManager,
-            true,
-        )
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
+    // Platform ownership confers no business role in an organization.
+    let by_root = spaces::create_space(
+        &e.pool,
+        &e.fga,
+        "root",
+        SpaceKind::Team,
+        org.id,
+        "Platform".into(),
+        "alice",
+    )
+    .await;
+    assert!(matches!(by_root, Err(AppError::Forbidden)));
     let created = spaces::create_space(
         &e.pool,
         &e.fga,
-        "manager",
+        "alice",
         SpaceKind::Team,
         org.id,
-        "Delegated".into(),
+        "Local".into(),
         "alice",
     )
     .await
     .unwrap();
-    assert!(e.fga.roles_of("manager").await.unwrap().is_empty());
     assert!(!reads(&e, "alice", created.id).await);
     assert!(matches!(
         spaces::create_space(
             &e.pool,
             &e.fga,
-            "manager",
+            "root",
             SpaceKind::Project,
             team.id,
             "Denied".into(),
@@ -656,22 +669,10 @@ async fn delegated_creation_is_team_only_and_never_grants_caller_membership() {
         Err(AppError::Forbidden)
     ));
     assert!(matches!(
-        spaces::grant(
-            &e.pool,
-            &e.fga,
-            "manager",
-            created.id,
-            Role::Member,
-            "manager"
-        )
-        .await,
-        Err(AppError::Forbidden)
-    ));
-    assert!(matches!(
         spaces::create_space(
             &e.pool,
             &e.fga,
-            "manager",
+            "alice",
             SpaceKind::Team,
             org.id,
             "No parent".into(),
@@ -687,7 +688,7 @@ mod support;
 // Proves: I15
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn platform_roles_enforce_root_identity_and_direct_grant_semantics() {
+async fn platform_owners_manage_each_other_and_keep_one() {
     use fred_manager::{platform, roles::PlatformRole as P};
     let e = env().await;
     let server = support::IdentityServer::start().await;
@@ -704,22 +705,10 @@ async fn platform_roles_enforce_root_identity_and_direct_grant_semantics() {
         Some(&directory),
         "root",
         "admin",
-        P::PlatformAdmin,
+        P::PlatformOwner,
     )
     .await
     .unwrap();
-    assert!(matches!(
-        platform::grant(
-            &e.pool,
-            &e.fga,
-            Some(&directory),
-            "admin",
-            "observer",
-            P::PlatformAdmin
-        )
-        .await,
-        Err(AppError::Forbidden)
-    ));
     for target in ["missing", "unavailable"] {
         assert!(
             platform::grant(
@@ -741,10 +730,6 @@ async fn platform_roles_enforce_root_identity_and_direct_grant_semantics() {
                 .is_empty()
         );
     }
-    assert!(matches!(
-        platform::revoke(&e.pool, &e.fga, "root", "root", P::PlatformAdmin).await,
-        Err(AppError::Forbidden)
-    ));
     assert!(matches!(
         platform::revoke(&e.pool, &e.fga, "root", "admin", P::PlatformObserver).await,
         Err(AppError::NotFound)
@@ -776,6 +761,17 @@ async fn platform_roles_enforce_root_identity_and_direct_grant_semantics() {
         .await
         .unwrap();
     assert_eq!(platform::list(&e.fga, "root").await.unwrap().len(), 2);
+
+    // Any owner hands over ownership, root included; the last owner stays.
+    platform::revoke(&e.pool, &e.fga, "admin", "root", P::PlatformOwner)
+        .await
+        .unwrap();
+    assert!(!e.fga.is_platform_owner("root").await.unwrap());
+    assert!(matches!(
+        platform::revoke(&e.pool, &e.fga, "admin", "admin", P::PlatformOwner).await,
+        Err(AppError::Conflict(_))
+    ));
+    assert!(e.fga.is_platform_owner("admin").await.unwrap());
 }
 
 async fn wait_for_advisory_waiter(pool: &PgPool) {
@@ -792,19 +788,19 @@ async fn wait_for_advisory_waiter(pool: &PgPool) {
 // Proves: I5
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn revoked_platform_actor_cannot_complete_waiting_role_or_team_creation() {
+async fn revoked_platform_actor_cannot_complete_a_waiting_platform_or_owner_grant() {
     use fred_manager::{platform, roles::PlatformRole as P};
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    for create_team in [false, true] {
+    for owner_grant in [false, true] {
         e.fga
             .write_platform(
                 &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
                 "delegate",
-                P::PlatformAdmin,
+                P::PlatformOwner,
                 true,
             )
             .await
@@ -817,18 +813,8 @@ async fn revoked_platform_actor_cannot_complete_waiting_role_or_team_creation() 
             .unwrap();
         let (pool, fga) = (e.pool.clone(), e.fga.clone());
         let pending = tokio::spawn(async move {
-            if create_team {
-                spaces::create_space(
-                    &pool,
-                    &fga,
-                    "delegate",
-                    SpaceKind::Team,
-                    org.id,
-                    "waiting".into(),
-                    "alice",
-                )
-                .await
-                .map(|_| ())
+            if owner_grant {
+                spaces::grant(&pool, &fga, "delegate", org.id, Role::Owner, "target").await
             } else {
                 platform::grant(&pool, &fga, None, "delegate", "target", P::PromptEditor).await
             }
@@ -838,7 +824,7 @@ async fn revoked_platform_actor_cannot_complete_waiting_role_or_team_creation() 
             .write_platform(
                 &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
                 "delegate",
-                P::PlatformAdmin,
+                P::PlatformOwner,
                 false,
             )
             .await
@@ -1046,7 +1032,6 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for AuditCapture {
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn durable_grants_are_audited_even_when_sql_commit_fails() {
-    use fred_manager::roles::PlatformRole;
     use tracing_subscriber::prelude::*;
     let e = env().await;
     let capture = AuditCapture::default();
@@ -1055,15 +1040,8 @@ async fn durable_grants_are_audited_even_when_sql_commit_fails() {
     let root = format!("audit-root-{}", Uuid::new_v4());
     {
         let (org, _) = org_and_team(&e).await;
-        e.fga
-            .write_platform(
-                &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
-                "delegate",
-                PlatformRole::TeamManager,
-                true,
-            )
-            .await
-            .unwrap();
+        grant(&e, org.id, Role::Member, "delegate").await;
+        grant(&e, org.id, Role::Admin, "delegate").await;
         let team = spaces::create_space(
             &e.pool,
             &e.fga,
@@ -1088,7 +1066,7 @@ async fn durable_grants_are_audited_even_when_sql_commit_fails() {
         sqlx::raw_sql("create function reject_completion() returns trigger language plpgsql as $$ begin raise exception 'forced deferred failure'; end $$; create constraint trigger reject_completion after update on platform_bootstrap deferrable initially deferred for each row execute function reject_completion();").execute(&e.pool).await.unwrap();
         assert!(bootstrap::grant_root(&e.pool, &e.fga, &root).await.is_err());
         assert!(
-            e.fga.is_platform_admin(&root).await.unwrap(),
+            e.fga.is_platform_owner(&root).await.unwrap(),
             "FGA grant survives failed SQL completion"
         );
     }
@@ -1106,7 +1084,7 @@ async fn durable_grants_are_audited_even_when_sql_commit_fails() {
 }
 
 fn provisioning_bundle() -> fred_manager::provisioning::Bundle {
-    parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password","first_name":"Alice","last_name":"Example"},{"username":"bob","password":"private-password","platform_roles":["observer","team_manager","feature_manager","prompt_editor"]},{"username":"platform-only","password":"private-password","platform_roles":["admin"]}],"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member"],"bob":["member"]}}],"teams":[{"ref":"BID","name":"BID","organization":"org","roles":{"alice":["admin"],"bob":["member","editor","analyst"]}}],"projects":[]}"#).unwrap()
+    parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password","first_name":"Alice","last_name":"Example"},{"username":"bob","password":"private-password","platform_roles":["observer","feature_manager","prompt_editor"]},{"username":"platform-only","password":"private-password","platform_roles":["platform_owner"]}],"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member","owner"],"bob":["member"]}}],"teams":[{"ref":"BID","name":"BID","organization":"org","roles":{"alice":["admin"],"bob":["member","editor","analyst"]}}],"projects":[]}"#).unwrap()
 }
 
 // Proves: I4, I8, I17
@@ -1164,7 +1142,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
     }
     for role in PlatformRole::ALL {
         assert!(fga.platform_grants().await.unwrap().contains(&(
-            if role == PlatformRole::PlatformAdmin {
+            if role == PlatformRole::PlatformOwner {
                 platform.clone()
             } else {
                 bob.clone()
@@ -1229,15 +1207,6 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
     e.fga
         .write_platform(
             &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
-            "delegate",
-            PlatformRole::PlatformAdmin,
-            true,
-        )
-        .await
-        .unwrap();
-    e.fga
-        .write_platform(
-            &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
             "observer",
             PlatformRole::PlatformObserver,
             true,
@@ -1248,7 +1217,6 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
     for token in [
         "invalid".into(),
         server.token("observer"),
-        server.token("delegate"),
         server
             .sign(serde_json::json!({"sub":"root","iss":server.realm,"aud":"app","iat":1,"exp":2})),
     ] {
@@ -1274,7 +1242,7 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
             serde_json::json!([{"ref":"bad","name":"uncreatable","organization":"org","roles":{"alice":["member"]}}]),
         ),
     ] {
-        let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member"]}}],"users":users,"teams":teams,"projects":[]})).unwrap()).unwrap();
+        let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member","owner"]}}],"users":users,"teams":teams,"projects":[]})).unwrap()).unwrap();
         let error = Importer {
             pool: &e.pool,
             fga: &e.fga,
@@ -1456,7 +1424,7 @@ async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
         let pool = e.pool.clone();
         let fga = e.fga.clone();
         let pending = tokio::spawn(async move {
-            let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"new","roles":{"alice":["admin","member"]}}],"teams":[],"projects":[]}"#).unwrap();
+            let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"new","roles":{"alice":["admin","member","owner"]}}],"teams":[],"projects":[]}"#).unwrap();
             Importer {
                 pool: &pool,
                 fga: &fga,
@@ -1471,7 +1439,7 @@ async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
         if expired {
             tokio::time::sleep(Duration::from_secs(2)).await;
         } else {
-            delete_tuple(&e, "root", "admin", "platform:root").await;
+            delete_tuple(&e, "root", "owner", "platform:root").await;
         }
         tx.commit().await.unwrap();
         assert!(pending.await.unwrap().is_err());
@@ -1508,7 +1476,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
     config["storage"]["postgres"]["username"] = "postgres".into();
     config["storage"]["postgres"]["database"] = database.into();
     let _: Configuration = serde_json::from_value(config.clone()).unwrap();
-    std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member"]}}],"teams":[],"projects":[]}"#)).unwrap();
+    std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member","owner"]}}],"teams":[],"projects":[]}"#)).unwrap();
     fred_manager::onboarding::accept(&e.pool, Some("v1"), "root", "v1")
         .await
         .unwrap();
@@ -1582,7 +1550,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
             std::fs::write(temp.join("bundle.json"), br#"{"private-password":true}"#).unwrap();
         }
         if case == "valid" {
-            std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member"]}}],"teams":[],"projects":[]}"#)).unwrap();
+            std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member","owner"]}}],"teams":[],"projects":[]}"#)).unwrap();
         }
         if case == "bad-config" {
             std::fs::write(temp.join("configuration.yaml"), "private-secret: [bad").unwrap();
@@ -1732,7 +1700,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
         org_roles.insert(
             name.clone(),
             if i == 0 {
-                serde_json::json!(["member", "admin"])
+                serde_json::json!(["member", "admin", "owner"])
             } else {
                 serde_json::json!(["member"])
             },
@@ -1764,10 +1732,10 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
         bearer: &token,
     };
     let report = importer.run(&bundle).await.unwrap();
-    assert_eq!(report.grants_acknowledged, 316);
+    assert_eq!(report.grants_acknowledged, 317);
     {
         let fault = proxy.fault.lock().await;
-        // U=105, B=ceil(106/96)+ceil(210/96)=5, G=0, new organization=1.
+        // U=105, B=ceil(107/96)+ceil(211/96)=5, G=0, new organization and team=1 each.
         assert_eq!(fault.calls.get("check"), Some(&114));
         assert_eq!(fault.calls.get("read"), Some(&107));
         assert_eq!(fault.calls.get("write"), Some(&111));
@@ -1780,7 +1748,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
             })
             .collect();
         // Plus one `parent` link for the new team.
-        assert_eq!(operations.iter().sum::<usize>(), 549);
+        assert_eq!(operations.iter().sum::<usize>(), 550);
         assert_eq!(operations.iter().max(), Some(&100));
     }
     let org = named_space(&e.pool, &e.fga, None, "Many")
@@ -1791,7 +1759,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
         .await
         .unwrap();
     // A personal space is not a child: a team may share its name and stays distinct.
-    let homonym=parse_blueprint(br#"{"users":[{"username":"new","password":"private-password"}],"organizations":[{"ref":"org","name":"Many","roles":{"new":["admin","member"]}}],"teams":[{"ref":"user-0","name":"user-0","organization":"org","roles":{"new":["admin"]}}],"projects":[]}"#).unwrap();
+    let homonym=parse_blueprint(br#"{"users":[{"username":"new","password":"private-password"}],"organizations":[{"ref":"org","name":"Many","roles":{"new":["admin","member","owner"]}}],"teams":[{"ref":"user-0","name":"user-0","organization":"org","roles":{"new":["admin"]}}],"projects":[]}"#).unwrap();
     importer.run(&homonym).await.unwrap();
     let team = named_space(&e.pool, &e.fga, Some(org.id), "user-0")
         .await
@@ -1874,7 +1842,7 @@ async fn preflight_does_not_block_revocation_and_cancelled_identity_creation_rep
                 .write_platform(
                     &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
                     "root",
-                    fred_manager::roles::PlatformRole::PlatformAdmin,
+                    fred_manager::roles::PlatformRole::PlatformOwner,
                     false,
                 )
                 .await
@@ -1960,7 +1928,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     );
     let grants = e.fga.platform_grants().await.unwrap();
     for role in fred_manager::roles::PlatformRole::ALL {
-        let subject = if role == fred_manager::roles::PlatformRole::PlatformAdmin {
+        let subject = if role == fred_manager::roles::PlatformRole::PlatformOwner {
             directory
                 .find_username("platform-only")
                 .await
@@ -2013,10 +1981,10 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(report["spaces_reconciled"], 4);
     {
         let fault = proxy.fault.lock().await;
-        // Actual Make artifact: U=15, O=1, B=4, G=5, C=3; HTTP adds one admin Check.
-        assert_eq!(fault.calls.get("check"), Some(&29));
+        // Actual Make artifact: U=15, O=1, B=4, G=4, C=3; HTTP adds one owner Check.
+        assert_eq!(fault.calls.get("check"), Some(&28));
         assert_eq!(fault.calls.get("read"), Some(&18));
-        assert_eq!(fault.calls.get("write"), Some(&25));
+        assert_eq!(fault.calls.get("write"), Some(&24));
         let operations: usize = fault
             .written
             .iter()
@@ -2025,7 +1993,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
                     + body["deletes"]["tuple_keys"].as_array().map_or(0, Vec::len)
             })
             .sum();
-        assert_eq!(operations, 92);
+        assert_eq!(operations, 90);
     }
     let demo = named_space(&e.pool, &e.fga, None, "Demo")
         .await
@@ -2055,12 +2023,11 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
             .unwrap()
     );
     for (username, role) in [
-        ("alice", fred_manager::roles::PlatformRole::PlatformAdmin),
+        ("alice", fred_manager::roles::PlatformRole::PlatformOwner),
         (
             "gabriel",
             fred_manager::roles::PlatformRole::PlatformObserver,
         ),
-        ("oscar", fred_manager::roles::PlatformRole::TeamManager),
         ("nina", fred_manager::roles::PlatformRole::FeatureManager),
         ("quinn", fred_manager::roles::PlatformRole::PromptEditor),
     ] {
@@ -2173,7 +2140,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments() {
     use fred_manager::provisioning::Importer;
-    for nth in 1..=11 {
+    for nth in 1..=10 {
         let e = env().await;
         let server = support::IdentityServer::start().await;
         bootstrap::grant_root(&e.pool, &e.fga, "root")
@@ -2382,7 +2349,7 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
         .write_platform(
             &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
             "delegate",
-            PlatformRole::PlatformAdmin,
+            PlatformRole::PlatformOwner,
             true,
         )
         .await
@@ -2414,7 +2381,7 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
     let auth = server.auth().await;
     let directory = server.directory();
     let token = server.token("delegate");
-    let bytes=br#"{"users":[{"username":"alice"},{"username":"bob","platform_roles":["observer"]}],"organizations":[{"ref":"org","name":"Existing","roles":{"alice":["admin","member"],"bob":["member"]}}],"teams":[{"ref":"New","name":"New","organization":"org","roles":{"alice":["admin"],"bob":["analyst"]}}],"projects":[]}"#;
+    let bytes=br#"{"users":[{"username":"alice"},{"username":"bob","platform_roles":["observer"]}],"organizations":[{"ref":"org","name":"Existing","roles":{"alice":["admin","member","owner"],"bob":["member"]}}],"teams":[{"ref":"New","name":"New","organization":"org","roles":{"alice":["admin"],"bob":["analyst"]}}],"projects":[]}"#;
     let pending = tokio::spawn(async move {
         Importer {
             pool: &pool,
@@ -2658,7 +2625,7 @@ async fn a_timed_out_platform_grant_cannot_arrive_after_actor_revocation() {
         .write_platform(
             &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
             "delegate",
-            P::PlatformAdmin,
+            P::PlatformOwner,
             true,
         )
         .await
@@ -2714,12 +2681,12 @@ async fn a_timed_out_platform_grant_cannot_arrive_after_actor_revocation() {
     assert!(proxy.fault.lock().await.acknowledged.is_empty());
     tokio::time::timeout(
         Duration::from_secs(3),
-        platform::revoke(&e.pool, &e.fga, "root", "delegate", P::PlatformAdmin),
+        platform::revoke(&e.pool, &e.fga, "root", "delegate", P::PlatformOwner),
     )
     .await
     .expect("uncertain platform write must not block revocation indefinitely")
     .unwrap();
-    assert!(!e.fga.is_platform_admin("delegate").await.unwrap());
+    assert!(!e.fga.is_platform_owner("delegate").await.unwrap());
     gate.release.notify_one();
     tokio::time::timeout(Duration::from_secs(3), async {
         while proxy.fault.lock().await.acknowledged.is_empty() {
@@ -3193,7 +3160,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         directory: Some(directory.clone()),
     });
     let token = server.token("root");
-    let mut value = serde_json::json!({"users":[{"username":"alice","password":"private-password"},{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"alice":["admin","member"]}},{"ref":"b","name":"B","roles":{"bob":["admin","member"]}}],"teams":[{"ref":"at","name":"Team","organization":"a","roles":{"alice":["admin","member"]}},{"ref":"bt","name":"Team","organization":"b","roles":{"bob":["admin","analyst"]}}],"projects":[{"ref":"ap","name":"Project","team":"at","roles":{"alice":["admin","editor"]}},{"ref":"bp","name":"Project","team":"bt","roles":{"bob":["admin"]}}]});
+    let mut value = serde_json::json!({"users":[{"username":"alice","password":"private-password"},{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"alice":["admin","member","owner"]}},{"ref":"b","name":"B","roles":{"bob":["admin","member","owner"]}}],"teams":[{"ref":"at","name":"Team","organization":"a","roles":{"alice":["admin","member"]}},{"ref":"bt","name":"Team","organization":"b","roles":{"bob":["admin","analyst"]}}],"projects":[{"ref":"ap","name":"Project","team":"at","roles":{"alice":["admin","editor"]}},{"ref":"bp","name":"Project","team":"bt","roles":{"bob":["admin"]}}]});
     // Malformed upload is never parsed for a caller lacking platform authority.
     for (bearer, status) in [("invalid".to_owned(), 401), (server.token("ordinary"), 403)] {
         let response = app
@@ -3266,26 +3233,28 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         0
     );
     value["teams"][1]["roles"]["bob"] = serde_json::json!(["admin", "analyst"]);
-    // Root-only grant is rejected before identities, even for another platform admin.
-    e.fga
-        .write_platform(
-            &mut e.fga.guard(&[Scope::Platform]).await.unwrap(),
-            "delegate",
-            fred_manager::roles::PlatformRole::PlatformAdmin,
-            true,
-        )
-        .await
-        .unwrap();
-    value["users"][0]["platform_roles"] = serde_json::json!(["admin"]);
+    // Owner exists only on organizations; a team owner is rejected before identities.
+    value["teams"][0]["roles"]["alice"] = serde_json::json!(["admin", "member", "owner"]);
     let (s, b) = http_import(
         &app,
-        &server.token("delegate"),
+        &token,
         &fixture_zip(&serde_json::to_vec(&value).unwrap()),
     )
     .await;
-    assert_eq!(s, 403, "{b}");
+    assert_eq!(s, 422, "{b}");
     assert!(server.users.lock().await.is_empty());
-    value["users"][0]["platform_roles"] = serde_json::json!([]);
+    value["teams"][0]["roles"]["alice"] = serde_json::json!(["admin", "member"]);
+    // A new organization needs a declared owner as well as an admin.
+    value["organizations"][0]["roles"]["alice"] = serde_json::json!(["admin", "member"]);
+    let (s, b) = http_import(
+        &app,
+        &token,
+        &fixture_zip(&serde_json::to_vec(&value).unwrap()),
+    )
+    .await;
+    assert_eq!(s, 422, "{b}");
+    assert!(server.users.lock().await.is_empty());
+    value["organizations"][0]["roles"]["alice"] = serde_json::json!(["admin", "member", "owner"]);
     server.control.lock().await.fail_create = true;
     let (s, b) = http_import(
         &app,
@@ -3336,7 +3305,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     assert_ne!(ids[0], ids[1]);
     // Internal SQL failures expose a phase and counters, never database diagnostics.
     sqlx::raw_sql("CREATE FUNCTION fail_import_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name = 'Internal failure' THEN RAISE EXCEPTION 'private-password'; END IF; RETURN NEW; END $$; CREATE TRIGGER fail_import_fixture BEFORE INSERT ON space FOR EACH ROW EXECUTE FUNCTION fail_import_fixture();").execute(&e.pool).await.unwrap();
-    let failing=fixture_zip(br#"{"users":[{"username":"alice"}],"organizations":[{"ref":"bad","name":"Internal failure","roles":{"alice":["admin"]}}],"teams":[],"projects":[]}"#);
+    let failing=fixture_zip(br#"{"users":[{"username":"alice"}],"organizations":[{"ref":"bad","name":"Internal failure","roles":{"alice":["admin","owner"]}}],"teams":[],"projects":[]}"#);
     let (status, body) = http_import(&app, &token, &failing).await;
     assert_eq!(status, 500, "{body}");
     assert!(body["detail"].as_str().unwrap().contains("roles/spaces"));
@@ -4070,4 +4039,67 @@ async fn hierarchy_reads_have_fixed_request_budgets() {
         .await
         .unwrap();
     assert_eq!(budget().await, (1, 1));
+}
+
+// Proves: I8, I14, I21
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn organization_owners_name_admins_and_read_nothing() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    // Only a platform owner names organization owners, and only on organizations.
+    let by_admin = spaces::grant(&e.pool, &e.fga, "alice", org.id, Role::Owner, "olga").await;
+    assert!(matches!(by_admin, Err(AppError::Forbidden)));
+    spaces::grant(&e.pool, &e.fga, "root", org.id, Role::Owner, "olga")
+        .await
+        .unwrap();
+    let on_team = spaces::grant(&e.pool, &e.fga, "root", team.id, Role::Owner, "olga").await;
+    assert!(matches!(on_team, Err(AppError::Conflict(_))));
+
+    // The owner names admins, whose role descends; the owner reads and manages nothing.
+    spaces::grant(&e.pool, &e.fga, "olga", org.id, Role::Admin, "bob")
+        .await
+        .unwrap();
+    assert!(
+        e.fga
+            .check("bob", Permission::Manage, team.id)
+            .await
+            .unwrap()
+    );
+    for space in [org.id, team.id] {
+        assert!(!reads(&e, "olga", space).await);
+        assert!(
+            !e.fga
+                .check("olga", Permission::Manage, space)
+                .await
+                .unwrap()
+        );
+    }
+    let member = spaces::grant(&e.pool, &e.fga, "olga", org.id, Role::Member, "carol").await;
+    assert!(matches!(member, Err(AppError::Forbidden)));
+    let created = spaces::create_space(
+        &e.pool,
+        &e.fga,
+        "olga",
+        SpaceKind::Team,
+        org.id,
+        "By owner".into(),
+        "alice",
+    )
+    .await;
+    assert!(matches!(created, Err(AppError::Forbidden)));
+
+    // An organization keeps an owner.
+    spaces::revoke(&e.pool, &e.fga, "root", org.id, Role::Owner, "alice")
+        .await
+        .unwrap();
+    let last = spaces::revoke(&e.pool, &e.fga, "root", org.id, Role::Owner, "olga").await;
+    assert!(matches!(last, Err(AppError::Conflict(_))));
+    assert_eq!(
+        e.fga.space_holders(org.id, Role::Owner).await.unwrap(),
+        vec!["olga".to_string()]
+    );
 }

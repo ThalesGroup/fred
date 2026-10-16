@@ -6,7 +6,7 @@
     "last_name": "Watson",
     "password": "Azerty123_",
     "platform_roles": [
-      "admin"
+      "platform_owner"
     ]
   },
   {
@@ -79,9 +79,7 @@
     "first_name": "Oscar",
     "last_name": "Reyes",
     "password": "Azerty123_",
-    "platform_roles": [
-      "team_manager"
-    ]
+    "platform_roles": []
   },
   {
     "username": "nina",

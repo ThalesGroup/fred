@@ -228,7 +228,7 @@ struct BootstrapResponse {
 }
 
 /// Same contract as the control-plane's `POST /bootstrap/platform-admin`: the caller's
-/// own verified bearer plus the deploy-time secret, granting platform admin to the
+/// own verified bearer plus the deploy-time secret, granting platform owner to the
 /// caller only, once ever.
 #[utoipa::path(
     post, path = "/bootstrap/platform-admin",
@@ -264,7 +264,7 @@ async fn bootstrap_platform_admin(
     bootstrap::grant_root(&s.pool, &s.fga, &user.uid).await?;
     tracing::info!(
         user_id = user.uid,
-        "[BOOTSTRAP] Granted platform_admin via root bootstrap"
+        "[BOOTSTRAP] Granted platform_owner via root bootstrap"
     );
     Ok(Json(BootstrapResponse {
         user_id: user.uid,
@@ -1287,7 +1287,7 @@ async fn import_blueprint(
     };
     let result = async {
         require_directory_actor(&s).map_err(IntoResponse::into_response)?;
-        match s.fga.is_platform_admin(&user.uid).await {
+        match s.fga.is_platform_owner(&user.uid).await {
             Ok(true) => (),
             Ok(false) => return Err(AppError::Forbidden.into_response()),
             Err(_) => return Err(AppError::Unavailable("authorization unavailable".into()).into_response()),

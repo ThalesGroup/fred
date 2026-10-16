@@ -133,7 +133,7 @@ describe("generated fred-manager client", () => {
   });
 
   it("reads manager authority and flat nullable spaces through generated query contracts", async () => {
-    const me: MeApiResponse = { user_id: "alice", username: "Alice", platform_roles: ["platform_admin"] };
+    const me: MeApiResponse = { user_id: "alice", username: "Alice", platform_roles: ["platform_owner"] };
     const { store, fetch } = setup(me);
     const actor = store.dispatch(api.endpoints.me.initiate());
     expect(await actor.unwrap()).toEqual(me);

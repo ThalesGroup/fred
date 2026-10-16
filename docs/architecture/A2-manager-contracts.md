@@ -147,22 +147,21 @@ model
 
 type user
 
-# One object, platform:root. Platform roles grant no access to any space's content.
+# One object, platform:root. Owner is the technical platform role; platform roles grant
+# no access to any space's content.
 type platform
   relations
-    define admin: [user]
-    define observer: [user] or admin
-    define team_manager: [user] or admin
-    define feature_manager: [user] or admin
-    define prompt_editor: [user] or admin
-    define can_create_team: team_manager
-    define can_list_all_teams: team_manager or feature_manager
-    define can_delete_team: admin
-    define can_rescue_team_admin: admin
-    define can_edit_agent_class_path: admin
+    define owner: [user]
+    define observer: [user] or owner
+    define feature_manager: [user] or owner
+    define prompt_editor: [user] or owner
+    define can_list_all_teams: feature_manager
+    define can_delete_team: owner
+    define can_rescue_team_admin: owner
+    define can_edit_agent_class_path: owner
     define can_observe_platform: observer
-    define can_administer_users: admin
-    define can_manage_platform: admin
+    define can_administer_users: owner
+    define can_manage_platform: owner
     define can_manage_capabilities: feature_manager
     define can_edit_platform_prompt: prompt_editor
 
@@ -177,6 +176,8 @@ type space
     define editor: [user]
     define admin: [user]
     define analyst: [user]
+    # Technical role of an organization: names its admins, reads nothing, never descends.
+    define owner: [user]
     # Editor, admin and analyst reach every descendant; member stays local.
     define effective_editor: editor or effective_editor from parent
     define effective_admin: admin or effective_admin from parent
@@ -187,6 +188,7 @@ type space
     define can_run_evaluations: effective_analyst or effective_admin
     define can_manage_evaluation_corpus: effective_analyst or effective_admin
     define can_read_conversations_for_evaluation: effective_analyst
+    define can_own: owner
 
 # Mutation ordering only; these relations grant no permission.
 type revision
@@ -213,16 +215,17 @@ other files are arrays:
 | `projects.json` | `ref`, `name`, `team` reference, `roles`; empty array accepted |
 
 A roles object maps declared usernames to arrays of `member`, `editor`, `analyst`,
-`admin`. Roles accumulate and equivalent grants are deduplicated. Admin confers no
-implicit content role. Every new space requires a declared admin. Every child-role
+`admin`, and on organizations `owner`. Roles accumulate and equivalent grants are
+deduplicated. Admin and owner confer no implicit content role. Every new space
+requires a declared admin, and every new organization a declared owner. Every child-role
 holder requires a declared or existing direct parent content role; inherited access
 does not count. Existing direct roles are read from OpenFGA; no space grant is synthesized. The demo explicitly declares
 organization membership for team-role holders.
 
 References are nonempty and unique across the entire bundle. Parents and role
 subjects must be declared. Space names are nonempty and unique within each parent;
-homonyms under distinct parents remain distinct. Platform aliases `admin` and
-`observer` normalize to `platform_admin` and `platform_observer`. Unknown fields/roles,
+homonyms under distinct parents remain distinct. Platform aliases `owner` and
+`observer` normalize to `platform_owner` and `platform_observer`. Unknown fields/roles,
 duplicate JSON keys, usernames, references and sibling names are rejected. Legacy
 `teams`/`team_roles` user fields are not accepted. Old JSON and Python version-1 ZIPs,
 unknown versions/sections and multidisk formats return `not_yet_supported`.

@@ -104,6 +104,8 @@ pub enum Role {
     Editor,
     Admin,
     Analyst,
+    /// Technical role of an organization: names its admins, reads nothing.
+    Owner,
 }
 
 impl Role {
@@ -113,6 +115,7 @@ impl Role {
             Role::Editor => "editor",
             Role::Admin => "admin",
             Role::Analyst => "analyst",
+            Role::Owner => "owner",
         }
     }
 
@@ -122,6 +125,7 @@ impl Role {
             "editor" => Some(Role::Editor),
             "admin" => Some(Role::Admin),
             "analyst" => Some(Role::Analyst),
+            "owner" => Some(Role::Owner),
             _ => None,
         }
     }
@@ -133,7 +137,7 @@ impl Role {
 
     /// Roles the model extends to every descendant space.
     pub fn descends(self) -> bool {
-        !matches!(self, Role::Member)
+        matches!(self, Role::Editor | Role::Admin | Role::Analyst)
     }
 }
 

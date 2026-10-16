@@ -279,7 +279,8 @@ try {
   const north = spaces.find((space) => space.name === "northbridge");
   const organization = spaces.find((space) => space.name === "Demo");
   assert.deepEqual(project.path, [organization.id, north.id, project.id]);
-  assert.deepEqual([...project.roles].sort(), ["admin", "member"]);
+  assert.deepEqual([...project.roles].sort(), ["admin", "editor", "member"]);
+  assert.deepEqual(project.inherited_roles, ["editor"]);
   assert.deepEqual(north.roles, ["editor"]);
   const denied = await bob.context.request.post(`${origin}/fred-manager/v1/import-export/import`, {
     headers: { Authorization: bob.bearer },
@@ -288,10 +289,9 @@ try {
   assert.equal(denied.status(), 403);
 
   const alice = await login("alice", "Azerty123_");
-  // An ordinary platform admin reaches the page, but this bundle declares an
-  // admin grant: only the bootstrap root may apply it, including on replay.
+  // Another platform owner reaches the page and replays the bundle without changes.
   await expect(alice.page.locator('input[type="file"]')).toHaveCount(1);
-  await importFile(alice.page, bundle, 403);
+  await importFile(alice.page, bundle, 200);
   assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
   assert.deepEqual(await get(bob.context, bob.bearer, "/me/spaces"), spaces);
   assert.deepEqual(unexpected, [], "Unexpected control-plane dependency");

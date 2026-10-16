@@ -66,8 +66,9 @@ Whole-bundle preflight rejects predictable errors before provisioning writes.
 Organizations resolve by root name, teams by organization/name and projects by
 team/name. Existing identity fields, passwords, committed space IDs and undeclared
 roles are preserved. Requested grants are repaired; no content role or CGU
-acceptance is invented. A platform-admin declaration requires bootstrap root,
-including on replay.
+acceptance is invented. A new organization declares at least one owner and one
+admin, possibly the same person; owner is refused on teams and projects. Import
+requires a platform owner.
 
 Keycloak, PostgreSQL and OpenFGA do not share a transaction. An error can leave
 created identities or acknowledged grants; replay follows correction of the cause

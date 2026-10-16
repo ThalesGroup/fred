@@ -195,8 +195,8 @@ impl Fga {
             .await
     }
 
-    pub async fn is_platform_admin(&self, user: &str) -> Result<bool> {
-        self.check_object(user, "admin", PLATFORM).await
+    pub async fn is_platform_owner(&self, user: &str) -> Result<bool> {
+        self.check_object(user, "owner", PLATFORM).await
     }
 
     async fn check_object(&self, user: &str, relation: &str, object: &str) -> Result<bool> {
@@ -366,17 +366,16 @@ impl Fga {
     }
 
     pub async fn effective_platform_roles(&self, user: &str) -> Result<Vec<PlatformRole>> {
-        let [a, b, c, d, e] = PlatformRole::ALL;
-        let (a, b, c, d, e) = tokio::try_join!(
+        let [a, b, c, d] = PlatformRole::ALL;
+        let (a, b, c, d) = tokio::try_join!(
             self.check_object(user, a.relation(), PLATFORM),
             self.check_object(user, b.relation(), PLATFORM),
             self.check_object(user, c.relation(), PLATFORM),
             self.check_object(user, d.relation(), PLATFORM),
-            self.check_object(user, e.relation(), PLATFORM),
         )?;
         Ok(PlatformRole::ALL
             .into_iter()
-            .zip([a, b, c, d, e])
+            .zip([a, b, c, d])
             .filter_map(|(role, allowed)| allowed.then_some(role))
             .collect())
     }
@@ -411,9 +410,10 @@ impl Fga {
             .collect())
     }
 
-    pub async fn space_admins(&self, space: Uuid) -> Result<Vec<String>> {
+    /// Direct holders of `role` on one space.
+    pub async fn space_holders(&self, space: Uuid, role: Role) -> Result<Vec<String>> {
         Ok(self
-            .read_keys(json!({ "object": format!("space:{space}"), "relation": "admin" }))
+            .read_keys(json!({ "object": format!("space:{space}"), "relation": role.as_str() }))
             .await?
             .into_iter()
             .filter_map(|k| k.user.strip_prefix("user:").map(str::to_owned))

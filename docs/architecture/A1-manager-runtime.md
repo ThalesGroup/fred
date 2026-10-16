@@ -58,7 +58,7 @@ flowchart TB
     roles["roles.rs<br/>roles and capabilities"]
     directory["keycloak.rs<br/>service-account directory"]
     onboarding["onboarding.rs<br/>personal consent and admission"]
-    bootstrap["bootstrap.rs<br/>root platform admin"]
+    bootstrap["bootstrap.rs<br/>root platform owner"]
     domain["domain.rs<br/>types, placement rules"]
     db["db.rs<br/>SQL"]
     fga["fga.rs<br/>OpenFGA client"]
@@ -258,7 +258,7 @@ sequenceDiagram
     end
     M->>PG: lock again, re-read marker
     alt still pending for this caller
-        M->>FGA: write admin on platform:root
+        M->>FGA: write owner on platform:root
         M->>PG: set granted_at, commit
         M-->>U: 200
     else granted meanwhile
@@ -307,18 +307,24 @@ deleting the row, so a failure leaves a retryable document rather than orphaned 
 ## Platform administration and self checks
 
 `GET /me` returns effective platform roles, including the roles implied by platform
-admin. `GET /users/platform-roles` returns direct grants only, to platform admins.
+owner. `GET /users/platform-roles` returns direct grants only, to platform owners.
 `PUT` and `DELETE /users/{user}/platform-roles/{role}` acquire the bootstrap/platform
-lock and recheck the caller's platform-admin permission. Only the completed bootstrap
-root can grant or revoke platform admin, and its own admin grant cannot be removed.
-Granting requires a Keycloak subject that exists in the configured directory; revoking
-a stale direct grant does not require the identity to still exist (I15).
+lock and recheck the caller's platform-owner permission. Any platform owner grants or
+revokes platform owners; revoking the last one is refused with 409. Granting requires
+a Keycloak subject that exists in the configured directory; revoking a stale direct
+grant does not require the identity to still exist (I15).
 
-Platform roles use canonical names `platform_admin`, `platform_observer`, `team_manager`,
-`feature_manager` and `prompt_editor`; mutation paths also accept `admin` and `observer`.
-Deleting an absent direct grant returns 404, even when the role is effective through admin.
+Platform roles use canonical names `platform_owner`, `platform_observer`,
+`feature_manager` and `prompt_editor`; mutation paths also accept `owner` and `observer`.
+Deleting an absent direct grant returns 404, even when the role is effective through owner.
 
-`POST /authorize/platform` accepts `{ "permission": "create_team" }`;
+An organization's `owner` is granted and revoked by platform owners, under the
+platform lock and guard as well as the organization's; owner on a team or project is
+refused with 409, as is revoking an organization's last owner (I14). The
+organization's admins are granted by its owners or admins; every other space role by
+the space's admins (I21).
+
+`POST /authorize/platform` accepts `{ "permission": "list_all_teams" }`;
 `POST /authorize/space` accepts `{ "space_id": "<uuid>", "permission": "run_evaluations" }`.
 Both return `{ "allowed": true|false }` for the authenticated caller only. The typed
 capabilities are defined in `roles.rs` and the model in [model and contracts](A2-manager-contracts.md). Space checks first
@@ -328,22 +334,21 @@ resolve the space, returning 404 for an unknown id.
 team metadata records ordered by UUID, each placed by one concurrent `parent` Read.
 `?after=<uuid>` continues after the last id; it confers no content access.
 
-Team creation accepts either management of the parent organization or the platform
-`can_create_team` capability. It takes the platform lock before the organization lock,
-then checks authorization. The nominated team administrator must hold a direct
-content role on the parent, and no sibling may have the same name.
-The caller receives no implicit role; project creation still requires local governance.
+Team creation requires management of the parent organization, project creation
+management of the parent team. The nominated administrator must hold a direct content
+role on the parent, and no sibling may have the same name. The caller receives no
+implicit role.
 
 
 ## Authenticated provisioning import
 
 `fred-manager import-provisioning <bundle.zip> --token-file <path>` verifies the
 operator bearer, connects to SQL without migrating and verifies migration
-versions/checksums. It loads the published FGA store/model and checks platform admin.
+versions/checksums. It loads the published FGA store/model and checks platform owner.
 Multipart `POST /import-export/import` checks the authenticated caller's platform
-admin authority before reading exactly one `file` field. Both parse the same ZIP
-on a blocking worker and invoke `Importer`. A platform-admin declaration also
-requires the completed bootstrap root, including on replay.
+owner authority before reading exactly one `file` field. Both parse the same ZIP
+on a blocking worker and invoke `Importer`. A new organization requires a declared
+owner and admin.
 
 ```mermaid
 sequenceDiagram
@@ -352,9 +357,8 @@ sequenceDiagram
     participant PG as Postgres
     participant FGA as OpenFGA
     C->>KC: verify operator bearer using signing keys
-    C->>FGA: check platform admin before reading input
+    C->>FGA: check platform owner before reading input
     C->>C: bound and validate the complete ZIP
-    C->>PG: lock platform, verify root-only declarations, release
     C->>KC: preflight every exact username and missing password
     C->>PG: lock platform, resolve roots, lock organizations in UUID order
     C->>FGA: read children of existing parents
@@ -424,8 +428,8 @@ remote effects have the dispatch boundary described by I5 in [invariants](09-qua
 | D9 | Configuration, secrets and log output follow Fred's service conventions. | One way to operate every Fred service. | `sourceLocation.function` holds the module path. |
 | D10 | Shared infrastructure, own OpenFGA store. | No dedicated infrastructure to run. | Table names are unique in `fred`; `fred-manager` is the logical store name; SQL pins its active store/model IDs. |
 | D11 | Deployed with fred's chart as a separate release. | One chart for every Fred service. | The release references the chart without its `values.schema.json` ([operations reference](A3-manager-operations.md)). |
-| D12 | All assignable Fred roles have explicit typed equivalents; space admin and content roles remain orthogonal. A child role requires a direct parent content role. | Silent role loss and implicit content grants change authorization meaning. | Analyst is a content role; revocation never adds a fallback role. |
-| D13 | Platform mutations and delegated team creation share the bootstrap lock, acquired before the organization lock. | Platform revocation must serialize with dependent writes. | A revoked administrator cannot finish a waiting mutation; the root grant is protected. |
+| D12 | Owner is technical, on the platform and on organizations; admin, editor, analyst and member are business roles on every space. Admin and content roles remain orthogonal; a child role requires a direct parent content role. | Technical and business administration were confused under one word. | An organization owner names admins and reads nothing; analyst is a content role; revocation never adds a fallback role. |
+| D13 | Platform mutations and organization-owner changes share the bootstrap lock, acquired before the organization lock. | Platform revocation must serialize with dependent writes. | A revoked platform owner cannot finish a waiting mutation; the platform and each organization keep an owner. |
 | D14 | Directory operations use a dedicated service client and raw Keycloak subjects in the same realm as callers. | Caller tokens do not carry directory administration privileges. | Grants validate identity existence; revocation tolerates deleted identities. |
 | D15 | Import uses authenticated, read-only initialization and a distinct Keycloak service identity. | Service-client credentials must not substitute for Fred operator authority. | Bootstrap and compatible schema/model initialization precede import; Temporal is not involved. |
 | D16 | Provisioning is additive and replayable, with identity phases separate from the space transaction. | Keycloak, SQL and OpenFGA do not share a transaction. | Partial effects remain; replay preserves committed IDs and repairs grants. Rolled-back space IDs are not reused. |

@@ -116,7 +116,13 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
     assert_eq!(schemas["PlatformRole"]["enum"], json!(PlatformRole::ALL));
     assert_eq!(
         schemas["Role"]["enum"],
-        json!([Role::Member, Role::Editor, Role::Admin, Role::Analyst])
+        json!([
+            Role::Member,
+            Role::Editor,
+            Role::Admin,
+            Role::Analyst,
+            Role::Owner
+        ])
     );
     assert_eq!(
         schemas["SpaceKind"]["enum"],

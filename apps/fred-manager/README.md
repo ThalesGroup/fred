@@ -41,7 +41,7 @@ secret in the UI. The local service uses `FRED_BOOTSTRAP_TOKEN` from `config/.en
 The k3d manager overlay reads the cluster secret `fred-secrets` key
 `CONTROL_PLANE_BOOTSTRAP_TOKEN`; use the value supplied by your deployment.
 
-The root has platform authority and no organization membership. Open
+The root is platform owner and has no organization membership. Open
 **Provisioning**, import the ZIP built below, then sign out and sign in as an
 imported user. That person accepts their own CGU and sees their declared spaces.
 There is no automatic personal space or default-team enrollment.
@@ -77,16 +77,19 @@ the optional ingestion request. Frontend consumers use `fredManagerApiEnhancemen
 
 ## Platform and space roles
 
-`GET /me` reports effective platform roles. Platform administrators list direct grants
+`GET /me` reports effective platform roles. Platform owners list direct grants
 with `GET /users/platform-roles`, and grant/revoke with
-`PUT`/`DELETE /users/{subject}/platform-roles/{role}`. Only the bootstrap root changes
-`platform_admin`; its own grant is protected. `platform_observer`, `team_manager`,
+`PUT`/`DELETE /users/{subject}/platform-roles/{role}`. Any platform owner names or
+removes other owners; the last one cannot be revoked. `platform_observer`,
 `feature_manager` and `prompt_editor` are also supported.
 
-Space roles are `member`, `editor`, `analyst` and `admin`. They are cumulative;
-admin alone does not read content. Editor, admin and analyst also apply to every
-descendant space; member stays local, and a personal space inherits nothing. The last admin of a non-personal space cannot be
-revoked. Capability checks and their contracts are in the
+Owner is technical: on the platform, and on each organization, where it names the
+organization's admins and reads nothing. Platform owners name organization owners.
+Space roles `member`, `editor`, `analyst` and `admin` are business roles. They are
+cumulative; admin alone does not read content. Editor, admin and analyst also apply
+to every descendant space; member stays local, and a personal space inherits nothing.
+Organization admins create teams, team admins create projects. The last admin of a
+non-personal space, and the last owner of an organization, cannot be revoked. Capability checks and their contracts are in the
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
 
 Directory-backed platform grants require the manager's service client. The factory
@@ -114,7 +117,7 @@ array. Demo passwords are test credentials. The
 defines explicit parent references and roles, including projects. Old JSON and
 Python version-1 ZIPs return `not_yet_supported`; no conversion is performed.
 
-After compatible initialization, personal CGU acceptance and root bootstrap, save a platform administrator's
+After compatible initialization, personal CGU acceptance and root bootstrap, save a platform owner's
 access token in a private file and run:
 
 ```sh
@@ -127,9 +130,8 @@ The CLI uses the normal configuration and the manager's Keycloak service client.
 It needs neither the running HTTP server nor Temporal and never initializes or
 migrates SQL/OpenFGA. The HTTP equivalent is multipart
 `POST /fred-manager/v1/import-export/import`, with exactly one field named `file`
-and the operator bearer. It checks platform authority before reading the upload.
-A bundle declaring platform admin requires the bootstrap root, even on replay;
-the demo includes such a declaration. Archive limits are 50 MiB compressed and
+and the operator bearer. It checks platform ownership before reading the upload.
+A new organization declares at least one owner and one admin. Archive limits are 50 MiB compressed and
 100 MiB expanded, with no filesystem extraction.
 
 Existing identities keep their profile and password; new identities need a
@@ -147,10 +149,9 @@ imports a variant with a project.
 ## Import through the frontend
 
 Fred's existing administration console exposes **Provisioning** at
-`/admin/provisioning` to manager platform administrators. Select the ZIP produced by `make build-demo-bundle`.
+`/admin/provisioning` to manager platform owners. Select the ZIP produced by `make build-demo-bundle`.
 The page displays the completed server counts or an error with explicit replay
-guidance. The demo declares a platform admin and therefore requires the bootstrap
-root. The existing Home and sidebar display own memberships, hierarchy and roles.
+guidance. The existing Home and sidebar display own memberships, hierarchy and roles.
 The account menu permits logout before and after admission. The router mounts only
 onboarding, Home and provisioning; other product destinations return home without
 starting their Python consumers.

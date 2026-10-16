@@ -22,7 +22,7 @@ ORG_NAME ?=
 ORG_ADMIN ?=
 
 .PHONY: create-org
-create-org: dev ## Create an organization and its first admin (usage: make create-org ORG_NAME=TSN ORG_ADMIN=<keycloak sub>)
+create-org: dev ## Create an organization; its first person is owner, admin and member (usage: make create-org ORG_NAME=TSN ORG_ADMIN=<keycloak sub>)
 	@if [ -z "$(ORG_NAME)" ] || [ -z "$(ORG_ADMIN)" ]; then \
 		echo "❌ Usage: make create-org ORG_NAME=<name> ORG_ADMIN=<keycloak sub>"; \
 		exit 1; \
@@ -53,7 +53,7 @@ BUNDLE ?=
 TOKEN_FILE ?=
 export BUNDLE TOKEN_FILE
 .PHONY: import-provisioning
-import-provisioning: dev ## Import a bundle as platform admin (BUNDLE=<zip path> TOKEN_FILE=<bearer file path>); replay is additive
+import-provisioning: dev ## Import a bundle as platform owner (BUNDLE=<zip path> TOKEN_FILE=<bearer file path>); replay is additive
 	@test -n "$$BUNDLE" && test -n "$$TOKEN_FILE" || { echo 'Usage: make import-provisioning BUNDLE=<path> TOKEN_FILE=<path>'; exit 1; }
 	$(CARGO) run -- import-provisioning "$$BUNDLE" --token-file "$$TOKEN_FILE"
 

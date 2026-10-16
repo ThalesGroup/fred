@@ -203,8 +203,8 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
         .load(&pool)
         .await?;
         anyhow::ensure!(
-            fga.is_platform_admin(&caller.uid).await?,
-            "import requires platform admin"
+            fga.is_platform_owner(&caller.uid).await?,
+            "import requires platform owner"
         );
         use tokio::io::AsyncReadExt;
         let file = tokio::fs::File::open(bundle_file)
@@ -242,7 +242,7 @@ fn import_setup_error(error: anyhow::Error) -> anyhow::Error {
         | "cannot read provisioning bundle"
         | "invalid or expired operator bearer"
         | "user_not_accept_gcu"
-        | "import requires platform admin"
+        | "import requires platform owner"
         | "import requires configured Keycloak service credentials"
         | "import requires enabled Keycloak subject authentication in the directory realm"
         | "import database unavailable"

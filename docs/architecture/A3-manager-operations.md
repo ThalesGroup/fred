@@ -235,8 +235,8 @@ and `DEMO_BUNDLE_FILE` override source/output paths, including paths with spaces
 no running service is needed. HTTP clients submit the same ZIP as multipart `file`
 to `/fred-manager/v1/import-export/import` on the running server.
 
-The bearer must identify a current platform admin. Only the bootstrap root imports a
-bundle containing platform-admin declarations, including declarations already granted.
+The bearer must identify a current platform owner, who may declare any platform role
+and organization owners.
 The operator token is never used to administer Keycloak: that traffic uses the manager's
 service identity from `identities.yaml`. Token validity and authority are rechecked during
 import; replay after expiry uses a fresh operator token.

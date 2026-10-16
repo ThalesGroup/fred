@@ -301,7 +301,6 @@ export type AuthorizeDocument = {
   permission: Permission;
 };
 export type PlatformPermission =
-  | "create_team"
   | "list_all_teams"
   | "delete_team"
   | "rescue_team_admin"
@@ -331,7 +330,8 @@ export type SpacePermission =
   | "manage"
   | "run_evaluations"
   | "manage_evaluation_corpus"
-  | "read_conversations_for_evaluation";
+  | "read_conversations_for_evaluation"
+  | "own";
 export type SpaceCheck = {
   permission: SpacePermission;
   space_id: string;
@@ -412,12 +412,7 @@ export type Report = {
 export type ProvisioningUpload = {
   file: Blob;
 };
-export type PlatformRole =
-  | "platform_admin"
-  | "platform_observer"
-  | "team_manager"
-  | "feature_manager"
-  | "prompt_editor";
+export type PlatformRole = "platform_owner" | "platform_observer" | "feature_manager" | "prompt_editor";
 export type Me = {
   platform_roles: PlatformRole[];
   user_id: string;
@@ -437,7 +432,7 @@ export type OnboardingStatus = {
 export type CreatePersonalSpace = {
   organization_id: string;
 };
-export type Role = "member" | "editor" | "admin" | "analyst";
+export type Role = "member" | "editor" | "admin" | "analyst" | "owner";
 export type MySpace = Space & {
   /** The subset of `roles` held only through an ancestor. */
   inherited_roles: Role[];

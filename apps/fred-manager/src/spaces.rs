@@ -27,12 +27,13 @@ use crate::{
     domain::{self, Folder, Permission, Role, Space, SpaceKind, SpaceRow},
     error::{AppError, AppResult},
     fga::{Fga, Guard, Link, Scope, Tuple},
-    roles::PlatformPermission,
+    roles::SpacePermission,
 };
 
 const PARENT_REQUIRED: &str = "the user must first be a member of the parent space";
 const SIBLING_NAME: &str = "a space with this name already exists here";
 const PERSONAL_EXISTS: &str = "a personal space already exists in this organization";
+const OWNER_ON_ORGANIZATIONS: &str = "only an organization has owners";
 const PERSONAL_FIXED: &str = "a personal space has a fixed single member";
 const CHILDREN_FIRST: &str = "remove the user from the child spaces first";
 
@@ -228,6 +229,49 @@ async fn holds_parent_content(fga: &Fga, user: &str, parent: Uuid) -> AppResult<
         .any(|r| r.grants_content()))
 }
 
+/// Owners of an organization are named by platform owners, its admins by its owners or
+/// admins, every other role by the space's admins.
+async fn may_change(fga: &Fga, caller: &str, space: &Space, role: Role) -> AppResult<()> {
+    let allowed = match (role, space.kind) {
+        (Role::Owner, SpaceKind::Organization) => fga.is_platform_owner(caller).await?,
+        (Role::Owner, _) => return Err(AppError::Conflict(OWNER_ON_ORGANIZATIONS.into())),
+        (Role::Admin, SpaceKind::Organization) => {
+            fga.check(caller, Permission::Manage, space.id).await?
+                || fga
+                    .check_space(caller, SpacePermission::Own, space.id)
+                    .await?
+        }
+        _ => fga.check(caller, Permission::Manage, space.id).await?,
+    };
+    if allowed {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
+/// Owner changes depend on platform authority: they also take the platform lock and guard.
+async fn lock_for(
+    pool: &PgPool,
+    fga: &Fga,
+    space: &Space,
+    role: Role,
+) -> AppResult<(Transaction<'static, Postgres>, Guard)> {
+    let platform = role == Role::Owner;
+    let mut tx = if platform {
+        bootstrap::locked(pool).await?
+    } else {
+        pool.begin().await?
+    };
+    lock_organization(&mut tx, space).await?;
+    let mut scopes = vec![Scope::Organization(space.organization)];
+    if platform {
+        scopes.insert(0, Scope::Platform);
+    }
+    let guard = fga.guard(&scopes).await?;
+    Ok((tx, guard))
+}
+
 /// Locks the organization `space` belongs to, until the transaction ends.
 pub(crate) async fn lock_organization(
     tx: &mut Transaction<'_, Postgres>,
@@ -269,6 +313,8 @@ async fn persist(
 }
 
 /// Organizations are created by an operator: no parent, so no invariant to check.
+/// The first person becomes owner, admin and member: technical and business roles may be
+/// held by the same person.
 pub async fn create_organization(
     pool: &PgPool,
     fga: &Fga,
@@ -295,6 +341,11 @@ pub async fn create_organization(
         Tuple {
             user: admin,
             role: Role::Member,
+            space: id,
+        },
+        Tuple {
+            user: admin,
+            role: Role::Owner,
             space: id,
         },
     ];
@@ -325,28 +376,12 @@ pub async fn create_space(
 ) -> AppResult<Space> {
     let parent = load(pool, fga, parent_id).await?;
     domain::check_parent(kind, Some(&parent))?;
-    // Always take the platform lock first when a delegated creation can authorize us.
-    let mut tx = if kind == SpaceKind::Team {
-        bootstrap::locked(pool).await?
-    } else {
-        pool.begin().await?
-    };
+    let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &parent).await?;
-    let scopes = if kind == SpaceKind::Team {
-        vec![Scope::Platform, Scope::Organization(parent.organization)]
-    } else {
-        vec![Scope::Organization(parent.organization)]
-    };
-    let mut guard = fga.guard(&scopes).await?;
-    let local = fga.check(caller, Permission::Manage, parent.id).await?;
-    if !local
-        && !(kind == SpaceKind::Team
-            && fga
-                .check_platform(caller, PlatformPermission::CreateTeam)
-                .await?)
-    {
-        return Err(AppError::Forbidden);
-    }
+    let mut guard = fga
+        .guard(&[Scope::Organization(parent.organization)])
+        .await?;
+    require(fga, caller, Permission::Manage, parent.id).await?;
     if !holds_parent_content(fga, admin, parent.id).await? {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
@@ -451,12 +486,8 @@ pub async fn grant(
     if space.personal_owner.is_some() {
         return Err(AppError::Conflict(PERSONAL_FIXED.into()));
     }
-    let mut tx = pool.begin().await?;
-    lock_organization(&mut tx, &space).await?;
-    let mut guard = fga
-        .guard(&[Scope::Organization(space.organization)])
-        .await?;
-    require(fga, caller, Permission::Manage, space.id).await?;
+    let (tx, mut guard) = lock_for(pool, fga, &space, role).await?;
+    may_change(fga, caller, &space, role).await?;
     if let Some(parent) = space.parent_id
         && !holds_parent_content(fga, target, parent).await?
     {
@@ -495,29 +526,32 @@ pub async fn revoke(
     target: &str,
 ) -> AppResult<()> {
     let space = load(pool, fga, space_id).await?;
-    let manager = if space.personal_owner.is_some() {
-        space.organization
+    let (mut tx, mut guard) = lock_for(pool, fga, &space, role).await?;
+    if space.personal_owner.is_some() {
+        require(fga, caller, Permission::Manage, space.organization).await?;
     } else {
-        space.id
-    };
-    let mut tx = pool.begin().await?;
-    lock_organization(&mut tx, &space).await?;
-    let mut guard = fga
-        .guard(&[Scope::Organization(space.organization)])
-        .await?;
-    require(fga, caller, Permission::Manage, manager).await?;
+        may_change(fga, caller, &space, role).await?;
+    }
     let held = fga.roles_of(target).await?;
     let on_space: Vec<Role> = held
         .iter()
         .filter(|(s, _)| *s == space.id)
         .map(|(_, r)| *r)
         .collect();
-    if role == Role::Admin && space.personal_owner.is_none() && on_space.contains(&Role::Admin) {
-        let admins = fga.space_admins(space.id).await?;
-        if !admins.iter().any(|admin| admin != target) {
-            return Err(AppError::Conflict(
-                "a non-personal space must retain an administrator".into(),
-            ));
+    if matches!(role, Role::Admin | Role::Owner)
+        && space.personal_owner.is_none()
+        && on_space.contains(&role)
+    {
+        let holders = fga.space_holders(space.id, role).await?;
+        if !holders.iter().any(|holder| holder != target) {
+            return Err(AppError::Conflict(format!(
+                "a non-personal space must retain an {}",
+                if role == Role::Admin {
+                    "administrator"
+                } else {
+                    "owner"
+                }
+            )));
         }
     }
     let dependents = dependents(&mut tx, fga, &space).await?;

@@ -5,7 +5,7 @@
 In the organization/team/project journey, Keycloak authenticates the person,
 PostgreSQL records their personal terms-of-use (CGU) acceptance and OpenFGA decides
 their rights.
-A valid login is not consent; consent is not a role; platform administration is
+A valid login is not consent; consent is not a role; platform ownership is
 not membership of an organization. The following rules describe this journey's
 manager authority, not a universal replacement for every Python security boundary.
 
@@ -83,12 +83,13 @@ secret with 403. The secret cannot nominate another person or bypass consent.
 Manager commits a root reservation for that caller before the OpenFGA grant. A
 failed grant can be retried only by the claimant. Once completion is recorded,
 all later bootstrap attempts return 409, even if a role is subsequently removed.
-Rotating the secret does not reset completion. Root receives platform authority,
+Rotating the secret does not reset completion. Root receives platform ownership,
 with no organization, team, project or personal-space membership.
 
 The [reservation sequence](A1-manager-runtime.md#root-platform-admin-bootstrap)
-shows the two transactions and failure recovery. Only the completed root may change
-platform-admin grants, and its own grant is protected (I9, I15).
+shows the two transactions and failure recovery (I9). Afterwards root is an ordinary
+platform owner: any platform owner grants or revokes platform owners, and the platform
+always keeps one (I15).
 
 ## Roles, permissions and ReBAC
 
@@ -101,9 +102,16 @@ Editor, admin and analyst also apply to every descendant space; member applies t
 its own space only (I20). A personal space has no parent and inherits nothing.
 No platform role reaches a space.
 
-Platform admin implies all platform capabilities. Team manager grants team creation and listing;
-feature manager grants `manage_capabilities` and team registry listing; prompt editor grants
-`edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply space membership or content access.
+Administration is business, ownership is technical. Each organization also has an
+`owner` role: it names and removes the organization's admins and holds no content,
+management or descending permission (I21). Platform owners name organization owners,
+and an organization always keeps one (I14). Teams and projects have no owner.
+
+Platform owner implies all platform capabilities. Feature manager grants
+`manage_capabilities` and team registry listing; prompt editor grants
+`edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply
+space membership or content access: a platform owner creates organizations and names
+their owners, and creates teams only through an organization admin role.
 
 Direct role tuples and the space tree are canonical in OpenFGA: each space carries
 one immutable `parent` link. The model evaluates permissions, including roles

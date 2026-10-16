@@ -15,7 +15,7 @@ Other product pages and their Python data consumers are not mounted.
 | --- | --- | --- |
 | 1. Open Fred | Sign in with a personal Keycloak account. | Public configuration identifies the login authority. The bearer identifies the caller; it grants no organization membership. |
 | 2. Accept the CGU | Read the active terms and explicitly accept. | Manager records that person's subject, version and time in SQL. No role or space is created. |
-| 3. Initialize administration | On an unclaimed platform, enter the deployment bootstrap secret. | Manager reserves this caller as root, writes platform administration in OpenFGA and records completion. |
+| 3. Initialize administration | On an unclaimed platform, enter the deployment bootstrap secret. | Manager reserves this caller as root, writes platform ownership in OpenFGA and records completion. |
 | 4. Open the platform | Root sees an empty Home view and Provisioning in the administration console. | Platform governance grants no organization membership or content access. |
 | 5. Import the ZIP | Select the Make-generated bundle and read the completed report. | Manager uses its own Keycloak service identity to resolve/create users and reconciles declared organizations, teams, projects and direct roles. |
 | 6. Change accounts | Sign out, then sign in as an imported person. | The browser starts a fresh session; the previous person's data is not retained. |
@@ -38,7 +38,7 @@ sequenceDiagram
     Root->>UI: Enter bootstrap secret
     UI->>M: Own bearer and deployment secret
     M->>PG: Reserve root claimant
-    M->>FGA: Grant platform administration
+    M->>FGA: Grant platform ownership
     M->>PG: Record bootstrap completion
     Root->>UI: Import provisioning ZIP
     UI->>M: ZIP and operator bearer

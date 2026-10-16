@@ -225,7 +225,9 @@ impl Bundle {
                 }
                 let mut roles = raw.roles;
                 for (subject, grants) in &mut roles {
-                    if !names.contains(subject) {
+                    if !names.contains(subject)
+                        || (kind != SpaceKind::Organization && grants.contains(&Role::Owner))
+                    {
                         return Err(Invalid);
                     }
                     let mut unique = Vec::new();
@@ -246,11 +248,6 @@ impl Bundle {
             }
         }
         Ok(Self { users, spaces })
-    }
-    pub(crate) fn has_admin_grant(&self) -> bool {
-        self.users
-            .iter()
-            .any(|u| u.platform.contains(&PlatformRole::PlatformAdmin))
     }
 }
 
@@ -397,7 +394,7 @@ mod tests {
     fn files() -> BTreeMap<String, Vec<u8>> {
         [
             ("manifest.json", r#"{"format_version":2,"users_schema_version":2,"source_platform":"swift"}"#),
-            ("users.json", r#"[{"username":"alice","platform_roles":["admin","platform_admin","observer","platform_observer","team_manager","feature_manager","prompt_editor"]}]"#),
+            ("users.json", r#"[{"username":"alice","platform_roles":["owner","platform_owner","observer","platform_observer","feature_manager","prompt_editor"]}]"#),
             ("organizations.json", r#"[{"ref":"org","name":"Org","roles":{"alice":["admin","member","member"]}}]"#),
             ("teams.json", r#"[{"ref":"team","name":"Team","organization":"org","roles":{"alice":["admin","analyst"]}}]"#),
             ("projects.json", r#"[{"ref":"project","name":"Project","team":"team","roles":{"alice":["admin"]}}]"#),
@@ -423,7 +420,7 @@ mod tests {
             zip::CompressionMethod::Deflated,
         ] {
             let b = Bundle::parse(&pack(&files(), method)).unwrap();
-            assert_eq!(b.users[0].platform.len(), 5);
+            assert_eq!(b.users[0].platform.len(), 4);
             assert_eq!(b.spaces[0].roles["alice"], [Role::Admin, Role::Member]);
             assert_eq!(b.spaces[1].roles["alice"], [Role::Admin, Role::Analyst]);
             assert_eq!(b.spaces[2].roles["alice"], [Role::Admin]);
