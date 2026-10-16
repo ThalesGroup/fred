@@ -122,9 +122,9 @@ _(none)_
 **Status:** `Functional`
 
 The action-oriented Dialog primitive now owns initial focus, Tab containment,
-Escape/scrim dismissal, and focus restoration. `closeOnEscape={false}` (default
-`true`) keeps Escape from cancelling a form that is costly to lose; the scrim
-and the Cancel button still close it. `Dialog.tsx` remains a thin FRED
+Escape/scrim dismissal, and focus restoration. `dismissible={false}` (default
+`true`) ignores Escape and scrim clicks for a form that is costly to lose; the
+Cancel button still closes it. `Dialog.tsx` remains a thin FRED
 wrapper supplying its translated Cancel default; neutral callers supply their
 own labels. Consumer-root portals inherit light/dark theme; the application
 without `.fred-ui` retains its body portal. An open Select gets the first Escape
@@ -2264,8 +2264,8 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
   uses. Refusals carrying a `code` (name taken, last active admin, sole
   replacement pending the charter) toast our localized message instead of
   the server's English `detail`; any other error keeps `useApiErrorToast`.
-  The description field is six rows tall. Escape does not close the dialog
-  (`closeOnEscape={false}`) so a draft is not lost by accident. The admin
+  The description field is six rows tall. Escape and scrim clicks do not close
+  the dialog (`dismissible={false}`) so a draft is not lost by accident. The admin
   search opens from 2 characters, with localized "searching" and "no match"
   messages, and its menu is portaled so the dialog body never clips it.
 - **Description field.** A required `TextArea` under the team name:

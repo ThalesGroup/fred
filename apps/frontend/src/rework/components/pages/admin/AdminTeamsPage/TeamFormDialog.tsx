@@ -160,7 +160,7 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
       onCancel={onClose}
       maxWidth={560}
       dense
-      closeOnEscape={false}
+      dismissible={false}
     >
       <div className={styles.teamForm}>
         <TextInput
