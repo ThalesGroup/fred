@@ -85,7 +85,7 @@ from pptx import Presentation
 from pptx.oxml.ns import qn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from prompts import EDITS, PROMPTS  # noqa: E402
+from prompts import EDITS, EXPECTED_CHART_TYPES, PROMPTS  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[4]
 DEFAULT_ENV = REPO / "apps/fred-agents/config/.env"
@@ -326,6 +326,10 @@ class RunResult:
     charts_given: int = 0
     charts_on_chart_slides: int = 0
     chart_style_keys: int = 0
+    # The chart types sent, and the scatter or bubble charts with both axis titles.
+    chart_types: List[str] = field(default_factory=list)
+    xy_charts: int = 0
+    xy_titled: int = 0
     leftovers: List[str] = field(default_factory=list)
     removed_by_check: int = 0
     truncated: int = 0
@@ -657,6 +661,11 @@ def _measure(
     run.chart_style_keys = sum(
         len(s.chart.style_fields) for s, _ in with_chart if s.chart is not None
     )
+    sent = [s.chart for s, _ in with_chart if s.chart is not None]
+    run.chart_types = [c.type for c in sent]
+    xy = [c for c in sent if c.type in ("scatter", "bubble")]
+    run.xy_charts = len(xy)
+    run.xy_titled = sum(1 for c in xy if c.x_title and c.y_title)
     if renders:
         report = renders[-1].report
         for slide_report in report.slides.values():
@@ -830,8 +839,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         "| 3-in-a-row | distinct/slides | max reuse | max kind repeat (max / mean) | A-B-A | avoidable reuses "
         "| patterns used | tables used/given | table shape kept | table overflow "
         "| charts on chart slides/given | chart style keys "
+        "| expected chart type | scatter/bubble axes titled "
         "| leftovers | removed by check | truncated | lost | split lists | variety asks | avg wall s | tokens in / out (k) | reply chars (mean) | tool call instead of reply |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -842,6 +852,7 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         ok = [r for r in runs if r.success]
         covers = [r.cover_once_first for r in ok if r.cover_once_first is not None]
         across = {p for r in ok for p in r.patterns}
+        expected = [r for r in ok if r.prompt in EXPECTED_CHART_TYPES]
 
         def mean(values: List[float]) -> str:
             return f"{statistics.mean(values):.2f}" if values else "-"
@@ -863,6 +874,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(r.tables_overflow for r in ok)} "
             f"| {sum(r.charts_on_chart_slides for r in ok)}/{sum(r.charts_given for r in ok)} "
             f"| {sum(r.chart_style_keys for r in ok)} "
+            f"| {sum(EXPECTED_CHART_TYPES[r.prompt] in r.chart_types for r in expected)}"
+            f"/{len(expected)} "
+            f"| {sum(r.xy_titled for r in ok)}/{sum(r.xy_charts for r in ok)} "
             f"| {sum(len(r.leftovers) for r in ok)} "
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "

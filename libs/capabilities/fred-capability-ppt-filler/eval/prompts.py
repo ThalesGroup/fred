@@ -123,6 +123,35 @@ PROMPTS: dict[str, str] = {
         "On a fait 12,5 % de croissance et 3,2 M€ de chiffre d'affaires cette année, avec 14 "
         "nouveaux clients. Prépare 3 slides de bilan."
     ),
+    # One prompt per chart type beyond categories over time and shares.
+    "chart_stacked_bar": (
+        "Make a 3-slide budget review: the 2026 budget per department split into staff, "
+        "tools and travel (in k€): Customer Success 420, 80, 35; Research and Development "
+        "910, 260, 40; Sales and Marketing 530, 120, 150; General Administration 300, 60, 10."
+    ),
+    "chart_radar": (
+        "Compare les trois offres d'hébergement sur six critères notés sur 10 (prix, "
+        "sécurité, support, performance, réversibilité, conformité) : Offre A 7, 8, 6, 9, 5, 8 ; "
+        "Offre B 9, 6, 7, 6, 8, 6 ; Offre C 5, 9, 8, 7, 7, 9. 3 slides."
+    ),
+    "chart_scatter": (
+        "Show how price relates to units sold for our ten products, in 3 slides: Alpha 12 € "
+        "1 450 units, Beta 18 € 1 120, Gamma 25 € 980, Delta 9 € 1 800, Epsilon 30 € 640, Zeta "
+        "15 € 1 300, Eta 22 € 900, Theta 40 € 420, Iota 35 € 500, Kappa 28 € 760."
+    ),
+    "chart_bubble": (
+        "Prépare 3 slides sur nos marchés : croissance annuelle, part de marché et chiffre "
+        "d'affaires : France 4 %, 32 %, 120 M€ ; Allemagne 6 %, 18 %, 85 M€ ; Espagne 9 %, 12 %, "
+        "40 M€ ; Italie 3 %, 22 %, 60 M€ ; Pologne 12 %, 8 %, 25 M€."
+    ),
+}
+
+# The chart type each chart prompt calls for, measured as "expected type chosen".
+EXPECTED_CHART_TYPES: dict[str, str] = {
+    "chart_stacked_bar": "stacked_bar",
+    "chart_radar": "radar",
+    "chart_scatter": "scatter",
+    "chart_bubble": "bubble",
 }
 
 # A second user turn per prompt, asking to change the delivered deck: an
@@ -171,4 +200,8 @@ EDITS: dict[str, str] = {
     "story_illustrative": "Remplace le graphique de la slide 3 par un camembert.",
     "story_no_titles": "Add a closing slide, still without a title.",
     "story_user_figures": "Le chiffre d'affaires est de 3,4 M€, pas 3,2 : corrige-le.",
+    "chart_stacked_bar": "Travel for Sales and Marketing is 130 k€, not 150: fix the chart.",
+    "chart_radar": "L'offre B a 7 en sécurité, pas 6 : corrige le graphique.",
+    "chart_scatter": "Theta sold 450 units, not 420: fix the chart.",
+    "chart_bubble": "La Pologne fait 30 M€, pas 25 : corrige le graphique.",
 }
