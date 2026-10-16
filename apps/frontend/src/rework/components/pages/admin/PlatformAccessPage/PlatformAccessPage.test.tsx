@@ -1048,7 +1048,7 @@ it("shows a supported page size and lets the administrator change it", () => {
   expect(state.filter).not.toHaveBeenCalled();
 });
 
-it("offers the small T0 refresh action only after completion and disables it with active filtering", () => {
+it("offers the small refresh action after completion with filtering on or off", () => {
   state.completed = true;
   act(() => root.render(<PlatformAccessPage />));
   openTab("users");
@@ -1058,5 +1058,5 @@ it("offers the small T0 refresh action only after completion and disables it wit
   expect(state.importT0).not.toHaveBeenCalled();
   state.filteringEnabled = true;
   act(() => root.render(<PlatformAccessPage />));
-  expect(action().disabled).toBe(true);
+  expect(action().disabled).toBe(false);
 });

@@ -245,7 +245,7 @@ export default function PlatformAccessPage() {
                       icon={{ category: "outlined", type: "refresh" }}
                       title={t("rework.platformAccess.t0Refresh.title")}
                       aria-label={t("rework.platformAccess.t0Refresh.title")}
-                      disabled={locked || state.data?.filtering_enabled || t0.isFetching || t0.isError}
+                      disabled={locked || t0.isFetching || t0.isError}
                       onClick={() => setRefreshingT0(true)}
                     />
                   </>

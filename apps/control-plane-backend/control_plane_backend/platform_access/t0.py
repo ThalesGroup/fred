@@ -30,8 +30,6 @@ def _check_refresh(
     mode: PlatformT0RefreshMode,
     refresh: RefreshPlatformT0 | None,
 ) -> None:
-    if state.filtering_enabled:
-        raise HTTPException(409, "t0_requires_inactive_filtering")
     if state.t0_completed_at is None:
         raise HTTPException(409, "t0_requires_completed_import")
     if refresh is not None and (
@@ -140,7 +138,7 @@ async def run_t0(
             _check_refresh(state, mode, refresh)
         if state.revision != revision:
             raise HTTPException(409, "platform_access_t0_snapshot_changed")
-        if state.filtering_enabled:
+        if mode is None and state.filtering_enabled:
             raise HTTPException(409, "t0_requires_inactive_filtering")
         existing = set(await session.scalars(select(PlatformAccessUserRow.user_id)))
         removed = (

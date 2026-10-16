@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Explicit T0 refresh with durable removal history"
+title: "Explicit whitelist refresh with durable removal history"
 impact: minor
 configuration: none
 configuration_reason: "Admission remains controlled in SQL administration; no YAML, Helm, environment, permission or secret changes are introduced."
@@ -8,7 +8,7 @@ configuration_reason: "Admission remains controlled in SQL administration; no YA
 
 ## Applicability
 
-Authenticated deployments using platform admission administration. Normal admission and the initial import retain their behavior; administrators can explicitly refresh completed T0 imports while filtering is off.
+Authenticated deployments using platform admission administration. Normal admission and the initial import retain their behavior; administrators can explicitly refresh completed T0 imports with filtering on or off.
 
 ## Prerequisites
 
@@ -22,13 +22,13 @@ No configuration changes. The existing administrator permission controls both re
 
 1. Run the normal control-plane `make db-upgrade`. Revision `d4e8b2a6f091` creates `platform_access_removals` and adds `platform_access_settings.t0_removal_history_complete`.
 2. Upgrade participating services and the frontend. New readers require the migrated settings column; control-plane administration requires the history table.
-3. Optional feature use: while filtering is off, open Users and select the small refresh icon beside T0 completion. With reliable history, choose preservation or inclusion and confirm.
+3. Optional feature use: with filtering on or off, open Users and select the small refresh icon beside the completed import status. With reliable history, choose preservation or inclusion and confirm.
 
 A completed import from an older version has no reliable removal history. Its next refresh requires inclusion and explicitly warns that the entire T0 whitelist is recalculated and manually removed people can regain access. Confirming that full import establishes the new baseline and enables preservation for future refreshes. Existing grants and provenance are retained. No historical reconstruction is required for legacy test data.
 
 ## Validation
 
-After a normal initial import, remove a test exception and introduce a new test identity in the configured directory. Preservation must add the newcomer without restoring the recorded removal. Inclusion must warn before allowing that removed candidate to be re-added. Verify that active filtering disables the icon and the server rejects refresh. In a legacy test environment, verify the missing-history warning and forced inclusion, then the availability of both modes after success. Each committed refresh emits one audit summary with mode and actual additions.
+After a normal initial import, remove a test exception and introduce a new test identity in the configured directory. Preservation must add the newcomer without restoring the recorded removal. Inclusion must warn before allowing that removed candidate to be re-added. Verify that refresh remains available with filtering active and leaves the switch active. In a legacy test environment, verify the missing-history warning and forced inclusion, then the availability of both modes after success. Each committed refresh emits one audit summary with mode and actual additions.
 
 ## Rollback
 

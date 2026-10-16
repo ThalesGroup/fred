@@ -78,7 +78,8 @@ afterEach(() => {
   host.remove();
 });
 
-it("starts each dialog on preservation and submits the confirmed snapshot", async () => {
+it.each([false, true])("starts on preservation and submits with filtering=%s", async (filtering) => {
+  state.filtering = filtering;
   render();
   expect(state.submit).not.toHaveBeenCalled();
   expect(state.queries).toHaveBeenCalledWith({ refreshMode: "preserve_removals" });
@@ -90,39 +91,47 @@ it("starts each dialog on preservation and submits the confirmed snapshot", asyn
   expect(state.close).toHaveBeenCalledOnce();
 });
 
-it("warns before including removed people and resets the choice after reopening", async () => {
-  render();
-  selectInclude();
-  expect(document.body.textContent).toContain(key("includeWarning"));
-  expect(state.submit).not.toHaveBeenCalled();
-  await act(async () => button(key("confirm")).click());
-  expect(state.submit.mock.calls[0][0].body.mode).toBe("include_removed");
-  act(() => root.unmount());
-  root = createRoot(host);
-  render();
-  expect(document.querySelector('[aria-haspopup="listbox"]')?.textContent).toContain(key("preserve_removals"));
-});
+it.each([false, true])(
+  "warns before including removed people with filtering=%s and resets after reopening",
+  async (filtering) => {
+    state.filtering = filtering;
+    render();
+    selectInclude();
+    expect(document.body.textContent).toContain(key("includeWarning"));
+    expect(state.submit).not.toHaveBeenCalled();
+    await act(async () => button(key("confirm")).click());
+    expect(state.submit.mock.calls[0][0].body.mode).toBe("include_removed");
+    act(() => root.unmount());
+    root = createRoot(host);
+    render();
+    expect(document.querySelector('[aria-haspopup="listbox"]')?.textContent).toContain(key("preserve_removals"));
+  },
+);
 
-it("requires inclusion with an explicit missing-history warning until reset succeeds", async () => {
-  state.complete = false;
-  render();
-  expect(document.body.textContent).toContain(key("missingHistory"));
-  expect(state.queries).toHaveBeenCalledWith({ refreshMode: "include_removed" });
-  act(() => document.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click());
-  const preserve = [...document.querySelectorAll('[role="option"]')].find((node) =>
-    node.textContent?.includes(key("preserve_removals")),
-  )!;
-  expect(preserve.getAttribute("aria-disabled")).toBe("true");
-  expect(state.submit).not.toHaveBeenCalled();
-  await act(async () => button(key("confirm")).click());
-  expect(state.submit.mock.calls[0][0].body.mode).toBe("include_removed");
-  act(() => root.unmount());
-  root = createRoot(host);
-  state.complete = true;
-  render();
-  expect(document.body.textContent).not.toContain(key("missingHistory"));
-  expect(document.querySelector('[aria-haspopup="listbox"]')?.textContent).toContain(key("preserve_removals"));
-});
+it.each([false, true])(
+  "requires inclusion with missing history and filtering=%s until reset succeeds",
+  async (filtering) => {
+    state.filtering = filtering;
+    state.complete = false;
+    render();
+    expect(document.body.textContent).toContain(key("missingHistory"));
+    expect(state.queries).toHaveBeenCalledWith({ refreshMode: "include_removed" });
+    act(() => document.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click());
+    const preserve = [...document.querySelectorAll('[role="option"]')].find((node) =>
+      node.textContent?.includes(key("preserve_removals")),
+    )!;
+    expect(preserve.getAttribute("aria-disabled")).toBe("true");
+    expect(state.submit).not.toHaveBeenCalled();
+    await act(async () => button(key("confirm")).click());
+    expect(state.submit.mock.calls[0][0].body.mode).toBe("include_removed");
+    act(() => root.unmount());
+    root = createRoot(host);
+    state.complete = true;
+    render();
+    expect(document.body.textContent).not.toContain(key("missingHistory"));
+    expect(document.querySelector('[aria-haspopup="listbox"]')?.textContent).toContain(key("preserve_removals"));
+  },
+);
 
 it("does not import when cancelled", () => {
   render();
@@ -131,7 +140,7 @@ it("does not import when cancelled", () => {
   expect(state.submit).not.toHaveBeenCalled();
 });
 
-it.each(["fetching", "stale", "filtering", "fail"] as const)("prevents confirmation while %s", (condition) => {
+it.each(["fetching", "stale", "fail"] as const)("prevents confirmation while %s", (condition) => {
   state[condition] = true;
   render();
   expect(button(key("confirm")).disabled).toBe(true);

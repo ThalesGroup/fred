@@ -28,7 +28,7 @@ export default function PlatformAccessT0RefreshDialog({ onClose }: { onClose: ()
   const mode = requiresFull ? "include_removed" : choice;
   const preview = usePlatformAccessT0Query(
     { refreshMode: mode },
-    { skip: !statusKnown || authority.data?.filtering_enabled !== false, refetchOnMountOrArgChange: true },
+    { skip: !statusKnown || !authority.data || authority.isError, refetchOnMountOrArgChange: true },
   );
   const [importT0] = useImportPlatformT0Mutation();
   const current = preview.currentData;
@@ -36,7 +36,7 @@ export default function PlatformAccessT0RefreshDialog({ onClose }: { onClose: ()
     statusKnown &&
     !authority.isFetching &&
     !authority.isError &&
-    authority.data?.filtering_enabled === false &&
+    !!authority.data &&
     !preview.isFetching &&
     !preview.isError &&
     !!current?.completed_at &&

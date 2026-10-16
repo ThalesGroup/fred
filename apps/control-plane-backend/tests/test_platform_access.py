@@ -2131,8 +2131,9 @@ def refresh_request(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source", ["manual", "t0"])
+@pytest.mark.parametrize("filtering", [False, True])
 async def test_refresh_preserves_removals_and_can_explicitly_restore_them(
-    access, source
+    access, source, filtering
 ):
     actor, removed, manual, newcomer = user("accepted"), user(), user(), user()
     for person in (removed, manual):
@@ -2152,6 +2153,9 @@ async def test_refresh_preserves_removals_and_can_explicitly_restore_them(
             await session.get(PlatformAccessRemovalRow, UUID(removed.uid))
         ).removed_at == removed_at
     await access.observe(newcomer)
+    if filtering:
+        await service.set_filtering(access, actor, True)
+        assert not await access.admitted(newcomer)
     preview = await service.t0(access, refresh_mode="preserve_removals")
     assert preview.candidates == 1 and preview.removed_skipped == 1
     result, count = await service.import_t0(
@@ -2160,6 +2164,10 @@ async def test_refresh_preserves_removals_and_can_explicitly_restore_them(
     assert count == result.imported_count == 1
     assert await access.store.exception(UUID(removed.uid)) is None
     assert (await access.store.exception(UUID(newcomer.uid))).source == "t0"
+    assert (await access.state()).filtering_enabled is filtering
+    if filtering:
+        assert await access.admitted(newcomer)
+        assert not await access.admitted(removed)
     assert result.completed_at is not None and first.completed_at is not None
     assert result.completed_at > first.completed_at.replace(tzinfo=timezone.utc)
     preview = await service.t0(access, refresh_mode="include_removed")
@@ -2168,6 +2176,10 @@ async def test_refresh_preserves_removals_and_can_explicitly_restore_them(
     )
     assert count == 1
     assert (await access.store.exception(UUID(removed.uid))).source == "t0"
+    assert (await access.state()).filtering_enabled is filtering
+    if filtering:
+        assert await access.admitted(removed)
+        assert not await access.admitted(user())
     # A replay cannot undo a removal performed after the confirmed refresh.
     await service.set_user(access, actor, UUID(removed.uid), False)
     with pytest.raises(HTTPException) as error:
@@ -2224,17 +2236,13 @@ async def test_refresh_retains_grant_provenance_and_advances_empty_completion(ac
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["policy", "filtering"])
-async def test_refresh_rejects_changed_policy_or_activation(access, change):
+async def test_refresh_rejects_changed_policy(access):
     actor = user("accepted")
     await service.t0(access, actor)
     preview = await service.t0(access, refresh_mode="include_removed")
     later = user()
     await access.observe(later)
-    if change == "policy":
-        await service.save_policy(access, actor, draft("different"), preview.revision)
-    else:
-        await service.set_filtering(access, actor, True)
+    await service.save_policy(access, actor, draft("different"), preview.revision)
     with pytest.raises(HTTPException) as error:
         await service.import_t0(
             access, actor, refresh=refresh_request(preview, "include_removed")
@@ -2384,6 +2392,8 @@ async def test_refresh_rechecks_state_after_directory_preparation(
     actor, person = user("accepted"), user()
     await access.observe(person)
     await service.t0(access, actor)
+    newcomer = user()
+    await access.observe(newcomer)
     preview = await service.t0(access, refresh_mode="include_removed")
     entered, release = threading.Event(), threading.Event()
     original = access.observed_match
@@ -2409,10 +2419,18 @@ async def test_refresh_rechecks_state_after_directory_preparation(
             )
     finally:
         release.set()
-    with pytest.raises(HTTPException) as error:
-        await task
-    assert error.value.status_code == 409
-    assert (await service.t0(access)).completed_at == preview.completed_at
+    if change == "filtering":
+        result, count = await task
+        assert count == 1 and result.completed_at != preview.completed_at
+        assert (await access.state()).filtering_enabled
+        assert await access.admitted(newcomer)
+        assert not await access.admitted(user())
+    else:
+        with pytest.raises(HTTPException) as error:
+            await task
+        assert error.value.status_code == 409
+        assert (await service.t0(access)).completed_at == preview.completed_at
+        assert await access.store.exception(UUID(newcomer.uid)) is None
 
 
 @pytest.mark.asyncio
@@ -2448,3 +2466,16 @@ async def test_refresh_audit_reports_actual_additions_and_mode_once(
     assert len(events) == 1
     assert events[0][1]["mode"] == "preserve_removals"
     assert events[0][1]["imported_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_first_import_still_requires_inactive_filtering(access):
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.set_filtering(access, actor, True)
+    with pytest.raises(HTTPException) as error:
+        await service.import_t0(access, actor)
+    assert error.value.detail == "t0_requires_inactive_filtering"
+    assert (await access.state()).filtering_enabled
+    assert (await service.t0(access)).completed_at is None
+    assert await access.store.exception(UUID(person.uid)) is None

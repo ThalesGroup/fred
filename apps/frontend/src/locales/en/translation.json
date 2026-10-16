@@ -3798,7 +3798,7 @@
       "title": "Platform access",
       "description": "Choose who can use the platform: a rule on the account, and a whitelist of users and teams.",
       "disabled": "This page is only available when user sign-in and permission checks are enabled on this instance.",
-      "t0Hint": "Before enabling filtering, add current users to the whitelist. You can remove them or refresh the import afterwards.",
+      "t0Hint": "Add existing users who are not already accepted by the rule to the whitelist. You can run this import again at any time.",
       "t0Preview": "{{count}} users to import; {{matching}} already accepted by the rule.",
       "t0Refresh": {
         "title": "Refresh the whitelist",
@@ -3813,7 +3813,7 @@
         "success_other": "Whitelist updated: {{count}} users added.",
         "conflict": "The configuration or last import changed. Check the updated estimate before confirming again."
       },
-      "t0Done": "Initial import completed",
+      "t0Done": "Import completed",
       "t0Import": "Import existing users",
       "search": "Search a whitelisted user",
       "exception": "Actions",
@@ -4054,7 +4054,7 @@
       "origin": {
         "label": "Origin",
         "manual": "Manual",
-        "t0": "Initial import"
+        "t0": "Import"
       },
       "whitelistedUsers": "Whitelisted users",
       "whitelistedUsersHint": "Users added here can always access the platform, whatever the rule says.",

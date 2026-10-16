@@ -3798,7 +3798,7 @@
       "title": "Accès plateforme",
       "description": "Choisissez qui peut utiliser la plateforme : une règle sur le compte, et une liste blanche d'utilisateurs et d'équipes.",
       "disabled": "Cette page n'est disponible que si la connexion des utilisateurs et le contrôle des droits sont activés sur cette instance.",
-      "t0Hint": "Avant d'activer le filtrage, ajoutez les utilisateurs actuels à la liste blanche. Vous pourrez les retirer ou relancer l'import ensuite.",
+      "t0Hint": "Ajoutez les utilisateurs existants que la règle n'accepte pas déjà à la liste blanche. Vous pouvez relancer cet import à tout moment.",
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} déjà acceptés par la règle.",
       "t0Refresh": {
         "title": "Actualiser la liste blanche",
@@ -3813,7 +3813,7 @@
         "success_other": "Liste blanche mise à jour : {{count}} utilisateurs ajoutés.",
         "conflict": "La configuration ou le dernier import a changé. Vérifiez l'estimation actualisée avant de confirmer à nouveau."
       },
-      "t0Done": "Import initial terminé",
+      "t0Done": "Import terminé",
       "t0Import": "Importer les utilisateurs existants",
       "search": "Rechercher un utilisateur de la liste blanche",
       "exception": "Actions",
@@ -4054,7 +4054,7 @@
       "origin": {
         "label": "Origine",
         "manual": "Manuel",
-        "t0": "Import initial"
+        "t0": "Import"
       },
       "whitelistedUsers": "Utilisateurs de la liste blanche",
       "whitelistedUsersHint": "Les utilisateurs ajoutés ici ont toujours accès à la plateforme, quelle que soit la règle.",
