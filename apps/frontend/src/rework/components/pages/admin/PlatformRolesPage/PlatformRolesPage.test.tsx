@@ -136,7 +136,7 @@ describe("PlatformRolesPage grant", () => {
     act(() => input().blur());
     act(() => input().focus());
 
-    const options = Array.from(container.querySelectorAll('[role="option"]')).map((option) => option.textContent);
+    const options = Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent);
     expect(options).toEqual(["Bob Durand (bob)", "Carol Diaz (carol)"]);
   });
 });

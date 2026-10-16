@@ -323,7 +323,7 @@ describe("AdminTeamsPage default teams for new users", () => {
     act(() => searchInput().focus());
 
     const section = defaultTeamSection()!;
-    const options = Array.from(section.querySelectorAll('[role="option"]')).map((option) => option.textContent);
+    const options = Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent);
     expect(options).toEqual(["Alpha", "Gamma"]);
     expect(section.textContent).toContain("Beta");
     expect(section.textContent).not.toContain("uid-");
