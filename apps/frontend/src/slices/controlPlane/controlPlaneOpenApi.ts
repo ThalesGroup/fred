@@ -424,6 +424,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}`, method: "DELETE" }),
     }),
+    editTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatch: build.mutation<
+      EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiResponse,
+      EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/registry`,
+        method: "PATCH",
+        body: queryArg.editTeamRegistryRequest,
+      }),
+    }),
     joinTeamControlPlaneV1TeamsTeamIdJoinPost: build.mutation<
       JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse,
       JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiArg
@@ -2403,6 +2413,12 @@ export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse = unknown;
 export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg = {
   teamId: string;
 };
+export type EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
+export type EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiArg = {
+  teamId: string;
+  editTeamRegistryRequest: EditTeamRegistryRequest;
+};
 export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse =
   /** status 200 Successful Response */ TeamWithPermissions;
 export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiArg = {
@@ -3931,6 +3947,12 @@ export type UpdateTeamRequest = {
   avatar_image_url?: string | null;
   team_delete_grace?: string | null;
   max_idle?: string | null;
+};
+export type EditTeamRegistryRequest = {
+  name?: string | null;
+  description?: string | null;
+  add_admin_ids?: string[];
+  remove_admin_ids?: string[];
 };
 export type RescueTeamAdminRequest = {
   user_id: string;
@@ -5911,6 +5933,7 @@ export const {
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
+  useEditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
   useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,

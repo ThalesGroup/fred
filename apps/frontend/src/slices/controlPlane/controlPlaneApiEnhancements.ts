@@ -507,6 +507,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
           : []),
       ],
     },
+    // Platform admin edit: name, description and admins of any team.
+    editTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatch: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformDefaultTeams", id: "LIST" },
+      ],
+    },
     // TEAM-09: self-service join — same tags as updateTeam so the marketplace
     // list (yourTeams/otherTeams split) and this team's own cache entry both
     // refresh with the caller now a member.
@@ -969,6 +978,7 @@ export const {
   useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation:
     useSetDefaultTeamsForNewUsersMutation,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
+  useEditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchMutation: useEditTeamRegistryMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
   useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation: useUploadUserAvatarMutation,
