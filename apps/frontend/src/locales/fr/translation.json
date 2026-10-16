@@ -2755,7 +2755,8 @@
         "table": {
           "name": "Équipe",
           "admins": "Administrateur(s)"
-        }
+        },
+        "pendingCount": "{{count}} en attente"
       },
       "defaultTeam": {
         "title": "Équipes par défaut des nouveaux utilisateurs",
@@ -2797,6 +2798,13 @@
           "conflictDetail": "Ce nom est déjà pris, ou l'équipe resterait sans administrateur actif.",
           "forbiddenDetail": "Seuls les administrateurs de la plateforme peuvent modifier les équipes."
         }
+      },
+      "pendingAdmin": "En attente",
+      "pendingAdminHint": "{{name}} n'a pas encore accepté la charte des administrateurs d'équipe.",
+      "refusals": {
+        "teamNameTaken": "Une équipe porte déjà ce nom.",
+        "lastActiveAdmin": "L'équipe doit garder au moins un administrateur actif.",
+        "pendingCharter": "Le nouvel administrateur n'a pas encore accepté la charte : gardez l'administrateur actuel jusqu'à son acceptation."
       }
     },
     "teamCard": {
@@ -2813,7 +2821,8 @@
         "title": "Décrivez votre équipe",
         "description": "Votre équipe a encore une description par défaut. Indiquez ses objectifs dans son usage de l'IA pour que chacun sache à quoi elle utilise la plateforme.",
         "action": "Ouvrir les paramètres de l'équipe"
-      }
+      },
+      "maxReached": "{{max}} caractères maximum"
     },
     "teamRoles": {
       "team_admin": "Admin",

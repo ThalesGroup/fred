@@ -126,14 +126,28 @@ export default function AdminTeamsPage() {
       },
       {
         label: t("rework.adminTeams.existingTeams.table.admins"),
-        cellRenderer: (team) => (
-          <AvatarGroup
-            avatars={(team.admins ?? []).map((admin) => ({
-              name: `${admin.first_name} ${admin.last_name}`,
-              imageUrl: admin.avatar_image_url,
-            }))}
-          />
-        ),
+        cellRenderer: (team) => {
+          const admins = (team.admins ?? []).map((admin) => ({
+            id: admin.id,
+            name: `${admin.first_name} ${admin.last_name}`,
+            imageUrl: admin.avatar_image_url,
+          }));
+          const pendingIds = new Set(team.pending_admin_ids ?? []);
+          const pending = admins.filter((admin) => pendingIds.has(admin.id));
+          return (
+            <div className={styles.adminsCell}>
+              <AvatarGroup avatars={admins.map(({ name, imageUrl }) => ({ name, imageUrl }))} />
+              {pending.length > 0 && (
+                <span
+                  className={styles.pendingAdmins}
+                  title={pending.map(({ name }) => t("rework.adminTeams.pendingAdminHint", { name })).join("\n")}
+                >
+                  {t("rework.adminTeams.existingTeams.pendingCount", { count: pending.length })}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       ...(admissionEnabled
         ? [

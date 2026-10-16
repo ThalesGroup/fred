@@ -256,6 +256,11 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           placeholder={t("rework.teamSettings.parameters.description.placeholder")}
           description={t("rework.teamDescription.helper")}
           error={descriptionError ?? undefined}
+          explanation={
+            (descriptionValue ?? "").length >= TEAM_DESCRIPTION_MAX_LENGTH
+              ? t("rework.teamDescription.maxReached", { max: TEAM_DESCRIPTION_MAX_LENGTH })
+              : undefined
+          }
           maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
           value={descriptionValue}
           rows={7}

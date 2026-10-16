@@ -27,6 +27,7 @@ import {
 } from "@core/utils/teamFields.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import {
   useCreateTeamMutation,
@@ -40,6 +41,13 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AdminTeamsPage.module.css";
 
+// The server's `detail` is English: these refusals show our own wording instead.
+const REFUSAL_KEYS: Record<string, string> = {
+  team_name_taken: "rework.adminTeams.refusals.teamNameTaken",
+  team_last_admin: "rework.adminTeams.refusals.lastActiveAdmin",
+  team_admin_pending_charter: "rework.adminTeams.refusals.pendingCharter",
+};
+
 interface TeamFormDialogProps {
   /** The team to edit; absent to create one. */
   team?: Team;
@@ -49,7 +57,7 @@ interface TeamFormDialogProps {
 /** Create or edit a team's name, description and admins. An edit sends only what changed. */
 export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
   const { t } = useTranslation();
-  const { showSuccess } = useToast();
+  const { showSuccess, showError } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
   const mode = team ? "edit" : "create";
@@ -58,6 +66,7 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
   // The default description is not something an admin wrote: start empty.
   const storedDescription = team && !team.description_is_placeholder ? (team.description ?? "") : "";
   const initialAdmins = useMemo(() => team?.admins ?? [], [team]);
+  const pendingAdminIds = useMemo(() => new Set(team?.pending_admin_ids ?? []), [team]);
   const [name, setName] = useState(team?.name ?? "");
   const [description, setDescription] = useState(storedDescription);
   // The minimum is only reported once the field has been left.
@@ -83,6 +92,8 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
   // Left empty on a team that still has the default description: it stays.
   const keepsPlaceholder = !!team?.description_is_placeholder && trimmedDescription === "";
   const descriptionValid = isValidTeamDescription(description) || keepsPlaceholder;
+  // `maxLength` stops typing silently: say why once the limit is reached.
+  const descriptionAtLimit = description.length >= TEAM_DESCRIPTION_MAX_LENGTH;
 
   const changes = useMemo((): EditTeamRegistryRequest => {
     if (!team) return {};
@@ -123,13 +134,19 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
         showSuccess({ summary: t(`${keys}.successSummary`) });
         onClose();
       },
-      onError: (error) =>
+      onError: (error) => {
+        const refusalKey = REFUSAL_KEYS[normalizeApiError(error).code ?? ""];
+        if (refusalKey) {
+          showError({ summary: t(`${keys}.errors.summary`), detail: t(refusalKey) });
+          return;
+        }
         notifyApiError(error, {
           summary: t(`${keys}.errors.summary`),
           fallbackDetail: t(`${keys}.errors.fallbackDetail`),
           forbiddenDetail: t(`${keys}.errors.forbiddenDetail`),
           conflictDetail: t(`${keys}.errors.conflictDetail`),
-        }),
+        });
+      },
     });
   };
 
@@ -160,6 +177,11 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
               ? t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH })
               : undefined
           }
+          explanation={
+            descriptionAtLimit
+              ? t("rework.teamDescription.maxReached", { max: TEAM_DESCRIPTION_MAX_LENGTH })
+              : undefined
+          }
           maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
@@ -168,34 +190,42 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
         />
         <div className={styles.adminsField}>
           <span className={styles.adminsLabel}>{t("rework.adminTeams.createTeam.adminsLabel")} *</span>
-          <Autocomplete<UserSummary>
-            textInput={{
-              placeholder: t("rework.adminTeams.createTeam.adminsPlaceholder"),
-              icon: { category: "outlined", type: "search" },
-            }}
-            onFieldValueChange={setAdminQuery}
-            options={suggestions.map((user) => ({
-              label: `${user.first_name} ${user.last_name} (${user.username})`,
-              value: user,
-              key: user.id,
-            }))}
-            onSelect={(user) => {
-              setAdmins((previous) => [...previous, user]);
-              setAdminQuery("");
-            }}
-          />
-          {admins.length > 0 && (
-            <ul className={styles.adminChipList}>
-              {admins.map((user) => (
-                <li key={user.id}>
-                  <Chip
-                    label={`${user.first_name} ${user.last_name}`}
-                    onRemove={() => setAdmins((previous) => previous.filter((u) => u.id !== user.id))}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className={styles.adminsPicker}>
+            <Autocomplete<UserSummary>
+              textInput={{
+                placeholder: t("rework.adminTeams.createTeam.adminsPlaceholder"),
+                icon: { category: "outlined", type: "search" },
+              }}
+              onFieldValueChange={setAdminQuery}
+              options={suggestions.map((user) => ({
+                label: `${user.first_name} ${user.last_name} (${user.username})`,
+                value: user,
+                key: user.id,
+              }))}
+              onSelect={(user) => {
+                setAdmins((previous) => [...previous, user]);
+                setAdminQuery("");
+              }}
+            />
+            {admins.length > 0 && (
+              <ul className={styles.adminChipList}>
+                {admins.map((user) => {
+                  const name = `${user.first_name} ${user.last_name}`;
+                  const pending = pendingAdminIds.has(user.id);
+                  return (
+                    <li key={user.id}>
+                      <Chip
+                        label={name}
+                        secondary={pending ? t("rework.adminTeams.pendingAdmin") : undefined}
+                        title={pending ? t("rework.adminTeams.pendingAdminHint", { name }) : undefined}
+                        onRemove={() => setAdmins((previous) => previous.filter((u) => u.id !== user.id))}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </Dialog>

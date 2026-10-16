@@ -2755,7 +2755,8 @@
         "table": {
           "name": "Team",
           "admins": "Admin(s)"
-        }
+        },
+        "pendingCount": "{{count}} pending"
       },
       "defaultTeam": {
         "title": "Default teams for new users",
@@ -2797,6 +2798,13 @@
           "conflictDetail": "This name is taken, or the team would be left without an active admin.",
           "forbiddenDetail": "Only platform administrators can edit teams."
         }
+      },
+      "pendingAdmin": "Pending",
+      "pendingAdminHint": "{{name}} has not accepted the team administrator charter yet.",
+      "refusals": {
+        "teamNameTaken": "A team already has this name.",
+        "lastActiveAdmin": "The team must keep at least one active admin.",
+        "pendingCharter": "The new admin has not accepted the charter yet: keep the current admin until they accept."
       }
     },
     "teamCard": {
@@ -2813,7 +2821,8 @@
         "title": "Describe your team",
         "description": "Your team still has a default description. State its objectives regarding its use of AI so everyone knows what it uses the platform for.",
         "action": "Open team settings"
-      }
+      },
+      "maxReached": "{{max}} characters maximum"
     },
     "teamRoles": {
       "team_admin": "Admin",

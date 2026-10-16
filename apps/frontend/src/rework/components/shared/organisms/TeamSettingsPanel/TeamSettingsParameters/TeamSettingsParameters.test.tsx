@@ -445,6 +445,15 @@ describe("TeamSettingsParameters description", () => {
     expect(container.textContent).toContain("rework.teamSettings.parameters.description.saveError");
   });
 
+  it("says why typing stops once the description reaches 500 characters", () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+    expect(container.textContent).not.toContain("rework.teamDescription.maxReached");
+
+    typeAndLeave("a".repeat(500));
+
+    expect(container.textContent).toContain("rework.teamDescription.maxReached");
+  });
+
   it("gives the description field seven rows", () => {
     render(<TeamSettingsParameters team={describedTeam()} />);
 

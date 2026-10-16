@@ -42,12 +42,22 @@ const h = vi.hoisted(() => ({
       admins: [{ id: "u-zoe", first_name: "Zoe", last_name: "Zed", username: "zoe" }],
     },
     { id: "uid-beta", name: "Beta" },
-    { id: "uid-gamma", name: "Gamma" },
+    {
+      id: "uid-gamma",
+      name: "Gamma",
+      admins: [
+        { id: "u-max", first_name: "Max", last_name: "Mill", username: "max" },
+        { id: "u-ian", first_name: "Ian", last_name: "Iles", username: "ian" },
+      ],
+      pending_admin_ids: ["u-ian"],
+    },
   ] as Record<string, unknown>[],
   defaultTeams: undefined as { team_id: string; name: string }[] | undefined,
   setDefaultTeams: vi.fn(),
   createTeam: vi.fn(),
   editTeam: vi.fn(),
+  showError: vi.fn(),
+  notifyApiError: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -55,17 +65,30 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+  useToast: () => ({ showSuccess: vi.fn(), showError: h.showError }),
 }));
 
 vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
-  useApiErrorToast: () => ({ notifyApiError: vi.fn() }),
+  useApiErrorToast: () => ({ notifyApiError: h.notifyApiError }),
 }));
 
 vi.mock("@core/hooks/useMutationAction.ts", () => ({
   useMutationAction: () => ({
-    runMutationAction: async ({ action, onSuccess }: { action: () => Promise<unknown>; onSuccess?: () => void }) => {
-      await action();
+    runMutationAction: async ({
+      action,
+      onSuccess,
+      onError,
+    }: {
+      action: () => Promise<unknown>;
+      onSuccess?: () => void;
+      onError?: (error: unknown) => void;
+    }) => {
+      try {
+        await action();
+      } catch (error) {
+        onError?.(error);
+        return;
+      }
       onSuccess?.();
     },
   }),
@@ -155,6 +178,8 @@ beforeEach(() => {
   h.createTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
   h.editTeam.mockReset();
   h.editTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.showError.mockReset();
+  h.notifyApiError.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -194,6 +219,13 @@ describe("AdminTeamsPage layout", () => {
     rerender();
     expect(editButtons()).toHaveLength(0);
     expect(buttonByText(container, "rework.adminTeams.createTeam.open")).toBeDefined();
+  });
+
+  it("marks the admins still awaiting the charter next to the avatars", () => {
+    render();
+    const marker = container.querySelector('[title="rework.adminTeams.pendingAdminHint"]');
+    expect(marker?.textContent).toBe("rework.adminTeams.existingTeams.pendingCount");
+    expect(container.querySelectorAll('[title="rework.adminTeams.pendingAdminHint"]')).toHaveLength(1);
   });
 });
 
@@ -363,6 +395,37 @@ describe("AdminTeamsPage team creation", () => {
     expect(submit().disabled).toBe(true);
     expect(dialog()!.textContent).toContain("rework.teamDescription.tooShort");
     expect(dialog()!.textContent).toContain("9 / 500");
+    expect(dialog()!.textContent).not.toContain("rework.teamDescription.maxReached");
+  });
+
+  it("says why typing stops once the description reaches 500 characters", async () => {
+    await openAndFillNameAndAdmin();
+    type(dialog()!.querySelector("textarea")!, "a".repeat(500));
+    expect(dialog()!.textContent).toContain("rework.teamDescription.maxReached");
+    expect(submit().disabled).toBe(false);
+  });
+
+  it("keeps the admin chips in their own spaced row under the search field", async () => {
+    await openAndFillNameAndAdmin();
+    const chips = dialog()!.querySelector("ul")!;
+    const search = dialog()!.querySelectorAll("input")[1];
+    expect(chips.parentElement).toBe(search.closest("[data-open]")!.parentElement);
+    expect(chips.parentElement!.className).toContain("adminsPicker");
+  });
+
+  it("shows our own message when the name is taken", async () => {
+    h.createTeam.mockReturnValue({
+      unwrap: () =>
+        Promise.reject({ status: 409, data: { detail: "Team 'Ops' already exists.", code: "team_name_taken" } }),
+    });
+    await openAndFillNameAndAdmin();
+    type(dialog()!.querySelector("textarea")!, "Automate the drafting of our monthly reports.");
+    await act(async () => submit().click());
+    expect(h.showError).toHaveBeenCalledWith({
+      summary: "rework.adminTeams.createTeam.errors.summary",
+      detail: "rework.adminTeams.refusals.teamNameTaken",
+    });
+    expect(h.notifyApiError).not.toHaveBeenCalled();
   });
 
   it("sends the trimmed description once it is valid and closes", async () => {
@@ -423,5 +486,42 @@ describe("AdminTeamsPage team edit", () => {
       teamId: "uid-alpha",
       editTeamRegistryRequest: { add_admin_ids: ["u-ada"], remove_admin_ids: ["u-zoe"] },
     });
+  });
+
+  it("marks a pending admin's chip", () => {
+    render();
+    act(() => editButtons()[2].click());
+    const chips = Array.from(dialog()!.querySelectorAll("ul li"));
+    const ian = chips.find((li) => li.textContent?.includes("Ian Iles"))!;
+    const max = chips.find((li) => li.textContent?.includes("Max Mill"))!;
+    expect(ian.textContent).toContain("rework.adminTeams.pendingAdmin");
+    expect(ian.querySelector('[title="rework.adminTeams.pendingAdminHint"]')).not.toBeNull();
+    expect(max.textContent).not.toContain("rework.adminTeams.pendingAdmin");
+  });
+
+  it.each([
+    ["team_last_admin", "rework.adminTeams.refusals.lastActiveAdmin"],
+    ["team_admin_pending_charter", "rework.adminTeams.refusals.pendingCharter"],
+  ])("shows our own message for the %s refusal", async (code, message) => {
+    h.editTeam.mockReturnValue({
+      unwrap: () => Promise.reject({ status: 409, data: { detail: "English detail.", code } }),
+    });
+    openAlpha();
+    type(dialog()!.querySelector("textarea")!, "Automates the drafting of every monthly report.");
+    await act(async () => save().click());
+    expect(h.showError).toHaveBeenCalledWith({ summary: "rework.adminTeams.editTeam.errors.summary", detail: message });
+  });
+
+  it("keeps the generic handling for an unknown refusal", async () => {
+    const error = { status: 500, data: { detail: "boom" } };
+    h.editTeam.mockReturnValue({ unwrap: () => Promise.reject(error) });
+    openAlpha();
+    type(dialog()!.querySelector("textarea")!, "Automates the drafting of every monthly report.");
+    await act(async () => save().click());
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.notifyApiError).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({ summary: "rework.adminTeams.editTeam.errors.summary" }),
+    );
   });
 });
