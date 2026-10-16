@@ -639,6 +639,11 @@ def _weigh(
             empty += 1
             cost += _EMPTY_ZONE
     for group in pattern.groups:
+        if not slide.items:
+            # No items: the list is removed whole, its zones unfilled like any other.
+            holes = sum(len(zones) for zones in group.items)
+            empty += holes
+            cost += _EMPTY_ZONE * holes
         for item, zones in zip(slide.items, group.items):
             holes = 0 if item.image else sum(1 for z in zones if z.role == "image")
             empty += holes

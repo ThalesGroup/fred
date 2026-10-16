@@ -36,7 +36,12 @@ from fred_capability_ppt_filler.builder.assign import Assignment, assign, infer_
 from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.changes import SlideChange, apply_changes
 from fred_capability_ppt_filler.builder.labelling import kind_fits_slots
-from fred_capability_ppt_filler.builder.models import TemplateInventory
+from fred_capability_ppt_filler.builder.models import (
+    Box,
+    RepeatGroup,
+    TemplateInventory,
+    Zone,
+)
 from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
 from pptx import Presentation
@@ -339,6 +344,36 @@ def test_a_bare_chart_keeps_the_centred_slide_and_text_alternates_the_sides(buil
     ]
     assert set(labels) == {"Left", "Right"}
     assert all(a != b for a, b in zip(labels, labels[1:]))
+
+
+def test_a_chart_without_items_avoids_the_slide_whose_list_would_stay_empty(builtin):
+    _, inventory = builtin
+    card = next(p for p in inventory.patterns if p.kind == "chart")
+    figure = [
+        Zone(key=f"ph:{k}", role=role, box=Box(x=700, y=300 + 100 * k, w=200, h=80))
+        for k, role in ((7, "number"), (8, "label"))
+    ]
+    listed = card.model_copy(
+        update={
+            "id": "slide:903",
+            "label": "Chart and figures",
+            "zones": [z for z in card.zones if z.role != "body"],
+            "groups": [
+                RepeatGroup(
+                    key="ph:7",
+                    count=2,
+                    item_zones=["number", "label"],
+                    items=[figure, figure],
+                    item_keys=["ph:7", "ph:9"],
+                )
+            ],
+        }
+    )
+    others = [p for p in inventory.patterns if p.kind != "chart"]
+    both = inventory.model_copy(update={"patterns": [*others, card, listed]})
+    assignment = assign(both, _plan(_chart_slide(REVENUE)), "off")
+    # Two figures left unfilled weigh more than one empty text box.
+    assert [p.label for p in assignment.patterns[1:] if p] == [card.label]
 
 
 def test_a_content_area_hosts_the_chart_when_no_chart_slide_exists():
