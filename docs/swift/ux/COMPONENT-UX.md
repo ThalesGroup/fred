@@ -122,7 +122,9 @@ _(none)_
 **Status:** `Functional`
 
 The action-oriented Dialog primitive now owns initial focus, Tab containment,
-Escape/scrim dismissal, and focus restoration. `Dialog.tsx` remains a thin FRED
+Escape/scrim dismissal, and focus restoration. `closeOnEscape={false}` (default
+`true`) keeps Escape from cancelling a form that is costly to lose; the scrim
+and the Cancel button still close it. `Dialog.tsx` remains a thin FRED
 wrapper supplying its translated Cancel default; neutral callers supply their
 own labels. Consumer-root portals inherit light/dark theme; the application
 without `.fred-ui` retains its body portal. An open Select gets the first Escape
@@ -2262,10 +2264,14 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
   uses. Refusals carrying a `code` (name taken, last active admin, sole
   replacement pending the charter) toast our localized message instead of
   the server's English `detail`; any other error keeps `useApiErrorToast`.
+  The description field is six rows tall. Escape does not close the dialog
+  (`closeOnEscape={false}`) so a draft is not lost by accident. The admin
+  search opens from 2 characters, with localized "searching" and "no match"
+  messages, and its menu is portaled so the dialog body never clips it.
 - **Description field.** A required `TextArea` under the team name:
   `x / 500` counter, a sentence on the team's objectives regarding AI between
   the label and the field (`TextArea` `description`, tied to the field with
-  `aria-describedby` — a full sentence never goes in the one-line `explanation`
+  `aria-describedby` with the error, which also sets `aria-invalid` — a full sentence never goes in the one-line `explanation`
   under the field, which cuts it off), and the minimum-length error once the
   field has been left. The request sends it trimmed. At 500 characters the
   `explanation` line reads "500 characters maximum", so the stop is never
@@ -2547,8 +2553,9 @@ worth of height, which (a) misaligned the input's visual center against the
 title/`LeaveTeamButton` row and (b) pushed `Autocomplete`'s `menu-popover`
 (`top: 100%` of the input's own wrapper) below the input with a large gap.
 Both now resolve automatically since the wrapper's rendered height matches
-the input exactly; the popover's only remaining offset is the deliberate
-`margin-top: var(--spacing-3xs)` in `Autocomplete.module.scss`.
+the input exactly. Since 2026-10-16 the menu renders in a portal with fixed
+positioning computed from the input (flipping above it when less than 240px
+remain below), like `Select`, so a dialog body's overflow no longer clips it.
 
 #### Open UX issues
 
@@ -2700,9 +2707,8 @@ generic `Dialog` primitive exists yet):
     overall height doesn't jump between the empty and one-candidate states.
 
   **No `overflow: hidden` at the dialog level** — everything is inset by
-  the dialog's own padding, and clipping would also cut off the
-  `Autocomplete` menu popover in the search row above the list (same class
-  of bug just fixed on the old inline field, see above).
+  the dialog's own padding. (The `Autocomplete` menu is portaled since
+  2026-10-16, so clipping no longer threatens it.)
 
 - **Actions:** `Annuler` (`outlined`/`on-surface`) / `Ajouter`
   (`filled`/`primary`, disabled while the list is empty or a submit is in
@@ -2837,8 +2843,7 @@ menu. Replaced with a derived value: `isOpen = isFocused && !dismissed &&
 queryValue.trim().length >= minQueryLength`, where `dismissed` is a
 one-shot flag set by Escape or a selection and cleared on the next
 focus/keystroke. New optional prop `minQueryLength` (default `0`, opens
-immediately on focus — e.g. `AdminTeamsPage`'s browsable full-user-list
-field) lets a consumer whose menu is backed by a server search that itself
+immediately on focus) lets a consumer whose menu is backed by a server search that itself
 only queries past a minimum length (this dialog, `minQueryLength={2}`)
 avoid flashing an empty "no options" state below that threshold. Affects
 every `Autocomplete` consumer, not just this dialog.
