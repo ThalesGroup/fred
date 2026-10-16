@@ -153,8 +153,9 @@ mesures), qui reste modifiable dans PowerPoint.
 - **Le template décide de l'apparence** : le graphique prend les couleurs
   d'accentuation du thème, dans l'ordre, et sa police de corps. Pour changer
   les couleurs de tous les graphiques, changez les couleurs d'accentuation du
-  thème. La mise en forme du graphique d'exemple n'est pas reprise : il montre
-  seulement où placer le graphique.
+  thème. Si votre graphique d'exemple est déjà du type demandé (par exemple
+  des barres pour un graphique en barres), sa mise en forme est conservée ;
+  sinon le graphique est reconstruit avec l'apparence du template.
 - Sans diapositive de graphique, une grande zone de contenu (celle du masque
   « Titre et contenu » de PowerPoint) reçoit le graphique quand la diapositive
   n'a pas d'autre texte.

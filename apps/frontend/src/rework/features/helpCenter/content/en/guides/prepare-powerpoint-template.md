@@ -146,8 +146,9 @@ editable in PowerPoint.
   that need no comment.
 - **The template decides the look**: the chart takes the theme's accent
   colours, in order, and its body font. To change the colours of every chart,
-  change the theme's accent colours. The example chart's own formatting is not
-  kept: it shows where the chart goes.
+  change the theme's accent colours. If your example chart is already the type
+  requested (say, a bar chart for a bar chart), its own formatting is kept;
+  otherwise the chart is rebuilt in the template's look.
 - Without a chart slide, a large content area (the one PowerPoint's "Title and
   Content" layout offers) takes the chart when the slide has no other text.
 - The agent never draws a chart elsewhere, and asks for fewer categories or
