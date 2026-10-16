@@ -926,6 +926,7 @@ def _build_runtime_services(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     binding: BoundRuntimeContext,
     *,
+    tuning: AgentTuning | None = None,
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     access_token: str | None = None,
@@ -1017,9 +1018,13 @@ def _build_runtime_services(
         credentials=credential_provider,
     )
     document_access_config = None
-    tuning = settings.tuning
+    effective_tuning = tuning if tuning is not None else settings.tuning
     if capability_registry is not None and "document_access" in capability_registry:
-        stored = tuning.capability_config.get("document_access") if tuning else None
+        stored = (
+            effective_tuning.capability_config.get("document_access")
+            if effective_tuning
+            else None
+        )
         document_access_config = (
             capability_registry.capability("document_access")
             .ConfigModel.model_validate(stored.config if stored else {})
@@ -4679,6 +4684,7 @@ async def _iterate_runtime_event_payloads_inner(
     services = _build_runtime_services(
         definition,
         binding,
+        tuning=tuning,
         team_id=resolved_team_id,
         registry=registry,
         access_token=access_token,

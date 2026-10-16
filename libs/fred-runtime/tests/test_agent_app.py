@@ -3479,6 +3479,76 @@ def test_build_runtime_services_wires_the_current_turns_binding_onto_the_invoker
         assert services_no_registry.agent_invoker is None
 
 
+def test_build_runtime_services_uses_persisted_document_source_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    from fred_sdk.contracts.models import AgentTuning, StoredCapabilityConfig
+    from pydantic import BaseModel
+
+    class DocumentConfig(BaseModel):
+        attachments: bool = True
+        team_documents: bool = True
+
+    class Registry:
+        def __contains__(self, capability_id: str) -> bool:
+            return capability_id == "document_access"
+
+        def capability(self, capability_id: str) -> Any:
+            assert capability_id == "document_access"
+            return SimpleNamespace(ConfigModel=DocumentConfig)
+
+    definition = _EchoAgent()
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        capability_config={
+            "document_access": StoredCapabilityConfig(
+                schema_version="0.2.0",
+                config={"attachments": True, "team_documents": False},
+            )
+        },
+    )
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(
+            session_id="s", user_id="alice", team_id="fredlab"
+        ),
+        portable_context=PortableContext(
+            request_id="r",
+            correlation_id="c",
+            actor="alice",
+            tenant="fredlab",
+            environment=PortableEnvironment.DEV,
+            session_id="s",
+            user_id="alice",
+            team_id="fredlab",
+        ),
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(
+        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    )
+    with TestClient(app):
+        services = agent_app_module._build_runtime_services(
+            definition,
+            binding,
+            team_id="fredlab",
+            tuning=tuning,
+            capability_registry=cast(Any, Registry()),
+        )
+
+    assert isinstance(services.tool_provider, agent_app_module.FredMcpToolProvider)
+    assert services.tool_provider._agent.document_access_config == {
+        "attachments": True,
+        "team_documents": False,
+    }
+
+
 @pytest.mark.asyncio
 async def test_build_runtime_services_binds_scratchpad_to_trusted_conversation_identity(
     monkeypatch: pytest.MonkeyPatch,
