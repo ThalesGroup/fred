@@ -2252,12 +2252,21 @@ bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
   nothing changed, and an edit sends only the changed fields and the admin
   diff. A default description starts empty and may stay empty. Each row
   shows the description on one ellipsed line under the name.
+  Admins still awaiting the charter carry a "Pending" secondary line on their
+  dialog chip, and the row shows "N pending" (`on-surface-retreat`,
+  body-small, names in its tooltip) after the avatars. The search field and
+  the admin chips sit `--spacing-s` apart, the gap the default-teams section
+  uses. Refusals carrying a `code` (name taken, last active admin, sole
+  replacement pending the charter) toast our localized message instead of
+  the server's English `detail`; any other error keeps `useApiErrorToast`.
 - **Description field.** A required `TextArea` under the team name:
   `x / 500` counter, a sentence on the team's objectives regarding AI between
   the label and the field (`TextArea` `description`, tied to the field with
   `aria-describedby` — a full sentence never goes in the one-line `explanation`
   under the field, which cuts it off), and the minimum-length error once the
-  field has been left. The request sends it trimmed.
+  field has been left. The request sends it trimmed. At 500 characters the
+  `explanation` line reads "500 characters maximum", so the stop is never
+  silent (dialog and team settings alike).
 - **`TeamSettingsParameters`.** Same counter and description, seven rows tall.
   For a team that still has the default description the field starts empty
   (the default text is not a value the admin wrote), and leaving it empty

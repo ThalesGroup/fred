@@ -31,6 +31,7 @@
 - [x] 5.1 Add a dated entry to `CONTROL-PLANE-PRODUCT-CONTRACT.md` and update REBAC.md "Team registry governance" and "Delegated admin roles"
 - [x] 5.2 Add the migration note under `docs/swift/ops/migrations/` and verify `make migration-check`
 - [x] 5.3 Run `make code-quality`, `make test` (control-plane, fred-core, frontend), `ruff --select I` and basedpyright; record results here
+- [x] 5.5 Owner UX fixes (2026-10-16): localized refusal toasts from a stable `code` on the three 409s; `Team.pending_admin_ids` and a pending marker in the table and dialog chips; "500 characters maximum" on the description field at its limit; `--spacing-s` between the admin search and its chips; contract §67 and COMPONENT-UX.md updated, client regenerated
 - [ ] 5.4 Manual check by the owner: create a team, edit name, description and admins, try removing the last admin
 
 ## Verification (2026-10-16)
@@ -41,3 +42,4 @@
 - `make test`: control-plane-backend 1992 passed, 10 skipped; fred-core 1274 passed, 1 skipped; frontend 4361 passed, 6 failed (2 AgentFormModal files: missing Redux provider for `useTeamRoutingPolicyQuery`; fail identically on `origin/swift`, untouched here). `AdminTeamsPage.test.tsx` 19 passed.
 - `make migration-check`: valid. `openspec validate platform-admin-team-edit --strict`: valid.
 - Not run: the validation scenario (`validation/scenarios/test_team_registry_authz.py`, needs a live stack) and task 5.4 (owner manual check).
+- Owner UX fixes (task 5.5): root `make code-quality` exit 0 (incl. basedpyright, `ruff --select I` clean on touched files); control-plane `make test` 1994 passed, 10 skipped (new: stable refusal codes on the route, pending admins in the bulk listing); frontend vitest on `AdminTeamsPage`, `TeamSettingsPanel`, `core/errors`, `core/hooks`: 315 passed (new: localized refusal toasts per code and generic fallback, pending marker in row and chip, 500-character message in dialog and settings, chips in their own spaced row).

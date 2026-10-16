@@ -4874,6 +4874,17 @@ race after the pre-check answers 409 with the admins already changed, as for
 (ids only). REBAC.md "Team registry governance" records the authority; the
 OpenSpec change `platform-admin-team-edit` the scenarios.
 
+**Refusal codes.** The 409 bodies of `TeamAlreadyExistsError` and
+`TeamAdminConstraintError`, on every route that raises them, carry a stable
+`code` next to the English `detail`: `team_name_taken`, `team_last_admin`,
+`team_admin_pending_charter` (sole replacement still owing the charter). The
+admin Teams dialog maps them to its own localized messages.
+
+**Pending admins.** `Team.pending_admin_ids` (`string[]`, default `[]`) lists
+the ids in `admins` that still hold `pending_team_admin` only. Filled by the
+team listings that resolve membership (their `admins` include nominees);
+empty on the single-team projection, whose `admins` are accepted admins only.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation

@@ -78,3 +78,26 @@ The admin Teams page SHALL show a "Create team" action in its header to every ca
 
 - **WHEN** a team manager without `platform_admin` opens the page
 - **THEN** no row shows an "Edit" action
+
+#### Scenario: Description limit reached
+
+- **WHEN** an admin types a description up to 500 characters
+- **THEN** the field's information line says "500 characters maximum" instead of stopping silently
+
+### Requirement: Registry refusals are localized
+
+A 409 refusing a team name already taken, the removal of the last active team admin, or a sole replacement still owing the charter SHALL carry a stable `code` (`team_name_taken`, `team_last_admin`, `team_admin_pending_charter`) next to its `detail`. The team dialog SHALL show its own French or English message for each code, and SHALL keep the generic error handling for any other failure.
+
+#### Scenario: Last admin refusal in French
+
+- **WHEN** a platform admin using the French interface removes a team's only active admin and saves
+- **THEN** the response is 409 with `code` `team_last_admin`, and the toast shows the French message, not the server's English `detail`
+
+### Requirement: Pending admins are distinguishable
+
+The team listing SHALL expose `pending_admin_ids`, the admins listed who have not accepted the team administrator charter. The admin Teams page SHALL mark them: a "N pending" text after the row's avatars and a "Pending" line on their chip in the dialog.
+
+#### Scenario: Nominee awaiting the charter
+
+- **WHEN** a team has one active admin and one nominee who has not accepted the charter
+- **THEN** its row shows "1 pending" next to the avatars and, in the edit dialog, only the nominee's chip reads "Pending"
