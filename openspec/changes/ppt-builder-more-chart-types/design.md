@@ -46,14 +46,14 @@ chart: {type: scatter|bubble, title?, x_title, x_unit?, y_title, unit?,
 | bubble sizes > 0 | `chart.series[1].points[2].size is 0; a bubble needs a positive size` |
 | size given on scatter / missing on bubble | `points carry size: use type 'bubble'` / `chart.series[0].points[4] has no size` |
 | caps | scatter ≤ 50 points, ≥ 3; bubble ≤ 15 points; scatter/bubble ≤ `MAX_SERIES` (4) series; radar 3–8 categories (`radar: 2 criteria; a radar needs 3 to 8 — use 'column' or 'bar'`), ≤ 3 series (the polygons overlap) |
-| point labels | `label` ≤ 2 words; shown as data labels when the chart has ≤ 12 points (pending Q2) |
+| point labels | `label` ≤ 2 words; shown as data labels when the chart has ≤ 12 points (owner decision Q2) |
 
 Fit (`charts.fit_problems`): `stacked_bar` uses the `bar` room; radar category labels get a quarter of the plot width, one line; scatter/bubble have no category room, only axis titles (each a line of the plot), series names and title, measured as today. Caps are builder constants, never settings; nothing is cut or rescaled.
 
 ### D4. One measure per chart, applied per axis (extends storytelling D3)
 
 - `stacked_bar` and `radar` share one value axis: they keep the rule unchanged and join `_SPREAD_TYPES` (radar is where "price vs. score out of 10" mixes happen).
-- `scatter`/`bubble` relate two (three) measures by nature: the rule becomes **one measure per axis**. `story._units` checks the units written in x, in y and in size separately (`x values mix units (€, %)…`); the spread question does not apply (wide ranges are normal on an XY axis), and the required axis titles replace it as the guard that the reader knows what each axis measures. Pending Q1.
+- `scatter`/`bubble` relate two (three) measures by nature: the rule becomes **one measure per axis**. `story._units` checks the units written in x, in y and in size separately (`x values mix units (€, %)…`); the spread question does not apply (wide ranges are normal on an XY axis), and the required axis titles replace it as the guard that the reader knows what each axis measures. Owner decision Q1.
 - `story.slide_figures` reads x, y and size of every point, so the source spot-check and `illustrative` caption work unchanged. Takeaway rules unchanged.
 - Intents: `highlight` names a series (several series) or a point `label`; `sort` is not applied to scatter/bubble/radar (agent note, as for `line`); `show` stays pie/doughnut only.
 
@@ -84,7 +84,7 @@ Fit (`charts.fit_problems`): `stacked_bar` uses the `bar` room; radar category l
 
 `ANALYSIS_VERSION` 15, background refresh (D20 of the base change); no setting, table or dependency. Migration note impact none → patch.
 
-## Open Questions for the owner
+## Owner decisions (2026-10-16)
 
-- **Q1. Two measures on a scatter.** Proposed: a scatter or bubble may show two (three) different measures, one per axis, each axis with one unit and a required title; the "do these values measure the same thing?" question is skipped for them. Is that acceptable as the exception to "one measure per chart"?
-- **Q2. Dot names on scatter and bubble.** Proposed: each dot may carry a short name (a product, a country) shown next to it when the chart has 12 dots or fewer, and hidden above that (too crowded). Keep, change the threshold, or never show names?
+- **Q1. Two measures on a scatter — yes.** A scatter or bubble may show one measure per axis (x, y, size); the rule becomes one unit per axis plus both axis titles required, and the spread question is skipped for these types.
+- **Q2. Dot names on scatter and bubble — yes.** A point's short `label` is shown next to it when the chart has 12 points or fewer, hidden above that.
