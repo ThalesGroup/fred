@@ -200,6 +200,29 @@ describe("DeckSummaryButton", () => {
     ]);
   });
 
+  it("words a table or figure intent shown otherwise or not at all", async () => {
+    const slide: BuiltSlide = {
+      number: 3,
+      part: 1,
+      parts: 1,
+      title: "Offres",
+      kind: "table",
+      template: "Table",
+      notes: [
+        { code: "intent_shown_otherwise", field: "total_row" },
+        { code: "intent_not_shown", field: "trend" },
+        { code: "intent_shown_otherwise", field: "takeaway" },
+      ],
+    };
+    const dialog = open(await mount("en", [slide]));
+    const notes = [...dialog.querySelectorAll("ol > li li")].map((li) => li.textContent);
+    expect(notes).toEqual([
+      "The total row is shown in bold: the table's style has no total formatting.",
+      "The rising or falling arrows asked on the figures could not be shown.",
+      "An emphasis you asked for is shown in bold instead.",
+    ]);
+  });
+
   it("says where a slide's figures could not be confirmed", async () => {
     const slide: BuiltSlide = {
       number: 2,
@@ -243,6 +266,14 @@ describe("DeckSummaryButton", () => {
       "intent_not_shown_highlight",
       "intent_not_shown_sort",
       "intent_not_shown_stacked_as",
+      "intent_not_shown_total_row",
+      "intent_not_shown_highlight_row",
+      "intent_not_shown_highlight_column",
+      "intent_not_shown_trend",
+      "intent_shown_otherwise",
+      "intent_shown_otherwise_total_row",
+      "intent_shown_otherwise_highlight_row",
+      "intent_shown_otherwise_highlight_column",
       "illustrative_data",
       "figures_unverified",
       "wide_range_chart",

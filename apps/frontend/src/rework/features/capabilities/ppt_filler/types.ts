@@ -53,7 +53,7 @@ export interface BuildNote {
   count?: number | null;
   /** The requested kind, for `other_kind`. */
   kind?: string | null;
-  /** The plan field an `intent_not_shown` note is about: "highlight", "sort"... */
+  /** The plan field an intent note is about: "highlight", "total_row", "trend"... */
   field?: string | null;
 }
 

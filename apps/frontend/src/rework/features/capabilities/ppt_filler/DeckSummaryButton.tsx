@@ -43,8 +43,19 @@ const PLAIN_NOTES = new Set([
   "wide_range_chart",
 ]);
 
-// Intent fields with their own wording; any other field gets the generic one.
-const INTENT_FIELDS = new Set(["highlight", "sort", "stacked_as"]);
+// Per intent code, the fields with their own wording; any other field gets the generic one.
+const INTENT_FIELDS: Record<string, Set<string>> = {
+  intent_not_shown: new Set([
+    "highlight",
+    "sort",
+    "stacked_as",
+    "total_row",
+    "highlight_row",
+    "highlight_column",
+    "trend",
+  ]),
+  intent_shown_otherwise: new Set(["total_row", "highlight_row", "highlight_column"]),
+};
 
 function kindLabel(t: TFunction, kind: string): string {
   return t(`capability.ppt_builder.kinds.${kind}`, { defaultValue: kind });
@@ -61,9 +72,10 @@ function noteText(t: TFunction, note: BuildNote, slide: BuiltSlide): string | nu
   if (note.code === "chart_type_changed") {
     return t(`${NOTES}.chart_type_changed`, { asked: note.kind ?? "" });
   }
-  if (note.code === "intent_not_shown") {
-    const field = note.field && INTENT_FIELDS.has(note.field) ? `_${note.field}` : "";
-    return t(`${NOTES}.intent_not_shown${field}`);
+  const intents = INTENT_FIELDS[note.code];
+  if (intents) {
+    const field = note.field && intents.has(note.field) ? `_${note.field}` : "";
+    return t(`${NOTES}.${note.code}${field}`);
   }
   if (!PLAIN_NOTES.has(note.code)) return null;
   return t(`${NOTES}.${note.code}`, note.count != null ? { count: note.count } : undefined);
