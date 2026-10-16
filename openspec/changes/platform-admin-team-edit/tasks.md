@@ -1,6 +1,6 @@
 ## 0. Preconditions
 
-- [ ] 0.1 Owner answers the open questions in proposal.md (question 1 needs reviewer agreement); update specs/design if an answer differs from the recommendation
+- [x] 0.1 Owner answers recorded in proposal.md "Owner decisions" (2026-10-16), all as recommended; question 1 agreed at the daily meeting
 - [ ] 0.2 PR #3071 is merged; rebase this branch on `origin/swift` and verify `TeamDescription` and `@core/utils/teamFields.ts` exist
 
 ## 1. Authorization model

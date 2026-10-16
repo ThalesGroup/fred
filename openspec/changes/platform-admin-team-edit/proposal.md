@@ -11,7 +11,7 @@ Depends on PR #3071 (issue #3067), still open on 2026-10-16: it makes the team d
 - **New registry edit route.** `PATCH /teams/{team_id}/registry`, platform admin only, accepts a new name, a new description, admins to add and admins to remove. Name and description follow the rules of `PATCH /teams/{team_id}` (trimmed, unique name with 409 on collision, description 20-500). A team always keeps at least one active team admin. Admins added follow the team administrator charter (pending until accepted). Every save writes one audit event.
 - **New organization permission** `can_edit_team_registry`, held by `platform_admin` only. `team_manager` keeps creating teams but does not edit them.
 - **Condensed page.** Header with the create button, the default-teams setting kept compact, then the teams table. No new design token.
-- **Contract change, explicit:** REBAC.md says platform admins never reassign an existing team's admins (only the zero-admin rescue). This change makes that an audited registry action for `platform_admin`. See "Open questions for the owner", question 1.
+- **Contract change, explicit:** REBAC.md says platform admins never reassign an existing team's admins (only the zero-admin rescue). This change makes that an audited registry action for `platform_admin`. Agreed by the owner and the team on 2026-10-16 (Owner decisions, 1).
 
 ## Capabilities
 
@@ -33,11 +33,11 @@ None. `team-description` (introduced by PR #3071) is reused unchanged: its lengt
 - **Help Center**: none. The page is admin-only and the Help Center targets end users.
 - **Validation scenario**: `validation/scenarios/test_team_registry_authz.py` gains the new route.
 
-## Open questions for the owner
+## Owner decisions (2026-10-16)
 
-1. **May a platform admin change the admins of any team, at any time?** Today the security rules forbid it on purpose: whoever names the admins of a team can name themselves, then give themselves access to the team's agents and documents. The only exception is a team left with no admin at all. *Recommendation:* allow it, for platform admins only (not team managers), with an audit event on every change. This needs the reviewer's (dimitri-tombroff) agreement because it reverses a documented rule; if refused, the dialog edits name and description only and admins stay team-managed.
-2. **May a platform admin remove themselves, or the last admin?** *Recommendation:* removing oneself is allowed like any other admin; removing the last active admin is refused, the team must always keep one (same rule as team settings).
-3. **Replacing the only admin by someone who has not accepted the charter yet.** That person is only "pending" until they accept, so the team would have no active admin and the save is refused. *Recommendation:* keep the refusal with a clear message ("keep the current admin until the new one has accepted the charter"); do not weaken the rule.
-4. **Does a rename need the uniqueness check?** *Recommendation:* yes, the same as today when a team admin renames their team: two teams with the same name are refused.
-5. **Show the description in the teams table?** *Recommendation:* yes, one truncated line under the team name in the name column, no extra column, so the page stays compact.
-6. **Team managers.** *Recommendation:* they keep the "Create team" button but see no "Edit" action.
+1. **A platform admin may change the admins of any team, at any time** (agreed by the team at the daily meeting, 2026-10-16). Platform admins only, never team managers; every change writes an audit event. This reverses the REBAC.md rule, documented in the same change.
+2. Removing oneself is allowed; removing the last active admin is refused (the team always keeps one).
+3. Replacing the only admin by someone who has not accepted the charter is refused with a clear message (keep the current admin until the new one has accepted).
+4. A rename keeps the uniqueness check.
+5. The description shows as one truncated line under the team name, no extra column.
+6. Team managers keep "Create team" and get no "Edit" action.
