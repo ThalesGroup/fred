@@ -106,6 +106,8 @@ pub enum Role {
     Analyst,
     /// Technical role of an organization: names its admins, reads nothing.
     Owner,
+    #[serde(rename = "personal_space_creator")]
+    PersonalSpaceCreator,
 }
 
 impl Role {
@@ -116,6 +118,7 @@ impl Role {
             Role::Admin => "admin",
             Role::Analyst => "analyst",
             Role::Owner => "owner",
+            Role::PersonalSpaceCreator => "personal_space_creator",
         }
     }
 
@@ -126,6 +129,7 @@ impl Role {
             "admin" => Some(Role::Admin),
             "analyst" => Some(Role::Analyst),
             "owner" => Some(Role::Owner),
+            "personal_space_creator" => Some(Role::PersonalSpaceCreator),
             _ => None,
         }
     }
@@ -202,7 +206,9 @@ pub fn revocation_blocked(role: Role, roles_on_space: &[Role], holds_role_in_chi
     let keeps_content = roles_on_space
         .iter()
         .any(|r| *r != role && r.grants_content());
-    role.grants_content() && !keeps_content && holds_role_in_child
+    role.grants_content()
+        && !keeps_content
+        && (holds_role_in_child || roles_on_space.contains(&Role::PersonalSpaceCreator))
 }
 
 #[cfg(test)]

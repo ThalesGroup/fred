@@ -278,15 +278,20 @@ route family without exposing paths, tokens or upload contents.
 
 ## Authorization store publication
 
-`sync_schema_on_init` allows initialization of an entirely empty installation: manager
-creates a fresh store, writes its model, initializes the platform guard and publishes
-the store/model IDs in one SQL commit. Existing bindings pin the exact model even
-when a newer model exists. An installation with spaces, bootstrap state or tuples but
-no binding, or a binding whose model differs from the built model, refuses startup:
-manager never converts existing authorization data. On a dedicated local k3d, the
-[local data reset](08-operations.md) clears manager data and authorization together.
-Changing the configured logical store name does not select a different
-authorization source behind an existing binding.
+`sync_schema_on_init` allows empty initialization and the exact additive
+personal-eligibility upgrade. Existing bindings pin the model even when arbitrary
+newer models exist. Upgrade verifies the published predecessor, publishes in the
+same store and commits the model ID under the platform SQL lock. Spaces, tuples
+and guard revisions are preserved. Concurrent initializers converge. Failed SQL
+publication leaves the previous pointer usable for retry; an unused model grants nothing.
+
+Ordinary loads, CLI import and create-org never synchronize models. Unknown models,
+changed logical store names and existing data without publication are refused.
+Stop old writers, enable `security.rebac.sync_schema_on_init` on manager startup,
+then deploy matching API/CLI/frontend versions. Old binaries reject the upgraded
+pinned model. Rollback requires coordinated SQL/OpenFGA backup restoration with
+writers stopped, not a pointer edit or shared-data reset. See the
+[migration guide](../swift/ops/migrations/manager-personal-space.md).
 
 ## First-user application entry
 

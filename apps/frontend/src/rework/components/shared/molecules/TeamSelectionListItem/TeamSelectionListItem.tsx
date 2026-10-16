@@ -33,7 +33,9 @@ const ROLE_PRIORITY: Record<string, number> = {
 
 interface TeamSelectionListItemProps {
   /** Where clicking the row navigates — into the team (or the personal space). */
-  redirection: To;
+  redirection?: To;
+  onActivate?: () => void;
+  pending?: boolean;
   /** Display name: the team name, or the personal-space label. */
   name: string;
   /** Explicit presentation text for organization/team/project membership rows. */
@@ -60,6 +62,8 @@ interface TeamSelectionListItemProps {
  */
 export default function TeamSelectionListItem({
   redirection,
+  onActivate,
+  pending = false,
   name,
   description,
   roles = [],
@@ -79,8 +83,8 @@ export default function TeamSelectionListItem({
       ? t("rework.teamRoles.team_member")
       : heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
 
-  return (
-    <Link to={redirection} className={`${styles.item}${personal ? ` ${styles.itemPersonal}` : ""}`} aria-label={name}>
+  const content = (
+    <>
       {personal ? (
         <UserAvatar name={avatarName} size="small" imageUrl={imgUrl} />
       ) : imgUrl ? (
@@ -92,6 +96,23 @@ export default function TeamSelectionListItem({
         <span className={styles.name}>{name}</span>
         {!personal && <span className={styles.roles}>{description ?? roleLabel}</span>}
       </span>
+    </>
+  );
+  const className = `${styles.item}${personal ? ` ${styles.itemPersonal}` : ""}`;
+  return onActivate ? (
+    <button
+      type="button"
+      className={`${className} ${styles.command}`}
+      aria-label={name}
+      aria-busy={pending}
+      disabled={pending}
+      onClick={onActivate}
+    >
+      {content}
+    </button>
+  ) : (
+    <Link to={redirection!} className={className} aria-label={name}>
+      {content}
     </Link>
   );
 }

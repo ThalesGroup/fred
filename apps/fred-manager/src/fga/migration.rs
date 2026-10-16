@@ -1,5 +1,5 @@
 //! Store publication. Startup binds the published store and model, or publishes a fresh
-//! store for an entirely empty installation; existing state is never converted.
+//! store for an empty installation. Exact additive model upgrades preserve tuples.
 use super::*;
 use crate::bootstrap;
 use sqlx::PgPool;
@@ -9,7 +9,9 @@ impl Fga {
     pub async fn initialize(self, pool: &PgPool) -> Result<Self> {
         let mut tx = bootstrap::locked(pool).await?;
         if let Some(binding) = binding(&mut *tx).await? {
-            return self.bind(binding).await;
+            let bound = self.bind(binding, Some(&mut tx)).await?;
+            tx.commit().await?;
+            return Ok(bound);
         }
         anyhow::ensure!(
             !self.ambiguous_source,
@@ -64,10 +66,14 @@ impl Fga {
         let binding = binding(pool)
             .await?
             .context("initialize fred-manager authorization with serve before import")?;
-        self.bind(binding).await
+        self.bind(binding, None).await
     }
 
-    async fn bind(mut self, (source, active, model): (String, String, String)) -> Result<Self> {
+    async fn bind(
+        mut self,
+        (source, active, model): (String, String, String),
+        upgrade: Option<&mut sqlx::Transaction<'_, sqlx::Postgres>>,
+    ) -> Result<Self> {
         anyhow::ensure!(
             self.configured_store == source,
             "configured OpenFGA store differs from published authorization store"
@@ -81,17 +87,46 @@ impl Fga {
             .await?;
         let actual = &reply["authorization_model"];
         let expected: Value = serde_json::from_str(include_str!("../../openfga/model.json"))?;
-        anyhow::ensure!(
+        let matches = |expected: &Value| {
             actual["id"] == model
                 && actual["schema_version"] == expected["schema_version"]
                 && normalized_model(actual["type_definitions"].clone())
                     == normalized_model(expected["type_definitions"].clone())
                 && actual
                     .get("conditions")
-                    .is_none_or(|c| c.is_null() || c.as_object().is_some_and(|m| m.is_empty())),
-            "published OpenFGA model is incompatible; reset local Fred data"
-        );
-        self.model = Some(model);
+                    .is_none_or(|c| c.is_null() || c.as_object().is_some_and(|m| m.is_empty()))
+        };
+        if matches(&expected) {
+            self.model = Some(model);
+        } else {
+            let previous: Value = serde_json::from_str(include_str!(
+                "../../openfga/model-before-personal-eligibility.json"
+            ))?;
+            anyhow::ensure!(
+                matches(&previous),
+                "published OpenFGA model is incompatible; operator reconciliation required"
+            );
+            let tx = upgrade.context("published model requires initialization with sync_schema_on_init before ordinary loading")?;
+            let reply = self
+                .post(
+                    &format!("/stores/{}/authorization-models", self.store),
+                    expected,
+                )
+                .await?;
+            let model = reply["authorization_model_id"]
+                .as_str()
+                .context("missing upgraded model id")?;
+            sqlx::query("update authorization_store set model_id = $1 where singleton")
+                .bind(model)
+                .execute(&mut **tx)
+                .await?;
+            self.model = Some(model.to_owned());
+            tracing::info!(
+                store_id = self.store,
+                model_id = model,
+                "[REBAC] Additive authorization model published"
+            );
+        }
         Ok(self)
     }
 }
@@ -104,4 +139,38 @@ async fn binding<'e>(
     )
     .fetch_optional(executor)
     .await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn personal_model_is_an_exact_additive_upgrade() {
+        let previous: Value = serde_json::from_str(include_str!(
+            "../../openfga/model-before-personal-eligibility.json"
+        ))
+        .unwrap();
+        let mut current: Value =
+            serde_json::from_str(include_str!("../../openfga/model.json")).unwrap();
+        let space = current["type_definitions"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|t| t["type"] == "space")
+            .unwrap();
+        for key in ["personal_space_creator", "can_create_personal_space"] {
+            assert!(
+                space["relations"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(key)
+                    .is_some()
+            );
+            space["metadata"]["relations"]
+                .as_object_mut()
+                .unwrap()
+                .remove(key);
+        }
+        assert_eq!(normalized_model(current), normalized_model(previous));
+    }
 }

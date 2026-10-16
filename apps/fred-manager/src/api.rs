@@ -311,6 +311,7 @@ async fn me(
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct MySpace {
+    organization_id: Uuid,
     #[serde(flatten)]
     space: Space,
     /// Effective roles, including those descending from an ancestor.
@@ -338,6 +339,7 @@ async fn my_spaces(
             .await?
             .into_iter()
             .map(|m| MySpace {
+                organization_id: m.space.organization,
                 space: m.space,
                 roles: m.roles,
                 inherited_roles: m.inherited_roles,
@@ -396,7 +398,8 @@ struct CreatePersonalSpace {
     post, path = "/me/personal-space",
     request_body = CreatePersonalSpace,
     responses(
-        (status = 201, description = "Success", body = Space),
+        (status = 200, description = "Existing personal space", body = Space),
+        (status = 201, description = "Created personal space", body = Space),
         (status = 400, description = "Request failed", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
@@ -407,12 +410,20 @@ struct CreatePersonalSpace {
     )
 )]
 async fn create_personal_space(
-    State(s): State<AppState>,
+    State(s): State<GovernanceState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreatePersonalSpace>,
 ) -> AppResult<(StatusCode, Json<Space>)> {
-    let space = spaces::create_personal_space(&s.pool, &s.fga, &user, req.organization_id).await?;
-    Ok((StatusCode::CREATED, Json(space)))
+    let (space, created) =
+        spaces::create_personal_space(&s.pool, &s.fga, &user, req.organization_id).await?;
+    Ok((
+        if created {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
+        Json(space),
+    ))
 }
 
 fn parse_role(role: &str) -> AppResult<Role> {
@@ -1211,6 +1222,7 @@ fn governance_routes() -> OpenApiRouter<GovernanceState> {
         .routes(routes!(bootstrap_platform_admin))
         .routes(routes!(me))
         .routes(routes!(my_spaces))
+        .routes(routes!(create_personal_space))
         .routes(
             routes!(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
                 crate::blueprint::MAX_ARCHIVE + 64 * 1024,
@@ -1227,7 +1239,6 @@ fn governance_routes() -> OpenApiRouter<GovernanceState> {
 fn content_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(health))
-        .routes(routes!(create_personal_space))
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
         .routes(routes!(list_folders))

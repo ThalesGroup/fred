@@ -12,18 +12,64 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem";
-import { useMySpacesQuery } from "../../../../../../slices/fredManager/fredManagerApiEnhancements";
+import { useNavigate } from "react-router-dom";
+import { KeyCloakService } from "../../../../../../security/KeycloakService";
+import {
+  useMySpacesQuery,
+  useMeQuery,
+  useCreatePersonalSpaceMutation,
+} from "../../../../../../slices/fredManager/fredManagerApiEnhancements";
 import styles from "./HomeNavPanel.module.scss";
 
 export default function HomeNavPanel() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const spaces = useMySpacesQuery();
+  const me = useMeQuery();
+  const navigate = useNavigate();
+  const [openPersonal] = useCreatePersonalSpaceMutation();
+  const [opening, setOpening] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const active = useRef<string | undefined>(me.data?.user_id);
+  const pending = useRef(false);
+  useEffect(() => {
+    active.current = me.data?.user_id;
+    setFailed(false);
+    setOpening(false);
+    return () => {
+      active.current = undefined;
+    };
+  }, [me.data?.user_id]);
+  const org = spaces.data?.find((space) => space.kind === "organization");
+  const personal = spaces.data?.find((space) => space.personal_owner === me.data?.user_id);
+  const canOpen =
+    !spaces.isError && !me.isError && org && me.data && (org.roles.includes("personal_space_creator") || personal);
+  const activatePersonal = async () => {
+    if (!canOpen || pending.current) return;
+    const user = me.data.user_id;
+    pending.current = true;
+    setOpening(true);
+    setFailed(false);
+    try {
+      const space = await openPersonal({ createPersonalSpace: { organization_id: org.id } }).unwrap();
+      if (active.current !== user) return;
+      const memberships = await spaces.refetch().unwrap();
+      if (!memberships.some((membership) => membership.id === space.id)) {
+        throw new Error("Opened space is not in current memberships");
+      }
+      if (active.current === user) navigate({ pathname: "/home", search: `?space=${space.id}` });
+    } catch {
+      if (active.current === user) setFailed(true);
+    } finally {
+      pending.current = false;
+      if (active.current === user) setOpening(false);
+    }
+  };
   const byId = new Map(spaces.data?.map((space) => [space.id, space.name]));
   const ordered = spaces.isError
     ? []
@@ -36,6 +82,19 @@ export default function HomeNavPanel() {
   return (
     <div className={styles.panel}>
       <NavPanelHeader title={t("rework.manager.spaces")} />
+      {canOpen && (
+        <div className={styles.personalSpace}>
+          <TeamSelectionListItem
+            personal
+            name={t("rework.sidebar.team.userTeam")}
+            avatarName={KeyCloakService.GetUserFullName()}
+            pending={opening}
+            onActivate={() => void activatePersonal()}
+          />
+          {opening && <p role="status">{t("common.loading")}</p>}
+          {failed && <p role="alert">{t("rework.manager.unavailable")}</p>}
+        </div>
+      )}
       <div className={styles.teamSort}>
         <SearchInput
           size="xs"
@@ -48,7 +107,7 @@ export default function HomeNavPanel() {
       </div>
       <div className={styles.scroll}>
         {ordered
-          .filter((space) => space.name.toLowerCase().includes(search.trim().toLowerCase()))
+          .filter((space) => !space.personal_owner && space.name.toLowerCase().includes(search.trim().toLowerCase()))
           .map((space) => (
             <div key={space.id} className={styles[space.kind]}>
               <TeamSelectionListItem

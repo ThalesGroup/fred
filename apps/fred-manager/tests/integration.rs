@@ -217,9 +217,21 @@ async fn a_member_with_a_personal_space_can_leave_the_organization() {
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
     grant(&e, org.id, Role::Member, "bob").await;
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "bob",
+    )
+    .await
+    .unwrap();
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "bob", org.id)
         .await
-        .unwrap();
+        .unwrap()
+        .0;
 
     let blocked = spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Member, "bob").await;
     assert!(matches!(blocked, Err(AppError::Conflict(_))));
@@ -242,6 +254,16 @@ async fn a_member_with_a_personal_space_can_leave_the_organization() {
             .await
             .unwrap();
     }
+    spaces::revoke(
+        &e.pool,
+        &e.fga,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "bob",
+    )
+    .await
+    .unwrap();
     spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Member, "bob")
         .await
         .unwrap();
@@ -479,8 +501,9 @@ async fn complete_role_permission_matrix_and_space_isolation() {
         Role::Admin,
         Role::Analyst,
         Role::Owner,
+        Role::PersonalSpaceCreator,
     ];
-    for mask in 0..32 {
+    for mask in 0..64 {
         let user = format!("space-{mask}");
         let held: Vec<_> = roles
             .iter()
@@ -515,6 +538,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                 }
                 SP::ReadConversationsForEvaluation => *role == Role::Analyst,
                 SP::Own => *role == Role::Owner,
+                SP::CreatePersonalSpace => *role == Role::PersonalSpaceCreator,
             });
             assert_eq!(
                 e.fga.check_space(&user, permission, space).await.unwrap(),
@@ -590,9 +614,21 @@ async fn analyst_membership_is_content_and_personal_roles_remain_fixed() {
     spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Analyst, "analyst")
         .await
         .unwrap();
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "analyst",
+    )
+    .await
+    .unwrap();
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "analyst", org.id)
         .await
-        .unwrap();
+        .unwrap()
+        .0;
     assert!(matches!(
         spaces::grant(
             &e.pool,
@@ -1846,9 +1882,21 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
         .await
         .unwrap()
         .unwrap();
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "user-0",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "user-0",
+    )
+    .await
+    .unwrap();
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "user-0", org.id)
         .await
-        .unwrap();
+        .unwrap()
+        .0;
     // A personal space is not a child: a team may share its name and stays distinct.
     let homonym=parse_blueprint(br#"{"users":[{"username":"new","password":"private-password"}],"organizations":[{"ref":"org","name":"Many","roles":{"new":["admin","member","owner"]}}],"teams":[{"ref":"user-0","name":"user-0","organization":"org","roles":{"new":["admin"]}}],"projects":[]}"#).unwrap();
     importer.run(&homonym).await.unwrap();
@@ -2121,7 +2169,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
                     + body["deletes"]["tuple_keys"].as_array().map_or(0, Vec::len)
             })
             .sum();
-        assert_eq!(operations, 90);
+        assert_eq!(operations, 91);
     }
     let demo = named_space(&e.pool, &e.fga, None, "Demo")
         .await
@@ -3875,9 +3923,21 @@ async fn descending_roles_reach_projects_and_member_stays_local() {
     assert!(!reads(&e, "claire", team.id).await && !reads(&e, "claire", project.id).await);
 
     // A personal space inherits nothing, and its organization still manages it.
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "pat",
+    )
+    .await
+    .unwrap();
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "pat", org.id)
         .await
-        .unwrap();
+        .unwrap()
+        .0;
     assert_eq!(
         (personal.parent_id, personal.path.clone()),
         (None, vec![personal.id])
@@ -3892,7 +3952,7 @@ async fn descending_roles_reach_projects_and_member_stays_local() {
             .unwrap()
     );
     let again = spaces::create_personal_space(&e.pool, &e.fga, "pat", org.id).await;
-    assert!(matches!(again, Err(AppError::Conflict(_))));
+    assert_eq!(again.unwrap().0.id, personal.id);
     spaces::revoke(&e.pool, &e.fga, "alice", personal.id, Role::Editor, "pat")
         .await
         .unwrap();
@@ -3954,9 +4014,21 @@ async fn memberships_list_inherited_spaces_with_their_paths() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Analyst, "ana").await;
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "ana",
+    )
+    .await
+    .unwrap();
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "ana", org.id)
         .await
-        .unwrap();
+        .unwrap()
+        .0;
     let listed: std::collections::BTreeMap<Uuid, spaces::Membership> =
         spaces::memberships(&e.pool, &e.fga, "ana")
             .await
@@ -3974,7 +4046,12 @@ async fn memberships_list_inherited_spaces_with_their_paths() {
         );
         assert_eq!((&m.roles, &m.inherited_roles), (&roles, &inherited));
     };
-    expect(org.id, vec![org.id], vec![Role::Analyst], vec![]);
+    expect(
+        org.id,
+        vec![org.id],
+        vec![Role::Analyst, Role::PersonalSpaceCreator],
+        vec![],
+    );
     expect(
         team.id,
         vec![org.id, team.id],
@@ -4030,9 +4107,21 @@ async fn scope_follows_ancestors_and_levels_only_narrow_it() {
             .unwrap(),
         vec![org.id, project.id]
     );
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "bob",
+    )
+    .await
+    .unwrap();
     let personal = spaces::create_personal_space(&e.pool, &e.fga, "bob", org.id)
         .await
-        .unwrap();
+        .unwrap()
+        .0;
     assert_eq!(scope(personal.id, None).await.unwrap(), vec![personal.id]);
     assert!(
         scope(personal.id, Some(vec![Organization]))
@@ -4143,6 +4232,17 @@ async fn hierarchy_reads_have_fixed_request_budgets() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Analyst, "ana").await;
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "ana",
+    )
+    .await
+    .unwrap();
     spaces::create_personal_space(&e.pool, &e.fga, "ana", org.id)
         .await
         .unwrap();
@@ -5133,4 +5233,473 @@ async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
             .unwrap()
             .is_none()
     );
+}
+
+// Proves: I4, I6, I20, I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn personal_open_requires_explicit_eligibility_and_never_repairs_revocation() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "priya").await;
+    assert!(matches!(
+        spaces::create_personal_space(&e.pool, &e.fga, "priya", org.id).await,
+        Err(AppError::Forbidden)
+    ));
+    assert!(
+        spaces::grant(
+            &e.pool,
+            &e.fga,
+            None,
+            "alice",
+            org.id,
+            Role::PersonalSpaceCreator,
+            "outsider"
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        spaces::grant(
+            &e.pool,
+            &e.fga,
+            None,
+            "alice",
+            team.id,
+            Role::PersonalSpaceCreator,
+            "priya"
+        )
+        .await
+        .is_err()
+    );
+    grant(&e, org.id, Role::PersonalSpaceCreator, "priya").await;
+    assert!(
+        !e.fga
+            .check_space(
+                "priya",
+                fred_manager::roles::SpacePermission::CreatePersonalSpace,
+                team.id
+            )
+            .await
+            .unwrap()
+    );
+    assert!(matches!(
+        spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Member, "priya").await,
+        Err(AppError::Conflict(_))
+    ));
+    let (a, b) = tokio::join!(
+        spaces::create_personal_space(&e.pool, &e.fga, "priya", org.id),
+        spaces::create_personal_space(&e.pool, &e.fga, "priya", org.id)
+    );
+    let ((personal, created_a), (other, created_b)) = (a.unwrap(), b.unwrap());
+    assert_eq!(personal.id, other.id);
+    assert_ne!(created_a, created_b);
+    assert_eq!(personal.path, vec![personal.id]);
+    assert!(!reads(&e, "alice", personal.id).await);
+    spaces::revoke(
+        &e.pool,
+        &e.fga,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "priya",
+    )
+    .await
+    .unwrap();
+    spaces::revoke(&e.pool, &e.fga, "alice", personal.id, Role::Editor, "priya")
+        .await
+        .unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    let (again, created) = spaces::create_personal_space(&e.pool, &observed, "priya", org.id)
+        .await
+        .unwrap();
+    assert!(!created);
+    assert_eq!(again.id, personal.id);
+    assert_eq!(proxy.fault.lock().await.writes, 0);
+    assert!(
+        !e.fga
+            .check("priya", Permission::Write, personal.id)
+            .await
+            .unwrap()
+    );
+    spaces::revoke(&e.pool, &e.fga, "alice", personal.id, Role::Member, "priya")
+        .await
+        .unwrap();
+    grant(&e, org.id, Role::PersonalSpaceCreator, "priya").await;
+    assert!(matches!(
+        spaces::create_personal_space(&e.pool, &observed, "priya", org.id).await,
+        Err(AppError::Forbidden)
+    ));
+    assert_eq!(proxy.fault.lock().await.writes, 0);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from space where personal_owner = 'priya'")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        1
+    );
+    grant(&e, org.id, Role::Admin, "governor").await;
+    assert!(matches!(
+        spaces::create_personal_space(&e.pool, &e.fga, "governor", org.id).await,
+        Err(AppError::Forbidden)
+    ));
+    let foreign = spaces::create_organization(&e.pool, &e.fga, "Other", "carol")
+        .await
+        .unwrap();
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "carol",
+        foreign.id,
+        Role::PersonalSpaceCreator,
+        "carol",
+    )
+    .await
+    .unwrap();
+    let (private, _) = spaces::create_personal_space(&e.pool, &e.fga, "carol", foreign.id)
+        .await
+        .unwrap();
+    assert_ne!(private.id, personal.id);
+    assert_eq!(private.path, vec![private.id]);
+    assert_eq!(private.organization, foreign.id);
+    assert!(matches!(
+        spaces::create_personal_space(&e.pool, &e.fga, "priya", foreign.id).await,
+        Err(AppError::Forbidden)
+    ));
+    let listed = spaces::memberships(&e.pool, &e.fga, "carol").await.unwrap();
+    assert!(listed.iter().all(|m| m.space.organization == foreign.id));
+    assert!(listed.iter().all(|m| m.space.id != personal.id));
+}
+
+// Proves: I6, I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
+    let e = env().await;
+    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+        .await
+        .unwrap();
+    for user in ["priya", "bob", "carol"] {
+        grant(&e, org.id, Role::Member, user).await;
+        grant(&e, org.id, Role::PersonalSpaceCreator, user).await;
+        if user != "priya" {
+            spaces::create_personal_space(&e.pool, &e.fga, user, org.id)
+                .await
+                .unwrap();
+        }
+    }
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    for existing in [false, true] {
+        *proxy.fault.lock().await = support::fga_proxy::Fault {
+            read_page_size: Some(1),
+            ..Default::default()
+        };
+        let (_, created) = spaces::create_personal_space(&e.pool, &observed, "priya", org.id)
+            .await
+            .unwrap();
+        assert_eq!(created, !existing);
+        let fault = proxy.fault.lock().await;
+        assert_eq!(fault.calls.get("check"), Some(&2));
+        assert_eq!(fault.writes, if existing { 0 } else { 1 });
+        // Exact guard: 1 page; roles: 2/4 pages; organization links: 2/3 pages.
+        // Existing personal placement adds one Read; no empty terminal page.
+        assert_eq!(
+            fault.calls.get("read"),
+            Some(&(if existing { 9 } else { 5 }))
+        );
+        assert!(fault.reads.iter().any(|r| {
+            r["continuation_token"]
+                .as_str()
+                .is_some_and(|s| !s.is_empty())
+        }));
+        if !existing {
+            let body = &fault.written[0];
+            assert_eq!(
+                body["writes"]["tuple_keys"].as_array().unwrap().len()
+                    + body["deletes"]["tuple_keys"].as_array().unwrap().len(),
+                5
+            );
+        }
+    }
+    let held = hold_organization_lock(&e, org.id).await;
+    let pool = e.pool.clone();
+    let fga = observed.clone();
+    let pending =
+        tokio::spawn(
+            async move { spaces::create_personal_space(&pool, &fga, "priya", org.id).await },
+        );
+    wait_for_advisory_waiter(&e.pool).await;
+    delete_tuple(&e, "priya", "member", &format!("space:{}", org.id)).await;
+    held.commit().await.unwrap();
+    assert!(matches!(pending.await.unwrap(), Err(AppError::Forbidden)));
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn additive_personal_model_publication_preserves_data_and_retries_sql_failure() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let previous: serde_json::Value = serde_json::from_str(include_str!(
+        "../openfga/model-before-personal-eligibility.json"
+    ))
+    .unwrap();
+    let reply: serde_json::Value = reqwest::Client::new()
+        .post(format!(
+            "{}/stores/{}/authorization-models",
+            e.openfga,
+            e.fga.store_id()
+        ))
+        .json(&previous)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let old = reply["authorization_model_id"].as_str().unwrap();
+    sqlx::query("update authorization_store set model_id=$1")
+        .bind(old)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let source = Fga::connect(
+        &e.openfga,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap();
+    assert!(source.clone().load(&e.pool).await.is_err());
+    sqlx::raw_sql("create function reject_model_update() returns trigger language plpgsql as $$ begin raise exception 'test publication failure'; end $$; create trigger reject_model_update before update on authorization_store for each row execute function reject_model_update()").execute(&e.pool).await.unwrap();
+    assert!(source.clone().initialize(&e.pool).await.is_err());
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("select model_id from authorization_store")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        old
+    );
+    assert!(reads(&e, "alice", org.id).await);
+    sqlx::raw_sql("drop trigger reject_model_update on authorization_store; drop function reject_model_update()").execute(&e.pool).await.unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let source = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap();
+    let (a, b) = tokio::join!(
+        source.clone().initialize(&e.pool),
+        source.initialize(&e.pool)
+    );
+    let (a, b) = (a.unwrap(), b.unwrap());
+    assert_eq!(a.store_id(), e.fga.store_id());
+    assert_eq!(b.store_id(), a.store_id());
+    assert_eq!(
+        proxy.fault.lock().await.calls.get("authorization-models"),
+        Some(&1)
+    );
+    assert!(a.check("alice", Permission::Read, org.id).await.unwrap());
+    assert!(
+        Fga::connect(
+            &e.openfga,
+            &e.store,
+            false,
+            false,
+            None,
+            Some(Duration::from_secs(5))
+        )
+        .await
+        .unwrap()
+        .load(&e.pool)
+        .await
+        .is_ok()
+    );
+}
+
+// Proves: I4, I17, I18
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn import_orders_personal_eligibility_after_content_across_failed_batches() {
+    let e = env().await;
+    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+        .await
+        .unwrap();
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let server = support::IdentityServer::start().await;
+    let auth = server.auth().await;
+    let directory = server.directory();
+    let token = server.token("root");
+    let mut users = Vec::new();
+    let mut roles = serde_json::Map::new();
+    for i in 0..96 {
+        let user = format!("user-{i:03}");
+        server.users.lock().await.insert(user.clone(), user.clone());
+        users.push(serde_json::json!({"username":user}));
+        roles.insert(
+            user,
+            if i == 95 {
+                serde_json::json!(["personal_space_creator", "member"])
+            } else {
+                serde_json::json!(["member"])
+            },
+        );
+    }
+    let mut value = serde_json::json!({"users":users,"organizations":[{"ref":"tsn","name":"TSN","roles":roles}],"teams":[],"projects":[]});
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    let importer = fred_manager::provisioning::Importer {
+        pool: &e.pool,
+        fga: &observed,
+        directory: &directory,
+        auth: &auth,
+        bearer: &token,
+    };
+    value["organizations"][0]["roles"]["user-095"] = serde_json::json!(["personal_space_creator"]);
+    let invalid = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();
+    assert!(importer.run(&invalid).await.is_err());
+    assert_eq!(proxy.fault.lock().await.writes, 0);
+    value["organizations"][0]["roles"]["user-095"] =
+        serde_json::json!(["personal_space_creator", "member"]);
+    let bundle = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();
+    proxy.fault.lock().await.fail_at = 98; // 96 identity fences, then two role batches.
+    assert!(importer.run(&bundle).await.is_err());
+    assert_eq!(proxy.fault.lock().await.writes, 98);
+    assert!(reads(&e, "user-095", org.id).await);
+    assert!(
+        !e.fga
+            .check_space(
+                "user-095",
+                fred_manager::roles::SpacePermission::CreatePersonalSpace,
+                org.id
+            )
+            .await
+            .unwrap()
+    );
+    proxy.fault.lock().await.fail_at = 0;
+    importer.run(&bundle).await.unwrap();
+    assert!(
+        e.fga
+            .check_space(
+                "user-095",
+                fred_manager::roles::SpacePermission::CreatePersonalSpace,
+                org.id
+            )
+            .await
+            .unwrap()
+    );
+}
+
+// Proves: I4, I6
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn personal_grant_budget_and_failed_creation_preserve_authority() {
+    let e = env().await;
+    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+        .await
+        .unwrap();
+    grant(&e, org.id, Role::Member, "priya").await;
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    proxy.fault.lock().await.calls.clear();
+    spaces::grant(
+        &e.pool,
+        &observed,
+        None,
+        "alice",
+        org.id,
+        Role::PersonalSpaceCreator,
+        "priya",
+    )
+    .await
+    .unwrap();
+    {
+        let fault = proxy.fault.lock().await;
+        assert_eq!(fault.calls.get("check"), Some(&1));
+        assert_eq!(fault.calls.get("read"), Some(&5));
+        assert_eq!(fault.writes, 1);
+    }
+    *proxy.fault.lock().await = support::fga_proxy::Fault {
+        fail_at: 1,
+        ..Default::default()
+    };
+    assert!(
+        spaces::create_personal_space(&e.pool, &observed, "priya", org.id)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from space where personal_owner = 'priya'")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    proxy.fault.lock().await.fail_at = 0;
+    let (personal, created) = spaces::create_personal_space(&e.pool, &observed, "priya", org.id)
+        .await
+        .unwrap();
+    assert!(created && reads(&e, "priya", personal.id).await);
 }

@@ -32,10 +32,9 @@ use crate::{
 
 const PARENT_REQUIRED: &str = "the user must first be a member of the parent space";
 const SIBLING_NAME: &str = "a space with this name already exists here";
-const PERSONAL_EXISTS: &str = "a personal space already exists in this organization";
 const OWNER_ON_ORGANIZATIONS: &str = "only an organization has owners";
 const PERSONAL_FIXED: &str = "a personal space has a fixed single member";
-const CHILDREN_FIRST: &str = "remove the user from the child spaces first";
+const CHILDREN_FIRST: &str = "remove dependent child roles and personal-space eligibility first";
 
 async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> AppResult<()> {
     if fga.check(user, permission, space).await? {
@@ -518,7 +517,7 @@ pub async fn create_personal_space(
     fga: &Fga,
     caller: &str,
     organization_id: Uuid,
-) -> AppResult<Space> {
+) -> AppResult<(Space, bool)> {
     let org = load(pool, fga, organization_id).await?;
     domain::check_parent(SpaceKind::Team, Some(&org))?;
     let mut tx = pool.begin().await?;
@@ -527,12 +526,19 @@ pub async fn create_personal_space(
     require_context(&mut *tx, fga, caller, org.id).await?;
     require(fga, caller, Permission::Read, org.id).await?;
     let personal = fga.linked_to(org.id, true).await?;
-    if db::spaces(&mut *tx, &personal)
+    if let Some(row) = db::spaces(&mut *tx, &personal)
         .await?
-        .iter()
-        .any(|s| s.personal_owner.as_deref() == Some(caller))
+        .into_iter()
+        .find(|s| s.personal_owner.as_deref() == Some(caller))
     {
-        return Err(AppError::Conflict(PERSONAL_EXISTS.into()));
+        require(fga, caller, Permission::Read, row.id).await?;
+        return Ok((Space::placed(row, &[], Some(org.id)), false));
+    }
+    if !fga
+        .check_space(caller, SpacePermission::CreatePersonalSpace, org.id)
+        .await?
+    {
+        return Err(AppError::Forbidden);
     }
     let id = Uuid::new_v4();
     let space = Space::placed(
@@ -562,7 +568,7 @@ pub async fn create_personal_space(
         organization: org.id,
     }];
     persist(tx, fga, &mut guard, &space, &links, &tuples, Some(caller)).await?;
-    Ok(space)
+    Ok((space, true))
 }
 
 pub async fn grant(
@@ -594,6 +600,18 @@ pub async fn grant(
         && !holds_parent_content(fga, target, parent).await?
     {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
+    }
+    if role == Role::PersonalSpaceCreator {
+        if space.kind != SpaceKind::Organization {
+            return Err(AppError::BadRequest(
+                "personal-space eligibility belongs to an organization".into(),
+            ));
+        }
+        if !holds_parent_content(fga, target, space.id).await? {
+            return Err(AppError::Conflict(
+                "personal-space eligibility requires direct organization content membership".into(),
+            ));
+        }
     }
     may_attach(&mut *tx, fga, target, space.organization).await?;
     fga.write(

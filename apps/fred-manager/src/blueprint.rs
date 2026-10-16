@@ -230,7 +230,9 @@ impl Bundle {
                 let mut roles = raw.roles;
                 for (subject, grants) in &mut roles {
                     if !names.contains(subject)
-                        || (kind != SpaceKind::Organization && grants.contains(&Role::Owner))
+                        || (kind != SpaceKind::Organization
+                            && (grants.contains(&Role::Owner)
+                                || grants.contains(&Role::PersonalSpaceCreator)))
                     {
                         return Err(Invalid);
                     }

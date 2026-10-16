@@ -229,7 +229,9 @@ export type MeApiResponse = /** status 200 Success */ Me;
 export type MeApiArg = void;
 export type OnboardingStatusApiResponse = /** status 200 undefined */ OnboardingStatus;
 export type OnboardingStatusApiArg = void;
-export type CreatePersonalSpaceApiResponse = /** status 201 Success */ Space;
+export type CreatePersonalSpaceApiResponse = /** status 200 Existing personal space */
+  | Space
+  | /** status 201 Created personal space */ Space;
 export type CreatePersonalSpaceApiArg = {
   createPersonalSpace: CreatePersonalSpace;
 };
@@ -331,7 +333,8 @@ export type SpacePermission =
   | "run_evaluations"
   | "manage_evaluation_corpus"
   | "read_conversations_for_evaluation"
-  | "own";
+  | "own"
+  | "create_personal_space";
 export type SpaceCheck = {
   permission: SpacePermission;
   space_id: string;
@@ -432,10 +435,11 @@ export type OnboardingStatus = {
 export type CreatePersonalSpace = {
   organization_id: string;
 };
-export type Role = "member" | "editor" | "admin" | "analyst" | "owner";
+export type Role = "member" | "editor" | "admin" | "analyst" | "owner" | "personal_space_creator";
 export type MySpace = Space & {
   /** The subset of `roles` held only through an ancestor. */
   inherited_roles: Role[];
+  organization_id: string;
   /** Effective roles, including those descending from an ancestor. */
   roles: Role[];
 };

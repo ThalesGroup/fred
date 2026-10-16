@@ -110,6 +110,18 @@ describe("generated fred-manager client", () => {
     store.dispatch(api.util.resetApiState());
   });
 
+  it("does not replay personal-space creation on 401", async () => {
+    const { store, fetch } = setup(null);
+    fetch.mockImplementationOnce(async () => new Response(JSON.stringify({ detail: "expired" }), { status: 401 }));
+    const result = await store.dispatch(
+      api.endpoints.createPersonalSpace.initiate({ createPersonalSpace: { organization_id: "org" } }),
+    );
+    expect(result).toEqual({ error: { status: 401, data: { detail: "expired" } } });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(KeyCloakService.ensureFreshToken).toHaveBeenCalledExactlyOnceWith(30);
+    store.dispatch(api.util.resetApiState());
+  });
+
   it("allows an omitted ingestion body through the typed enhancement", async () => {
     const { store, fetch } = setup(null);
     fetch.mockImplementationOnce(async () => new Response(null, { status: 202 }));
@@ -142,6 +154,7 @@ describe("generated fred-manager client", () => {
       {
         id: "org-id",
         kind: "organization",
+        organization_id: "org",
         name: "Demo",
         parent_id: null,
         personal_owner: null,

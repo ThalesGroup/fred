@@ -96,7 +96,7 @@ flowchart TB
 `roles` defines typed platform roles and scoped capabilities. `platform` serializes
 role mutations with bootstrap. `keycloak` owns one shared HTTP client and a synchronized
 service-token cache. `api::governance_router` groups identity, platform administration
-space listing, ZIP import and self-capability routes independently of the Temporal client.
+space listing, personal opening, ZIP import and self-capability routes independently of the Temporal client.
 
 The same `utoipa-axum` registrations build the runtime routers and OpenAPI paths.
 `utoipa::ToSchema` derives request/response schemas from the Rust DTOs. The binary's
@@ -107,7 +107,7 @@ tool and registers the slice in the shared Redux store. A handwritten enhancemen
 encodes the import's generated binary argument as FormData; paths, methods and
 response types remain generated.
 The generation target corrects the code generator's required-body typing for the
-optional ingestion request and fails if that upstream output changes. The bootstrap and import
+optional ingestion request and fails if that upstream output changes. The bootstrap, personal-space and import
 endpoints disable automatic retry on 401 because expiry can follow committed
 effects; the shared base query still refreshes before each explicit attempt.
 
@@ -195,7 +195,7 @@ sequenceDiagram
 ## Memberships
 
 `GET /me/spaces` lists every space where the caller holds a direct role or one
-descending from an ancestor, with its path. `roles` holds the effective roles and
+descending from an ancestor, with its path and managing `organization_id`. `roles` holds the effective roles and
 `inherited_roles` those held only through an ancestor. Manager reads the caller's
 direct roles, each directly granted space's `parent` (or a personal space's
 `organization`) link, then the children of each organization and team where the
@@ -217,6 +217,15 @@ Creation writes the new space's `parent` link (or a personal space's `organizati
 link) in the same Write as its initial grants, after checking that no committed
 sibling has the same name, or that the owner has no personal space in that
 organization. Children whose SQL row never committed are ignored.
+
+`POST /me/personal-space` captures the organization guard before context and
+permission reads under its SQL lock. It requires unique context and organization
+read, exhausts organization-link pages and joins committed personal rows. An
+existing caller-owned row requires current personal read and returns 200 without
+SQL/FGA writes. An absent row additionally requires `can_create_personal_space`,
+then guarded creation returns 201. Lost read never causes role repair or replacement.
+The UI waits for membership refresh before selection, ignores late completion after
+account changes and requires explicit retry on error.
 
 ```mermaid
 sequenceDiagram
@@ -240,7 +249,8 @@ sequenceDiagram
 
 Revocation also reads the target's roles and the space's children under the lock
 (and, for an organization, the personal spaces it manages), and refuses with 409
-when the target would keep a role there without a direct content role here. Removing the last administrator of a non-personal space is refused with 409 (I14).
+when the target would keep a role there without direct content here, or retain
+personal creation eligibility without organization content membership. Removing the last administrator of a non-personal space is refused with 409 (I14).
 Removing a role never grants a replacement content role. A personal space is managed from its organization: an organization admin may
 revoke its owner's roles, nobody may grant any (I6).
 
@@ -456,6 +466,7 @@ remote effects have the dispatch boundary described by I5 in [invariants](09-qua
 | D15 | Import uses authenticated, read-only initialization and a distinct Keycloak service identity. | Service-client credentials must not substitute for Fred operator authority. | Bootstrap and compatible schema/model initialization precede import; Temporal is not involved. |
 | D16 | Provisioning is additive and replayable, with identity phases separate from the space transaction. | Keycloak, SQL and OpenFGA do not share a transaction. | Partial effects remain; replay preserves committed IDs and repairs grants. Rolled-back space IDs are not reused. |
 | D17 | Strict guard deletion and role changes share one OpenFGA Write. | A consumed revision rejects stale decisions without copying the role set. | One guard Read and two additional tuple operations per guarded scope; conflicting attempts reauthorize on replay. |
-| D18 | Startup publishes a fresh store only for an empty installation, once, in SQL. | Existing state cannot be converted safely into a different model. | Existing state without a matching publication requires a data reset. |
+| D18 | SQL pins store/model; synchronization permits an exact additive predecessor upgrade. | Preserve spaces and grants while refusing unknown model changes. | Upgrade keeps the store and commits its model pointer under the platform lock; ordinary loads stay read-only. |
 | D19 | One version-2 ZIP with explicit organizations, teams, projects and direct roles serves CLI and HTTP. | Reconciliation needs unambiguous parent scope and complete preflight. | Legacy formats are explicitly unsupported; bundle-local references do not add persistent identity or imply content grants. |
 | D20 | The unique organization is derived from canonical direct roles and full placement of committed spaces. Home uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
+| D21 | Personal creation requires explicit organization eligibility; opening reuses current authority. | Some people have no personal workspace; opening must not undo revocations. | First explicit open creates, repeats write nothing, and organization content remains a prerequisite. |

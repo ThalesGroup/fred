@@ -121,7 +121,8 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
             Role::Editor,
             Role::Admin,
             Role::Analyst,
-            Role::Owner
+            Role::Owner,
+            Role::PersonalSpaceCreator
         ])
     );
     assert_eq!(

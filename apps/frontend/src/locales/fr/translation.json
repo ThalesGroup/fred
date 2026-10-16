@@ -4190,6 +4190,7 @@
         "project": "Projet"
       },
       "roles": {
+        "personal_space_creator": "Création d'espace personnel",
         "admin": "Administrateur",
         "member": "Membre",
         "editor": "Éditeur",

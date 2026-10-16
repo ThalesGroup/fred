@@ -56,8 +56,14 @@ A role on a child requires a direct content role on its parent: a person is a
 member of a team before holding a project role, even when an ancestor role already
 lets them read the team. A personal space accepts no additional member and inherits
 nothing; its organization can revoke its owner's access, and the owner leaves the
-organization only after leaving the personal space. Every non-personal space
+organization only after leaving the personal space and removing creation eligibility. Every non-personal space
 retains an administrator.
+
+Personal-space creation is an explicit organization entitlement. The demo declares
+it for Priya in the organization's roles. First activation creates one private
+workspace; further activations reuse it under current read authority. Import and
+organization creation grant no implicit entitlement and create no personal space.
+See the [Priya journey](02-user-journeys.md#priya-opens-her-personal-space).
 
 The tree lives in OpenFGA as `parent` links; SQL stores only each space's identity,
 kind, name and personal owner. A personal space has an `organization` link instead,

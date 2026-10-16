@@ -105,9 +105,10 @@ pub enum SpacePermission {
     ReadConversationsForEvaluation,
     /// Technical administration of an organization.
     Own,
+    CreatePersonalSpace,
 }
 impl SpacePermission {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Read,
         Self::Write,
         Self::Manage,
@@ -115,6 +116,7 @@ impl SpacePermission {
         Self::ManageEvaluationCorpus,
         Self::ReadConversationsForEvaluation,
         Self::Own,
+        Self::CreatePersonalSpace,
     ];
     pub fn relation(self) -> &'static str {
         match self {
@@ -125,6 +127,7 @@ impl SpacePermission {
             Self::ManageEvaluationCorpus => "can_manage_evaluation_corpus",
             Self::ReadConversationsForEvaluation => "can_read_conversations_for_evaluation",
             Self::Own => "can_own",
+            Self::CreatePersonalSpace => "can_create_personal_space",
         }
     }
 }

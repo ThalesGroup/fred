@@ -290,6 +290,14 @@
           "computedUserset": {
             "relation": "owner"
           }
+        },
+        "personal_space_creator": {
+          "this": {}
+        },
+        "can_create_personal_space": {
+          "computedUserset": {
+            "relation": "personal_space_creator"
+          }
         }
       },
       "metadata": {
@@ -337,6 +345,13 @@
             ]
           },
           "owner": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "personal_space_creator": {
             "directly_related_user_types": [
               {
                 "type": "user"

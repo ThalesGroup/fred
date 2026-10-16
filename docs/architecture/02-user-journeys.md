@@ -62,6 +62,25 @@ See [personal consent and bootstrap](03-security.md),
 [automated journey acceptance](09-quality.md#provisioning-ui-acceptance).
 Deployment commands remain in the [manager README](../../apps/fred-manager/README.md).
 
+## Priya opens her personal space
+
+After demo import and personal consent, Priya enters Demo at `/home`. Her declared
+organization role includes `personal_space_creator`. The existing Personal space
+entry calls generated `POST /me/personal-space`, then refreshes `GET /me/spaces`
+before selecting the returned UUID. First opening returns 201; subsequent openings
+return 200 with the same UUID. The existing selected-space detail appears, and
+fredlab remains selectable. The entry keeps its personal avatar, label and styling.
+Keyboard activation runs the command; pending state prevents duplicate submissions.
+Command or refresh failure shows an error and requires another deliberate action.
+
+Import, login and consent create no personal space. Bob has no creation entitlement
+in the demo, so no personal entry appears and the server refuses creation. Removing
+Priya's entitlement alone preserves reuse of her readable space. Removing editor
+is not repaired by opening; removing all personal read roles prevents opening,
+without replacement. Her organization retains revocation authority and no implicit
+private-space read. This journey uses manager only, with no control-plane,
+knowledge-flow, task or runtime request. Resources have their own feature boundary.
+
 ## Joining and governing organizations, teams and projects
 
 Bob's TSN roles attach him to TSN; Priya's demo roles attach her to Demo. Each person

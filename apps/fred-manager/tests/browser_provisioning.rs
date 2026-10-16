@@ -118,7 +118,7 @@ async fn provisioning_browser_journey() {
             .fetch_one(&e.pool)
             .await
             .unwrap(),
-        5
+        6
     );
     let sophia = directory.find_username("sophia").await.unwrap().unwrap();
     assert!(

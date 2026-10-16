@@ -129,12 +129,21 @@ is an organization and a project's parent a non-personal team; sibling names are
 unique; one personal space per owner and organization.
 
 
+`POST /me/personal-space` retains `{organization_id}` and returns a `Space`: 201
+for creation, 200 for current-authority reuse. The identifier must match the caller's
+unique organization. Missing eligibility on creation, organization read or personal
+read on reuse gives 403. Inaccessible existing spaces are not replaced.
+`MySpace` adds required `organization_id` from placement, without changing personal
+paths. `Role` adds `personal_space_creator`; `SpacePermission` adds `create_personal_space`.
+
 ## OpenFGA model
 
 `store_name` identifies the configured source store. The SQL singleton
 `authorization_store` binds that name to the active store and model IDs; it holds
-no roles. Startup pins those IDs and verifies the model without selecting a newer
-model or falling back to the source. Empty initialization publishes a fresh store only after its initialization writes
+no roles. Startup pins those IDs without selecting an arbitrary newer model or
+falling back to the source. With schema synchronization, the exact predecessor
+without personal eligibility upgrades additively in the same store; the SQL pointer
+commits before the initialized client is returned. Empty initialization publishes a fresh store only after its initialization writes
 succeed; existing state without a matching publication is refused. User IDs are Keycloak subjects.
 
 Each organization and the platform has a `guard` object with an immutable
@@ -194,6 +203,9 @@ type space
     define can_manage_evaluation_corpus: effective_analyst or effective_admin
     define can_read_conversations_for_evaluation: effective_analyst
     define can_own: owner
+    # Explicit organization eligibility, without content access or inheritance.
+    define personal_space_creator: [user]
+    define can_create_personal_space: personal_space_creator
 
 # Mutation ordering only; these relations grant no permission.
 type revision

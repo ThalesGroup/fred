@@ -82,7 +82,9 @@ async function login(username, password, path = "/admin/provisioning") {
     await page.getByRole("button", { name: "Technical console", exact: true }).click();
     await page.getByRole("link", { name: "Provisioning", exact: true }).click();
   }
-  await expect(page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: path === "/home" ? "Your spaces" : "Provisioning", exact: true }),
+  ).toBeVisible();
   return { context, page, bearer };
 }
 
@@ -297,6 +299,87 @@ try {
   await importFile(alice.page, bundle, 200);
   assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
   assert.deepEqual(await get(bob.context, bob.bearer, "/me/spaces"), spaces);
+  // Explicit eligibility: Bob has no entry and the real command denies creation.
+  await bob.page.goto(origin + "/home");
+  await expect(bob.page.getByRole("button", { name: "Personal space", exact: true })).toHaveCount(0);
+  const bobOpen = await bob.context.request.post(`${origin}/fred-manager/v1/me/personal-space`, {
+    headers: { Authorization: bob.bearer },
+    data: { organization_id: organization.id },
+  });
+  assert.equal(bobOpen.status(), 403);
+
+  const priya = await login("priya", "Azerty123_", "/home");
+  const beforePersonal = await get(priya.context, priya.bearer, "/me/spaces");
+  assert.equal(beforePersonal.filter((space) => space.personal_owner).length, 0);
+  const personalEntry = priya.page.getByRole("button", { name: "Personal space", exact: true });
+  let personalCalls = 0;
+  let releasePersonal;
+  let enteredPersonal;
+  const personalHeld = new Promise((resolve) => {
+    releasePersonal = resolve;
+  });
+  const personalEntering = new Promise((resolve) => {
+    enteredPersonal = resolve;
+  });
+  await priya.page.route(
+    "**/fred-manager/v1/me/personal-space",
+    async (route) => {
+      personalCalls++;
+      enteredPersonal();
+      await personalHeld;
+      await route.continue();
+    },
+    { times: 1 },
+  );
+  const firstPersonal = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
+  await personalEntry.focus();
+  await priya.page.keyboard.press("Enter");
+  await personalEntering;
+  await expect(personalEntry).toBeDisabled();
+  await priya.page.keyboard.press("Enter");
+  releasePersonal();
+  const createdPersonal = await firstPersonal;
+  assert.equal(createdPersonal.status(), 201);
+  const personal = await createdPersonal.json();
+  assert.equal(personalCalls, 1);
+  await expect(priya.page).toHaveURL(origin + `/home?space=${personal.id}`);
+  await expect(priya.page.getByRole("region", { name: "Personal space", exact: true })).toBeVisible();
+  const personalMembership = (await get(priya.context, priya.bearer, "/me/spaces")).find((s) => s.id === personal.id);
+  assert.equal(personalMembership.organization_id, organization.id);
+  assert.deepEqual(personalMembership.path, [personal.id]);
+  await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
+  await expect(priya.page.getByRole("region", { name: "fredlab", exact: true })).toContainText(
+    "Editor, Administrator, Analyst",
+  );
+  const repeated = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
+  await personalEntry.click();
+  const reused = await repeated;
+  assert.equal(reused.status(), 200);
+  assert.equal((await reused.json()).id, personal.id);
+  await expect(priya.page).toHaveURL(origin + `/home?space=${personal.id}`);
+  await priya.page.reload();
+  await expect(priya.page.getByRole("region", { name: "Personal space", exact: true })).toBeVisible();
+  await priya.page.screenshot({ path: "target/personal-space.png", fullPage: true });
+  await priya.page.setViewportSize({ width: 390, height: 844 });
+  assert(await priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
+  await priya.page.screenshot({ path: "target/personal-space-narrow.png", fullPage: true });
+  // A transport refusal stays visible and requires a fresh deliberate action.
+  await priya.page.route(
+    "**/fred-manager/v1/me/personal-space",
+    (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "expired" }),
+      }),
+    { times: 1 },
+  );
+  await personalEntry.click();
+  await expect(priya.page.getByRole("alert")).toBeVisible();
+  await expect(personalEntry).toBeEnabled();
+  await personalEntry.click();
+  await expect(priya.page.getByRole("alert")).toHaveCount(0);
+  assert(!(await get(bob.context, bob.bearer, "/me/spaces")).some((s) => s.id === personal.id));
   assert.deepEqual(unexpected, [], "Unexpected control-plane dependency");
   assert.deepEqual(pageErrors, [], "Browser application errors");
   console.log(

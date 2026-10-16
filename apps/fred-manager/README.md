@@ -179,12 +179,13 @@ dependencies and Chromium are already installed.
 
 ## Upgrade existing authorization
 
-Manager publishes a fresh OpenFGA store only for an empty installation and never
-converts existing data. When `serve` refuses existing state or a changed model,
-reset local Fred data (`make k3d-app-reset DIR=<fred checkout> CONFIRM=reset` from
-the factory), then repeat CGU acceptance, bootstrap and import. The
-[deployment chapter](../../docs/architecture/A3-manager-operations.md#authorization-store-publication)
-describes the publication rules.
+Manager publishes a fresh OpenFGA store only for an empty installation. With
+`security.rebac.sync_schema_on_init`, it upgrades the exact predecessor model for
+personal eligibility in the same store, preserving existing data. Stop old writers
+and follow the [migration guide](../../docs/swift/ops/migrations/manager-personal-space.md).
+Unknown models are refused for operator reconciliation, without an automatic reset.
+The [deployment chapter](../../docs/architecture/A3-manager-operations.md#authorization-store-publication)
+describes publication, retry and rollback rules.
 
 A role mutation that loses its authorization revision returns a conflict; replay
 rechecks current authority. Timeout is not rollback. Roles and permission evaluation

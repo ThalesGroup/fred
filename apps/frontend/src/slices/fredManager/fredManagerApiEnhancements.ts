@@ -7,6 +7,9 @@ import { fredManagerApi } from "./fredManagerOpenApi";
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedFredManagerApi = fredManagerApi.enhanceEndpoints({
   endpoints: {
+    createPersonalSpace: {
+      extraOptions: { retryUnauthorized: false },
+    },
     bootstrapPlatformAdmin: { extraOptions: { retryUnauthorized: false } },
     importBlueprint(endpoint) {
       // Bearer expiry can follow committed provisioning writes: replay is explicit.
@@ -26,6 +29,7 @@ export const {
   useImportBlueprintMutation,
   useMeQuery,
   useMySpacesQuery,
+  useCreatePersonalSpaceMutation,
   useIngestDocumentMutation,
   useOnboardingStatusQuery,
   useAcceptTermsMutation,

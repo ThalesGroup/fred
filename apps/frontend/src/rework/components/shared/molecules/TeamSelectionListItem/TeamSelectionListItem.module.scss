@@ -73,3 +73,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.command {
+  background: transparent;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+}

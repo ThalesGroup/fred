@@ -29,7 +29,9 @@ export default function HomePage() {
   const firstName = KeyCloakService.GetUserGivenName() || undefined;
   const selected = params.get("space") ?? spaces.data?.find((space) => space.kind === "organization")?.id;
   const visible = (spaces.data ?? []).filter((space) => selected === undefined || space.id === selected);
-  const byId = new Map(spaces.data?.map((space) => [space.id, space.name]));
+  const byId = new Map(
+    spaces.data?.map((space) => [space.id, space.personal_owner ? t("rework.sidebar.team.userTeam") : space.name]),
+  );
   return (
     <div className={styles.page}>
       <header className={styles.headerText}>
@@ -51,8 +53,8 @@ export default function HomePage() {
         <p>{t(selected !== undefined ? "rework.manager.missingSpace" : "rework.manager.empty")}</p>
       ) : (
         visible.map((space) => (
-          <section key={space.id} className={styles.membership} aria-label={space.name}>
-            <h2>{space.name}</h2>
+          <section key={space.id} className={styles.membership} aria-label={byId.get(space.id)}>
+            <h2>{byId.get(space.id)}</h2>
             <dl>
               <dt>{t("rework.manager.kind")}</dt>
               <dd>{t(`rework.manager.kinds.${space.kind}`)}</dd>

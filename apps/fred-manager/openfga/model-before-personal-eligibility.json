@@ -1,0 +1,382 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "user"
+    },
+    {
+      "type": "platform",
+      "relations": {
+        "owner": {
+          "this": {}
+        },
+        "observer": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              }
+            ]
+          }
+        },
+        "feature_manager": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              }
+            ]
+          }
+        },
+        "prompt_editor": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              }
+            ]
+          }
+        },
+        "can_list_all_teams": {
+          "computedUserset": {
+            "relation": "feature_manager"
+          }
+        },
+        "can_delete_team": {
+          "computedUserset": {
+            "relation": "owner"
+          }
+        },
+        "can_rescue_team_admin": {
+          "computedUserset": {
+            "relation": "owner"
+          }
+        },
+        "can_edit_agent_class_path": {
+          "computedUserset": {
+            "relation": "owner"
+          }
+        },
+        "can_observe_platform": {
+          "computedUserset": {
+            "relation": "observer"
+          }
+        },
+        "can_administer_users": {
+          "computedUserset": {
+            "relation": "owner"
+          }
+        },
+        "can_manage_platform": {
+          "computedUserset": {
+            "relation": "owner"
+          }
+        },
+        "can_manage_capabilities": {
+          "computedUserset": {
+            "relation": "feature_manager"
+          }
+        },
+        "can_edit_platform_prompt": {
+          "computedUserset": {
+            "relation": "prompt_editor"
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "owner": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "observer": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "feature_manager": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "prompt_editor": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "space",
+      "relations": {
+        "parent": {
+          "this": {}
+        },
+        "organization": {
+          "this": {}
+        },
+        "member": {
+          "this": {}
+        },
+        "editor": {
+          "this": {}
+        },
+        "admin": {
+          "this": {}
+        },
+        "analyst": {
+          "this": {}
+        },
+        "owner": {
+          "this": {}
+        },
+        "effective_editor": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "editor"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "relation": "parent"
+                  },
+                  "computedUserset": {
+                    "relation": "effective_editor"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "effective_admin": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "relation": "parent"
+                  },
+                  "computedUserset": {
+                    "relation": "effective_admin"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "effective_analyst": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "analyst"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "relation": "parent"
+                  },
+                  "computedUserset": {
+                    "relation": "effective_analyst"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_read": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "member"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "effective_editor"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "effective_analyst"
+                }
+              }
+            ]
+          }
+        },
+        "can_write": {
+          "computedUserset": {
+            "relation": "effective_editor"
+          }
+        },
+        "can_manage": {
+          "computedUserset": {
+            "relation": "effective_admin"
+          }
+        },
+        "can_run_evaluations": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "effective_analyst"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "effective_admin"
+                }
+              }
+            ]
+          }
+        },
+        "can_manage_evaluation_corpus": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "effective_analyst"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "effective_admin"
+                }
+              }
+            ]
+          }
+        },
+        "can_read_conversations_for_evaluation": {
+          "computedUserset": {
+            "relation": "effective_analyst"
+          }
+        },
+        "can_own": {
+          "computedUserset": {
+            "relation": "owner"
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "parent": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          },
+          "organization": {
+            "directly_related_user_types": [
+              {
+                "type": "space"
+              }
+            ]
+          },
+          "member": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "editor": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "admin": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "analyst": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "owner": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "revision"
+    },
+    {
+      "type": "guard",
+      "relations": {
+        "initialized": {
+          "this": {}
+        },
+        "version": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "initialized": {
+            "directly_related_user_types": [
+              {
+                "type": "revision"
+              }
+            ]
+          },
+          "version": {
+            "directly_related_user_types": [
+              {
+                "type": "revision"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

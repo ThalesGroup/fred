@@ -103,6 +103,14 @@ Editor, admin and analyst also apply to every descendant space; member applies t
 its own space only (I20). A personal space has no parent and inherits nothing.
 No platform role reaches a space.
 
+The organization-only `personal_space_creator` role grants
+`can_create_personal_space`, with no content access or inheritance. Organization
+administrators manage it through existing role routes. Its recipient must hold a
+direct content role on that organization; the last such role cannot be removed
+while eligibility remains. Bundles enforce this dependency and publish content
+before eligibility across batches. Creation requires eligibility and organization
+read; reuse requires current organization and personal read, with no role writes.
+
 Administration is business, ownership is technical. Each organization also has an
 `owner` role: it names and removes the organization's admins and holds no content,
 management or descending permission (I21). Platform owners name organization owners,
