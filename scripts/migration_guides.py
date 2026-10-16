@@ -639,7 +639,7 @@ def release_plan(repo, base=None, target=None):
 
 def render(repo, plan, notes):
     lines = [
-        f"# Migration guide — v{plan['version']}",
+        f"# Migration guide - v{plan['version']}",
         "",
         f"Upgrade from: `{plan['base']}`",
         f"Operational impact: **{plan['impact']}** (minimum version: `{plan['minimum']}`).",
@@ -655,7 +655,7 @@ def render(repo, plan, notes):
             [
                 f"## {note.meta['title']}",
                 "",
-                f"Impact: **{note.impact}** · [Source]({url})",
+                f"Impact: **{note.impact}** - [Source]({url})",
                 "",
             ]
         )
