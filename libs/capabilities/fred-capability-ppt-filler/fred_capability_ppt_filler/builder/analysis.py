@@ -183,7 +183,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 14
+ANALYSIS_VERSION = 15
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
