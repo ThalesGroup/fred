@@ -171,10 +171,10 @@ def test_a_chart_is_read_from_what_small_models_write():
 
 
 def test_an_unknown_type_is_built_as_columns_and_said():
-    chart = PlanChart.model_validate({**REVENUE, "type": "radar"})
-    assert (chart.type, chart.asked_type) == ("column", "radar")
+    chart = PlanChart.model_validate({**REVENUE, "type": "waterfall"})
+    assert (chart.type, chart.asked_type) == ("column", "waterfall")
     again = PlanChart.model_validate(chart.model_dump())
-    assert again.asked_type == "radar"
+    assert again.asked_type == "waterfall"
 
 
 def test_design_keys_are_set_aside_and_unknown_keys_are_content():
@@ -587,14 +587,18 @@ def test_a_labels_mode_on_another_chart_type_is_told(builtin):
 def test_a_type_fallback_and_design_keys_are_told(builtin):
     template, inventory = builtin
     result = _render(
-        template, inventory, _chart_slide({**REVENUE, "type": "radar", "color": "red"})
+        template,
+        inventory,
+        _chart_slide({**REVENUE, "type": "waterfall", "color": "red"}),
     )
     assert _chart(result).chart_type == XL_CHART_TYPE.COLUMN_CLUSTERED
     notes = " ".join(result.report.notes)
-    assert "chart type 'radar' is not offered; built as 'column'" in notes
+    assert "chart type 'waterfall' is not offered; built as 'column'" in notes
     assert "the chart's color were ignored" in notes
     built = result.report.built[1]
-    assert [(n.code, n.kind) for n in built.notes] == [("chart_type_changed", "radar")]
+    assert [(n.code, n.kind) for n in built.notes] == [
+        ("chart_type_changed", "waterfall")
+    ]
 
 
 # --- the template's own example chart (D11) ---------------------------------------------
@@ -875,3 +879,412 @@ def test_the_tool_offers_charts_only_where_the_template_has_a_place(builtin):
     content = analyze_template(build_layouts_only_template()).inventory
     assert content is not None
     assert "or a chart in place of the bullets" in tools.catalogue(content)
+
+
+# --- more chart types: stacked bar, radar, scatter, bubble ----------------------------------
+
+SCATTER = {
+    "type": "scatter",
+    "x_title": "Price",
+    "x_unit": "€",
+    "y_title": "Units sold",
+    "series": [
+        {
+            "name": "Products",
+            "points": [{"x": 10, "y": 120}, {"x": 15, "y": 90}, {"x": 22, "y": 60}],
+        }
+    ],
+}
+BUBBLE = {
+    "type": "bubble",
+    "x_title": "Growth",
+    "x_unit": "%",
+    "y_title": "Share",
+    "unit": "%",
+    "size_title": "Revenue",
+    "size_unit": "M€",
+    "series": [
+        {
+            "name": "Markets",
+            "points": [
+                {"x": 5, "y": 20, "size": 100, "label": "France"},
+                {"x": 8, "y": 12, "size": 40, "label": "Spain"},
+                {"x": 2, "y": 30, "size": 250, "label": "Italy"},
+            ],
+        }
+    ],
+}
+RADAR = {
+    "type": "radar",
+    "categories": ["Price", "Speed", "Support", "Fit"],
+    "series": [
+        {"name": "Offer A", "values": [3, 4, 5, 2]},
+        {"name": "Offer B", "values": [4, 2, 3, 5]},
+    ],
+}
+STACKED_BAR = {
+    "type": "stacked_bar",
+    "categories": ["Sales", "R&D", "Support"],
+    "series": [
+        {"name": "2025", "values": [4, 3, 2]},
+        {"name": "2026", "values": [5, 3, 3]},
+    ],
+}
+
+
+def _points(chart: PlanChart) -> List[tuple]:
+    return [(p.x, p.y, p.size, p.label) for s in chart.series for p in s.points]
+
+
+@pytest.mark.parametrize(
+    "written",
+    [
+        {"series": [{"name": "P", "points": [[1, 2], [3, 4]]}]},
+        {"series": [{"name": "P", "points": [{"x": 1, "y": 2}, {"x": "3", "y": "4"}]}]},
+        {"series": [{"name": "P", "data": [{"x": 1, "y": 2}, {"x": 3, "y": 4}]}]},
+        {"series": [{"name": "P", "x": [1, 3], "y": [2, 4]}]},
+        {"x": [1, 3], "y": [2, 4]},
+        {"x": [1, 3], "values": [2, 4]},
+        {"points": [[1, 2], [3, 4]]},
+        {"categories": ["1", "3"], "series": [{"name": "P", "values": [2, 4]}]},
+    ],
+)
+def test_scatter_points_are_read_from_what_small_models_write(written):
+    chart = PlanChart.model_validate({"type": "scatter", **written})
+    assert chart.categories == []
+    assert _points(chart) == [(1, 2, None, None), (3, 4, None, None)]
+    assert chart.ignored_fields == [] and chart.style_fields == []
+
+
+def test_bubble_sizes_labels_and_units_are_read_per_axis():
+    chart = PlanChart.model_validate(
+        {
+            "type": "bulles",
+            "x_label": "Croissance",
+            "y_axis": "Part",
+            "series": [
+                {
+                    "name": "Marchés",
+                    "points": [
+                        {"x": "5 %", "y": "20 €", "radius": "100", "name": "France"},
+                        ["8 %", "12 €", 40, "Spain"],
+                    ],
+                }
+            ],
+        }
+    )
+    assert chart.type == "bubble"
+    assert (chart.x_title, chart.y_title) == ("Croissance", "Part")
+    assert (chart.x_unit, chart.unit, chart.size_unit) == ("%", "€", None)
+    assert _points(chart) == [(5, 20, 100, "France"), (8, 12, 40, "Spain")]
+    # Sizes as a list are data on a bubble, a design key elsewhere.
+    listed = PlanChart.model_validate(
+        {"type": "bubble", "x": [1, 2], "y": [3, 4], "size": [5, 6]}
+    )
+    assert _points(listed) == [(1, 3, 5, None), (2, 4, 6, None)]
+    assert listed.style_fields == []
+    styled = PlanChart.model_validate(
+        {**REVENUE, "size": "large", "x_axis": {"min": 0}}
+    )
+    assert styled.style_fields == ["size", "x_axis"]
+
+
+def test_x_is_the_categories_of_a_column_chart_and_new_names_are_read():
+    column = PlanChart.model_validate(
+        {"type": "column", "x": ["Q1", "Q2"], "values": [1, 2]}
+    )
+    assert column.categories == ["Q1", "Q2"] and column.series[0].values == [1, 2]
+    names = {
+        "stacked bar": "stacked_bar",
+        "Horizontal stacked bar chart": "stacked_bar",
+        "spider": "radar",
+        "toile d'araignée": "column",
+        "araignée": "radar",
+        "nuage de points": "scatter",
+        "XY": "scatter",
+        "bubbles": "bubble",
+        "stacked column": "stacked_column",
+    }
+    for written, kind in names.items():
+        assert PlanChart.model_validate({**REVENUE, "type": written}).type == kind
+
+
+def test_a_points_chart_survives_its_dump_with_its_unread_values():
+    chart = PlanChart.model_validate(
+        {**SCATTER, "series": [{"name": "P", "points": [{"x": "n/a", "y": 1}]}]}
+    )
+    again = PlanChart.model_validate(chart.model_dump())
+    assert again.series[0].points[0].unread == {"x": "n/a"}
+    assert (again.x_title, again.x_unit) == ("Price", "€")
+
+
+def _with_points(*points: Any, **chart: Any) -> Dict[str, Any]:
+    return {**SCATTER, "series": [{"name": "P", "points": list(points)}], **chart}
+
+
+@pytest.mark.parametrize(
+    ("chart", "problem", "option"),
+    [
+        (
+            {
+                **SCATTER,
+                "categories": ["Q1", "Q2", "Q3"],
+                "series": [{"values": [1, 2, 3]}],
+            },
+            "a 'scatter' chart takes points; series[0] has values over categories 'Q1'",
+            "use type 'line' or 'column'",
+        ),
+        (
+            {**RADAR, "series": [{"name": "A", "points": [[1, 2], [2, 3], [3, 4]]}]},
+            "a 'radar' chart takes categories and values, not points",
+            "use type 'scatter' for points",
+        ),
+        (
+            _with_points([1, 2], ["n/a", 3], [3, 4]),
+            "chart.series[0].points[1].x 'n/a' is not a number",
+            "drop that point",
+        ),
+        (
+            _with_points([1, 2], {"x": 2}, [3, 4]),
+            "chart.series[0].points[1] has no y",
+            "give each point {x, y}",
+        ),
+        (
+            {**SCATTER, "x_title": None},
+            "chart: no x_title; say what the horizontal axis measures ('Price')",
+            "set chart.x_title and chart.y_title",
+        ),
+        (
+            {**BUBBLE, "series": [{"name": "M", "points": [[1, 2, 3], [2, 3, 0]]}]},
+            "chart.series[0].points[1].size is 0; a bubble needs a positive size",
+            "give a size above 0",
+        ),
+        (
+            {**BUBBLE, "series": [{"name": "M", "points": [[1, 2, 3], [2, 3]]}]},
+            "chart.series[0].points[1] has no size",
+            "positive size",
+        ),
+        (
+            _with_points([1, 2, 5], [2, 3, 6], [3, 4, 7]),
+            "points carry size: use type 'bubble'",
+            "set chart.type to 'bubble'",
+        ),
+        (
+            _with_points([1, 2], [2, 3]),
+            "a 'scatter' chart: 2 points; it needs 3 to 50",
+            "give more points",
+        ),
+        (
+            _with_points(*[[i, i] for i in range(51)]),
+            "a 'scatter' chart: 51 points; at most 50 stay readable",
+            "keep the 50 that matter",
+        ),
+        (
+            {
+                **BUBBLE,
+                "series": [{"name": "M", "points": [[i, i, 1] for i in range(16)]}],
+            },
+            "a 'bubble' chart: 16 points; at most 15 stay readable",
+            "use type 'scatter' (no size)",
+        ),
+        (
+            {
+                **RADAR,
+                "categories": ["A", "B"],
+                "series": [{"name": "S", "values": [1, 2]}],
+            },
+            "radar: 2 criteria; a radar needs 3 to 8",
+            "use type 'column' or 'bar'",
+        ),
+        (
+            {
+                **RADAR,
+                "series": [{"name": f"S{n}", "values": [1, 2, 3, 4]} for n in range(4)],
+            },
+            "a 'radar' chart: 4 series; at most 3 stay readable",
+            "keep the 3 that matter",
+        ),
+        (
+            _with_points(
+                {"x": 1, "y": 2, "label": "Very long product name"}, [2, 3], [3, 4]
+            ),
+            "chart.series[0].points[0].label 'Very long product name' is 4 words",
+            "shorten each point label to 2 words",
+        ),
+    ],
+)
+def test_bad_points_and_radar_data_are_named_revisions(builtin, chart, problem, option):
+    _, inventory = builtin
+    found = _problem(_assigned(inventory, _chart_slide(chart)))
+    assert problem in found["problem"]
+    assert any(option in o for o in found["options"]), found["options"]
+
+
+def test_a_long_axis_title_is_measured_with_its_unit(builtin):
+    _, inventory = builtin
+    long = {**SCATTER, "x_title": "Average selling price per unit " * 8}
+    found = _problem(_assigned(inventory, _chart_slide(long)))
+    assert (
+        "chart.x_title is" in found["problem"] and "with its unit" in found["problem"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("chart", "xl_type"),
+    [
+        (STACKED_BAR, XL_CHART_TYPE.BAR_STACKED),
+        ({**STACKED_BAR, "stacked_as": "percent"}, XL_CHART_TYPE.BAR_STACKED_100),
+        (RADAR, XL_CHART_TYPE.RADAR_MARKERS),
+        (SCATTER, XL_CHART_TYPE.XY_SCATTER),
+        (BUBBLE, XL_CHART_TYPE.BUBBLE),
+    ],
+)
+def test_each_new_type_builds_a_native_theme_chart(builtin, chart, xl_type):
+    template, inventory = builtin
+    result = _render(template, inventory, _chart_slide(chart))
+    built = _chart(result)
+    assert built.chart_type == xl_type
+    xml = built._chartSpace.xml
+    assert '<a:schemeClr val="accent1"' in xml and "srgbClr" not in xml
+    assert '<a:latin typeface="+mn-lt"/>' in xml
+    assert not result.report.notes
+
+
+def test_a_scatter_titles_its_axes_and_names_few_points(builtin):
+    template, inventory = builtin
+    labelled = {
+        **SCATTER,
+        "series": [
+            {
+                "name": "Products",
+                "points": [
+                    {"x": 10, "y": 120, "label": "Alpha"},
+                    {"x": 15, "y": 90},
+                    {"x": 22.5, "y": 60, "label": "Gamma"},
+                ],
+            }
+        ],
+    }
+    built = _chart(_render(template, inventory, _chart_slide(labelled)))
+    x_axis, y_axis = built.category_axis, built.value_axis
+    assert x_axis.axis_title.text_frame.text == "Price (€)"
+    assert y_axis.axis_title.text_frame.text == "Units sold"
+    assert x_axis.tick_labels.number_format == '#,##0.0" €"'
+    assert y_axis.tick_labels.number_format == "#,##0"
+    assert list(built.plots[0].series[0].values) == [120, 90, 60]
+    points = built.plots[0].series[0].points
+    assert [points[i].data_label.text_frame.text for i in (0, 2)] == ["Alpha", "Gamma"]
+    assert not built.has_legend
+    many = _with_points(*[{"x": i, "y": i, "label": f"P{i}"} for i in range(13)])
+    crowded = _chart(_render(template, inventory, _chart_slide(many)))
+    assert "<c:dLbl>" not in crowded._chartSpace.xml
+
+
+def test_a_bubble_says_what_its_size_measures(builtin):
+    template, inventory = builtin
+    built = _chart(
+        _render(template, inventory, _chart_slide({**BUBBLE, "title": "Markets"}))
+    )
+    assert built.chart_title.text_frame.text == "Markets\nBubble size: Revenue (M€)"
+    assert built.plots[0].bubble_scale == 50
+    assert built.value_axis.axis_title.text_frame.text == "Share (%)"
+
+
+def test_intents_on_the_new_types(builtin):
+    template, inventory = builtin
+    result = _render(
+        template,
+        inventory,
+        _chart_slide({**BUBBLE, "highlight": "Italy", "sort": "desc"}),
+        _chart_slide({**RADAR, "sort": "desc", "highlight": "Offer B"}),
+        _chart_slide({**STACKED_BAR, "sort": "desc"}),
+    )
+    bubble = _chart(result, 1)
+    ser = bubble.plots[0]._element.find(qn("c:ser"))
+    assert [d.find(qn("c:idx")).get("val") for d in ser.findall(qn("c:dPt"))] == [
+        "0",
+        "1",
+        "2",
+    ]
+    assert "a 'bubble' chart keeps its own order" in " ".join(result.report.notes)
+    assert "a 'radar' chart keeps its own order" in " ".join(result.report.notes)
+    # A stacked bar sorts by its totals, the largest on top.
+    assert list(_chart(result, 3).plots[0].categories) == ["Support", "R&D", "Sales"]
+
+
+def test_axis_fields_a_type_does_not_draw_are_told(builtin):
+    template, inventory = builtin
+    result = _render(
+        template, inventory, _chart_slide({**REVENUE, "x_title": "Quarter"})
+    )
+    assert any(
+        "chart.x_title not drawn on a 'column' chart" in n for n in result.report.notes
+    )
+
+
+@pytest.mark.parametrize(
+    ("example", "chart"),
+    [
+        (XL_CHART_TYPE.XY_SCATTER, SCATTER),
+        (XL_CHART_TYPE.RADAR_MARKERS, RADAR),
+        (XL_CHART_TYPE.BAR_STACKED_100, STACKED_BAR),
+    ],
+)
+def test_an_example_chart_of_a_new_type_is_reused(example, chart):
+    template = build_slides([lambda p: add_main_chart_slide(p, example)])
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if p.source == "slide")
+    zone = next(z for z in pattern.zones if z.role == "chart")
+    assert zone.chart_type == chart["type"]
+    result = _render(template, inventory, _chart_slide(chart, bullets=["Look"]))
+    built = _chart(result)
+    xml = built._chartSpace.xml
+    # The example's own part, refilled: never a second chart, never 100 % stacking.
+    assert "percentStacked" not in xml
+    assert len([n for n in _parts(result) if n.startswith("ppt/charts/chart")]) == 1
+    if chart is SCATTER:
+        assert list(built.plots[0].series[0].values) == [120, 90, 60]
+        assert built.category_axis.axis_title.text_frame.text == "Price (€)"
+
+
+def test_a_point_is_edited_and_a_type_change_across_shapes_is_named(builtin):
+    template, inventory = builtin
+    base = _delivered(inventory, _chart_slide(SCATTER))
+    edit = {
+        "op": "edit",
+        "slide": 2,
+        "field": "chart.series[0].points[2].y",
+        "value": 75,
+    }
+    plan = _changed(base, edit)
+    assignment = assign(inventory, plan, "off")
+    assert not assignment.problems
+    result = render_deck(template, inventory, plan, assignment.patterns)
+    assert list(_chart(result).plots[0].series[0].values) == [120, 90, 75]
+    title = _changed(
+        base, {"op": "edit", "slide": 2, "field": "chart.x_title", "value": "Cost"}
+    )
+    assert title.slides[1].chart is not None and title.slides[1].chart.x_title == "Cost"
+    column = _changed(
+        base, {"op": "edit", "slide": 2, "field": "chart.type", "value": "column"}
+    )
+    found = _problem(assign(inventory, column, "off"))
+    assert (
+        "a 'column' chart takes categories and values, not points" in found["problem"]
+    )
+
+
+def test_the_tool_guides_the_model_to_the_new_types(builtin):
+    _, fred = builtin
+    description = tools._description(fred, "template_slide", 2)
+    assert "two measures per item → chart scatter (bubble for a third)" in description
+    assert "items scored on several criteria → chart radar" in description
+    assert "points [{x, y, size, label}]}] with x_title, x_unit, y_title" in description
+    assert '"chart.series[0].points[2].y"' in description
+    catalogue = tools.catalogue(fred)
+    assert "stacked_bar, radar, scatter, bubble" in catalogue
+    schema = tools._args_schema(fred).model_json_schema()
+    kinds = schema["$defs"]["PlanChart"]["properties"]["type"]
+    assert kinds["enum"][-4:] == ["stacked_bar", "radar", "scatter", "bubble"]
+    assert "radar (3-8 criteria compared for 1-3 items)" in kinds["description"]

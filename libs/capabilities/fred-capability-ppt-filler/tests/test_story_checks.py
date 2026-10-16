@@ -186,6 +186,69 @@ def test_bare_numbers_beside_written_units_do_not_conflict():
     assert _check(_slide(chart=chart, source="user"), users=["12 %"]).problems == []
 
 
+SCATTER = {
+    "type": "scatter",
+    "x_title": "Price",
+    "y_title": "Units sold",
+    "series": [{"name": "Products", "points": [[10, 120], [15, 90], [2200, 6]]}],
+}
+
+
+def test_a_radar_or_stacked_bar_takes_the_spread_question():
+    users = ["45 ans, 2 800 salariés et 9 sites, 12 bureaux"]
+    radar = {
+        "type": "radar",
+        "categories": ["Années", "Salariés", "Sites", "Bureaux"],
+        "series": [{"name": "Groupe", "values": [45, 2800, 9, 12]}],
+    }
+    for chart in (radar, {**REPRO, "type": "stacked_bar"}):
+        (problem,) = _check(_slide(chart=chart, source="user"), users=users).problems
+        assert "do they measure the same thing?" in problem.problem
+
+
+def test_a_scatter_relates_two_measures_without_the_spread_question():
+    users = ["prix 10, 15 et 2200 ; ventes 120, 90 et 6"]
+    assert _check(_slide(chart=SCATTER, source="user"), users=users).problems == []
+
+
+def test_a_scatter_axis_mixing_units_is_refused():
+    chart = {
+        **SCATTER,
+        "series": [
+            {
+                "name": "P",
+                "points": [
+                    {"x": "10 €", "y": 1},
+                    {"x": "12 %", "y": 2},
+                    {"x": "15 €", "y": 3},
+                ],
+            }
+        ],
+    }
+    result = _check(_slide(chart=chart, source="user"), users=["10 € 12 % 15 €"])
+    (problem,) = result.problems
+    assert (
+        "x values mix units (%, €): a chart axis shows one measure" in problem.problem
+    )
+    assert result.hard
+    # Units differing between axes are the point of a scatter.
+    apart = {
+        **SCATTER,
+        "series": [
+            {"name": "P", "points": [["10 €", "1 %"], ["12 €", "2 %"], ["9 €", 3]]}
+        ],
+    }
+    assert _check(_slide(chart=apart, source="user"), users=["10 € 1 %"]).problems == []
+
+
+def test_a_scatters_points_are_sourced_figures():
+    assert "no `source`" in _problems(_check(_slide(chart=SCATTER)))[2]
+    found = _check(_slide(chart=SCATTER, source="étude"), tools=["Prix : 2200 euros"])
+    assert found.problems == []
+    missing = _check(_slide(chart=SCATTER, source="étude"), tools=["rien"])
+    assert "none of the slide's figures" in _problems(missing)[2]
+
+
 # --- sources --------------------------------------------------------------------------------
 
 

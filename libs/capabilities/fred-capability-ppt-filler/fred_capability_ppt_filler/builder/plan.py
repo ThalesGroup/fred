@@ -307,7 +307,22 @@ class PlanTable(BaseModel):
 
 # --- charts ---------------------------------------------------------------------------
 
-CHART_TYPES = ("column", "bar", "line", "pie", "doughnut", "stacked_column", "area")
+CHART_TYPES = (
+    "column",
+    "bar",
+    "line",
+    "pie",
+    "doughnut",
+    "stacked_column",
+    "area",
+    "stacked_bar",
+    "radar",
+    "scatter",
+    "bubble",
+)
+# Types drawn from numeric points {x, y, size} rather than categories.
+XY_TYPES = ("scatter", "bubble")
+STACKED_TYPES = ("stacked_column", "stacked_bar")
 # Readability caps of every chart, whatever its zone.
 MAX_SERIES = 4
 MAX_SLICES = 6
@@ -323,16 +338,31 @@ _CHART_TYPE_NAMES = {
     "donut": "doughnut",
     "ring": "doughnut",
     "stacked": "stacked_column",
-    "stacked bar": "stacked_column",
     "stacked columns": "stacked_column",
     "column stacked": "stacked_column",
     "areas": "area",
+    "stacked bar": "stacked_bar",
+    "stacked bars": "stacked_bar",
+    "horizontal stacked": "stacked_bar",
+    "horizontal stacked bar": "stacked_bar",
+    "spider": "radar",
+    "web": "radar",
+    "toile": "radar",
+    "araignee": "radar",
+    "xy": "scatter",
+    "scatter plot": "scatter",
+    "nuage de points": "scatter",
+    "dispersion": "scatter",
+    "correlation": "scatter",
+    "bubbles": "bubble",
+    "bulles": "bubble",
 }
 # Design keys a model adds to a chart: the template decides them, never the call.
 _CHART_STYLE_KEYS = frozenset(
     ("color", "colors", "colour", "colours", "palette", "style", "theme", "legend")
     + ("position", "size", "width", "height", "font", "fonts", "x_axis", "y_axis")
 )
+_STYLE_NAMES = frozenset(lexicon.normalize(k) for k in _CHART_STYLE_KEYS)
 # What a pie's or doughnut's slice labels show, and the words models use for it.
 PieShow = Literal["share", "value", "both"]
 _SHOW_NAMES: Dict[str, PieShow] = {
@@ -466,8 +496,64 @@ def read_number(value: Any) -> Tuple[Optional[float], str]:
     return number, unit
 
 
+POINT_AXES = ("x", "y", "size")
+_POINT_ALIASES = {
+    **dict.fromkeys(("z", "r", "radius", "weight", "volume", "sizes"), "size"),
+    **dict.fromkeys(("name", "title", "text"), "label"),
+}
+
+
+def _point_like(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(k in value for k in ("x", "y"))
+    return isinstance(value, (list, tuple)) and len(value) in (2, 3, 4)
+
+
+class PlanPoint(BaseModel):
+    """One point of a scatter or bubble chart."""
+
+    x: Optional[float] = Field(default=None, description="Horizontal axis value.")
+    y: Optional[float] = Field(default=None, description="Vertical axis value.")
+    size: Optional[float] = Field(
+        default=None, description="bubble only: the bubble's size, positive."
+    )
+    label: Optional[str] = Field(
+        default=None, description="Optional short name of the point (1-2 words)."
+    )
+    # Axis values that did not read as numbers, with the text sent.
+    unread: SkipJsonSchema[Dict[str, str]] = Field(default_factory=dict)
+    units: SkipJsonSchema[Dict[str, str]] = Field(default_factory=dict, exclude=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, value: Any) -> Any:
+        if isinstance(value, (list, tuple)):
+            value = dict(zip(POINT_AXES + ("label",), value))
+        elif not isinstance(value, dict):
+            value = {"y": value}
+        data = _with_aliases(value, _POINT_ALIASES)
+        carried = dict(value.get("unread") or {})
+        out: Dict[str, Any] = {"unread": {}, "units": {}}
+        for axis in POINT_AXES:
+            raw = data.get(axis)
+            if _empty(raw):
+                out[axis] = None
+                if axis in carried:
+                    out["unread"][axis] = carried[axis]
+                continue
+            number, unit = read_number(_seq(raw)[0])
+            out[axis] = number
+            if number is None:
+                out["unread"][axis] = _quote(raw)[:20]
+            elif isinstance(raw, str):
+                out["units"][axis] = unit
+        label = _as_text(data.get("label"))
+        out["label"] = label.strip() if label and label.strip() else None
+        return out
+
+
 class PlanSeries(BaseModel):
-    """One series of a chart: a name and one value per category."""
+    """One series of a chart: a name and one value per category, or its points."""
 
     name: str = Field(default="", description="Series name, shown in the legend.")
     values: List[Optional[float]] = Field(
@@ -478,6 +564,10 @@ class PlanSeries(BaseModel):
     # Values that did not read as numbers, by index, with the text sent.
     unread: SkipJsonSchema[Dict[int, str]] = Field(default_factory=dict)
     units: SkipJsonSchema[List[str]] = Field(default_factory=list, exclude=True)
+    points: List[PlanPoint] = Field(
+        default_factory=list,
+        description="scatter and bubble only, instead of values: [{x, y, size, label}].",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -487,11 +577,16 @@ class PlanSeries(BaseModel):
         name = next(
             (value.get(k) for k in ("name", "label", "title") if value.get(k)), ""
         )
+        points = value.get("points")
         raw = next(
             (value[k] for k in ("values", "data", "y") if value.get(k) is not None),
             [],
         )
         raw = list(raw) if isinstance(raw, (list, tuple)) else [raw]
+        if points is None and isinstance(value.get("x"), (list, tuple)):
+            points, raw = _parallel_points(value), []
+        elif points is None and raw and all(_point_like(v) for v in raw):
+            points, raw = raw, []
         carried = {int(k): v for k, v in (value.get("unread") or {}).items()}
         values: List[Optional[float]] = []
         unread: Dict[int, str] = {}
@@ -508,7 +603,27 @@ class PlanSeries(BaseModel):
             "values": values,
             "unread": unread,
             "units": units,
+            "points": [p for p in _seq(points or []) if p is not None],
         }
+
+
+def _parallel_points(value: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """``{x: [...], y: [...], size: [...], labels: [...]}`` as one point per x."""
+    aliases = {"values": "y", "names": "labels", "point_labels": "labels"}
+    data = _with_aliases(
+        dict(value), {**aliases, **dict.fromkeys(("z", "sizes", "radius"), "size")}
+    )
+    columns = {k: _seq(data.get(k) or []) for k in ("x", "y", "size")}
+    labels = _seq(data.get("labels") or [])
+    return [
+        {
+            "x": x,
+            "y": columns["y"][i] if i < len(columns["y"]) else None,
+            "size": columns["size"][i] if i < len(columns["size"]) else None,
+            "label": labels[i] if i < len(labels) else None,
+        }
+        for i, x in enumerate(columns["x"])
+    ]
 
 
 class PlanChart(BaseModel):
@@ -517,7 +632,10 @@ class PlanChart(BaseModel):
     type: str = Field(
         default="column",
         description="column | bar (horizontal) | line | pie | doughnut | stacked_column | "
-        "area (one or two series).",
+        "area (one or two series) | stacked_bar (parts of a whole per category, long "
+        "labels) | radar (3-8 criteria compared for 1-3 items) | scatter (how two "
+        "measures relate across items; points {x, y}) | bubble (scatter plus a third "
+        "measure as size).",
         json_schema_extra={"enum": list(CHART_TYPES)},
     )
     categories: List[str] = Field(
@@ -526,7 +644,8 @@ class PlanChart(BaseModel):
     )
     series: List[PlanSeries] = Field(
         default_factory=list,
-        description="Series, each {name, values}: one number per category.",
+        description="Series, each {name, values}: one number per category; for "
+        "scatter and bubble, each {name, points}.",
     )
     title: Optional[str] = Field(
         default=None, description="Optional caption of the chart itself."
@@ -553,8 +672,26 @@ class PlanChart(BaseModel):
     )
     stacked_as: Optional[StackedAs] = Field(
         default=None,
-        description="stacked_column only: value (the default) or percent (every "
-        "column fills 100 %, to compare shares).",
+        description="stacked_column and stacked_bar only: value (the default) or "
+        "percent (every column or bar fills 100 %, to compare shares).",
+    )
+    x_title: Optional[str] = Field(
+        default=None,
+        description="scatter and bubble, required: what the horizontal axis measures.",
+    )
+    x_unit: Optional[str] = Field(
+        default=None, description="scatter and bubble: unit of the x values."
+    )
+    y_title: Optional[str] = Field(
+        default=None,
+        description="scatter and bubble, required: what the vertical axis measures "
+        "(its unit is `unit`).",
+    )
+    size_title: Optional[str] = Field(
+        default=None, description="bubble: what the bubble size measures."
+    )
+    size_unit: Optional[str] = Field(
+        default=None, description="bubble: unit of the sizes."
     )
     # Intent words that name nothing (field → text sent), for the note.
     asked_intents: SkipJsonSchema[Dict[str, str]] = Field(default_factory=dict)
@@ -573,6 +710,11 @@ class PlanChart(BaseModel):
             value = {"series": value}
         if not isinstance(value, dict):
             return {"ignored_fields": [f"chart '{_quote(value)}'"]}
+        value = dict(value)
+        # An axis written as a word is its title; an axis object stays design.
+        for axis in ("x", "y"):
+            if isinstance(value.get(f"{axis}_axis"), str):
+                value.setdefault(f"{axis}_title", value.pop(f"{axis}_axis"))
         aliases = {
             "chart_type": "type",
             "kind": "type",
@@ -595,9 +737,24 @@ class PlanChart(BaseModel):
             "sorting": "sort",
             "sort_order": "sort",
             "stacking": "stacked_as",
+            **dict.fromkeys(("x_label", "x_axis_title", "xlabel", "x_name"), "x_title"),
+            **dict.fromkeys(("y_label", "y_axis_title", "ylabel", "y_name"), "y_title"),
+            **dict.fromkeys(
+                ("size_label", "size_axis_title", "bubble_size"), "size_title"
+            ),
+            "x_units": "x_unit",
+            "y_unit": "unit",
+            "y_units": "unit",
+            "size_units": "size_unit",
         }
+        kind, asked = _chart_type(
+            _with_aliases(value, {"chart_type": "type", "kind": "type"}).get("type")
+        )
+        xy = kind in XY_TYPES
+        if xy:
+            # On a scatter, `x` holds the x values, never the categories.
+            aliases.pop("x")
         data = _with_aliases(value, aliases)
-        kind, asked = _chart_type(data.get("type"))
         if kind == "column" and value.get("asked_type"):
             asked = value["asked_type"]
         show, asked_show = _show(data.get("show"))
@@ -634,11 +791,14 @@ class PlanChart(BaseModel):
             s
             for s in series
             if isinstance(s, dict)
-            and not any(k in s for k in ("values", "data", "y"))
+            and not any(k in s for k in ("values", "data", "y", "points", "x"))
             and len(s) > 1
         ]
-        if paired and not categories:
+        if paired and not categories and not xy:
             categories = [k for k in paired[0] if k not in ("name", "label", "title")]
+        if xy:
+            categories, series = _xy_series(data, categories, series, title)
+            paired = []
         series = [
             {
                 "name": s.get("name") or s.get("label") or s.get("title") or "",
@@ -649,13 +809,15 @@ class PlanChart(BaseModel):
             for s in series
         ]
         known = set(cls.model_fields) | set(aliases) | {"values"}
-        style = [k for k in value if lexicon.normalize(k) in _CHART_STYLE_KEYS]
+        if xy:
+            known |= {"x", "y", "size", "sizes", "points"}
+        style = [k for k in value if _style_key(k, value[k], xy)]
         style += [
             f"series.{k}"
             for s in series
             if isinstance(s, dict)
             for k in s
-            if lexicon.normalize(k) in _CHART_STYLE_KEYS
+            if _style_key(k, s[k], True)
         ]
         return {
             "type": kind,
@@ -668,6 +830,10 @@ class PlanChart(BaseModel):
             "highlight": highlight,
             "sort": sort,
             "stacked_as": stacked_as,
+            **{
+                name: _as_text(data.get(name))
+                for name in ("x_title", "x_unit", "y_title", "size_title", "size_unit")
+            },
             "asked_intents": asked_intents,
             "asked_type": asked,
             "style_fields": sorted(set(value.get("style_fields") or []) | set(style)),
@@ -678,16 +844,89 @@ class PlanChart(BaseModel):
 
     @model_validator(mode="after")
     def _unit_from_values(self) -> "PlanChart":
-        """Every value written with the same unit ("45 %") gives the unit."""
-        units = {u for s in self.series for u in s.units}
-        written = sum(len(s.units) for s in self.series)
-        counted = sum(len(s.values) for s in self.series)
-        if not self.unit and len(units) == 1 and written == counted and "" not in units:
-            self.unit = units.pop()
+        """Every value written with the same unit ("45 %") gives the unit; on a
+        scatter or bubble, each axis its own."""
+        if not self.unit:
+            self.unit = _one_unit(
+                [u for s in self.series for u in s.units],
+                sum(len(s.values) for s in self.series),
+            )
+        points = [p for s in self.series for p in s.points]
+        for axis, field in (("y", "unit"), ("x", "x_unit"), ("size", "size_unit")):
+            if points and not getattr(self, field):
+                written = [p.units[axis] for p in points if axis in p.units]
+                counted = sum(1 for p in points if getattr(p, axis) is not None)
+                setattr(self, field, _one_unit(written, counted))
         return self
 
+    def points(self) -> List[PlanPoint]:
+        return [p for s in self.series for p in s.points]
+
     def has_content(self) -> bool:
-        return bool(self.categories) or any(s.values for s in self.series)
+        return bool(self.categories) or any(s.values or s.points for s in self.series)
+
+
+def _one_unit(written: List[str], counted: int) -> Optional[str]:
+    units = set(written)
+    if counted and len(units) == 1 and len(written) == counted and "" not in units:
+        return units.pop()
+    return None
+
+
+def _style_key(key: str, value: Any, xy: bool) -> bool:
+    """A design key; on a scatter or bubble, a list of sizes is data."""
+    name = lexicon.normalize(key)
+    if name == "size" and xy and isinstance(value, (list, tuple)):
+        return False
+    return name in _STYLE_NAMES
+
+
+def _values_of(series: Any) -> Optional[List[Any]]:
+    if isinstance(series, (list, tuple)):
+        return list(series)
+    if not isinstance(series, dict) or "points" in series or "x" in series:
+        return None
+    raw = next((series[k] for k in ("values", "data", "y") if k in series), None)
+    return list(raw) if isinstance(raw, (list, tuple)) else None
+
+
+def _xy_series(
+    data: Mapping[str, Any], categories: Any, series: List[Any], title: Optional[str]
+) -> Tuple[Any, List[Any]]:
+    """A scatter's or bubble's series as points: chart-level parallel lists or
+    points, and numeric categories read as x values. Text categories stay, for
+    the shape problem to name."""
+    labels = categories
+    if not data.get("series") and isinstance(data.get("x"), (list, tuple)):
+        columns = {
+            "x": data["x"],
+            "y": data.get("y") if data.get("y") is not None else data.get("values"),
+            "size": data.get("size") or data.get("sizes"),
+            "labels": labels,
+        }
+        return [], [
+            {"name": title or "", **{k: v for k, v in columns.items() if v is not None}}
+        ]
+    if not data.get("series") and data.get("points") is not None:
+        return categories, [{"name": title or "", "points": data["points"]}]
+    # "Q1" reads as a number after a unit: a category starting with a letter is text.
+    texts = [(_as_text(c) or "").strip() for c in _seq(categories or [])]
+    if not texts or any(read_number(t)[0] is None or t[:1].isalpha() for t in texts):
+        return categories, series
+    converted = []
+    for entry in series:
+        values = _values_of(entry)
+        if values is None:
+            converted.append(entry)
+            continue
+        name = entry.get("name") if isinstance(entry, dict) else None
+        converted.append(
+            {
+                "name": name or "",
+                "points": [{"x": x, "y": y} for x, y in zip(_seq(categories), values)],
+            }
+        )
+    return [], converted
 
 
 REPEAT_LAYOUT_HINT = (

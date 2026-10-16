@@ -228,10 +228,20 @@ _FIELDS: Dict[str, Dict[str, _Type]] = {
         "highlight": "text",
         "sort": "text",
         "stacked_as": "text",
+        "x_title": "text",
+        "x_unit": "text",
+        "y_title": "text",
+        "size_title": "text",
+        "size_unit": "text",
         "categories": ("list", "text"),
         "series": ("list", "series"),
     },
-    "series": {"name": "text", "values": ("list", "number")},
+    "series": {
+        "name": "text",
+        "values": ("list", "number"),
+        "points": ("list", "point"),
+    },
+    "point": {"x": "number", "y": "number", "size": "number", "label": "text"},
 }
 _PATH = re.compile(r"^[a-z_]+(\[\d+\])*(\.[a-z_]+(\[\d+\])*)*$")
 _TOKEN = re.compile(r"([a-z_]+)|\[(\d+)\]")

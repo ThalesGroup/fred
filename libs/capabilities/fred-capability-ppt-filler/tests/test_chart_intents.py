@@ -316,8 +316,8 @@ def test_percent_stacking_builds_a_full_height_stack(builtin):
     assert _intent_notes(result, 2) == [("intent_not_shown", "stacked_as")]
     assert (
         "Slide 3: chart.stacked_as 'percent' was not applied: it needs type "
-        "'stacked_column'; a 'line' chart was built. Nothing to do; drop "
-        "chart.stacked_as, or set chart.type to 'stacked_column'."
+        "'stacked_column' or 'stacked_bar'; a 'line' chart was built. Nothing to do; "
+        "drop chart.stacked_as, or set chart.type to 'stacked_column'."
         in result.report.notes
     )
 
@@ -335,7 +335,7 @@ def test_unread_intent_words_are_told(builtin):
     )
     assert (
         "Slide 2: chart.stacked_as 'tall' is not a stacking; built with the values. "
-        "Use 'percent' for stacked columns that each fill 100 %, or drop it."
+        "Use 'percent' for stacked columns or bars that each fill 100 %, or drop it."
         in result.report.notes
     )
 

@@ -59,6 +59,7 @@ _LINES = {
         "unverified": "Figures not found in the documents read.",
         "caption": "(illustrative)",
         "caption_alone": "Illustrative data",
+        "bubble_size": "Bubble size: {}",
     },
     "fr": {
         "source": "Source : {}",
@@ -67,6 +68,7 @@ _LINES = {
         "unverified": "Chiffres non retrouvés dans les documents lus.",
         "caption": "(illustratif)",
         "caption_alone": "Données illustratives",
+        "bubble_size": "Taille des bulles : {}",
     },
 }
 
@@ -101,3 +103,10 @@ def caption(chart: PlanChart, language: str) -> str:
     lines = _LINES[language]
     title = (chart.title or "").strip()
     return f"{title} {lines['caption']}" if title else lines["caption_alone"]
+
+
+def with_size_line(chart: PlanChart, language: str, size: str) -> str:
+    """A bubble chart's caption with the size measure on its own line:
+    PowerPoint has no legend for bubble sizes."""
+    line = _LINES[language]["bubble_size"].format(size)
+    return "\n".join(t for t in ((chart.title or "").strip(), line) if t)

@@ -87,6 +87,8 @@ _NO_WRAP_MARGIN = 1.06
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 _MEDIA_RELS = ("/image", "/media", "/video", "/audio", "/hdphoto")
 _HYPERLINK_REL = "/hyperlink"
+# A chart's axis fields, in the order a scatter (first three) and a bubble draw them.
+_AXIS_FIELDS = ("x_title", "x_unit", "y_title", "size_title", "size_unit")
 # A title in the user-facing summary: enough to recognise the slide.
 _SUMMARY_TITLE_CHARS = 120
 _SECTIONS_EXT_URI = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"
@@ -1635,6 +1637,10 @@ class _Renderer:
             chart = chart.model_copy(
                 update={"title": notes.caption(chart, self.language)}
             )
+        size_line = charts.axis_title(chart.size_title, chart.size_unit)
+        if chart.type == "bubble" and size_line:
+            title = notes.with_size_line(chart, self.language, size_line)
+            chart = chart.model_copy(update={"title": title})
         # The designer's own chart, when it already shows the type asked.
         example = (
             charts.example_frame(placed, chart)
@@ -1652,6 +1658,7 @@ class _Renderer:
                 f"{', '.join(charts.XL_TYPES)}."
             )
         self._tell_labels(chart, position)
+        self._tell_axes(chart, position)
         for name, note in charts.intent_notes(chart):
             self._tell_intent(position, name, note)
         if chart.style_fields:
@@ -1661,6 +1668,21 @@ class _Renderer:
                 "Nothing to do; never send them."
             )
         return host
+
+    def _tell_axes(self, chart: PlanChart, position: int) -> None:
+        """Axis fields the chart type does not draw: said, never dropped quietly."""
+        drawn = _AXIS_FIELDS if chart.type == "bubble" else ()
+        if chart.type == "scatter":
+            drawn = _AXIS_FIELDS[:3]
+        sent = [
+            f"chart.{n}" for n in _AXIS_FIELDS if getattr(chart, n) and n not in drawn
+        ]
+        if sent:
+            self._tell(
+                f"Slide {position}: {', '.join(sent)} not drawn on a '{chart.type}' "
+                "chart (axis titles: scatter and bubble only; size: bubble only). "
+                "Nothing to do; drop them."
+            )
 
     def _tell_labels(self, chart: PlanChart, position: int) -> None:
         """A label setting the chart cannot show: said, never dropped quietly."""

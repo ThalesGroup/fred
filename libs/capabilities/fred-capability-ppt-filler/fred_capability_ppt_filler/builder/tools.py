@@ -471,7 +471,15 @@ def _sent(slide: Any) -> SlidePlan:
     chart = getattr(slide, "chart", None)
     if isinstance(chart, PlanChart) and sent.chart is not None:
         series = [
-            mine.model_copy(update={"units": written.units})
+            mine.model_copy(
+                update={
+                    "units": written.units,
+                    "points": [
+                        p.model_copy(update={"units": w.units})
+                        for p, w in zip(mine.points, written.points)
+                    ],
+                }
+            )
             for mine, written in zip(sent.chart.series, chart.series)
         ]
         sent = sent.model_copy(
@@ -1076,6 +1084,8 @@ def _guide(
         pairs[-1] += ", not restated as columns before it"
     if charts:
         pairs.append("numbers that compare across categories or over time → chart")
+        pairs.append("two measures per item → chart scatter (bubble for a third)")
+        pairs.append("items scored on several criteria → chart radar")
     lead = (
         f" Shape the content, within the fields and items max each variant lists below: "
         f"{'; '.join(pairs)}."
@@ -1114,7 +1124,8 @@ def _description(
         '[...]}, {"op": "insert", "after": N (0 = at the start), "slides": [...]}, {"op": "remove", "slide": '
         'N}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label"'
         + (
-            ' | "chart.series[0].values[2]" | "chart.show" | "chart.highlight"'
+            ' | "chart.series[0].values[2]" | "chart.series[0].points[2].y" | '
+            '"chart.x_title" | "chart.show" | "chart.highlight"'
             if charts
             else ""
         )
@@ -1139,7 +1150,9 @@ def _description(
             "on a pie, set show: 'value', or 'both' for the two; to make one category or "
             "series stand out, set highlight to its name, never a colour; sort: 'desc' "
             "puts the largest first; stacked_as: 'percent' shows a stacked_column as "
-            "shares of 100 %), "
+            "shares of 100 %, stacked_bar too; scatter and bubble take series [{name, "
+            "points [{x, y, size, label}]}] with x_title, x_unit, y_title, unit (bubble: "
+            "size_title, size_unit) instead of categories and values), "
             if charts
             else ""
         )

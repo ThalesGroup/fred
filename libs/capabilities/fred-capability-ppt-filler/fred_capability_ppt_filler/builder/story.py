@@ -41,6 +41,8 @@ from fred_capability_ppt_filler.builder.notes import (
     WIDE_RANGE_CHART,
 )
 from fred_capability_ppt_filler.builder.plan import (
+    POINT_AXES,
+    XY_TYPES,
     DeckPlan,
     PlanChart,
     SlidePlan,
@@ -50,7 +52,16 @@ from fred_capability_ppt_filler.builder.plan import (
 _TAKEAWAY_MIN_WORDS = 4
 _TITLE_FIGURES = 3
 _SPREAD = 100.0
-_SPREAD_TYPES = ("column", "bar", "line", "area", "stacked_column")
+# One value axis each; a scatter's or bubble's axes are checked by unit only.
+_SPREAD_TYPES = (
+    "column",
+    "bar",
+    "line",
+    "area",
+    "stacked_column",
+    "stacked_bar",
+    "radar",
+)
 
 # Bounds of the per-call scan: text read from the conversation, distinct numbers
 # kept, and derived-value lookups per slide (past it, a figure counts as found).
@@ -259,13 +270,23 @@ def slide_figures(slide: SlidePlan) -> List[List[Reading]]:
     chart = _chart(slide)
     if chart is not None:
         scale = _unit_scale(chart.unit)
-        for series in chart.series:
-            for value in series.values:
-                if value:
-                    reading = (abs(value), _decimals(value))
-                    figures.append(
-                        [reading] + ([(abs(value) * scale, 0)] if scale else [])
-                    )
+        values = [(v, scale) for s in chart.series for v in s.values]
+        scales = {
+            "x": _unit_scale(chart.x_unit),
+            "y": scale,
+            "size": _unit_scale(chart.size_unit),
+        }
+        values += [
+            (getattr(p, axis), scales[axis])
+            for p in chart.points()
+            for axis in POINT_AXES
+        ]
+        for value, factor in values:
+            if value:
+                reading = (abs(value), _decimals(value))
+                figures.append(
+                    [reading] + ([(abs(value) * factor, 0)] if factor else [])
+                )
     for text in _numeric_cells(slide) + _figure_items(slide):
         for readings in numbers_in(text):
             if not _is_year(readings) and any(v for v, _ in readings):
@@ -398,6 +419,8 @@ def _crammed(slide: SlidePlan) -> List[Tuple[str, str]]:
 
 
 def _units(chart: PlanChart) -> List[Tuple[str, str]]:
+    if chart.type in XY_TYPES:
+        return _axis_units(chart)
     units = sorted(
         {u.strip().lower() for s in chart.series for u in s.units if u.strip()}
     )
@@ -410,6 +433,28 @@ def _units(chart: PlanChart) -> List[Tuple[str, str]]:
             "keep one measure and set `unit`",
         )
     ]
+
+
+def _axis_units(chart: PlanChart) -> List[Tuple[str, str]]:
+    """A scatter or bubble relates measures, one per axis: each axis one unit."""
+    found = []
+    for axis, name in (("x", "x_unit"), ("y", "unit"), ("size", "size_unit")):
+        units = sorted(
+            {
+                p.units[axis].strip().lower()
+                for p in chart.points()
+                if p.units.get(axis, "").strip()
+            }
+        )
+        if len(units) >= 2:
+            found.append(
+                (
+                    f"{axis} values mix units ({', '.join(units)}): a chart axis shows "
+                    "one measure",
+                    f"write the {axis} values in one unit and set chart.{name}",
+                )
+            )
+    return found
 
 
 def _spread(chart: PlanChart) -> Optional[Tuple[str, str]]:

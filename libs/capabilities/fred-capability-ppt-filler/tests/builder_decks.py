@@ -29,7 +29,7 @@ from typing import Any, List, Optional, cast
 from deck_builders import png_bytes
 from fred_capability_ppt_filler.builder.models import Box, Pattern, RepeatGroup, Zone
 from pptx import Presentation
-from pptx.chart.data import CategoryChartData
+from pptx.chart.data import CategoryChartData, XyChartData
 from pptx.enum.chart import XL_CHART_TYPE
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.oxml.ns import qn
@@ -225,9 +225,15 @@ def add_chart_slide(presentation):
 def add_main_chart_slide(presentation, chart_type=XL_CHART_TYPE.PIE):
     """One free chart over the slide's main area, under a title and a takeaway."""
     slide = _titled(presentation, "Parts de marché")
-    data = CategoryChartData()
-    data.categories = ["Europe", "Amériques", "Asie"]
-    data.add_series("Parts", (45, 35, 20))
+    data: Any = CategoryChartData()
+    if chart_type == XL_CHART_TYPE.XY_SCATTER:
+        data = XyChartData()
+        points = data.add_series("Parts")
+        for x, y in ((1, 45), (2, 35), (3, 20)):
+            points.add_data_point(x, y)
+    else:
+        data.categories = ["Europe", "Amériques", "Asie"]
+        data.add_series("Parts", (45, 35, 20))
     slide.shapes.add_chart(
         chart_type, Inches(0.5), Inches(1.5), Inches(6), Inches(5), data
     )

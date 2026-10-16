@@ -24,7 +24,7 @@ from __future__ import annotations
 import copy
 from typing import Any, List, Optional, Sequence, Tuple, cast
 
-from pptx.chart.data import CategoryChartData
+from pptx.chart.data import BubbleChartData, CategoryChartData, XyChartData
 from pptx.chart.datalabel import DataLabels
 from pptx.enum.chart import (
     XL_CHART_TYPE,
@@ -43,7 +43,10 @@ from fred_capability_ppt_filler.builder.models import Zone
 from fred_capability_ppt_filler.builder.plan import (
     MAX_SERIES,
     MAX_SLICES,
+    STACKED_TYPES,
+    XY_TYPES,
     PlanChart,
+    PlanPoint,
     capacity_text,
 )
 from fred_capability_ppt_filler.traversal import PlacedShape
@@ -56,13 +59,31 @@ XL_TYPES = {
     "doughnut": XL_CHART_TYPE.DOUGHNUT,
     "stacked_column": XL_CHART_TYPE.COLUMN_STACKED,
     "area": XL_CHART_TYPE.AREA,
+    "stacked_bar": XL_CHART_TYPE.BAR_STACKED,
+    "radar": XL_CHART_TYPE.RADAR_MARKERS,
+    "scatter": XL_CHART_TYPE.XY_SCATTER,
+    "bubble": XL_CHART_TYPE.BUBBLE,
 }
 # The example chart's type in the plan's vocabulary (phase B reuses it).
 _FROM_XL = {xl: name for name, xl in XL_TYPES.items()} | {
     XL_CHART_TYPE.LINE: "line",
     XL_CHART_TYPE.PIE_EXPLODED: "pie",
     XL_CHART_TYPE.DOUGHNUT_EXPLODED: "doughnut",
+    XL_CHART_TYPE.COLUMN_STACKED_100: "stacked_column",
+    XL_CHART_TYPE.BAR_STACKED_100: "stacked_bar",
+    XL_CHART_TYPE.RADAR: "radar",
+    XL_CHART_TYPE.RADAR_FILLED: "radar",
+    XL_CHART_TYPE.XY_SCATTER_LINES: "scatter",
+    XL_CHART_TYPE.XY_SCATTER_LINES_NO_MARKERS: "scatter",
+    XL_CHART_TYPE.XY_SCATTER_SMOOTH: "scatter",
+    XL_CHART_TYPE.XY_SCATTER_SMOOTH_NO_MARKERS: "scatter",
+    XL_CHART_TYPE.BUBBLE_THREE_D_EFFECT: "bubble",
 }
+_PERCENT_XL = {
+    "stacked_column": XL_CHART_TYPE.COLUMN_STACKED_100,
+    "stacked_bar": XL_CHART_TYPE.BAR_STACKED_100,
+}
+_HORIZONTAL = ("bar", "stacked_bar")
 ROUND = ("pie", "doughnut")
 _ACCENTS = (
     MSO_THEME_COLOR.ACCENT_1,
@@ -75,6 +96,18 @@ _ACCENTS = (
 # Readability caps, and the share of the frame the plot gets beside its axes.
 _MAX_CATEGORIES = {"line": 24, "area": 24}
 _MAX_CATEGORIES_DEFAULT = 12
+_RADAR_CATEGORIES = (3, 8)
+_RADAR_SERIES = 3
+_SCATTER_POINTS = (3, 50)
+_BUBBLE_POINTS = 15
+# Point names show beside their point up to this many points (owner decision).
+_LABELLED_POINTS = 12
+_POINT_LABEL_WORDS = 2
+_BUBBLE_SCALE = 50
+_BUBBLE_ALPHA = 75000
+_SCATTER_MARKER = 9
+# The longest "Bubble size: " caption prefix of the deck languages.
+_SIZE_PREFIX = len("Taille des bulles : ")
 _LABELLED_BARS = 8
 # The catalogue quotes a label's room among this many categories.
 QUOTED_CATEGORIES = 6
@@ -108,9 +141,11 @@ def _frame_pt(zone: Zone, size: Tuple[int, int]) -> Tuple[float, float]:
 def max_categories(zone: Zone, kind: str, size: Tuple[int, int]) -> int:
     if kind in ROUND:
         return MAX_SLICES
+    if kind == "radar":
+        return _RADAR_CATEGORIES[1]
     width, height = _frame_pt(zone, size)
     pt = chart_pt(zone)
-    if kind == "bar":
+    if kind in _HORIZONTAL:
         room = height * _PLOT_H / (pt * text_metrics.LINE_HEIGHT * _BAR_LINES)
     else:
         room = width * _PLOT_W / (pt * _CATEGORY_EM)
@@ -126,7 +161,9 @@ def label_room(
     plot = width * _PLOT_W
     if kind in ROUND:
         span, lines = plot / 3, 1
-    elif kind == "bar":
+    elif kind == "radar":
+        span, lines = plot / 4, 1
+    elif kind in _HORIZONTAL:
         span, lines = plot * 0.4, 2
     else:
         span, lines = plot / max(1, count), 2
@@ -146,6 +183,16 @@ def _title_room(zone: Zone, size: Tuple[int, int]) -> int:
 
 def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
     """What is wrong with the chart's data whatever slide shows it: (what, fix)."""
+    if chart.type in XY_TYPES:
+        return _point_problems(chart)
+    if any(s.points for s in chart.series):
+        return [
+            (
+                f"a '{chart.type}' chart takes categories and values, not points",
+                "give categories and series [{name, values}], or use type 'scatter' "
+                "for points",
+            )
+        ]
     found: List[Tuple[str, str]] = []
     count = len(chart.categories)
     if not count or not chart.series:
@@ -169,6 +216,14 @@ def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
                 "keep one series, or use type 'column'",
             )
         )
+    elif chart.type == "radar" and len(chart.series) > _RADAR_SERIES:
+        found.append(
+            (
+                f"a 'radar' chart: {len(chart.series)} series; at most {_RADAR_SERIES} "
+                "stay readable (the shapes overlap)",
+                f"keep the {_RADAR_SERIES} that matter, or use type 'column'",
+            )
+        )
     elif len(chart.series) > MAX_SERIES:
         found.append(
             (
@@ -181,6 +236,15 @@ def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
             (
                 f"a '{chart.type}' chart: {count} slices; at most {MAX_SLICES} stay readable",
                 f"keep {MAX_SLICES - 1} and group the smallest as 'Other', or use type 'bar'",
+            )
+        )
+    low, high = _RADAR_CATEGORIES
+    if chart.type == "radar" and not low <= count <= high:
+        found.append(
+            (
+                f"radar: {count} criteria; a radar needs {low} to {high}",
+                "use type 'column' or 'bar'"
+                + (f", or keep the {high} that matter" if count > high else ""),
             )
         )
     for j, series in enumerate(chart.series):
@@ -214,31 +278,151 @@ def data_problems(chart: PlanChart) -> List[Tuple[str, str]]:
     return found
 
 
+def _point_problems(chart: PlanChart) -> List[Tuple[str, str]]:
+    """A scatter's or bubble's data: numeric points, both axis titles, caps."""
+    kind = chart.type
+    points = chart.points()
+    if not points:
+        if chart.categories and any(s.values for s in chart.series):
+            shown = ", ".join(f"'{c}'" for c in chart.categories[:3])
+            return [
+                (
+                    f"a '{kind}' chart takes points; series[0] has values over "
+                    f"categories {shown}…",
+                    "use type 'line' or 'column', or give points [{x, y}]",
+                )
+            ]
+        return [
+            (
+                f"chart: no points; a '{kind}' chart takes series [{{name, points}}]",
+                "give each series its points [{x, y"
+                + (", size" if kind == "bubble" else "")
+                + "}], or drop the chart",
+            )
+        ]
+    found: List[Tuple[str, str]] = []
+    if len(chart.series) > MAX_SERIES:
+        found.append(
+            (
+                f"chart: {len(chart.series)} series; at most {MAX_SERIES} stay readable",
+                f"keep the {MAX_SERIES} that matter, or split them over two charts",
+            )
+        )
+    low, high = _SCATTER_POINTS if kind == "scatter" else (1, _BUBBLE_POINTS)
+    if len(points) < low:
+        found.append(
+            (
+                f"a '{kind}' chart: {len(points)} points; it needs {low} to {high}",
+                "give more points, or show these figures on a figures slide",
+            )
+        )
+    elif len(points) > high:
+        found.append(
+            (
+                f"a '{kind}' chart: {len(points)} points; at most {high} stay readable",
+                f"keep the {high} that matter"
+                + (", or use type 'scatter' (no size)" if kind == "bubble" else ""),
+            )
+        )
+    for field, side, example in (
+        ("x_title", "horizontal", "Price"),
+        ("y_title", "vertical", "Units sold"),
+    ):
+        if not (getattr(chart, field) or "").strip():
+            found.append(
+                (
+                    f"chart: no {field}; say what the {side} axis measures ('{example}')",
+                    "set chart.x_title and chart.y_title to what each axis measures",
+                )
+            )
+    for j, series in enumerate(chart.series):
+        at = f"chart.series[{j}]"
+        if series.values and not series.points:
+            found.append((f"{at} has values, not points", "give its points [{x, y}]"))
+        for i, point in enumerate(series.points):
+            found += _point_problem(f"{at}.points[{i}]", point, kind)
+        if len(chart.series) > 1 and not series.name:
+            found.append((f"{at} has no name", "name each series: the legend shows it"))
+    if kind == "scatter" and any(p.size is not None for p in points):
+        found.append(
+            (
+                "points carry size: use type 'bubble'",
+                "set chart.type to 'bubble', or drop the sizes",
+            )
+        )
+    return found
+
+
+def _point_problem(at: str, point: PlanPoint, kind: str) -> List[Tuple[str, str]]:
+    found = [
+        (f"{at}.{axis} '{text}' is not a number", "write a number, or drop that point")
+        for axis, text in sorted(point.unread.items())
+    ]
+    missing = [
+        a for a in ("x", "y") if getattr(point, a) is None and a not in point.unread
+    ]
+    if missing:
+        found.append((f"{at} has no {' or '.join(missing)}", "give each point {x, y}"))
+    if kind == "bubble" and "size" not in point.unread:
+        if point.size is None:
+            found.append((f"{at} has no size", "give each bubble a positive size"))
+        elif point.size <= 0:
+            found.append(
+                (
+                    f"{at}.size is {point.size:g}; a bubble needs a positive size",
+                    "give a size above 0, or drop that point",
+                )
+            )
+    words = len((point.label or "").split())
+    if words > _POINT_LABEL_WORDS:
+        found.append(
+            (
+                f"{at}.label '{point.label}' is {words} words; a point name holds "
+                f"{_POINT_LABEL_WORDS}",
+                f"shorten each point label to {_POINT_LABEL_WORDS} words (a name)",
+            )
+        )
+    return found
+
+
+def axis_title(title: Optional[str], unit: Optional[str]) -> str:
+    """``Price (€)``: an axis title with its unit."""
+    title, unit = (title or "").strip(), (unit or "").strip()
+    return f"{title} ({unit})" if title and unit else title
+
+
+def _xy_fit(
+    zone: Zone, chart: PlanChart, size: Tuple[int, int]
+) -> List[Tuple[str, str]]:
+    """Each axis title holds one line of the plot's side."""
+    width, height = _frame_pt(zone, size)
+    pt = chart_pt(zone)
+    found: List[Tuple[str, str]] = []
+    for field, unit, span in (
+        ("x_title", chart.x_unit, width * _PLOT_W),
+        ("y_title", chart.unit, height * _PLOT_H),
+    ):
+        text = axis_title(getattr(chart, field), unit)
+        room = text_metrics.chars_per_line(span, pt, None, False)
+        if len(text) > room:
+            found.append(
+                (
+                    f"chart.{field} is {len(text)} chars with its unit; it holds "
+                    f"{capacity_text(room, 1)}",
+                    f"shorten chart.{field} to {capacity_text(room, 1)}",
+                )
+            )
+    return found
+
+
 def fit_problems(
     zone: Zone, chart: PlanChart, size: Tuple[int, int]
 ) -> List[Tuple[str, str]]:
     """What does not fit this zone at a readable size: (what, fix)."""
-    found: List[Tuple[str, str]] = []
-    count = len(chart.categories)
-    most = max_categories(zone, chart.type, size)
-    if count > most and chart.type not in ROUND:
-        found.append(
-            (
-                f"chart: {count} categories; this chart holds {most}",
-                f"keep {most} categories (group the rest, or a coarser period)",
-            )
-        )
-    per_line, lines = label_room(zone, chart.type, size, min(count, most))
-    room = capacity_text(per_line, lines)
-    long = [(i, c) for i, c in enumerate(chart.categories) if len(c) > per_line * lines]
-    if long:
-        i, label = max(long, key=lambda pair: len(pair[1]))
-        found.append(
-            (
-                f"chart.categories[{i}] is {len(label)} chars; each label holds {room}",
-                f"shorten every category label to {room}",
-            )
-        )
+    if chart.type in XY_TYPES:
+        found = _xy_fit(zone, chart, size)
+    else:
+        found = _category_fit(zone, chart, size)
     if len(chart.series) > 1 or chart.type in ROUND:
         name_room = _name_room(zone, size, len(chart.series))
         for j, series in enumerate(chart.series):
@@ -261,6 +445,46 @@ def fit_problems(
                 "(the slide title says it)",
             )
         )
+    size_line = axis_title(chart.size_title, chart.size_unit)
+    if (
+        chart.type == "bubble"
+        and size_line
+        and len(size_line) + _SIZE_PREFIX > title_room
+    ):
+        found.append(
+            (
+                f"chart.size_title is {len(size_line)} chars with its unit; the caption "
+                f"line holds {capacity_text(title_room - _SIZE_PREFIX, 1)}",
+                f"shorten chart.size_title to {capacity_text(title_room - _SIZE_PREFIX, 1)}",
+            )
+        )
+    return found
+
+
+def _category_fit(
+    zone: Zone, chart: PlanChart, size: Tuple[int, int]
+) -> List[Tuple[str, str]]:
+    found: List[Tuple[str, str]] = []
+    count = len(chart.categories)
+    most = max_categories(zone, chart.type, size)
+    if count > most and chart.type not in ROUND + ("radar",):
+        found.append(
+            (
+                f"chart: {count} categories; this chart holds {most}",
+                f"keep {most} categories (group the rest, or a coarser period)",
+            )
+        )
+    per_line, lines = label_room(zone, chart.type, size, min(count, most))
+    room = capacity_text(per_line, lines)
+    long = [(i, c) for i, c in enumerate(chart.categories) if len(c) > per_line * lines]
+    if long:
+        i, label = max(long, key=lambda pair: len(pair[1]))
+        found.append(
+            (
+                f"chart.categories[{i}] is {len(label)} chars; each label holds {room}",
+                f"shorten every category label to {room}",
+            )
+        )
     return found
 
 
@@ -269,6 +493,11 @@ def fit_problems(
 # Categories in time order: a sort would scramble them, and one point of their
 # single line or area cannot be coloured apart (LibreOffice ignores point markers).
 _ORDERED = ("line", "area")
+# Types whose order is their own (positions, or a polygon): never sorted.
+_OWN_ORDER = ("radar",) + XY_TYPES
+_UNSORTED = _ORDERED + _OWN_ORDER
+# Types where one category cannot stand out: only a series can.
+_NO_CATEGORY = _ORDERED + ("radar",)
 # Opacity of muted text-colour points or series: below the accent on a light or
 # a dark background alike; neighbours alternate so a legend still tells them apart.
 _MUTED = (35000, 55000)
@@ -290,8 +519,12 @@ def emphasis(chart: PlanChart) -> Optional[Tuple[str, int]]:
     if len(chart.series) > 1 and chart.type not in ROUND:
         names = _names([s.name for s in chart.series])
         return ("series", names.index(name)) if name in names else None
+    if chart.type in XY_TYPES:
+        # One series: a point stands out by its label.
+        labels = _names([p.label or "" for p in chart.series[0].points])
+        return ("category", labels.index(name)) if name in labels else None
     categories = _names(chart.categories)
-    if chart.type in _ORDERED or name not in categories:
+    if chart.type in _NO_CATEGORY or name not in categories:
         return None
     return "category", categories.index(name)
 
@@ -320,7 +553,16 @@ def _highlight_note(chart: PlanChart) -> Optional[str]:
             "without highlight. To set it, edit chart.highlight to one of those (a "
             "name, never a colour)."
         )
-    if chart.type in _ORDERED and lexicon.normalize(name) in _names(chart.categories):
+    if chart.type in XY_TYPES:
+        labels = [p.label for p in chart.series[0].points if p.label] if series else []
+        return (
+            f"chart.highlight '{name}' matches no point label "
+            f"({', '.join(labels) or 'none given'}); built without highlight. To set "
+            "it, edit chart.highlight to one point's label (a name, never a colour)."
+        )
+    if chart.type in _NO_CATEGORY and lexicon.normalize(name) in _names(
+        chart.categories
+    ):
         return (
             f"chart.highlight '{name}' was not applied: {_a(chart.type)} chart cannot "
             "emphasise one category. Nothing to do; drop chart.highlight, or use type "
@@ -348,6 +590,15 @@ def intent_notes(chart: PlanChart) -> List[Tuple[str, str]]:
                 "sort, edit chart.sort to 'desc' (largest first) or 'asc'.",
             )
         )
+    elif chart.sort in ("desc", "asc") and chart.type in _OWN_ORDER:
+        found.append(
+            (
+                "sort",
+                f"chart.sort '{chart.sort}' was not applied: a '{chart.type}' chart "
+                "keeps its own order. Nothing to do; drop chart.sort, or use type "
+                "'column' or 'bar' to sort.",
+            )
+        )
     elif chart.sort in ("desc", "asc") and chart.type in _ORDERED:
         found.append(
             (
@@ -363,16 +614,18 @@ def intent_notes(chart: PlanChart) -> List[Tuple[str, str]]:
             (
                 "stacked_as",
                 f"chart.stacked_as '{asked}' is not a stacking; built with the values. "
-                "Use 'percent' for stacked columns that each fill 100 %, or drop it.",
+                "Use 'percent' for stacked columns or bars that each fill 100 %, or "
+                "drop it.",
             )
         )
-    elif chart.stacked_as == "percent" and chart.type != "stacked_column":
+    elif chart.stacked_as == "percent" and chart.type not in STACKED_TYPES:
         found.append(
             (
                 "stacked_as",
                 f"chart.stacked_as 'percent' was not applied: it needs type "
-                f"'stacked_column'; a '{chart.type}' chart was built. Nothing to do; drop "
-                "chart.stacked_as, or set chart.type to 'stacked_column'.",
+                f"'stacked_column' or 'stacked_bar'; a '{chart.type}' chart was built. "
+                "Nothing to do; drop chart.stacked_as, or set chart.type to "
+                "'stacked_column'.",
             )
         )
     return found
@@ -380,15 +633,15 @@ def intent_notes(chart: PlanChart) -> List[Tuple[str, str]]:
 
 def _arranged(chart: PlanChart) -> PlanChart:
     """The chart in the order ``sort`` asks; the plan itself keeps the order written."""
-    if chart.sort not in ("desc", "asc") or chart.type in _ORDERED:
+    if chart.sort not in ("desc", "asc") or chart.type in _UNSORTED:
         return chart
     count = len(chart.categories)
-    if chart.type == "stacked_column":
+    if chart.type in STACKED_TYPES:
         keys = [sum(s.values[i] or 0 for s in chart.series) for i in range(count)]
     else:
         keys = [v or 0 for v in chart.series[0].values]
     order = sorted(range(count), key=keys.__getitem__, reverse=chart.sort == "desc")
-    if chart.type == "bar":
+    if chart.type in _HORIZONTAL:
         # A bar chart draws its first category at the bottom: the first in order goes last.
         order.reverse()
     return chart.model_copy(
@@ -412,11 +665,18 @@ def _decimals(values: Sequence[Optional[float]]) -> int:
     )
 
 
-def number_format(chart: PlanChart) -> str:
-    """``#,##0.0" M€"``: the data's own decimals (at most 2), then its unit."""
-    decimals = _decimals([v for s in chart.series for v in s.values])
+def number_format(chart: PlanChart, axis: str = "y") -> str:
+    """``#,##0.0" M€"``: the data's own decimals (at most 2), then its unit; on a
+    scatter or bubble, those of one axis."""
+    if chart.type in XY_TYPES:
+        values = [getattr(p, axis) for p in chart.points()]
+        unit = {"x": chart.x_unit, "size": chart.size_unit}.get(axis, chart.unit)
+    else:
+        values = [v for s in chart.series for v in s.values]
+        unit = chart.unit
+    decimals = _decimals(values)
     base = "#,##0" + ("." + "0" * decimals if decimals else "")
-    unit = (chart.unit or "").replace('"', "").strip()
+    unit = (unit or "").replace('"', "").strip()
     if not unit:
         return base
     return f'{base}"{unit}"' if unit == "%" else f'{base}" {unit}"'
@@ -508,22 +768,32 @@ def _colour(
     if target and target[0] == "category":
         # Each bar coloured on its own: LibreOffice lays a series' opacity over its points.
         for i, point in enumerate(plot.series[0].points):
-            if paints(i):
+            if not paints(i):
+                continue
+            if chart.type == "scatter":
+                _marker(point, *_tone(i, chosen, alternate=False), _SCATTER_MARKER)
+            else:
                 _theme_fill(point.format, *_tone(i, chosen, alternate=False))
         return
     for i, series in enumerate(plot.series):
         if not paints(i):
             continue
         colour, alpha = _tone(i, chosen)
-        if chart.type == "line":
+        if chart.type in ("line", "radar"):
             stressed = chosen is None or i == chosen
             width = 2.25 if chosen is None else 3.0 if stressed else 1.5
             _theme_line(series.format, colour, width, alpha)
-            series.smooth = False
+            if chart.type == "line":
+                series.smooth = False
             if stressed:
                 _marker(series, colour, alpha, 7)
             else:
                 series.marker.style = XL_MARKER_STYLE.NONE
+        elif chart.type == "scatter":
+            _marker(series, colour, alpha, _SCATTER_MARKER)
+        elif chart.type == "bubble":
+            # Translucent, so a bubble behind another still shows.
+            _theme_fill(series.format, colour, alpha or _BUBBLE_ALPHA)
         else:
             _theme_fill(series.format, colour, alpha)
 
@@ -542,6 +812,9 @@ def _labels(
 ) -> None:
     plot = built.plots[0]
     point = target[1] if target and target[0] == "category" else None
+    if chart.type in XY_TYPES:
+        _point_labels(built, chart, pt)
+        return
     if not _labelled(chart):
         return
     plot.has_data_labels = True
@@ -564,6 +837,21 @@ def _labels(
     labels.position = XL_LABEL_POSITION.OUTSIDE_END
     if point is not None:
         _stress_label(plot, point)
+
+
+def _point_labels(built: Any, chart: PlanChart, pt: float) -> None:
+    """Each point's name beside it, while the chart has few enough points."""
+    points = chart.points()
+    if len(points) > _LABELLED_POINTS or not any(p.label for p in points):
+        return
+    for drawn, planned in zip(built.plots[0].series, chart.series):
+        for point, plan in zip(drawn.points, planned.points):
+            if not plan.label:
+                continue
+            label = point.data_label
+            label.position = XL_LABEL_POSITION.RIGHT
+            label.text_frame.text = plan.label
+            _text(label.text_frame.paragraphs[0].runs[0].font, pt)
 
 
 def _stress_label(plot: Any, index: int, light: bool = False) -> None:
@@ -639,12 +927,54 @@ def _axes(built: Any, fmt: str) -> None:
     category.format.line.color.brightness = 0.6
 
 
+def _xy_axes(built: Any, chart: PlanChart, pt: float) -> None:
+    """A scatter's or bubble's two value axes: each its number format and its
+    title with the unit (a reused chart keeps its title format)."""
+    for axis, name, title, unit in (
+        (built.category_axis, "x", chart.x_title, chart.x_unit),
+        (built.value_axis, "y", chart.y_title, chart.unit),
+    ):
+        axis.tick_labels.number_format = number_format(chart, name)
+        axis.tick_labels.number_format_is_linked = False
+        text = axis_title(title, unit)
+        if not text:
+            axis.has_title = False
+            continue
+        frame = axis.axis_title.text_frame if axis.has_title else None
+        runs = frame.paragraphs[0].runs if frame is not None else []
+        if runs:
+            runs[0].text = text
+            for extra in runs[1:]:
+                extra._r.getparent().remove(extra._r)
+            continue
+        axis.axis_title.text_frame.text = text
+        _text(axis.axis_title.text_frame.paragraphs[0].runs[0].font, pt)
+
+
 def _hole(built: Any) -> None:
     for node in built._chartSpace.iter(qn("c:holeSize")):
         node.set("val", "55")
 
 
-def _data(chart: PlanChart) -> CategoryChartData:
+def _number(value: Optional[float]) -> float:
+    return value if value is not None else 0.0
+
+
+def _data(chart: PlanChart) -> Any:
+    if chart.type in XY_TYPES:
+        bubble = chart.type == "bubble"
+        fmt = number_format(chart)
+        xy = (
+            BubbleChartData(number_format=fmt)
+            if bubble
+            else XyChartData(number_format=fmt)
+        )
+        for series in chart.series:
+            added = xy.add_series(series.name)
+            for p in series.points:
+                values = [_number(p.x), _number(p.y)]
+                added.add_data_point(*values, *([_number(p.size)] if bubble else []))
+        return xy
     data = CategoryChartData(number_format=number_format(chart))
     data.categories = chart.categories
     for series in chart.series:
@@ -653,7 +983,7 @@ def _data(chart: PlanChart) -> CategoryChartData:
 
 
 def _percent(chart: PlanChart) -> bool:
-    return chart.type == "stacked_column" and chart.stacked_as == "percent"
+    return chart.type in STACKED_TYPES and chart.stacked_as == "percent"
 
 
 def _title(built: Any, chart: PlanChart, pt: float) -> None:
@@ -662,15 +992,24 @@ def _title(built: Any, chart: PlanChart, pt: float) -> None:
         # Untitled, a one-series chart would show its series name as a title.
         built.has_title = False
         return
+    first, *rest = chart.title.split("\n")
     runs = built.chart_title.text_frame.paragraphs[0].runs if built.has_title else []
+    frame = built.chart_title.text_frame
     if runs:
-        runs[0].text = chart.title
+        runs[0].text = first
         for extra in runs[1:]:
             extra._r.getparent().remove(extra._r)
-        return
-    built.has_title = True
-    built.chart_title.text_frame.text = chart.title
-    _text(built.chart_title.text_frame.paragraphs[0].runs[0].font, pt * 1.2, True)
+        for paragraph in frame.paragraphs[1:]:
+            paragraph._p.getparent().remove(paragraph._p)
+    else:
+        built.has_title = True
+        frame.text = first
+        _text(frame.paragraphs[0].runs[0].font, pt * 1.2, True)
+    # A bubble chart's size line: a plain line under the caption.
+    for line in rest:
+        run = frame.add_paragraph().add_run()
+        run.text = line
+        _text(run.font, pt)
 
 
 def _legend(built: Any, chart: PlanChart, pt: float, keep: bool = False) -> None:
@@ -710,16 +1049,19 @@ def refill(frame: Any, zone: Zone, chart: PlanChart) -> None:
     fmt = number_format(chart)
     pt = chart_pt(zone)
     built.replace_data(_data(chart))
-    if _percent(chart):
+    if chart.type in STACKED_TYPES:
+        # The example may stack to 100 % while the plan does not, or the reverse.
         for grouping in plot._element.iter(qn("c:grouping")):
-            grouping.set("val", "percentStacked")
+            grouping.set("val", "percentStacked" if _percent(chart) else "stacked")
     _title(built, chart, pt)
     _legend(built, chart, pt, keep=True)
     count = len(chart.categories) if chart.type in ROUND else len(chart.series)
     target = emphasis(chart)
     _colour(built, chart, target, painted=range(before, count))
     _relabel(built, chart, pt, fmt, target)
-    if chart.type not in ROUND:
+    if chart.type in XY_TYPES:
+        _xy_axes(built, chart, pt)
+    elif chart.type not in ROUND:
         value = built.value_axis.tick_labels
         value.number_format = "0%" if _percent(chart) else fmt
         value.number_format_is_linked = False
@@ -735,6 +1077,11 @@ def _relabel(
         ser.find(qn("c:dLbls")) for ser in plot._element.iter(qn("c:ser"))
     ]
     own = [s for s in sets if s is not None]
+    if chart.type in XY_TYPES:
+        for node in own:
+            node.getparent().remove(node)
+        _point_labels(built, chart, pt)
+        return
     if not _labelled(chart) or not own:
         for node in own:
             node.getparent().remove(node)
@@ -757,7 +1104,7 @@ def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
     """Replace ``host`` (a chart or content placeholder, or a duplicated chart
     frame) with a native chart at its box and drawing-order place."""
     for series in chart.series:
-        if len(series.values) != len(chart.categories):
+        if chart.type not in XY_TYPES and len(series.values) != len(chart.categories):
             raise ValueError(
                 f"chart series '{series.name}' has {len(series.values)} value(s) for "
                 f"{len(chart.categories)} categories"
@@ -766,7 +1113,7 @@ def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
     data = _data(chart)
     percent = _percent(chart)
     frame = slide.shapes.add_chart(
-        XL_CHART_TYPE.COLUMN_STACKED_100 if percent else XL_TYPES[chart.type],
+        _PERCENT_XL[chart.type] if percent else XL_TYPES[chart.type],
         Emu(host.left),
         Emu(host.top),
         Emu(host.width),
@@ -797,6 +1144,10 @@ def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
         _hole(built)
     else:
         _axes(built, "0%" if percent else fmt)
-        if chart.type in ("column", "bar", "stacked_column"):
-            built.plots[0].gap_width = 60 if chart.type == "stacked_column" else 80
+        if chart.type in XY_TYPES:
+            _xy_axes(built, chart, pt)
+        if chart.type == "bubble":
+            built.plots[0].bubble_scale = _BUBBLE_SCALE
+        if chart.type in ("column", "bar") + STACKED_TYPES:
+            built.plots[0].gap_width = 60 if chart.type in STACKED_TYPES else 80
     return frame
