@@ -53,8 +53,12 @@ has none.
   body font. When an example slide's own chart already shows the type asked,
   it is kept instead (copied with its workbook, data replaced): the designer's
   colours and fonts stay, only legend, labels and number format follow the
-  data. The type mapping, chart data, legend rule and length check are
-  adapted from `fred-capability-pptx-generator` (PR #3058, by Shuigami).
+  data. Eleven types: column, bar, line, pie, doughnut, stacked column and
+  bar, area, radar on categories; scatter and bubble on numeric points
+  (`series [{name, points [{x, y, size, label}]}]`, `x_title`/`y_title`
+  required, one unit per axis, point names shown up to 12 points). The type
+  mapping, chart data, legend rule and length check are adapted from
+  `fred-capability-pptx-generator` (PR #3058, by Shuigami).
 
 - **Storytelling** (`story.py`, `notes.py`): before the assignment, every
   content slide needs a `takeaway` (what the audience concludes, as a
@@ -71,7 +75,8 @@ has none.
 Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
 Design: `openspec/changes/ppt-builder-capability/`, charts:
-`openspec/changes/ppt-builder-charts/`, storytelling:
+`openspec/changes/ppt-builder-charts/` and
+`openspec/changes/ppt-builder-more-chart-types/`, storytelling:
 `openspec/changes/ppt-builder-storytelling/`.
 
 ### Evaluation (opt-in)

@@ -141,8 +141,9 @@ des lignes dans la hauteur du tableau.
 ## Les graphiques
 
 L'agent transforme les chiffres d'une demande en un vrai graphique PowerPoint
-(barres, histogramme, courbes, secteurs, anneau, histogramme empilé, aires),
-qui reste modifiable dans PowerPoint.
+(barres, histogramme, courbes, secteurs, anneau, histogramme ou barres
+empilés, aires, radar, et nuages de points ou bulles qui relient deux ou trois
+mesures), qui reste modifiable dans PowerPoint.
 
 - **Prévoyez une diapositive de graphique** : un masque avec un espace réservé
   de graphique, ou une diapositive d'exemple avec un graphique qui en occupe

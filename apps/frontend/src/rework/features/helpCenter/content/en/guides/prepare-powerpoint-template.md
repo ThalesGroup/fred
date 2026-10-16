@@ -136,8 +136,9 @@ height.
 ## Charts
 
 The agent turns the numbers of a request into a real PowerPoint chart (bars,
-columns, lines, pie, doughnut, stacked columns, areas), which stays editable
-in PowerPoint.
+columns, lines, pie, doughnut, stacked columns or bars, areas, radar, and
+scatter or bubble charts that relate two or three measures), which stays
+editable in PowerPoint.
 
 - **Offer a chart slide**: a layout with a chart placeholder, or an example
   slide holding one chart over a good part of it. A text area beside the chart

@@ -50,6 +50,9 @@ package, so every fred-agents pod that installs that package registers it.
    analysed keep working and are read again in the background (the agent form
    says when a save is needed), at the cost of an upload; until then their
    chart slides stay set aside. The built-in template ships already analysed.
+   Stacked bar, radar, scatter and bubble charts raise it once more (example
+   charts of those types are recognised and reused); the same background
+   refresh applies, with no action.
 5. Storytelling checks (takeaway per slide, one measure per chart, sourced
    figures) are always on and need no action. The agent setting "Validate the
    plan before building" is off by default; a proposed plan is stored in the
