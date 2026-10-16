@@ -378,6 +378,7 @@ describe("AdminTeamsPage team creation", () => {
     const [nameInput, adminInput] = Array.from(dialog()!.querySelectorAll("input"));
     type(nameInput, "  Ops  ");
     act(() => adminInput.focus());
+    type(adminInput, "ad");
     await act(async () => {
       adminInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     });
@@ -478,6 +479,7 @@ describe("AdminTeamsPage team edit", () => {
 
     const adminInput = dialog()!.querySelectorAll("input")[1];
     act(() => adminInput.focus());
+    type(adminInput, "ad");
     await act(async () => {
       adminInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     });

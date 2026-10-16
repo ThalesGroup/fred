@@ -75,7 +75,7 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
   const [adminQuery, setAdminQuery] = useState("");
 
   const trimmedAdminQuery = adminQuery.trim();
-  const { data: candidateAdmins } = useSearchCandidateTeamAdminsQuery(
+  const { data: candidateAdmins, isFetching: searchingAdmins } = useSearchCandidateTeamAdminsQuery(
     { query: trimmedAdminQuery },
     { skip: trimmedAdminQuery.length < 2 },
   );
@@ -202,6 +202,12 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
                 icon: { category: "outlined", type: "search" },
               }}
               onFieldValueChange={setAdminQuery}
+              minQueryLength={2}
+              noOptionsMessage={t(
+                searchingAdmins
+                  ? "rework.adminTeams.createTeam.adminsSearching"
+                  : "rework.adminTeams.createTeam.adminsNoMatch",
+              )}
               options={suggestions.map((user) => ({
                 label: `${user.first_name} ${user.last_name} (${user.username})`,
                 value: user,
@@ -223,6 +229,7 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
                         label={name}
                         secondary={pending ? t("rework.adminTeams.pendingAdmin") : undefined}
                         title={pending ? t("rework.adminTeams.pendingAdminHint", { name }) : undefined}
+                        removeAriaLabel={t("rework.adminTeams.createTeam.adminRemove", { name })}
                         onRemove={() => setAdmins((previous) => previous.filter((u) => u.id !== user.id))}
                       />
                     </li>
