@@ -480,15 +480,27 @@ def misfit(
     """Why ``pattern`` cannot hold all of ``slide`` (empty when it can), and the
     cost of the fit. Uses the renderer's own placement, so a fitting pattern
     loses nothing when rendered."""
+    reasons, cost, _ = _weigh(pattern, slide, size)
+    return reasons, cost
+
+
+def _weigh(
+    pattern: Pattern, slide: SlidePlan, size: Tuple[int, int]
+) -> Tuple[List[Misfit], float, int]:
+    """``misfit``, with the zones a fitting pattern leaves unfilled."""
     if not pattern.fillable:
         if not has_content(slide) or _only_names_the_slide(slide, pattern):
-            return [], 0.0
-        return [
-            Misfit(
-                "this slide is shown as is and takes no content",
-                f"send only the title '{pattern.label}'",
-            )
-        ], 0.0
+            return [], 0.0, 0
+        return (
+            [
+                Misfit(
+                    "this slide is shown as is and takes no content",
+                    f"send only the title '{pattern.label}'",
+                )
+            ],
+            0.0,
+            0,
+        )
     reasons: List[Misfit] = []
     lost: List[str] = []
     text = _assign_text(pattern, slide, lost)
@@ -594,25 +606,29 @@ def misfit(
             )
         )
     if reasons:
-        return reasons, 0.0
+        return reasons, 0.0, 0
 
+    empty = 0
     for zone in pattern.zones:
         if zone.role == "image":
+            empty += 0 if images else 1
             cost += 0.0 if images else _IMAGE_HOLE
         elif (
             zone.role not in ("keep", "table", "chart")
             and zone.key not in text
             and zone is not host
         ):
+            empty += 1
             cost += _EMPTY_ZONE
     for group in pattern.groups:
         for item, zones in zip(slide.items, group.items):
-            holes = sum(1 for z in zones if z.role == "image")
-            cost += 0.0 if item.image else _IMAGE_HOLE * holes
+            holes = 0 if item.image else sum(1 for z in zones if z.role == "image")
+            empty += holes
+            cost += _IMAGE_HOLE * holes
     cost += _UNUSED_ITEM * max(0, capacity - len(slide.items)) if slide.items else 0.0
     if pattern.source == "layout":
         cost += _LAYOUT
-    return reasons, cost
+    return reasons, cost, empty
 
 
 def _many(found: List[Misfit]) -> Misfit:
@@ -727,6 +743,10 @@ class _Slide:
     tiers: List[List[SlideKind]] = field(default_factory=list)
     # Every assignable pattern, with its misfit reasons and cost.
     checked: List[Tuple[Pattern, List[Misfit], float]] = field(default_factory=list)
+    # Per pattern id, the zones it leaves unfilled; the fits dropped for one
+    # of their kind that fills more (`_fullest`).
+    empty: Dict[str, int] = field(default_factory=dict)
+    emptier: set[str] = field(default_factory=set)
     candidates: List[Tuple[Pattern, float]] = field(default_factory=list)
     # A slide that fits nothing: the pattern closest to holding it, its misfits.
     closest: Optional[Tuple[Pattern, List[Misfit]]] = None
@@ -741,9 +761,9 @@ def _kept(
 ) -> List[Tuple[Pattern, float]]:
     """The template slide the delivered deck showed this slide on, alone, while
     it is still among the best-ranked kind's fits: a text change keeps its
-    design, a kind the template replaced included."""
+    design, a kind the template replaced included. Otherwise the fullest fits."""
     kept = [c for c in candidates if c[0].id == slide.plan.built_on]
-    return kept or candidates
+    return kept or _fullest(slide, candidates)
 
 
 def _asked(slide: _Slide, has_cover: bool) -> Optional[SlideProblem]:
@@ -819,7 +839,13 @@ def _tiers(slide: _Slide, has_cover: bool) -> List[List[SlideKind]]:
         return [[asked], list(CLOSE_KINDS[asked])]
     inferred = infer_kinds(slide.plan)
     tiers: List[List[SlideKind]] = [[asked]] if asked else []
-    tiers.append([k for k in inferred if k != asked])
+    # A chart has one natural form: a content area only when no chart slide holds it.
+    first: List[SlideKind] = (
+        [] if asked or _chart(slide.plan) is None else [inferred[0]]
+    )
+    if first:
+        tiers.append(first)
+    tiers.append([k for k in inferred if k != asked and k not in first])
     seen = set(inferred) | {asked}
     tiers.append([k for k in SLIDE_KINDS if k not in seen])
     return tiers
@@ -841,6 +867,30 @@ def _candidates(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
         if found:
             return found
     return []
+
+
+def _fullest(
+    slide: _Slide, found: List[Tuple[Pattern, float]]
+) -> List[Tuple[Pattern, float]]:
+    """Without the fits one of their kind beats on unfilled zones at no higher
+    cost: reuse and variety only choose between equally filled slides."""
+    kept = [
+        (p, cost)
+        for p, cost in found
+        if not any(
+            q.kind == p.kind and slide.empty[q.id] < slide.empty[p.id] and other <= cost
+            for q, other in found
+        )
+    ]
+    slide.emptier |= {p.id for p, _ in found} - {p.id for p, _ in kept}
+    return kept
+
+
+def _check(slide: _Slide, pool: List[Pattern], size: Tuple[int, int]) -> None:
+    for p in pool:
+        reasons, cost, empty = _weigh(p, slide.plan, size)
+        slide.checked.append((p, reasons, cost))
+        slide.empty[p.id] = empty
 
 
 # --- a list continued on a second slide ---------------------------------------------------
@@ -940,12 +990,15 @@ def _split(
         parts = _parts(slide, count)
         for part in parts:
             part.tiers = [[kind]]
-            part.checked = [(p, *misfit(p, part.plan, size)) for p in mine]
-            part.candidates = [
-                (p, cost)
-                for p, reasons, cost in part.checked
-                if not reasons and _allowed(p, part, has_cover)
-            ]
+            _check(part, mine, size)
+            part.candidates = _fullest(
+                part,
+                [
+                    (p, cost)
+                    for p, reasons, cost in part.checked
+                    if not reasons and _allowed(p, part, has_cover)
+                ],
+            )
         if all(part.candidates for part in parts):
             what = "items" if plan.items else "rows"
             return _Split(kind, what, entries, most if plan.items else 0, parts)
@@ -1628,6 +1681,8 @@ def _repeats(
         reused = len({p.id for _, p in group}) < len(group)
         # Left out: a variant that has the fit problem of every slide of the group.
         blocked = set.intersection(*(_same_problem(s) for s, _ in group))
+        # And one that would leave a zone unfilled on every slide of it.
+        blocked |= set.intersection(*(s.emptier for s, _ in group))
         plans = [s.plan for s, _ in group]
         offer = [
             p for p in unused if p.id not in blocked and not _wants_picture(p, plans)
@@ -1765,7 +1820,7 @@ def assign(
             )
             continue
         slide.tiers = _tiers(slide, has_cover)
-        slide.checked = [(p, *misfit(p, slide.plan, size)) for p in pool]
+        _check(slide, pool, size)
         if slide.plan.asked_design is not None:
             asked = _asked(slide, has_cover)
             if asked is not None:

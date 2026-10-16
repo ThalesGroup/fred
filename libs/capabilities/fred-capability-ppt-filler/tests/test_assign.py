@@ -1084,16 +1084,19 @@ def _pictured_layout() -> Pattern:
 
 def test_max_uses_one_takes_another_variant_of_the_same_kind():
     plan = [_points(1), _points(2, "two_columns"), _points(3)]
-    inventory = _max_uses_inventory(_pictured_layout())
 
-    def labels(variety: Any, max_uses: int) -> List[str]:
+    def labels(inventory: TemplateInventory, variety: Any, max_uses: int) -> List[str]:
         found = assign(inventory, _plan(*plan), variety, max_uses).patterns
         return [p.label if p else "-" for p in found]
 
-    assert labels("template_slide", 2) == ["A", "Two cols", "A"]
-    assert labels("off", 1) == ["A", "Two cols", "A"]
-    assert labels("template_slide", 1) == ["A", "Two cols", "Pic"]
-    assert labels("kind", 1) == ["A", "Two cols", "Pic"]
+    plain = _max_uses_inventory(_bullets("layout:3", "B"))
+    assert labels(plain, "template_slide", 1) == ["A", "Two cols", "B"]
+    assert labels(plain, "kind", 1) == ["A", "Two cols", "B"]
+    # A variant leaving a zone unfilled is never taken for variety alone.
+    pictured = _max_uses_inventory(_pictured_layout())
+    for variety, max_uses in (("template_slide", 2), ("off", 1), ("template_slide", 1)):
+        assert labels(pictured, variety, max_uses) == ["A", "Two cols", "A"]
+    assert labels(pictured, "kind", 1) == ["A", "Two cols", "A"]
     # One bullets variant: the requested kind is kept, the reuse only priced.
     alone = assign(_max_uses_inventory(), _plan(*plan), "template_slide", 1)
     assert [p.label for p in alone.patterns if p] == ["A", "Two cols", "A"]
@@ -1101,7 +1104,7 @@ def test_max_uses_one_takes_another_variant_of_the_same_kind():
 
 def test_max_uses_is_raised_to_what_the_template_allows():
     plan = [_points(1), _points(2, "two_columns"), _points(3), _points(4)]
-    inventory = _max_uses_inventory(_pictured_layout())
+    inventory = _max_uses_inventory(_bullets("layout:3", "B"))
     # Four content slides on three template slides: one is used twice anyway.
     assert assign(inventory, _plan(*plan), "template_slide", 1).repeats == []
     # By kind, two kinds for four slides: two each; bullets on three is one too many.
@@ -1113,7 +1116,7 @@ def test_max_uses_is_raised_to_what_the_template_allows():
     cover = _bullets("slide:9", "Cover", source="slide").model_copy(
         update={"kind": "cover"}
     )
-    covered = _max_uses_inventory(_pictured_layout(), cover)
+    covered = _max_uses_inventory(_bullets("layout:3", "B"), cover)
     with_cover = [SlidePlan(title="Deck", subtitle="x")] + plan[:3]
     assert assign(covered, _plan(*with_cover), "kind", 1).repeats == []
 
@@ -1159,7 +1162,9 @@ def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
     assignment = assign(inventory, _plan(*EVIDENCE_SLIDES), "kind")
     (repeat,) = assignment.repeats
     assert repeat.kind == "bullets" and repeat.slides == [3, 5, 7, 9, 10]
-    assert len(repeat.labels) == 5 and repeat.revisable
+    # 'Free text' would leave a zone unfilled where the others fill all of theirs.
+    assert len(repeat.labels) == 4 and "Free text" not in repeat.labels
+    assert repeat.revisable
     # Each suggestion says what the template's slide of that kind holds.
     items = "items max 6 [heading ≤12 words (≈20 chars × 4 lines), text ≤12 words (≈20 chars × 4 lines)]"
     # One cards and one timeline variant; the one two_columns variant already

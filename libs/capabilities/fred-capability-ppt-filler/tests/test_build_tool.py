@@ -916,11 +916,11 @@ async def test_the_delivered_text_names_each_file_slides_design(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_two_template_slides_sharing_a_label_get_distinct_names(monkeypatch):
-    extend = _relabel(**{"slide:269": "Free text"})
+    extend = _relabel(**{"slide:269": "Points"}, **{"slide:266": "Points"})
     text, result = await _build(monkeypatch, extend=extend, slides=[COVER, *_points(3)])
     assert not result.is_error, text
     (designs,) = [line for line in text.splitlines() if line.startswith("Designs: ")]
-    assert "'Free text'" in designs and "'Free text #2'" in designs
+    assert "'Points'" in designs and "'Points #2'" in designs
 
 
 def test_a_long_design_name_is_cut():

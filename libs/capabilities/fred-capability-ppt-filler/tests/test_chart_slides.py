@@ -307,6 +307,40 @@ def test_a_takeaway_goes_beside_the_chart_and_a_bare_chart_spans_the_slide(built
     ]
 
 
+def _three_chart_slides(inventory: TemplateInventory) -> TemplateInventory:
+    """A centred chart and two chart slides with a text box beside it, as a
+    customer template draws them."""
+    takeaway, wide = [p for p in inventory.patterns if p.kind == "chart"]
+    others = [p for p in inventory.patterns if p.kind != "chart"]
+    side = [
+        takeaway.model_copy(update={"id": f"slide:{n}", "label": label})
+        for n, label in ((901, "Left"), (902, "Right"))
+    ]
+    centred = wide.model_copy(update={"label": "Centred"})
+    return inventory.model_copy(update={"patterns": [*others, centred, *side]})
+
+
+def test_a_bare_chart_keeps_the_centred_slide_and_text_alternates_the_sides(builtin):
+    inventory = _three_chart_slides(builtin[1])
+    bare = [_chart_slide(REVENUE, title=f"Revenue {n}") for n in range(6)]
+    assignment = assign(inventory, _plan(*bare), "template_slide", 1)
+    assert not assignment.problems
+    # Fewer empty zones beats variety: never a side slide with its text box empty.
+    assert [p.label for p in assignment.patterns[1:] if p] == ["Centred"] * 6
+    assert not [r for r in assignment.repeats if r.revisable]
+    told = [
+        _chart_slide(REVENUE, title=f"Revenue {n}", bullets=["Q4 leads"])
+        for n in range(4)
+    ]
+    labels = [
+        p.label
+        for p in assign(inventory, _plan(*told), "template_slide", 1).patterns[1:]
+        if p
+    ]
+    assert set(labels) == {"Left", "Right"}
+    assert all(a != b for a, b in zip(labels, labels[1:]))
+
+
 def test_a_content_area_hosts_the_chart_when_no_chart_slide_exists():
     template = build_layouts_only_template()
     inventory = analyze_template(template).inventory
