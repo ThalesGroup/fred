@@ -365,6 +365,10 @@ ILLUSTRATIVE_WORDS = (
     "hypothetical",
 )
 
+# Shape or layout-placeholder names of a kicker: the small line above a title
+# (eyebrow, surtitre). It is no slot: the builder leaves it out of the deck.
+KICKER_NAMES = ("kicker", "eyebrow", "surtitre", "sur titre", "overline", "pretitle")
+
 # Shape names and vision purposes of a zone made for the slide's key message.
 TAKEAWAY_NAMES = (
     "takeaway",

@@ -60,6 +60,7 @@ from fred_capability_ppt_filler.builder.analysis import (
     _cell_text,
     _font_name_of,
     estimate_capacity,
+    kicker_keys,
     theme_fonts,
 )
 from fred_capability_ppt_filler.builder.models import (
@@ -450,6 +451,19 @@ def _remove(placed: PlacedShape) -> None:
     parent = element.getparent()
     if parent is not None:
         parent.remove(element)
+
+
+def _remove_kickers(slide, pattern: Pattern) -> None:
+    """A kicker line above the title is no zone: the slide shows it neither
+    empty nor with its example text."""
+    zones = {z.key for z in pattern.zones} | {
+        z.key for g in pattern.groups for item in g.items for z in item
+    }
+    index = _shape_index(slide)
+    for key in kicker_keys(slide) - zones:
+        placed = index.get(key)
+        if placed is not None:
+            _remove(placed)
 
 
 # --- text -----------------------------------------------------------------------------
@@ -1536,6 +1550,7 @@ class _Renderer:
     def _fill(
         self, slide, pattern: Pattern, plan: SlidePlan, position: int, start: int = 0
     ) -> None:
+        _remove_kickers(slide, pattern)
         index = _shape_index(slide)
         report = self.report.slide(position)
         lost: List[str] = []

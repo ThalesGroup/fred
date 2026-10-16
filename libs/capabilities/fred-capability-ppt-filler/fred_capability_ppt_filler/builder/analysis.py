@@ -190,7 +190,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 17
+ANALYSIS_VERSION = 18
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -447,6 +447,37 @@ def _placeholder_key(shape) -> str:
 
 def _shape_key(path: Tuple[int, ...]) -> str:
     return "sp:" + "/".join(str(part) for part in path)
+
+
+def kicker_keys(owner) -> set[str]:
+    """Keys of the kicker lines of a slide or layout: text named a kicker, by
+    its shape name or its layout placeholder's (never by geometry). The
+    analysis makes no zone of them and the renderer removes them."""
+    layout = getattr(owner, "slide_layout", None)
+    layout_names = (
+        {ph.placeholder_format.idx: ph.name or "" for ph in layout.placeholders}
+        if layout is not None
+        else {}
+    )
+    keys: set[str] = set()
+    for placed in walk_shapes(owner.shapes):
+        shape = cast(Any, placed.shape)
+        if not getattr(shape, "has_text_frame", False):
+            continue
+        said = [shape.name or ""]
+        if shape.is_placeholder:
+            fmt = shape.placeholder_format
+            if fmt.type is not None and fmt.type.name in _TITLE_PLACEHOLDERS:
+                continue
+            said.append(layout_names.get(fmt.idx, ""))
+            key = _placeholder_key(shape)
+        else:
+            key = _shape_key(placed.path)
+        if any(
+            lexicon.name_matches(name, lexicon.KICKER_NAMES) for name in said if name
+        ):
+            keys.add(key)
+    return keys
 
 
 def _records(
@@ -787,8 +818,10 @@ class _Analyzer:
 
     def run(self) -> TemplateInventory:
         slides = list(self.prs.slides)
-        slide_records = [
-            _records(
+        slide_records: List[List[_Rec]] = []
+        for slide in slides:
+            kickers = kicker_keys(slide)
+            records = _records(
                 slide.shapes,
                 self.width,
                 self.height,
@@ -796,8 +829,7 @@ class _Analyzer:
                 slide.slide_layout.slide_master,
                 self.theme,
             )
-            for slide in slides
-        ]
+            slide_records.append([rec for rec in records if rec.key not in kickers])
         self.shared_texts = self._shared_texts(slide_records)
 
         patterns: List[Pattern] = []
@@ -867,14 +899,19 @@ class _Analyzer:
     def _layout_pattern(
         self, layout, index: int
     ) -> Tuple[Pattern, Dict[int, ZoneRole]]:
-        records = _records(
-            layout.placeholders,
-            self.width,
-            self.height,
-            None,
-            layout.slide_master,
-            self.theme,
-        )
+        kickers = kicker_keys(layout)
+        records = [
+            rec
+            for rec in _records(
+                layout.placeholders,
+                self.width,
+                self.height,
+                None,
+                layout.slide_master,
+                self.theme,
+            )
+            if rec.key not in kickers
+        ]
         slotted = [rec for rec in records if _placeholder_role(rec) is not None]
         groups, in_rows = self._row_group(
             [
@@ -1926,4 +1963,5 @@ __all__ = [
     "analyze_presentation",
     "analyze_template",
     "estimate_capacity",
+    "kicker_keys",
 ]
