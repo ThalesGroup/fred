@@ -46,6 +46,8 @@ from control_plane_backend.platform_access.schemas import (
     PlatformEnrollmentLinksPage,
     PlatformEnrollmentLinkStatus,
     PlatformT0Preview,
+    PlatformT0RefreshMode,
+    RefreshPlatformT0,
     SetPlatformAccessPolicy,
     SetPlatformAccessTeam,
     SetPlatformFiltering,
@@ -213,17 +215,25 @@ async def revoke_platform_access_user(
 
 @router.get("/admin/platform/access/t0-preview", response_model=PlatformT0Preview)
 async def preview_platform_access_t0(
-    access: Access, user: Admin, deps: UserDeps
+    access: Access,
+    user: Admin,
+    deps: UserDeps,
+    refresh_mode: PlatformT0RefreshMode | None = None,
 ) -> PlatformT0Preview:
-    return await service.t0(access, directory=PlatformAccessDirectory(deps))
+    return await service.t0(
+        access, directory=PlatformAccessDirectory(deps), refresh_mode=refresh_mode
+    )
 
 
 @router.post("/admin/platform/access/t0-import", response_model=PlatformT0Preview)
 async def import_platform_access_t0(
-    access: Access, user: Admin, deps: UserDeps
+    access: Access,
+    user: Admin,
+    deps: UserDeps,
+    body: RefreshPlatformT0 | None = None,
 ) -> PlatformT0Preview:
     result, imported_count = await service.import_t0(
-        access, user, directory=PlatformAccessDirectory(deps)
+        access, user, directory=PlatformAccessDirectory(deps), refresh=body
     )
     if imported_count is not None:
         emit_audit_log(
@@ -233,6 +243,7 @@ async def import_platform_access_t0(
             candidates=result.candidates,
             matching=result.matching,
             imported_count=imported_count,
+            mode=body.mode if body is not None else None,
         )
     return result
 

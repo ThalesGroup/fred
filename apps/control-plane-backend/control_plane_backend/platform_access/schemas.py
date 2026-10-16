@@ -135,10 +135,24 @@ class DeletedPlatformEnrollmentLinks(BaseModel):
     deleted_count: int
 
 
+PlatformT0RefreshMode = Literal["preserve_removals", "include_removed"]
+
+
+class RefreshPlatformT0(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: PlatformT0RefreshMode
+    expected_revision: int = Field(ge=0)
+    expected_completed_at: AwareDatetime
+
+
 class PlatformT0Preview(BaseModel):
     candidates: int
     matching: int
     completed_at: datetime | None
+    revision: int = 0
+    removal_history_complete: bool = True
+    removed_skipped: int = 0
+    imported_count: int | None = None
 
 
 class PlatformAccessStatus(BaseModel):

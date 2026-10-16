@@ -10,6 +10,11 @@ import pytest_asyncio
 from control_plane_backend.app.dependencies import get_application_configuration
 from control_plane_backend.platform_access import api, service
 from control_plane_backend.platform_access.directory import PlatformAccessDirectory
+from control_plane_backend.platform_access.schemas import (
+    PlatformT0Preview,
+    PlatformT0RefreshMode,
+    RefreshPlatformT0,
+)
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.users.dependencies import (
@@ -26,6 +31,7 @@ from fred_core.security.platform_access.access_control import (
 from fred_core.security.platform_access.models import (
     PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
+    PlatformAccessRemovalRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -102,6 +108,7 @@ async def access(tmp_path):
             UserRow,
             TeamMetadataRow,
             PlatformAccessLinkRow,
+            PlatformAccessRemovalRow,
             PlatformAccessLinkJoinerRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
@@ -731,6 +738,7 @@ async def pg_access(monkeypatch):
                 UserRow,
                 TeamMetadataRow,
                 PlatformAccessLinkRow,
+                PlatformAccessRemovalRow,
                 PlatformAccessSettingsRow,
                 PlatformAccessUserRow,
             ):
@@ -2108,3 +2116,335 @@ async def test_pg_user_search_ignores_accents_and_case(pg_access):
     assert await found("hélène") == ["helene"]
     assert await found("ольга") == ["olga"]
     assert await found("zzz") == []
+
+
+def refresh_request(
+    preview: PlatformT0Preview, mode: PlatformT0RefreshMode = "preserve_removals"
+) -> RefreshPlatformT0:
+    assert preview.completed_at is not None
+    return RefreshPlatformT0(
+        mode=mode,
+        expected_revision=preview.revision,
+        expected_completed_at=preview.completed_at.replace(tzinfo=timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["manual", "t0"])
+async def test_refresh_preserves_removals_and_can_explicitly_restore_them(
+    access, source
+):
+    actor, removed, manual, newcomer = user("accepted"), user(), user(), user()
+    for person in (removed, manual):
+        await access.observe(person)
+    await service.set_user(access, actor, UUID(manual.uid), True)
+    first = await service.t0(access, actor)
+    if source == "manual":
+        removed = manual
+    await service.set_user(access, actor, UUID(removed.uid), False)
+    async with access.store.read() as session:
+        history = await session.get(PlatformAccessRemovalRow, UUID(removed.uid))
+        assert history.removed_by == actor.uid
+        removed_at = history.removed_at
+    await service.set_user(access, actor, UUID(removed.uid), False)
+    async with access.store.read() as session:
+        assert (
+            await session.get(PlatformAccessRemovalRow, UUID(removed.uid))
+        ).removed_at == removed_at
+    await access.observe(newcomer)
+    preview = await service.t0(access, refresh_mode="preserve_removals")
+    assert preview.candidates == 1 and preview.removed_skipped == 1
+    result, count = await service.import_t0(
+        access, actor, refresh=refresh_request(preview)
+    )
+    assert count == result.imported_count == 1
+    assert await access.store.exception(UUID(removed.uid)) is None
+    assert (await access.store.exception(UUID(newcomer.uid))).source == "t0"
+    assert result.completed_at is not None and first.completed_at is not None
+    assert result.completed_at > first.completed_at.replace(tzinfo=timezone.utc)
+    preview = await service.t0(access, refresh_mode="include_removed")
+    result, count = await service.import_t0(
+        access, actor, refresh=refresh_request(preview, "include_removed")
+    )
+    assert count == 1
+    assert (await access.store.exception(UUID(removed.uid))).source == "t0"
+    # A replay cannot undo a removal performed after the confirmed refresh.
+    await service.set_user(access, actor, UUID(removed.uid), False)
+    with pytest.raises(HTTPException) as error:
+        await service.import_t0(
+            access, actor, refresh=refresh_request(preview, "include_removed")
+        )
+    assert error.value.status_code == 409
+    assert await access.store.exception(UUID(removed.uid)) is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_requires_full_reset_for_legacy_history(access):
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.t0(access, actor)
+    await service.set_user(access, actor, UUID(person.uid), False)
+    async with access.store.mutation() as session:
+        (await access.state(session)).t0_removal_history_complete = False
+    status = await service.t0(access)
+    assert not status.removal_history_complete
+    with pytest.raises(HTTPException) as error:
+        await service.import_t0(access, actor, refresh=refresh_request(status))
+    assert error.value.detail == "platform_access_t0_full_refresh_required"
+    assert not (await service.t0(access)).removal_history_complete
+    preview = await service.t0(access, refresh_mode="include_removed")
+    result, count = await service.import_t0(
+        access, actor, refresh=refresh_request(preview, "include_removed")
+    )
+    assert count == 1 and result.removal_history_complete
+    assert (await service.t0(access, refresh_mode="preserve_removals")).candidates == 0
+
+
+@pytest.mark.asyncio
+async def test_refresh_retains_grant_provenance_and_advances_empty_completion(access):
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.set_user(access, actor, UUID(person.uid), True)
+    grant = await access.store.exception(UUID(person.uid))
+    await service.t0(access, actor)
+    preview = await service.t0(access, refresh_mode="include_removed")
+    result, count = await service.import_t0(
+        access, actor, refresh=refresh_request(preview, "include_removed")
+    )
+    retained = await access.store.exception(UUID(person.uid))
+    assert (retained.source, retained.granted_by, retained.granted_at) == (
+        grant.source,
+        grant.granted_by,
+        grant.granted_at,
+    )
+    assert result.completed_at is not None and preview.completed_at is not None
+    assert count == 0 and result.completed_at > preview.completed_at.replace(
+        tzinfo=timezone.utc
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["policy", "filtering"])
+async def test_refresh_rejects_changed_policy_or_activation(access, change):
+    actor = user("accepted")
+    await service.t0(access, actor)
+    preview = await service.t0(access, refresh_mode="include_removed")
+    later = user()
+    await access.observe(later)
+    if change == "policy":
+        await service.save_policy(access, actor, draft("different"), preview.revision)
+    else:
+        await service.set_filtering(access, actor, True)
+    with pytest.raises(HTTPException) as error:
+        await service.import_t0(
+            access, actor, refresh=refresh_request(preview, "include_removed")
+        )
+    assert error.value.status_code == 409
+    assert await access.store.exception(UUID(later.uid)) is None
+    assert (await service.t0(access)).completed_at == preview.completed_at
+
+
+@pytest.mark.asyncio
+async def test_keycloak_refresh_imports_new_directory_identity(access):
+    actor = user("accepted")
+    directory = keycloak_directory(FakeDirectoryAdmin([]))
+    await service.import_t0(access, actor, directory)
+    later = user()
+    directory = keycloak_directory(
+        FakeDirectoryAdmin([{"id": later.uid, "username": "new-in-directory"}])
+    )
+    preview = await service.t0(
+        access, directory=directory, refresh_mode="preserve_removals"
+    )
+    assert preview.candidates == 1
+    result, count = await service.import_t0(
+        access, actor, directory, refresh=refresh_request(preview)
+    )
+    assert count == 1 and result.imported_count == 1
+    assert (await access.store.exception(UUID(later.uid))).source == "t0"
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_concurrent_pg_refresh_commits_only_once(pg_access):
+    import asyncio
+
+    actor = user("accepted")
+    await service.t0(pg_access, actor)
+    later = user()
+    await pg_access.observe(later)
+    preview = await service.t0(pg_access, refresh_mode="include_removed")
+    request = refresh_request(preview, "include_removed")
+    results = await asyncio.gather(
+        service.import_t0(pg_access, actor, refresh=request),
+        service.import_t0(pg_access, actor, refresh=request),
+        return_exceptions=True,
+    )
+    assert (
+        sum(
+            isinstance(result, HTTPException) and result.status_code == 409
+            for result in results
+        )
+        == 1
+    )
+    assert (await pg_access.store.exception(UUID(later.uid))).source == "t0"
+
+
+@pytest.mark.asyncio
+async def test_failed_revocation_rolls_back_removal_record(access, monkeypatch):
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.set_user(access, actor, UUID(person.uid), True)
+
+    async def reject(*args):
+        raise HTTPException(409, "platform_access_actor_lockout")
+
+    monkeypatch.setattr(service, "preserve_actor", reject)
+    with pytest.raises(HTTPException):
+        await service.set_user(access, actor, UUID(person.uid), False)
+    assert await access.store.exception(UUID(person.uid)) is not None
+    async with access.store.read() as session:
+        assert await session.get(PlatformAccessRemovalRow, UUID(person.uid)) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_pg_t0_removal_history_migration(pg_access):
+    import runpy
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import text
+
+    migration = runpy.run_path(
+        str(
+            Path(__file__).parents[1]
+            / "alembic/versions/d4e8b2a6f091_add_t0_removal_history.py"
+        )
+    )
+    async with pg_access.store.engine.begin() as connection:
+        await connection.execute(text("DROP TABLE platform_access_removals"))
+        await connection.execute(
+            text(
+                "ALTER TABLE platform_access_settings DROP COLUMN t0_removal_history_complete"
+            )
+        )
+        await connection.execute(
+            text(
+                "UPDATE platform_access_settings SET t0_completed_at = now() WHERE id = 1"
+            )
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO platform_access_settings (id, revision, filtering_enabled) VALUES (2, 0, false)"
+            )
+        )
+
+        def upgrade(sync_connection):
+            with Operations.context(MigrationContext.configure(sync_connection)):
+                migration["upgrade"]()
+
+        await connection.run_sync(upgrade)
+        flags = (
+            await connection.execute(
+                text(
+                    "SELECT id, t0_removal_history_complete FROM platform_access_settings ORDER BY id"
+                )
+            )
+        ).all()
+        assert flags == [(1, False), (2, True)]
+        assert (
+            await connection.execute(
+                text("SELECT count(*) FROM platform_access_removals")
+            )
+        ).scalar_one() == 0
+        await connection.execute(
+            text(
+                "INSERT INTO platform_access_settings (id, revision, filtering_enabled) VALUES (3, 0, false)"
+            )
+        )
+        assert (
+            await connection.execute(
+                text(
+                    "SELECT t0_removal_history_complete FROM platform_access_settings WHERE id = 3"
+                )
+            )
+        ).scalar_one()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["filtering", "policy"])
+async def test_refresh_rechecks_state_after_directory_preparation(
+    access, monkeypatch, change
+):
+    import asyncio
+    import threading
+
+    actor, person = user("accepted"), user()
+    await access.observe(person)
+    await service.t0(access, actor)
+    preview = await service.t0(access, refresh_mode="include_removed")
+    entered, release = threading.Event(), threading.Event()
+    original = access.observed_match
+
+    def pause(row, policy):
+        entered.set()
+        assert release.wait(5)
+        return original(row, policy)
+
+    monkeypatch.setattr(access, "observed_match", pause)
+    task = asyncio.create_task(
+        service.import_t0(
+            access, actor, refresh=refresh_request(preview, "include_removed")
+        )
+    )
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        if change == "filtering":
+            await service.set_filtering(access, actor, True)
+        else:
+            await service.save_policy(
+                access, actor, draft("different"), preview.revision
+            )
+    finally:
+        release.set()
+    with pytest.raises(HTTPException) as error:
+        await task
+    assert error.value.status_code == 409
+    assert (await service.t0(access)).completed_at == preview.completed_at
+
+
+@pytest.mark.asyncio
+async def test_refresh_audit_reports_actual_additions_and_mode_once(
+    access, monkeypatch
+):
+    actor = user("accepted")
+    await service.t0(access, actor)
+    later = user()
+    await access.observe(later)
+    preview = await service.t0(access, refresh_mode="preserve_removals")
+    request = refresh_request(preview)
+    events = []
+    monkeypatch.setattr(
+        api, "emit_audit_log", lambda name, **fields: events.append((name, fields))
+    )
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/admin/platform/access/t0-import", json=request.model_dump(mode="json")
+        )
+        replay = await client.post(
+            "/admin/platform/access/t0-import", json=request.model_dump(mode="json")
+        )
+    assert response.status_code == 200 and replay.status_code == 409
+    assert response.json()["imported_count"] == 1
+    assert len(events) == 1
+    assert events[0][1]["mode"] == "preserve_removals"
+    assert events[0][1]["imported_count"] == 1
