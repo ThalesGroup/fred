@@ -86,7 +86,7 @@ Owns: `render.py`, `checks.py` (new), test `test_builder_render.py`.
 
 Blocked on the developer's deck. Owns: `assets/fred_template.pptx`, `assets/fred_template.inventory.json`, `builtin.py` (new), package `Makefile` target, package-data entry in `pyproject.toml`, `theme.py` (deletion), test `test_builtin_template.py` (new). Touches `capability.py` only to swap the import (after WP4).
 
-- [ ] 7.1 Author the deck (Q5) with example slides for every kind but `team`/`other` (deck shipped; since WP12 the rules analysis finds `cover`, `quote`, `image_text`, `cards`; the deck still has no `timeline` slide: developer fix pending, then `make builtin-inventory`)
+- [x] 7.1 Author the deck (Q5) with example slides for every kind but `team`/`other` (2026-10-16: the owner's "fred-default-showcase" deck, 45 slides, replaces it; its table body emptied (owner decision A), its kicker lines left out by `ppt-builder-kicker-label` (decision B); the rules analysis finds cover, agenda, section, bullets, two_columns, comparison, cards, quote, image_text, timeline, table, chart (+ full and two-chart slides), figures, process, team, closing; see verification "Built-in deck swap")
 - [x] 7.2 `make builtin-inventory` regenerates the JSON through the full pipeline; test fails when it lags `ANALYSIS_VERSION`
 - [x] 7.0 Interim (not blocked, done in WP4): `builtin.py` backed by `theme.py` (superseded: `builtin.py` reads the shipped asset)
 - [x] 7.3 `/builtin` routes replace `/theme`; delete `theme.py` once the real deck lands

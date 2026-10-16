@@ -1545,3 +1545,32 @@ Path chosen: a frontend locale key per capability, `capability.<id>.preparing`, 
 Commands (apps/frontend, no make target): `tsc --noEmit` clean; prettier and eslint clean on touched files (locales and Help Center pages included); `vitest run` on the helper, `AgentCard` and the `AgentFormModal` folder: 14 files, 136 tests passed. fred-sdk `ruff check` / `ruff format --check` clean on the docstring change. `openspec validate ppt-builder-capability --strict` valid.
 
 Not covered: the banner and the form message in the browser.
+
+## Results: built-in deck swap (task 7.1, 2026-10-16)
+
+Deck: the owner's `fred-default-showcase.pptx` (45 slides, "Fred …" layouts). Owner decision A: `ppt/slides/slide33.xml` ("Fred Table") rewritten by a one-off lxml script, every other part copied byte for byte: header row kept, the 18 body cells (6 rows × 3 columns) emptied, each keeping its `tcPr` and an `a:endParaRPr sz="1400" b="0"` (the run's properties, as in `ppt-builder-builtin-table-slide` D2). Saved as `fred-default-showcase-table-vide.pptx` beside the original, then copied over `assets/fred_template.pptx`; `make builtin-inventory`. Decision B: `ppt-builder-kicker-label`.
+
+| Kind offered | Built-in slide(s) |
+| --- | --- |
+| cover | Fred Title (slide 1) |
+| agenda / section | Fred Agenda; Fred Section ×4, Title Only layouts |
+| bullets, two_columns, comparison, cards | Title and Content…; Two Content, Code; Comparison, Before After; Three Columns, Four/Six Cards, Three Images, Matrix |
+| quote, image_text | Fred Quote ×2; Title Image, Content with Image, Image Left, Full Image, Two Images, Screenshot |
+| timeline, process, team | Fred Timeline; Process ×2; Team |
+| table | Fred Table (3 columns, header + ≈6 lines) |
+| chart | Fred Chart (takeaway card), Chart Full (caption), Two Charts, Chart and Figures |
+| figures, closing | Key Figures ×2; Closing ×2 |
+
+Assignment fix found by the swap (commit `fix(#2679): count a list left without items…`): "Fred Chart and Figures" (chart + a two-figure list) won every bare chart, because a list given no items counted no empty zone in `_weigh`, and the render then removed the list with a `left_empty` note. A list left without items now counts its zones as unfilled (`_EMPTY_ZONE` each). Test: `test_a_chart_without_items_avoids_the_slide_whose_list_would_stay_empty` (fails without the fix); the old deck's suite was unchanged by it.
+
+Test expectations changed as consequences of the deck only: pattern ids and names (`slide:266` → `slide:288` table, "Fred Chart Wide" → "Fred Chart Full" with its caption body, two more chart slides), the table's 3 columns (two-offer comparison, 10-row continuation, "4 columns given, max 3"), the example chart's design (no series colour, literal gridlines `E3E5EF`, plot-wide value labels; a fresh chart checked with an area chart, the style-part test's second chart a line for the full slide's example), takeaway and figure placeholders found by their layout names, the full chart slide's caption taking the bullet when the card shows the takeaway (told, `intent_not_shown`), the figures slide holding 4, no chart-capable content placeholder, and a section list added in the test (the deck has none).
+
+Commands: package `make test`: 890 passed, 5 skipped; `ruff check`, `--select I`, `format --check` clean; basedpyright with baseline 0 errors. Preview: a 16-slide showcase built in process on the new deck and converted by LibreOffice, `~/fred-tmp/builtin-new/showcase-built.pdf`.
+
+Seen in the preview, not fixed (owner to decide):
+- A `section` plan lands on a quote slide: the section slides' `section_number` body ("01", 88 pt) sits before the title and takes the subtitle, which misfits.
+- An `agenda` with items lands on a process slide: Fred Agenda holds one body, no list.
+- Timeline dates are top-level bodies outside the milestone list: items' `number` has no place (dates fit as headings); 4 items leave the fifth dot drawn.
+- Four Cards with 3 items keeps the fourth card's box (decoration) empty.
+- Statement and Big Number slides stay `bullets` (kicker change Follow-ups).
+- The table is 3 columns: a 4-offer comparison (5 columns) now gets `needs_revision`; the old deck had 5.
