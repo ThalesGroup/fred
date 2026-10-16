@@ -336,9 +336,9 @@ per-caller special-casing.
 
 ### Team registry governance — existence only
 
-Three narrow capabilities govern the team *registry* (which teams exist) —
-none of them grant access to a team's data. Two are `platform_admin`-only;
-the read-only listing is delegable:
+Four narrow capabilities govern the team *registry* (which teams exist and
+who runs them) — none of them grant the caller a team relation. Three are
+`platform_admin`-only; the read-only listing is delegable:
 
 - **`can_list_all_teams`** → `GET /teams/all`: every team in the registry,
   regardless of the caller's own membership. The one of the three that is
@@ -357,8 +357,16 @@ the read-only listing is delegable:
 - **`can_rescue_team_admin`** → `POST /teams/{team_id}/rescue-admin`: grants
   `team_admin` to a named user, **only if the team currently has zero
   `team_admin`** — mechanically inert against any team with an active admin.
-  Never generalize this into "platform_admin can reassign any team's admin at
-  any time" — that is a live escalation, not a rescue.
+  Kept as the break-glass path for a team with no admin at all.
+- **`can_edit_team_registry`** → `PATCH /teams/{team_id}/registry`: renames,
+  re-describes and adds or removes `team_admin`s of any team, at any time
+  (decided with the team on 2026-10-16, reversing the former "never reassign
+  an existing team's admins" rule). Bounded instead of forbidden:
+  `platform_admin` only, never delegated; the caller gains no relation unless
+  they name themselves; a team keeps at least one active `team_admin`; an
+  added admin still waits for the charter (`pending_team_admin`); every edit
+  writes one `team.registry.edited` audit event (actor, team, fields, ids
+  added and removed).
 
 ### Delegated admin roles — `team_manager`, `feature_manager`, `prompt_editor`
 
@@ -368,9 +376,10 @@ Three narrower roles own one admin surface each, and every one of them is
 `[user] or platform_admin` so an admin never loses a surface:
 
 - **`team_manager`** → `can_create_team` and `can_list_all_teams`
-  (`/admin/teams`). `can_delete_team` and `can_rescue_team_admin` are
-  deliberately excluded and stay `platform_admin`-only: creating and listing
-  teams is not the same authority as destroying one or reassigning its admin.
+  (`/admin/teams`). `can_delete_team`, `can_rescue_team_admin` and
+  `can_edit_team_registry` are deliberately excluded and stay
+  `platform_admin`-only: creating and listing teams is not the same authority
+  as destroying one or reassigning its admins.
   `can_list_all_teams` is included because without it the page renders empty
   for the very role that owns it. `can_create_team` also gates `GET
   /teams/candidate-admins`, the bounded user search that fills the new team's
