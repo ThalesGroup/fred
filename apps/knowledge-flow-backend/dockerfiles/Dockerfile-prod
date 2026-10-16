@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.13-slim AS builder
+FROM mirror.gcr.io/python:3.12.15-slim-trixie AS builder
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -45,7 +45,7 @@ RUN python /workspace/scripts/download_encodings.py https://openaipublic.blob.co
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.13-slim
+FROM mirror.gcr.io/python:3.12.15-slim-trixie
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -62,9 +62,13 @@ RUN apt-get update && \
     libgl1 \
     libmagic1 \
     ffmpeg \
-    libreoffice \
+    libreoffice-writer-nogui \
+    libreoffice-calc-nogui \
+    libreoffice-impress-nogui \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
+
+RUN /usr/local/bin/python -m pip uninstall --yes pip
 
 # Create user
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
@@ -142,6 +146,9 @@ COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
 RUN cd /workspace/apps/knowledge-flow-backend && \
     UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache
+
+# Runtime uses uv; pip and its vendored libraries are only needed during bootstrap.
+RUN /app/venv/bin/python -m pip uninstall --yes pip
 
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/. /app/
 
