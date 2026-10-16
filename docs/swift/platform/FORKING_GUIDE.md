@@ -369,7 +369,7 @@ Fred now ships the clean agent extension mechanism that Meridian lacked. **You n
 Instead:
 
 - **Build your agents as an independent pod** using `fred-sdk` + `fred-runtime`. See [fred-samples](https://github.com/ThalesGroup/fred-samples) for a reference implementation.
-- Your pod lives in its own repository, has its own release cycle and image, and deploys from Fred's published `agent-pod` chart with its image and configuration (a Knowledge Base pod: the `knowledge-base` chart); see `deploy/charts/README.md`. The install prints the `runtime_catalog_sources` entry that registers it with the control plane.
+- Your pod lives in its own repository, has its own release cycle and image, and deploys from Fred's published `agent-pod` chart with its image and configuration (a Knowledge Base pod: the `knowledge-base` chart); see `deploy/charts/fred/README.md` → "Pods built on Fred's libraries". The install prints the `runtime_catalog_sources` entry that registers it with the control plane.
 - The Fred core repository becomes a pure dependency — you consume it, you never patch it.
 - Merging upstream Fred updates requires zero conflict resolution on any source file.
 

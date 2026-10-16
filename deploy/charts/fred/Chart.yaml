@@ -1,5 +1,25 @@
 apiVersion: v2
 name: fred
-description: Helm chart for Fred
+description: >-
+  Fred, an open-source platform for putting a team to work with AI agents on its own
+  documents: agent runtime, document ingestion and search, control plane and web UI.
+type: application
+# Both are set from the release tag when the chart is published.
 version: 1.5.0-post
 appVersion: 1.5.0-post
+home: https://site.fredlab.dev
+icon: https://site.fredlab.dev/images/fred.svg
+sources:
+  - https://github.com/ThalesGroup/fred
+  - https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/fred
+keywords:
+  - fred
+  - ai
+  - agents
+  - llm
+  - rag
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Releases and operator guides
+      url: https://github.com/ThalesGroup/fred/releases
