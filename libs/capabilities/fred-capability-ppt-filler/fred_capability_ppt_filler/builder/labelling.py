@@ -34,6 +34,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fred_capability_ppt_filler.builder import lexicon
+from fred_capability_ppt_filler.builder.analysis import mark_takeaway
 from fred_capability_ppt_filler.builder.models import (
     SLIDE_KINDS,
     Pattern,
@@ -80,7 +81,8 @@ _SYSTEM_PROMPT = (
     "JSON object and nothing else:\n"
     '{"kind": <one kind>, "label": <short name of the layout, at most 6 words, e.g. '
     '"Four KPI cards">, "slots": {"<slot number>": <what the slot holds on this slide, a few '
-    'words, e.g. "slide title", "KPI value", "step description">}, "max_items": <number of '
+    'words, e.g. "slide title", "KPI value", "step description", "key message">}, '
+    '"max_items": <number of '
     'repeated items (cards, steps, entries) the layout holds, or null>, "reusable": <false '
     "when the slide is a one-off that cannot carry other content, such as a specific org chart, "
     "a legal notice or a fixed decorative visual; otherwise true>}\n"
@@ -226,6 +228,7 @@ def _merge(
     merged.reusable = answer.reusable
     for number, zone in enumerate(numbered_slots(merged), start=1):
         zone.purpose = answer.slots.get(number)
+    mark_takeaway(merged, {z.key: [z.purpose or ""] for z in merged.zones})
     merged.labelled_by = "vision"
     return merged
 

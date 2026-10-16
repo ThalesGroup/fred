@@ -163,6 +163,9 @@ class Zone(BaseModel):
     # Set on a `chart` zone of an example slide: the type its chart shows, in
     # the plan's vocabulary when it maps to one.
     chart_type: Optional[str] = None
+    # A text zone the template designed for the slide's key message (by its
+    # name or vision purpose): it shows the takeaway when the user asks for it.
+    takeaway: bool = False
 
 
 class RepeatGroup(BaseModel):

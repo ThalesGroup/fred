@@ -365,6 +365,31 @@ ILLUSTRATIVE_WORDS = (
     "hypothetical",
 )
 
+# Shape names and vision purposes of a zone made for the slide's key message.
+TAKEAWAY_NAMES = (
+    "takeaway",
+    "key takeaway",
+    "key message",
+    "message cle",
+    "messages cles",
+    "a retenir",
+    "so what",
+    "conclusion",
+)
+# Text roles a takeaway zone can have.
+TAKEAWAY_ROLES = frozenset({"body", "caption", "subtitle"})
+
+# User words that ask for the key messages on the slides themselves.
+SHOW_TAKEAWAY_WORDS = (
+    "messages cles",
+    "message cle",
+    "a retenir",
+    "points cles",
+    "key message",
+    "takeaway",
+    "key point",
+)
+
 # User words that ask to build without showing the plan first.
 SKIP_PLAN_WORDS = (
     "sans plan",

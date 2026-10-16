@@ -35,6 +35,7 @@ from typing import (
     Any,
     Dict,
     List,
+    Mapping,
     Optional,
     Sequence,
     Tuple,
@@ -62,7 +63,10 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
     ZoneRole,
 )
-from fred_capability_ppt_filler.builder.plan import MAX_CHARTS_PER_SLIDE
+from fred_capability_ppt_filler.builder.plan import (
+    MAX_CHARTS_PER_SLIDE,
+    chart_headings,
+)
 from fred_capability_ppt_filler.pptx_archive import open_presentation
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, walk_shapes
 
@@ -186,7 +190,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 16
+ANALYSIS_VERSION = 17
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -908,6 +912,7 @@ class _Analyzer:
             pattern.included = False
             pattern.exclusion_reason = "no_placeholder"
         _quote_roles(pattern)
+        mark_takeaway(pattern, {rec.key: [rec.name] for rec in records})
         _mark_framed(pattern, self.frames(layout))
         pattern.reusable = pattern.kind != "other"
         return pattern, {
@@ -1089,10 +1094,25 @@ class _Analyzer:
             if declared in SLIDE_KINDS:
                 pattern.kind = cast(SlideKind, declared)
         _quote_roles(pattern)
+        mark_takeaway(pattern, self._names(slide, records))
         if slide._element.get("showMasterSp") != "0":
             _mark_framed(pattern, self.frames(slide.slide_layout))
         pattern.reusable = pattern.kind != "other"
         return pattern
+
+    @staticmethod
+    def _names(slide, records: List[_Rec]) -> Dict[str, List[str]]:
+        """Each record's shape name, with its layout placeholder's for a
+        placeholder: the designer may have named either."""
+        layout = {
+            ph.placeholder_format.idx: ph.name or ""
+            for ph in slide.slide_layout.placeholders
+        }
+        return {
+            rec.key: [rec.name]
+            + ([layout.get(rec.ph_idx, "")] if rec.ph_idx is not None else [])
+            for rec in records
+        }
 
     def _chart_zones(self, zones: List[Zone], records: List[_Rec]) -> None:
         """A chart zone draws its text from the presentation's default size and
@@ -1662,6 +1682,31 @@ def _mark_framed(pattern: Pattern, frames: List[Box]) -> None:
             if w > 0 and h > 0 and w * h * 2 >= b.w * b.h:
                 zone.framed = True
                 break
+
+
+def mark_takeaway(pattern: Pattern, said: Mapping[str, Sequence[str]]) -> None:
+    """Flag the first text zone, in reading order, whose name or purpose
+    (``said`` per zone key) names a key message; never by geometry, and never
+    on a slide kind that carries no takeaway."""
+    if pattern.kind in lexicon.TAKEAWAY_EXEMPT_KINDS:
+        for zone in pattern.zones:
+            zone.takeaway = False
+        return
+    if any(zone.takeaway for zone in pattern.zones):
+        return
+    headings = {z.key for z in chart_headings(pattern).values()}
+    for zone in sorted(pattern.zones, key=lambda z: (z.box.y // 150, z.box.x)):
+        if (
+            zone.role in lexicon.TAKEAWAY_ROLES
+            and zone.key not in headings
+            and any(
+                lexicon.name_matches(text, lexicon.TAKEAWAY_NAMES)
+                for text in said.get(zone.key, ())
+                if text
+            )
+        ):
+            zone.takeaway = True
+            return
 
 
 def _quote_roles(pattern: Pattern) -> None:
