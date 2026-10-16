@@ -4871,7 +4871,8 @@ race after the pre-check answers 409 with the admins already changed, as for
 
 **Audit.** One `team.registry.edited` event per edit that changed something:
 `actor_uid`, `team_id`, `changed_fields`, `admins_added`, `admins_removed`
-(ids only). REBAC.md "Team registry governance" records the authority; the
+(ids only, as requested). An edit that fails after its admin changes were
+written still emits it, with empty `changed_fields`. REBAC.md "Team registry governance" records the authority; the
 OpenSpec change `platform-admin-team-edit` the scenarios.
 
 **Refusal codes.** The 409 bodies of `TeamAlreadyExistsError` and

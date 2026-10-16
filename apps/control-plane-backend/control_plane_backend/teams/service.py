@@ -1264,32 +1264,48 @@ async def edit_team_registry(
             await _ensure_registry_edit_keeps_an_admin(
                 rebac, team_id, added, removed_ids
             )
-        for user_id, relation in added.items():
-            await _add_team_member_relation(rebac, team_id, user_id, relation)
-        for user_id in removed_ids:
-            await _demote_team_admin(rebac, team_id, user_id)
-        if patch_data:
-            try:
-                updated = await store.upsert(
-                    team_id, TeamMetadataPatch.model_validate(patch_data)
-                )
-            except IntegrityError as exc:
-                raise _name_conflict_or(exc, patch_data) from exc
-            if updated is not None:
-                metadata = updated
+        try:
+            for user_id, relation in added.items():
+                await _add_team_member_relation(rebac, team_id, user_id, relation)
+            for user_id in removed_ids:
+                await _demote_team_admin(rebac, team_id, user_id)
+            if patch_data:
+                try:
+                    updated = await store.upsert(
+                        team_id, TeamMetadataPatch.model_validate(patch_data)
+                    )
+                except IntegrityError as exc:
+                    raise _name_conflict_or(exc, patch_data) from exc
+                if updated is not None:
+                    metadata = updated
+        except Exception:
+            # Admin relations may already be written: they must not go unaudited.
+            if added or removed_ids:
+                _audit_registry_edit(user, team_id, [], added, removed_ids)
+            raise
 
     _log_rename(team_id, renamed_from, patch_data, user)
     if patch_data or added or removed_ids:
-        emit_audit_log(
-            "team.registry.edited",
-            actor_uid=user.uid,
-            team_id=str(team_id),
-            changed_fields=sorted(patch_data),
-            admins_added=sorted(added),
-            admins_removed=sorted(removed_ids),
-        )
+        _audit_registry_edit(user, team_id, sorted(patch_data), added, removed_ids)
     return await _build_team_with_permissions(
         user, metadata, deps, RebacEngine.HIGHER_CONSISTENCY
+    )
+
+
+def _audit_registry_edit(
+    user: KeycloakUser,
+    team_id: TeamId,
+    changed_fields: list[str],
+    added: dict[str, UserTeamRelation],
+    removed_ids: set[str],
+) -> None:
+    emit_audit_log(
+        "team.registry.edited",
+        actor_uid=user.uid,
+        team_id=str(team_id),
+        changed_fields=changed_fields,
+        admins_added=sorted(added),
+        admins_removed=sorted(removed_ids),
     )
 
 

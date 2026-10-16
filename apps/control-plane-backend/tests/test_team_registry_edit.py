@@ -270,6 +270,36 @@ async def test_rename_race_is_a_conflict() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rename_race_still_audits_the_admin_changes(audit: list) -> None:
+    rebac = _RosterRebac({"alice": {RelationType.TEAM_ADMIN}})
+    store = _store(
+        upsert_raises=IntegrityError("UPDATE", {}, Exception("duplicate key"))
+    )
+
+    with pytest.raises(TeamAlreadyExistsError):
+        await edit_team_registry(
+            _user(),
+            TeamId("t1"),
+            EditTeamRegistryRequest(name="Westbridge", add_admin_ids=["carol"]),
+            _deps(rebac, store),
+        )
+
+    assert rebac.roles["carol"] == {RelationType.TEAM_ADMIN}
+    assert audit == [
+        (
+            "team.registry.edited",
+            {
+                "actor_uid": "platform-admin-1",
+                "team_id": "t1",
+                "changed_fields": [],
+                "admins_added": ["carol"],
+                "admins_removed": [],
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_removing_the_last_admin_is_refused(audit: list) -> None:
     rebac = _RosterRebac({"alice": {RelationType.TEAM_ADMIN}})
     store = _store()
