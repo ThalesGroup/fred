@@ -376,6 +376,8 @@ class GitTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         output = self.root / RELEASES / "v1.2.4/migration.md"
         before = output.read_bytes()
+        # The repository writes documentation with keyboard characters only.
+        self.assertTrue(before.isascii())
         self.assertEqual(
             self.run_cli("generate", "--worktree", "--version", "1.2.4").returncode, 0
         )
