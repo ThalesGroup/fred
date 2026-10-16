@@ -1,14 +1,14 @@
 [project]
 name = "fred-runtime"
-version = "4.5.2"
+version = "4.5.3"
 description = "Runtime adapters and infrastructure wiring for Fred v2 agents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.5.2",
-  "fred-sdk[agents]>=4.5.2",
+  "fred-core>=4.5.3",
+  "fred-sdk[agents]>=4.5.3",
   "alembic>=1.18.4",
   "deepagents>=0.7.19",
   "httpx>=0.28.1",
@@ -18,7 +18,7 @@ dependencies = [
   # rewrite langchain-mcp-adapters does not support yet — pin here to keep
   # fresh installs on mcp v1 until upstream ships v2 support. See #2194 and
   # https://github.com/langchain-ai/langchain-mcp-adapters/issues/578.
-  "mcp>=1.24.0,<2.0.0",
+  "mcp>=1.30.0,<2.0.0",
   "langchain>=1.4.2",
   "langchain-core>=1.6.5",
   "langgraph>=1.2.12",
