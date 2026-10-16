@@ -3813,7 +3813,7 @@
         "success_other": "Whitelist updated: {{count}} users added.",
         "conflict": "The configuration or last import changed. Check the updated estimate before confirming again."
       },
-      "t0Done": "Import completed",
+      "t0Done": "Initial import completed",
       "t0Import": "Import existing users",
       "search": "Search a whitelisted user",
       "exception": "Actions",

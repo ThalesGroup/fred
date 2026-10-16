@@ -3813,7 +3813,7 @@
         "success_other": "Liste blanche mise à jour : {{count}} utilisateurs ajoutés.",
         "conflict": "La configuration ou le dernier import a changé. Vérifiez l'estimation actualisée avant de confirmer à nouveau."
       },
-      "t0Done": "Import terminé",
+      "t0Done": "Import initial terminé",
       "t0Import": "Importer les utilisateurs existants",
       "search": "Rechercher un utilisateur de la liste blanche",
       "exception": "Actions",
