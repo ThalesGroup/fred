@@ -190,7 +190,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 18
+ANALYSIS_VERSION = 19
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -441,8 +441,15 @@ def _has_chrome_field(shape) -> bool:
     )
 
 
-def _placeholder_key(shape) -> str:
-    return f"ph:{shape.placeholder_format.idx}"
+def _placeholder_key(shape, path: Tuple[int, ...], taken: set[int]) -> str:
+    """``ph:<idx>``, or the shape path for a second placeholder sharing an idx
+    (a copied slot): each slot keeps a key of its own, the first one in
+    drawing order keeping the idx, as the renderer's index does."""
+    idx = shape.placeholder_format.idx
+    if idx in taken:
+        return _shape_key(path)
+    taken.add(idx)
+    return f"ph:{idx}"
 
 
 def _shape_key(path: Tuple[int, ...]) -> str:
@@ -460,8 +467,14 @@ def kicker_keys(owner) -> set[str]:
         else {}
     )
     keys: set[str] = set()
+    taken: set[int] = set()
     for placed in walk_shapes(owner.shapes):
         shape = cast(Any, placed.shape)
+        key = (
+            _placeholder_key(shape, placed.path, taken)
+            if shape.is_placeholder
+            else _shape_key(placed.path)
+        )
         if not getattr(shape, "has_text_frame", False):
             continue
         said = [shape.name or ""]
@@ -470,9 +483,6 @@ def kicker_keys(owner) -> set[str]:
             if fmt.type is not None and fmt.type.name in _TITLE_PLACEHOLDERS:
                 continue
             said.append(layout_names.get(fmt.idx, ""))
-            key = _placeholder_key(shape)
-        else:
-            key = _shape_key(placed.path)
         if any(
             lexicon.name_matches(name, lexicon.KICKER_NAMES) for name in said if name
         ):
@@ -495,6 +505,7 @@ def _records(
     """
     slide_area = float(width * height) or 1.0
     records: List[_Rec] = []
+    taken: set[int] = set()
     for placed in walk_shapes(shapes):
         shape = cast(Any, placed.shape)
         box = Box(
@@ -539,7 +550,11 @@ def _records(
             is_field = _has_chrome_field(shape)
         else:
             kind = "other"
-        key = _placeholder_key(shape) if ph_idx is not None else _shape_key(placed.path)
+        key = (
+            _placeholder_key(shape, placed.path, taken)
+            if ph_idx is not None
+            else _shape_key(placed.path)
+        )
         records.append(
             _Rec(
                 key=key,
@@ -1015,9 +1030,8 @@ class _Analyzer:
 
         # 2. Typed placeholders keep their meaning. A designer who duplicated
         # a placeholder left two shapes with one idx: the second is addressed
-        # by its shape path so both stay fillable.
+        # by its shape path (`_placeholder_key`) so both stay fillable.
         title_text = ""
-        used_keys: set[str] = set()
         for rec in records:
             if rec.ph_idx is None or rec.key in in_rows:
                 continue
@@ -1028,15 +1042,12 @@ class _Analyzer:
                 continue
             if role == "title" and not title_text:
                 title_text = rec.text
-            zone = _zone(rec, role, self.width, self.height)
-            if zone.key in used_keys:
+            if rec.key.startswith("sp:"):
                 warnings.append(
                     f"Two placeholders share the index {rec.ph_idx}; the second is "
                     "addressed by its shape."
                 )
-                zone.key = _shape_key(rec.path)
-            used_keys.add(zone.key)
-            zones.append(zone)
+            zones.append(_zone(rec, role, self.width, self.height))
         _promote_headings(zones)
 
         # 3. Every other text box is a slot, but chrome: text repeated across

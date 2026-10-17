@@ -20,7 +20,9 @@ import io
 from typing import Any, Dict, List, cast
 
 import pytest
+from builder_decks import _blank_titled, _placeholder, build_slides
 from deck_builders import png_bytes
+from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import assign
 from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.plan import DeckPlan
@@ -29,6 +31,7 @@ from fred_capability_ppt_filler.images import prepare_picture
 from pptx import Presentation
 from pptx.oxml.ns import qn
 from pptx.shapes.picture import Picture
+from pptx.util import Pt
 
 COVER = {"title": "Quarterly review", "subtitle": "Sales"}
 
@@ -150,3 +153,32 @@ def test_three_team_photos_move_with_their_names(builtin):
         assert (
             abs((photo.left + photo.width // 2) - (name.left + name.width // 2)) < 9525
         )
+
+
+def _shared_idx_slide(presentation):
+    """Three (picture, text) columns whose first two picture slots share one
+    placeholder idx, as a copied slot leaves them."""
+    slide = _blank_titled(presentation, "Our three sites")
+    for n, x in enumerate((0.3, 3.5, 6.7)):
+        _placeholder(slide, "pic", 30 if n < 2 else 32, x, 1.5, 2.8, 2.4, "", Pt(12))
+        _placeholder(slide, "body", 40 + n, x, 4.1, 2.8, 1.2, "Some text", Pt(14))
+
+
+def test_two_picture_slots_sharing_an_idx_are_each_filled():
+    template = build_slides([_shared_idx_slide])
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if p.source == "slide")
+    assert len(set(pattern.groups[0].item_keys)) == 3
+    sites = [
+        {"text": site, "image": f"img-{n}"}
+        for n, site in enumerate(("Lyon", "Lille", "Nantes"))
+    ]
+    plan = DeckPlan.model_validate(
+        {"slides": [{"title": "Our three sites", "kind": "cards", "items": sites}]}
+    )
+    # Failed before: both items sent their picture to the first slot, and the
+    # second insert hit a placeholder the first had already replaced.
+    result = render_deck(template, inventory, plan, [pattern], images=WIDE)
+    slide = Presentation(io.BytesIO(result.pptx)).slides[0]
+    assert len([s for s in slide.shapes if isinstance(s, Picture)]) == 3
