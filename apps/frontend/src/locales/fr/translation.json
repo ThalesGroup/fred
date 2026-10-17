@@ -2755,7 +2755,8 @@
         "table": {
           "name": "Équipe",
           "admins": "Administrateur(s)"
-        }
+        },
+        "pendingCount": "{{count}} en attente"
       },
       "defaultTeam": {
         "title": "Équipes par défaut des nouveaux utilisateurs",
@@ -2774,8 +2775,12 @@
         "title": "Créer une équipe",
         "nameLabel": "Nom de l'équipe",
         "namePlaceholder": "ex. swiftpost",
-        "adminsLabel": "Administrateur(s) initial(aux)",
+        "adminsLabel": "Administrateur(s) de l'équipe",
         "adminsPlaceholder": "Entrer un nom, prénom ou ID utilisateur",
+        "adminsSearching": "Recherche en cours...",
+        "adminsNoMatch": "Aucun utilisateur ne correspond à cette recherche.",
+        "adminRemove": "Retirer {{name}}",
+        "open": "Créer une équipe",
         "submit": "Créer l'équipe",
         "successSummary": "Équipe créée",
         "errors": {
@@ -2784,12 +2789,43 @@
           "conflictDetail": "Une équipe portant ce nom existe déjà.",
           "forbiddenDetail": "Vous n'avez pas les droits pour créer des équipes."
         }
+      },
+      "editTeam": {
+        "title": "Modifier l'équipe",
+        "openAria": "Modifier {{name}}",
+        "submit": "Enregistrer",
+        "successSummary": "Équipe modifiée",
+        "errors": {
+          "summary": "Échec de la modification de l'équipe",
+          "fallbackDetail": "Impossible de modifier l'équipe. Veuillez réessayer.",
+          "conflictDetail": "Ce nom est déjà pris, ou l'équipe resterait sans administrateur actif.",
+          "forbiddenDetail": "Seuls les administrateurs de la plateforme peuvent modifier les équipes."
+        }
+      },
+      "pendingAdmin": "En attente",
+      "pendingAdminHint": "{{name}} n'a pas encore accepté la charte des administrateurs d'équipe.",
+      "refusals": {
+        "teamNameTaken": "Une équipe porte déjà ce nom.",
+        "lastActiveAdmin": "L'équipe doit garder au moins un administrateur actif.",
+        "pendingCharter": "Le nouvel administrateur n'a pas encore accepté la charte : gardez l'administrateur actuel jusqu'à son acceptation."
       }
     },
     "teamCard": {
       "join": "Rejoindre",
       "inviteOnly": "Sur invitation",
       "memberCount": "{{count}} membres"
+    },
+    "teamDescription": {
+      "label": "Description de l'équipe",
+      "helper": "Indiquez les objectifs de votre équipe dans son usage de l'IA. Tous les utilisateurs de la marketplace la voient.",
+      "tooShort": "Saisissez au moins {{min}} caractères.",
+      "placeholderDisplay": "Description à compléter par l'administrateur de l'équipe.",
+      "reminder": {
+        "title": "Décrivez votre équipe",
+        "description": "Votre équipe a encore une description par défaut. Indiquez ses objectifs dans son usage de l'IA pour que chacun sache à quoi elle utilise la plateforme.",
+        "action": "Ouvrir les paramètres de l'équipe"
+      },
+      "maxReached": "{{max}} caractères maximum"
     },
     "teamRoles": {
       "team_admin": "Admin",
@@ -2919,7 +2955,9 @@
         },
         "description": {
           "label": "Description de l'équipe",
-          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
+          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe.",
+          "saved": "Description de l'équipe mise à jour",
+          "saveError": "La description n'a pas pu être enregistrée. Réessayez."
         },
         "joiningMode": {
           "label": "Mode d'adhésion",

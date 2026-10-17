@@ -9,6 +9,7 @@ from control_plane_backend.platform_access import api, service
 from fastapi import FastAPI, HTTPException
 from fred_core.security.platform_access.access_control import get_platform_access
 from fred_core.security.platform_access.models import PlatformAccessLinkRow
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, select
@@ -32,7 +33,11 @@ async def history(access, monkeypatch):
     await service.set_team(access, actor, "demo", False, True)
     rows = []
     async with access.store.mutation() as session:
-        session.add(TeamMetadataRow(id="other", name="Other"))
+        session.add(
+            TeamMetadataRow(
+                description=TEAM_DESCRIPTION_PLACEHOLDER, id="other", name="Other"
+            )
+        )
         await session.flush()
         for index in range(33):
             token = f"{index:043d}"

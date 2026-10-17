@@ -1069,8 +1069,10 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "name": "Equipe personnelle",
             "member_count": 1,
             "admins": [],
+            "pending_admin_ids": [],
             "is_member": True,
             "my_relations": ["team_editor"],
+            "description_is_placeholder": False,
             "joining_mode": "invite_only",
             # #2433: a personal space is stated private explicitly — it is
             # never marketplace-listed and unreadable to non-members.
@@ -1658,7 +1660,9 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "name": "Equipe personnelle",
         "member_count": 1,
         "admins": [],
+        "pending_admin_ids": [],
         "is_member": True,
+        "description_is_placeholder": False,
         "joining_mode": "invite_only",
         # #2433: a personal space is stated private explicitly.
         "visibility": "private",
@@ -5916,7 +5920,7 @@ async def test_update_team_checks_can_update_info_permission(
         resp = await client.patch(
             "/control-plane/v1/teams/thales",
             json={
-                "description": "Updated description",
+                "description": "Updated description for the team",
                 "joining_mode": "open",
                 "avatar_image_url": "https://example.test/banner.webp",
             },
@@ -5931,7 +5935,7 @@ async def test_update_team_checks_can_update_info_permission(
         (
             "thales",
             {
-                "description": "Updated description",
+                "description": "Updated description for the team",
                 "joining_mode": "open",
                 "banner_image_url": "https://example.test/banner.webp",
             },
@@ -6142,7 +6146,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
             return "https://example.test/banner.png"
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
-        return {}, {}, {}
+        return {}, {}, {}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {}
@@ -6219,7 +6223,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
         members = {"user-1", "marc"}
-        return {"team-1": members}, {"team-1": members}, {"team-1": set()}
+        return {"team-1": members}, {"team-1": members}, {"team-1": set()}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {

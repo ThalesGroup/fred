@@ -74,6 +74,12 @@
   font: var(--font-label-large);
 }
 
+.description {
+  padding: 0 var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
 .information {
   display: flex;
   justify-content: space-between;

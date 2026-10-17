@@ -114,7 +114,7 @@ function selectCandidate(user: UserSummary) {
     nativeInputValueSetter.call(input, user.username);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  const option = Array.from(portal().querySelectorAll('[role="option"]')).find((o) =>
+  const option = Array.from(document.querySelectorAll('[role="option"]')).find((o) =>
     o.textContent?.includes(user.username!),
   );
   click(option ?? null);

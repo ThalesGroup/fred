@@ -68,6 +68,7 @@ from fred_core import (
 from fred_core.common import PostgresStoreConfig, TeamId
 from fred_core.sql import create_async_engine_from_config
 from fred_core.teams.metadata_store import (
+    TEAM_DESCRIPTION_PLACEHOLDER,
     TeamMetadataPatch,
     TeamMetadataStore,
     TeamVisibility,
@@ -219,7 +220,7 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
 
     teams = TeamMetadataStore(engine)
     for team_id, name in ((_TEAM, "Alpha"), (_OTHER, "Beta"), (_THIRD, "Gamma")):
-        await teams.create(team_id, name)
+        await teams.create(team_id, name, TEAM_DESCRIPTION_PLACEHOLDER)
         await teams.upsert(team_id, TeamMetadataPatch(visibility=TeamVisibility.PUBLIC))
     settings = PlatformMarketplaceSettingsStore(engine)
     await settings.set(

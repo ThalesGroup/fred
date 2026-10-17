@@ -274,7 +274,7 @@ async def test_team_admin_summaries_carry_the_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _bulk(_rebac, team_ids, _uid):
-        return {team_ids[0]: {"alice"}}, {team_ids[0]: {"alice", "bob"}}, {}
+        return {team_ids[0]: {"alice"}}, {team_ids[0]: {"alice", "bob"}}, {}, {}
 
     monkeypatch.setattr(teams_service, "_bulk_team_membership", _bulk)
     config = MagicMock()

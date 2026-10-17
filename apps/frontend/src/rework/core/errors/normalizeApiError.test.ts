@@ -152,5 +152,11 @@ describe("normalizeApiError", () => {
       expect(normalizeApiError({ status: 409, data: {} }).detail).toBeUndefined();
       expect(normalizeApiError({ status: 409 }).detail).toBeUndefined();
     });
+
+    it("keeps a refusal's stable code next to its detail", () => {
+      const error = { status: 409, data: { detail: "Team 'X' already exists.", code: "team_name_taken" } };
+      expect(normalizeApiError(error)).toMatchObject({ detail: "Team 'X' already exists.", code: "team_name_taken" });
+      expect(normalizeApiError({ status: 409, data: { detail: "nope" } }).code).toBeUndefined();
+    });
   });
 });

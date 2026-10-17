@@ -35,6 +35,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   // The rename path awaits `.unwrap()`; every other PATCH here fires and forgets.
   updateTeam: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  showSuccess: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -46,7 +47,13 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   useUploadTeamAvatarMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
+vi.mock("react-router-dom", () => ({
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+}));
+
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showError: vi.fn(), showSuccess: h.showSuccess }),
+}));
 
 vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ defaultTeamAvatarFile: undefined }),
@@ -76,6 +83,7 @@ afterEach(() => {
   });
   container.remove();
   h.updateTeam.mockClear();
+  h.showSuccess.mockClear();
 });
 
 function baseTeam(
@@ -375,5 +383,124 @@ describe("TeamSettingsParameters rename", () => {
     type("Team Three");
 
     expect(container.textContent).not.toContain("rework.teamSettings.parameters.name.alreadyTaken");
+  });
+});
+
+describe("TeamSettingsParameters description", () => {
+  const stored = "Answer internal IT questions from our knowledge base.";
+
+  function field(): HTMLTextAreaElement {
+    return container.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
+  }
+
+  // Types through the native setter, then leaves the field (React listens to focusout).
+  function typeAndLeave(value: string) {
+    const setValue = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+    act(() => {
+      setValue.call(field(), value);
+      field().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      field().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+  }
+
+  function describedTeam(overrides: Partial<TeamWithPermissions> = {}): TeamWithPermissions {
+    return { ...baseTeam("invite_only"), description: stored, ...overrides };
+  }
+
+  it("shows the error and sends nothing when the field is emptied", () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+
+    typeAndLeave("");
+
+    expect(container.textContent).toContain("rework.teamDescription.tooShort");
+    expect(h.updateTeam).not.toHaveBeenCalled();
+  });
+
+  it("sends a valid description trimmed", () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+
+    typeAndLeave("  Draft and review procurement contracts.  ");
+
+    expect(h.updateTeam).toHaveBeenCalledWith({
+      teamId: "team-1",
+      updateTeamRequest: { description: "Draft and review procurement contracts." },
+    });
+    expect(container.textContent).not.toContain("rework.teamDescription.tooShort");
+  });
+
+  it("confirms a saved description with a toast, and stays silent when the save fails", async () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+
+    typeAndLeave("Draft and review procurement contracts.");
+    await act(async () => {});
+    expect(h.showSuccess).toHaveBeenCalledWith({ summary: "rework.teamSettings.parameters.description.saved" });
+
+    h.showSuccess.mockClear();
+    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject(new Error("offline")) });
+    typeAndLeave("Negotiate and archive supplier agreements.");
+    await act(async () => {});
+    expect(h.showSuccess).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("rework.teamSettings.parameters.description.saveError");
+  });
+
+  it("says why typing stops once the description reaches 500 characters", () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+    expect(container.textContent).not.toContain("rework.teamDescription.maxReached");
+
+    typeAndLeave("a".repeat(500));
+
+    expect(container.textContent).toContain("rework.teamDescription.maxReached");
+  });
+
+  it("gives the description field seven rows", () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+
+    expect(field().getAttribute("rows")).toBe("7");
+  });
+
+  it("sends nothing when the description is left unchanged", () => {
+    render(<TeamSettingsParameters team={describedTeam()} />);
+
+    typeAndLeave(`${stored}  `);
+
+    expect(h.updateTeam).not.toHaveBeenCalled();
+  });
+
+  it("reminds a team admin while the default description is in place, with an empty field", () => {
+    const placeholderTeam = describedTeam({
+      description: "Description à compléter par l'administrateur de l'équipe.",
+      description_is_placeholder: true,
+      permissions: ["can_update_info"],
+    });
+    render(<TeamSettingsParameters team={placeholderTeam} />);
+
+    expect(container.textContent).toContain("rework.teamDescription.reminder.title");
+    expect(field().value).toBe("");
+  });
+
+  it("flags the field left empty on a team with the default description, and sends nothing", () => {
+    const placeholderTeam = describedTeam({
+      description: "Description à compléter par l'administrateur de l'équipe.",
+      description_is_placeholder: true,
+      permissions: ["can_update_info"],
+    });
+    render(<TeamSettingsParameters team={placeholderTeam} />);
+
+    typeAndLeave("");
+
+    expect(container.textContent).toContain("rework.teamDescription.tooShort");
+    expect(h.updateTeam).not.toHaveBeenCalled();
+  });
+
+  it("shows no reminder for a described team or a member without the admin role", () => {
+    render(<TeamSettingsParameters team={describedTeam({ permissions: ["can_update_info"] })} />);
+    expect(container.textContent).not.toContain("rework.teamDescription.reminder.title");
+    act(() => root.unmount());
+    container.remove();
+
+    render(<TeamSettingsParameters team={describedTeam({ description_is_placeholder: true })} />);
+    expect(container.textContent).not.toContain("rework.teamDescription.reminder.title");
   });
 });

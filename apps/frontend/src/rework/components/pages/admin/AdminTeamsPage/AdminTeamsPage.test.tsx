@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Only a platform_admin picks where new users land, and the picker names teams,
-// never their ids.
+// Only a platform_admin picks where new users land and edits teams; the picker
+// names teams, never their ids.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,12 +35,29 @@ const h = vi.hoisted(() => ({
   setAdmissionTeam: vi.fn(),
   gcuVersion: "v1" as string | null,
   teams: [
-    { id: "uid-alpha", name: "Alpha" },
+    {
+      id: "uid-alpha",
+      name: "Alpha",
+      description: "Automates the drafting of reports.",
+      admins: [{ id: "u-zoe", first_name: "Zoe", last_name: "Zed", username: "zoe" }],
+    },
     { id: "uid-beta", name: "Beta" },
-    { id: "uid-gamma", name: "Gamma" },
-  ],
+    {
+      id: "uid-gamma",
+      name: "Gamma",
+      admins: [
+        { id: "u-max", first_name: "Max", last_name: "Mill", username: "max" },
+        { id: "u-ian", first_name: "Ian", last_name: "Iles", username: "ian" },
+      ],
+      pending_admin_ids: ["u-ian"],
+    },
+  ] as Record<string, unknown>[],
   defaultTeams: undefined as { team_id: string; name: string }[] | undefined,
   setDefaultTeams: vi.fn(),
+  createTeam: vi.fn(),
+  editTeam: vi.fn(),
+  showError: vi.fn(),
+  notifyApiError: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -48,17 +65,30 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+  useToast: () => ({ showSuccess: vi.fn(), showError: h.showError }),
 }));
 
 vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
-  useApiErrorToast: () => ({ notifyApiError: vi.fn() }),
+  useApiErrorToast: () => ({ notifyApiError: h.notifyApiError }),
 }));
 
 vi.mock("@core/hooks/useMutationAction.ts", () => ({
   useMutationAction: () => ({
-    runMutationAction: async ({ action, onSuccess }: { action: () => Promise<unknown>; onSuccess?: () => void }) => {
-      await action();
+    runMutationAction: async ({
+      action,
+      onSuccess,
+      onError,
+    }: {
+      action: () => Promise<unknown>;
+      onSuccess?: () => void;
+      onError?: (error: unknown) => void;
+    }) => {
+      try {
+        await action();
+      } catch (error) {
+        onError?.(error);
+        return;
+      }
       onSuccess?.();
     },
   }),
@@ -85,8 +115,11 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useDefaultTeamsForNewUsersQuery: (_arg: unknown, options?: { skip?: boolean }) => ({
     data: options?.skip ? undefined : h.defaultTeams,
   }),
-  useSearchCandidateTeamAdminsQuery: () => ({ data: undefined }),
-  useCreateTeamMutation: () => [vi.fn(), { isLoading: false }],
+  useSearchCandidateTeamAdminsQuery: () => ({
+    data: [{ id: "u-ada", first_name: "Ada", last_name: "Admin", username: "ada" }],
+  }),
+  useCreateTeamMutation: () => [h.createTeam, { isLoading: false }],
+  useEditTeamRegistryMutation: () => [h.editTeam, { isLoading: false }],
   useSetDefaultTeamsForNewUsersMutation: () => [h.setDefaultTeams, { isLoading: false }],
   usePlatformAccessStateQuery: (arg: unknown, options: { skip: boolean }) => {
     h.admissionQuery(arg, options);
@@ -141,6 +174,12 @@ beforeEach(() => {
   h.defaultTeams = [{ team_id: "uid-beta", name: "Beta" }] satisfies DefaultTeam[];
   h.setDefaultTeams.mockReset();
   h.setDefaultTeams.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.createTeam.mockReset();
+  h.createTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.editTeam.mockReset();
+  h.editTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.showError.mockReset();
+  h.notifyApiError.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -151,15 +190,42 @@ afterEach(() => {
   container.remove();
 });
 
+const buttonByText = (scope: ParentNode, text: string) =>
+  Array.from(scope.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.includes(text));
+const editButtons = () =>
+  container.querySelectorAll<HTMLButtonElement>('button[aria-label="rework.adminTeams.editTeam.openAria"]');
+
 describe("AdminTeamsPage layout", () => {
-  it("puts the actions above the teams list, which can grow long", () => {
+  it("creates from the header and lists teams right after the default-teams setting", () => {
     render();
     const titles = Array.from(container.querySelectorAll("h2")).map((h2) => h2.textContent);
-    expect(titles).toEqual([
-      "rework.adminTeams.defaultTeam.title",
-      "rework.adminTeams.createTeam.title",
-      "rework.adminTeams.existingTeams.title",
-    ]);
+    expect(titles).toEqual(["rework.adminTeams.defaultTeam.title", "rework.adminTeams.existingTeams.title"]);
+    const create = buttonByText(container, "rework.adminTeams.createTeam.open")!;
+    const firstSection = container.querySelector("h2")!;
+    expect(create.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows the description as one line under the team name", () => {
+    render();
+    expect(container.querySelector('[title="Automates the drafting of reports."]')?.textContent).toBe(
+      "Automates the drafting of reports.",
+    );
+  });
+
+  it("offers Edit on every row to a platform admin only", () => {
+    render();
+    expect(editButtons()).toHaveLength(3);
+    h.canAdmin = false;
+    rerender();
+    expect(editButtons()).toHaveLength(0);
+    expect(buttonByText(container, "rework.adminTeams.createTeam.open")).toBeDefined();
+  });
+
+  it("marks the admins still awaiting the charter next to the avatars", () => {
+    render();
+    const marker = container.querySelector('[title="rework.adminTeams.pendingAdminHint"]');
+    expect(marker?.textContent).toBe("rework.adminTeams.existingTeams.pendingCount");
+    expect(container.querySelectorAll('[title="rework.adminTeams.pendingAdminHint"]')).toHaveLength(1);
   });
 });
 
@@ -257,7 +323,7 @@ describe("AdminTeamsPage default teams for new users", () => {
     act(() => searchInput().focus());
 
     const section = defaultTeamSection()!;
-    const options = Array.from(section.querySelectorAll('[role="option"]')).map((option) => option.textContent);
+    const options = Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent);
     expect(options).toEqual(["Alpha", "Gamma"]);
     expect(section.textContent).toContain("Beta");
     expect(section.textContent).not.toContain("uid-");
@@ -291,5 +357,173 @@ describe("AdminTeamsPage default teams for new users", () => {
     expect(h.setDefaultTeams).toHaveBeenCalledWith({
       setDefaultTeamsForNewUsersRequest: { team_ids: ["uid-gamma"] },
     });
+  });
+});
+
+// React tracks the value through the native setter, not the property.
+const type = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+  const proto = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  act(() => {
+    Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+
+describe("AdminTeamsPage team creation", () => {
+  const submit = () => buttonByText(dialog()!, "rework.adminTeams.createTeam.submit")!;
+  const openAndFillNameAndAdmin = async () => {
+    render();
+    act(() => buttonByText(container, "rework.adminTeams.createTeam.open")!.click());
+    const [nameInput, adminInput] = Array.from(dialog()!.querySelectorAll("input"));
+    type(nameInput, "  Ops  ");
+    act(() => adminInput.focus());
+    type(adminInput, "ad");
+    await act(async () => {
+      adminInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+  };
+
+  it("keeps the create action unavailable and explains the minimum for a short description", async () => {
+    await openAndFillNameAndAdmin();
+    const description = dialog()!.querySelector("textarea")!;
+    type(description, "Too short");
+    act(() => {
+      description.focus();
+      description.blur();
+    });
+
+    expect(submit().disabled).toBe(true);
+    expect(dialog()!.textContent).toContain("rework.teamDescription.tooShort");
+    expect(dialog()!.textContent).toContain("9 / 500");
+    expect(dialog()!.textContent).not.toContain("rework.teamDescription.maxReached");
+  });
+
+  it("says why typing stops once the description reaches 500 characters", async () => {
+    await openAndFillNameAndAdmin();
+    type(dialog()!.querySelector("textarea")!, "a".repeat(500));
+    expect(dialog()!.textContent).toContain("rework.teamDescription.maxReached");
+    expect(submit().disabled).toBe(false);
+  });
+
+  it("keeps the admin chips in their own spaced row under the search field", async () => {
+    await openAndFillNameAndAdmin();
+    const chips = dialog()!.querySelector("ul")!;
+    const search = dialog()!.querySelectorAll("input")[1];
+    expect(chips.parentElement).toBe(search.closest("[data-open]")!.parentElement);
+    expect(chips.parentElement!.className).toContain("adminsPicker");
+  });
+
+  it("shows our own message when the name is taken", async () => {
+    h.createTeam.mockReturnValue({
+      unwrap: () =>
+        Promise.reject({ status: 409, data: { detail: "Team 'Ops' already exists.", code: "team_name_taken" } }),
+    });
+    await openAndFillNameAndAdmin();
+    type(dialog()!.querySelector("textarea")!, "Automate the drafting of our monthly reports.");
+    await act(async () => submit().click());
+    expect(h.showError).toHaveBeenCalledWith({
+      summary: "rework.adminTeams.createTeam.errors.summary",
+      detail: "rework.adminTeams.refusals.teamNameTaken",
+    });
+    expect(h.notifyApiError).not.toHaveBeenCalled();
+  });
+
+  it("sends the trimmed description once it is valid and closes", async () => {
+    await openAndFillNameAndAdmin();
+    type(dialog()!.querySelector("textarea")!, "  Automate the drafting of our monthly reports.  ");
+
+    expect(submit().disabled).toBe(false);
+    await act(async () => submit().click());
+    expect(h.createTeam).toHaveBeenCalledWith({
+      createTeamRequest: {
+        name: "Ops",
+        description: "Automate the drafting of our monthly reports.",
+        initial_team_admin_ids: ["u-ada"],
+      },
+    });
+    expect(dialog()).toBeNull();
+  });
+});
+
+describe("AdminTeamsPage team edit", () => {
+  const save = () => buttonByText(dialog()!, "rework.adminTeams.editTeam.submit")!;
+  const openAlpha = () => {
+    render();
+    act(() => editButtons()[0].click());
+  };
+
+  it("opens prefilled and saves nothing until something changes", () => {
+    openAlpha();
+    expect(dialog()!.querySelector("input")!.value).toBe("Alpha");
+    expect(dialog()!.querySelector("textarea")!.value).toBe("Automates the drafting of reports.");
+    expect(dialog()!.textContent).toContain("Zoe Zed");
+    expect(save().disabled).toBe(true);
+  });
+
+  it("sends only the changed description", async () => {
+    openAlpha();
+    type(dialog()!.querySelector("textarea")!, "Automates the drafting of every monthly report.");
+    await act(async () => save().click());
+    expect(h.editTeam).toHaveBeenCalledWith({
+      teamId: "uid-alpha",
+      editTeamRegistryRequest: { description: "Automates the drafting of every monthly report." },
+    });
+  });
+
+  it("sends the admin diff and refuses an empty roster", async () => {
+    openAlpha();
+    const removeZoe = () => dialog()!.querySelector("li button") as HTMLButtonElement;
+    act(() => removeZoe().click());
+    expect(save().disabled).toBe(true);
+
+    const adminInput = dialog()!.querySelectorAll("input")[1];
+    act(() => adminInput.focus());
+    type(adminInput, "ad");
+    await act(async () => {
+      adminInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    await act(async () => save().click());
+    expect(h.editTeam).toHaveBeenCalledWith({
+      teamId: "uid-alpha",
+      editTeamRegistryRequest: { add_admin_ids: ["u-ada"], remove_admin_ids: ["u-zoe"] },
+    });
+  });
+
+  it("marks a pending admin's chip", () => {
+    render();
+    act(() => editButtons()[2].click());
+    const chips = Array.from(dialog()!.querySelectorAll("ul li"));
+    const ian = chips.find((li) => li.textContent?.includes("Ian Iles"))!;
+    const max = chips.find((li) => li.textContent?.includes("Max Mill"))!;
+    expect(ian.textContent).toContain("rework.adminTeams.pendingAdmin");
+    expect(ian.querySelector('[title="rework.adminTeams.pendingAdminHint"]')).not.toBeNull();
+    expect(max.textContent).not.toContain("rework.adminTeams.pendingAdmin");
+  });
+
+  it.each([
+    ["team_last_admin", "rework.adminTeams.refusals.lastActiveAdmin"],
+    ["team_admin_pending_charter", "rework.adminTeams.refusals.pendingCharter"],
+  ])("shows our own message for the %s refusal", async (code, message) => {
+    h.editTeam.mockReturnValue({
+      unwrap: () => Promise.reject({ status: 409, data: { detail: "English detail.", code } }),
+    });
+    openAlpha();
+    type(dialog()!.querySelector("textarea")!, "Automates the drafting of every monthly report.");
+    await act(async () => save().click());
+    expect(h.showError).toHaveBeenCalledWith({ summary: "rework.adminTeams.editTeam.errors.summary", detail: message });
+  });
+
+  it("keeps the generic handling for an unknown refusal", async () => {
+    const error = { status: 500, data: { detail: "boom" } };
+    h.editTeam.mockReturnValue({ unwrap: () => Promise.reject(error) });
+    openAlpha();
+    type(dialog()!.querySelector("textarea")!, "Automates the drafting of every monthly report.");
+    await act(async () => save().click());
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.notifyApiError).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({ summary: "rework.adminTeams.editTeam.errors.summary" }),
+    );
   });
 });

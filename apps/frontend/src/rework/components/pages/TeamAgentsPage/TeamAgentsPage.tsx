@@ -61,6 +61,7 @@ import {
 } from "./agentNames.ts";
 import { getStoredAgentSort, sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import TeamDescriptionReminder from "@shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   type CreateAgentInstanceRequest,
@@ -172,6 +173,7 @@ export default function TeamAgentsPage() {
     canUpdateAgents: canManageAgents,
     canPublishMarketplaceAgents: canPublish,
     canUnpublishMarketplaceAgents: canUnpublish,
+    canUpdateInfo,
   } = useTeamCapabilities(team);
 
   const {
@@ -598,6 +600,11 @@ export default function TeamAgentsPage() {
 
   return (
     <div className={styles.teamAgentContainer}>
+      {team?.description_is_placeholder && canUpdateInfo && (
+        <div className={styles.descriptionReminder}>
+          <TeamDescriptionReminder team={team} withSettingsLink />
+        </div>
+      )}
       {hasAgents && !templatesUnavailable && (
         <div className={styles.title}>
           <PageHeader

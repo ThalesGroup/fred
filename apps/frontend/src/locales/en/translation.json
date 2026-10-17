@@ -2755,7 +2755,8 @@
         "table": {
           "name": "Team",
           "admins": "Admin(s)"
-        }
+        },
+        "pendingCount": "{{count}} pending"
       },
       "defaultTeam": {
         "title": "Default teams for new users",
@@ -2774,8 +2775,12 @@
         "title": "Create team",
         "nameLabel": "Team name",
         "namePlaceholder": "e.g. swiftpost",
-        "adminsLabel": "Initial team admin(s)",
+        "adminsLabel": "Team admin(s)",
         "adminsPlaceholder": "Enter a name, first name, or user ID",
+        "adminsSearching": "Searching...",
+        "adminsNoMatch": "No user matches this search.",
+        "adminRemove": "Remove {{name}}",
+        "open": "Create team",
         "submit": "Create team",
         "successSummary": "Team created",
         "errors": {
@@ -2784,12 +2789,43 @@
           "conflictDetail": "A team with this name already exists.",
           "forbiddenDetail": "You are not allowed to create teams."
         }
+      },
+      "editTeam": {
+        "title": "Edit team",
+        "openAria": "Edit {{name}}",
+        "submit": "Save",
+        "successSummary": "Team updated",
+        "errors": {
+          "summary": "Failed to update the team",
+          "fallbackDetail": "Could not update the team. Please try again.",
+          "conflictDetail": "This name is taken, or the team would be left without an active admin.",
+          "forbiddenDetail": "Only platform administrators can edit teams."
+        }
+      },
+      "pendingAdmin": "Pending",
+      "pendingAdminHint": "{{name}} has not accepted the team administrator charter yet.",
+      "refusals": {
+        "teamNameTaken": "A team already has this name.",
+        "lastActiveAdmin": "The team must keep at least one active admin.",
+        "pendingCharter": "The new admin has not accepted the charter yet: keep the current admin until they accept."
       }
     },
     "teamCard": {
       "join": "Join",
       "inviteOnly": "Invite only",
       "memberCount": "{{count}} members"
+    },
+    "teamDescription": {
+      "label": "Team description",
+      "helper": "State your team's objectives regarding its use of AI. Everyone browsing the marketplace sees it.",
+      "tooShort": "Write at least {{min}} characters.",
+      "placeholderDisplay": "Description to be completed by the team administrator.",
+      "reminder": {
+        "title": "Describe your team",
+        "description": "Your team still has a default description. State its objectives regarding its use of AI so everyone knows what it uses the platform for.",
+        "action": "Open team settings"
+      },
+      "maxReached": "{{max}} characters maximum"
     },
     "teamRoles": {
       "team_admin": "Admin",
@@ -2919,7 +2955,9 @@
         },
         "description": {
           "label": "Team description",
-          "placeholder": "Help other users understand your team's role."
+          "placeholder": "Help other users understand your team's role.",
+          "saved": "Team description updated",
+          "saveError": "The description could not be saved. Try again."
         },
         "joiningMode": {
           "label": "Joining mode",
