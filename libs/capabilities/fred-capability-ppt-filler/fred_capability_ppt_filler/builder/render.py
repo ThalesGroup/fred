@@ -1398,8 +1398,17 @@ def _heading_lead(
     return zone
 
 
+def _figure_heading(roles: Collection[str], figures: bool) -> bool:
+    """A key-figure card with a heading but no label zone: an item's label
+    goes under the heading."""
+    return figures and "heading" in roles and "label" not in roles
+
+
 def _unused_item_fields(
-    groups: Sequence[RepeatGroup], plan: SlidePlan, size: Tuple[int, int]
+    groups: Sequence[RepeatGroup],
+    plan: SlidePlan,
+    size: Tuple[int, int],
+    figures: bool = False,
 ) -> List[str]:
     """Item fields the plan fills that none of the slide's groups has a zone for
     (every group is fed the same items)."""
@@ -1429,7 +1438,7 @@ def _unused_item_fields(
             ("number", item.number, "number" in roles or counting),
             ("heading", item.heading, heading_shown),
             ("text", item.text, bool(roles & {"body", "caption"})),
-            ("label", item.label, "label" in roles),
+            ("label", item.label, "label" in roles or _figure_heading(roles, figures)),
             ("image", item.image, "image" in roles),
         )
         for name, value, shown in checks:
@@ -1439,7 +1448,11 @@ def _unused_item_fields(
 
 
 def _assign_group(
-    group: RepeatGroup, plan: SlidePlan, size: Tuple[int, int], start: int = 0
+    group: RepeatGroup,
+    plan: SlidePlan,
+    size: Tuple[int, int],
+    start: int = 0,
+    figures: bool = False,
 ) -> Tuple[Dict[str, List[_Line]], Dict[str, Optional[str]], int]:
     """Lines and image ids per item zone key; returns ``(text, images, used items)``.
     ``start`` is the entries before a list's continuation: its count goes on."""
@@ -1450,6 +1463,12 @@ def _assign_group(
         item = plan.items[index]
         zones = group.items[index]
         has_heading = any(z.role == "heading" for z in zones)
+        # A key figure without a label zone: its label reads under its heading.
+        folded = (
+            _lines_from_bullets([item.label], f"items[{index}].label")
+            if item.label and _figure_heading({z.role for z in zones}, figures)
+            else []
+        )
         at = f"items[{index}]."
         lead = _heading_lead(zones, item, at, size)
         for zone in zones:
@@ -1464,8 +1483,8 @@ def _assign_group(
                     _lines_from_bullets([value], at + "number") if value else []
                 )
             elif zone.role == "heading":
-                text[zone.key] = _lines_from_bullets(
-                    [item.heading or ""], at + "heading"
+                text[zone.key] = (
+                    _lines_from_bullets([item.heading or ""], at + "heading") + folded
                 )
             elif zone.role in ("body", "caption"):
                 text[zone.key] = _lines_from_bullets([item.text or ""], at + "text")
@@ -1810,7 +1829,12 @@ class _Renderer:
         if plan.table is not None and plan.table.has_content() and not tables:
             lost.append("table")
         lost.extend(
-            _unused_item_fields(pattern.groups, plan, (self.width, self.height))
+            _unused_item_fields(
+                pattern.groups,
+                plan,
+                (self.width, self.height),
+                pattern.kind == "figures",
+            )
         )
         hosted = self._fill_charts(slide, pattern, plan, index, text, position, lost)
         self._tell_trends(pattern, plan, position)
@@ -1818,7 +1842,11 @@ class _Renderer:
 
         for group in pattern.groups:
             group_text, group_images, used = _assign_group(
-                group, plan, (self.width, self.height), start
+                group,
+                plan,
+                (self.width, self.height),
+                start,
+                pattern.kind == "figures",
             )
             text.update(group_text)
             image_ids.update(group_images)

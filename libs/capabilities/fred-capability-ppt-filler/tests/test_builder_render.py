@@ -701,6 +701,26 @@ def test_a_closing_holds_its_bullets_and_on_a_section_slide_takes_no_number():
     assert not any(re.fullmatch(r"0?1", text) for text in _texts(slide))
 
 
+def test_a_figures_label_reads_under_its_heading_without_a_label_zone():
+    """The eval slide: number, heading and label on the built-in key figures,
+    refused over the label, so the agent fell back to plain bullets."""
+    content, inventory = builtin.builtin_template()
+    figures = next(p for p in inventory.patterns if p.id == "slide:281")
+    size = (inventory.slide_width, inventory.slide_height)
+    items = [
+        PlanItem(number="6,5 M€", heading="Investissement total", label="sur 3 ans"),
+        PlanItem(number="2,8 M€", heading="Économies annuelles", label="dès 2027"),
+        PlanItem(number="70 %", label="de ressaisies en moins"),
+    ]
+    slide = SlidePlan(title="Chiffres clés", kind="figures", items=items)
+    assert misfit(figures, slide, size)[0] == []
+    result = render_deck(content, inventory, DeckPlan(slides=[slide]), [figures])
+    (built,) = Presentation(io.BytesIO(result.pptx)).slides
+    texts = _texts(built)
+    assert "Investissement total\nsur 3 ans" in texts
+    assert "de ressaisies en moins" in texts
+
+
 REFERENCE = os.environ.get("PPT_BUILDER_REFERENCE_TEMPLATE")
 
 

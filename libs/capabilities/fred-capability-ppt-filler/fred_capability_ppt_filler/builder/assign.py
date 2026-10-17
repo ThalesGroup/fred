@@ -546,7 +546,8 @@ def _weigh(
                 f"trim to {capacity} items or split them over two slides",
             )
         )
-    lost.extend(_unused_item_fields(pattern.groups, slide, size))
+    figures = pattern.kind == "figures"
+    lost.extend(_unused_item_fields(pattern.groups, slide, size, figures))
     held = [w for w in lost if w.startswith("column ")]
     if held:
         most = int(held[0].split()[1]) - 1
@@ -619,7 +620,9 @@ def _weigh(
             zone, lines, SLIDE_FIELDS.get(zone.role, "bullets"), size, reasons
         )
     for group in pattern.groups:
-        group_text, pictures, used = _assign_group(group, slide, size)
+        group_text, pictures, used = _assign_group(
+            group, slide, size, figures=pattern.kind == "figures"
+        )
         framed |= any(
             z.framed and not pictures.get(z.key)
             for item in group.items[:used]
