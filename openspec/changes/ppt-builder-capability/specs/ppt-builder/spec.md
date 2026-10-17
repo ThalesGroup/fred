@@ -595,6 +595,16 @@ The system SHALL instruct the agent to write the plan and call `build_presentati
 - **WHEN** the user asks to see or validate the outline first, or gives no subject
 - **THEN** the working rules allow the agent to ask before building
 
+#### Scenario: A revision request
+
+- **WHEN** the user asks to change a delivered deck
+- **THEN** the working rules tell the agent to do only what was asked (any other slide or content is proposed, not added), to send `changes` for the slides concerned and the whole deck only for a new deck or a rewrite of most slides, to ask which slide when the request names none, to say a deck was built or changed only after a delivery in that answer and to describe only what the result lists, and to say so when nothing needed changing or could be applied
+
+#### Scenario: A request for another template
+
+- **WHEN** the user asks to use another template
+- **THEN** the working rules name the template in use (the built-in one, or the one uploaded in the agent's settings) and say the tool cannot switch it: an editor of the agent uploads another in its settings
+
 ### Requirement: No silent fallback
 
 The system SHALL NOT substitute an unfitting pattern for a slide. When a slide fits no pattern, the tool SHALL build nothing and return a structured `needs_revision` result the model can act on. An expected revision SHALL NOT be returned as a failed tool call: only a bad call, an unavailable template, a busy server, a render or a storage failure SHALL be an error.
@@ -955,4 +965,5 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **GIVEN** a deck delivered earlier in the conversation
 - **WHEN** a new deck is delivered (by `changes` or a `slides` resend)
 - **THEN** the result lists the slides of the new file that changed (content or design) or were added, the previous deck's slides removed, and how many stayed unchanged
+- **AND** when no slide differs, the result says so and to tell the user the deck is the same; when a `slides` resend changed, added or removed at most two slides and kept more, the result adds that such an edit is sent as `changes`
 

@@ -571,3 +571,12 @@ Owns: `plan.py` (`single_columns`), `changes.py` (`_not_a_list`, one edit per fi
 - [x] 52.8 Eval calls replayed offline and rendered by LibreOffice (`~/fred-tmp/revision-evals/fixes/`), PNG looked at; package checks; `openspec validate --strict`
 - Not changed: parallel build calls (already one build per round and a per-tool lock; the 4-slide deck was the model splitting its deck); a corrected `changes` resend whose shape changed applies to the refused plan (default r14 `after` 0 → 1); the built-in matrix's axis labels read as `columns.bullets×3 1 short word` (analysis)
 
+## WP53. Agent guidance from the revision evals (owner decision 2026-10-17 overnight, design D32)
+
+Owns: `builder/capability.py` (`_BUILD_INSTRUCTIONS`, `build_instructions`), `tools.py` (tool and `slides` descriptions, delivery text), `changes.py` (`after` description, `deck_delta` lines), tests, delta spec, `verification.md`. Figures: `ppt-builder-storytelling` 3b.
+
+- [x] 53.1 Working rules name the template in use (built-in or uploaded in the agent's settings) and say the tool cannot switch it. Test: `test_plan_validation.py::test_the_working_rules_name_the_template_and_keep_revisions_truthful`
+- [x] 53.2 Working rules for revisions: only what was asked (extras proposed), `changes` for the slides concerned, ask which slide when none is named, claim a build only after a delivery in this answer and describe only what the result lists, say when nothing needed changing. Same test
+- [x] 53.3 `after` 0 described as "first, after the cover" (tool description, `SlideChange.after`, the missing-`after` problem); `slides` described as a new deck or a rewrite of most slides. Tests: `test_the_tool_tells_the_agent_one_call_builds_the_whole_deck`, `test_every_bad_change_is_reported_with_its_remedy`
+- [x] 53.4 Delivery: "none changed: tell the user the deck is the same"; a `slides` resend touching at most two slides of a larger deck adds "send only `changes` next time". Tests: `test_the_delta_names_changed_added_and_removed_slides`, `test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes`, `test_a_small_edit_resent_as_a_whole_deck_is_built_and_pointed_to_changes`
+- [ ] 53.5 Live re-evaluation of the 30 revision requests on both templates once fred-agents runs this code (not restarted by this change)

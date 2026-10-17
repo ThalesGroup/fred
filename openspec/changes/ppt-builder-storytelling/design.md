@@ -103,6 +103,10 @@ Rejected:
 - `BuildNoteCode` gains `illustrative_data`, `figures_unverified`, `wide_range_chart`; frontend `types.ts`, `DeckSummaryButton.tsx`, locales.
 - Notes lines (`Source:`, illustrative, unverified) are written in the plan's language, like the caption suffix.
 
+### D6. Unsourced figures said truthfully (owner decision 2026-10-17 overnight)
+
+Revision evals (mistral-small) showed invented figures tagged `source: user` and replies claiming "no assumption": the second send of an unverified slide is built (D4), and the agent was never told again. The refusal now says not to resend made-up figures, and the delivery carries one line per such slide (those the call changed) telling the agent to present them as to be confirmed. One rule, consistent with D3: concrete figures the user did not give are asked for, never invented, unless illustrative data was asked for. No new check: the soft spot-check stays soft (real derived figures still build).
+
 ## Risks / Trade-offs
 
 - [More revision rounds on weak models] → checks run before the assignment and share one revision; each option is a concrete edit; measured in the eval (first-call success, rounds per deck).

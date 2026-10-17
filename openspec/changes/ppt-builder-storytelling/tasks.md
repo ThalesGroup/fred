@@ -21,6 +21,11 @@
 - [x] 3.4 Generated client: run `make update-ppt-builder-capability-api` in `apps/frontend` and confirm no diff (the setting is a manifest field); commit the regeneration only if it changes
 - Verification: `tests/test_plan_validation.py` — setting off builds directly; on: first call returns `plan_proposed` with every slide's kind, title, takeaway and source and stores the plan; a second call in the same turn gets the same answer; after a user message `slides` builds and `changes` apply to the proposed plan; `skip_plan` with "construis directement, sans plan" in the latest user message builds, `skip_plan` without it gets the outline; a delivered deck's edit is never gated; a plan with problems gets `needs_revision`, not the outline. Frontend: toggle test beside `PptBuilderVarietySettings.test.tsx`, `DeckSummaryButton.test.tsx` notes; `tsc`, `prettier`, `eslint`, `vitest`
 
+## 3b. Unsourced figures said truthfully (owner decision 2026-10-17 overnight, design D6)
+
+- [x] 3b.1 The unverified-figures refusal says never to resend made-up figures (ask the user instead); a slide built with `figures_unverified` adds a delivery line telling the agent to present its figures as to be confirmed, never as the user's (slides the call changed only). Test: `test_story_render.py::test_unverified_figures_are_built_on_the_resend_and_said`
+- [x] 3b.2 Working rule: figures, names and dates exact when rewording, `source: user` only for what the user wrote, concrete figures the user did not give are asked for (with `ppt-builder-capability` WP53)
+
 ## 4. Evidence and close-out
 
 - [ ] 4.1 `eval/prompts.py`: storytelling prompts (prompts added 2026-10-15; metrics and the run pending) with provided documents (the repro request, a "données indicatives" request, a "no titles" request, user-typed figures); metrics: takeaway present, kind and emphasis consistent with the takeaway, refusals per check, false spot-check refusals, first-call success, rounds per deck, tool-schema size before/after

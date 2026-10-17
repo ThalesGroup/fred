@@ -1626,3 +1626,10 @@ Eval calls replayed offline from the runs' `digest.json` (rules-only analysis: t
 Commands: ruff, `ruff check --select I`, ruff format, basedpyright (0 errors); `make test` equivalent: 918 passed, 5 skipped; `openspec validate --strict`.
 
 Not proven: the live Thales inventory (vision labels) was not replayed; the harness renders the delivered `.pptx`, so its PNGs still show Wingdings 3 boxes (the in-app preview does not).
+
+## WP53 (2026-10-17 overnight): agent guidance from the revision evals
+
+- New tests: `test_plan_validation.py::test_the_working_rules_name_the_template_and_keep_revisions_truthful`, `test_deck_changes.py::test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes`, `test_a_small_edit_resent_as_a_whole_deck_is_built_and_pointed_to_changes`; extended: `test_the_delta_names_changed_added_and_removed_slides`, `test_story_render.py::test_unverified_figures_are_built_on_the_resend_and_said`; updated for the `after` wording: `test_the_tool_tells_the_agent_one_call_builds_the_whole_deck`, `test_every_bad_change_is_reported_with_its_remedy`.
+- Prompt size (cl100k, built-in template): working rules 479 → 587 tokens, tool description 3189 → 3196, args schema 4532 → 4540 (+123 per model call).
+- Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 921 passed, 5 skipped; `openspec validate --strict`.
+- Not proven: the model's behaviour. fred-agents was not restarted, so no live run uses this guidance yet (WP53.5).

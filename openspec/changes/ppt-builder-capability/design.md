@@ -341,6 +341,17 @@ Thirty revision requests on the built-in and Thales templates found deterministi
 - **Preview glyphs.** LibreOffice cannot recode Wingdings 3 (it does Wingdings), so the Thales sub-bullets showed as boxes in the preview. The preview copy only draws them as `►` in Arial, like the existing no-wrap widening; the template is not changed (PowerPoint has the font).
 - **What changed.** The delivery compares the new deck with the previous delivered one (content and design per slide, a sequence diff) and lists changed, added and removed slides, so the agent can describe its edit truthfully. One extra store read when the turn has no delivered deck in hand.
 
+### D32. Agent guidance from the revision evals (owner decision 2026-10-17 overnight)
+
+The LLM-behaviour faults of the same evals (D31 took the builder ones) are addressed in the capability's own guidance, tightening sentences rather than adding sections; size measured with cl100k on the built-in template: working rules 479 → 587 tokens, tool description 3189 → 3196, schema 4532 → 4540.
+
+- **Truthful replies.** Replies claimed edits, layouts and deliveries the deck did not hold, once with no tool call. The rules now say a deck was built only when the tool delivered it in that answer, to describe only what the result lists (the D31 change list), and to say when a request needed no change; the delivery text adds "never a change, layout or source it does not show", and an identical deck says to tell the user so.
+- **Only what was asked.** Unrequested Synthèse/Conclusion slides and padding: a revision does only what was asked; extras are proposed in the reply. A request naming no slide ("this slide") is asked about, not guessed.
+- **`changes` for targeted edits.** Most revisions resent the whole deck, with drift in slides nobody touched. The rules, the tool description and the `slides` field say `changes` for edits of some slides, the whole deck only for a new deck or a rewrite of most; a resend that touched at most two slides of a larger deck is still built (no refusal: the content is right) with one line pointing to `changes`. `after` 0 is described as it now behaves (after the cover).
+- **Template.** The tool has no template choice; asked for "my team's template", the agent pretended. The rules name the template in use and where an editor of the agent changes it (the Help Center already documents the upload, so no page moves).
+- **Facts.** See `ppt-builder-storytelling` D6. Tone requests on a deck without addressing (tu/vous) fall under "say so when a request needed no change".
+- Not done: no code check of the reply against the result (the reply is free text); live effect unmeasured until the re-evaluation (WP53.5).
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.
