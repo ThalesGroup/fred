@@ -143,9 +143,17 @@ COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml a
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
+# Opt-in variant for deployments intentionally using filesystem-backed Chroma.
+# The builder and the default runtime image never install this extra.
+ARG INSTALL_CHROMA=false
 RUN cd /workspace/apps/knowledge-flow-backend && \
+    case "$INSTALL_CHROMA" in \
+        true) set -- --extra chroma ;; \
+        false) set -- ;; \
+        *) echo "INSTALL_CHROMA must be true or false" >&2; exit 1 ;; \
+    esac && \
     UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
-    /app/venv/bin/uv sync --locked --no-default-groups --no-cache
+    /app/venv/bin/uv sync --locked --no-default-groups --no-cache "$@"
 
 # Runtime uses uv; pip and its vendored libraries are only needed during bootstrap.
 RUN /app/venv/bin/python -m pip uninstall --yes pip

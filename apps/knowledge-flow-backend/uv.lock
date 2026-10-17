@@ -2032,7 +2032,6 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "av" },
-    { name = "chromadb" },
     { name = "clickhouse-connect" },
     { name = "coloredlogs" },
     { name = "dateparser" },
@@ -2091,9 +2090,13 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+chroma = [
+    { name = "chromadb" },
+]
 dev = [
     { name = "bandit" },
     { name = "black" },
+    { name = "httpx2" },
     { name = "isort" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -2109,6 +2112,7 @@ dev = [
 dev = [
     { name = "bandit" },
     { name = "basedpyright" },
+    { name = "chromadb" },
     { name = "detect-secrets" },
     { name = "httpx2" },
     { name = "pytest" },
@@ -2124,7 +2128,7 @@ requires-dist = [
     { name = "av", specifier = ">=14.0.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = "==1.8.5" },
     { name = "black", marker = "extra == 'dev'", specifier = "==26.3.1" },
-    { name = "chromadb", specifier = ">=0.5" },
+    { name = "chromadb", marker = "extra == 'chroma'", specifier = ">=0.5" },
     { name = "clickhouse-connect", specifier = ">=0.8.0" },
     { name = "coloredlogs", specifier = "==15.0.1" },
     { name = "dateparser", specifier = ">=1.2.2" },
@@ -2137,6 +2141,7 @@ requires-dist = [
     { name = "fred-core", editable = "../../libs/fred-core" },
     { name = "google-cloud-storage", specifier = "==3.1.0" },
     { name = "hf-xet", specifier = "==1.6.0" },
+    { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.13.1" },
     { name = "ipython", specifier = "==8.31.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = "==5.10.1" },
     { name = "langchain-community", specifier = ">=0.4.1" },
@@ -2192,12 +2197,13 @@ requires-dist = [
     { name = "uv" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35,<0.36" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["chroma", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.8.5" },
     { name = "basedpyright", specifier = "==1.31.0" },
+    { name = "chromadb", specifier = ">=0.5" },
     { name = "detect-secrets", specifier = ">=1.5.0" },
     { name = "httpx2", specifier = ">=2.13.1" },
     { name = "pytest", specifier = ">=9.0.3" },
