@@ -41,6 +41,7 @@ from fred_capability_ppt_filler.builder.models import (
     RepeatGroup,
     TemplateInventory,
     Zone,
+    ZoneRole,
 )
 from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
@@ -353,9 +354,10 @@ def test_a_bare_chart_keeps_the_centred_slide_and_text_alternates_the_sides(buil
 def test_a_chart_without_items_avoids_the_slide_whose_list_would_stay_empty(builtin):
     _, inventory = builtin
     card = next(p for p in inventory.patterns if p.kind == "chart")
+    fields: tuple[tuple[int, ZoneRole], ...] = ((7, "number"), (8, "label"))
     figure = [
         Zone(key=f"ph:{k}", role=role, box=Box(x=700, y=300 + 100 * k, w=200, h=80))
-        for k, role in ((7, "number"), (8, "label"))
+        for k, role in fields
     ]
     listed = card.model_copy(
         update={
