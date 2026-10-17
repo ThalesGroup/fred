@@ -14,6 +14,7 @@
 import asyncio
 import atexit
 import importlib
+import importlib.util
 import logging
 import os
 from pathlib import Path
@@ -303,6 +304,12 @@ class ApplicationContext:
             return
 
         self.configuration = configuration
+        if isinstance(configuration.storage.vector_store, ChromaVectorStorageConfig) and importlib.util.find_spec("chromadb") is None:
+            raise ImportError(
+                "Chroma vector storage is configured but the optional 'chromadb' dependency is missing. "
+                "Run `uv sync --extra chroma` in apps/knowledge-flow-backend, or build the "
+                "Knowledge Flow image with `--build-arg INSTALL_CHROMA=true`."
+            )
         validate_profile_input_processor_config(configuration)
         validate_output_processor_config(configuration)
         validate_library_output_processor_config(configuration)
