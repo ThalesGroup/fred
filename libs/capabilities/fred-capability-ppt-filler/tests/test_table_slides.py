@@ -307,7 +307,7 @@ def _builtin_tables(plan: DeckPlan):
 
 
 def test_a_comparison_of_two_offers_builds_on_the_builtin_table_slide():
-    # The built-in table has 3 columns: a criterion and two offers.
+    # The built-in table has 5 columns: a criterion and two offers keep three.
     offers = PlanTable(
         header=["Critère", "Offre A", "Offre B"],
         rows=[[f"Critère {r}", "Oui", "Partiel"] for r in range(6)],
@@ -328,16 +328,16 @@ def test_a_comparison_of_two_offers_builds_on_the_builtin_table_slide():
 
 def test_a_table_too_tall_for_the_builtin_slide_continues_with_its_header():
     assignment, _, frames = _builtin_tables(
-        _deck(SlidePlan(title="Planning", table=_table(10, cols=3)))
+        _deck(SlidePlan(title="Planning", table=_table(16, cols=3)))
     )
     assert "continue on a second 'table' slide" in assignment.notes[0]
     assert len(frames) == 2
     assert [_rows(f)[0] for f in frames] == [[f"Col {c}" for c in range(3)]] * 2
-    assert sum(len(_rows(f)) - 1 for f in frames) == 10
+    assert sum(len(_rows(f)) - 1 for f in frames) == 16
 
 
-def test_four_columns_on_the_builtin_table_need_revision():
+def test_six_columns_on_the_builtin_table_need_revision():
     _, inventory = builtin.builtin_template()
-    plan = _deck(SlidePlan(title="T", table=_table(3, cols=4)))
+    plan = _deck(SlidePlan(title="T", table=_table(3, cols=6)))
     problems = assign(inventory, plan).problems
-    assert problems and "4 columns given, max 3" in problems[0].problem
+    assert problems and "6 columns given, max 5" in problems[0].problem

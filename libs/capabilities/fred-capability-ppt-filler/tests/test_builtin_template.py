@@ -91,13 +91,13 @@ def test_builtin_deck_offers_a_data_table_slide():
     assert not any(p.exclusion_reason == "table" for p in inventory.patterns)
     zone = next(z for z in pattern.zones if z.role == "table")
     assert zone.table is not None and zone.table.header
-    assert len(zone.table.columns) == 3
+    assert len(zone.table.columns) == 5
     schema = _args_schema(inventory).model_json_schema()
     assert "table" in schema["$defs"]["BuildSlide"]["properties"]
     # Equal columns are quoted once.
     rooms = "/".join(str(c) for c in dict.fromkeys(zone.table.columns))
     assert (
-        f"table 2 to 3 columns (≈{rooms} chars per cell line), "
+        f"table 2 to 5 columns (≈{rooms} chars per cell line), "
         f"header + ≈{zone.max_lines} lines of rows"
     ) in _description(inventory, "template_slide", 2)
 

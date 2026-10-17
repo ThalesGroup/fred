@@ -1,5 +1,5 @@
 {
- "template_sha256": "fbb1498b873eb0066bdd711ac551a491156b54ae52ff343d8641a2e2941578cd",
+ "template_sha256": "67568c2cfec8a1bc14820169d676e965eb869da03b4615427f6d54a4881c9708",
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
@@ -89,8 +89,8 @@
     "source": "slide",
     "source_index": 4,
     "name": "Fred Title Image",
-    "label": "Knowledge assistants for every team",
-    "kind": "image_text",
+    "label": "Cover with picture",
+    "kind": "cover",
     "zones": [
      {
       "key": "ph:103",
@@ -189,8 +189,8 @@
     "source": "slide",
     "source_index": 5,
     "name": "Fred Title Light",
-    "label": "Designing agent workflows that people trust",
-    "kind": "bullets",
+    "label": "Cover, light",
+    "kind": "cover",
     "zones": [
      {
       "key": "ph:103",
@@ -291,30 +291,337 @@
       "chart_capable": false,
       "chart_type": null,
       "takeaway": false
-     },
-     {
-      "key": "ph:102",
-      "role": "body",
-      "box": {
-       "x": 398,
-       "y": 127,
-       "w": 557,
-       "h": 747
-      },
-      "sample": "Design principles\nOpenings and sections\nText and comparison layouts\nVisual layou",
-      "font_pt": 20.0,
-      "chars_per_line": 53,
-      "max_lines": 9,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
      }
     ],
-    "groups": [],
+    "groups": [
+     {
+      "key": "sp:6",
+      "count": 7,
+      "item_zones": [
+       "number",
+       "heading"
+      ],
+      "items": [
+       [
+        {
+         "key": "sp:6/4",
+         "role": "number",
+         "box": {
+          "x": 398,
+          "y": 127,
+          "w": 52,
+          "h": 67
+         },
+         "sample": "01",
+         "font_pt": 20.0,
+         "chars_per_line": 4,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:6/5",
+         "role": "heading",
+         "box": {
+          "x": 458,
+          "y": 127,
+          "w": 497,
+          "h": 67
+         },
+         "sample": "Design principles",
+         "font_pt": 20.0,
+         "chars_per_line": 50,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:9/7",
+         "role": "number",
+         "box": {
+          "x": 398,
+          "y": 233,
+          "w": 52,
+          "h": 67
+         },
+         "sample": "02",
+         "font_pt": 20.0,
+         "chars_per_line": 4,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:9/8",
+         "role": "heading",
+         "box": {
+          "x": 458,
+          "y": 233,
+          "w": 497,
+          "h": 67
+         },
+         "sample": "Openings and sections",
+         "font_pt": 20.0,
+         "chars_per_line": 50,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:12/10",
+         "role": "number",
+         "box": {
+          "x": 398,
+          "y": 340,
+          "w": 52,
+          "h": 67
+         },
+         "sample": "03",
+         "font_pt": 20.0,
+         "chars_per_line": 4,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:12/11",
+         "role": "heading",
+         "box": {
+          "x": 458,
+          "y": 340,
+          "w": 497,
+          "h": 67
+         },
+         "sample": "Text and comparison layouts",
+         "font_pt": 20.0,
+         "chars_per_line": 50,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:15/13",
+         "role": "number",
+         "box": {
+          "x": 398,
+          "y": 447,
+          "w": 52,
+          "h": 67
+         },
+         "sample": "04",
+         "font_pt": 20.0,
+         "chars_per_line": 4,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:15/14",
+         "role": "heading",
+         "box": {
+          "x": 458,
+          "y": 447,
+          "w": 497,
+          "h": 67
+         },
+         "sample": "Visual layouts",
+         "font_pt": 20.0,
+         "chars_per_line": 50,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:18/16",
+         "role": "number",
+         "box": {
+          "x": 398,
+          "y": 553,
+          "w": 52,
+          "h": 67
+         },
+         "sample": "05",
+         "font_pt": 20.0,
+         "chars_per_line": 4,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:18/17",
+         "role": "heading",
+         "box": {
+          "x": 458,
+          "y": 553,
+          "w": 497,
+          "h": 67
+         },
+         "sample": "Data layouts",
+         "font_pt": 20.0,
+         "chars_per_line": 50,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:21/19",
+         "role": "number",
+         "box": {
+          "x": 398,
+          "y": 660,
+          "w": 52,
+          "h": 67
+         },
+         "sample": "06",
+         "font_pt": 20.0,
+         "chars_per_line": 4,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:21/20",
+         "role": "heading",
+         "box": {
+          "x": 458,
+          "y": 660,
+          "w": 497,
+          "h": 67
+         },
+         "sample": "Process, people and code",
+         "font_pt": 20.0,
+         "chars_per_line": 50,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ],
+       [
+        {
+         "key": "sp:24/22",
+         "role": "number",
+         "box": {
+          "x": 398,
+          "y": 767,
+          "w": 52,
+          "h": 67
+         },
+         "sample": "07",
+         "font_pt": 20.0,
+         "chars_per_line": 4,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "sp:24/23",
+         "role": "heading",
+         "box": {
+          "x": 458,
+          "y": 767,
+          "w": 497,
+          "h": 67
+         },
+         "sample": "Closings and free canvases",
+         "font_pt": 20.0,
+         "chars_per_line": 50,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        }
+       ]
+      ],
+      "item_keys": [
+       "sp:6",
+       "sp:9",
+       "sp:12",
+       "sp:15",
+       "sp:18",
+       "sp:21",
+       "sp:24"
+      ]
+     }
+    ],
     "included": true,
     "exclusion_reason": null,
     "reusable": true,
@@ -331,7 +638,7 @@
     "zones": [
      {
       "key": "ph:103",
-      "role": "body",
+      "role": "number",
       "box": {
        "x": 45,
        "y": 127,
@@ -373,7 +680,7 @@
      },
      {
       "key": "ph:105",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 45,
        "y": 620,
@@ -410,7 +717,7 @@
     "zones": [
      {
       "key": "ph:103",
-      "role": "body",
+      "role": "number",
       "box": {
        "x": 45,
        "y": 127,
@@ -452,7 +759,7 @@
      },
      {
       "key": "ph:105",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 45,
        "y": 620,
@@ -489,7 +796,7 @@
     "zones": [
      {
       "key": "ph:103",
-      "role": "body",
+      "role": "number",
       "box": {
        "x": 45,
        "y": 127,
@@ -531,7 +838,7 @@
      },
      {
       "key": "ph:105",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 45,
        "y": 620,
@@ -589,7 +896,7 @@
      },
      {
       "key": "ph:103",
-      "role": "body",
+      "role": "number",
       "box": {
        "x": 518,
        "y": 127,
@@ -631,7 +938,7 @@
      },
      {
       "key": "ph:105",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 518,
        "y": 620,
@@ -823,69 +1130,6 @@
       "chart_capable": false,
       "chart_type": null,
       "takeaway": false
-     },
-     {
-      "key": "ph:102",
-      "role": "body",
-      "box": {
-       "x": 45,
-       "y": 440,
-       "w": 278,
-       "h": 440
-      },
-      "sample": "Each layout answers one communication need: compare, prove, explain, show. The a",
-      "font_pt": 16.0,
-      "chars_per_line": 32,
-      "max_lines": 7,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:104",
-      "role": "body",
-      "box": {
-       "x": 361,
-       "y": 440,
-       "w": 278,
-       "h": 440
-      },
-      "sample": "No hard-coded colour. Decorations and placeholders use scheme colours, so a new ",
-      "font_pt": 16.0,
-      "chars_per_line": 32,
-      "max_lines": 7,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:106",
-      "role": "body",
-      "box": {
-       "x": 677,
-       "y": 440,
-       "w": 278,
-       "h": 440
-      },
-      "sample": "Empty placeholders disappear, generous boxes absorb long text, and every image i",
-      "font_pt": 16.0,
-      "chars_per_line": 32,
-      "max_lines": 7,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
      }
     ],
     "groups": [
@@ -893,13 +1137,14 @@
       "key": "ph:101",
       "count": 3,
       "item_zones": [
+       "heading",
        "body"
       ],
       "items": [
        [
         {
          "key": "ph:101",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 45,
           "y": 353,
@@ -917,12 +1162,33 @@
          "chart_capable": false,
          "chart_type": null,
          "takeaway": false
+        },
+        {
+         "key": "ph:102",
+         "role": "body",
+         "box": {
+          "x": 45,
+          "y": 440,
+          "w": 278,
+          "h": 400
+         },
+         "sample": "Each layout answers one communication need: compare, prove, explain, show. The a",
+         "font_pt": 16.0,
+         "chars_per_line": 32,
+         "max_lines": 7,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
         }
        ],
        [
         {
          "key": "ph:103",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 361,
           "y": 353,
@@ -940,12 +1206,33 @@
          "chart_capable": false,
          "chart_type": null,
          "takeaway": false
+        },
+        {
+         "key": "ph:104",
+         "role": "body",
+         "box": {
+          "x": 361,
+          "y": 440,
+          "w": 278,
+          "h": 400
+         },
+         "sample": "No hard-coded colour. Decorations and placeholders use scheme colours, so a new ",
+         "font_pt": 16.0,
+         "chars_per_line": 32,
+         "max_lines": 7,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
         }
        ],
        [
         {
          "key": "ph:105",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 677,
           "y": 353,
@@ -956,6 +1243,27 @@
          "font_pt": 20.0,
          "chars_per_line": 27,
          "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 677,
+          "y": 440,
+          "w": 278,
+          "h": 400
+         },
+         "sample": "Empty placeholders disappear, generous boxes absorb long text, and every image i",
+         "font_pt": 16.0,
+         "chars_per_line": 32,
+         "max_lines": 7,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -1776,12 +2084,12 @@
     "source": "slide",
     "source_index": 15,
     "name": "Fred Statement",
-    "label": "Fred Statement (15)",
-    "kind": "bullets",
+    "label": "Statement",
+    "kind": "quote",
     "zones": [
      {
       "key": "ph:101",
-      "role": "body",
+      "role": "title",
       "box": {
        "x": 45,
        "y": 253,
@@ -1802,7 +2110,7 @@
      },
      {
       "key": "ph:102",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 45,
        "y": 667,
@@ -1834,12 +2142,12 @@
     "source": "slide",
     "source_index": 16,
     "name": "Fred Statement Accent",
-    "label": "Fred Statement Accent (16)",
-    "kind": "bullets",
+    "label": "Statement, accent colour",
+    "kind": "quote",
     "zones": [
      {
       "key": "ph:101",
-      "role": "body",
+      "role": "title",
       "box": {
        "x": 45,
        "y": 253,
@@ -1860,7 +2168,7 @@
      },
      {
       "key": "ph:102",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 45,
        "y": 667,
@@ -2452,87 +2760,46 @@
       "chart_capable": false,
       "chart_type": null,
       "takeaway": false
-     },
-     {
-      "key": "ph:101",
-      "role": "image",
-      "box": {
-       "x": 45,
-       "y": 247,
-       "w": 286,
-       "h": 440
-      },
-      "sample": "",
-      "font_pt": null,
-      "chars_per_line": null,
-      "max_lines": null,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": true,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:104",
-      "role": "image",
-      "box": {
-       "x": 357,
-       "y": 247,
-       "w": 286,
-       "h": 440
-      },
-      "sample": "",
-      "font_pt": null,
-      "chars_per_line": null,
-      "max_lines": null,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": true,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:107",
-      "role": "image",
-      "box": {
-       "x": 669,
-       "y": 247,
-       "w": 286,
-       "h": 440
-      },
-      "sample": "",
-      "font_pt": null,
-      "chars_per_line": null,
-      "max_lines": null,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": true,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
      }
     ],
     "groups": [
      {
-      "key": "ph:102",
+      "key": "ph:101",
       "count": 3,
       "item_zones": [
+       "image",
        "heading",
        "body"
       ],
       "items": [
        [
         {
+         "key": "ph:101",
+         "role": "image",
+         "box": {
+          "x": 45,
+          "y": 247,
+          "w": 286,
+          "h": 400
+         },
+         "sample": "",
+         "font_pt": null,
+         "chars_per_line": null,
+         "max_lines": null,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": true,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
          "key": "ph:102",
          "role": "heading",
          "box": {
           "x": 45,
-          "y": 713,
+          "y": 673,
           "w": 286,
           "h": 53
          },
@@ -2553,7 +2820,7 @@
          "role": "body",
          "box": {
           "x": 45,
-          "y": 767,
+          "y": 727,
           "w": 286,
           "h": 113
          },
@@ -2572,11 +2839,32 @@
        ],
        [
         {
+         "key": "ph:104",
+         "role": "image",
+         "box": {
+          "x": 357,
+          "y": 247,
+          "w": 286,
+          "h": 400
+         },
+         "sample": "",
+         "font_pt": null,
+         "chars_per_line": null,
+         "max_lines": null,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": true,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
          "key": "ph:105",
          "role": "heading",
          "box": {
           "x": 357,
-          "y": 713,
+          "y": 673,
           "w": 286,
           "h": 53
          },
@@ -2597,7 +2885,7 @@
          "role": "body",
          "box": {
           "x": 357,
-          "y": 767,
+          "y": 727,
           "w": 286,
           "h": 113
          },
@@ -2616,11 +2904,32 @@
        ],
        [
         {
+         "key": "ph:107",
+         "role": "image",
+         "box": {
+          "x": 669,
+          "y": 247,
+          "w": 286,
+          "h": 400
+         },
+         "sample": "",
+         "font_pt": null,
+         "chars_per_line": null,
+         "max_lines": null,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": true,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
          "key": "ph:108",
          "role": "heading",
          "box": {
           "x": 669,
-          "y": 713,
+          "y": 673,
           "w": 286,
           "h": 53
          },
@@ -2641,7 +2950,7 @@
          "role": "body",
          "box": {
           "x": 669,
-          "y": 767,
+          "y": 727,
           "w": 286,
           "h": 113
          },
@@ -2660,9 +2969,9 @@
        ]
       ],
       "item_keys": [
-       "ph:102",
-       "ph:105",
-       "ph:108"
+       "ph:101",
+       "ph:104",
+       "ph:107"
       ]
      }
     ],
@@ -3013,21 +3322,21 @@
       "key": "ph:102",
       "count": 4,
       "item_zones": [
-       "heading",
-       "body"
+       "number",
+       "heading"
       ],
       "items": [
        [
         {
          "key": "ph:102",
-         "role": "heading",
+         "role": "number",
          "box": {
           "x": 68,
           "y": 307,
           "w": 166,
           "h": 160
          },
-         "sample": "-62%",
+         "sample": "62%",
          "font_pt": 48.0,
          "chars_per_line": 6,
          "max_lines": 1,
@@ -3041,7 +3350,7 @@
         },
         {
          "key": "ph:103",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 68,
           "y": 500,
@@ -3064,7 +3373,7 @@
        [
         {
          "key": "ph:105",
-         "role": "heading",
+         "role": "number",
          "box": {
           "x": 301,
           "y": 307,
@@ -3085,7 +3394,7 @@
         },
         {
          "key": "ph:106",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 301,
           "y": 500,
@@ -3108,7 +3417,7 @@
        [
         {
          "key": "ph:108",
-         "role": "heading",
+         "role": "number",
          "box": {
           "x": 534,
           "y": 307,
@@ -3129,7 +3438,7 @@
         },
         {
          "key": "ph:109",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 534,
           "y": 500,
@@ -3152,14 +3461,14 @@
        [
         {
          "key": "ph:111",
-         "role": "heading",
+         "role": "number",
          "box": {
           "x": 767,
           "y": 307,
           "w": 166,
           "h": 160
          },
-         "sample": "x3",
+         "sample": "3x",
          "font_pt": 48.0,
          "chars_per_line": 6,
          "max_lines": 1,
@@ -3173,7 +3482,7 @@
         },
         {
          "key": "ph:112",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 767,
           "y": 500,
@@ -3213,12 +3522,12 @@
     "source": "slide",
     "source_index": 28,
     "name": "Fred Big Number",
-    "label": "Fred Big Number (28)",
-    "kind": "bullets",
+    "label": "Big number",
+    "kind": "other",
     "zones": [
      {
       "key": "ph:101",
-      "role": "body",
+      "role": "number",
       "box": {
        "x": 45,
        "y": 260,
@@ -3239,7 +3548,7 @@
      },
      {
       "key": "ph:102",
-      "role": "body",
+      "role": "label",
       "box": {
        "x": 45,
        "y": 600,
@@ -3283,7 +3592,7 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "reusable": true,
+    "reusable": false,
     "labelled_by": "heuristic",
     "warnings": []
    },
@@ -3341,15 +3650,15 @@
       "key": "ph:103",
       "role": "body",
       "box": {
-       "x": 705,
-       "y": 373,
-       "w": 225,
-       "h": 460
+       "x": 679,
+       "y": 247,
+       "w": 276,
+       "h": 633
       },
       "sample": "Charts use theme colours, so a custom template restyles them automatically.",
       "font_pt": 18.0,
       "chars_per_line": 22,
-      "max_lines": 7,
+      "max_lines": 8,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -3784,31 +4093,35 @@
        "x": 45,
        "y": 247,
        "w": 910,
-       "h": 467
+       "h": 600
       },
       "sample": "",
       "font_pt": 14.0,
       "chars_per_line": null,
-      "max_lines": 6,
+      "max_lines": 8,
       "grows": false,
       "purpose": null,
       "table": {
        "header": true,
        "columns": [
-        42,
-        42,
-        42
+        24,
+        24,
+        24,
+        24,
+        24
        ],
        "widths": [
-        3698138,
-        3698138,
-        3698139
+        2218883,
+        2218883,
+        2218883,
+        2218883,
+        2218883
        ],
        "margin": 274320,
        "line_pt": 16.8,
        "pad_pt": 11.52,
        "row_pt": 36.0,
-       "height_pt": 252.0
+       "height_pt": 324.0
       },
       "framed": false,
       "chart_capable": false,
@@ -4081,69 +4394,6 @@
       "chart_capable": false,
       "chart_type": null,
       "takeaway": false
-     },
-     {
-      "key": "ph:102",
-      "role": "body",
-      "box": {
-       "x": 45,
-       "y": 413,
-       "w": 263,
-       "h": 467
-      },
-      "sample": "Collect brand assets\nName layouts by intent",
-      "font_pt": 16.0,
-      "chars_per_line": 30,
-      "max_lines": 8,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:104",
-      "role": "body",
-      "box": {
-       "x": 365,
-       "y": 413,
-       "w": 263,
-       "h": 467
-      },
-      "sample": "Create layouts and placeholders\nDocument each one in notes",
-      "font_pt": 16.0,
-      "chars_per_line": 30,
-      "max_lines": 8,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:106",
-      "role": "body",
-      "box": {
-       "x": 665,
-       "y": 413,
-       "w": 263,
-       "h": 467
-      },
-      "sample": "Upload to Fred\nReview the first decks together",
-      "font_pt": 16.0,
-      "chars_per_line": 30,
-      "max_lines": 8,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
      }
     ],
     "groups": [
@@ -4151,13 +4401,14 @@
       "key": "ph:101",
       "count": 3,
       "item_zones": [
+       "heading",
        "body"
       ],
       "items": [
        [
         {
          "key": "ph:101",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 71,
           "y": 247,
@@ -4175,12 +4426,33 @@
          "chart_capable": false,
          "chart_type": null,
          "takeaway": false
+        },
+        {
+         "key": "ph:102",
+         "role": "body",
+         "box": {
+          "x": 45,
+          "y": 413,
+          "w": 263,
+          "h": 400
+         },
+         "sample": "Collect brand assets\nName layouts by intent",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 7,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
         }
        ],
        [
         {
          "key": "ph:103",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 391,
           "y": 247,
@@ -4198,12 +4470,33 @@
          "chart_capable": false,
          "chart_type": null,
          "takeaway": false
+        },
+        {
+         "key": "ph:104",
+         "role": "body",
+         "box": {
+          "x": 365,
+          "y": 413,
+          "w": 263,
+          "h": 400
+         },
+         "sample": "Create layouts and placeholders\nDocument each one in notes",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 7,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
         }
        ],
        [
         {
          "key": "ph:105",
-         "role": "body",
+         "role": "heading",
          "box": {
           "x": 692,
           "y": 247,
@@ -4214,6 +4507,27 @@
          "font_pt": 18.0,
          "chars_per_line": 24,
          "max_lines": 2,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
+         "key": "ph:106",
+         "role": "body",
+         "box": {
+          "x": 665,
+          "y": 413,
+          "w": 263,
+          "h": 400
+         },
+         "sample": "Upload to Fred\nReview the first decks together",
+         "font_pt": 16.0,
+         "chars_per_line": 30,
+         "max_lines": 7,
          "grows": false,
          "purpose": null,
          "table": null,
@@ -4265,123 +4579,40 @@
       "chart_capable": false,
       "chart_type": null,
       "takeaway": false
-     },
-     {
-      "key": "ph:101",
-      "role": "body",
-      "box": {
-       "x": 45,
-       "y": 280,
-       "w": 159,
-       "h": 60
-      },
-      "sample": "Q1 2026",
-      "font_pt": 16.0,
-      "chars_per_line": 19,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:104",
-      "role": "body",
-      "box": {
-       "x": 227,
-       "y": 280,
-       "w": 159,
-       "h": 60
-      },
-      "sample": "Q2 2026",
-      "font_pt": 16.0,
-      "chars_per_line": 19,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:107",
-      "role": "body",
-      "box": {
-       "x": 409,
-       "y": 280,
-       "w": 159,
-       "h": 60
-      },
-      "sample": "Q3 2026",
-      "font_pt": 16.0,
-      "chars_per_line": 19,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:110",
-      "role": "body",
-      "box": {
-       "x": 591,
-       "y": 280,
-       "w": 159,
-       "h": 60
-      },
-      "sample": "Q4 2026",
-      "font_pt": 16.0,
-      "chars_per_line": 19,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
-     },
-     {
-      "key": "ph:113",
-      "role": "body",
-      "box": {
-       "x": 773,
-       "y": 280,
-       "w": 159,
-       "h": 60
-      },
-      "sample": "2027",
-      "font_pt": 16.0,
-      "chars_per_line": 19,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null,
-      "table": null,
-      "framed": false,
-      "chart_capable": false,
-      "chart_type": null,
-      "takeaway": false
      }
     ],
     "groups": [
      {
-      "key": "ph:102",
+      "key": "ph:101",
       "count": 5,
       "item_zones": [
+       "number",
        "heading",
        "body"
       ],
       "items": [
        [
+        {
+         "key": "ph:101",
+         "role": "number",
+         "box": {
+          "x": 45,
+          "y": 300,
+          "w": 159,
+          "h": 60
+         },
+         "sample": "2024",
+         "font_pt": 16.0,
+         "chars_per_line": 19,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
         {
          "key": "ph:102",
          "role": "heading",
@@ -4427,6 +4658,27 @@
        ],
        [
         {
+         "key": "ph:104",
+         "role": "number",
+         "box": {
+          "x": 227,
+          "y": 300,
+          "w": 159,
+          "h": 60
+         },
+         "sample": "2025",
+         "font_pt": 16.0,
+         "chars_per_line": 19,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
          "key": "ph:105",
          "role": "heading",
          "box": {
@@ -4470,6 +4722,27 @@
         }
        ],
        [
+        {
+         "key": "ph:107",
+         "role": "number",
+         "box": {
+          "x": 409,
+          "y": 300,
+          "w": 159,
+          "h": 60
+         },
+         "sample": "2026",
+         "font_pt": 16.0,
+         "chars_per_line": 19,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
         {
          "key": "ph:108",
          "role": "heading",
@@ -4515,6 +4788,27 @@
        ],
        [
         {
+         "key": "ph:110",
+         "role": "number",
+         "box": {
+          "x": 591,
+          "y": 300,
+          "w": 159,
+          "h": 60
+         },
+         "sample": "2027",
+         "font_pt": 16.0,
+         "chars_per_line": 19,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
+        {
          "key": "ph:111",
          "role": "heading",
          "box": {
@@ -4558,6 +4852,27 @@
         }
        ],
        [
+        {
+         "key": "ph:113",
+         "role": "number",
+         "box": {
+          "x": 773,
+          "y": 300,
+          "w": 159,
+          "h": 60
+         },
+         "sample": "2028",
+         "font_pt": 16.0,
+         "chars_per_line": 19,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null,
+         "table": null,
+         "framed": false,
+         "chart_capable": false,
+         "chart_type": null,
+         "takeaway": false
+        },
         {
          "key": "ph:114",
          "role": "heading",
@@ -4603,11 +4918,11 @@
        ]
       ],
       "item_keys": [
-       "ph:102",
-       "ph:105",
-       "ph:108",
-       "ph:111",
-       "ph:114"
+       "ph:101",
+       "ph:104",
+       "ph:107",
+       "ph:110",
+       "ph:113"
       ]
      }
     ],
@@ -4692,15 +5007,15 @@
       "key": "ph:111",
       "role": "body",
       "box": {
-       "x": 720,
-       "y": 373,
-       "w": 210,
-       "h": 460
+       "x": 694,
+       "y": 247,
+       "w": 261,
+       "h": 633
       },
       "sample": "Visual and data layouts give the most value for the least effort, so they come f",
       "font_pt": 16.0,
-      "chars_per_line": 24,
-      "max_lines": 8,
+      "chars_per_line": 23,
+      "max_lines": 9,
       "grows": false,
       "purpose": null,
       "table": null,
@@ -5231,7 +5546,7 @@
     "source_index": 40,
     "name": "Fred Code",
     "label": "Filling a layout by name",
-    "kind": "two_columns",
+    "kind": "other",
     "zones": [
      {
       "key": "ph:100",
@@ -5300,7 +5615,7 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "reusable": true,
+    "reusable": false,
     "labelled_by": "heuristic",
     "warnings": []
    },
@@ -5996,8 +6311,8 @@
     "source": "slide",
     "source_index": 41,
     "name": "Fred Title Only Dark",
-    "label": "Dark canvas for diagrams and demos",
-    "kind": "cards",
+    "label": "Four-step flow, short labels",
+    "kind": "process",
     "zones": [
      {
       "key": "ph:100",
