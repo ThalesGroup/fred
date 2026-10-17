@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
+import subprocess  # nosec B404 - fixed Python executable and script; no shell
 import sys
 from pathlib import Path
 
@@ -40,7 +40,7 @@ def render_pdf_pages_to_png(pdf_path: Path, slide_numbers: list[int], out_dir: P
     out_dir.mkdir(parents=True, exist_ok=True)
     if not slide_numbers:
         return {}
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 - fixed executable/script, paths passed as separate arguments
         [sys.executable, str(Path(__file__).resolve()), str(pdf_path.resolve()), str(out_dir.resolve()), json.dumps(slide_numbers)],
         capture_output=True,
         text=True,

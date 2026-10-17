@@ -42,63 +42,39 @@ what we ship, and under what terms:
 
 | ID | Package(s) | License | Where | Severity | Status |
 | --- | --- | --- | --- | --- | --- |
-| `LICENSE-01` | `pymupdf`, `pymupdf4llm` | AGPL-3.0 (dual, Artifex commercial alt.) | `knowledge-flow-backend` PDF pipeline (primary extractor in 3 of 4 usage sites) | **High** | Decided: make optional, non-AGPL default path. Tracked in issue #1950, milestone `swift-golive`. Further plugin separation deferred to `INGEST-01` |
+| `LICENSE-01` | `pymupdf`, `pymupdf4llm`, `pymupdf-layout` | AGPL/commercial; layout: PolyForm Noncommercial | Explicit Knowledge Flow PDF extra | **High** | Standard installs exclude the family; issue #3159 |
 | `LICENSE-02` | `psycopg`, `psycopg[binary]`, `psycopg2-binary` | LGPL-3.0-only / LGPL-2.0-only | `fred-core`, `knowledge-flow-backend` (Postgres driver) | Low | Resolved via disclosure — no code change needed |
 | `LICENSE-03` | `jwcrypto` | LGPL-3.0-or-later | Transitive, via `python-keycloak`'s `KeycloakAdmin` — `fred-core`, `control-plane-backend`, `knowledge-flow-backend`, `fred-agents`, `fred-sdk`, `fred-runtime` | Low | Disclosed, compliant as unmodified/dynamically-imported dependency. Full removal of the transitive dependency tracked separately (issue #1949), not implemented |
 
 ---
 
-## LICENSE-01 — pymupdf / pymupdf4llm (AGPL-3.0)
+## LICENSE-01 - optional PyMuPDF family
 
-**Status: high severity. Decision made — make the dependency optional with a
-non-AGPL default path (tracked in issue [#1950](https://github.com/ThalesGroup/fred/issues/1950),
-milestone `swift-golive`). Not yet implemented.**
+The `pymupdf` extra and `INSTALL_PYMUPDF=true` image variant include the
+PyMuPDF family only when explicitly requested. Ordinary `uv sync`, `make dev`
+and the standard production image exclude it. Installed inventory checks in
+`scripts/check_pdf_dependencies.py` and the image CI guard this boundary.
+The lockfile retains optional packages for reproducible opt-in builds; their
+presence in that file does not mean they are installed in the standard image.
 
-Dual-licensed AGPL-3.0 / Artifex Commercial License (verified from PyPI wheel
-metadata). Today `pymupdf`/`pymupdf4llm` are **mandatory** dependencies of
-`knowledge-flow-backend` (`[project.dependencies]`, not
-`[project.optional-dependencies]`) — every default build/image contains this
-AGPL code regardless of any config value. Three sites import them
-unconditionally at module load, with no fallback: the "lite" fast-path PDF
-pipeline (`lite_pdf_to_md_processor.py`, `lite2_pdf_to_md_processor.py`,
-wired in every config profile with no extractor switch) and the PPTX
-slide-rendering path (`pptx_slide_renderer.py`). It is actively invoked in
-production. The main pipeline (`pdf_markdown_processor.py`) already defaults
-to the MIT-licensed `docling` extractor in every config profile, with a
-code-level fallback that itself still defaults to `pymupdf` when the config
-value is missing/unrecognized.
+At the locked 1.27.2.3 versions, `pymupdf` and `pymupdf4llm` offer AGPL-3.0 or
+Artifex commercial terms. Their transitive `pymupdf-layout` package has
+PolyForm Noncommercial 1.0.0 terms. Assess the entire selected family and any
+commercial agreement, not just the two direct packages. Preserve their license
+and notice files in optional images. This is an inventory boundary, not a
+legal determination about a deployment or a claim that all Fred dependencies
+are permissively licensed.
 
-Why this is more serious than the others in this document: AGPL's
-network-use clause can require source disclosure for a networked service that
-runs (even unmodified) AGPL code, and Fred is a networked service. "It's
-rarely invoked" is not available as a defense here — the code path is
-genuinely exercised on every PDF ingested.
+The default fast PDF path uses pypdf (BSD-3-Clause), advanced PDF extraction
+uses Docling (MIT), and PPTX rasterization uses pypdfium2 (Apache-2.0/BSD-3-Clause)
+with bundled PDFium and its third-party notices. Model weights and other
+transitive/native dependencies retain their separate terms. Image inventories
+and SBOMs must include them, without suppressing findings or stripping metadata.
 
-### Decision — Option 1: optional dependency, non-AGPL default path
-
-Move `pymupdf`/`pymupdf4llm` into an optional dependency group, fix the three
-unconditional-import sites to default to `docling`/`pypdf` (already
-dependencies), flip the `pdf_markdown_processor.py` fallback default away
-from `pymupdf`, and ensure the default build/image never installs the
-optional extra. Result: Fred as built and distributed by default contains no
-AGPL code; a deployer who wants pymupdf's speed/quality installs the extra
-and opts in via config explicitly, at which point the AGPL/Artifex
-implications for that deployment are theirs to manage. Tracked end-to-end in
-issue #1950.
-
-### Deferred — full plugin separation
-
-Going further — shipping the pymupdf-touching processors as a fully separate,
-out-of-tree installable plugin package, so the code isn't even in this repo
-— requires a real plugin/extension contract, which does not exist yet: today's
-`class_path`/`suffix` YAML mapping is only a "proto-plugin system". No bespoke
-plugin mechanism is being built for pymupdf alone — this follow-up waits on
-that contract being designed, expected no earlier than the `swift ga`
-milestone (2026-09-30).
-
-An Artifex commercial license remains a fallback option if the migration to
-`docling`/`pypdf` turns out to regress extraction quality unacceptably — not
-pursued unless that happens.
+See the [deployment instructions](../../apps/knowledge-flow-backend/README.md#optional-pymupdf-processing)
+and [migration note](ops/migrations/3159-optional-pymupdf.md). Historical issue
+#1950 described the intent; issue #3159 implements this concrete boundary.
+A separate plugin contract is outside this change.
 
 ## LICENSE-02 — psycopg / psycopg-binary / psycopg2-binary (LGPL)
 
