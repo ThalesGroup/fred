@@ -95,6 +95,7 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
     .unwrap();
     let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
         onboarding: Default::default(),
+        lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
         pool: e.pool.clone(),
         fga: observed,
@@ -349,6 +350,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
     .unwrap();
     let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
         onboarding: Default::default(),
+        lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
         pool: e.pool.clone(),
         fga: observed,

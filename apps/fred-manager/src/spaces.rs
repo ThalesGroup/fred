@@ -47,6 +47,7 @@ async fn require(fga: &Fga, user: &str, permission: Permission, space: Uuid) -> 
 /// A space with its placement. Links are immutable, so reading them before locking is safe:
 /// a project costs two `parent` Reads, a team or personal space one, an organization none.
 pub async fn load(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<Space> {
+    crate::lifecycle::store::require_active(pool, id).await?;
     place(fga, db::space(pool, id).await?).await
 }
 
@@ -80,28 +81,43 @@ pub async fn organization<'e>(
 ) -> AppResult<Option<Uuid>> {
     let roles = fga.roles_of(user).await?;
     let ids: Vec<_> = roles.iter().map(|(id, _)| *id).collect();
-    let rows = db::spaces(ex, &ids).await?;
+    #[derive(sqlx::FromRow)]
+    struct Attachment {
+        #[sqlx(flatten)]
+        row: SpaceRow,
+        organization_id: Option<Uuid>,
+    }
+    let rows: Vec<Attachment> = sqlx::query_as("select s.id, s.kind, s.name, s.personal_owner, d.organization_id from space s left join space_deletion d on d.id = s.deletion_id where s.id = any($1)").bind(&ids).fetch_all(ex).await?;
     let mut organization = None;
     let mut pending = tokio::task::JoinSet::new();
     let mut rows = rows.into_iter();
-    // Independent placements overlap, with a fixed per-resolution concurrency cap.
-    // place() still resolves a project's parent before its organization.
     loop {
         while pending.len() < 32 {
-            let Some(row) = rows.next() else { break };
+            let Some(Attachment {
+                row,
+                organization_id: retired_org,
+            }) = rows.next()
+            else {
+                break;
+            };
             let fga = fga.clone();
-            pending.spawn(async move { place(&fga, row).await });
+            pending.spawn(async move {
+                match retired_org {
+                    Some(org) => Ok(org),
+                    None => place(&fga, row).await.map(|s| s.organization),
+                }
+            });
         }
         let Some(result) = pending.join_next().await else {
             break;
         };
-        let space = result.map_err(anyhow::Error::from)??;
-        if organization.is_some_and(|id| id != space.organization) {
+        let org = result.map_err(anyhow::Error::from)??;
+        if organization.is_some_and(|id| id != org) {
             return Err(AppError::Conflict(
                 "multiple organization attachments".into(),
             ));
         }
-        organization = Some(space.organization);
+        organization = Some(org);
     }
     Ok(organization)
 }
@@ -188,7 +204,7 @@ pub struct Membership {
 pub async fn memberships(pool: &PgPool, fga: &Fga, user: &str) -> AppResult<Vec<Membership>> {
     let direct = fga.roles_of(user).await?;
     let ids: Vec<Uuid> = direct.iter().map(|(id, _)| *id).collect();
-    let mut rows: BTreeMap<Uuid, SpaceRow> = db::spaces(pool, &ids)
+    let mut rows: BTreeMap<Uuid, SpaceRow> = db::active_spaces(pool, &ids)
         .await?
         .into_iter()
         .map(|r| (r.id, r))
@@ -266,7 +282,7 @@ pub async fn memberships(pool: &PgPool, fga: &Fga, user: &str) -> AppResult<Vec<
             .iter()
             .flat_map(|(_, c)| c.iter().copied())
             .collect();
-        let found: BTreeMap<Uuid, SpaceRow> = db::spaces(pool, &found)
+        let found: BTreeMap<Uuid, SpaceRow> = db::active_spaces(pool, &found)
             .await?
             .into_iter()
             .map(|r| (r.id, r))
@@ -328,7 +344,15 @@ async fn dependents(
     if space.kind == SpaceKind::Organization {
         ids.extend(fga.linked_to(space.id, true).await?);
     }
-    Ok(db::spaces(&mut **tx, &ids).await?)
+    let mut rows = db::spaces(&mut **tx, &ids).await?;
+    let pending: Vec<SpaceRow> = sqlx::query_as("select s.id, s.kind, s.name, s.personal_owner from space s join space_deletion d on d.target_id = s.id where d.status <> 'completed' and d.target_parent_id = $1")
+        .bind(space.id).fetch_all(&mut **tx).await?;
+    for row in pending {
+        if !rows.iter().any(|r| r.id == row.id) {
+            rows.push(row);
+        }
+    }
+    Ok(rows)
 }
 
 /// A role below the root requires a direct content role on the parent: inherited access
@@ -371,6 +395,7 @@ async fn lock_for(
 ) -> AppResult<(Transaction<'static, Postgres>, Guard)> {
     let mut tx = bootstrap::locked(pool).await?;
     lock_organization(&mut tx, space).await?;
+    crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     let scopes = vec![Scope::Platform, Scope::Organization(space.organization)];
     let guard = fga.guard(&scopes).await?;
     Ok((tx, guard))
@@ -477,6 +502,7 @@ pub async fn create_space(
     domain::check_parent(kind, Some(&parent))?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &parent).await?;
+    crate::lifecycle::store::require_active(&mut *tx, parent.id).await?;
     let mut guard = fga
         .guard(&[Scope::Organization(parent.organization)])
         .await?;
@@ -486,10 +512,11 @@ pub async fn create_space(
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
     require_context(&mut *tx, fga, admin, parent.organization).await?;
-    if children(&mut tx, fga, parent.id)
-        .await?
-        .iter()
-        .any(|c| c.name == name)
+    if crate::lifecycle::store::reserved(&mut *tx, parent.id, &name).await?
+        || children(&mut tx, fga, parent.id)
+            .await?
+            .iter()
+            .any(|c| c.name == name)
     {
         return Err(AppError::Conflict(SIBLING_NAME.into()));
     }
@@ -534,6 +561,7 @@ pub async fn create_personal_space(
     domain::check_parent(SpaceKind::Team, Some(&org))?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &org).await?;
+    crate::lifecycle::store::require_active(&mut *tx, org.id).await?;
     let mut guard = fga.guard(&[Scope::Organization(org.id)]).await?;
     require_context(&mut *tx, fga, caller, org.id).await?;
     require(fga, caller, Permission::Read, org.id).await?;
@@ -734,6 +762,7 @@ pub async fn authorized_write(
     let space = load(pool, fga, space_id).await?;
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &space).await?;
+    crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     let mut guard = fga
         .guard(&[Scope::Organization(space.organization)])
         .await?;

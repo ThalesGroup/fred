@@ -36,6 +36,9 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bootstrapRequest,
       }),
     }),
+    deletionStatus: build.query<DeletionStatusApiResponse, DeletionStatusApiArg>({
+      query: (queryArg) => ({ url: `/fred-manager/v1/deletions/${queryArg.operationId}` }),
+    }),
     createDocument: build.mutation<CreateDocumentApiResponse, CreateDocumentApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/documents`, method: "POST", body: queryArg.createDocument }),
     }),
@@ -102,6 +105,9 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     createSpace: build.mutation<CreateSpaceApiResponse, CreateSpaceApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/spaces`, method: "POST", body: queryArg.createSpace }),
+    }),
+    deleteSpace: build.mutation<DeleteSpaceApiResponse, DeleteSpaceApiArg>({
+      query: (queryArg) => ({ url: `/fred-manager/v1/spaces/${queryArg.id}`, method: "DELETE" }),
     }),
     listDocuments: build.query<ListDocumentsApiResponse, ListDocumentsApiArg>({
       query: (queryArg) => ({
@@ -178,6 +184,10 @@ export type BootstrapPlatformAdminApiResponse = /** status 200 Success */ Bootst
 export type BootstrapPlatformAdminApiArg = {
   bootstrapRequest: BootstrapRequest;
 };
+export type DeletionStatusApiResponse = /** status 200 undefined */ Receipt;
+export type DeletionStatusApiArg = {
+  operationId: string;
+};
 export type CreateDocumentApiResponse = /** status 201 Success */ CreatedDocument;
 export type CreateDocumentApiArg = {
   createDocument: CreateDocument;
@@ -240,6 +250,12 @@ export type MySpacesApiArg = void;
 export type CreateSpaceApiResponse = /** status 201 Success */ Space;
 export type CreateSpaceApiArg = {
   createSpace: CreateSpace;
+};
+export type DeleteSpaceApiResponse = /** status 200 Already completed */
+  | Receipt
+  | /** status 202 Durably accepted */ Receipt;
+export type DeleteSpaceApiArg = {
+  id: string;
 };
 export type ListDocumentsApiResponse = /** status 200 Success */ Document[];
 export type ListDocumentsApiArg = {
@@ -305,6 +321,7 @@ export type AuthorizeDocument = {
 export type PlatformPermission =
   | "list_all_teams"
   | "delete_team"
+  | "delete_space"
   | "rescue_team_admin"
   | "edit_agent_class_path"
   | "observe_platform"
@@ -345,6 +362,24 @@ export type BootstrapResponse = {
 };
 export type BootstrapRequest = {
   token: string;
+};
+export type Status = "queued" | "running" | "retrying" | "blocked" | "completed";
+export type Receipt = {
+  actor_subject: string;
+  completed_at?: string | null;
+  due_at: string;
+  error_code?: string | null;
+  folders_deleted: number;
+  id: string;
+  mode: string;
+  organization_id: string;
+  requested_at: string;
+  rule_id?: string | null;
+  spaces_deleted: number;
+  status: Status;
+  target_id: string;
+  target_kind: SpaceKind;
+  target_parent_id?: string | null;
 };
 export type Document = {
   created_by: string;
@@ -462,6 +497,8 @@ export const {
   useAuthorizeScopeMutation,
   useAuthorizeSpaceMutation,
   useBootstrapPlatformAdminMutation,
+  useDeletionStatusQuery,
+  useLazyDeletionStatusQuery,
   useCreateDocumentMutation,
   useGetDocumentQuery,
   useLazyGetDocumentQuery,
@@ -485,6 +522,7 @@ export const {
   useMySpacesQuery,
   useLazyMySpacesQuery,
   useCreateSpaceMutation,
+  useDeleteSpaceMutation,
   useListDocumentsQuery,
   useLazyListDocumentsQuery,
   useListFoldersQuery,

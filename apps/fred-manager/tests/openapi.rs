@@ -76,6 +76,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /me/spaces",
         "post /me/personal-space",
         "post /spaces",
+        "delete /spaces/{id}",
+        "get /deletions/{operation_id}",
         "put /spaces/{id}/roles/{role}/{user}",
         "delete /spaces/{id}/roles/{role}/{user}",
         "get /spaces/{id}/folders",
@@ -221,7 +223,14 @@ fn upload_optional_body_and_empty_responses_match_the_http_contract() {
         for operation in item.as_object().unwrap().values() {
             for status in ["202", "204"] {
                 if let Some(response) = operation["responses"].get(status) {
-                    assert!(response.get("content").is_none());
+                    if status == "202" && operation["operationId"] == "delete_space" {
+                        assert_eq!(
+                            response["content"]["application/json"]["schema"]["$ref"],
+                            "#/components/schemas/Receipt"
+                        );
+                    } else {
+                        assert!(response.get("content").is_none());
+                    }
                 }
             }
         }

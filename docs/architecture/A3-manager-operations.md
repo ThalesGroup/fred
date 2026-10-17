@@ -9,7 +9,7 @@ Structured stdout, in the format shared by Fred's services.
 
 | `app.log_format` | Output |
 | --- | --- |
-| `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`fred-manager`), `service_role` (`api`), `category`, `logging.googleapis.com/sourceLocation` (`file`, `line`, `function` = module path), `process`, `thread` |
+| `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`fred-manager`), `service_role` (`api` or `worker`), `category`, `logging.googleapis.com/sourceLocation` (`file`, `line`, `function` = module path), `process`, `thread` |
 | `text` | `<rfc3339> <SEVERITY> fred-manager/<logger> <message> key=value ...`, no wrapping, colors only on a terminal without `NO_COLOR` |
 
 - Event fields and request context are top-level and never replace core fields.
@@ -80,7 +80,7 @@ steps are in the [migration note](../swift/ops/migrations/manager-single-organiz
 ## Configuration
 
 `CONFIG_FILE` (default `./config/configuration.yaml`) holds the settings, in sections
-`app`, `security`, `storage`, `scheduler`; `ENV_FILE` (default `./config/.env`) holds
+`app`, `security`, `storage`, `scheduler`, `policies`; `ENV_FILE` (default `./config/.env`) holds
 secrets only and never overrides the process environment.
 
 | Secret | Read from |
@@ -133,7 +133,21 @@ storage:
     database: fred
     username: fred
 
+policies:
+  purge_catalog_path: ./config/lifecycle_policy_catalog.yaml
+
 scheduler:
+  lifecycle:
+    enabled: false
+    sweep_interval: PT10M
+    batch_size: 100
+    temporal:
+      host: localhost:7233
+      namespace: default
+      task_queue: fred-manager-lifecycle
+      workflow_id_prefix: fred-manager-lifecycle
+      connect_timeout_seconds: 5
+      rpc_timeout_seconds: 10
   temporal:
     host: localhost:7233
     namespace: default
@@ -279,7 +293,7 @@ route family without exposing paths, tokens or upload contents.
 ## Authorization store publication
 
 `sync_schema_on_init` allows empty initialization and the exact additive
-personal-eligibility upgrade. Existing bindings pin the model even when arbitrary
+personal-eligibility and space-deletion upgrades. Existing bindings pin the model even when arbitrary
 newer models exist. Upgrade verifies the published predecessor, publishes in the
 same store and commits the model ID under the platform SQL lock. Spaces, tuples
 and guard revisions are preserved. Concurrent initializers converge. Failed SQL
@@ -306,3 +320,45 @@ the UI provisioning page populate explicitly declared memberships. Fred's existi
 Home, scoped Resources, sidebar and administration console expose this bounded journey; unrelated
 product routes are not mounted. Rebuilding the frontend changes presentation only:
 existing manager consent, bootstrap and imported data remain valid.
+
+## Space deletion lifecycle
+
+API and worker share `scheduler.lifecycle` and `policies.purge_catalog_path`.
+Omitted lifecycle configuration is disabled. The shipped catalog defaults to
+`deferred_delete` with `P7D`; `immediate_delete` still uses the worker. Rules match
+`space_id` and/or `space_kind`, most defined criteria first, then file order.
+An empty match object matches every space. Durations accept nonnegative ISO weeks,
+days, hours, minutes and seconds; unsupported fields, calendar/fractional durations,
+empty match lists and overflows fail validation. Accepted deadlines never change
+when a catalog is reloaded.
+
+`make run-worker` starts the separate process. The k3d overlay deploys
+`fred-manager-worker` from the same image, with the API's config/catalog mounts,
+SQL/FGA secrets and `/healthz` probes, without ingress or a Service. Local
+`k3d-app-reset` treats API and worker as optional manager workloads, validates both
+configurations, stops both before erasure and restores their original replicas. Its logs use
+`service_role: worker`. Acceptance and completion emit `space.deletion.accepted`
+and `space.deletion.completed` on `fred.security.audit` after SQL commit.
+
+The manager-owned schedule defaults to PT10M and 100 candidates (range 1..5000),
+skips overlap and reconciles idempotently at startup. Queue and workflow prefix
+must begin with `fred-manager-`; the queue cannot equal ingestion's. Connect/RPC
+timeouts default to 5/10 seconds. Sweep cadence, backlog and outages add latency;
+due time is an earliest cleanup time. Disabling every worker prevents cleanup and
+pauses its schedule when Temporal is reachable. Settings load at process startup.
+
+Deploy API/worker with lifecycle disabled; replace every API replica and operator
+producer with retirement-aware binaries, verify compatible schema/model and worker,
+then activate all affected processes. An old producer must never write retired
+state. Old binaries reject the new model publication even after draining requests;
+rollback requires coordinated pre-activation SQL/OpenFGA restoration with all
+producers stopped. Prefer a forward fix. See the [migration note](../swift/ops/migrations/manager-space-deletion.md).
+
+Inspect safe errors through the receipt. `unsupported_documents` requires resolving
+unexpected document metadata through its owning lifecycle; `unexpected_reference`
+or `unexpected_hierarchy` requires reconciling the scope before retry.
+`dependency_unavailable` retries; missing organization guards require operator
+reconciliation unless only final root removal remains. No content-store cleanup is
+claimed. `make test-lifecycle-temporal` verifies HTTP acceptance, a real worker restart,
+schedule reuse, history replay, SIGTERM during a SQL lock wait and exhausted-retry
+recovery against disposable services.

@@ -21,7 +21,7 @@ use fred_manager::{
     api, auth, config::Configuration as Config, fga::Fga, ingestion, logging, spaces,
 };
 
-const USAGE: &str = "usage: fred-manager [serve | generate-openapi | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: fred-manager [serve | worker | generate-openapi | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -48,7 +48,16 @@ async fn main() -> Result<()> {
         }
     })?;
     // Startup events wait for the configured format, as fred-pod buffers them.
-    logging::init(&config.app.log_level, config.app.log_format).map_err(|error| {
+    logging::init_role(
+        &config.app.log_level,
+        config.app.log_format,
+        if args == ["worker"] {
+            logging::ServiceRole::Worker
+        } else {
+            logging::ServiceRole::Api
+        },
+    )
+    .map_err(|error| {
         if args.first().is_some_and(|a| a == "import-provisioning") {
             import_setup_error(error)
         } else {
@@ -71,6 +80,7 @@ async fn main() -> Result<()> {
         .as_slice()
     {
         [] | ["serve"] => serve(config).await,
+        ["worker"] => worker(config).await,
         ["create-org", name, admin] => create_org(config, name, admin).await,
         ["import-provisioning", bundle, "--token-file", token] => {
             import(config, bundle, token).await
@@ -121,6 +131,12 @@ async fn serve(config: Config) -> Result<()> {
         pool,
         fga,
         onboarding: (&config).into(),
+        lifecycle: fred_manager::lifecycle::Lifecycle {
+            config: config.scheduler.lifecycle.clone(),
+            catalog: fred_manager::lifecycle::policy::Catalog::load(
+                config.policies.purge_catalog_path.as_deref(),
+            )?,
+        },
         ingestion: ingestion::Ingestion::connect(
             &config.temporal_url(),
             &config.scheduler.temporal.namespace,
@@ -269,4 +285,32 @@ fn import_setup_error(error: anyhow::Error) -> anyhow::Error {
         "provisioning initialization/validation failed: {reason}; {}; no provisioning writes; correct the cause and replay",
         fred_manager::provisioning::Report::default()
     )
+}
+
+async fn worker(config: Config) -> Result<()> {
+    let pool = PgPoolOptions::new()
+        .max_connections(10)
+        .connect_with(
+            config
+                .postgres()?
+                .options([("lock_timeout", "5000"), ("statement_timeout", "45000")]),
+        )
+        .await
+        .context("worker postgres unavailable")?;
+    fred_manager::db::require_initialized(&pool).await?;
+    let rebac = &config.security.rebac;
+    let fga = Fga::connect(
+        &rebac.api_url,
+        &rebac.store_name,
+        false,
+        false,
+        config.fga_token(),
+        config.fga_timeout(),
+    )
+    .await?
+    .load(&pool)
+    .await?;
+    fred_manager::lifecycle::policy::Catalog::load(config.policies.purge_catalog_path.as_deref())?;
+    let listen = config.listen_addr();
+    fred_manager::lifecycle::worker::run(pool, fga, config.scheduler.lifecycle, &listen).await
 }

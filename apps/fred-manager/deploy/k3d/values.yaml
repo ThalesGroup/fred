@@ -16,7 +16,7 @@ applications:
   control-plane-backend: { enabled: false }
   control-plane-worker: { enabled: false }
 
-  fred-manager:
+  fred-manager: &manager-api
     enabled: true
     applicationName: fred-manager
     deployment:
@@ -80,7 +80,16 @@ applications:
       tls: []
     httpRoute:
       enabled: false
+    lifecycle_policy_catalog:
+      version: v1
+      space_policies:
+        purge:
+          default: { mode: deferred_delete, retention: P7D }
+          rules: []
     volumeMounts:
+      - name: fred-manager-catalog
+        mountPath: /app/config/lifecycle_policy_catalog.yaml
+        subPath: lifecycle_policy_catalog.yaml
       - name: fred-manager-vol
         mountPath: /app/config/configuration.yaml
         subPath: configuration.yaml
@@ -88,6 +97,9 @@ applications:
         mountPath: /app/config/.env
         subPath: .env
     volumes:
+      - name: fred-manager-catalog
+        configMap:
+          name: fred-manager-catalog
       - name: fred-manager-vol
         configMap:
           name: fred-manager-back
@@ -170,8 +182,61 @@ applications:
           port: 5432
           database: fred
           username: fred
+      policies:
+        purge_catalog_path: /app/config/lifecycle_policy_catalog.yaml
       scheduler:
+        lifecycle:
+          enabled: false
+          sweep_interval: PT10M
+          batch_size: 100
+          temporal:
+            host: temporal:7233
+            namespace: default
+            task_queue: fred-manager-lifecycle
+            workflow_id_prefix: fred-manager-lifecycle
+            connect_timeout_seconds: 5
+            rpc_timeout_seconds: 10
         temporal:
           host: "temporal:7233"            # address
           namespace: default
           task_queue: fred-ingestion
+
+  # Same image and API-owned configuration; activation follows the documented barrier.
+  fred-manager-worker:
+    <<: *manager-api
+    applicationName: fred-manager-worker
+    command:
+      enabled: true
+      data: ["fred-manager", "worker"]
+    service:
+      enabled: false
+    ingress:
+      enabled: false
+    configuration_type:
+      backend: false
+      frontend: false
+    lifecycle_policy_catalog: null
+    extraEnvVars:
+      - name: FRED_POSTGRES_PASSWORD
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: POSTGRES_FRED_PASSWORD, optional: false }
+      - name: OPENFGA_API_TOKEN
+        valueFrom:
+          secretKeyRef: { name: fred-secrets, key: OPENFGA_API_TOKEN, optional: false }
+    probes:
+      lifecycle:
+        enabled: false
+      livenessProbe:
+        enabled: true
+        data:
+          httpGet: { path: /healthz, port: 8400 }
+          periodSeconds: 10
+          failureThreshold: 10
+      readinessProbe:
+        enabled: true
+        data:
+          httpGet: { path: /healthz, port: 8400 }
+          periodSeconds: 10
+          failureThreshold: 3
+      startupProbe:
+        enabled: false

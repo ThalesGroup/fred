@@ -125,4 +125,17 @@ details these boundaries.
 
 ## Leaving, deleting and transferring ownership
 
+A platform owner retires a project, an ordinary team with its projects, or an
+organization with all ordinary and personal descendants. Retirement closes access
+immediately; physical cleanup follows the configured delay. Accounts, consent and
+platform roles survive. Document-bearing scopes are refused before any retirement.
+
+SQL stores the operation, retired row IDs and an immutable root-parent snapshot
+for recovery and pending name reservation. This snapshot never authorizes access.
+Names remain reserved while their rows are pending, even after FGA link removal.
+Overlapping parent/child requests conflict; replay of the same UUID returns its
+receipt. Cleanup removes descendants before parents, retaining rows until external
+references are absent. [Runtime](A1-manager-runtime.md#space-deletion-lifecycle)
+and [operations](A3-manager-operations.md#space-deletion-lifecycle) describe execution.
+
 ## Export and portability

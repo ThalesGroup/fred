@@ -47,6 +47,7 @@ async fn provisioning_browser_journey() {
             "/fred-manager/v1",
             api::governance_router(api::GovernanceState {
                 onboarding: (&config).into(),
+                lifecycle: Default::default(),
                 auth,
                 pool: e.pool.clone(),
                 fga: e.fga.clone(),

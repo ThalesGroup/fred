@@ -921,6 +921,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         .unwrap();
     let app = governance_router(GovernanceState {
         onboarding: Default::default(),
+        lifecycle: Default::default(),
         auth: Arc::new(server.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -1032,6 +1033,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
         }
         let app = governance_router(GovernanceState {
             onboarding: Default::default(),
+            lifecycle: Default::default(),
             auth: Arc::new(
                 Authenticator::start(config.security().unwrap())
                     .await
@@ -2146,6 +2148,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     proxy.fault.lock().await.calls.clear();
     let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
         onboarding: Default::default(),
+        lifecycle: Default::default(),
         auth: std::sync::Arc::new(auth),
         pool: e.pool.clone(),
         fga: observed_fga,
@@ -3340,6 +3343,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         .unwrap();
     let app = governance_router(GovernanceState {
         onboarding: Default::default(),
+        lifecycle: Default::default(),
         auth: auth.clone(),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -3555,6 +3559,7 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         .unwrap();
     let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
         onboarding: Default::default(),
+        lifecycle: Default::default(),
         auth: std::sync::Arc::new(server.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -3598,6 +3603,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         pool: e.pool.clone(),
         fga: e.fga.clone(),
         directory: None,
+        lifecycle: Default::default(),
         onboarding: Onboarding {
             gcu_version: Some("v1".into()),
             bootstrap_token_env_var: Some("FRED_MANAGER_TEST_BOOTSTRAP_TOKEN".into()),
@@ -4380,6 +4386,7 @@ async fn content_app(
             pool: e.pool.clone(),
             fga: e.fga.clone(),
             onboarding: Default::default(),
+            lifecycle: Default::default(),
             directory: Some(identity.directory()),
             ingestion: fred_manager::ingestion::Ingestion::connect(
                 &temporal.url,
@@ -5464,93 +5471,95 @@ async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn additive_personal_model_publication_preserves_data_and_retries_sql_failure() {
-    let e = env().await;
-    let (org, _) = org_and_team(&e).await;
-    let previous: serde_json::Value = serde_json::from_str(include_str!(
-        "../openfga/model-before-personal-eligibility.json"
-    ))
-    .unwrap();
-    let reply: serde_json::Value = reqwest::Client::new()
-        .post(format!(
-            "{}/stores/{}/authorization-models",
-            e.openfga,
-            e.fga.store_id()
-        ))
-        .json(&previous)
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    let old = reply["authorization_model_id"].as_str().unwrap();
-    sqlx::query("update authorization_store set model_id=$1")
-        .bind(old)
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    let source = Fga::connect(
-        &e.openfga,
-        &e.store,
-        false,
-        false,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap();
-    assert!(source.clone().load(&e.pool).await.is_err());
-    sqlx::raw_sql("create function reject_model_update() returns trigger language plpgsql as $$ begin raise exception 'test publication failure'; end $$; create trigger reject_model_update before update on authorization_store for each row execute function reject_model_update()").execute(&e.pool).await.unwrap();
-    assert!(source.clone().initialize(&e.pool).await.is_err());
-    assert_eq!(
-        sqlx::query_scalar::<_, String>("select model_id from authorization_store")
-            .fetch_one(&e.pool)
+    for snapshot in [
+        include_str!("../openfga/model-before-personal-eligibility.json"),
+        include_str!("../openfga/model-before-space-deletion.json"),
+    ] {
+        let e = env().await;
+        let (org, _) = org_and_team(&e).await;
+        let previous: serde_json::Value = serde_json::from_str(snapshot).unwrap();
+        let reply: serde_json::Value = reqwest::Client::new()
+            .post(format!(
+                "{}/stores/{}/authorization-models",
+                e.openfga,
+                e.fga.store_id()
+            ))
+            .json(&previous)
+            .send()
             .await
-            .unwrap(),
-        old
-    );
-    assert!(reads(&e, "alice", org.id).await);
-    sqlx::raw_sql("drop trigger reject_model_update on authorization_store; drop function reject_model_update()").execute(&e.pool).await.unwrap();
-    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
-    let source = Fga::connect(
-        &proxy.base,
-        &e.store,
-        false,
-        false,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap();
-    let (a, b) = tokio::join!(
-        source.clone().initialize(&e.pool),
-        source.initialize(&e.pool)
-    );
-    let (a, b) = (a.unwrap(), b.unwrap());
-    assert_eq!(a.store_id(), e.fga.store_id());
-    assert_eq!(b.store_id(), a.store_id());
-    assert_eq!(
-        proxy.fault.lock().await.calls.get("authorization-models"),
-        Some(&1)
-    );
-    assert!(a.check("alice", Permission::Read, org.id).await.unwrap());
-    assert!(
-        Fga::connect(
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let old = reply["authorization_model_id"].as_str().unwrap();
+        sqlx::query("update authorization_store set model_id=$1")
+            .bind(old)
+            .execute(&e.pool)
+            .await
+            .unwrap();
+        let source = Fga::connect(
             &e.openfga,
             &e.store,
             false,
             false,
             None,
-            Some(Duration::from_secs(5))
+            Some(Duration::from_secs(5)),
         )
         .await
-        .unwrap()
-        .load(&e.pool)
+        .unwrap();
+        assert!(source.clone().load(&e.pool).await.is_err());
+        sqlx::raw_sql("create function reject_model_update() returns trigger language plpgsql as $$ begin raise exception 'test publication failure'; end $$; create trigger reject_model_update before update on authorization_store for each row execute function reject_model_update()").execute(&e.pool).await.unwrap();
+        assert!(source.clone().initialize(&e.pool).await.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("select model_id from authorization_store")
+                .fetch_one(&e.pool)
+                .await
+                .unwrap(),
+            old
+        );
+        assert!(reads(&e, "alice", org.id).await);
+        sqlx::raw_sql("drop trigger reject_model_update on authorization_store; drop function reject_model_update()").execute(&e.pool).await.unwrap();
+        let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+        let source = Fga::connect(
+            &proxy.base,
+            &e.store,
+            false,
+            false,
+            None,
+            Some(Duration::from_secs(5)),
+        )
         .await
-        .is_ok()
-    );
+        .unwrap();
+        let (a, b) = tokio::join!(
+            source.clone().initialize(&e.pool),
+            source.initialize(&e.pool)
+        );
+        let (a, b) = (a.unwrap(), b.unwrap());
+        assert_eq!(a.store_id(), e.fga.store_id());
+        assert_eq!(b.store_id(), a.store_id());
+        assert_eq!(
+            proxy.fault.lock().await.calls.get("authorization-models"),
+            Some(&1)
+        );
+        assert!(a.check("alice", Permission::Read, org.id).await.unwrap());
+        assert!(
+            Fga::connect(
+                &e.openfga,
+                &e.store,
+                false,
+                false,
+                None,
+                Some(Duration::from_secs(5))
+            )
+            .await
+            .unwrap()
+            .load(&e.pool)
+            .await
+            .is_ok()
+        );
+    }
 }
 
 // Proves: I4, I17, I18
@@ -5706,3 +5715,6 @@ async fn personal_grant_budget_and_failed_creation_preserve_authority() {
 
 #[path = "support/resource_browsing.rs"]
 mod resource_browsing;
+
+#[path = "support/space_deletion.rs"]
+mod space_deletion;

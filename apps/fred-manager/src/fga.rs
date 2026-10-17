@@ -28,6 +28,7 @@ use crate::{
     roles::{PlatformPermission, PlatformRole, SpacePermission},
 };
 
+mod lifecycle;
 /// The single platform object holding platform roles.
 mod migration;
 
@@ -49,6 +50,15 @@ pub struct Fga {
 /// A failed/ambiguous write invalidates this attempt; never refresh it and reuse a decision.
 pub struct Guard {
     versions: Option<Vec<Value>>,
+}
+impl Guard {
+    pub(crate) fn extend(&mut self, other: Self) -> Result<()> {
+        self.versions
+            .as_mut()
+            .context("invalid guard")?
+            .extend(other.versions.context("invalid guard")?);
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy)]

@@ -39,7 +39,20 @@ use tracing_subscriber::{Layer, layer::Context, prelude::*, registry::LookupSpan
 use uuid::Uuid;
 
 pub const SERVICE: &str = "fred-manager";
-const ROLE: &str = "api";
+static ROLE: std::sync::OnceLock<ServiceRole> = std::sync::OnceLock::new();
+#[derive(Clone, Copy)]
+pub enum ServiceRole {
+    Api,
+    Worker,
+}
+impl ServiceRole {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Api => "api",
+            Self::Worker => "worker",
+        }
+    }
+}
 /// The logger of the request completion event, as fred-core's `http` logger.
 pub const HTTP_TARGET: &str = "http";
 
@@ -100,6 +113,11 @@ pub enum LogFormat {
 
 /// Installs the global subscriber. Dependencies only reach stdout from WARNING up.
 pub fn init(level: &str, format: LogFormat) -> anyhow::Result<()> {
+    init_role(level, format, ServiceRole::Api)
+}
+pub fn init_role(level: &str, format: LogFormat, role: ServiceRole) -> anyhow::Result<()> {
+    ROLE.set(role)
+        .map_err(|_| anyhow::anyhow!("logger role already initialized"))?;
     let level: Level = level
         .parse()
         .map_err(|_| anyhow::anyhow!("invalid log_level {level}"))?;
@@ -280,7 +298,14 @@ fn render(
         "thread".into(),
         std::thread::current().name().unwrap_or("unnamed").into(),
     );
-    out.insert("service_role".into(), ROLE.into());
+    out.insert(
+        "service_role".into(),
+        ROLE.get()
+            .copied()
+            .unwrap_or(ServiceRole::Api)
+            .as_str()
+            .into(),
+    );
     Value::Object(out).to_string()
 }
 

@@ -34,6 +34,8 @@ pub struct Configuration {
     pub security: SecurityConfig,
     pub storage: StorageConfig,
     pub scheduler: SchedulerConfig,
+    #[serde(default)]
+    pub policies: crate::lifecycle::policy::Policies,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -137,6 +139,8 @@ pub struct PostgresConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SchedulerConfig {
     pub temporal: TemporalConfig,
+    #[serde(default)]
+    pub lifecycle: crate::lifecycle::policy::LifecycleConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -212,7 +216,12 @@ impl Configuration {
         let path =
             std::env::var("CONFIG_FILE").unwrap_or_else(|_| "./config/configuration.yaml".into());
         let text = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
-        let config = serde_yaml_ng::from_str(&text).with_context(|| format!("invalid {path}"))?;
+        let config: Self =
+            serde_yaml_ng::from_str(&text).with_context(|| format!("invalid {path}"))?;
+        config
+            .scheduler
+            .lifecycle
+            .validate(&config.scheduler.temporal.task_queue)?;
         Ok((path, config))
     }
 

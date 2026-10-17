@@ -165,3 +165,19 @@ attachment, workspace selection and the separate meanings of identity and permis
 ## Running a conversation and inspecting its results
 
 ## Evaluating, administering and operating the platform
+
+## An operator retires a space
+
+An authenticated platform owner who has accepted CGU calls `DELETE /spaces/{id}`
+for a project, team or organization. Manager returns 202 with a durable receipt.
+The scope immediately disappears from Priya's workspace lists; direct resource
+requests and mutations refuse it. Organization deletion includes personal spaces.
+An organization owner or team administrator alone cannot request this operation.
+The UI has no new deletion control.
+
+The operator follows `GET /deletions/{operation_id}`. After the configured delay,
+the separate worker removes folders, OpenFGA references and space rows. The receipt
+reports completion only after that cleanup. Repeating DELETE returns the same
+receipt, including after the target disappears. Document-bearing scopes and
+standalone personal-space requests are refused. The delay provides retention,
+not an undo window. See [lifecycle operation](A3-manager-operations.md#space-deletion-lifecycle).

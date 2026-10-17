@@ -11,6 +11,7 @@ import subprocess
 import sys
 from urllib.parse import quote
 
+MANAGER_APPS = {"fred-manager", "fred-manager-worker"}
 APPS = {
     "control-plane-backend",
     "control-plane-worker",
@@ -18,8 +19,7 @@ APPS = {
     "knowledge-flow-worker",
     "fred-agents",
     "frontend",
-    "fred-manager",
-}
+} | MANAGER_APPS
 INFRA = {
     "postgres",
     "keycloak",
@@ -197,7 +197,7 @@ class Reset:
             require(
                 fga.get("type") == "openfga"
                 and fga.get("api_url") in ("http://openfga:9080", "http://openfga:9080/")
-                and fga.get("store_name", "fred") == ("fred-manager" if name == "fred-manager" else "fred")
+                and fga.get("store_name", "fred") == ("fred-manager" if name in MANAGER_APPS else "fred")
                 and not fga.get("store_id")
                 and not fga.get("authorization_model_id")
                 and fga.get("create_store_if_needed", True)
@@ -209,8 +209,15 @@ class Reset:
                 temporal.get("host") == "temporal:7233" and temporal.get("namespace", "default") == "default",
                 "custom Temporal storage is unsupported",
             )
+            if name in MANAGER_APPS:
+                lifecycle = c.get("scheduler", {}).get("lifecycle", {}).get("temporal", {})
+                require(
+                    lifecycle.get("host", "temporal:7233") == "temporal:7233"
+                    and lifecycle.get("namespace", "default") == "default",
+                    "custom lifecycle Temporal storage is unsupported",
+                )
             storage = c["storage"]
-            if name != "fred-manager":
+            if name not in MANAGER_APPS:
                 require(
                     storage["opensearch"]["host"] == "https://opensearch:9200",
                     "custom OpenSearch host is unsupported",
@@ -336,7 +343,7 @@ class Reset:
                 )
                 continue
             name = meta["name"]
-            expected = "fred-manager" if name == "fred-manager" else "fred-app" if name in APPS else "fred-stack"
+            expected = "fred-manager" if name in MANAGER_APPS else "fred-app" if name in APPS else "fred-stack"
             require(
                 meta["namespace"] == self.namespace
                 and name in APPS | INFRA
@@ -345,7 +352,7 @@ class Reset:
             )
             self.deployments[name] = d
         require(
-            (APPS - {"fred-manager"}) | INFRA <= self.deployments.keys(),
+            (APPS - MANAGER_APPS) | INFRA <= self.deployments.keys(),
             "required local services are missing",
         )
         for kind in ("statefulsets", "cronjobs", "horizontalpodautoscalers"):
@@ -399,9 +406,9 @@ class Reset:
                 or (m["namespace"] == "kube-system" and m["name"].startswith("svclb-traefik-")),
                 "unknown daemonset",
             )
-        self.check_config(self.values("fred-app"), APPS - {"fred-manager"})
-        if "fred-manager" in self.deployments:
-            self.check_config(self.values("fred-manager"), {"fred-manager"})
+        self.check_config(self.values("fred-app"), APPS - MANAGER_APPS)
+        if manager_apps := MANAGER_APPS & self.deployments.keys():
+            self.check_config(self.values("fred-manager"), manager_apps)
         secret = self.get("secret", "fred-secrets")["data"]
 
         def decode(key):

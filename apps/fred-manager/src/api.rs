@@ -52,6 +52,7 @@ pub struct AppState {
     pub pool: PgPool,
     pub fga: Fga,
     pub onboarding: Onboarding,
+    pub lifecycle: crate::lifecycle::Lifecycle,
     pub ingestion: Ingestion,
     pub directory: Option<Directory>,
 }
@@ -90,6 +91,7 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         fga: state.fga.clone(),
         directory: state.directory.clone(),
         onboarding: state.onboarding.clone(),
+        lifecycle: state.lifecycle.clone(),
     });
     let api = content_routes()
         .with_state(state)
@@ -1182,7 +1184,7 @@ async fn team_registry(
         return Err(AppError::Forbidden);
     }
     // Registry metadata only, bounded independently of content and FGA memberships.
-    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner from space where kind = 'team' and personal_owner is null and ($1::uuid is null or id > $1) order by id limit 100")
+    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner from space where kind = 'team' and personal_owner is null and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
         .bind(query.after).fetch_all(&s.pool).await?;
     let ids: Vec<Uuid> = teams.iter().map(|t| t.id).collect();
     let orgs: std::collections::BTreeMap<Uuid, Option<Uuid>> =
@@ -1208,6 +1210,7 @@ pub struct GovernanceState {
     pub fga: Fga,
     pub directory: Option<Directory>,
     pub onboarding: Onboarding,
+    pub lifecycle: crate::lifecycle::Lifecycle,
 }
 impl FromRef<GovernanceState> for Arc<Authenticator> {
     fn from_ref(state: &GovernanceState) -> Self {
@@ -1245,6 +1248,8 @@ fn governance_routes() -> OpenApiRouter<GovernanceState> {
         .routes(routes!(bootstrap_platform_admin))
         .routes(routes!(me))
         .routes(routes!(my_spaces))
+        .routes(routes!(delete_space))
+        .routes(routes!(deletion_status))
         .routes(routes!(create_personal_space))
         .routes(routes!(list_folders))
         .routes(routes!(create_folder))
@@ -1410,4 +1415,43 @@ fn upload_error(status: StatusCode) -> axum::response::Response {
         StatusCode::BAD_REQUEST
     };
     (status, Json(serde_json::json!({"detail": if status == StatusCode::PAYLOAD_TOO_LARGE { "provisioning bundle exceeds size limit" } else { "expected one multipart file" }}))).into_response()
+}
+
+#[utoipa::path(delete, path = "/spaces/{id}", params(("id" = Uuid, Path)), responses(
+    (status = 202, description = "Durably accepted", body = crate::lifecycle::Receipt),
+    (status = 200, description = "Already completed", body = crate::lifecycle::Receipt),
+    (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
+    (status = 404, body = crate::error::ErrorBody), (status = 409, body = crate::error::ErrorBody),
+    (status = 503, body = crate::error::ErrorBody), (status = 500, body = crate::error::ErrorBody)
+))]
+async fn delete_space(
+    State(s): State<GovernanceState>,
+    AdmittedUser(user): AdmittedUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
+    require_directory_actor(&s)?;
+    let receipt = s.lifecycle.accept(&s.pool, &s.fga, &user.uid, id).await?;
+    Ok((
+        if receipt.status == crate::lifecycle::Status::Completed {
+            StatusCode::OK
+        } else {
+            StatusCode::ACCEPTED
+        },
+        Json(receipt),
+    ))
+}
+#[utoipa::path(get, path = "/deletions/{operation_id}", params(("operation_id" = Uuid, Path)), responses(
+    (status = 200, body = crate::lifecycle::Receipt),
+    (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
+    (status = 404, body = crate::error::ErrorBody), (status = 503, body = crate::error::ErrorBody), (status = 500, body = crate::error::ErrorBody)
+))]
+async fn deletion_status(
+    State(s): State<GovernanceState>,
+    AdmittedUser(user): AdmittedUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<crate::lifecycle::Receipt>> {
+    require_directory_actor(&s)?;
+    Ok(Json(
+        crate::lifecycle::store::status(&s.pool, &s.fga, &user.uid, id).await?,
+    ))
 }

@@ -49,7 +49,7 @@ def build(app_dir: Path, output: Path) -> None:
     reference = f"{repository}:{tag}"
     subprocess.run(["docker", "tag", image, reference], check=True)
     print(f"Built fred-manager: {reference}", flush=True)
-    values = {"applications": {"fred-manager": {"image": {"repository": repository, "tag": tag}}}}
+    values = {"applications": {name: {"image": {"repository": repository, "tag": tag}} for name in ("fred-manager", "fred-manager-worker")}}
     # Publish only a complete build's outputs; JSON is also valid Helm values YAML.
     for name, content in {
         "images.yaml": json.dumps(values, indent=2) + "\n",

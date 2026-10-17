@@ -37,7 +37,21 @@ storage:
     database: fred
     username: fred
 
+policies:
+  purge_catalog_path: ./config/lifecycle_policy_catalog.yaml
+
 scheduler:
+  lifecycle:
+    enabled: false
+    sweep_interval: PT10M
+    batch_size: 100
+    temporal:
+      host: localhost:7233
+      namespace: default
+      task_queue: fred-manager-lifecycle
+      workflow_id_prefix: fred-manager-lifecycle
+      connect_timeout_seconds: 5
+      rpc_timeout_seconds: 10
   temporal:
     host: localhost:7233
     namespace: default

@@ -15,7 +15,7 @@ spec.loader.exec_module(reset)
 
 
 def configuration(name):
-    manager = name == "fred-manager"
+    manager = name in reset.MANAGER_APPS
     return {
         "storage": {
             "postgres": {"host": "postgres", "database": "fred", "username": "fred"},
@@ -83,7 +83,7 @@ class FakeReset(reset.Reset):
             }
         }
         for name in sorted(reset.APPS | reset.INFRA):
-            release = "fred-manager" if name == "fred-manager" else "fred-app" if name in reset.APPS else "fred-stack"
+            release = "fred-manager" if name in reset.MANAGER_APPS else "fred-app" if name in reset.APPS else "fred-stack"
             self.resources["deployments"]["items"].append(
                 {
                     "metadata": {
@@ -213,6 +213,25 @@ class ResetTests(unittest.TestCase):
         self.assert_read_only()
         self.assertFalse(self.r.state_file.exists())
 
+    def test_manager_worker_is_stopped_restored_and_optional(self):
+        self.preflight()
+        self.assertIn("fred-manager-worker", self.r.state["replicas"])
+        for kind in ("deployments", "replicasets", "pods"):
+            self.r.resources[kind]["items"] = [
+                item for item in self.r.resources[kind]["items"]
+                if not any(name in json.dumps(item) for name in reset.MANAGER_APPS)
+            ]
+        self.r.preflight()
+        self.assert_read_only()
+
+    def test_manager_worker_external_temporal_is_refused(self):
+        self.r.configs["fred-manager-worker"]["configuration"]["scheduler"]["lifecycle"] = {
+            "temporal": {"host": "external:7233"}
+        }
+        with self.assertRaises(reset.Refused):
+            self.preflight()
+        self.assert_read_only()
+
     def test_other_application_and_bare_pod_are_refused_before_mutation(self):
         for kind, resource in (
             ("deployments", {"metadata": {"name": "other-app", "namespace": "fred"}}),
@@ -269,6 +288,8 @@ class ResetTests(unittest.TestCase):
         self.assertEqual(len(waits), len(reset.APPS) + 1)
         self.assertLess(max(waits), erasure)
         self.assertIn(("scale", "deployment/fred-agents", "--replicas=2"), calls)
+        self.assertIn(("scale", "deployment/fred-manager-worker", "--replicas=0"), calls)
+        self.assertIn(("scale", "deployment/fred-manager-worker", "--replicas=1"), calls)
         migrations = [i for i, c in enumerate(calls) if c[:2] == ("wait", "--for=condition=complete")]
         restore = next(i for i, c in enumerate(calls) if c[:3] == ("scale", "deployment/fred-agents", "--replicas=2"))
         self.assertLess(max(migrations), restore)

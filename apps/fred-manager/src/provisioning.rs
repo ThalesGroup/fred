@@ -200,6 +200,15 @@ impl Importer<'_> {
                     _ if parent_new => None,
                     None => db::organization_named(&mut **tx, &declaration.name).await?,
                     Some(parent) => {
+                        if crate::lifecycle::store::reserved(
+                            &mut **tx,
+                            parent.id,
+                            &declaration.name,
+                        )
+                        .await?
+                        {
+                            return Err(conflict("space is pending deletion"));
+                        }
                         if let btree_map::Entry::Vacant(slot) = children.entry(parent.id) {
                             let ids = self.fga.linked_to(parent.id, false).await?;
                             slot.insert(db::spaces(&mut **tx, &ids).await?);
@@ -210,6 +219,9 @@ impl Importer<'_> {
                             .cloned()
                     }
                 };
+                if let Some(row) = &existing {
+                    crate::lifecycle::store::require_active(&mut **tx, row.id).await?;
+                }
                 let is_new = existing.is_none();
                 let row = if let Some(existing) = existing {
                     if existing.kind != declaration.kind {

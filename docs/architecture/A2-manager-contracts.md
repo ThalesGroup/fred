@@ -22,6 +22,7 @@ foreign context, and 409 for ambiguity.
 | POST | `/fred-manager/v1/authorize/scope` | `authorize_scope` |
 | POST | `/fred-manager/v1/authorize/space` | `authorize_space` |
 | POST | `/fred-manager/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
+| GET | `/fred-manager/v1/deletions/{operation_id}` | `deletion_status` |
 | POST | `/fred-manager/v1/documents` | `create_document` |
 | DELETE | `/fred-manager/v1/documents/{id}` | `delete_document` |
 | GET | `/fred-manager/v1/documents/{id}` | `get_document` |
@@ -39,6 +40,7 @@ foreign context, and 409 for ambiguity.
 | POST | `/fred-manager/v1/me/personal-space` | `create_personal_space` |
 | GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
 | POST | `/fred-manager/v1/spaces` | `create_space` |
+| DELETE | `/fred-manager/v1/spaces/{id}` | `delete_space` |
 | GET | `/fred-manager/v1/spaces/{id}/documents` | `list_documents` |
 | GET | `/fred-manager/v1/spaces/{id}/folders` | `list_folders` |
 | DELETE | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `revoke` |
@@ -59,6 +61,7 @@ never edited: sqlx checksums each file.
 ```mermaid
 erDiagram
 
+"space" }o--o| "space_deletion" : "deletion_id"
 "folder" }o--|| "space" : "space_id"
 "folder" }o--|| "folder" : "parent_id, space_id"
 "document" }o--|| "space" : "space_id"
@@ -70,6 +73,7 @@ erDiagram
   text name
   text personal_owner
   timestamp_with_time_zone created_at
+  uuid deletion_id FK
 }
 "folder" {
   uuid id
@@ -108,6 +112,24 @@ erDiagram
   text version
   timestamp_with_time_zone accepted_at
 }
+"space_deletion" {
+  uuid id
+  uuid target_id
+  space_kind target_kind
+  uuid target_parent_id
+  uuid organization_id
+  text actor_subject
+  timestamp_with_time_zone requested_at
+  timestamp_with_time_zone due_at
+  text mode
+  text rule_id
+  text status
+  timestamp_with_time_zone last_visit
+  timestamp_with_time_zone completed_at
+  text error_code
+  bigint folders_deleted
+  bigint spaces_deleted
+}
 ```
 <!-- end generated -->
 
@@ -142,7 +164,7 @@ paths. `Role` adds `personal_space_creator`; `SpacePermission` adds `create_pers
 `authorization_store` binds that name to the active store and model IDs; it holds
 no roles. Startup pins those IDs without selecting an arbitrary newer model or
 falling back to the source. With schema synchronization, the exact predecessor
-without personal eligibility upgrades additively in the same store; the SQL pointer
+without personal eligibility, or without space deletion, upgrades additively in the same store; the SQL pointer
 commits before the initialized client is returned. Empty initialization publishes a fresh store only after its initialization writes
 succeed; existing state without a matching publication is refused. User IDs are Keycloak subjects.
 
@@ -171,6 +193,7 @@ type platform
     define prompt_editor: [user] or owner
     define can_list_all_teams: feature_manager
     define can_delete_team: owner
+    define can_delete_space: owner
     define can_rescue_team_admin: owner
     define can_edit_agent_class_path: owner
     define can_observe_platform: observer
@@ -256,3 +279,23 @@ effective emails of missing identities, case-insensitively within the bundle and
 against Keycloak's exact email search. A known conflict refuses the whole import
 before any identity creation. The supported realm disallows duplicate emails;
 concurrent external changes remain subject to the additive replay contract.
+
+## Space deletion contract
+
+`DELETE /spaces/{id}` returns a `Receipt`: operation/target/organization identifiers,
+root-parent recovery snapshot, actor subject, frozen request/due timestamps and
+mode/rule, status, safe error code, SQL deletion counters and completion time.
+It returns 202 while pending and 200 on completed replay. `GET /deletions/{operation_id}`
+returns that receipt after a fresh platform capability check. No names, bearer,
+content or canonical grants are retained in it.
+
+Statuses are `queued`, `running`, `retrying`, `blocked`, `completed`. Disabled
+lifecycle refuses new requests with 503 while preserving reads and replay. Overlap,
+retired targets, personal-only deletion and document-bearing scopes return 409.
+Unsupported documents or unexpected references discovered during cleanup block the
+receipt; later sweeps resume after the cause is corrected. Completion requires all
+manifest rows and their FGA references absent.
+
+Migration 0007 adds `space_deletion` and `space.deletion_id`. The receipt has no
+foreign key to its target, and survives physical deletion. Its parent snapshot is
+operational recovery metadata; the canonical tree and grants remain in OpenFGA.

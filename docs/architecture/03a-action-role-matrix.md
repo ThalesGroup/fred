@@ -129,6 +129,8 @@ Space roles grant none of these operations.
 | Revoke platform role - `DELETE /users/{user}/platform-roles/{role}` | Yes | No | No | No | Includes root's owner grant; preserve at least one owner; real authentication required |
 | Grant/revoke organization owner - space role routes | Yes | No | No | No | Conditions above |
 | Import identities, organizations, teams, projects and roles - `POST /import-export/import` | Yes | No | No | No | Real authentication, CGU, compatible directory, valid bundle and parent dependencies |
+| Request project/team/organization deletion - `DELETE /spaces/{id}` | Yes | No | No | No | Real authentication and CGU; enabled lifecycle; no document rows; complete subtree; no standalone personal deletion |
+| Read deletion receipt - `GET /deletions/{operation_id}` | Yes | No | No | No | Real authentication and CGU; remains available after cleanup and when lifecycle is disabled |
 | List global team registry - `GET /admin/teams` | Yes | No | Yes | No | Non-personal team metadata only; no content access |
 | Read or write space content directly | No | No | No | No | Requires an independently held space content role |
 
@@ -173,6 +175,7 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 | --- | --- | --- | --- | --- |
 | `list_all_teams` | Yes | No | Yes | No |
 | `delete_team` | Yes | No | No | No |
+| `delete_space` | Yes | No | No | No |
 | `rescue_team_admin` | Yes | No | No | No |
 | `edit_agent_class_path` | Yes | No | No | No |
 | `observe_platform` | Yes | Yes | No | No |
@@ -204,11 +207,12 @@ client. This does not remove the full binary's Temporal startup dependency.
 
 The two implementations use different models. These are verified differences in
 the current code, not a statement that role names are interchangeable or that the
-team has approved each semantic change. This folder-creation lot changes no FGA
-role, inheritance rule or permission expression.
+team has approved each semantic change. Space deletion uses the explicitly approved
+platform-owner capability; local space roles confer no deletion authority.
 
 | Concern | Python contract | Manager Rust contract |
 | --- | --- | --- |
+| Space deletion | Technical team deletion is synchronous; member removal queues conversations separately | Platform owner retires a complete space scope; Rust Temporal cleans SQL/OpenFGA after retention |
 | Admin and corpus read | `team_admin` implies team membership and reads team-owned tags | `admin` alone grants no content read |
 | Hierarchical authority | No equivalent organization/team/project inheritance tree | `editor`, `admin`, `analyst` descend through non-personal spaces |
 | Team creation | `platform_admin` or `team_manager` | Organization admin; no `team_manager` role |

@@ -98,6 +98,20 @@ pub async fn spaces<'e>(
         .await
 }
 
+/// Active business listings omit retired rows without changing operational lookups.
+pub async fn active_spaces<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    ids: &[Uuid],
+) -> sqlx::Result<Vec<SpaceRow>> {
+    sqlx::query_as(concat!(
+        space!(),
+        " where id = any($1) and deletion_id is null order by id"
+    ))
+    .bind(ids)
+    .fetch_all(ex)
+    .await
+}
+
 pub async fn insert_space(tx: &mut Transaction<'_, Postgres>, s: &Space) -> sqlx::Result<()> {
     sqlx::query("insert into space (id, kind, name, personal_owner) values ($1, $2, $3, $4)")
         .bind(s.id)

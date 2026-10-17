@@ -62,6 +62,11 @@
             "relation": "owner"
           }
         },
+        "can_delete_space": {
+          "computedUserset": {
+            "relation": "owner"
+          }
+        },
         "can_rescue_team_admin": {
           "computedUserset": {
             "relation": "owner"

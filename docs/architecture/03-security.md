@@ -178,3 +178,19 @@ realm/subject checks, retries and safe errors.
 ## Delegation and execution credentials
 
 ## Privacy and personal data
+
+## Space retirement and cleanup authority
+
+`platform.can_delete_space` is computed from `owner` only. Request and receipt APIs
+require real authentication and CGU admission, including for receipts whose target
+no longer exists. Deletion grants no content access. Organization ownership and
+space administration confer no implicit deletion power.
+
+Acceptance checks authority after acquiring the platform lock and capturing its
+revision, then locks the organization, verifies the scope and fences both guards.
+All retired descendants are marked in the same SQL transaction. Mutation waiters
+recheck retirement after their lock; reads already authorized may finish. Existing
+role revocation remains an immediate role operation without a purge request.
+The worker executes the accepted durable scope without retaining a user token.
+Remaining grants on retired rows still count towards the unique organization
+attachment, using the receipt's organization when placement links are gone.

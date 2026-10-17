@@ -33,7 +33,7 @@ flowchart LR
 | Keycloak | Access tokens, signing keys (JWKS), user lookup/creation with its own service account | [security](03-security.md), Authentication |
 | OpenFGA | `check`, `write`, `read` on its own store | [model and contracts](A2-manager-contracts.md), OpenFGA model |
 | Postgres | Its tables in the `fred` database | [model and contracts](A2-manager-contracts.md), Schema |
-| Temporal | Starting `IngestDocument` and `DeleteDocument` | [runtime reference](A1-manager-runtime.md), Ingestion submission |
+| Temporal | Ingestion submission and manager-owned space-deletion scheduling/activities | [runtime reference](A1-manager-runtime.md), Ingestion submission |
 | Clients | Public configuration and health; authenticated onboarding and business routes | [HTTP surface](A2-manager-contracts.md#fred-manager-http-surface) and [authentication](03-security.md#authentication) |
 | Services acting for a user | `/authorize/document`, `/authorize/scope` | [runtime reference](A1-manager-runtime.md), Search scope |
 
@@ -45,7 +45,7 @@ drive the library against real Postgres and OpenFGA.
 
 ```mermaid
 flowchart TB
-    main["main.rs<br/>serve, create-org, import-provisioning"]
+    main["main.rs<br/>serve, worker, create-org, import-provisioning"]
     config["config.rs<br/>configuration.yaml + secrets"]
     logging["logging.rs<br/>stdout format, request ids"]
     api["api.rs<br/>routes, handlers"]
@@ -503,3 +503,51 @@ current context and `can_write` Check, then fence precede parent lookup and inse
 on the held connection. No Temporal call occurs. `main::serve` still constructs its
 Temporal ingestion client before binding HTTP; governance-router independence does
 not imply independent startup of the complete binary.
+
+## Space deletion lifecycle
+
+`lifecycle::policy` validates configuration and resolves retention without effects.
+`lifecycle::store` accepts authenticated requests and owns durable receipts.
+`lifecycle::cleanup` executes one bounded SQL/OpenFGA batch; `lifecycle::worker`
+registers the deterministic `SpaceDeletionSweep` workflow and its activities.
+The worker loads the published schema/model; it performs no bootstrap, migration
+or directory initialization.
+
+```mermaid
+sequenceDiagram
+    participant O as Platform owner
+    participant A as Manager API
+    participant SQL as PostgreSQL
+    participant T as Temporal
+    participant W as Manager worker
+    participant FGA as OpenFGA
+    O->>A: DELETE space
+    A->>FGA: Guard, permission and hierarchy checks
+    A->>SQL: Atomic receipt and subtree retirement
+    A-->>O: 202 with operation ID
+    T->>W: Scheduled sweep
+    W->>SQL: Claim due candidates fairly
+    W->>FGA: Drain bounded reference pages under guards
+    W->>SQL: Remove leaves, retain incomplete manifest
+    O->>A: GET deletion receipt
+    A-->>O: Durable status and safe progress
+```
+
+Acceptance streams hierarchy pages into one SQL transaction under platform then
+organization locks. Cleanup uses separate bounded transactions, with up to 1000
+folder leaves or 96 payload tuple deletes plus four guard operations per batch.
+Each candidate receives at most one batch per activity attempt, with three attempts
+and 60-second start-to-close / 240-second schedule-to-close limits. A separate
+activity records exhausted attempts; failure does not abort other candidates.
+Each activity also observes cancellation and has a 50-second local deadline.
+Worker PostgreSQL statements are bounded at 45 seconds and lock waits at 5 seconds;
+cleanup sets those limits before taking its transaction locks. SIGTERM/SIGINT starts
+a two-second graceful period, then cancels remaining activity futures. Server-side
+SQL limits bound outstanding statements even when their Rust future is dropped.
+Candidate selection advances its visit time so a failing candidate cannot monopolize
+a limited sweep.
+
+FGA deletion rereads the first page after every mutation. SQL identifiers survive
+ambiguous acknowledgments. An organization guard is removed last, fenced by the
+platform guard; a failed final SQL commit is recoverable without recreating that
+guard. Workflow history carries operation IDs, not credentials or canonical grants.

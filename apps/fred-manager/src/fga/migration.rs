@@ -103,7 +103,10 @@ impl Fga {
                 "../../openfga/model-before-personal-eligibility.json"
             ))?;
             anyhow::ensure!(
-                matches(&previous),
+                matches(&previous)
+                    || matches(&serde_json::from_str(include_str!(
+                        "../../openfga/model-before-space-deletion.json"
+                    ))?),
                 "published OpenFGA model is incompatible; operator reconciliation required"
             );
             let tx = upgrade.context("published model requires initialization with sync_schema_on_init before ordinary loading")?;
@@ -152,6 +155,20 @@ mod tests {
         .unwrap();
         let mut current: Value =
             serde_json::from_str(include_str!("../../openfga/model.json")).unwrap();
+        let platform = current["type_definitions"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|t| t["type"] == "platform")
+            .unwrap();
+        platform["relations"]
+            .as_object_mut()
+            .unwrap()
+            .remove("can_delete_space");
+        platform["metadata"]["relations"]
+            .as_object_mut()
+            .unwrap()
+            .remove("can_delete_space");
         let space = current["type_definitions"]
             .as_array_mut()
             .unwrap()

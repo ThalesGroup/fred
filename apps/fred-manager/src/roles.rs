@@ -58,6 +58,7 @@ impl PlatformRole {
 pub enum PlatformPermission {
     ListAllTeams,
     DeleteTeam,
+    DeleteSpace,
     RescueTeamAdmin,
     EditAgentClassPath,
     ObservePlatform,
@@ -67,9 +68,10 @@ pub enum PlatformPermission {
     EditPlatformPrompt,
 }
 impl PlatformPermission {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::ListAllTeams,
         Self::DeleteTeam,
+        Self::DeleteSpace,
         Self::RescueTeamAdmin,
         Self::EditAgentClassPath,
         Self::ObservePlatform,
@@ -82,6 +84,7 @@ impl PlatformPermission {
         match self {
             Self::ListAllTeams => "can_list_all_teams",
             Self::DeleteTeam => "can_delete_team",
+            Self::DeleteSpace => "can_delete_space",
             Self::RescueTeamAdmin => "can_rescue_team_admin",
             Self::EditAgentClassPath => "can_edit_agent_class_path",
             Self::ObservePlatform => "can_observe_platform",

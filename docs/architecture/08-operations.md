@@ -6,6 +6,13 @@
 
 ## Background work and scheduling
 
+`fred-manager worker` runs the manager-owned Temporal lifecycle schedule on its
+own queue. SQL receipts are the durable work source; acceptance has no Temporal
+RPC. The worker polls due operations, applies bounded cleanup activities and
+retains incomplete work for later sweeps. Ingestion uses its existing queue.
+[Manager operations](A3-manager-operations.md#space-deletion-lifecycle) defines
+configuration, activation, progress and recovery.
+
 ## Logs, audit, metrics and diagnostics
 
 ## Migration, backup and recovery

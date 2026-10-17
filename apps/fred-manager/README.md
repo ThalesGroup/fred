@@ -14,6 +14,7 @@ cp config/.env.template config/.env   # once: the four secrets
 make run                              # http://localhost:8400/fred-manager/v1
 make test                             # offline unit tests
 make test-integration                 # throwaway Postgres, OpenFGA and Keycloak containers
+make test-lifecycle-temporal          # disposable SQL/FGA/Temporal worker recovery
 make code-quality                     # model parity + clippy + rustfmt
 make -C ../../docs/architecture check # the dossier still matches the code
 ```
@@ -51,6 +52,14 @@ Changing the version requires everyone, including root, to accept again. Publish
 the corresponding frontend `gcu.<language>.md`/`gcu.md` assets with the version;
 `null` disables the gate. Existing Python consent and bootstrap records are not
 manager consent or bootstrap records.
+
+## Space deletion worker
+
+`make run-worker` starts the Rust Temporal worker after the API has initialized
+SQL and published its authorization model. It uses the same binary and configuration;
+use a distinct `app.port` if API and worker share a host. Lifecycle is disabled by
+default. See [activation and policy configuration](../../docs/architecture/A3-manager-operations.md#space-deletion-lifecycle)
+before enabling it. The k3d overlay deploys the worker with the manager API.
 
 ## Changing it
 

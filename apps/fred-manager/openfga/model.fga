@@ -13,6 +13,7 @@ type platform
     define prompt_editor: [user] or owner
     define can_list_all_teams: feature_manager
     define can_delete_team: owner
+    define can_delete_space: owner
     define can_rescue_team_admin: owner
     define can_edit_agent_class_path: owner
     define can_observe_platform: observer
