@@ -1599,3 +1599,13 @@ Test expectations changed for the deck only: 5 table columns ("2 to 5 columns"),
 Commands: package `make code-quality` clean (basedpyright 0 errors); `make test`: 897 passed, 5 skipped. Showcase: three decks built in process through `build_presentation` (57 slides), `~/fred-tmp/default-template/v3/showcase-v3.pdf`.
 
 Remaining, recommended, not done: a big number beside a title is no one-item `figures` slide (`_lone_figure` takes exactly two shapes, so the slide is set aside); a section's number zone is never filled (left out); a filled picture placeholder (cover image, team photo) is fitted inside its box rather than cropped to its shape; a bare chart alternates between the full-width slide and the takeaway slide with its card removed.
+
+## WP50 (2026-10-17): section numbers, cropped pictures, team photos recentred once
+
+`tests/test_section_and_picture_fill.py`, all four failing on the code before and passing after: sections numbered 01, 07 (given), 03; four wide team photos cropped 25 % each side, no geometry of their own (the layout's ellipse), alt text kept; cover and image_text pictures fill their frames at the picture's aspect ratio; three team photos each centred on its name (before: off by 1 421 091 EMU, moved twice). `test_deck_changes.py`: the slide field list names `number`.
+
+Showcase re-rendered on the built-in template (`~/fred-tmp/default-template/v3-fixes/`, PNG looked at): sections 01/02/03 with the title under the number, section image, cover image, image_text and Two/Three Images pictures filling their frames, team photos round, centred on their names.
+
+Commands: package `make code-quality` clean (ruff, `--select I`, format, bandit, detect-secrets; basedpyright 0 errors, the pre-existing `builder_decks.py` warning); `make test`: 903 passed, 5 skipped; `openspec validate --strict` on the three changes.
+
+Not proven: PowerPoint's rendering of the crop (LibreOffice only); a template whose image zone is a plain shape (picture over its box with the shape's preset geometry, not tested).

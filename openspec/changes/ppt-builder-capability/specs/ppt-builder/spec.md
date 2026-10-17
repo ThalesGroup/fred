@@ -705,7 +705,19 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 #### Scenario: Images from team folders
 
 - **WHEN** the plan names a valid image document for a slide with an image slot
-- **THEN** it is placed keeping its aspect ratio; an image slot left empty is removed, and an invalid reference is named in the result
+- **THEN** it fills the slot's frame keeping its aspect ratio, centre-cropped rather than letterboxed, in the slot's own shape (a round frame stays round) and with the example picture's alt text; an image slot left empty is removed, and an invalid reference is named in the result
+
+#### Scenario: Fewer team photos than the template shows
+
+- **GIVEN** a team slide of four members, each a photo over a name
+- **WHEN** it is filled with three members
+- **THEN** each photo is recentred with its name, exactly as far
+
+#### Scenario: Section numbers
+
+- **GIVEN** section slides whose template slide has a number zone
+- **WHEN** the plan gives no `number` for them
+- **THEN** each shows its place among the deck's section slides (01, 02…), written as the zone's example writes it (zero-padded when the example is); a `number` the plan gives is shown as is; a number on a slide without a number zone is not lost content
 
 #### Scenario: Malformed plan from the model
 

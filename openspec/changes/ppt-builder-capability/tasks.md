@@ -540,3 +540,12 @@ Owns: `render.py` (`_decoration_fate`, `_mark_of`, `_lift_layout_graphics`, `_la
 - [x] 49.4 Package `make code-quality` and `make test`; Help Center fr/en: item height limit, item decoration on the layout, a card behind an optional zone as its fill
 - Not in scope (recommended): a big number beside a title as a one-item `figures` slide (analysis), section numbers filled at render, a filled picture placeholder cropped to its shape instead of fitted inside, a bare chart preferring the full-width chart slide
 
+## WP50. Section numbers and cropped pictures (owner decision 2026-10-17, design D29)
+
+Owns: `render.py` (`_place_text`, `section_number`, `_numbered`, `_place_image`, `_crop_to_fill`, `_recentre_items`), `plan.py` / `changes.py` (slide `number`), tests (`test_section_and_picture_fill.py`, `test_deck_changes.py`), delta spec, `verification.md`.
+
+- [x] 50.1 A section slide's number zone shows its ordinal among the deck's sections, padded like the example; a plan `number` is kept. Test: three sections, the second numbered "07" → 01, 07, 03 (fails before: the zone is removed)
+- [x] 50.2 A filled picture zone is centre-cropped to its frame, in the frame's shape, alt text kept. Tests: four wide team photos cropped 25 % each side, no geometry of their own (the layout's ellipse), alt text kept; cover and image_text pictures fill their frames (fail before: letterboxed rectangles)
+- [x] 50.3 A recentred item moves each shape once. Test: three team members, each photo centred on its name (fails before: off by half a step)
+- [x] 50.4 Showcase decks re-rendered on the built-in template and checked as PNG (`~/fred-tmp/default-template/v3-fixes/`): sections numbered, cover, section image, image_text and team pictures filled, team photos round and centred
+

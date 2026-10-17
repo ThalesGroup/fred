@@ -318,6 +318,12 @@ Found live (Paintress Cyan, a Slidesgo template): the deck used the `Fonts` slid
 
 Rejected: asking the vision model (optional, and it never labels excluded slides); matching body text such as "attribution" (the closing slide carries it).
 
+### D29. Section numbers and cropped pictures (owner decision 2026-10-17)
+
+- **Section numbers.** The built-in sections draw a big "01" in a `number` zone that nothing filled, so it was removed and the title sat low under the gap. A section slide's number zone now shows the slide's ordinal among the deck's section slides (every slide built on a `section` template slide counts), computed at render from the plan order and padded like the example ("01" → two digits). A `number` the model gives (a new optional slide field, editable through `changes`) is kept. The assigner measures the zone as filled. A number elsewhere, or without a number zone, is not lost content (the order shows it, as for step numbers).
+- **Cropped pictures.** A filled picture zone is centre-cropped (`a:srcRect`) to its frame at the picture's own aspect ratio, never letterboxed. An example picture is swapped in place (new image relationship, old one dropped), so its frame, its geometry inherited from the layout (an ellipse for the team photos) and its alt text stay; an empty picture placeholder uses python-pptx's own crop; any other shape gets a picture over its box, with the shape's preset geometry. The image bytes are embedded as given: never resampled, and the frame is never enlarged.
+- **Team photos recentred once.** With fewer items than the group shows, a picture-only item zone was also taken as loose decoration and moved twice; each shape now moves once.
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.
