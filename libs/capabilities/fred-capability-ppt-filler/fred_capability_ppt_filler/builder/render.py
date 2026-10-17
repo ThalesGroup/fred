@@ -116,7 +116,8 @@ PreparedImage = Tuple[bytes, int, int]
 class RenderResult:
     pptx: bytes
     slide_count: int = 0
-    # The same deck adjusted for the PDF preview only (see `_widen_no_wrap_text`).
+    # The same deck adjusted for the PDF preview only (see `_widen_no_wrap_text`
+    # and `_plain_symbol_bullets`).
     preview_pptx: bytes = b""
     # The same findings per slide, for a structured result message.
     report: checks.DeckReport = field(default_factory=checks.DeckReport)
@@ -200,6 +201,32 @@ def _widen_no_wrap_text(presentation) -> int:
                 ext.set("cx", str(new_box))
                 widened += 1
     return widened
+
+
+# Symbol fonts LibreOffice cannot recode: their bullets show as missing-glyph
+# boxes in the preview. Wingdings 3 holds arrows and triangles only.
+_UNMAPPED_BULLET_FONTS = {"Wingdings 3": "►"}
+
+
+def _plain_symbol_bullets(presentation) -> int:
+    """Draw the preview's symbol-font bullets LibreOffice cannot show with a
+    look-alike in a text font; the delivered file keeps the template's glyph."""
+    replaced = 0
+    parts = [slide.element for slide in presentation.slides]
+    for master in presentation.slide_masters:
+        parts.append(master.element)
+        parts.extend(layout.element for layout in master.slide_layouts)
+    for element in parts:
+        for font in element.iter(qn("a:buFont")):
+            glyph = _UNMAPPED_BULLET_FONTS.get(font.get("typeface", ""))
+            char = font.getnext()
+            if glyph is None or char is None or char.tag != qn("a:buChar"):
+                continue
+            font.attrib.clear()
+            font.set("typeface", "Arial")
+            char.set("char", glyph)
+            replaced += 1
+    return replaced
 
 
 @dataclass
@@ -1628,6 +1655,7 @@ class _Renderer:
             widened = _widen_no_wrap_text(self.prs)
         except (ValueError, TypeError):  # unexpected geometry: preview as delivered
             widened = 0
+        widened += _plain_symbol_bullets(self.prs)
         if widened:
             preview = io.BytesIO()
             self.prs.save(preview)

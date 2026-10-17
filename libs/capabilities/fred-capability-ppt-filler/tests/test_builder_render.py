@@ -652,6 +652,40 @@ def test_preview_copy_widens_one_line_text_the_delivered_deck_keeps():
     assert left + width // 2 == Inches(5)  # still centred where the designer put it
 
 
+def test_preview_copy_draws_wingdings_3_bullets_the_delivered_deck_keeps():
+    """The Thales master's sub-bullet is Wingdings 3, which LibreOffice cannot
+    recode: the preview showed missing-glyph boxes."""
+    template = Presentation(io.BytesIO(TEMPLATE))
+    styles = template.slide_masters[0].element.find(f".//{qn('p:bodyStyle')}")
+    level = styles.find(qn("a:lvl2pPr"))
+    for tag in ("a:buFont", "a:buChar", "a:buNone", "a:buAutoNum"):
+        for old in level.findall(qn(tag)):
+            level.remove(old)
+    font = level.makeelement(
+        qn("a:buFont"), {"typeface": "Wingdings 3", "charset": "2"}
+    )
+    char = level.makeelement(qn("a:buChar"), {"char": "ê"})
+    level.insert(0, char)
+    level.insert(0, font)
+    buffer = io.BytesIO()
+    template.save(buffer)
+
+    result, _ = _render(
+        _on(_pattern("Title Only"), title="End"), template=buffer.getvalue()
+    )
+
+    def bullet(pptx: bytes):
+        master = Presentation(io.BytesIO(pptx)).slide_masters[0].element
+        found = master.find(f".//{qn('p:bodyStyle')}/{qn('a:lvl2pPr')}")
+        return (
+            found.find(qn("a:buFont")).get("typeface"),
+            found.find(qn("a:buChar")).get("char"),
+        )
+
+    assert bullet(result.pptx) == ("Wingdings 3", "ê")
+    assert bullet(result.preview_pptx) == ("Arial", "►")
+
+
 REFERENCE = os.environ.get("PPT_BUILDER_REFERENCE_TEMPLATE")
 
 
