@@ -1049,6 +1049,11 @@ class SlidePlan(BaseModel):
         description="Short title, a few words pointing to the takeaway.",
     )
     subtitle: Optional[str] = None
+    number: Optional[str] = Field(
+        default=None,
+        description="A section slide's number ('02'). Omitted → its place among the "
+        "deck's sections.",
+    )
     bullets: List[str] = Field(
         default_factory=list,
         description="Body bullets, telegraphic; prefix '- ' for a sub-bullet. Inline **bold** allowed.",
@@ -1122,7 +1127,14 @@ class SlidePlan(BaseModel):
         return {**renamed, "ignored_fields": _ignored(value, known)}
 
     @field_validator(
-        "takeaway", "title", "subtitle", "image", "source", "notes", mode="before"
+        "takeaway",
+        "title",
+        "subtitle",
+        "number",
+        "image",
+        "source",
+        "notes",
+        mode="before",
     )
     @classmethod
     def _text(cls, value: Any) -> Optional[str]:

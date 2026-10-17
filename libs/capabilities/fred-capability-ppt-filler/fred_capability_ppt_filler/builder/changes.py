@@ -46,7 +46,17 @@ LIKE = "like"
 REPEAT = "repeat_layout"
 # Slide fields (and their aliases) a model may write in the change itself.
 _SLIDE_KEYS = frozenset(
-    ("title", "subtitle", "bullets", "columns", "items", "image", "images", "table")
+    (
+        "title",
+        "subtitle",
+        "number",
+        "bullets",
+        "columns",
+        "items",
+        "image",
+        "images",
+        "table",
+    )
     + ("chart", "charts", "takeaway", "source")
     + ("notes", "kind", "body", "text", "pattern", "type")
 )
@@ -206,6 +216,7 @@ _FIELDS: Dict[str, Dict[str, _Type]] = {
         "source": "text",
         "title": "text",
         "subtitle": "text",
+        "number": "text",
         "bullets": ("list", "text"),
         "columns": ("list", "column"),
         "items": ("list", "item"),
@@ -439,6 +450,7 @@ CLEARABLE = (
     "takeaway",
     "title",
     "subtitle",
+    "number",
     "bullets",
     "columns",
     "items",

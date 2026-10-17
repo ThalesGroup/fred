@@ -1193,6 +1193,13 @@ def _takeaway_zone(
     return zone if zone.grows or not _fit(zone, lines, *size)[2] else None
 
 
+def section_number(zone: Zone, ordinal: int) -> str:
+    """``ordinal`` written as the zone's example writes it: "01" pads to two digits."""
+    sample = (zone.sample or "").strip()
+    width = len(sample) if sample.isdigit() and sample.startswith("0") else 0
+    return str(ordinal).zfill(width)
+
+
 def _assign_text(
     pattern: Pattern,
     plan: SlidePlan,
@@ -1255,6 +1262,15 @@ def _place_text(
             lost.append("bullets")
         if plan.columns:
             lost.append("columns")
+        # A section is numbered by its place in the deck unless the plan names it;
+        # elsewhere, and without a number zone, the order shows it: never lost.
+        number = plan.number or (
+            section_number(zmap.numbers[0], 1)
+            if zmap.numbers and pattern.kind == "section"
+            else None
+        )
+        if number and zmap.numbers:
+            put(zmap.numbers[0], _lines_from_bullets([number], "number"), "number")
         return out
 
     if zmap.subtitles:
@@ -1512,6 +1528,7 @@ class _Renderer:
         announced: List[List[int]] = []
         parts_of = Counter(numbers or [])
         seen: Counter = Counter()
+        sections = 0
         for position, slide_plan in enumerate(plan.slides, start=1):
             # Messages name the deck's slide; a split list's parts share a source.
             source = numbers[position - 1] if numbers else position
@@ -1524,6 +1541,9 @@ class _Renderer:
                     "the same plan; if it persists, tell the user."
                 )
             rendered += 1
+            if pattern.kind == "section":
+                sections += 1
+                slide_plan = _numbered(slide_plan, pattern, sections)
             if pattern.kind == "agenda" and slide_plan.items:
                 if announced and announced[-1][0] == source:
                     announced[-1][1] = rendered
@@ -2331,6 +2351,14 @@ class _Renderer:
             new_element.getparent().remove(new_element)
             tree.insert(list(tree).index(anchor), new_element)
         _remove(placed)
+
+
+def _numbered(plan: SlidePlan, pattern: Pattern, ordinal: int) -> SlidePlan:
+    """A section slide without a number takes its place among the deck's sections."""
+    zone = next((z for z in pattern.zones if z.role == "number"), None)
+    if plan.number or zone is None:
+        return plan
+    return plan.model_copy(update={"number": section_number(zone, ordinal)})
 
 
 def render_deck(
