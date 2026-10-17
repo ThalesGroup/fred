@@ -60,14 +60,24 @@ def builtin():
     return builtin_template()
 
 
-def _plan(*charts: Dict[str, Any]) -> DeckPlan:
+# The built-in chart slide beside its card, whose example chart is a column chart.
+CARD = "slide:284"
+
+
+def _plan(*charts: Dict[str, Any], on: str | None = None) -> DeckPlan:
+    """``on``: the template slide each chart slide was delivered on, kept while it fits
+    (a bare chart otherwise takes the full-width slide)."""
     slides = [{"title": f"Chart {n}", "chart": c} for n, c in enumerate(charts)]
-    return DeckPlan.model_validate({"slides": [COVER, *slides]})
+    plan = DeckPlan.model_validate({"slides": [COVER, *slides]})
+    pinned = [plan.slides[0]] + [
+        s.model_copy(update={"built_on": on}) for s in plan.slides[1:]
+    ]
+    return plan.model_copy(update={"slides": pinned})
 
 
-def _render(builtin, *charts: Dict[str, Any]) -> RenderResult:
+def _render(builtin, *charts: Dict[str, Any], on: str | None = None) -> RenderResult:
     template, inventory = builtin
-    plan = _plan(*charts)
+    plan = _plan(*charts, on=on)
     assignment = assign(inventory, plan, "off")
     assert not assignment.problems, [p.as_dict() for p in assignment.problems]
     return render_deck(template, inventory, plan, assignment.patterns)
@@ -209,7 +219,7 @@ def test_a_line_chart_keeps_its_order_and_says_so_once(builtin):
 
 
 def test_a_highlighted_category_takes_the_accent_and_the_rest_is_muted(builtin):
-    built = _chart(_render(builtin, {**REVENUE, "highlight": "q3"}))
+    built = _chart(_render(builtin, {**REVENUE, "highlight": "q3"}, on=CARD))
     points = _points(built)
     # The template's own column chart: the emphasised bar keeps its series'
     # colour (the built-in example sets none, so the style's accent shows).
@@ -239,7 +249,7 @@ def test_a_highlighted_series_takes_the_accent_and_the_others_thin_out(builtin):
         "series": [*TWO["series"], {"name": "2026", "values": [1, 2, 3, 4]}],
         "highlight": "2025",
     }
-    built = _chart(_render(builtin, three))
+    built = _chart(_render(builtin, three, on=CARD))
     first, second, third = [_xml(s._element) for s in built.plots[0].series]
     assert ACCENT in second and 'w="38100"' in second
     assert MUTED in first and 'w="19050"' in first and '<c:symbol val="none"/>' in first
@@ -344,8 +354,8 @@ def test_unread_intent_words_are_told(builtin):
 # --- changes and the tool ----------------------------------------------------------------
 
 
-def _delivered(inventory, *charts: Dict[str, Any]) -> DeckPlan:
-    plan = _plan(*charts)
+def _delivered(inventory, *charts: Dict[str, Any], on: str | None = None) -> DeckPlan:
+    plan = _plan(*charts, on=on)
     assignment = assign(inventory, plan, "off")
     deck, patterns, _ = assignment.deck(plan)
     return deck.model_copy(
@@ -371,7 +381,7 @@ def test_an_intent_is_edited_on_the_same_template_slide(
     builtin, field, value, attr, expected
 ):
     template, inventory = builtin
-    base = _delivered(inventory, REVENUE)
+    base = _delivered(inventory, REVENUE, on=CARD)
     edit = {"op": "edit", "slide": 2, "field": field, "value": value}
     plan = apply_changes(base, [SlideChange.model_validate(edit)])
     chart = plan.slides[1].chart

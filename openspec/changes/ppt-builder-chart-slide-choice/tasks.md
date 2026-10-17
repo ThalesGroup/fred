@@ -12,6 +12,12 @@
 - [x] 2.2 Built-in: `test_a_takeaway_goes_beside_the_chart_and_a_bare_chart_spans_the_slide` and `test_chart_slides_are_never_asked_to_become_another_kind` unchanged and green
 - [x] 2.3 `test_assign.py` / `test_build_tool.py`: expectations that relied on variety picking an emptier variant updated to an equally filled one; the emptier variant asserted never taken
 
+## 4. Empty takeaway card (owner decision 2026-10-17, D6)
+
+- [x] 4.1 `assign._weigh`: an unfilled takeaway zone counts as two unfilled zones (count and cost)
+- [x] 4.2 `test_chart_slides.py::test_bare_charts_all_span_the_slide_even_with_variety` fails before, passes after; `test_chart_intents.py` pins the column-chart card slide where it tests that slide's own chart
+- Verification: package `make test` green; showcase decks re-rendered (`~/fred-tmp/default-template/v3-fixes/`), every bare chart on the full-width slide, takeaways shown on the card slide
+
 ## 3. Docs and close-out
 
 - [x] 3.1 `ppt-builder-charts/design.md` D10: point to this change for the "wide one wins" assumption

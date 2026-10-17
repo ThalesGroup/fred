@@ -636,8 +636,11 @@ def _weigh(
             and zone.key not in text
             and zone not in hosts
         ):
-            empty += 1
-            cost += _EMPTY_ZONE
+            # A takeaway card swept away leaves its side of the slide blank:
+            # it weighs as two, so a slide whose content spans that side wins.
+            holes = 2 if zone.takeaway else 1
+            empty += holes
+            cost += _EMPTY_ZONE * holes
     for group in pattern.groups:
         if not slide.items:
             # No items: the list is removed whole, its zones unfilled like any other.

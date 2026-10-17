@@ -315,6 +315,21 @@ def test_a_takeaway_goes_beside_the_chart_and_a_bare_chart_spans_the_slide(built
     ]
 
 
+def test_bare_charts_all_span_the_slide_even_with_variety(builtin):
+    _, inventory = builtin
+    # A takeaway not asked on the slides goes to the notes: the slide stays bare.
+    bare = [
+        _chart_slide(REVENUE, title=f"Revenue {n}", takeaway="Q4 leads")
+        for n in range(4)
+    ]
+    assignment = assign(inventory, _plan(*bare), "template_slide", 1)
+    assert not assignment.problems
+    # The wide slide's empty caption is a line; the card left empty is a third.
+    assert [p.label for p in assignment.patterns[1:] if p] == [
+        "Generated decks per month grew steadily"
+    ] * 4
+
+
 def _three_chart_slides(inventory: TemplateInventory) -> TemplateInventory:
     """A centred chart and two chart slides with a text box beside it, as a
     customer template draws them."""
