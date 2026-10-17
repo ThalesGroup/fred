@@ -74,3 +74,8 @@ Found during the preview: on the built-in style (Medium Style 2) the light tint 
 - PowerPoint rendering (checked by hand only by the owner), in particular the total row of the other predefined styles.
 - The vision path end to end: the purpose rule is unit-tested; no template with an unnamed key-message zone was labelled.
 - The evaluation prompts were not run (real LLM).
+
+## Task 5.5 (2026-10-17): the key-message name beats the size rule
+
+- `test_takeaway.py::test_a_large_box_named_for_the_key_message_stays_the_takeaway` fails before (read as a heading, no takeaway zone).
+- A copy of Thales v2-final with its "message clé" panel (slide "Graphique et message clé") set to 24 pt: before, `sp:7` a heading without flag; after, a body flagged as the takeaway zone. The unmodified v2-final has no such box at 20 pt or more.

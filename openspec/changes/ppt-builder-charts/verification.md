@@ -95,3 +95,11 @@ Not proven: PowerPoint opening the copied parts (checked through python-pptx and
 ## D13 (2026-10-17): key-figures option over every figures slide
 
 `test_chart_slides.py::test_the_figures_remedy_counts_every_figures_slide` (built-in figures slides reordered so the roomiest is not last) fails before, passes after. Commands: package `make code-quality` clean (ruff, `--select I`, format, bandit, detect-secrets; basedpyright 0 errors, the pre-existing `builder_decks.py` warning); `make test`: 903 passed, 5 skipped; `openspec validate --strict` on the three changes.
+
+## Tasks 11 and 12 (2026-10-17): example chart colours, chart room at the chart's text size
+
+- Regression tests, each failing before: `test_chart_slides.py::test_fresh_charts_take_the_example_charts_colours_first` (accent1…), `test_multi_chart_slides.py::test_a_quarter_slide_bar_chart_is_measured_at_its_own_text_size` (18 pt stored, three categories held). `test_colours_and_fonts_come_from_the_theme` unchanged: the built-in deck keeps its accents.
+- Thales v2-final: before, a fresh pie was magenta/grey/green/red; after, navy (`tx2`), cyan (`bg2`), grey-blue (`accent2`), then magenta (`~/fred-tmp/bugfix-1017/targets/cmp-colours.png`); the whole showcase reads navy/cyan (`thales-v2final/deckA-sheet2.png`, `-sheet3.png`). Built-in showcase unchanged in colour (`builtin/deckA-sheet3.png`).
+- Quarter-slide bar chart: 4, 5 and 6 bars rendered on both Thales templates (`targets/bars.png`): at 6 LibreOffice skips every other label, at 5 all show, hence 1.7 line heights; the room is now 5 on both (was 3 on the original, 4 on v2-final), 6 refused.
+- Package `make test`: 908 passed, 5 skipped; `openspec validate --strict`.
+- Not proven: PowerPoint's own label skipping (LibreOffice only).

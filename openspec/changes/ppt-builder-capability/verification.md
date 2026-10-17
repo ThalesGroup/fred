@@ -1609,3 +1609,10 @@ Showcase re-rendered on the built-in template (`~/fred-tmp/default-template/v3-f
 Commands: package `make code-quality` clean (ruff, `--select I`, format, bandit, detect-secrets; basedpyright 0 errors, the pre-existing `builder_decks.py` warning); `make test`: 903 passed, 5 skipped; `openspec validate --strict` on the three changes.
 
 Not proven: PowerPoint's rendering of the crop (LibreOffice only); a template whose image zone is a plain shape (picture over its box with the shape's preset geometry, not tested).
+
+## WP51 (2026-10-17): shared picture slots, empty text boxes
+
+- Regression tests, each failing before its fix: `test_section_and_picture_fill.py::test_two_picture_slots_sharing_an_idx_are_each_filled` (the build raised; then, before the position fix, the pictures had no position of their own), `test_builder_render.py::test_an_unfilled_text_box_is_removed_with_its_own_fill`.
+- Original Thales template, slide 12 ("3 images + message clé", two picture placeholders of idx 16) filled with three pictures: before, `AttributeError` (the whole build failed); after, each photo in its own column (`~/fred-tmp/bugfix-1017/targets/after-orig-1-2.png`).
+- Thales v2-final showcase (forced, deckA/B/C) and built-in showcase re-rendered and converted to PNG (`~/fred-tmp/bugfix-1017/thales-v2final/`, `builtin/`): pictures in their frames, no empty panel left. v2-final has no text-box panel with its own fill, so the empty-box rule is shown by the test only.
+- Package `make test`: 908 passed, 5 skipped; ruff, `--select I`, format, basedpyright (0 errors, the baseline warning), bandit and detect-secrets clean; `openspec validate --strict`.
