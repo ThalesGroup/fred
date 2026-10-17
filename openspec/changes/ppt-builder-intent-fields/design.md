@@ -154,6 +154,10 @@ The draft's recommendations were accepted on every open question:
 - **Q9: yes, a stronger highlight tint.** The light tint (`lumMod 20 % lumOff 80 %`) was the very colour of Medium Style 2's unbanded rows (the built-in style) and lighter than its banded rows, so the highlight showed by bold only. The owner asked for a somewhat stronger tint of the same theme accent, readable, bold kept. Built as `lumMod 60 % lumOff 40 %`: the draft's 40 % would have equalled Medium Style 2's banded rows (`tint 40 %`). Dark text reads at 6.2:1 on the built-in accent 1 and 8.6:1 on accent 2; under 4.5:1 the 40 % tint is used (D7). Checked in the LibreOffice preview on Medium Style 2 (built-in) and Light Style 1 – Accent 1.
 - **Q10: yes, prefer a slide that shows the takeaway, and say when none can.** With `show_takeaways` honoured, among fits of one kind those that cannot show the takeaway go when one can, consistent with `_fullest` (content placed first); when none of that kind can, the slide is built as before and "What was built" says the key message stays in the notes (`intent_not_shown`, `takeaway`), so the loss is not silent. With the flag off nothing changes (D9).
 
+### The key-message name beats the size rule (owner decision 2026-10-17)
+
+A free text box is read as a heading when its text is 20 pt or more on at most two lines, and only body, caption and subtitle zones can carry the takeaway flag (D9). A panel named "message clé" in a large font therefore lost its flag although its name said what it was for. The name now wins: a free text box whose name matches `TAKEAWAY_NAMES` is a body, whatever its size, and the usual first-in-reading-order rule then flags it. Placeholders keep their type's role (a takeaway-named subtitle stays a subtitle).
+
 ## Open Questions
 
 None.

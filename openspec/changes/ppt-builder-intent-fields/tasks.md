@@ -47,6 +47,7 @@
 - [x] 5.3 `labelling.py`: a vision purpose matching the names sets the flag; prompt slot example "key message"
 - [x] 5.4 Regenerate `assets/fred_template.inventory.json` (`make builtin-inventory`): "Fred Chart" takeaway zone flagged
 - Verification: `test_builder_analysis.py` (named placeholder flagged, unnamed body not, two candidates → first only), `test_labelling.py` (purpose "key message" flags), `test_builtin_template.py` on the regenerated JSON
+- [x] 5.5 Owner decision 2026-10-17: a free text box named for the key message is a body whatever its size, so a "message clé" box at 20 pt or more on two lines or fewer is no longer read as a heading and keeps its flag. Test: `test_takeaway.py::test_a_large_box_named_for_the_key_message_stays_the_takeaway` (fails before: no takeaway zone)
 
 ### 6. Plan, assignment, rendering
 

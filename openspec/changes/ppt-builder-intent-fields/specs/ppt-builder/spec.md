@@ -89,7 +89,7 @@ For `table.total_row: true`, the system SHALL apply the table style's own total-
 
 ### Requirement: Slide takeaway
 
-The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone. By default the system SHALL fill a takeaway zone as before this change, from the slide's content, and SHALL leave the takeaway in the speaker notes only. The system SHALL write the takeaway into the zone only when the plan sets `show_takeaways`, a user message of the conversation explicitly asks for key messages or takeaways to be shown, the assigned template slide has a takeaway zone and the takeaway fits its room; it SHALL then NOT fill that zone from `bullets`. In every other case the zone SHALL be filled as before and the takeaway SHALL stay in the speaker notes, without a refusal; when `show_takeaways` is honoured the slide's summary SHALL then hold `intent_not_shown` for `takeaway`. `show_takeaways` without such a user message SHALL be ignored with an agent note. The takeaway SHALL NOT change which kind of slide is assigned; a takeaway written into its zone SHALL count as filling that zone when slides of one kind are compared on the zones they leave empty, and with `show_takeaways` honoured the system SHALL prefer, among template slides of one kind, one that can show the takeaway over one that cannot.
+The analysis SHALL mark at most one text zone per pattern as a takeaway zone when its shape name (or its layout placeholder's name) or its vision-labelled purpose names a takeaway or key message, and SHALL NOT mark one from geometry alone; a free text box so named SHALL be read as a body whatever its text size. By default the system SHALL fill a takeaway zone as before this change, from the slide's content, and SHALL leave the takeaway in the speaker notes only. The system SHALL write the takeaway into the zone only when the plan sets `show_takeaways`, a user message of the conversation explicitly asks for key messages or takeaways to be shown, the assigned template slide has a takeaway zone and the takeaway fits its room; it SHALL then NOT fill that zone from `bullets`. In every other case the zone SHALL be filled as before and the takeaway SHALL stay in the speaker notes, without a refusal; when `show_takeaways` is honoured the slide's summary SHALL then hold `intent_not_shown` for `takeaway`. `show_takeaways` without such a user message SHALL be ignored with an agent note. The takeaway SHALL NOT change which kind of slide is assigned; a takeaway written into its zone SHALL count as filling that zone when slides of one kind are compared on the zones they leave empty, and with `show_takeaways` honoured the system SHALL prefer, among template slides of one kind, one that can show the takeaway over one that cannot.
 
 #### Scenario: Takeaway kept off the slide by default
 
@@ -126,6 +126,12 @@ The analysis SHALL mark at most one text zone per pattern as a takeaway zone whe
 - **GIVEN** a layout whose body placeholder is named "Key message"
 - **WHEN** the template is analysed
 - **THEN** that zone is a takeaway zone and the catalogue quotes its room
+
+#### Scenario: A large box named for the key message
+
+- **GIVEN** a free text box named "Message clé" whose sample text is 24 pt on one line
+- **WHEN** the template is analysed
+- **THEN** it is a body zone flagged as the takeaway zone, not a heading
 
 #### Scenario: Takeaway longer than the zone
 

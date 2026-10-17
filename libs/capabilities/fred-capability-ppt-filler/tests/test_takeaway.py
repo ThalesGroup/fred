@@ -31,6 +31,7 @@ from fred_capability_ppt_filler.builder.plan import zone_summary
 from fred_capability_ppt_filler.fill import PptPreviewPart
 from langchain_core.messages import HumanMessage
 from port_fakes import FakeWorkspace
+from pptx.util import Inches, Pt
 from story_tools import COVER, answered, build_tool, deck, notes, texts
 
 ASK = "Fais une présentation des ventes, et affiche les messages clés sur les slides."
@@ -151,6 +152,24 @@ def test_a_layout_placeholder_named_takeaway_is_found_through_the_slide():
     assert inventory is not None
     slides = [p for p in inventory.patterns if p.source == "slide"]
     assert [[z.role for z in p.zones if z.takeaway] for p in slides] == [["body"]]
+
+
+def test_a_large_box_named_for_the_key_message_stays_the_takeaway():
+    def chart_with_panel(presentation):
+        slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+        slide.shapes.title.text = "Ventes"
+        body = slide.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(5), Inches(4))
+        body.text_frame.text = "Cliquez ici pour ajouter du texte"
+        panel = slide.shapes.add_textbox(Inches(6), Inches(1.5), Inches(3), Inches(1))
+        panel.name = "Message clé"
+        panel.text_frame.text = "Le message clé"
+        panel.text_frame.paragraphs[0].runs[0].font.size = Pt(24)
+
+    inventory = analyze_template(build_slides([chart_with_panel])).inventory
+    assert inventory is not None
+    slide = next(p for p in inventory.patterns if p.source == "slide")
+    # Failed before: 24 pt on one line read it as a heading, which loses the flag.
+    assert [z.role for z in slide.zones if z.takeaway] == ["body"]
 
 
 def test_a_vision_purpose_naming_a_key_message_flags_the_zone():

@@ -1398,7 +1398,8 @@ class _Analyzer:
             marker = KEY_PATTERN.search(rec.text)
             if declared:
                 role = cast(ZoneRole, declared)
-            elif marker:
+            elif marker or lexicon.name_matches(rec.name, lexicon.TAKEAWAY_NAMES):
+                # A box named for the key message is one, whatever its size.
                 role = "body"
             elif lexicon.is_numberish(rec.text):
                 role = "number"
