@@ -149,6 +149,9 @@ async def test_unverified_figures_are_built_on_the_resend_and_said(monkeypatch):
     assert "Chiffres non retrouvés dans les documents lus." in notes(
         deck(workspace).slides[1]
     )
+    # Replies called such figures the user's: the agent is told they are to confirm.
+    assert "Slide 2: its figures are in no document read nor any user message" in text
+    assert "never figures you made up" in refused
 
 
 @pytest.mark.asyncio

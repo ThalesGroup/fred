@@ -161,3 +161,18 @@ def test_the_working_rules_do_not_depend_on_the_setting():
     rules = capability_mod._BUILD_INSTRUCTIONS
     assert "takeaway" in rules
     assert "plan_proposed" not in rules and "skip_plan" not in rules
+
+
+def test_the_working_rules_name_the_template_and_keep_revisions_truthful():
+    """The tool cannot switch template: the rules say which one is used and where
+    another is set; a revision does only what was asked and is described from its result."""
+    builtin = capability_mod.build_instructions(True)
+    uploaded = capability_mod.build_instructions(False)
+    assert "Fred's built-in template" in builtin and "built-in" not in uploaded
+    assert "uploaded in this agent's settings" in uploaded
+    for rules in (builtin, uploaded):
+        assert "cannot switch template" in rules and "{" not in rules
+        assert "do only that (propose any other slide or content instead)" in rules
+        assert "Ask which slide when the request does not say" in rules
+        assert "only when build_presentation delivered it in this answer" in rules
+        assert "Never invent one" in rules

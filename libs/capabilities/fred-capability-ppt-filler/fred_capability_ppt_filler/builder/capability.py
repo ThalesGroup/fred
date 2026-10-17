@@ -263,9 +263,17 @@ async def builtin_patterns_pdf() -> Optional[bytes]:
         return pdf
 
 
+# Where the deck's look comes from: the tool cannot switch template, so a
+# request for another one is answered with where it is set.
+_TEMPLATES = {
+    True: "Fred's built-in template (this agent has no template of its own)",
+    False: "the template uploaded in this agent's settings",
+}
+
 _BUILD_INSTRUCTIONS = (
-    "PPT BUILDER: this agent builds PowerPoint presentations with the 'build_presentation' tool on a "
-    "template its owner configured — NEVER ask the user to upload a template. When the user asks, in any "
+    "PPT BUILDER: this agent builds PowerPoint presentations with the 'build_presentation' tool on "
+    "{template}; it cannot switch template: an editor of the agent uploads another in its settings, "
+    "never in the chat. When the user asks, in any "
     "wording or language, to produce, generate, create or prepare a PPT, PowerPoint, presentation, deck or "
     "slides, you MUST call 'build_presentation'; never answer with slide content in the chat instead. "
     "Build directly: write the plan — one entry per slide with its takeaway, its content, then optionally its kind — and "
@@ -273,21 +281,31 @@ _BUILD_INSTRUCTIONS = (
     "Ask the user to validate an outline first only when they asked for it, or when the request does not "
     "say what the presentation is about. Ground the content in "
     "the documents when the agent has document tools and the request refers to them. Keep every text "
-    "SLIDE-READABLE: short titles, a few short bullets, never paragraphs; respect the room each field and "
-    "the catalogue state. Tell a story: decide the deck's main message, then each content slide's "
+    "SLIDE-READABLE: short titles, a few short bullets, never paragraphs, within the catalogue's room. "
+    "Tell a story: decide the deck's main message, then each content slide's "
     "`takeaway` (what the audience concludes, as a sentence) before its content. Let the takeaway design "
     "the slide: the kind that shows it (a comparison → a chart; one striking number → a figures slide; a "
     "trend → a line), only the content that supports it, and the emphasis that proves it (chart.highlight, "
     "chart.sort). Then write a short title, a few words pointing to the takeaway, not the takeaway itself; "
-    "leave titles out only when the user asked. Take every figure from the documents or the user and say "
-    "where in `source`; never invent figures unless the user asked for illustrative data. If the tool returns needs_revision, nothing was built yet: your very next message MUST be a "
-    "new 'build_presentation' call with the fixes applied (one option per listed slide, only `changes` for those "
-    "slides), never a final answer, unless the user must decide something. Make it as a real tool call: never "
-    "write the call, its JSON or the planned fixes in your reply text. If it reports cuts that matter, fix "
-    "them the same way. When the "
-    "user asks to change the deck, send only `changes` (the other slides stay exactly as they are); "
-    "send the whole deck in `slides` only for a new presentation."
+    "leave titles out only when the user asked. Take every figure, name and date from the documents or the "
+    "user, keep them exact when rewording, and say where in `source` ('user' only for what the user wrote). "
+    "Never invent one: when the user asks for concrete figures they did not give, ask for them, unless they "
+    "asked for illustrative data. If the tool returns needs_revision, nothing was built yet: your very "
+    "next message MUST be a new 'build_presentation' call with the fixes applied (`changes` for the listed "
+    "slides), never a final answer, unless the user must decide something; the same for cuts that matter. "
+    "Make it as a real tool call: never write the call, its JSON or the planned fixes in your reply text. "
+    "When the user asks to change the deck, do only that (propose any "
+    "other slide or content instead), with `changes` for the slides concerned; the whole deck in `slides` "
+    "only for a new deck or a rewrite of most slides. Ask which slide when the request does not say "
+    "('this slide'). Say a deck was built or changed only when build_presentation delivered it in this "
+    "answer; describe only what its result lists, and say so when a request needed no change or could "
+    "not be applied."
 )
+
+
+def build_instructions(builtin: bool) -> str:
+    """The working rules overlaid on the system prompt, naming the template."""
+    return _BUILD_INSTRUCTIONS.format(template=_TEMPLATES[builtin])
 
 
 def _plain(value: Any) -> Any:
@@ -309,7 +327,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
     def __init__(self, ctx: CapabilityContext[PptBuilderConfig, EmptyModel]) -> None:
         super().__init__()
         self._ctx = ctx
-        self._fragment = _BUILD_INSTRUCTIONS
+        self._fragment = build_instructions(ctx.config.template_sha256 is None)
         self._resolved: Optional[List[BaseTool]] = None
         self._refusal = _ANALYSING_MESSAGE
         # The last model call's messages: the build tool reads whether a deck was delivered.

@@ -109,7 +109,7 @@ class SlideChange(BaseModel):
     )
     after: Optional[int] = Field(
         default=None,
-        description="insert: the new slides go after this slide of the previous deck; 0 = at the start.",
+        description="insert: the new slides follow this slide of the previous deck; 0 = first, after a cover.",
     )
     slides: List[SlidePlan] = Field(
         default_factory=list,
@@ -412,7 +412,7 @@ def _check(change: SlideChange, n: int) -> List[str]:
     if change.op == "insert":
         if change.after is None and "after" not in change.raw_numbers:
             issues.append(
-                "insert needs `after`: the slide number the new slides follow (0 = at the start)"
+                "insert needs `after`: the slide number the new slides follow (0 = first)"
             )
         elif change.after is not None and not 0 <= change.after <= n:
             issues.append(
@@ -496,9 +496,16 @@ def _numbers(found: List[int]) -> str:
     return ", ".join(str(n) for n in found)
 
 
-def deck_delta(before: DeckPlan, after: DeckPlan, kinds: Mapping[str, str]) -> str:
+# A whole deck resent for an edit this small risks drift in the slides it repeats.
+_SMALL_EDIT = 2
+
+
+def deck_delta(
+    before: DeckPlan, after: DeckPlan, kinds: Mapping[str, str], resent: bool = False
+) -> str:
     """Which slides of ``after`` differ from the delivered ``before`` (content
-    or design), as a line the agent can describe its edit from truthfully."""
+    or design), as a line the agent can describe its edit from truthfully;
+    ``resent``: the whole deck came in `slides`."""
     a = [
         json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in before.slides
     ]
@@ -520,11 +527,20 @@ def deck_delta(before: DeckPlan, after: DeckPlan, kinds: Mapping[str, str]) -> s
     parts = [f"changed: {_numbers(changed)}"] if changed else []
     parts += [f"added: {_numbers(added)}"] if added else []
     parts += [f"removed: {_numbers(removed)} of the previous deck"] if removed else []
-    parts.append(f"{kept} unchanged" if parts else "none changed")
+    lead = f"\nCompared with the previous deck ({len(a)} slides), slides of this file "
+    if not parts:
+        return lead + "none changed: tell the user the deck is the same as before."
+    touched = len(changed) + len(added) + len(removed)
+    hint = (
+        " For an edit of a few slides, send only `changes` next time."
+        if resent and touched <= _SMALL_EDIT < kept
+        else ""
+    )
     return (
-        f"\nCompared with the previous deck ({len(a)} slides), slides of this file "
-        + "; ".join(parts)
+        lead
+        + "; ".join(parts + [f"{kept} unchanged"])
         + ". Describe only these changes to the user."
+        + hint
     )
 
 

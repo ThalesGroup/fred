@@ -102,6 +102,7 @@ from fred_capability_ppt_filler.builder.models import (
     SlideKind,
     TemplateInventory,
 )
+from fred_capability_ppt_filler.builder.notes import FIGURES_UNVERIFIED
 from fred_capability_ppt_filler.builder.plan import (
     REPEAT_LAYOUT_HINT,
     DeckPlan,
@@ -451,7 +452,10 @@ def _schema_for(
             List[slide_model],
             Field(
                 default_factory=list,
-                description="A new deck: every slide, in order. Leave empty when sending `changes`.",
+                description=(
+                    "A new deck, or a rewrite of most slides: every slide, in order. Leave "
+                    "empty when sending `changes`."
+                ),
             ),
         ),  # type: ignore[valid-type]
         changes=(
@@ -753,6 +757,19 @@ def _cleared_lines(
         f"{'them' if len(fields) > 1 else 'it'} beside the rest (to keep "
         "that text, put it in a field this kind shows)."
         for n, fields in sorted(cleared.items())
+    ]
+
+
+def _unverified_lines(
+    plan: DeckPlan, checked: Sequence[int], numbers: List[int]
+) -> List[str]:
+    """Figures built with no source in the conversation: replies called them the
+    user's, so the agent is told to present them as to be confirmed."""
+    return [
+        f"Slide {numbers.index(n) + 1}: its figures are in no document read nor any "
+        "user message: tell the user they are to be confirmed, never that they are theirs."
+        for n in checked
+        if FIGURES_UNVERIFIED in plan.slides[n - 1].story_notes and n in numbers
     ]
 
 
@@ -1232,8 +1249,10 @@ def _description(
         "eight entries, and the deck holds exactly what you send, not what you planned. Never split a deck "
         "across several calls and never call this tool twice at once. "
         "To CHANGE the last deck of this conversation (a fix after needs_revision, or a change the user asks "
-        'for), send only `changes`, numbered on that deck\'s slides: {"op": "replace", "slide": N, "slides": '
-        '[...]}, {"op": "insert", "after": N (0 = at the start), "slides": [...]}, {"op": "remove", "slide": '
+        "for, even on several slides), send only `changes`, numbered on that deck's slides: "
+        '{"op": "replace", "slide": N, "slides": [...]}, {"op": "insert", "after": N '
+        + ("(0 = first, after the cover)" if "cover" in kinds else "(0 = at the start)")
+        + ', "slides": [...]}, {"op": "remove", "slide": '
         'N}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label"'
         + (
             ' | "chart.series[0].values[2]" | "chart.series[0].points[2].y" | '
@@ -1641,7 +1660,9 @@ def build_builder_tools(
             )
         previous = await previous_deck(base)
         delta = (
-            "" if previous is None else deck_delta(previous, deck, _kinds(inventory))
+            ""
+            if previous is None
+            else deck_delta(previous, deck, _kinds(inventory), base is None)
         )
         # Delivered, the deck is the base: the same changes sent again are a
         # new change to it, not a corrected resend of a refused one.
@@ -1660,7 +1681,8 @@ def build_builder_tools(
             + unloadable
             + assignment.notes
             + moved_notes
-            + _cleared_lines(cleared, plan, numbers),
+            + _cleared_lines(cleared, plan, numbers)
+            + _unverified_lines(plan, checked, numbers),
         )
         notes = delta + _designs_line(inventory, patterns) + notes
 
@@ -1703,8 +1725,9 @@ def build_builder_tools(
                 "in this answer. A preview opens beside the chat and a download button is shown "
                 "automatically; do not write a download link. To change it, send only `changes` numbered "
                 f"on the file's slides (1 to {result.slide_count}, a list continued on two slides counts "
-                "two); every call rebuilds the whole deck. Describe to the user only the slides the deck "
-                "actually holds." + notes,
+                "two); every call rebuilds the whole deck. Describe to the user only what the deck "
+                "actually holds: never a change, layout or source it does not show."
+                + notes,
                 ToolInvocationResult(
                     tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(part),)
                 ),

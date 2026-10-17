@@ -209,7 +209,7 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
         in description
     )
     assert "To CHANGE the last deck of this conversation" in description
-    assert '{"op": "insert", "after": N (0 = at the start)' in description
+    assert '{"op": "insert", "after": N (0 = first, after the cover)' in description
     assert (
         "To change text inside a slide, use `edit`: the slide keeps its design"
         in description

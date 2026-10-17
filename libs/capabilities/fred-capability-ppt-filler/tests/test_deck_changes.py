@@ -173,7 +173,7 @@ def test_every_bad_change_is_reported_with_its_remedy():
         "Use a number from 1 to 4.",
         "changes[1] (move): 'move' is not an operation: use replace, insert, remove or edit.",
         "changes[2] (insert): insert needs `after`: the slide number the new slides follow "
-        "(0 = at the start).",
+        "(0 = first).",
         "changes[3] (replace): replace needs `slides`: the new slide objects.",
         "changes[4] (edit): edit needs `field`, e.g. 'title' or 'items[2].label'.",
         "changes[4] (edit): edit needs `value`: the new text, list or object (null removes).",
@@ -456,7 +456,23 @@ def test_the_delta_names_changed_added_and_removed_slides():
     line = deck_delta(BASE, after, {})
     assert "previous deck (4 slides), slides of this file changed: 2; added: 4" in line
     assert "removed: 3 of the previous deck; 2 unchanged." in line
-    assert "none changed" in deck_delta(BASE, BASE, {})
+    assert "none changed: tell the user the deck is the same" in deck_delta(
+        BASE, BASE, {}
+    )
+
+
+def test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes():
+    """Most revisions resent every slide for a one-slide edit: the result says so."""
+    after = _apply({"op": "edit", "slide": 2, "field": "title", "value": "Plan"})
+    assert "send only `changes` next time" in deck_delta(BASE, after, {}, resent=True)
+    assert "next time" not in deck_delta(BASE, after, {})
+    rewritten = _apply(
+        *(
+            {"op": "edit", "slide": n, "field": "title", "value": f"T{n}"}
+            for n in (2, 3, 4)
+        )
+    )
+    assert "next time" not in deck_delta(BASE, rewritten, {}, resent=True)
 
 
 @pytest.mark.asyncio
@@ -470,6 +486,19 @@ async def test_a_revision_result_says_which_slides_changed(monkeypatch):
         changes=[{"op": "edit", "slide": 2, "field": "title", "value": "Plan"}]
     )
     assert "slides of this file changed: 2; 1 unchanged." in text
+
+
+@pytest.mark.asyncio
+async def test_a_small_edit_resent_as_a_whole_deck_is_built_and_pointed_to_changes(
+    monkeypatch,
+):
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    deck = [COVER, *({"title": f"Part {n}", "bullets": ["a"]} for n in range(1, 5))]
+    await turn.build(slides=deck)
+    deck[2] = {"title": "Plan", "bullets": ["a"]}
+    text, _ = await turn.build(slides=deck)
+    assert text.startswith(tools_mod._DELIVERED), text
+    assert "changed: 3; 4 unchanged." in text and "`changes` next time" in text
 
 
 @pytest.mark.asyncio

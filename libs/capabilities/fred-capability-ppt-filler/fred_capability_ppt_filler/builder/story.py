@@ -513,8 +513,8 @@ def _sources(
         f"none of the slide's figures ({shown}) appears in the documents read or the "
         "user's messages",
         "take the figures from a document (read or search it first) or from the user's "
-        "messages; if they are right, send this slide again unchanged: it is built with "
-        "a note",
+        "messages; if the user or a document gave them, send this slide again unchanged: it is "
+        "built with a note; never figures you made up: ask the user for them instead",
     )
 
 
