@@ -345,7 +345,7 @@ class ProcessingConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
         extractor: Literal["docling", "pymupdf"] = Field(
-            default="pymupdf",
+            default="docling",
             description="PDF text extractor engine: 'docling' for layout-aware extraction, 'pymupdf' for fast page-oriented extraction.",
         )
         do_ocr: bool = Field(

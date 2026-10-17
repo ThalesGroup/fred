@@ -16,15 +16,13 @@ import re
 from pathlib import Path
 from typing import List
 
-import fitz
-import pymupdf4llm
-
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     collapse_whitespace,
     normalize_repeated_chars,
     strip_surrogates,
 )
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.base_pdf_extractor import BasePdfExtractor
+from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.optional_pymupdf import require_pymupdf
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import ImageTranscription
 
 
@@ -37,6 +35,7 @@ class PyMuPdfExtractor(BasePdfExtractor):
         a document it opens internally, which leaks native MuPDF memory (pages, xref
         table, decoded images/fonts) per processed file.
         """
+        fitz, pymupdf4llm = require_pymupdf(type(self).__name__)
         doc = fitz.open(file_path)
         try:
             pages = pymupdf4llm.to_markdown(

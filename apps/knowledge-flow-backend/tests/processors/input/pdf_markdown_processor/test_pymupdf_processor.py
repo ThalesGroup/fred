@@ -21,12 +21,16 @@ it explicitly — otherwise every PDF processed with the `pymupdf` extractor
 ingestion batches until the worker pod OOMs.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
-import fitz
 import pytest
 
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor import PyMuPdfExtractor
+
+fitz = pytest.importorskip("fitz")
+pytest.importorskip("pymupdf4llm")
 
 
 @pytest.fixture
@@ -59,7 +63,7 @@ def test_extract_closes_the_document(fitz_open_spy: list, sample_pdf_file: Path,
 
 def test_extract_closes_the_document_even_on_failure(fitz_open_spy: list, sample_pdf_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor.pymupdf4llm.to_markdown",
+        "pymupdf4llm.to_markdown",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
@@ -79,7 +83,7 @@ def test_extract_drops_unpaired_surrogates(sample_pdf_file: Path, tmp_path: Path
     output.md as the lite path, so it carries the same hazard.
     """
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor.pymupdf4llm.to_markdown",
+        "pymupdf4llm.to_markdown",
         lambda *a, **k: [{"text": "AERS Sensor" + chr(0xDBFF) + " ICD", "metadata": {"page_number": 1}}],
     )
 

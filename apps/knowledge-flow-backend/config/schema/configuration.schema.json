@@ -1553,7 +1553,7 @@
       "additionalProperties": false,
       "properties": {
         "extractor": {
-          "default": "pymupdf",
+          "default": "docling",
           "description": "PDF text extractor engine: 'docling' for layout-aware extraction, 'pymupdf' for fast page-oriented extraction.",
           "enum": [
             "docling",

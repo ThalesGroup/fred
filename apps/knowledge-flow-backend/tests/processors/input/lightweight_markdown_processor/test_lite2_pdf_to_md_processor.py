@@ -14,8 +14,7 @@
 
 """Regression tests for the fitz.Document lifecycle in LitePdfToMdExtractor.
 
-This is the extractor wired to the `fast` ingestion profile in production
-(see deploy/charts/fred/values.yaml, x-fast-input-processors). pymupdf4llm's
+This is the explicitly optional PyMuPDF extractor. pymupdf4llm's
 to_markdown() opens its own fitz.Document when given a path and never closes
 it, so the extractor must open the document itself and close it explicitly —
 otherwise every ingested PDF leaks native MuPDF memory (pages, xref table)
@@ -31,7 +30,10 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
     LitePdfMarkdownProcessor,
     LitePdfToMdExtractor,
 )
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import LiteMarkdownOptions
 from tests.processors.input.lightweight_markdown_processor.conftest import FitzOpenSpy
+
+pytest.importorskip("pymupdf4llm")
 
 
 def test_extract_pymupdf4llm_closes_the_document(fitz_open_spy: FitzOpenSpy, sample_pdf_file: Path):
@@ -46,34 +48,22 @@ def test_extract_pymupdf4llm_closes_the_document(fitz_open_spy: FitzOpenSpy, sam
 
 def test_extract_pymupdf4llm_closes_the_document_even_on_failure(fitz_open_spy: FitzOpenSpy, sample_pdf_file: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.pymupdf4llm.to_markdown",
+        "pymupdf4llm.to_markdown",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
     extractor = LitePdfToMdExtractor()
-    # extract() catches the primary-engine failure and falls back to markitdown,
-    # so it won't raise — but the leaked/closed state of the fitz.Document from
-    # the failed pymupdf4llm attempt is exactly what we're checking here.
-    extractor.extract(sample_pdf_file)
+    with pytest.raises(RuntimeError, match="boom"):
+        extractor.extract(sample_pdf_file)
 
     assert len(fitz_open_spy.opened) == 1
     assert fitz_open_spy.opened[0].is_closed
 
 
-def test_processor_check_file_validity_closes_the_document(fitz_open_spy: FitzOpenSpy, sample_pdf_file: Path):
+def test_optional_adapter_reuses_default_pdf_validation(sample_pdf_file: Path):
     processor = LitePdfMarkdownProcessor()
-    assert processor.check_file_validity(sample_pdf_file) is True
-    assert len(fitz_open_spy.opened) == 1
-    assert fitz_open_spy.opened[0].is_closed
-
-
-def test_processor_extract_file_metadata_closes_the_document(fitz_open_spy: FitzOpenSpy, sample_pdf_file: Path):
-    processor = LitePdfMarkdownProcessor()
-    metadata = processor.extract_file_metadata(sample_pdf_file)
-
-    assert metadata["page_count"] >= 1
-    assert len(fitz_open_spy.opened) == 1
-    assert fitz_open_spy.opened[0].is_closed
+    assert processor.check_file_validity(sample_pdf_file)
+    assert processor.extract_file_metadata(sample_pdf_file)["page_count"] >= 1
 
 
 # --- unpaired-surrogate regression (issue #2261) ------------------------------
@@ -87,7 +77,7 @@ LONE_SURROGATE = chr(0xDBFF)  # the code point reported in the issue
 
 def test_extract_pymupdf4llm_drops_unpaired_surrogates(sample_pdf_file: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.pymupdf4llm.to_markdown",
+        "pymupdf4llm.to_markdown",
         lambda *a, **k: [{"text": f"AERS Sensor{LONE_SURROGATE} ICD", "metadata": {"page_number": 1}}],
     )
 
@@ -100,7 +90,7 @@ def test_extract_pymupdf4llm_drops_unpaired_surrogates(sample_pdf_file: Path, mo
 def test_extract_with_markitdown_drops_unpaired_surrogates(sample_pdf_file: Path, monkeypatch: pytest.MonkeyPatch):
     # Force the primary engine to fail so the markitdown fallback is exercised.
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.pymupdf4llm.to_markdown",
+        "pymupdf4llm.to_markdown",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     extractor = LitePdfToMdExtractor()
@@ -110,7 +100,7 @@ def test_extract_with_markitdown_drops_unpaired_surrogates(sample_pdf_file: Path
         lambda *a, **k: SimpleNamespace(markdown=f"AERS Sensor{LONE_SURROGATE} ICD"),
     )
 
-    result = extractor.extract(sample_pdf_file)
+    result = extractor.extract(sample_pdf_file, LiteMarkdownOptions(return_per_page=False, add_page_headings=False))
 
     assert result.extras == {"engine": "markitdown"}
     assert result.markdown == "AERS Sensor ICD"
@@ -119,7 +109,7 @@ def test_extract_with_markitdown_drops_unpaired_surrogates(sample_pdf_file: Path
 def test_convert_file_to_markdown_writes_output_for_surrogate_tainted_pdf(sample_pdf_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """End-to-end guard: this is the exact call that raised in production."""
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.pymupdf4llm.to_markdown",
+        "pymupdf4llm.to_markdown",
         lambda *a, **k: [{"text": f"page one{LONE_SURROGATE}", "metadata": {"page_number": 1}}],
     )
 

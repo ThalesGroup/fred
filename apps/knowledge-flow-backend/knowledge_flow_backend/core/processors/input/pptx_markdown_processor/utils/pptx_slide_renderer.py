@@ -20,43 +20,60 @@ PPTX→PDF conversion itself lives in ``fred_core.conversion`` - one hardened
 
 from __future__ import annotations
 
+import json
 import logging
+import subprocess  # nosec B404 - fixed Python executable and script; no shell
+import sys
 from pathlib import Path
 
-import fitz
-
 logger = logging.getLogger(__name__)
+RENDER_TIMEOUT_SECONDS = 120
 
 
 def render_pdf_pages_to_png(pdf_path: Path, slide_numbers: list[int], out_dir: Path) -> dict[int, Path]:
-    """Render selected PDF pages to PNG images keyed by 1-based slide number."""
+    """Render a deck in its own process: PDFium must not share concurrent native calls.
+
+    Docling also uses PDFium in the parent worker. A per-deck child isolates that
+    native state and releases all native memory on success, failure or timeout.
+    subprocess.run kills and reaps the child when the timeout expires.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
-    rendered: dict[int, Path] = {}
+    if not slide_numbers:
+        return {}
+    result = subprocess.run(  # nosec B603 - fixed executable/script, paths passed as separate arguments
+        [sys.executable, str(Path(__file__).resolve()), str(pdf_path.resolve()), str(out_dir.resolve()), json.dumps(slide_numbers)],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=RENDER_TIMEOUT_SECONDS,
+    )
+    if result.stderr:
+        logger.info("[PROCESSOR][PPTX] %s", result.stderr.strip())
+    return {number: out_dir / f"slide_{number:03d}.png" for number in json.loads(result.stdout)}
 
-    doc = fitz.open(pdf_path)
-    try:
-        for slide_number in slide_numbers:
-            page_index = slide_number - 1
-            if page_index < 0 or page_index >= len(doc):
-                logger.warning(
-                    "[PROCESSOR][PPTX] Requested slide %s is out of PDF page range for %s",
-                    slide_number,
-                    pdf_path,
-                )
+
+def _render_in_child(pdf_path: Path, slide_numbers: list[int], out_dir: Path) -> list[int]:
+    import pypdfium2 as pdfium
+
+    rendered = []
+    with pdfium.PdfDocument(pdf_path) as doc:
+        for number in dict.fromkeys(slide_numbers):
+            if number < 1 or number > len(doc):
+                logger.warning("Requested slide %s is out of PDF page range for %s", number, pdf_path)
                 continue
+            page = doc[number - 1]
+            try:
+                bitmap = page.render(scale=2)
+                try:
+                    with bitmap.to_pil() as image:
+                        image.save(out_dir / f"slide_{number:03d}.png")
+                finally:
+                    bitmap.close()
+            finally:
+                page.close()
+            rendered.append(number)
+    return rendered
 
-            page = doc.load_page(page_index)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-            png_path = out_dir / f"slide_{slide_number:03d}.png"
-            pix.save(str(png_path))
-            rendered[slide_number] = png_path
 
-        logger.info(
-            "[PROCESSOR][PPTX] Rendered %s slide PNG(s) from %s into %s",
-            len(rendered),
-            pdf_path,
-            out_dir,
-        )
-        return rendered
-    finally:
-        doc.close()
+if __name__ == "__main__":
+    print(json.dumps(_render_in_child(Path(sys.argv[1]), json.loads(sys.argv[3]), Path(sys.argv[2]))))
