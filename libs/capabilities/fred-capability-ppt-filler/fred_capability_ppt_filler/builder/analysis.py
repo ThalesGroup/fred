@@ -1170,12 +1170,12 @@ class _Analyzer:
             if zone.role != "chart":
                 continue
             rec = by_key.get(zone.key)
-            example = rec is not None and rec.kind == "chart"
-            if example:
-                zone.chart_type = charts.type_of(cast(Any, rec.shape).chart)
-            zone.font_pt = (
-                charts.text_pt(cast(Any, rec.shape).chart) if example else None
+            example = (
+                cast(Any, rec.shape).chart if rec and rec.kind == "chart" else None
             )
+            if example is not None:
+                zone.chart_type = charts.type_of(example)
+            zone.font_pt = charts.text_pt(example) if example is not None else None
             size = (self.width, self.height)
             zone.max_lines = charts.max_categories(zone, "column", size)
             shown = min(charts.QUOTED_CATEGORIES, zone.max_lines)
