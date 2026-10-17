@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import signal
 import statistics
 import subprocess
 import sys
@@ -155,9 +156,11 @@ def extract(path: Path, engine: str, output: Path) -> None:
             from PIL import Image
 
             images = render_pdf_pages_to_png(path, [1, 2, 3, 999], Path(work))
-            result = {
-                "images": {str(n): list(Image.open(p).size) for n, p in images.items()}
-            }
+            sizes = {}
+            for number, image_path in images.items():
+                with Image.open(image_path) as image:
+                    sizes[str(number)] = list(image.size)
+            result = {"images": sizes}
         else:
             if engine == "lite":
                 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import (
@@ -217,6 +220,7 @@ def measure(folder: Path, engine: str, output: Path, jobs: int) -> None:
                     str(result_path),
                 ],
                 stdout=subprocess.DEVNULL,
+                start_new_session=True,
             )
             peak = 0
             monitored = psutil.Process(process.pid)
@@ -232,7 +236,7 @@ def measure(folder: Path, engine: str, output: Path, jobs: int) -> None:
                     pass
                 peak = max(peak, rss)
                 if time.perf_counter() - start > 180:
-                    process.kill()
+                    os.killpg(process.pid, signal.SIGKILL)
                     process.wait()
                     raise TimeoutError(path)
                 time.sleep(0.01)
