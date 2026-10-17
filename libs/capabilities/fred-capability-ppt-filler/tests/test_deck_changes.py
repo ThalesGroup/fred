@@ -431,6 +431,22 @@ async def test_numbers_in_a_revision_are_the_new_plans(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_an_insert_at_the_start_goes_after_the_cover(monkeypatch):
+    """The eval turn: `after` 0 put a Sommaire before the cover, refused three
+    times as a cover with no place for its items."""
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["One", "Two"]}])
+    text, result = await turn.build(
+        changes=[
+            {"op": "insert", "after": 0, "slides": [{"title": "Why", "bullets": ["a"]}]}
+        ]
+    )
+    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
+    assert [s.title for s in turn.rendered[-1].slides] == ["Kick-off", "Why", "Agenda"]
+    assert "went after the cover (slide 1)" in text
+
+
+@pytest.mark.asyncio
 async def test_the_same_changes_resent_are_never_applied_twice(
     monkeypatch, deck_plan_store
 ):

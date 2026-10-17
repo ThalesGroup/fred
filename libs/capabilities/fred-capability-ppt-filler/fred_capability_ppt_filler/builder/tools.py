@@ -85,9 +85,11 @@ from fred_capability_ppt_filler.builder.assign import (
     unplaced,
 )
 from fred_capability_ppt_filler.builder.changes import (
+    AFTER_THE_COVER,
     CLEARABLE,
     ChangeError,
     SlideChange,
+    after_the_cover,
     apply_changes,
     change_shape,
     unchanged,
@@ -1384,6 +1386,7 @@ def build_builder_tools(
         shape: Any = None
         base: Optional[DeckPlan] = None
         cleared: Dict[int, List[str]] = {}
+        moved_notes: List[str] = []
         if changes is not None and (changes or not plan.slides):
             if plan.slides:
                 return _error(_BOTH_MODES)
@@ -1400,6 +1403,9 @@ def build_builder_tools(
             # Models resend refused changes corrected, never applied twice.
             if turn_parent and shape == turn_shape[0]:
                 base = turn_parent[0]
+            changes, moved = after_the_cover(base, changes, _kinds(inventory))
+            if moved:
+                moved_notes.append(AFTER_THE_COVER)
             try:
                 changed = apply_changes(
                     base,
@@ -1635,6 +1641,7 @@ def build_builder_tools(
             + takeaway_note
             + unloadable
             + assignment.notes
+            + moved_notes
             + _cleared_lines(cleared, plan, numbers),
         )
         notes = _designs_line(inventory, patterns) + notes
