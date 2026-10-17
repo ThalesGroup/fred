@@ -17,8 +17,8 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
-from langchain.embeddings.base import Embeddings
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import InMemoryVectorStore
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, SearchFilter

@@ -547,7 +547,7 @@ wheels = [
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "4.5.0"
+version = "4.5.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -621,7 +621,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -685,6 +685,7 @@ requires-dist = [
     { name = "langchain-mistralai", specifier = ">=1.1.2" },
     { name = "langchain-ollama", specifier = ">=1.0.1" },
     { name = "langchain-openai", specifier = ">=1.1.14" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.30.0,<2.0.0" },
     { name = "minio", specifier = ">=7.2.20" },
     { name = "openfga-sdk", specifier = ">=0.9.9" },
     { name = "opensearch-py", specifier = "==2.8.0" },
@@ -707,8 +708,8 @@ requires-dist = [
     { name = "sqlparse", specifier = ">=0.6.0" },
     { name = "starlette", specifier = ">=1.3.1" },
     { name = "structlog", specifier = ">=25.5.0,<27.0.0" },
-    { name = "temporalio", specifier = ">=1.14.1" },
-    { name = "uv", specifier = ">=0.11.6" },
+    { name = "temporalio", specifier = ">=1.30.0,<2.0.0" },
+    { name = "uv", specifier = ">=0.12.23" },
 ]
 provides-extras = ["mcp", "migration", "dev"]
 
@@ -765,7 +766,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -803,7 +804,7 @@ requires-dist = [
     { name = "langchain-mcp-adapters", specifier = ">=0.2.1" },
     { name = "langfuse", specifier = ">=3.0.0" },
     { name = "langgraph", specifier = ">=1.2.12" },
-    { name = "mcp", specifier = ">=1.24.0,<2.0.0" },
+    { name = "mcp", specifier = ">=1.30.0,<2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
@@ -832,7 +833,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
@@ -868,8 +869,8 @@ requires-dist = [
     { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "pyyaml", marker = "extra == 'agents'", specifier = ">=6.0.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
-    { name = "temporalio", marker = "extra == 'dev'", specifier = ">=1.7.0" },
-    { name = "temporalio", marker = "extra == 'knowledge-base'", specifier = ">=1.7.0" },
+    { name = "temporalio", marker = "extra == 'dev'", specifier = ">=1.30.0,<2.0.0" },
+    { name = "temporalio", marker = "extra == 'knowledge-base'", specifier = ">=1.30.0,<2.0.0" },
 ]
 provides-extras = ["agents", "knowledge-base", "dev"]
 
@@ -883,7 +884,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.2.1" },
     { name = "pytest-socket", specifier = ">=0.7.0" },
     { name = "ruff", specifier = ">=0.12.5" },
-    { name = "temporalio", specifier = ">=1.7.0" },
+    { name = "temporalio", specifier = ">=1.30.0,<2.0.0" },
 ]
 
 [[package]]

@@ -14,7 +14,7 @@
 
 from typing import List
 
-from langchain.embeddings.base import Embeddings
+from langchain_core.embeddings import Embeddings
 
 
 class Embedder(Embeddings):

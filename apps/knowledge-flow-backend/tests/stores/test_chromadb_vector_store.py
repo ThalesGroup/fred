@@ -14,6 +14,9 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 from langchain_community.embeddings import FakeEmbeddings
 from langchain_core.documents import Document
 
@@ -72,3 +75,36 @@ def test_add_documents_distinct_chunk_uids_are_both_kept(tmp_path):
     chunks = store.get_chunks_for_document("doc-1")
     assert len(chunks) == 2
     assert {c["chunk_uid"] for c in chunks} == {"doc-1::chunk::0", "doc-1::chunk::1"}
+
+
+def test_persisted_chunks_can_be_searched_and_deleted_after_restart(tmp_path):
+    store = _make_store(tmp_path)
+    store.add_documents([Document(page_content="persistent local knowledge", metadata={CHUNK_ID_FIELD: "doc-1::chunk::0", "document_uid": "doc-1"})])
+    # A separate interpreter cannot reuse the parent's cached Chroma client.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import sys
+from langchain_community.embeddings import FakeEmbeddings
+from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore
+
+store = ChromaDBVectorStore(
+    persist_path=sys.argv[1], collection_name="test-collection",
+    embeddings=FakeEmbeddings(size=8), embedding_model_name="fake-embeddings",
+)
+chunks = store.get_chunks_for_document("doc-1")
+assert len(chunks) == 1 and chunks[0]["text"] == "persistent local knowledge"
+hits = store.ann_search("local knowledge", k=1)
+assert len(hits) == 1 and hits[0].document.metadata["document_uid"] == "doc-1"
+store.delete_vectors_for_document(document_uid="doc-1")
+assert store.get_chunks_for_document("doc-1") == []
+""",
+            str(tmp_path / "chroma"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )

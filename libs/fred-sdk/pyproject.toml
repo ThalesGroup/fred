@@ -1,6 +1,6 @@
 [project]
 name = "fred-sdk"
-version = "4.5.2"
+version = "4.5.3"
 description = "Authoring SDK for Fred agents — graph, ReAct, and team agent primitives."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -27,7 +27,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # plus the fred-core platform behind them. A Knowledge Base pod never needs it.
 agents = [
   "pyyaml>=6.0.1",
-  "fred-core>=4.5.2",
+  "fred-core>=4.5.3",
   "langchain-core>=1.6.5",
   "langchain>=1.4.2",
   "langgraph>=1.2.12",
@@ -36,7 +36,8 @@ agents = [
 # pods import fred-sdk without it. `worker.py` is imported lazily so `publish`
 # never loads it either.
 knowledge-base = [
-  "temporalio>=1.7.0",
+  # Keep standalone pods on the patched Temporal bridge dependency floor.
+  "temporalio>=1.30.0,<2.0.0",
   # The pod's /metrics endpoint. Beside the engine because only a pod serving
   # runs is scraped; without it the SDK's measurements do nothing.
   "prometheus-client>=0.20.0",
@@ -53,7 +54,7 @@ dev = [
   # Not a runtime dependency of the SDK (see `knowledge-base` above), but the
   # test suite validates the Knowledge Base workflow inside a real Temporal
   # sandbox — a guard that only protects anything if it actually runs.
-  "temporalio>=1.7.0",
+  "temporalio>=1.30.0,<2.0.0",
 ]
 
 [build-system]
@@ -86,5 +87,5 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
-  "temporalio>=1.7.0",
+  "temporalio>=1.30.0,<2.0.0",
 ]

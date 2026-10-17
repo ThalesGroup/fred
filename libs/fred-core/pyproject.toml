@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "4.5.2"
+version = "4.5.3"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -49,8 +49,9 @@ dependencies = [
     "python-keycloak>=5.8.1",
     "minio>=7.2.20",
     "google-cloud-storage>=3.1.0",
-    "temporalio>=1.14.1",
-    "uv>=0.11.6",
+    # Patched embedded PyO3, quinn-proto and OpenTelemetry dependencies.
+    "temporalio>=1.30.0,<2.0.0",
+    "uv>=0.12.23",
     "asyncpg>=0.31.0",
     "aiosqlite>=0.22.1",
     "greenlet>=3.4.0",
@@ -90,6 +91,8 @@ dev = [
 # Only the tool-mount subclass needs this; services that mount no tools do not.
 mcp = [
     "fastapi-mcp==0.4.0",
+    # fastapi-mcp consumes MCP v1; require its patched release for wheel consumers.
+    "mcp>=1.30.0,<2.0.0",
 ]
 migration = [
     "alembic>=1.18.4",

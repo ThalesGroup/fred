@@ -37,12 +37,14 @@ RUN make build
 # -----------------------------------------------------------------------------
 # RUNTIME
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/nginxinc/nginx-unprivileged:1.31.0-alpine AS runtime
+FROM mirror.gcr.io/nginxinc/nginx-unprivileged:1.31.7-alpine AS runtime
 
 # jq validates the deployment-owned application registration list, and the CA
 # bundle lets the gateway verify TLS upstreams, before nginx configuration is rendered.
 USER root
-RUN apk add --no-cache ca-certificates jq
+# Pick up security fixes published after the base image was built.
+RUN apk upgrade --no-cache && \
+    apk add --no-cache ca-certificates jq
 
 # Copy web app from builder to nginx html directory
 COPY --from=builder --chown=nginx:nginx /workspace/apps/frontend/dist /usr/share/nginx/html

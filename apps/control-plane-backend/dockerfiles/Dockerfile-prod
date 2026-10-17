@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.13-slim AS builder
+FROM mirror.gcr.io/python:3.12.15-slim-trixie AS builder
 
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
@@ -30,7 +30,7 @@ RUN make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-proje
 # -----------------------------------------------------------------------------
 # FINAL STAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.13-slim
+FROM mirror.gcr.io/python:3.12.15-slim-trixie
 
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
@@ -62,6 +62,10 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
 RUN cd /workspace/apps/control-plane-backend && \
     UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache
+
+# Runtime uses uv; pip and its vendored libraries are only needed during bootstrap.
+RUN /app/venv/bin/python -m pip uninstall --yes pip && \
+    /usr/local/bin/python -m pip uninstall --yes pip
 
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/. /app/
 
