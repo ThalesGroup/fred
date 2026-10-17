@@ -68,3 +68,25 @@ def _fold_with_replace(element: fold_accents, compiler: Any, **kw: Any) -> str:
 def _fold_with_translate(element: fold_accents, compiler: Any, **kw: Any) -> str:
     (value,) = element.clauses
     return compiler.process(func.translate(func.lower(value), _ACCENTED, _PLAIN), **kw)
+
+
+@compiles(fold_accents, "sqlite")
+def _fold_sqlite(element: fold_accents, compiler: Any, **kw: Any) -> str:
+    # Older SQLite builds have a fixed parser stack: 161 nested replace() calls
+    # overflow it. Sibling CTEs keep each parsed expression shallow, without a
+    # connection-specific SQL function or a change to SQLite's case semantics.
+    (value,) = element.clauses
+    initial = compiler.process(func.lower(value), **kw)
+    stages = [f"_fred_fold_0(v) AS (SELECT {initial})"]
+    letters = list(FOLDED_LETTERS.items())
+    for stage, start in enumerate(range(0, len(letters), 16), 1):
+        folded = "v"
+        for accented, plain in letters[start : start + 16]:
+            folded = f"replace({folded}, '{accented}', '{plain}')"
+        # Only integer stage IDs and the fixed folding table form this SQL.
+        stages.append(
+            f"_fred_fold_{stage}(v) AS (SELECT {folded} FROM _fred_fold_{stage - 1})"  # nosec B608
+        )
+    # The input expression is compiled by SQLAlchemy; user search text stays
+    # bound separately. Only compiler-generated stages are joined here.
+    return f"(WITH {', '.join(stages)} SELECT v FROM _fred_fold_{len(stages) - 1})"  # nosec B608
