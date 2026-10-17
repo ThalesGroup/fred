@@ -66,6 +66,12 @@ The system SHALL accept on a plan slide a `chart` field holding only data — `t
 - **WHEN** a chart has more categories than its zone holds at a readable size, or more series than the cap, or a pie with several series
 - **THEN** no deck is built and `needs_revision` gives the measured limit and a remedy (group as "Other", fewer series, another type); the chart is never cut or split over two slides
 
+#### Scenario: A small chart is measured at its own text size
+
+- **GIVEN** an example slide of four quarter-slide bar charts whose text is 10 pt
+- **WHEN** the model sends a bar chart of six short categories for one of them, then one of eight
+- **THEN** the zone's text size is 10 pt, six categories are accepted (their labels each on one line), and eight are refused with the measured limit
+
 #### Scenario: Unsupported chart type
 
 - **WHEN** the model asks for a chart type outside the offered list

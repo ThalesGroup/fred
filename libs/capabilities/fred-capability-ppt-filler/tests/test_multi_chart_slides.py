@@ -42,7 +42,7 @@ from fred_capability_ppt_filler.builder.story import Conversation
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
-from pptx.util import Inches
+from pptx.util import Inches, Pt
 
 COVER = {"title": "Quarterly review", "subtitle": "Sales"}
 TAKEAWAY = "Revenue grows every quarter while the margin holds, so the plan stands"
@@ -390,3 +390,35 @@ def test_charts_is_offered_only_with_a_slide_of_several(owner):
     sent = tools._args_schema(inventory)(slides=[_multi(REVENUE, mixed)])
     plan = tools._to_plan(sent)
     assert plan.slides[0].charts[1].series[0].units == ["%", "M€"]
+
+
+def _quarter_bars(presentation):
+    """Four bar charts of a quarter slide each, their text at 10 pt."""
+    slide = add_charts_slide(presentation, 4, [XL_CHART_TYPE.BAR_CLUSTERED] * 4)
+    for frame in slide.shapes:
+        if getattr(frame, "has_chart", False):
+            cast(Any, frame).chart.font.size = Pt(10)
+
+
+def _bars(count: int) -> Dict[str, Any]:
+    sites = ["Lyon", "Lille", "Nantes", "Brest", "Metz", "Nice", "Pau", "Caen"]
+    return {
+        "type": "bar",
+        "title": "Sites",
+        "categories": sites[:count],
+        "series": [{"name": "Sites", "values": list(range(1, count + 1))}],
+    }
+
+
+def test_a_quarter_slide_bar_chart_is_measured_at_its_own_text_size():
+    _, inventory = _template(_quarter_bars)
+    (pattern,) = _slides(inventory)
+    assert {z.font_pt for z in pattern.zones if z.role == "chart"} == {10.0}
+    # Failed before: measured at two thirds of 18 pt with two label lines per
+    # bar, a quarter-slide bar chart held three categories.
+    six = _multi(_bars(6), REVENUE, REVENUE, REVENUE)
+    assert not _assigned(inventory, six).problems
+    (problem,) = _assigned(
+        inventory, _multi(_bars(8), REVENUE, REVENUE, REVENUE)
+    ).problems
+    assert "charts[0]: 8 categories; this chart holds" in problem.problem

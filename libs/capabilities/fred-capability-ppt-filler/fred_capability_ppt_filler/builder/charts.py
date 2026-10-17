@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import re
+from collections import Counter
 from typing import Any, List, Optional, Sequence, Tuple, cast
 
 from pptx.chart.data import BubbleChartData, CategoryChartData, XyChartData
@@ -110,7 +111,10 @@ QUOTED_CATEGORIES = 6
 _PLOT_W = 0.85
 _PLOT_H = 0.75
 _CATEGORY_EM = 3.0
-_BAR_LINES = 2.2
+# Line heights a bar's category takes: its label on one line or two, and the gap.
+_BAR_LINES = {1: 1.5, 2: 2.2}
+# A chart zone's text size when no example chart shows one.
+_CHART_PT = 12.0
 _EMU_PER_PT = 12700
 
 
@@ -123,8 +127,21 @@ def type_of(chart: Any) -> Optional[str]:
 
 
 def chart_pt(zone: Zone) -> float:
-    """One text size for axes, legend and labels: two thirds of the zone's."""
+    """One text size for axes, legend and labels: a chart zone's own (its example
+    chart's), else two thirds of a text zone's."""
+    if zone.role == "chart":
+        return float(min(14, max(8, zone.font_pt or _CHART_PT)))
     return float(min(14, max(10, round((zone.font_pt or 18.0) * 2 / 3))))
+
+
+def text_pt(chart: Any) -> Optional[float]:
+    """The size a chart's text is drawn at: the most common one it sets."""
+    sizes = Counter(
+        node.get("sz")
+        for node in chart._chartSpace.iter(qn("a:defRPr"), qn("a:rPr"))
+        if node.get("sz")
+    )
+    return int(sizes.most_common(1)[0][0]) / 100 if sizes else None
 
 
 def _frame_pt(zone: Zone, size: Tuple[int, int]) -> Tuple[float, float]:
@@ -134,7 +151,9 @@ def _frame_pt(zone: Zone, size: Tuple[int, int]) -> Tuple[float, float]:
     )
 
 
-def max_categories(zone: Zone, kind: str, size: Tuple[int, int]) -> int:
+def max_categories(
+    zone: Zone, kind: str, size: Tuple[int, int], label_lines: int = 2
+) -> int:
     if kind in ROUND:
         return MAX_SLICES
     if kind == "radar":
@@ -142,7 +161,8 @@ def max_categories(zone: Zone, kind: str, size: Tuple[int, int]) -> int:
     width, height = _frame_pt(zone, size)
     pt = chart_pt(zone)
     if kind in _HORIZONTAL:
-        room = height * _PLOT_H / (pt * text_metrics.LINE_HEIGHT * _BAR_LINES)
+        lines = _BAR_LINES[label_lines]
+        room = height * _PLOT_H / (pt * text_metrics.LINE_HEIGHT * lines)
     else:
         room = width * _PLOT_W / (pt * _CATEGORY_EM)
     cap = _MAX_CATEGORIES.get(kind, _MAX_CATEGORIES_DEFAULT)
@@ -478,7 +498,12 @@ def _category_fit(
 ) -> List[Tuple[str, str]]:
     found: List[Tuple[str, str]] = []
     count = len(chart.categories)
-    most = max_categories(zone, chart.type, size)
+    # Bars whose labels all hold on one line each take less height.
+    one_line = label_room(zone, chart.type, size, count)[0]
+    short = chart.type in _HORIZONTAL and all(
+        len(c) <= one_line for c in chart.categories
+    )
+    most = max_categories(zone, chart.type, size, 1 if short else 2)
     if count > most and chart.type not in ROUND + ("radar",):
         found.append(
             (

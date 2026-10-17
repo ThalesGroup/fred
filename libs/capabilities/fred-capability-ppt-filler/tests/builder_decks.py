@@ -239,7 +239,8 @@ CHART_GRIDS = {
 
 def add_charts_slide(presentation, count: int = 2, types=None, headings: bool = False):
     """An example slide of ``count`` charts (``CHART_GRIDS``), shuffled in the
-    drawing order; ``headings`` puts a free text box right above each chart."""
+    drawing order, their text at 12 pt as a designer sets it (python-pptx
+    writes 18); ``headings`` puts a free text box right above each chart."""
     slide = _titled(presentation, f"Graphiques ×{count}")
     kinds = types or [XL_CHART_TYPE.COLUMN_CLUSTERED] * count
     frames = list(zip(CHART_GRIDS[count], kinds))
@@ -247,7 +248,10 @@ def add_charts_slide(presentation, count: int = 2, types=None, headings: bool = 
         data = CategoryChartData()
         data.categories = ["A", "B", "C"]
         data.add_series("Exemple", (3, 2, 1))
-        slide.shapes.add_chart(kind, Inches(x), Inches(y), Inches(w), Inches(h), data)
+        frame = slide.shapes.add_chart(
+            kind, Inches(x), Inches(y), Inches(w), Inches(h), data
+        )
+        cast(Any, frame).chart.font.size = Pt(12)
         if headings:
             _textbox(slide.shapes, x, y - 0.5, w, 0.4, "Titre du graphique", FONT_BODY)
     return slide

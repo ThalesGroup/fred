@@ -1163,20 +1163,23 @@ class _Analyzer:
         }
 
     def _chart_zones(self, zones: List[Zone], records: List[_Rec]) -> None:
-        """A chart zone draws its text from the presentation's default size and
-        stores its column-chart room; an example chart's type is kept too."""
+        """A chart zone takes its example chart's type and text size (else the
+        chart default) and stores its column-chart room."""
         by_key = {rec.key: rec for rec in records}
         for zone in zones:
             if zone.role != "chart":
                 continue
-            zone.font_pt = self.default_pt
+            rec = by_key.get(zone.key)
+            example = rec is not None and rec.kind == "chart"
+            if example:
+                zone.chart_type = charts.type_of(cast(Any, rec.shape).chart)
+            zone.font_pt = (
+                charts.text_pt(cast(Any, rec.shape).chart) if example else None
+            )
             size = (self.width, self.height)
             zone.max_lines = charts.max_categories(zone, "column", size)
             shown = min(charts.QUOTED_CATEGORIES, zone.max_lines)
             zone.chars_per_line = charts.label_room(zone, "column", size, shown)[0]
-            rec = by_key.get(zone.key)
-            if rec is not None and rec.kind == "chart":
-                zone.chart_type = charts.type_of(cast(Any, rec.shape).chart)
 
     def _table_zone(self, rec: _Rec) -> Optional[Zone]:
         tbl = rec.shape._element.find(f".//{qn('a:tbl')}")

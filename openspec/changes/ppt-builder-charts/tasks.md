@@ -74,6 +74,13 @@
 - [x] 11.1 `charts.example_palette`: the example charts' series and point colours in order, then the theme accents they leave out; `render.py` reads it once per build and hands it to `draw` and `refill`; `_tone` (emphasis included) takes it
 - Verification: `test_chart_slides.py::test_fresh_charts_take_the_example_charts_colours_first` (fails before: accent1…); `test_colours_and_fonts_come_from_the_theme` unchanged on the built-in deck; Thales showcase re-rendered and looked at
 
+### 12. Chart room at the chart's own text size (owner decision 2026-10-17, D15)
+
+- [x] 12.1 `analysis._chart_zones`: a chart zone's `font_pt` is its example chart's text size (`charts.text_pt`), else unset; `charts.chart_pt` reads it for a chart zone (12 pt default, 8 to 14); `ANALYSIS_VERSION` already moved to 19 in this round
+- [x] 12.2 `charts._category_fit`: bars whose labels each hold one line take 1.5 line heights (`_BAR_LINES`), two-line labels 2.2
+- [x] 12.3 Test fixtures' example charts at 12 pt (`builder_decks.add_charts_slide`); built-in inventory regenerated (chart zones at 12 pt, rooms unchanged)
+- Verification: `test_multi_chart_slides.py::test_a_quarter_slide_bar_chart_is_measured_at_its_own_text_size` (fails before: 18 pt stored, three categories held); Thales and built-in showcases re-rendered and looked at
+
 ### 8. Phase B close-out
 
 - [x] 8.1 `verification.md` phase B section; README update; `openspec validate ppt-builder-charts --strict`
