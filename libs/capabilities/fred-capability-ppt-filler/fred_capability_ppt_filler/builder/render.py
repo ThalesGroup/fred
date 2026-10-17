@@ -2185,8 +2185,12 @@ class _Renderer:
         )
         if abs(shift_x) < _RECENTRE_MIN_EMU and abs(shift_y) < _RECENTRE_MIN_EMU:
             return
-        movers = [p for item in kept for p in item] + list(decoration)
-        for placed in movers:
+        # A picture-only item zone also reads as decoration: move each shape once.
+        movers = {
+            id(cast(Any, p.shape)._element): p
+            for p in [p for item in kept for p in item] + list(decoration)
+        }
+        for placed in movers.values():
             shape = cast(Any, placed.shape)
             try:
                 _own_geometry(shape)

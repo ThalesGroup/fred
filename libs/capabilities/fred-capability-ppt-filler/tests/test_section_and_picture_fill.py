@@ -130,3 +130,23 @@ def test_cover_and_image_text_pictures_are_cropped_to_fill(builtin):
     assert len(photos) == 2
     assert all(_cropped_to_fill(p) for p in photos)
     assert all(p.crop_top > 0 or p.crop_left > 0 for p in photos)
+
+
+def test_three_team_photos_move_with_their_names(builtin):
+    members = [
+        {"heading": name, "text": "Lead", "image": f"img-{n}"}
+        for n, name in enumerate(("Ana", "Ben", "Chloé"))
+    ]
+    result = _render(builtin, {"title": "Team", "kind": "team", "items": members})
+    slide = Presentation(io.BytesIO(result.pptx)).slides[1]
+    photos = [s for s in slide.shapes if isinstance(s, Picture)]
+    names = [
+        s
+        for s in slide.placeholders
+        if s.has_text_frame and cast(Any, s).text_frame.text in ("Ana", "Ben", "Chloé")
+    ]
+    assert len(photos) == len(names) == 3
+    for photo, name in zip(photos, names):
+        assert (
+            abs((photo.left + photo.width // 2) - (name.left + name.width // 2)) < 9525
+        )
