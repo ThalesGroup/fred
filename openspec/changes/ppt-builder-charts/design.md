@@ -123,6 +123,10 @@ Live, a user asked for headcounts instead of percentages on a pie; the model add
 
 `both` is linked because a label carries one number format for every field: linked, the value takes the series' own format (it holds the unit) and the percentage its own, where an explicit format would also apply to the percentage. Loose words are read (`numbers`, `pourcentages`, `les deux`…); a word that names no mode is a `needs_revision` problem on a pie/doughnut (`chart.show 'bubbles' is not a label mode`). Never silent: a `unit` other than `%` on a pie/doughnut left in `share` tells the model how to show it (and the summary gets `chart_shows_shares`); `show` on another type is told as not applied (agent note only: the chart shows its values anyway). Unset rather than `"share"` by default, so a `show` sent to a column chart stays detectable after an edit re-validates the dump.
 
+### D13. The key-figures option reads every figures slide (owner decision 2026-10-17)
+
+The "give the N values as items of a 'figures' slide" option compares the values to the largest item count of **all** the template's figures slides; it read only the last one met, so a template whose last figures slide was not the roomiest lost the option.
+
 ## Risks / Trade-offs
 
 - [LibreOffice preview differs from PowerPoint on chart styling] → explicit `schemeClr` fills; a preview check in verification; the `.pptx` stays authoritative.

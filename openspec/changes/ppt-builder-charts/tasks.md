@@ -64,6 +64,11 @@
 - [x] 7.4 `checks.py`: the copied chart part is related once and holds the plan's categories and values
 - Verification: tests on the built-in example chart (column requested → its own `srgbClr`/formatting kept and values replaced; pie requested → fresh phase A chart), the saved deck reopens with `has_chart` and one workbook per chart; evidence PDF of the built-in chart slide before/after
 
+### 10. Key-figures option over every figures slide (owner decision 2026-10-17, D13)
+
+- [x] 10.1 `assign._chart_options`: the largest item count over every figures slide, not the last one read
+- Verification: `test_chart_slides.py::test_the_figures_remedy_counts_every_figures_slide` fails before the fix, passes after
+
 ### 8. Phase B close-out
 
 - [x] 8.1 `verification.md` phase B section; README update; `openspec validate ppt-builder-charts --strict`

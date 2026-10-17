@@ -434,6 +434,19 @@ def test_a_template_without_any_chart_place_asks_for_another_form(builtin):
     assert not any("as items of a 'figures' slide" in o for o in found["options"])
 
 
+def test_the_figures_remedy_counts_every_figures_slide(builtin):
+    inventory = _chartless(builtin[1])
+    figures = [p for p in inventory.patterns if p.kind == "figures"]
+    # The roomiest figures slide first: the last one read holds only 3.
+    roomiest = sorted(figures, key=lambda p: -max(g.count for g in p.groups))
+    others = [p for p in inventory.patterns if p.kind != "figures"]
+    reordered = inventory.model_copy(update={"patterns": [*others, *roomiest]})
+    found = _problem(_assigned(reordered, _chart_slide(REVENUE)))
+    assert any(
+        "give the 4 values as items of a 'figures' slide" in o for o in found["options"]
+    )
+
+
 def test_a_chart_slide_needs_a_chart(builtin):
     _, inventory = builtin
     assignment = _assigned(

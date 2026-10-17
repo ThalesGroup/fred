@@ -38,6 +38,12 @@ The system SHALL accept on a plan slide a `chart` field holding only data — `t
 - **WHEN** the model sends a chart slide
 - **THEN** no deck is built and `needs_revision` says the template has no slide for a chart, with options such as giving the data as a table, as key figures, or dropping the chart
 
+#### Scenario: Key figures option counts every figures slide
+
+- **GIVEN** a template with no place for a chart and several figures slides, the roomiest not last
+- **WHEN** the model sends a chart whose values fit the roomiest figures slide
+- **THEN** the options offer the values as items of a 'figures' slide
+
 #### Scenario: Series length mismatch
 
 - **WHEN** a series has fewer values than there are categories

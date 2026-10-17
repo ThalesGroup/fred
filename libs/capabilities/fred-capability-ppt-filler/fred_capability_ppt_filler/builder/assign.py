@@ -1157,17 +1157,16 @@ def _chart_options(slide: _Slide) -> List[str]:
     """What the chart's data can become on this template, best first."""
     shown = slide_charts(slide.plan)
     chart = shown[0] if shown else None
-    kinds = {p.kind: p for p, _, _ in slide.checked}
+    kinds = {p.kind for p, _, _ in slide.checked}
     options = []
     if "table" in kinds:
         options.append(
             "give the data as `table` (a row per category, a column per series)"
         )
     values = len(chart.categories) * len(chart.series) if chart is not None else 0
-    most = (
-        max((g.count for g in kinds["figures"].groups), default=0)
-        if "figures" in kinds
-        else 0
+    most = max(
+        (g.count for p, _, _ in slide.checked if p.kind == "figures" for g in p.groups),
+        default=0,
     )
     if most and values <= most:
         options.append(
