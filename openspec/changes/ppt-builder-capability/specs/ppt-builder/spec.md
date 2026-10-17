@@ -53,7 +53,7 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 
 - **GIVEN** an example slide with two placeholders of the same `idx`, top-level slots or the picture slots of a repeated group
 - **WHEN** it is analysed and then filled, pictures included
-- **THEN** each gets its own slot key (the first in drawing order keeps the `idx`, the next one its shape path), the pattern carries a warning, and each slot is filled on its own; the deck never fails on it
+- **THEN** each gets its own slot key (the first in drawing order keeps the `idx`, the next one its shape path), the pattern carries a warning, and each slot is filled on its own, the picture in that slot's own frame; the deck never fails on it
 
 #### Scenario: First slide is the cover
 

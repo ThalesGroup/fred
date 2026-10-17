@@ -31,7 +31,7 @@ from fred_capability_ppt_filler.images import prepare_picture
 from pptx import Presentation
 from pptx.oxml.ns import qn
 from pptx.shapes.picture import Picture
-from pptx.util import Pt
+from pptx.util import Inches, Pt
 
 COVER = {"title": "Quarterly review", "subtitle": "Sales"}
 
@@ -181,4 +181,6 @@ def test_two_picture_slots_sharing_an_idx_are_each_filled():
     # second insert hit a placeholder the first had already replaced.
     result = render_deck(template, inventory, plan, [pattern], images=WIDE)
     slide = Presentation(io.BytesIO(result.pptx)).slides[0]
-    assert len([s for s in slide.shapes if isinstance(s, Picture)]) == 3
+    lefts = sorted(s.left for s in slide.shapes if isinstance(s, Picture))
+    # Each picture in its own slot, not at the position its idx has elsewhere.
+    assert lefts == [Inches(x) for x in (0.3, 3.5, 6.7)]

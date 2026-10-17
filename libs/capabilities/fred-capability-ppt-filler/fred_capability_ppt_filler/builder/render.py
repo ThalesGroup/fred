@@ -2328,7 +2328,11 @@ class _Renderer:
         image_bytes, img_w, img_h = prepared
         shape = cast(Any, placed.shape)
         if shape.is_placeholder and hasattr(shape, "insert_picture"):
-            shape.insert_picture(io.BytesIO(image_bytes))  # cropped to fill
+            own = shape._element.spPr.find(qn("a:xfrm"))
+            picture = shape.insert_picture(io.BytesIO(image_bytes))  # cropped to fill
+            if own is not None:
+                # The new picture drops the slot's own position for its layout idx's.
+                picture._element.spPr.insert(0, copy.deepcopy(own))
             return
         frame = (placed.width, placed.height)
         if isinstance(shape, Picture):
