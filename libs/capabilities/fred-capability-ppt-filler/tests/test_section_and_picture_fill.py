@@ -27,6 +27,8 @@ from fred_capability_ppt_filler.builder.plan import DeckPlan
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
 from fred_capability_ppt_filler.images import prepare_picture
 from pptx import Presentation
+from pptx.oxml.ns import qn
+from pptx.shapes.picture import Picture
 
 COVER = {"title": "Quarterly review", "subtitle": "Sales"}
 
@@ -76,3 +78,55 @@ def test_section_slides_are_numbered_in_deck_order(builtin):
     )
     # Zero-padded as the example's "01"; a number the plan gives is kept.
     assert _numbers(result) == ["01", "07", "03"]
+
+
+def _photos(result: RenderResult) -> List[Picture]:
+    deck = Presentation(io.BytesIO(result.pptx))
+    return [s for slide in deck.slides for s in slide.shapes if isinstance(s, Picture)]
+
+
+def _crop(picture: Picture) -> tuple:
+    return tuple(
+        round(v, 3)
+        for v in (
+            picture.crop_left,
+            picture.crop_right,
+            picture.crop_top,
+            picture.crop_bottom,
+        )
+    )
+
+
+def _cropped_to_fill(picture: Picture) -> bool:
+    """The picture's visible part has its frame's proportions: no bars."""
+    left, right, top, bottom = _crop(picture)
+    shown = (400 * (1 - left - right)) / (200 * (1 - top - bottom))
+    return abs(shown - picture.width / picture.height) < 0.02
+
+
+def test_team_photos_fill_their_round_frames(builtin):
+    members = [
+        {"heading": name, "text": "Lead", "image": f"img-{n}"}
+        for n, name in enumerate(("Ana", "Ben", "Chloé", "Dev"))
+    ]
+    result = _render(builtin, {"title": "Team", "kind": "team", "items": members})
+    photos = _photos(result)
+    assert len(photos) == 4
+    for photo in photos:
+        # Square frame, wide picture: a quarter cut off each side.
+        assert _crop(photo) == (0.25, 0.25, 0.0, 0.0)
+        # No geometry of its own: the layout's ellipse shows; the alt text stays.
+        assert photo._element.spPr.find(qn("a:prstGeom")) is None
+        assert cast(Any, photo._element.nvPicPr).cNvPr.get("descr")
+
+
+def test_cover_and_image_text_pictures_are_cropped_to_fill(builtin):
+    result = _render(
+        builtin,
+        {"title": "Our site", "bullets": ["Opened in 2024"], "image": "img-1"},
+        cover={**COVER, "image": "img-0"},
+    )
+    photos = _photos(result)
+    assert len(photos) == 2
+    assert all(_cropped_to_fill(p) for p in photos)
+    assert all(p.crop_top > 0 or p.crop_left > 0 for p in photos)

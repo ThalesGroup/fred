@@ -46,6 +46,7 @@ from typing import (
 
 from pptx.oxml.ns import qn
 from pptx.parts.chart import ChartPart
+from pptx.shapes.picture import Picture
 from pptx.util import Emu
 
 from fred_capability_ppt_filler import text_metrics
@@ -85,7 +86,6 @@ from fred_capability_ppt_filler.builder.plan import (
     slide_charts,
 )
 from fred_capability_ppt_filler.fill import BuildNoteCode, BuiltSlide
-from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
 from fred_capability_ppt_filler.pptx_archive import open_presentation
 from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
@@ -2325,17 +2325,36 @@ class _Renderer:
         return zones
 
     def _place_image(self, slide, placed: PlacedShape, prepared: PreparedImage) -> None:
+        """Crop the picture to fill its frame, centred, keeping the frame's shape
+        (a round photo stays round) and, for an example picture, its alt text."""
         image_bytes, img_w, img_h = prepared
         shape = cast(Any, placed.shape)
         if shape.is_placeholder and hasattr(shape, "insert_picture"):
-            shape.insert_picture(io.BytesIO(image_bytes))
+            shape.insert_picture(io.BytesIO(image_bytes))  # cropped to fill
             return
-        left, top, width, height = fit_inside_box(
-            img_w, img_h, placed.left, placed.top, placed.width, placed.height
-        )
+        frame = (placed.width, placed.height)
+        if isinstance(shape, Picture):
+            # Swap the image only: position, geometry and alt text stay the slide's.
+            _, r_id = slide.part.get_or_add_image_part(io.BytesIO(image_bytes))
+            blip = cast(Any, shape._element.blipFill).blip
+            old, blip.rEmbed = blip.rEmbed, r_id
+            if old and old != r_id:
+                slide.part.drop_rel(old)
+            _crop_to_fill(shape._element, (img_w, img_h), frame)
+            return
         picture = slide.shapes.add_picture(
-            io.BytesIO(image_bytes), Emu(left), Emu(top), Emu(width), Emu(height)
+            io.BytesIO(image_bytes),
+            Emu(placed.left),
+            Emu(placed.top),
+            Emu(placed.width),
+            Emu(placed.height),
         )
+        _crop_to_fill(picture._element, (img_w, img_h), frame)
+        geometry = shape._element.find(f"{qn('p:spPr')}/{qn('a:prstGeom')}")
+        if geometry is not None:
+            own = picture._element.spPr.find(qn("a:prstGeom"))
+            own.addprevious(copy.deepcopy(geometry))
+            own.getparent().remove(own)
         # `add_picture` appends, which puts the new picture in front of
         # everything: a replaced cover photo then hides the title drawn over it.
         # Put it back where the one it replaces sat in the drawing order.
@@ -2351,6 +2370,14 @@ class _Renderer:
             new_element.getparent().remove(new_element)
             tree.insert(list(tree).index(anchor), new_element)
         _remove(placed)
+
+
+def _crop_to_fill(pic: Any, image: Tuple[int, int], frame: Tuple[int, int]) -> None:
+    """Centre-crop so the picture fills ``frame`` at its own aspect ratio."""
+    fill = pic.blipFill
+    for old in fill.findall(qn("a:srcRect")):  # an example's crop would be added to
+        fill.remove(old)
+    pic.crop_to_fit(image, frame)
 
 
 def _numbered(plan: SlidePlan, pattern: Pattern, ordinal: int) -> SlidePlan:
