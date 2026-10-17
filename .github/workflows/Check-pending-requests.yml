@@ -327,11 +327,24 @@ jobs:
         with:
           working-directory: ${{ matrix.directory }}
 
+      - name: Verify local Chroma profile
+        if: matrix.name == 'knowledge-flow-backend'
+        working-directory: ${{ matrix.directory }}
+        run: uv run --no-sync python -c 'import chromadb'
+
       - name: Run unit tests
         run: make test
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv
+
+      - name: Test Knowledge Flow without Chroma
+        if: matrix.name == 'knowledge-flow-backend'
+        working-directory: ${{ matrix.directory }}
+        run: |
+          uv sync --locked --no-default-groups --extra dev
+          uv run --no-sync python -c 'import importlib.util; assert importlib.util.find_spec("chromadb") is None; import knowledge_flow_backend.main; import knowledge_flow_backend.main_worker'
+          uv run --no-sync pytest -m 'not integration' --disable-socket --allow-unix-socket --ignore=tests/stores/test_chromadb_vector_store.py
 
       # fred-core only: ReBAC rules are only really covered against a live OpenFGA,
       # which the target starts and stops via docker compose.

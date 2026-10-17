@@ -73,6 +73,46 @@ Key point: Knowledge Flow uses the same `ENV_FILE` + `CONFIG_FILE` contract as A
 The default configuration is developer-friendly and only uses local stores. See the
 [configuration page](./config/README.md) when you want another setup.
 
+### Optional Chroma storage
+
+Chroma remains available as an embedded vector store that persists data on the
+local filesystem, with no separate database service. From
+`apps/knowledge-flow-backend`, install it explicitly with:
+
+```bash
+uv sync --locked --extra chroma
+```
+
+The default development dependency group also includes Chroma so `uv sync`,
+`make dev`, `make run` and `make test` keep supporting the local configuration.
+Keep the existing `storage.vector_store.type: chroma`, `local_path` and
+`collection_name`: existing data needs no migration or reindexing.
+
+For an installation without Chroma or development tools, use
+`uv sync --locked --no-default-groups` and configure another supported vector
+backend (for example OpenSearch or pgvector). Start it with `uv run --no-sync`
+or its installed executable; `make run` deliberately installs development
+dependencies. Selecting Chroma without installing it fails with instructions
+to enable the extra; there is no automatic fallback to another store.
+
+Production API and worker images omit Chroma by default. To use the same image
+with local Chroma storage, build an explicit variant from the repository root:
+
+```bash
+docker build -f apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod \
+  --build-arg INSTALL_CHROMA=true -t knowledge-flow-with-chroma .
+```
+
+Use this variant for both the API and any workers configured to use Chroma,
+including local container runs that mount the default configuration. Preserve
+the existing persistent storage mounts.
+
+Chroma stays in `uv.lock` for reproducible optional installations. Lockfile and
+local-environment scanners can therefore still report its vulnerabilities.
+Only scans of the default final image should lose Chroma-specific findings;
+the opt-in image retains them. Shared dependencies needed by other features
+remain installed.
+
 ### Storage credentials
 
 - **Core storage (`storage.postgres`)**: used by tags, metadata, resources, pgvector, etc.

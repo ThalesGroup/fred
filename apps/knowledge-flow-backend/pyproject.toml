@@ -46,7 +46,6 @@ dependencies = [
   "psycopg2-binary>=2.9.10",
   "sqlparse>=0.6.0",
   "uv",
-  "chromadb>=0.5",
   "python-keycloak>=5.8.1",
   # ClickHouse client
   "clickhouse-connect>=0.8.0",
@@ -80,8 +79,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+chroma = ["chromadb>=0.5"]
 dev = [
   "pytest-cov==6.1.1",
+  "httpx2>=2.13.1",
   "reportlab==4.3.1",
   "pytest==9.0.3",
   "pytest-asyncio==1.4.0",
@@ -138,6 +139,9 @@ url = "https://download.pytorch.org/whl/cpu"
 
 [dependency-groups]
 dev = [
+  # Keep the filesystem-backed local configuration usable with uv sync / make dev.
+  # Production syncs exclude this group; standalone installs opt into [chroma].
+  "chromadb>=0.5",
   "bandit>=1.8.5",
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
