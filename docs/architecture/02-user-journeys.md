@@ -96,7 +96,8 @@ page. The footer shows the current page without claiming an unknown total or las
 page. Refreshing the browser returns to the space root.
 
 Successful emptiness displays the existing empty-folder message. Loading hides
-previous rows; 403 shows denied access, 404 an absent space/folder, and other failures
+previous rows; 403 and 409 show denied access (including retired spaces or conflicting
+organization context), 404 an absent space/folder, and other failures
 an unavailable-service message. Reload retries both reads. Entering a space, folder
 or page verifies current authority before showing rows, including after an abandoned
 request. A response from an earlier visit cannot populate the current view.

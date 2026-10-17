@@ -441,6 +441,15 @@ async fn persist(
     Ok(())
 }
 
+fn validate_space_name(name: &str) -> AppResult<()> {
+    if !domain::valid_space_name(name) {
+        return Err(AppError::Unprocessable(
+            "space name must contain 1..180 characters, be nonblank and contain no control characters".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Organizations are created by an operator; the first person must be unattached.
 /// The first person becomes owner, admin and member: technical and business roles may be
 /// held by the same person.
@@ -450,6 +459,7 @@ pub async fn create_organization(
     name: &str,
     admin: &str,
 ) -> AppResult<Space> {
+    validate_space_name(name)?;
     let id = Uuid::new_v4();
     let org = Space::placed(
         SpaceRow {
@@ -498,6 +508,7 @@ pub async fn create_space(
     name: String,
     admin: &str,
 ) -> AppResult<Space> {
+    validate_space_name(&name)?;
     let parent = load(pool, fga, parent_id).await?;
     domain::check_parent(kind, Some(&parent))?;
     let mut tx = pool.begin().await?;
@@ -772,16 +783,7 @@ pub async fn authorized_write(
     Ok(tx)
 }
 
-/// Folder creation uses the held connection for placement lookup and insertion, so
-/// lock waiters cannot starve its transaction by consuming the rest of the pool.
-pub async fn create_folder(
-    pool: &PgPool,
-    fga: &Fga,
-    caller: &str,
-    space_id: Uuid,
-    parent_id: Option<Uuid>,
-    name: String,
-) -> AppResult<Folder> {
+pub(crate) fn folder_name(name: &str) -> AppResult<&str> {
     let name = name.trim();
     if name.is_empty()
         || name.chars().count() > 255
@@ -794,6 +796,20 @@ pub async fn create_folder(
                 .into(),
         ));
     }
+    Ok(name)
+}
+
+/// Folder creation uses the held connection for placement lookup and insertion, so
+/// lock waiters cannot starve its transaction by consuming the rest of the pool.
+pub async fn create_folder(
+    pool: &PgPool,
+    fga: &Fga,
+    caller: &str,
+    space_id: Uuid,
+    parent_id: Option<Uuid>,
+    name: String,
+) -> AppResult<Folder> {
+    let name = folder_name(&name)?;
     let mut tx = authorized_write(pool, fga, caller, space_id).await?;
     let parent = match parent_id {
         Some(id) => Some(db::folder(&mut *tx, id).await?),

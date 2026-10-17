@@ -175,6 +175,19 @@ realm/subject checks, retries and safe errors.
 
 ## Account lifecycle and platform admission
 
+In this manager journey, a valid personal credential from the configured issuer
+allows access to onboarding. After accepting the active CGU, a person with no
+organization or platform roles can reach an empty Home view. This creates no
+membership, personal space or content access. Business operations still require
+one organization context and the operation's OpenFGA permission; platform actions
+require their separate platform permission.
+
+Python control-plane additionally has configurable platform-access filtering and
+admission sources. Manager's onboarding checks authentication and consent, not
+that Python admission policy. A deployment using Python filtering therefore does
+not retain equivalent platform admission merely by directing the UI to manager.
+This security boundary is distinct from organization membership and from CGU.
+
 ## Delegation and execution credentials
 
 ## Privacy and personal data

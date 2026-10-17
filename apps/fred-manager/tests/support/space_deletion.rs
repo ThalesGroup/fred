@@ -657,3 +657,359 @@ async fn lifecycle_migration_preserves_existing_spaces_and_folders() {
         0
     );
 }
+
+// Proves: I24
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn lifecycle_aborted_creation_graph_does_not_block_cleanup() {
+    use fred_manager::fga::{Link, Tuple};
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let (org, team) = org_and_team(&e).await;
+    let ghost_team = Uuid::new_v4();
+    let ghost_project = Uuid::new_v4();
+    let ghost_personal = Uuid::new_v4();
+    let ghost_child = Uuid::new_v4();
+    let ghosts = [ghost_team, ghost_project, ghost_personal, ghost_child];
+    let mut guard = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
+    // A failed import can roll back several SQL rows after all FGA writes land.
+    e.fga
+        .write_created(
+            &mut guard,
+            &[
+                Link::Parent {
+                    child: ghost_team,
+                    parent: org.id,
+                },
+                Link::Parent {
+                    child: ghost_project,
+                    parent: ghost_team,
+                },
+                Link::Organization {
+                    personal: ghost_personal,
+                    organization: org.id,
+                },
+                Link::Parent {
+                    child: ghost_child,
+                    parent: team.id,
+                },
+            ],
+            &ghosts
+                .iter()
+                .map(|id| Tuple {
+                    user: "aborted",
+                    role: Role::Member,
+                    space: *id,
+                })
+                .collect::<Vec<_>>(),
+        )
+        .await
+        .unwrap();
+    let receipt = immediate()
+        .accept(&e.pool, &e.fga, "root", org.id)
+        .await
+        .unwrap();
+    assert!(
+        e.fga
+            .write_created(
+                &mut guard,
+                &[Link::Parent {
+                    child: Uuid::new_v4(),
+                    parent: team.id
+                }],
+                &[],
+            )
+            .await
+            .is_err()
+    );
+    drain(&e, receipt.id).await;
+    assert_eq!(
+        store::status(&e.pool, &e.fga, "root", receipt.id)
+            .await
+            .unwrap()
+            .spaces_deleted,
+        2
+    );
+    assert!(e.fga.roles_of("aborted").await.unwrap().is_empty());
+    for id in ghosts {
+        assert!(e.fga.linked_to(id, false).await.unwrap().is_empty());
+        assert!(e.fga.links_of(&[id], false).await.unwrap()[0].1.is_none());
+        assert!(e.fga.links_of(&[id], true).await.unwrap()[0].1.is_none());
+    }
+}
+
+// Proves: I24
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn lifecycle_orphan_pages_keep_anchors_through_lost_acknowledgments() {
+    use fred_manager::fga::{Link, Tuple};
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+        .await
+        .unwrap();
+    let ghost = Uuid::new_v4();
+    let projects: Vec<_> = (0..100).map(|_| Uuid::new_v4()).collect();
+    let mut guard = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
+    e.fga
+        .write_created(
+            &mut guard,
+            &[Link::Parent {
+                child: ghost,
+                parent: org.id,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+    for chunk in projects.chunks(80) {
+        let links: Vec<_> = chunk
+            .iter()
+            .map(|id| Link::Parent {
+                child: *id,
+                parent: ghost,
+            })
+            .collect();
+        e.fga.write_created(&mut guard, &links, &[]).await.unwrap();
+    }
+    for chunk in 0..3 {
+        let users: Vec<_> = (0..80).map(|n| format!("orphan-{chunk}-{n}")).collect();
+        let tuples: Vec<_> = users
+            .iter()
+            .map(|user| Tuple {
+                user,
+                role: Role::Member,
+                space: projects[0],
+            })
+            .collect();
+        e.fga.write(&mut guard, &tuples, &[]).await.unwrap();
+    }
+    let receipt = immediate()
+        .accept(&e.pool, &e.fga, "root", org.id)
+        .await
+        .unwrap();
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    {
+        let mut fault = proxy.fault.lock().await;
+        fault.calls.clear();
+        fault.reads.clear();
+    }
+    let started = std::time::Instant::now();
+    let mut completed = false;
+    let mut lost_grant_batch = false;
+    let mut lost_anchor_batch = false;
+    for pass in 0..220 {
+        // Lose every other FGA acknowledgment, including grant and anchor batches.
+        // The following pass must rediscover work from the surviving hierarchy.
+        if pass % 2 == 0 {
+            let mut fault = proxy.fault.lock().await;
+            fault.fail_at = fault.writes + 1;
+            fault.after = true;
+        }
+        let result = cleanup::batch(&e.pool, &observed, receipt.id).await;
+        if pass == 0 {
+            let fault = proxy.fault.lock().await;
+            assert_eq!(fault.calls.get("read"), Some(&13));
+            assert_eq!(fault.calls.get("write"), Some(&1));
+        }
+        if result.is_err() {
+            let fault = proxy.fault.lock().await;
+            let keys = fault.written.last().unwrap()["deletes"]["tuple_keys"]
+                .as_array()
+                .unwrap();
+            lost_grant_batch |= keys.iter().any(|k| k["relation"] == "member");
+            lost_anchor_batch |= keys.iter().any(|k| k["relation"] == "parent");
+        }
+        if !e
+            .fga
+            .space_holders(projects[0], Role::Member)
+            .await
+            .unwrap()
+            .is_empty()
+        {
+            assert_eq!(
+                e.fga.link_of(projects[0], false).await.unwrap(),
+                Some(ghost)
+            );
+            assert_eq!(e.fga.link_of(ghost, false).await.unwrap(), Some(org.id));
+        }
+        let status = store::status(&e.pool, &e.fga, "root", receipt.id)
+            .await
+            .unwrap();
+        if status.status == Status::Completed {
+            assert_eq!(status.spaces_deleted, 1);
+            completed = true;
+            break;
+        }
+    }
+    assert!(completed && lost_grant_batch && lost_anchor_batch);
+    assert!(
+        e.fga
+            .space_holders(projects[0], Role::Member)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(e.fga.linked_to(ghost, false).await.unwrap().is_empty());
+    assert!(e.fga.linked_to(org.id, false).await.unwrap().is_empty());
+    let fault = proxy.fault.lock().await;
+    for write in &fault.written {
+        let count: usize = ["writes", "deletes"]
+            .iter()
+            .map(|k| write[k]["tuple_keys"].as_array().map_or(0, Vec::len))
+            .sum();
+        assert!(count <= 100);
+    }
+    for read in &fault.reads {
+        assert!(read.get("tuple_key").is_some());
+        assert_ne!(read["tuple_key"], serde_json::json!({}));
+    }
+    println!(
+        "orphan cleanup: concurrency=1 committed_spaces=1 ghost_teams=1 ghost_projects=100 ghost_grants=240 alternating_lost_acks=true elapsed_ms={} RPCs={:?}",
+        started.elapsed().as_millis(),
+        fault.calls
+    );
+}
+
+// Proves: I24
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn lifecycle_orphans_cannot_expand_the_committed_manifest_or_depth() {
+    use fred_manager::fga::{Link, Tuple};
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, &e.fga, "root")
+        .await
+        .unwrap();
+    let (org, team) = org_and_team(&e).await;
+    let foreign = spaces::create_organization(&e.pool, &e.fga, "Other", "bob")
+        .await
+        .unwrap();
+    let ghost = Uuid::new_v4();
+    let mut guard = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
+    e.fga
+        .write_created(
+            &mut guard,
+            &[Link::Parent {
+                child: ghost,
+                parent: team.id,
+            }],
+            &[Tuple {
+                user: "orphan",
+                role: Role::Member,
+                space: ghost,
+            }],
+        )
+        .await
+        .unwrap();
+    let receipt = immediate()
+        .accept(&e.pool, &e.fga, "root", team.id)
+        .await
+        .unwrap();
+    // Simulate an unexpected external link added after retirement. SQL existence
+    // must be checked before considering this object an abandoned creation.
+    let mut guard = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
+    let foreign_link = Link::Parent {
+        child: foreign.id,
+        parent: ghost,
+    };
+    e.fga
+        .write_created(&mut guard, &[foreign_link], &[])
+        .await
+        .unwrap();
+    cleanup::batch(&e.pool, &e.fga, receipt.id).await.unwrap();
+    let blocked = store::status(&e.pool, &e.fga, "root", receipt.id)
+        .await
+        .unwrap();
+    assert_eq!(blocked.status, Status::Blocked);
+    assert_eq!(blocked.error_code.as_deref(), Some("unexpected_reference"));
+    assert_eq!(
+        e.fga.space_holders(foreign.id, Role::Member).await.unwrap(),
+        ["bob"]
+    );
+    assert_eq!(
+        e.fga.space_holders(ghost, Role::Member).await.unwrap(),
+        ["orphan"]
+    );
+    assert_eq!(e.fga.link_of(foreign.id, false).await.unwrap(), Some(ghost));
+    // Unsupported depth under an absent project is bounded and leaves all tuples.
+    let response = reqwest::Client::new().post(format!("{}/stores/{}/write",e.openfga,e.fga.store_id())).json(&serde_json::json!({"deletes":{"tuple_keys":[{"object":format!("space:{}",foreign.id),"relation":"parent","user":format!("space:{ghost}")}]}})).send().await.unwrap();
+    assert!(response.status().is_success());
+    e.fga
+        .write_created(
+            &mut guard,
+            &[Link::Parent {
+                child: Uuid::new_v4(),
+                parent: ghost,
+            }],
+            &[],
+        )
+        .await
+        .unwrap();
+    cleanup::batch(&e.pool, &e.fga, receipt.id).await.unwrap();
+    let blocked = store::status(&e.pool, &e.fga, "root", receipt.id)
+        .await
+        .unwrap();
+    assert_eq!(blocked.status, Status::Blocked);
+    assert_eq!(blocked.error_code.as_deref(), Some("unexpected_hierarchy"));
+    assert_eq!(
+        e.fga.space_holders(ghost, Role::Member).await.unwrap(),
+        ["orphan"]
+    );
+    // Malformed placement spanning several pages must be rejected using only
+    // the first page, rather than scanning arbitrary tuple volume under locks.
+    for _ in 0..2 {
+        let links: Vec<_> = (0..80)
+            .map(|_| Link::Parent {
+                child: ghost,
+                parent: Uuid::new_v4(),
+            })
+            .collect();
+        e.fga.write_created(&mut guard, &links, &[]).await.unwrap();
+    }
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    proxy.fault.lock().await.calls.clear();
+    cleanup::batch(&e.pool, &observed, receipt.id)
+        .await
+        .unwrap();
+    let fault = proxy.fault.lock().await;
+    assert_eq!(fault.calls.get("read"), Some(&6));
+    assert_eq!(fault.calls.get("write"), None);
+    let blocked = store::status(&e.pool, &e.fga, "root", receipt.id)
+        .await
+        .unwrap();
+    assert_eq!(blocked.error_code.as_deref(), Some("unexpected_hierarchy"));
+    assert_eq!(
+        e.fga.space_holders(ghost, Role::Member).await.unwrap(),
+        ["orphan"]
+    );
+}

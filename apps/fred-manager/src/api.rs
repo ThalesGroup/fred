@@ -615,7 +615,7 @@ async fn rename_folder(
     let folder = db::folder(&s.pool, id).await?;
     let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, folder.space_id).await?;
     db::folder(&mut *tx, id).await?;
-    db::rename_folder(&mut *tx, id, &req.name).await?;
+    db::rename_folder(&mut *tx, id, spaces::folder_name(&req.name)?).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

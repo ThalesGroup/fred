@@ -34,13 +34,12 @@ OpenFGA guard before the SQL insert. A local or inherited editor writes; member,
 analyst, administrator and organization owner alone do not. Personal spaces inherit
 no authority. The [action/role matrix](03a-action-role-matrix.md) details the scope.
 
-Creation trims the name, accepts 1..255 Unicode scalar values, and rejects slashes,
-backslashes and control characters. A root has depth 1; depth 15 is accepted and
+Creation and `PATCH /folders/{id}` trim the name, accept 1..255 Unicode scalar
+values, and reject slashes, backslashes and control characters. A root has depth 1; depth 15 is accepted and
 16 is refused. Invalid name/depth returns 422, missing parent 404, foreign-space
 parent 400 and duplicate sibling name 409. SQL uniqueness also applies at the root;
 the same name in another parent is permitted. Concurrent identical creations yield
-one folder and one conflict. These validation rules describe creation, not renaming
-or rewriting pre-existing rows.
+one folder and one conflict. Renaming preserves the folder id and hierarchy; pre-existing names are not rewritten.
 
 The existing dialog keeps its name and reports localized errors on failure. During
 submission it prevents duplicate Enter/click requests and dismissal. A successful

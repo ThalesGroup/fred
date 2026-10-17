@@ -79,15 +79,23 @@ These counts exclude authentication/admission, SQL and startup.
 | First acceptance | `4 + L + D`: platform version Read, owner capability Check, placement Reads, organization version Read, descendant Reads by exact parent/organization subject plus `object=space:`, one four-operation guard Write | Platform then organization locks, held through complete subtree validation, retirement and commit; no Temporal RPC |
 | Receipt replay/status | One current platform capability Check | Indexed receipt lookup, no mutation lock for an already committed receipt |
 | Ordinary cleanup batch | Five Reads: platform version, organization guard existence, organization version, exact target object, and incoming `user=space:<id>, object=space:`; zero or one Write, at most 96 payload deletes plus four guard operations | One bounded transaction, up to 1000 folder leaves or one tuple batch or one space row; no retention/retry sleep under locks |
+| Orphan descendant cleanup | Ordinary five Reads plus at most four filtered Reads per absent descendant level (two placement checks, exact object, incoming references); at most two levels, hence 13 Reads and one guarded Write for a supported chain | SQL existence is checked under the same platform/organization locks before each descent; no SQL space counter increment for ghosts |
 | Final organization removal | Seven Reads and one Write with the guard present; recovery after its removal uses five Reads and one platform fence Write | Final root metadata and receipt completion commit together |
 | Due candidate selection | No FGA RPC; indexed SQL selection and visit timestamp update | Row locks use `SKIP LOCKED`; at most configured batch size |
 
 Reference cleanup drains fresh first pages; it never reuses a cursor across a
 mutation. Current model metadata allows incoming space references only. Guard reads
 are exact and independent of role volume. Discovery cost grows with spaces and
-hierarchy pages; cleanup cost grows with target tuples and folders. Unrelated users,
+hierarchy pages; cleanup cost grows with target tuples, folders and reachable abandoned creations. Unrelated users,
 memberships and documents do not induce full-store scans. OpenFGA's internal Check
 evaluation work is separate from these client RPC counts.
+
+For SQL-absent descendants, each placement is checked with bounded first pages;
+multiple parents or an unsupported depth block cleanup. Grants and descendants
+are drained before a separate batch removes their parent/organization anchor.
+Each retry rediscovers the remaining work, including after a lost write acknowledgment.
+A committed incoming space outside the retired manifest is never deleted.
+Disconnected orphan roots are outside this targeted cleanup.
 
 On the local disposable-service fixture (six lifecycle tests running concurrently),
 one acceptance took 17.740 ms with three spaces, 1001 target folders and 243 target
@@ -97,10 +105,24 @@ including one committed FGA delete with a lost acknowledgment, took 149 ms; comb
 acceptance/cleanup used 34 Reads, one Check and seven Writes. Assertions cap every
 Write at 100 tuple operations and require filtered Reads. SQL progress records
 1001 folders and one space removed; all 241 unrelated member tuples remain.
+An additional single-cleanup-stream fixture, run alongside the 85-test integration
+suite, has one committed organization, one absent team, 100 absent projects and
+240 ghost grants. Alternating lost acknowledgments still converge: 1360 filtered
+Reads and 106 Writes in total, with a maximum of 13 Reads per supported orphan
+batch. A malformed ghost with 161 parent links blocks after six Reads and no Write.
+These counts include retry work; no orphan contributes to the SQL space counter.
 Eight concurrent receipt retries in a separate two-space fixture returned one UUID
 in 165 ms. These are service elapsed times, not isolated lock-hold measurements or
 throughput guarantees. Forced lock waiters verify ordering and retirement rechecks;
 atomic subtree acceptance holds its locks for the whole discovery and commit.
+
+Batch counts also determine scheduled latency: one successful batch per operation
+per sweep means nested folder depth, tuple pages and descendant space count add
+intervals after retention expires. `batch_size` bounds candidate operations, not
+batches completed for one operation. The [operations chapter](A3-manager-operations.md#space-deletion-lifecycle)
+gives the completion-time model and the 15-level folder example. The millisecond
+fixture above invokes batches directly; it does not measure scheduled completion
+with the default PT10M interval.
 
 ## Generated HTTP contract
 
@@ -444,7 +466,7 @@ Generated from the `// Proves:` markers.
 | I21 | `apps/fred-manager/tests/integration.rs::import_cli_is_read_only_until_authorized_and_requires_initialized_state`<br>`apps/fred-manager/tests/integration.rs::organization_owners_name_admins_and_read_nothing`<br>`apps/fred-manager/tests/integration.rs::owner_grants_require_directory_identity_and_deleted_owners_can_be_revoked`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_owner_identity_before_publishing_spaces`<br>`apps/fred-manager/tests/integration.rs::import_checks_distinct_owners_once_with_bounded_concurrency` |
 | I22 | `apps/fred-manager/tests/integration.rs::content_http_waiters_recheck_existence_after_deletion`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once` |
 | I23 | `apps/fred-manager/tests/integration.rs::concurrent_attachments_choose_one_organization_and_creation_cannot_bypass_it`<br>`apps/fred-manager/tests/integration.rs::a_late_attachment_cannot_publish_after_assignment_elsewhere`<br>`apps/fred-manager/tests/integration.rs::ambiguous_legacy_context_fails_closed_and_remains_repairable`<br>`apps/fred-manager/tests/integration.rs::import_rejects_cross_organization_declarations_before_identity_writes`<br>`apps/fred-manager/tests/integration.rs::organization_context_exhausts_pages_and_grant_budget_includes_global_fencing`<br>`apps/fred-manager/tests/integration.rs::business_http_checks_context_while_platform_metadata_stays_available`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_attachment_after_preflight_against_a_waiting_grant`<br>`apps/fred-manager/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/fred-manager/tests/integration.rs::personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait`<br>`apps/fred-manager/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/fred-manager/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics`<br>`apps/fred-manager/tests/support/resource_browsing.rs::organization_placement_reads_overlap_with_a_bounded_request_budget`<br>`apps/fred-manager/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once` |
-| I24 | `apps/fred-manager/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_filtered_batches_lost_ack_and_unrelated_state`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_migration_preserves_existing_spaces_and_folders` |
+| I24 | `apps/fred-manager/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_filtered_batches_lost_ack_and_unrelated_state`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_migration_preserves_existing_spaces_and_folders`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_aborted_creation_graph_does_not_block_cleanup`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_orphan_pages_keep_anchors_through_lost_acknowledgments`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_orphans_cannot_expand_the_committed_manifest_or_depth` |
 <!-- end generated -->
 
 Provisioning tests inject failures before/after real FGA writes, fail deferred SQL commits,

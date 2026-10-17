@@ -195,7 +195,7 @@ impl Bundle {
             }
             for raw in raw {
                 if !name(&raw.reference)
-                    || !name(&raw.name)
+                    || !crate::domain::valid_space_name(&raw.name)
                     || references.contains_key(&raw.reference)
                 {
                     return Err(Invalid);
@@ -432,6 +432,29 @@ mod tests {
             assert_eq!(b.spaces[2].roles["alice"], [Role::Admin]);
             assert_eq!(b.spaces[1].parent, Some(0));
             assert_eq!(b.spaces[2].parent, Some(1));
+        }
+    }
+    #[test]
+    fn space_names_share_the_creation_contract_without_folder_path_rules() {
+        for file in ["organizations.json", "teams.json", "projects.json"] {
+            for (name, valid) in [
+                ("".to_owned(), false),
+                ("  ".into(), false),
+                ("a\nb".into(), false),
+                ("é".repeat(181), false),
+                ("é".repeat(180), true),
+                (" R&D / TSN ".into(), true),
+            ] {
+                let mut f = files();
+                let mut value: serde_json::Value = serde_json::from_slice(&f[file]).unwrap();
+                value[0]["name"] = name.clone().into();
+                f.insert(file.into(), serde_json::to_vec(&value).unwrap());
+                let result = Bundle::parse(&pack(&f, zip::CompressionMethod::Stored));
+                assert_eq!(result.is_ok(), valid, "{file}: {name:?}");
+                if let Ok(bundle) = result {
+                    assert!(bundle.spaces.iter().any(|space| space.name == name));
+                }
+            }
         }
     }
     #[test]

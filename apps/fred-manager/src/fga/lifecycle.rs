@@ -6,7 +6,7 @@ use super::*;
 
 pub(crate) struct References {
     pub keys: Vec<Value>,
-    pub incoming: Vec<Uuid>,
+    pub incoming: Vec<(Uuid, bool)>,
 }
 impl Fga {
     async fn page(&self, filter: Value, token: &str) -> Result<(Vec<StoredKey>, String)> {
@@ -45,8 +45,12 @@ impl Fga {
                 .page(json!({"object":format!("{kind}:"), "user":subject}), "")
                 .await?;
             for key in found {
-                // Every supported inbound reference belongs to another manifest space.
-                incoming.push(space_id(&key.object)?);
+                let personal = match key.relation.as_str() {
+                    "parent" => false,
+                    "organization" => true,
+                    _ => anyhow::bail!("unsupported incoming space relation"),
+                };
+                incoming.push((space_id(&key.object)?, personal));
                 if !keys.iter().any(|k| {
                     k.user == key.user && k.object == key.object && k.relation == key.relation
                 }) {
@@ -62,6 +66,34 @@ impl Fga {
                 .collect(),
             incoming,
         })
+    }
+    /// An orphan has exactly one placement. Do not exhaust malformed link pages
+    /// under lifecycle locks: any second key or continuation already rejects it.
+    pub(crate) async fn orphan_link_matches(
+        &self,
+        child: Uuid,
+        parent: Uuid,
+        personal: bool,
+    ) -> Result<bool> {
+        let expected = if personal { "organization" } else { "parent" };
+        for relation in ["parent", "organization"] {
+            let (keys, token) = self
+                .page(
+                    json!({"object":format!("space:{child}"), "relation":relation}),
+                    "",
+                )
+                .await?;
+            if !token.is_empty()
+                || if relation == expected {
+                    keys.len() != 1 || keys[0].user != format!("space:{parent}")
+                } else {
+                    !keys.is_empty()
+                }
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
     pub(crate) async fn delete_references(
         &self,

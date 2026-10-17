@@ -347,12 +347,35 @@ timeouts default to 5/10 seconds. Sweep cadence, backlog and outages add latency
 due time is an earliest cleanup time. Disabling every worker prevents cleanup and
 pauses its schedule when Temporal is reachable. Settings load at process startup.
 
+A sweep selects at most `batch_size` operations and performs one successful batch
+per selected operation. This is not a throughput limit in folders or tuples per
+minute. For an operation needing `B` successful batches and interval `I`, with no
+backlog, failures or overlap skips, completion after its due time takes roughly
+`delta + (B - 1) * I` plus execution time, where `delta` is the wait for the first
+sweep (normally less than `I`). Retries after ambiguous effects can advance work
+within the same sweep; outages and long sweeps can extend the delay without bound.
+
+Folder batches remove at most 1000 current leaves. A chain of 15 folders therefore
+needs 15 successful folder batches, followed by tuple cleanup and a separate SQL
+space-removal batch. For one space with at most 96 direct tuples, this is at least
+17 batches: about 160-170 minutes after its due time with PT10M, before additional
+backlog or failure delay. Descendant spaces add their own batches. A person's
+organization attachment persists while their direct roles on remaining retired
+rows exist; it can end before the whole operation completes. Names remain reserved
+until their corresponding SQL rows are removed.
+
 Deploy API/worker with lifecycle disabled; replace every API replica and operator
 producer with retirement-aware binaries, verify compatible schema/model and worker,
 then activate all affected processes. An old producer must never write retired
 state. Old binaries reject the new model publication even after draining requests;
 rollback requires coordinated pre-activation SQL/OpenFGA restoration with all
 producers stopped. Prefer a forward fix. See the [migration note](../swift/ops/migrations/manager-space-deletion.md).
+
+Cleanup also drains SQL-absent descendants left by aborted creations or imports
+when they remain linked to the retired space. It removes their grants and descendants
+before removing the placement link in a separate batch. These extra batches add
+sweep intervals but do not increment `spaces_deleted`. No global orphan scan runs;
+committed spaces outside the retired manifest are preserved.
 
 Inspect safe errors through the receipt. `unsupported_documents` requires resolving
 unexpected document metadata through its owning lifecycle; `unexpected_reference`

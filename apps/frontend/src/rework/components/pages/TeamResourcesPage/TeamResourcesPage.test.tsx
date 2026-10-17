@@ -159,6 +159,11 @@ it("hides cached rows on re-entry, distinguishes refusals from errors and emptin
   await flush();
   expect(host.textContent).toContain("rework.resources.managerRead.denied");
   expect(host.textContent).not.toContain("rework.resources.empty.folder");
+  reply = async () => json({ detail: "space is pending deletion" }, 409);
+  await click("rework.bootstrap.reload");
+  expect(host.textContent).toContain("rework.resources.managerRead.denied");
+  expect(host.textContent).not.toContain("rework.resources.managerRead.unavailable");
+  expect(host.textContent).not.toContain("Document 0");
   reply = async () => json({ detail: "failed" }, 500);
   await click("rework.bootstrap.reload");
   expect(host.textContent).toContain("rework.resources.managerRead.unavailable");

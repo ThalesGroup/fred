@@ -44,7 +44,13 @@ An organization is a root. A team belongs to one organization; a project belongs
 to one non-personal team. A personal space is a team with one owner, no parent and
 no project; its organization manages it. Names are unique among siblings and among
 organizations; identically named teams in different organizations remain different
-spaces. Placement is immutable; names can change.
+spaces. Placement is immutable.
+
+API creation, `create-org` and ZIP declarations accept nonblank names of 1..180
+Unicode scalar values without control characters. Spaces and slashes are preserved;
+these labels are not folder paths. Invalid API names return 422, invalid CLI names
+fail before persistence, and invalid ZIP declarations are rejected before external
+writes. Existing names are not rewritten.
 
 Editor, admin and analyst reach every descendant space; member stays local. An
 analyst of an organization therefore sees all its teams and projects, and a

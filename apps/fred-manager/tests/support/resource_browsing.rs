@@ -526,3 +526,95 @@ async fn folder_creation_governance_contract_and_request_budget() {
     let count:i64 = sqlx::query_scalar("select count(*) from folder where name in ('forbidden','foreign','foreign-org','revoked','revoked-waiter','too-deep')").fetch_one(&e.pool).await.unwrap();
     assert_eq!(count, 0);
 }
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn folder_rename_preserves_creation_name_rules() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let temporal = temporal::Temporal::start().await;
+    let app = content_app(&e, &identity, &temporal).await;
+    let folder = spaces::create_folder(&e.pool, &e.fga, "alice", org.id, None, "Original".into())
+        .await
+        .unwrap();
+    let path = format!("/folders/{}", folder.id);
+    for name in [
+        "".into(),
+        "  ".into(),
+        "a/b".into(),
+        "a\\b".into(),
+        "a\nb".into(),
+        "é".repeat(256),
+    ] {
+        let body = serde_json::json!({"name":name}).to_string();
+        assert_eq!(
+            content_request(app.clone(), &identity.token("alice"), "PATCH", &path, &body).await,
+            422
+        );
+        assert_eq!(
+            db::folder(&e.pool, folder.id).await.unwrap().name,
+            "Original"
+        );
+    }
+    let name = "é".repeat(255);
+    assert_eq!(
+        content_request(
+            app,
+            &identity.token("alice"),
+            "PATCH",
+            &path,
+            &serde_json::json!({"name":format!("  {name}  ")}).to_string()
+        )
+        .await,
+        204
+    );
+    let renamed = db::folder(&e.pool, folder.id).await.unwrap();
+    assert_eq!(renamed.name, name);
+    assert_eq!(renamed.path, folder.path);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn space_names_match_operator_and_http_creation_contracts() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let identity = support::IdentityServer::start().await;
+    let temporal = temporal::Temporal::start().await;
+    let app = content_app(&e, &identity, &temporal).await;
+    for name in ["".into(), "  ".into(), "a\nb".into(), "é".repeat(181)] {
+        assert!(matches!(
+            spaces::create_organization(&e.pool, &e.fga, &name, "bob").await,
+            Err(AppError::Unprocessable(_))
+        ));
+        for (kind, parent) in [("team", org.id), ("project", team.id)] {
+            let body =
+                serde_json::json!({"kind":kind,"parent_id":parent,"name":name,"admin":"alice"})
+                    .to_string();
+            assert_eq!(
+                content_request(
+                    app.clone(),
+                    &identity.token("alice"),
+                    "POST",
+                    "/spaces",
+                    &body
+                )
+                .await,
+                422
+            );
+        }
+    }
+    assert!(e.fga.roles_of("bob").await.unwrap().is_empty());
+    let name = format!(" /{} ", "é".repeat(177));
+    let other = spaces::create_organization(&e.pool, &e.fga, &name, "bob")
+        .await
+        .unwrap();
+    assert_eq!(other.name, name);
+    let body = serde_json::json!({"kind":"team","parent_id":org.id,"name":name,"admin":"alice"})
+        .to_string();
+    assert_eq!(
+        content_request(app, &identity.token("alice"), "POST", "/spaces", &body).await,
+        201
+    );
+}

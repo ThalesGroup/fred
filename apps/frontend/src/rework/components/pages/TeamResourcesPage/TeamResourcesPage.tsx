@@ -191,7 +191,7 @@ function ResourcePage({
   const errors = [folders.error, documents.error].filter(Boolean);
   const failed = errors.length > 0;
   const status = (code: number) => errors.some((e) => e && "status" in e && e.status === code);
-  const errorKey = status(403) ? "denied" : status(404) ? "missing" : "unavailable";
+  const errorKey = status(403) || status(409) ? "denied" : status(404) ? "missing" : "unavailable";
   const docs = documents.currentData?.slice(0, PAGE_SIZE) ?? [];
   const rows: (Folder | Document)[] =
     loading || failed ? [] : [...(page === 0 ? (folders.currentData ?? []) : []), ...docs];

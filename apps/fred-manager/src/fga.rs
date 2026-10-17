@@ -29,6 +29,7 @@ use crate::{
 };
 
 mod lifecycle;
+pub(crate) use lifecycle::References;
 /// The single platform object holding platform roles.
 mod migration;
 

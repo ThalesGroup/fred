@@ -28,6 +28,11 @@ pub enum SpaceKind {
     Project,
 }
 
+/// Space labels preserve their spelling (including slashes); they are not paths.
+pub(crate) fn valid_space_name(name: &str) -> bool {
+    !name.trim().is_empty() && name.chars().count() <= 180 && !name.chars().any(char::is_control)
+}
+
 /// What SQL stores about a space. Its placement lives in OpenFGA links.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SpaceRow {

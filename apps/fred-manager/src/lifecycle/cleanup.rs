@@ -11,7 +11,7 @@ use crate::{
     spaces,
 };
 use chrono::Utc;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 pub async fn candidates(pool: &PgPool, limit: u32) -> AppResult<Vec<Uuid>> {
@@ -56,13 +56,13 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
     );
     spaces::lock_organization(&mut tx, &organization).await?;
     let mut guard = fga.guard(&[Scope::Platform]).await?;
-    let row: Option<(Uuid, SpaceKind)> = sqlx::query_as(
-        "select id, kind from space where deletion_id = $1 order by kind desc, id limit 1",
+    let row: Option<(Uuid, SpaceKind, bool)> = sqlx::query_as(
+        "select id, kind, personal_owner is not null from space where deletion_id = $1 order by kind desc, id limit 1",
     )
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((space, kind)) = row else {
+    let Some((space, kind, personal)) = row else {
         return Err(anyhow::anyhow!("incomplete deletion lost its manifest").into());
     };
     sqlx::query("update space_deletion set status = 'running', last_visit = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
@@ -82,24 +82,8 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
             .bind(id)
             .fetch_one(&mut *tx)
             .await?;
-    let incoming: i64 =
-        sqlx::query_scalar("select count(*) from space where id = any($1) and deletion_id = $2")
-            .bind(&refs.incoming)
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
     let error = if docs {
         Some("unsupported_documents")
-    } else if incoming
-        != refs
-            .incoming
-            .iter()
-            .collect::<std::collections::BTreeSet<_>>()
-            .len() as i64
-    {
-        Some("unexpected_reference")
-    } else if !refs.incoming.is_empty() {
-        Some("unexpected_hierarchy")
     } else if !guard_present
         && !(kind == SpaceKind::Organization && manifest_count == 1 && refs.keys.is_empty())
     {
@@ -113,6 +97,22 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
             .bind(code)
             .execute(&mut *tx)
             .await?;
+        tx.commit().await?;
+        return Ok(());
+    }
+    if !refs.incoming.is_empty() {
+        match orphan_batch(&mut tx, fga, id, space, kind, personal, refs).await? {
+            OrphanBatch::Delete(keys) => fga.delete_references(&mut guard, keys).await?,
+            OrphanBatch::Blocked(code) => {
+                sqlx::query(
+                    "update space_deletion set status = 'blocked', error_code = $2 where id = $1",
+                )
+                .bind(id)
+                .bind(code)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
         tx.commit().await?;
         return Ok(());
     }
@@ -172,4 +172,71 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
         tracing::info!(target:"fred.security.audit", audit_event="space.deletion.completed", operation_id=%id, space_id=%receipt.target_id, actor_uid=receipt.actor_subject, "Space deletion completed");
     }
     Ok(())
+}
+
+enum OrphanBatch {
+    Delete(Vec<serde_json::Value>),
+    Blocked(&'static str),
+}
+
+/// Keep each parent link until its SQL-absent subtree is empty, so retries can
+/// rediscover work after either store loses an acknowledgment. No global scan.
+async fn orphan_batch(
+    tx: &mut Transaction<'_, Postgres>,
+    fga: &Fga,
+    operation: Uuid,
+    mut parent: Uuid,
+    mut kind: SpaceKind,
+    mut personal: bool,
+    mut refs: crate::fga::References,
+) -> AppResult<OrphanBatch> {
+    loop {
+        let ids: Vec<_> = refs.incoming.iter().map(|(id, _)| *id).collect();
+        let committed: Vec<Option<Uuid>> =
+            sqlx::query_scalar("select deletion_id from space where id = any($1)")
+                .bind(&ids)
+                .fetch_all(&mut **tx)
+                .await?;
+        if !committed.is_empty() {
+            return Ok(OrphanBatch::Blocked(
+                if committed.iter().any(|id| *id != Some(operation)) {
+                    "unexpected_reference"
+                } else {
+                    "unexpected_hierarchy"
+                },
+            ));
+        }
+        // The supported hierarchy bounds this loop to team then project. Personal
+        // spaces and projects cannot have children; cycles fail closed here too.
+        if personal
+            || kind == SpaceKind::Project
+            || (kind == SpaceKind::Team && refs.incoming.iter().any(|(_, personal)| *personal))
+        {
+            return Ok(OrphanBatch::Blocked("unexpected_hierarchy"));
+        }
+        let (child, is_personal) = refs.incoming[0];
+        if !fga.orphan_link_matches(child, parent, is_personal).await? {
+            return Ok(OrphanBatch::Blocked("unexpected_hierarchy"));
+        }
+        refs = fga.references(child).await?;
+        if refs.incoming.is_empty() {
+            let anchor = serde_json::json!({"object":format!("space:{child}"),
+                "relation":if is_personal {"organization"} else {"parent"},
+                "user":format!("space:{parent}")});
+            let keys: Vec<_> = refs.keys.into_iter().filter(|key| *key != anchor).collect();
+            // Removing the anchor last preserves reachability through arbitrarily
+            // many grant pages, including after a committed write times out.
+            return Ok(OrphanBatch::Delete(if keys.is_empty() {
+                vec![anchor]
+            } else {
+                keys
+            }));
+        }
+        kind = match kind {
+            SpaceKind::Organization => SpaceKind::Team,
+            _ => SpaceKind::Project,
+        };
+        parent = child;
+        personal = is_personal;
+    }
 }

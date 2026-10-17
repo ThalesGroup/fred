@@ -63,8 +63,8 @@ have no separate ACL, sharing grant or role inheritance tree.
 | Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | SQL foreign keys refuse a folder with child folders/documents |
 | Create document metadata - `POST /documents` | No | Yes | No | No | Same-space folder; does not upload or ingest bytes |
 | Rename a document - `PATCH /documents/{id}` | No | Yes | No | No | Name changes; owning space/folder stay immutable |
-| Delete a document - `DELETE /documents/{id}` | No | Yes | No | No | Submit artifact erasure to Temporal before deleting SQL metadata |
-| Submit document ingestion - `POST /documents/{id}/ingest` | No | Yes | No | No | Requires successful Temporal workflow submission |
+| Delete a document - `DELETE /documents/{id}` | No | Yes | No | No | Submit a workflow before deleting SQL metadata; artifact erasure is not established |
+| Submit document ingestion - `POST /documents/{id}/ingest` | No | Yes | No | No | Requires successful submission; no compatible ingestion worker in this repository |
 | Resolve search scope - `POST /authorize/scope` | Yes, local | Yes | No | Yes | Read on requested space; returns it and ancestors, never descendants; personal returns itself; optional levels only narrow |
 
 The manager Resources UI exposes listing, navigation and folder creation. Other
@@ -212,6 +212,7 @@ platform-owner capability; local space roles confer no deletion authority.
 
 | Concern | Python contract | Manager Rust contract |
 | --- | --- | --- |
+| Platform admission | Configurable platform-access filtering and admission sources | Verified personal issuer credential and CGU; no evaluation of the Python admission policy |
 | Space deletion | Technical team deletion is synchronous; member removal queues conversations separately | Platform owner retires a complete space scope; Rust Temporal cleans SQL/OpenFGA after retention |
 | Admin and corpus read | `team_admin` implies team membership and reads team-owned tags | `admin` alone grants no content read |
 | Hierarchical authority | No equivalent organization/team/project inheritance tree | `editor`, `admin`, `analyst` descend through non-personal spaces |
@@ -219,6 +220,7 @@ platform-owner capability; local space roles confer no deletion authority.
 | Platform ownership | Bootstrap root alone manages platform admins; root is protected | Every platform owner manages owners; root can be revoked while another owner remains |
 | Admin activation | A configured active administrator charter not yet accepted produces a pending admin; otherwise activation is immediate | Admin grant is active immediately; personal CGU is a distinct gate |
 | Removal of final elevated role | Keeps a direct team-member grant | Removes the exact grant; no implicit demotion; dependency/last-admin protections apply |
+| Space names | Team create/rename trims names after enforcing 1..180 characters | Creation/import use 1..180 characters, reject blanks and controls, and preserve spelling including outer spaces; existing import name matching remains exact |
 | Folder/document rights | Tag owner/editor/viewer grants and parent inheritance | One content authority per owning space; no folder/document-specific grants |
 | Nested folder creation | Parent update authority can suffice without team-editor role | Write on the owning space is always required |
 | Personal folder creation | Personal tag branch has no personal-space entitlement check | Personal space is first created under explicit eligibility; its editor grant authorizes folders |

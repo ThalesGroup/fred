@@ -319,7 +319,13 @@ stateDiagram-v2
 `POST /documents` registers a document and returns its `storage_prefix`
 (`<space_id>/<document_id>/`) and `source_key` (`<prefix>source`). Workflow ids are
 `ingest-<document_id>` and `delete-<document_id>`: a second ingestion while one runs
-answers 409.
+answers 409. These routes expose submission and metadata registration only. The
+repository supplies no worker implementing these two workflow types on this queue,
+and `source_key` is a storage address, not an upload URL or an upload API. A Temporal
+acceptance therefore does not establish ingestion or artifact erasure. Submissions
+set no workflow execution timeout; without a compatible worker, a workflow can
+remain pending and later ingestion attempts return 409 until it is terminated or
+processed externally.
 
 ```mermaid
 sequenceDiagram
@@ -345,7 +351,8 @@ SQL mutation or Temporal submission. The lock remains held through submission an
 SQL commit. The extra existence read does not add an OpenFGA call.
 
 Deletion submits `DeleteDocument {document_id, space_id, storage_prefix}` before
-deleting the row, so a failure leaves a retryable document rather than orphaned chunks.
+deleting the row. A submission failure preserves the document row; successful
+submission does not prove that any stored artifact was deleted.
 
 
 ## Platform administration and self checks
