@@ -557,3 +557,17 @@ Owns: `analysis.py` (`_placeholder_key`, `kicker_keys`, `_records`, step 2 of th
 - [x] 51.2 A text zone left empty is removed, placeholder or text box. Test: a navy panel box beside the body, given nothing (fails before: emptied but drawn)
 - [x] 51.3 Reproduced and re-rendered on the original Thales template (slide 12) and the showcase decks (`~/fred-tmp/bugfix-1017/`), PNG looked at
 
+## WP52. Builder fixes from the revision evals (owner decision 2026-10-17 overnight, design D31)
+
+Owns: `plan.py` (`single_columns`), `changes.py` (`_not_a_list`, one edit per field, `after_the_cover`, `deck_delta`), `assign.py` (`_dropped_text`, `_one_point_over_columns`), `render.py` (`column_split`, closing body, unnumbered closing, `_figure_heading`, `_plain_symbol_bullets`), `tools.py` (cover note, delta line), tests, delta spec, `verification.md`.
+
+- [x] 52.1 `columns` sent as one object is refused with the list form; an edit of a list of objects with one object, and two edits of one field of one slide, are refused. Tests: `test_columns_sent_as_one_object_are_a_problem_not_one_column`, `test_an_edit_of_a_whole_list_with_one_object_is_refused`, `test_two_edits_of_one_field_on_one_slide_are_refused`
+- [x] 52.2 Bullets on a two-column slide split at a top-level point; one point with sub-points is a misfit there. Test: `test_bullets_over_two_columns_keep_each_point_with_its_sub_points`
+- [x] 52.3 An insert at `after` 0 of a deck opening on its cover goes after the cover, with a note. Test: `test_an_insert_at_the_start_goes_after_the_cover`
+- [x] 52.4 Wingdings 3 bullets drawn as `►` in the preview copy only. Test: `test_preview_copy_draws_wingdings_3_bullets_the_delivered_deck_keeps`
+- [x] 52.5 A closing's lone body holds its bullets; a closing on a section slide is unnumbered. Test: `test_a_closing_holds_its_bullets_and_on_a_section_slide_takes_no_number`
+- [x] 52.6 A key figure's label reads under its heading when the card has no label zone. Test: `test_a_figures_label_reads_under_its_heading_without_a_label_zone`
+- [x] 52.7 The delivery names the slides changed, added and removed since the previous delivered deck. Tests: `test_the_delta_names_changed_added_and_removed_slides`, `test_a_revision_result_says_which_slides_changed`
+- [x] 52.8 Eval calls replayed offline and rendered by LibreOffice (`~/fred-tmp/revision-evals/fixes/`), PNG looked at; package checks; `openspec validate --strict`
+- Not changed: parallel build calls (already one build per round and a per-tool lock; the 4-slide deck was the model splitting its deck); a corrected `changes` resend whose shape changed applies to the refused plan (default r14 `after` 0 → 1); the built-in matrix's axis labels read as `columns.bullets×3 1 short word` (analysis)
+

@@ -725,10 +725,38 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 - **WHEN** the plan gives no `number` for them
 - **THEN** each shows its place among the deck's section slides (01, 02…), written as the zone's example writes it (zero-padded when the example is); a `number` the plan gives is shown as is; a number on a slide without a number zone is not lost content
 
+#### Scenario: Columns sent as one object
+
+- **WHEN** a slide's `columns` is one object instead of a list (in `slides`, or as a `changes` edit value)
+- **THEN** nothing is built: a `slides` call gets `needs_revision` with `columns sent as one object, not a list` and the list form as its option; an edit of a list field with one object is refused, naming the whole list or `columns[i]` as the fix
+- **AND** two edits of the same field of one slide in one call are refused, since the second would replace the first
+
 #### Scenario: Malformed plan from the model
 
 - **WHEN** the plan has wrong JSON shapes (a bullet list as one string, a field under an alias or given twice, a non-object entry)
 - **THEN** the tool coerces what it can without losing text, a non-object entry is named in the result, and a key it cannot map is a `needs_revision` problem
+
+#### Scenario: Bullets over two columns keep each point with its sub-points
+
+- **WHEN** a slide's `bullets` land on a two-column slide (two body zones)
+- **THEN** the list is split at the top-level point nearest its middle, so a point and its `- ` sub-points stay in one column; a flat list splits in half, the first column the longer
+- **AND** a list that is one point with its sub-points does not fit a two-column slide (`bullets: one point with its sub-points cannot be split over this slide's two columns`), so a one-column slide holds it
+
+#### Scenario: A closing's single text box holds its bullets
+
+- **WHEN** a closing slide's only free text zone is one body and the plan gives it several bullets
+- **THEN** the bullets go in that body as a list, as its catalogue room says, instead of one bullet per box (which suits contact details)
+- **AND** a closing shown on a section slide (no closing fits) gets no section number and does not count among the deck's sections
+
+#### Scenario: A key figure's label under its heading
+
+- **WHEN** a `figures` slide's cards have a number and a heading zone but no label zone, and an item gives `label`
+- **THEN** the label is a line under the item's heading, never refused as content with no place
+
+#### Scenario: Symbol bullets LibreOffice cannot show
+
+- **WHEN** the template draws a bullet in Wingdings 3, which LibreOffice cannot recode
+- **THEN** the preview copy draws it as `►` in Arial; the delivered `.pptx` keeps the template's glyph
 
 ### Requirement: Tables fill the template's table
 
@@ -915,3 +943,16 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 - **WHEN** the user says a slide should be another kind of slide
 - **THEN** the agent rebuilds the deck with that slide's `kind` changed, and the stored analysis and overrides are unchanged
+
+#### Scenario: An insert before the cover
+
+- **GIVEN** a delivered deck that opens on the template's cover
+- **WHEN** a `changes` call inserts non-cover slides with `after` 0
+- **THEN** they go after the cover (as `after` 1), the deck is built, and the result says so
+
+#### Scenario: The result names what changed
+
+- **GIVEN** a deck delivered earlier in the conversation
+- **WHEN** a new deck is delivered (by `changes` or a `slides` resend)
+- **THEN** the result lists the slides of the new file that changed (content or design) or were added, the previous deck's slides removed, and how many stayed unchanged
+
