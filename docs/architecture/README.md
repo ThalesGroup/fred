@@ -47,3 +47,9 @@ source code; they are references, not another handwritten API specification.
 The [branch workflow](../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac)
 sets review and commit requirements. New domain chapters start with headings;
 verified explanations replace the headings' empty bodies as their scope is documented.
+
+For a repeatable independent review of the Rust reconstruction, use
+[`audit-fred-manager`](../../.agents/skills/audit-fred-manager/SKILL.md). It checks
+implemented manager behavior against this dossier and affected Fred contracts,
+with explicit coverage and exclusions. It does not audit the whole platform or
+treat future migration features as defects.

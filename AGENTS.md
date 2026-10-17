@@ -116,6 +116,12 @@ feature validation before running tests.
 
 ## fred-manager reconstruction on chore/rust-rebac
 
+For a reconstruction audit, use
+[`audit-fred-manager`](.agents/skills/audit-fred-manager/SKILL.md). It scopes the
+independent review to implemented manager responsibilities, affected consumers and
+arc42 conformity. It does not claim full-Fred or full-PR readiness. The generic
+branch review below remains applicable to a full PR readiness request.
+
 Rebuild Fred's Python behavior in Rust one complete feature at a time, using
 the organization/team/project model. For each feature, inventory the existing
 roles, permissions, edge cases and configuration, logging and security
