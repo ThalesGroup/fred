@@ -993,8 +993,12 @@ def test_builtin_process_with_three_steps_drops_the_fourth():
         inventory=inventory,
     )
     texts = _texts(deck.slides[0])
-    assert sorted(texts) == ["Deux", "Trois", "Trois étapes", "Un"] + ["Une phrase"] * 3
-    assert "Check and deliver" not in texts
+    # The layout's step tiles come onto the slide so the fourth can go; the
+    # slide number field comes with them.
+    assert sorted(texts) == ["1", "2", "3", "Deux", "Trois", "Trois étapes", "Un"] + [
+        "Une phrase"
+    ] * 3 + ["‹#›"]
+    assert "Check and deliver" not in texts and "4" not in texts
     # Recentred placeholders keep the height their layout gave them.
     tops = {
         cast(Any, p.shape).text_frame.text: p.top

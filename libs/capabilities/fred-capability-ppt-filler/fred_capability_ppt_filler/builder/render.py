@@ -59,6 +59,7 @@ from fred_capability_ppt_filler.builder import (
 from fred_capability_ppt_filler.builder.analysis import (
     _cell_text,
     _font_name_of,
+    _has_chrome_field,
     estimate_capacity,
     kicker_keys,
     theme_fonts,
@@ -254,26 +255,199 @@ def _copy_relationships(
     return rid_map
 
 
+def _clone_shape(element, rid_map: Mapping[str, str]):
+    clone = copy.deepcopy(element)
+    for node in list(clone.iter()):
+        # Every relationship-namespace attribute, not a fixed list.
+        for attr, old in list(node.attrib.items()):
+            if not attr.startswith(_R_NS) or not old:
+                continue
+            if old in rid_map:
+                node.set(attr, rid_map[old])
+            elif node.tag in _DROPPED_LINKS:
+                parent = node.getparent()
+                if parent is not None:
+                    parent.remove(node)
+                break
+            else:
+                del node.attrib[attr]
+    return clone
+
+
 def _copy_shapes(source_tree, dest_tree, rid_map: Mapping[str, str]) -> None:
     for element in source_tree:
         if element.tag in (qn("p:nvGrpSpPr"), qn("p:grpSpPr")):
             continue
-        clone = copy.deepcopy(element)
-        for node in list(clone.iter()):
-            # Every relationship-namespace attribute, not a fixed list.
-            for attr, old in list(node.attrib.items()):
-                if not attr.startswith(_R_NS) or not old:
-                    continue
-                if old in rid_map:
-                    node.set(attr, rid_map[old])
-                elif node.tag in _DROPPED_LINKS:
-                    parent = node.getparent()
-                    if parent is not None:
-                        parent.remove(node)
-                    break
-                else:
-                    del node.attrib[attr]
-        dest_tree.append(clone)
+        dest_tree.append(_clone_shape(element, rid_map))
+
+
+def _drawn_shapes(owner) -> List[Any]:
+    """The top-level shapes ``owner`` (a layout or master) draws on every slide:
+    not its placeholders, which a slide only shows through its own."""
+    return [
+        element
+        for element in owner.shapes._spTree
+        if element.tag not in (qn("p:nvGrpSpPr"), qn("p:grpSpPr"))
+        and element.find(f".//{qn('p:ph')}") is None
+    ]
+
+
+def _lift_layout_graphics(slide) -> set[int]:
+    """Copy the graphics the layout (and its master, unless the layout hides
+    them) draws onto the slide, behind its own shapes, and hide the originals:
+    a frame drawn there for an unused item can then go like the slide's own.
+    Returns the shape ids of the copies."""
+    layout = slide.slide_layout
+    owners = [layout]
+    if layout._element.get("showMasterSp") != "0":
+        owners.insert(0, layout.slide_master)
+    tree = slide.shapes._spTree
+    next_id = max((int(n.get("id", 0)) for n in tree.iter(qn("p:cNvPr"))), default=0)
+    at = sum(1 for child in tree if child.tag in (qn("p:nvGrpSpPr"), qn("p:grpSpPr")))
+    lifted: set[int] = set()
+    for owner in owners:
+        rid_map = _copy_relationships(owner.part, slide.part)
+        for element in _drawn_shapes(owner):
+            clone = _clone_shape(element, rid_map)
+            for node in clone.iter(qn("p:cNvPr")):
+                next_id += 1
+                node.set("id", str(next_id))
+            top = clone.find(f".//{qn('p:cNvPr')}")
+            if top is not None:
+                lifted.add(int(top.get("id")))
+            tree.insert(at, clone)
+            at += 1
+    slide._element.set("showMasterSp", "0")
+    return lifted
+
+
+_Box = Tuple[int, int, int, int]
+
+
+def _merge_boxes(boxes: Sequence[_Box]) -> _Box:
+    return (
+        min(b[0] for b in boxes),
+        min(b[1] for b in boxes),
+        max(b[2] for b in boxes),
+        max(b[3] for b in boxes),
+    )
+
+
+def _side_by_side(a: _Box, b: _Box) -> bool:
+    """Two items on one row or one column (half the smaller side shared)."""
+    rows = min(a[3], b[3]) - max(a[1], b[1])
+    cols = min(a[2], b[2]) - max(a[0], b[0])
+    return rows * 2 >= min(a[3] - a[1], b[3] - b[1]) or cols * 2 >= min(
+        a[2] - a[0], b[2] - b[0]
+    )
+
+
+def _mark_of(box: _Box, reach: Sequence[_Box]) -> Optional[int]:
+    """The item a small mark sits just above, under or beside (a numbered tile
+    over a column): in line with it and nearer than its own size, and nearer
+    to it than to any other item."""
+    found: List[Tuple[int, int]] = []
+    for index, item in enumerate(reach):
+        cols = min(box[2], item[2]) - max(box[0], item[0])
+        rows = min(box[3], item[3]) - max(box[1], item[1])
+        if cols * 2 >= box[2] - box[0]:
+            gap, own = max(item[1] - box[3], box[1] - item[3]), box[3] - box[1]
+        elif rows * 2 >= box[3] - box[1]:
+            gap, own = max(item[0] - box[2], box[0] - item[2]), box[2] - box[0]
+        else:
+            continue
+        side = min(item[2] - item[0], item[3] - item[1])
+        if 0 <= gap <= min(own, side // 4):
+            found.append((gap, index))
+    found.sort()
+    if not found or (len(found) > 1 and found[1][0] == found[0][0]):
+        return None
+    return found[0][1]
+
+
+def _decoration_fate(
+    kept: Sequence[_Box], dropped: Sequence[_Box], decoration: Sequence[_Box]
+) -> List[str]:
+    """``remove``, ``move`` (with the kept items) or ``stay`` per decoration box.
+
+    An item owns the frame drawn around or mostly under it and whatever that
+    frame holds (its icon, its step number); a connector belongs to the two
+    neighbours it joins. Unused items lose what they own and their connectors,
+    and so does anything inside the area they occupied; a shape that also
+    touches another item (a background, a panel behind the row) stays.
+    """
+    items = [(box, True) for box in kept] + [(box, False) for box in dropped]
+
+    def touches(box: _Box, skip: int) -> bool:
+        return any(
+            _covered(box, other) >= 0.2
+            for i, (other, _) in enumerate(items)
+            if i != skip
+        )
+
+    reach = []
+    for index, (item, _) in enumerate(items):
+        frames = [
+            d
+            for d in decoration
+            if (_covered(item, d) >= 0.9 or _covered(d, item) >= 0.5)
+            and not touches(d, index)
+        ]
+        reach.append(_merge_boxes([item, *frames]))
+    area = _merge_boxes(dropped) if dropped else None
+    fates: List[str] = []
+    for box in decoration:
+        owners = [
+            i
+            for i, extent in enumerate(reach)
+            if _covered(box, extent) >= 0.9 and not touches(box, i)
+        ]
+        if len(owners) == 1:
+            fates.append("move" if items[owners[0]][1] else "remove")
+            continue
+        joined = [
+            (i, j)
+            for i in range(len(items))
+            for j in range(i + 1, len(items))
+            if _side_by_side(reach[i], reach[j])
+            and _covered(box, _merge_boxes([reach[i], reach[j]])) >= 0.9
+            # Neighbours only: no other item stands between the two.
+            and not any(
+                _covered(reach[k], _merge_boxes([reach[i], reach[j]])) >= 0.5
+                for k in range(len(items))
+                if k not in (i, j)
+            )
+        ]
+        if len(joined) == 1:
+            i, j = joined[0]
+            fates.append("move" if items[i][1] and items[j][1] else "remove")
+            continue
+        near = _mark_of(box, reach)
+        if near is not None and not touches(box, near):
+            fates.append("move" if items[near][1] else "remove")
+            continue
+        on_dropped = any(_covered(box, b) >= 0.5 for b in dropped)
+        inside = area is not None and _covered(box, area) >= 0.9
+        if (on_dropped or inside) and not any(_covered(box, b) >= 0.2 for b in kept):
+            fates.append("remove")
+        elif any(_covered(box, b) >= 0.5 for b in kept):
+            fates.append("move")
+        else:
+            fates.append("stay")
+    return fates
+
+
+def _layout_draws_for(slide, kept: Sequence[_Box], dropped: Sequence[_Box]) -> bool:
+    """The slide's layout draws a shape for the unused items only (a card
+    frame): left there, it would show empty."""
+    if slide._element.get("showMasterSp") == "0":
+        return False
+    boxes = [
+        _box_of(placed)
+        for placed in walk_shapes(slide.slide_layout.shapes)
+        if len(placed.path) == 1 and not cast(Any, placed.shape).is_placeholder
+    ]
+    return "remove" in _decoration_fate(kept, dropped, boxes)
 
 
 def _copy_notes(source, dest) -> None:
@@ -1589,8 +1763,28 @@ class _Renderer:
                 self.report.note("items_left_out", len(plan.items) - group.count)
             items = _item_shapes(group, index)
             kept, dropped = items[:used], [i for i in items[used:] if i]
+            movers: List[PlacedShape] = []
             if dropped and kept:
-                self._remove_decoration(dropped, kept, index, pattern)
+                kept_boxes = [_union_box(item) for item in kept if item]
+                dropped_boxes = [_union_box(item) for item in dropped]
+                lifted: set[int] = set()
+                if _layout_draws_for(slide, kept_boxes, dropped_boxes):
+                    lifted = _lift_layout_graphics(slide)
+                    index = _shape_index(slide)
+                removed = {id(p.shape._element) for item in dropped for p in item}
+                loose = [
+                    p
+                    for p in self._loose_decoration(index, pattern, lifted)
+                    if id(p.shape._element) not in removed
+                ]
+                fates = _decoration_fate(
+                    kept_boxes, dropped_boxes, [_box_of(p) for p in loose]
+                )
+                for placed, fate in zip(loose, fates):
+                    if fate == "remove":
+                        _remove(placed)
+                    elif fate == "move":
+                        movers.append(placed)
             elif dropped:
                 # Nothing was kept, so nothing anchors the decoration: sweeping
                 # by overlap here takes the slide's own background with it.
@@ -1603,7 +1797,7 @@ class _Renderer:
             for placed in (p for item in dropped for p in item):
                 _remove(placed)
             if kept and dropped:
-                self._recentre_items(kept, dropped, index, pattern)
+                self._recentre_items(kept, dropped, movers)
             self._even_out_item_widths(group, index)
         report.lost.extend(lost)
         if lost:
@@ -1924,7 +2118,7 @@ class _Renderer:
 
     @staticmethod
     def _loose_decoration(
-        index: Dict[str, PlacedShape], pattern: Pattern
+        index: Dict[str, PlacedShape], pattern: Pattern, lifted: Collection[int] = ()
     ) -> List[PlacedShape]:
         """Top-level shapes that carry no content: the icons, card frames and
         connectors a designer draws beside a group rather than inside it."""
@@ -1942,58 +2136,24 @@ class _Renderer:
             if (
                 getattr(shape, "has_text_frame", False)
                 and shape.text_frame.text.strip()
+                and (shape.shape_id not in lifted or _has_chrome_field(shape))
             ):
                 continue
             loose.append(placed)
         return loose
 
-    def _remove_decoration(
-        self,
-        dropped: List[List[PlacedShape]],
-        kept: List[List[PlacedShape]],
-        index: Dict[str, PlacedShape],
-        pattern: Pattern,
-    ) -> None:
-        """Drop the loose decoration drawn with the unused items.
-
-        A shape goes when it sits on one of them, or anywhere inside the area
-        they occupied — a connector between two dropped slots overlaps neither
-        by much and used to be left dangling over an empty half-slide. Anything
-        that also serves a kept item stays, and so does a full-slide background:
-        it reaches beyond the dropped area and touches what was kept.
-        """
-        dropped_boxes = [_union_box(item) for item in dropped]
-        kept_boxes = [_union_box(item) for item in kept if item]
-        removed = [p for item in dropped for p in item]
-        area = (
-            min(b[0] for b in dropped_boxes),
-            min(b[1] for b in dropped_boxes),
-            max(b[2] for b in dropped_boxes),
-            max(b[3] for b in dropped_boxes),
-        )
-        for other in self._loose_decoration(index, pattern):
-            if other in removed:
-                continue
-            box = _box_of(other)
-            on_dropped = any(_covered(box, b) >= 0.5 for b in dropped_boxes)
-            if not on_dropped and _covered(box, area) < 0.9:
-                continue
-            if any(_covered(box, b) >= 0.2 for b in kept_boxes):
-                continue
-            _remove(other)
-
     def _recentre_items(
         self,
         kept: List[List[PlacedShape]],
         dropped: List[List[PlacedShape]],
-        index: Dict[str, PlacedShape],
-        pattern: Pattern,
+        decoration: Sequence[PlacedShape],
     ) -> None:
         """Slide the used items back to the middle of the room the group had.
 
         Four cards of a six-card row left at the designer's coordinates hug the
         left edge with a third of the slide empty beside them. A translation
-        only: the corporate spacing and sizing are untouched.
+        only: the corporate spacing and sizing are untouched. ``decoration``
+        is what was drawn for the kept items (frames, icons, connectors).
         """
         used = [_union_box(item) for item in kept if item]
         whole = used + [_union_box(item) for item in dropped]
@@ -2005,13 +2165,7 @@ class _Renderer:
         )
         if abs(shift_x) < _RECENTRE_MIN_EMU and abs(shift_y) < _RECENTRE_MIN_EMU:
             return
-        # The icons and frames drawn over a kept item belong to it and move with
-        # it; anything else on the slide stays where the designer put it.
-        movers = [p for item in kept for p in item]
-        for other in self._loose_decoration(index, pattern):
-            box = _box_of(other)
-            if any(_covered(box, b) >= 0.5 for b in used):
-                movers.append(other)
+        movers = [p for item in kept for p in item] + list(decoration)
         for placed in movers:
             shape = cast(Any, placed.shape)
             try:
