@@ -749,10 +749,6 @@ def _shrink_trend_glyph(shape, base_pt: Optional[float]) -> None:
         rPr.set("sz", str(max(600, int(size * _GLYPH_SCALE * 100))))
 
 
-def _clear_text(shape) -> None:
-    _write_lines(shape, [])
-
-
 def _set_font_scale(shape, scale: float, base_pt: Optional[float] = None) -> None:
     """Shrink a text frame. With a known base size every run gets an explicit
     scaled size, which every renderer honours; otherwise fall back to
@@ -1854,12 +1850,9 @@ class _Renderer:
                 continue
             lines = text.get(zone.key, [])
             if not lines:
-                # An empty placeholder shows "Click to add text" once the deck
-                # is edited: drop it (the layout can always put it back).
-                if cast(Any, shape).is_placeholder:
-                    _remove(placed)
-                else:
-                    _clear_text(shape)
+                # An empty zone goes: a placeholder would show "Click to add
+                # text", a text box its own fill or outline.
+                _remove(placed)
                 continue
             if zone.role == "number":
                 # "1 200", "62 %", "4,2 M€" never break across lines.

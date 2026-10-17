@@ -66,6 +66,7 @@ from fred_capability_ppt_filler.builder.tools import _issue_line, catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
@@ -1069,6 +1070,32 @@ def test_an_unfilled_placeholder_is_removed_not_left_prompting():
         if not cast(Any, shape).text_frame.text.strip()
     ]
     assert not empty
+
+
+def _filled_panel_slide(presentation):
+    """A body box and, beside it, a second box drawn with its own fill."""
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    cast(Any, slide.shapes.title).text = "Panel slide"
+    for x, w in ((0.5, 5.5), (6.3, 3.2)):
+        box = slide.shapes.add_textbox(Inches(x), Inches(1.5), Inches(w), Inches(4))
+        box.text_frame.text = "Cliquez ici pour ajouter du texte"
+    box.fill.solid()
+    box.fill.fore_color.rgb = RGBColor(0x1E, 0x2A, 0x5A)
+
+
+def test_an_unfilled_text_box_is_removed_with_its_own_fill():
+    template = build_slides([_filled_panel_slide])
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if p.source == "slide")
+    _, deck = _render(
+        _on(pattern, title="Panel slide", bullets=["Only this"]),
+        template=template,
+        inventory=inventory,
+    )
+    # Failed before: the box was emptied but kept, its navy panel still drawn.
+    boxes = [s for s in deck.slides[0].shapes if not s.is_placeholder]
+    assert [s.text_frame.text for s in boxes] == ["Only this"]
 
 
 # --- the remaining ways content or design was quietly lost ---
