@@ -45,7 +45,7 @@ async fn provisioning_browser_journey() {
     let app = axum::Router::new()
         .nest(
             "/fred-manager/v1",
-            api::governance_router(api::GovernanceState {
+            api::governance_router(api::AppState {
                 onboarding: (&config).into(),
                 lifecycle: Default::default(),
                 auth,

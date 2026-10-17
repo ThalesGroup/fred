@@ -61,10 +61,6 @@ have no separate ACL, sharing grant or role inheritance tree.
 | Create a folder - `POST /folders` | No | Yes | No | No | Same-space parent, valid name, depth <= 15, unique sibling name |
 | Rename a folder - `PATCH /folders/{id}` | No | Yes | No | No | Name changes; space, parent and path stay immutable |
 | Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | SQL foreign keys refuse a folder with child folders/documents |
-| Create document metadata - `POST /documents` | No | Yes | No | No | Same-space folder; does not upload or ingest bytes |
-| Rename a document - `PATCH /documents/{id}` | No | Yes | No | No | Name changes; owning space/folder stay immutable |
-| Delete a document - `DELETE /documents/{id}` | No | Yes | No | No | Submit a workflow before deleting SQL metadata; artifact erasure is not established |
-| Submit document ingestion - `POST /documents/{id}/ingest` | No | Yes | No | No | Requires successful submission; no compatible ingestion worker in this repository |
 | Resolve search scope - `POST /authorize/scope` | Yes, local | Yes | No | Yes | Read on requested space; returns it and ancestors, never descendants; personal returns itself; optional levels only narrow |
 
 The manager Resources UI exposes listing, navigation and folder creation. Other
@@ -186,7 +182,7 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 
 `read`, `write` and `manage` answers follow the corresponding space matrices above.
 `/authorize/document` also accepts `manage`: an effective admin can receive true
-without receiving read/write. The folder/document mutation handlers require write,
+without receiving read/write. The folder mutation handlers require write,
 not manage. Platform owner includes the other platform permissions through the
 OpenFGA model; that implication is not a stored grant of every role.
 
@@ -196,12 +192,12 @@ OpenFGA model; that implication is not a stored grant of every role.
 | --- | --- |
 | `create-org <name> <admin-user>` | Shell/configuration access and DB/FGA/Keycloak credentials; no bearer or platform-owner Check. Verifies initial person's IAM existence and organization compatibility, creates organization and initial owner/admin/member grants. |
 | `import-provisioning ... --token-file ...` | Authenticated bearer, CGU, platform owner and compatible directory; same provisioning engine as HTTP. |
-| `serve` | Operator access starts configured services and SQL migrations; the full binary connects to Temporal before binding HTTP. |
+| `serve` | Operator access starts configured services and SQL migrations; HTTP startup does not connect to Temporal. |
 | `generate-openapi` | Offline schema generation, no service credentials needed. |
 | `--help` / `-h` | Local command help. |
 
-Folder creation makes no Temporal call, and the governance router needs no ingestion
-client. This does not remove the full binary's Temporal startup dependency.
+Document metadata has read/probe operations only. Folder operations make no Temporal
+call. The separate lifecycle worker owns the Temporal connection.
 
 ## Differences from the Python contract
 

@@ -204,11 +204,12 @@ class Reset:
                 and fga.get("sync_schema_on_init", True),
                 "custom OpenFGA storage is unsupported",
             )
-            temporal = c.get("scheduler", {}).get("temporal", {})
-            require(
-                temporal.get("host") == "temporal:7233" and temporal.get("namespace", "default") == "default",
-                "custom Temporal storage is unsupported",
-            )
+            if name not in MANAGER_APPS:
+                temporal = c.get("scheduler", {}).get("temporal", {})
+                require(
+                    temporal.get("host") == "temporal:7233" and temporal.get("namespace", "default") == "default",
+                    "custom Temporal storage is unsupported",
+                )
             if name in MANAGER_APPS:
                 lifecycle = c.get("scheduler", {}).get("lifecycle", {}).get("temporal", {})
                 require(

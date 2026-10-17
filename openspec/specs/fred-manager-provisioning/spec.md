@@ -640,14 +640,13 @@ only on its own verified human OIDC identity, never an asserted subject.
 - **WHEN** a platform owner attempts to name an unknown organization owner
 - **THEN** no owner tuple is written and the existing last-owner protection remains effective
 
-### Requirement: Content existence at mutation dispatch
-Document and folder mutations SHALL recheck existence under the organization lock
-before SQL changes or external dispatch. An object deleted while the caller waits
-SHALL return not-found without dispatch or a fabricated mutation success.
+### Requirement: Folder existence at mutation dispatch
+Folder mutations SHALL recheck existence under the organization lock before SQL changes.
+A folder deleted while the caller waits SHALL return not-found without a fabricated mutation success.
 
-#### Scenario: Deletion wins over a waiting ingestion or rename
-- **WHEN** deletion commits while an ingestion or rename waits for the organization lock
-- **THEN** the waiter returns not-found and submits no workflow
+#### Scenario: Deletion wins over a waiting rename
+- **WHEN** deletion commits while a folder rename waits for the organization lock
+- **THEN** the waiter returns not-found and does not mutate a replacement or fabricate success
 
 ### Requirement: Personal space opens in the person's organization
 
@@ -876,7 +875,7 @@ partial retirement. An unknown target SHALL return 404 after authorization.
 ### Requirement: Retirement closes all manager business entry points
 After acceptance, manager SHALL omit the retired scope from business lists and
 refuse direct reads, writes, permission/scope probes, role changes, new descendants,
-ingestion dispatch, provisioning reuse and personal-space reuse in that scope.
+provisioning reuse and personal-space reuse in that scope.
 Mutation waiters SHALL recheck retirement after locking. Requests authorized before
 retirement can finish; retirement SHALL NOT authorize new content access.
 Names and personal-space slots SHALL remain reserved until physical cleanup.
@@ -997,3 +996,16 @@ logs SHALL identify the worker service role and sanitize dependency failures.
 #### Scenario: Completed target is absent
 - **WHEN** an authorized operator queries the receipt after SQL target removal
 - **THEN** the completed receipt remains readable without resolving deleted hierarchy links
+
+### Requirement: Document surface is read-only
+Manager SHALL expose document metadata reads and authorization probes, but SHALL NOT register document creation, rename, deletion or ingestion operations. OpenAPI and the generated frontend client SHALL expose the same surface. Existing metadata SHALL remain intact and subject to current organization, retirement and content authorization checks.
+
+#### Scenario: Provisional mutations are unavailable
+- **WHEN** a caller requests POST `/documents`, PATCH or DELETE `/documents/{id}`, or POST `/documents/{id}/ingest`
+- **THEN** the API returns 404 for absent paths or 405 for unsupported methods on the retained GET path
+- **AND** no document mutation or workflow submission occurs
+
+#### Scenario: Resources remains usable without Temporal
+- **WHEN** PostgreSQL, OpenFGA and configured identity dependencies are available but Temporal is unreachable
+- **THEN** the API starts and serves authorized folder/document reads and folder operations
+- **AND** the separate space-deletion worker retains its Temporal dependency and configured cleanup behavior

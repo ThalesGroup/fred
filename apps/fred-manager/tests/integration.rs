@@ -904,7 +904,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         http::{Request, StatusCode},
     };
     use fred_manager::{
-        api::{GovernanceState, governance_router},
+        api::{AppState, governance_router},
         roles::PlatformRole as P,
     };
     use std::sync::Arc;
@@ -919,7 +919,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    let app = governance_router(GovernanceState {
+    let app = governance_router(AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: Arc::new(server.auth().await),
@@ -1005,7 +1005,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
         http::{Request, StatusCode},
     };
     use fred_manager::{
-        api::{GovernanceState, governance_router},
+        api::{AppState, governance_router},
         auth::Authenticator,
         config::Configuration,
         roles::PlatformRole,
@@ -1031,7 +1031,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
         if !other_realm {
             config.security.user.claims.uid = Some("preferred_username".into());
         }
-        let app = governance_router(GovernanceState {
+        let app = governance_router(AppState {
             onboarding: Default::default(),
             lifecycle: Default::default(),
             auth: Arc::new(
@@ -2146,7 +2146,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     .await
     .unwrap();
     proxy.fault.lock().await.calls.clear();
-    let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+    let app = fred_manager::api::governance_router(fred_manager::api::AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(auth),
@@ -3332,7 +3332,7 @@ async fn http_import(
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
-    use fred_manager::api::{GovernanceState, governance_router};
+    use fred_manager::api::{AppState, governance_router};
     use tower::ServiceExt;
     let e = env().await;
     let server = support::IdentityServer::start().await;
@@ -3341,7 +3341,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    let app = governance_router(GovernanceState {
+    let app = governance_router(AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: auth.clone(),
@@ -3557,7 +3557,7 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         )
         .await
         .unwrap();
-    let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+    let app = fred_manager::api::governance_router(fred_manager::api::AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(server.auth().await),
@@ -3590,7 +3590,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         http::Request,
     };
     use fred_manager::{
-        api::{GovernanceState, governance_router},
+        api::{AppState, governance_router},
         onboarding::{self, Onboarding},
     };
     use serde_json::{Value, json};
@@ -3598,7 +3598,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     use tower::ServiceExt;
     let e = env().await;
     let server = support::IdentityServer::start().await;
-    let state = GovernanceState {
+    let state = AppState {
         auth: Arc::new(server.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -4372,14 +4372,7 @@ async fn organization_owners_name_admins_and_read_nothing() {
     );
 }
 
-#[path = "support/temporal.rs"]
-mod temporal;
-
-async fn content_app(
-    e: &Env,
-    identity: &support::IdentityServer,
-    temporal: &temporal::Temporal,
-) -> axum::Router {
+async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Router {
     fred_manager::api::router(
         fred_manager::api::AppState {
             auth: std::sync::Arc::new(identity.auth().await),
@@ -4388,13 +4381,6 @@ async fn content_app(
             onboarding: Default::default(),
             lifecycle: Default::default(),
             directory: Some(identity.directory()),
-            ingestion: fred_manager::ingestion::Ingestion::connect(
-                &temporal.url,
-                "default",
-                "fred-ingestion",
-            )
-            .await
-            .unwrap(),
         },
         "/fred-manager/v1",
         &[],
@@ -4427,28 +4413,7 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
     let (org, _) = org_and_team(&e).await;
     grant(&e, org.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
-    let temporal = temporal::Temporal::start().await;
-    let app = content_app(&e, &identity, &temporal).await;
-    for (method, suffix) in [("POST", "/ingest"), ("PATCH", ""), ("DELETE", "")] {
-        let doc = document(org.id, None, "race.pdf");
-        db::insert_document(&e.pool, &doc).await.unwrap();
-        let mut deleting = hold_organization_lock(&e, org.id).await;
-        let (app, token) = (app.clone(), identity.token("alice"));
-        let pending = tokio::spawn(async move {
-            content_request(
-                app,
-                &token,
-                method,
-                &format!("/documents/{}{suffix}", doc.id),
-                r#"{"name":"renamed"}"#,
-            )
-            .await
-        });
-        wait_for_advisory_waiter(&e.pool).await;
-        db::delete_document(&mut *deleting, doc.id).await.unwrap();
-        deleting.commit().await.unwrap();
-        assert_eq!(pending.await.unwrap(), 404, "{method} {suffix}");
-    }
+    let app = content_app(&e, &identity).await;
     for method in ["PATCH", "DELETE"] {
         let folder = spaces::create_folder(&e.pool, &e.fga, "alice", org.id, None, "folder".into())
             .await
@@ -4470,79 +4435,6 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
         deleting.commit().await.unwrap();
         assert_eq!(pending.await.unwrap(), 404);
     }
-    assert!(temporal.starts.lock().await.is_empty());
-}
-
-// Proves: I5
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn content_http_dispatch_preserves_payload_and_failure_boundaries() {
-    use std::sync::atomic::Ordering;
-    let e = env().await;
-    let (org, _) = org_and_team(&e).await;
-    grant(&e, org.id, Role::Editor, "alice").await;
-    let identity = support::IdentityServer::start().await;
-    let temporal = temporal::Temporal::start().await;
-    let app = content_app(&e, &identity, &temporal).await;
-    let doc = document(org.id, None, "source.pdf");
-    db::insert_document(&e.pool, &doc).await.unwrap();
-    let token = identity.token("alice");
-    let path = format!("/documents/{}", doc.id);
-    assert_eq!(
-        content_request(
-            app.clone(),
-            &identity.token("outsider"),
-            "POST",
-            &format!("{path}/ingest"),
-            ""
-        )
-        .await,
-        403
-    );
-    assert!(temporal.starts.lock().await.is_empty());
-    assert_eq!(
-        content_request(app.clone(), &token, "POST", &format!("{path}/ingest"), "").await,
-        202
-    );
-    {
-        let starts = temporal.starts.lock().await;
-        let call = &starts[0];
-        assert_eq!(call.workflow_id, format!("ingest-{}", doc.id));
-        assert_eq!(call.workflow_type.as_ref().unwrap().name, "IngestDocument");
-        assert_eq!(call.task_queue.as_ref().unwrap().name, "fred-ingestion");
-        let input: serde_json::Value =
-            serde_json::from_slice(&call.input.as_ref().unwrap().payloads[0].data).unwrap();
-        assert_eq!(
-            input,
-            serde_json::json!({"document_id":doc.id,"space_id":org.id,"folder_path":"/","storage_prefix":domain::storage_prefix(org.id, doc.id),"source_key":format!("{}source",domain::storage_prefix(org.id,doc.id)),"mime":doc.mime,"profile":"medium","requested_by":"alice"})
-        );
-    }
-    temporal.status.store(6, Ordering::SeqCst); // AlreadyExists maps to the API's explicit conflict.
-    assert_eq!(
-        content_request(app.clone(), &token, "POST", &format!("{path}/ingest"), "").await,
-        409
-    );
-    temporal.status.store(3, Ordering::SeqCst); // InvalidArgument is not retried by the SDK.
-    assert_eq!(
-        content_request(app.clone(), &token, "DELETE", &path, "").await,
-        500
-    );
-    assert!(db::document(&e.pool, doc.id).await.is_ok());
-    temporal.status.store(0, Ordering::SeqCst);
-    assert_eq!(content_request(app, &token, "DELETE", &path, "").await, 204);
-    assert!(db::document(&e.pool, doc.id).await.is_err());
-    let starts = temporal.starts.lock().await;
-    assert_eq!(starts.len(), 4);
-    assert_eq!(
-        starts[3].workflow_type.as_ref().unwrap().name,
-        "DeleteDocument"
-    );
-    let input: serde_json::Value =
-        serde_json::from_slice(&starts[3].input.as_ref().unwrap().payloads[0].data).unwrap();
-    assert_eq!(
-        input,
-        serde_json::json!({"document_id":doc.id,"space_id":org.id,"storage_prefix":domain::storage_prefix(org.id,doc.id)})
-    );
 }
 
 // Proves: I14, I21
@@ -4552,8 +4444,7 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
     let identity = support::IdentityServer::start().await;
-    let temporal = temporal::Temporal::start().await;
-    let app = content_app(&e, &identity, &temporal).await;
+    let app = content_app(&e, &identity).await;
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
@@ -5086,8 +4977,7 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
         .unwrap();
     grant(&e, a.id, Role::Editor, "bob").await;
     let identity = support::IdentityServer::start().await;
-    let temporal = temporal::Temporal::start().await;
-    let app = content_app(&e, &identity, &temporal).await;
+    let app = content_app(&e, &identity).await;
     let doc = document(b.id, None, "foreign.pdf");
     db::insert_document(&e.pool, &doc).await.unwrap();
     let token = identity.token("bob");
@@ -5097,17 +4987,6 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
             &token,
             "GET",
             &format!("/documents/{}", doc.id),
-            ""
-        )
-        .await,
-        403
-    );
-    assert_eq!(
-        content_request(
-            app.clone(),
-            &token,
-            "POST",
-            &format!("/documents/{}/ingest", doc.id),
             ""
         )
         .await,
@@ -5718,3 +5597,141 @@ mod resource_browsing;
 
 #[path = "support/space_deletion.rs"]
 mod space_deletion;
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn api_starts_without_temporal_and_exposes_only_document_reads() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let doc = document(org.id, None, "kept.pdf");
+    db::insert_document(&e.pool, &doc).await.unwrap();
+    let unavailable_temporal = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let api_port = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = api_port.local_addr().unwrap().port();
+    drop(api_port);
+    let pg = reqwest::Url::parse(&std::env::var("FRED_MANAGER_IT_POSTGRES").unwrap()).unwrap();
+    let database: String = sqlx::query_scalar("select current_database()")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    let config = serde_json::json!({
+        "app":{"base_url":"/fred-manager/v1","address":"127.0.0.1","port":port},
+        "security":{"user":{"realm_url":identity.realm,"client_id":"fred-manager"},"rebac":{"api_url":e.openfga,"store_name":e.store,"create_store_if_needed":false,"sync_schema_on_init":false}},
+        "storage":{"postgres":{"host":pg.host_str(),"port":pg.port(),"username":"postgres","database":database}},
+        "scheduler":{"lifecycle":{"enabled":true,"temporal":{"host":unavailable_temporal.local_addr().unwrap().to_string()}}}
+    });
+    let path = std::env::temp_dir().join(format!("manager-read-only-{}.json", Uuid::new_v4()));
+    std::fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_fred-manager"))
+        .arg("serve")
+        .env("CONFIG_FILE", &path)
+        .env("ENV_FILE", "/nonexistent")
+        .env("FRED_POSTGRES_PASSWORD", "it")
+        .env_remove("OPENFGA_API_TOKEN")
+        .kill_on_drop(true)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .unwrap();
+    let base = format!("http://127.0.0.1:{port}/fred-manager/v1");
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            assert!(
+                child.try_wait().unwrap().is_none(),
+                "serve exited before binding HTTP"
+            );
+            if http
+                .get(format!("{base}/healthz"))
+                .send()
+                .await
+                .is_ok_and(|r| r.status().is_success())
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let token = identity.token("alice");
+    for suffix in [
+        format!("/spaces/{}/documents", org.id),
+        format!("/documents/{}", doc.id),
+    ] {
+        assert_eq!(
+            http.get(format!("{base}{suffix}"))
+                .bearer_auth(&token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+        assert_eq!(
+            http.get(format!("{base}{suffix}"))
+                .bearer_auth(identity.token("outsider"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            403
+        );
+    }
+    for (method, suffix, status) in [
+        (reqwest::Method::POST, "/documents".into(), 404),
+        (
+            reqwest::Method::PATCH,
+            format!("/documents/{}", doc.id),
+            405,
+        ),
+        (
+            reqwest::Method::DELETE,
+            format!("/documents/{}", doc.id),
+            405,
+        ),
+        (
+            reqwest::Method::POST,
+            format!("/documents/{}/ingest", doc.id),
+            404,
+        ),
+    ] {
+        assert_eq!(
+            http.request(method, format!("{base}{suffix}"))
+                .bearer_auth(&token)
+                .json(&serde_json::json!({"name":"changed"}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            status
+        );
+    }
+    assert_eq!(
+        db::document(&e.pool, doc.id).await.unwrap().name,
+        "kept.pdf"
+    );
+    assert_eq!(
+        http.post(format!("{base}/folders"))
+            .bearer_auth(&token)
+            .json(&serde_json::json!({"space_id":org.id,"name":"Folder"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        201
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), unavailable_temporal.accept())
+            .await
+            .is_err()
+    );
+    child.kill().await.unwrap();
+    child.wait().await.unwrap();
+    std::fs::remove_file(path).unwrap();
+}

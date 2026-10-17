@@ -9,7 +9,7 @@
 `fred-manager worker` runs the manager-owned Temporal lifecycle schedule on its
 own queue. SQL receipts are the durable work source; acceptance has no Temporal
 RPC. The worker polls due operations, applies bounded cleanup activities and
-retains incomplete work for later sweeps. Ingestion uses its existing queue.
+retains incomplete work for later sweeps. HTTP startup does not connect to Temporal.
 [Manager operations](A3-manager-operations.md#space-deletion-lifecycle) defines
 configuration, activation, progress and recovery.
 

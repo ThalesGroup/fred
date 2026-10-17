@@ -32,7 +32,6 @@ export const {
   useMeQuery,
   useMySpacesQuery,
   useCreatePersonalSpaceMutation,
-  useIngestDocumentMutation,
   useOnboardingStatusQuery,
   useAcceptTermsMutation,
   useBootstrapPlatformAdminMutation,

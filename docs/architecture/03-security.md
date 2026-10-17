@@ -160,7 +160,7 @@ or a personal space role in an organization, without a direct parent content rol
 nor remove a non-personal space's last administrator.
 
 I5 orders role publication and SQL commits, not HTTP response arrival. Keycloak
-creation and Temporal submission are authorized at dispatch; cancellation or later
+creation is authorized at dispatch; cancellation or later
 revocation does not roll back already dispatched effects. A read-only permission
 check describes evaluation time, not a lease. The [runtime reference](A1-manager-runtime.md#role-and-space-mutations)
 and [invariants](09-quality.md#invariants) give the mechanisms and proofs.

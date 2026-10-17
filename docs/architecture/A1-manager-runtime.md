@@ -16,7 +16,8 @@ flowchart LR
     keycloak["Keycloak<br/>realm app"]
     openfga["OpenFGA<br/>store fred-manager"]
     postgres[("Postgres<br/>database fred")]
-    temporal["Temporal<br/>queue fred-ingestion"]
+    temporal["Temporal<br/>manager lifecycle queue"]
+    worker["fred-manager worker"]
 
     operator -- "ZIP + operator bearer" --> manager
     client -- "bearer token" --> manager
@@ -25,7 +26,8 @@ flowchart LR
     manager -- "signing keys,<br/>service-account directory lookup/create" --> keycloak
     manager -- "context reads, checks,<br/>role writes" --> openfga
     manager -- "consent, spaces, folders, documents" --> postgres
-    manager -- "IngestDocument,<br/>DeleteDocument" --> temporal
+    worker --> temporal
+    worker --> postgres & openfga
 ```
 
 | Partner | What fred-manager uses | Contract |
@@ -33,7 +35,7 @@ flowchart LR
 | Keycloak | Access tokens, signing keys (JWKS), user lookup/creation with its own service account | [security](03-security.md), Authentication |
 | OpenFGA | `check`, `write`, `read` on its own store | [model and contracts](A2-manager-contracts.md), OpenFGA model |
 | Postgres | Its tables in the `fred` database | [model and contracts](A2-manager-contracts.md), Schema |
-| Temporal | Ingestion submission and manager-owned space-deletion scheduling/activities | [runtime reference](A1-manager-runtime.md), Ingestion submission |
+| Temporal | Manager-owned space-deletion scheduling/activities | [lifecycle](#space-deletion-lifecycle) |
 | Clients | Public configuration and health; authenticated onboarding and business routes | [HTTP surface](A2-manager-contracts.md#fred-manager-http-surface) and [authentication](03-security.md#authentication) |
 | Services acting for a user | `/authorize/document`, `/authorize/scope` | [runtime reference](A1-manager-runtime.md), Search scope |
 
@@ -62,13 +64,12 @@ flowchart TB
     domain["domain.rs<br/>types, placement rules"]
     db["db.rs<br/>SQL"]
     fga["fga.rs<br/>OpenFGA client"]
-    ingestion["ingestion.rs<br/>Temporal client"]
 
     main --> config & logging & api & provisioning & blueprint
     api --> provisioning & blueprint
     provisioning --> blueprint
     provisioning --> auth & platform & directory & db & fga & spaces
-    api --> auth & error & spaces & bootstrap & db & fga & ingestion & logging
+    api --> auth & error & spaces & bootstrap & db & fga & logging
     spaces --> domain & db & fga
     api --> platform & roles & directory & onboarding
     onboarding --> auth & db
@@ -89,7 +90,6 @@ flowchart TB
 | `domain` | `Space`, `Folder`, `Document`, roles, parent rules | pure functions, unit-tested (I1, I7) |
 | `db` | content and space SQL | placement columns written by inserts only (I2) |
 | `fga` | pinned store/model, check, role and link reads, guarded write; empty-store publication | roles and the space tree stay in OpenFGA; SQL publishes only the store/model binding |
-| `ingestion` | `IngestDocument`, `DeleteDocument` submission | one workflow id per document and operation |
 | `logging` | output format, request span, completion event | [logging](A3-manager-operations.md#logging) (I11, I13) |
 | `error` | status codes, `{"detail": ...}` bodies | [errors](A3-manager-operations.md#errors) |
 
@@ -97,7 +97,7 @@ flowchart TB
 role mutations with bootstrap. `keycloak` owns one shared HTTP client and a synchronized
 service-token cache. `api::governance_router` groups identity, platform administration,
 space listing, personal opening, folder/document listing, folder creation, ZIP import and self-capability
-routes independently of the Temporal client.
+routes with the shared `AppState`; the HTTP API has no Temporal client.
 
 The same `utoipa-axum` registrations build the runtime routers and OpenAPI paths.
 `utoipa::ToSchema` derives request/response schemas from the Rust DTOs. The binary's
@@ -107,8 +107,7 @@ The frontend generates `fredManagerOpenApi.ts` through its standard RTK codegen
 tool and registers the slice in the shared Redux store. A handwritten enhancement
 encodes the import's generated binary argument as FormData; paths, methods and
 response types remain generated.
-The generation target corrects the code generator's required-body typing for the
-optional ingestion request and fails if that upstream output changes. The bootstrap, personal-space and import
+The bootstrap, personal-space and import
 endpoints disable automatic retry on 401 because expiry can follow committed
 effects; the shared base query still refreshes before each explicit attempt.
 
@@ -314,46 +313,17 @@ stateDiagram-v2
 ```
 
 
-## Ingestion submission
+## Document metadata and folder mutations
 
-`POST /documents` registers a document and returns its `storage_prefix`
-(`<space_id>/<document_id>/`) and `source_key` (`<prefix>source`). Workflow ids are
-`ingest-<document_id>` and `delete-<document_id>`: a second ingestion while one runs
-answers 409. These routes expose submission and metadata registration only. The
-repository supplies no worker implementing these two workflow types on this queue,
-and `source_key` is a storage address, not an upload URL or an upload API. A Temporal
-acceptance therefore does not establish ingestion or artifact erasure. Submissions
-set no workflow execution timeout; without a compatible worker, a workflow can
-remain pending and later ingestion attempts return 409 until it is terminated or
-processed externally.
+The API reads document metadata and answers authorization probes. Document creation,
+rename, deletion and ingestion operations are not registered; unsupported paths
+return 404 and unsupported methods on `/documents/{id}` return 405. Existing rows
+remain readable under their owning space's current authority.
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant M as fred-manager
-    participant FGA as OpenFGA
-    participant T as Temporal
-    C->>M: POST /documents/{id}/ingest {profile}
-    M->>FGA: check user can_write on the document's space
-    M->>T: start IngestDocument, id ingest-{id}, queue fred-ingestion
-    M-->>C: 202, or 409 when already running
-```
-
-| Workflow | Input |
-| --- | --- |
-| `IngestDocument` | `document_id`, `space_id`, `folder_path`, `storage_prefix`, `source_key`, `mime`, `profile` (default `medium`), `requested_by` |
-| `DeleteDocument` | `document_id`, `space_id`, `storage_prefix` |
-
-Document and folder mutations locate the immutable owning space, acquire its
-organization lock and authorize, then reread the object through the held transaction
-(I22). If deletion commits while a caller waits, that caller returns 404 without
-SQL mutation or Temporal submission. The lock remains held through submission and
-SQL commit. The extra existence read does not add an OpenFGA call.
-
-Deletion submits `DeleteDocument {document_id, space_id, storage_prefix}` before
-deleting the row. A submission failure preserves the document row; successful
-submission does not prove that any stored artifact was deleted.
-
+Folder rename/delete locate the immutable owning space, acquire its organization
+lock and authorize, then reread the folder through the held transaction (I22).
+A deletion that commits while a caller waits causes 404 without a fabricated success.
+The lock remains held through SQL commit; the extra read adds no OpenFGA call.
 
 ## Platform administration and self checks
 
@@ -465,10 +435,9 @@ rollback. New rows commit after their initial grants, and rolled-back UUIDs are 
 reused. The CLI exits nonzero on failure; HTTP returns safe phase/count information.
 HTTP 200 means reconciliation completes, not merely that an upload is accepted.
 
-Local folder/document mutations capture the organization guard, authorize, consume
+Local folder mutations capture the organization guard, authorize, consume
 the guard and commit SQL under the same organization lock. Placement reads use the
-held SQL connection. Temporal submission holds that lock through dispatch; its
-remote effects have the dispatch boundary described by I5 in [invariants](09-quality.md#invariants).
+held SQL connection. No workflow is dispatched by the API.
 
 
 ## Design rationale
@@ -478,7 +447,7 @@ remote effects have the dispatch boundary described by I5 in [invariants](09-qua
 | D1 | The space tree lives only in OpenFGA as immutable `parent` links; editor, admin and analyst descend, member does not. | One authority answers who may do what where, including roles reaching descendants. | One Check per access, evaluated through at most two parents; placement and structure operations read links (I20). |
 | D2 | Organization > team > project; a personal space is a one-member team without parent. | One model for every container; a personal space stays private to its owner. | Personal spaces inherit nothing and have their own management rule (I6). |
 | D3 | Folders carry no rights. | Rights per folder bring back traversal and per-item lists. | Access granularity is the space. |
-| D4 | Placement is immutable; a move is a re-import. | Storage keys and indexed content carry placement. | Renames are free; a move costs a re-ingestion. |
+| D4 | Space and content placement are immutable. | SQL constraints and OpenFGA links preserve ownership. | Folder renames preserve placement; the API exposes no move operation. |
 | D5 | A space's search scope is its ancestors and itself; levels only narrow it. | Content of a project stays out of its team's scope. | A project reads its team's and organization's content unless the caller removes those levels. |
 | D6 | Admin roles grant no content access. | Governing is not reading. | An admin who reads also holds a content role. |
 | D7 | Organization mutations hold a Postgres advisory lock and consume an OpenFGA guard captured before checks. | SQL locks alone cannot stop a remote write after cancellation. | Live callers serialize; stale remote writes fail atomically. |
@@ -504,12 +473,11 @@ current space and parent. The existing folder-name presentation is independent o
 the legacy corpus adapter. The manager mutation disables automatic unauthorized
 replay. Keyed resource/dialog mounts isolate late responses from navigation.
 
-The handler uses `GovernanceState` and the existing `spaces::create_folder` write
+The handler uses `AppState` and the existing `spaces::create_folder` write
 boundary. Placement lookup precedes the transaction; organization lock, guard read,
 current context and `can_write` Check, then fence precede parent lookup and insertion
-on the held connection. No Temporal call occurs. `main::serve` still constructs its
-Temporal ingestion client before binding HTTP; governance-router independence does
-not imply independent startup of the complete binary.
+on the held connection. `main::serve` binds HTTP without connecting to Temporal;
+only the separate lifecycle worker requires Temporal.
 
 ## Space deletion lifecycle
 

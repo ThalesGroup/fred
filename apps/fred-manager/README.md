@@ -81,8 +81,8 @@ never edit it by hand. The slice uses the shared bearer/refresh base query and
 Redux store. Its enhancement encodes the generated import argument as multipart
 FormData, retaining the generated URL, method and completed-report type.
 Bootstrap and import never retry automatically on 401; expiry can follow committed effects.
-The generation target also corrects the code generator's required-body typing for
-the optional ingestion request. Frontend consumers use `fredManagerApiEnhancements`.
+Frontend consumers use `fredManagerApiEnhancements`. Document metadata is read-only;
+HTTP startup needs no Temporal connection. Temporal belongs to the separate lifecycle worker.
 
 ## Platform and space roles
 

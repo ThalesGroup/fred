@@ -93,7 +93,7 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
     .load(&e.pool)
     .await
     .unwrap();
-    let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+    let app = fred_manager::api::governance_router(fred_manager::api::AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
@@ -348,7 +348,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
     .load(&e.pool)
     .await
     .unwrap();
-    let app = fred_manager::api::governance_router(fred_manager::api::GovernanceState {
+    let app = fred_manager::api::governance_router(fred_manager::api::AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
@@ -534,8 +534,7 @@ async fn folder_rename_preserves_creation_name_rules() {
     let (org, _) = org_and_team(&e).await;
     grant(&e, org.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
-    let temporal = temporal::Temporal::start().await;
-    let app = content_app(&e, &identity, &temporal).await;
+    let app = content_app(&e, &identity).await;
     let folder = spaces::create_folder(&e.pool, &e.fga, "alice", org.id, None, "Original".into())
         .await
         .unwrap();
@@ -581,8 +580,7 @@ async fn space_names_match_operator_and_http_creation_contracts() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     let identity = support::IdentityServer::start().await;
-    let temporal = temporal::Temporal::start().await;
-    let app = content_app(&e, &identity, &temporal).await;
+    let app = content_app(&e, &identity).await;
     for name in ["".into(), "  ".into(), "a\nb".into(), "é".repeat(181)] {
         assert!(matches!(
             spaces::create_organization(&e.pool, &e.fga, &name, "bob").await,

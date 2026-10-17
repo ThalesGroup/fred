@@ -23,11 +23,7 @@ foreign context, and 409 for ambiguity.
 | POST | `/fred-manager/v1/authorize/space` | `authorize_space` |
 | POST | `/fred-manager/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
 | GET | `/fred-manager/v1/deletions/{operation_id}` | `deletion_status` |
-| POST | `/fred-manager/v1/documents` | `create_document` |
-| DELETE | `/fred-manager/v1/documents/{id}` | `delete_document` |
 | GET | `/fred-manager/v1/documents/{id}` | `get_document` |
-| PATCH | `/fred-manager/v1/documents/{id}` | `rename_document` |
-| POST | `/fred-manager/v1/documents/{id}/ingest` | `ingest_document` |
 | POST | `/fred-manager/v1/folders` | `create_folder` |
 | DELETE | `/fred-manager/v1/folders/{id}` | `delete_folder` |
 | PATCH | `/fred-manager/v1/folders/{id}` | `rename_folder` |

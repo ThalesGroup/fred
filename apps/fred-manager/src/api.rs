@@ -34,10 +34,9 @@ use uuid::Uuid;
 use crate::{
     auth::{Authenticator, CurrentUser},
     bootstrap, db,
-    domain::{self, Document, Folder, Permission, Role, Space, SpaceKind, SpaceRow},
+    domain::{Document, Folder, Permission, Role, Space, SpaceKind, SpaceRow},
     error::{ApiJson, AppError, AppResult},
     fga::Fga,
-    ingestion::{DeleteDocument, IngestDocument, Ingestion, Submitted},
     keycloak::Directory,
     logging,
     onboarding::{self, AdmissionState, AdmittedUser, Onboarding, OwnUser},
@@ -53,7 +52,6 @@ pub struct AppState {
     pub fga: Fga,
     pub onboarding: Onboarding,
     pub lifecycle: crate::lifecycle::Lifecycle,
-    pub ingestion: Ingestion,
     pub directory: Option<Directory>,
 }
 
@@ -85,14 +83,7 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
             header::HeaderName::from_static("x-request-id"),
             header::HeaderName::from_static("x-correlation-id"),
         ]);
-    let governance = governance_router(GovernanceState {
-        auth: state.auth.clone(),
-        pool: state.pool.clone(),
-        fga: state.fga.clone(),
-        directory: state.directory.clone(),
-        onboarding: state.onboarding.clone(),
-        lifecycle: state.lifecycle.clone(),
-    });
+    let governance = governance_router(state.clone());
     let api = content_routes()
         .with_state(state)
         .split_for_parts()
@@ -133,7 +124,7 @@ struct FrontendConfig {
     (status = 200, body = FrontendConfig),
     (status = 500, body = crate::error::ErrorBody)
 ))]
-async fn frontend_config(State(s): State<GovernanceState>) -> AppResult<axum::response::Response> {
+async fn frontend_config(State(s): State<AppState>) -> AppResult<axum::response::Response> {
     use axum::response::IntoResponse;
     let completed = onboarding::bootstrap_completed(&s.pool).await?;
     Ok((
@@ -168,7 +159,7 @@ struct OnboardingStatus {
     (status = 500, body = crate::error::ErrorBody)
 ))]
 async fn onboarding_status(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     OwnUser(user): OwnUser,
 ) -> AppResult<axum::response::Response> {
     use axum::response::IntoResponse;
@@ -206,7 +197,7 @@ struct TermsRequest {
     (status = 500, body = crate::error::ErrorBody)
 ))]
 async fn accept_terms(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     OwnUser(user): OwnUser,
     ApiJson(req): ApiJson<TermsRequest>,
 ) -> AppResult<StatusCode> {
@@ -254,7 +245,7 @@ struct BootstrapResponse {
     )
 )]
 async fn bootstrap_platform_admin(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     OwnUser(user): OwnUser,
     ApiJson(req): ApiJson<BootstrapRequest>,
 ) -> AppResult<Json<BootstrapResponse>> {
@@ -298,10 +289,7 @@ struct Me {
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
-async fn me(
-    State(s): State<GovernanceState>,
-    AdmittedUser(user): AdmittedUser,
-) -> AppResult<Json<Me>> {
+async fn me(State(s): State<AppState>, AdmittedUser(user): AdmittedUser) -> AppResult<Json<Me>> {
     Ok(Json(Me {
         platform_roles: s.fga.effective_platform_roles(&user.uid).await?,
         user_id: user.uid,
@@ -333,7 +321,7 @@ struct MySpace {
     )
 )]
 async fn my_spaces(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
 ) -> AppResult<Json<Vec<MySpace>>> {
     Ok(Json(
@@ -412,7 +400,7 @@ struct CreatePersonalSpace {
     )
 )]
 async fn create_personal_space(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreatePersonalSpace>,
 ) -> AppResult<(StatusCode, Json<Space>)> {
@@ -538,7 +526,7 @@ struct FolderQuery {
     )
 )]
 async fn list_folders(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(space): Path<Uuid>,
     Query(q): Query<FolderQuery>,
@@ -570,7 +558,7 @@ struct CreateFolder {
     )
 )]
 async fn create_folder(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreateFolder>,
 ) -> AppResult<(StatusCode, Json<Folder>)> {
@@ -672,7 +660,7 @@ struct DocumentQuery {
     )
 )]
 async fn list_documents(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(space): Path<Uuid>,
     Query(q): Query<DocumentQuery>,
@@ -691,68 +679,6 @@ async fn list_documents(
     };
     Ok(Json(
         db::documents(&s.pool, space, q.folder_id, after, limit).await?,
-    ))
-}
-
-#[derive(Deserialize, utoipa::ToSchema)]
-struct CreateDocument {
-    space_id: Uuid,
-    folder_id: Option<Uuid>,
-    name: String,
-    mime: String,
-    size: i64,
-    sha256: String,
-}
-
-#[derive(Serialize, utoipa::ToSchema)]
-struct CreatedDocument {
-    #[serde(flatten)]
-    document: Document,
-    storage_prefix: String,
-    source_key: String,
-}
-
-#[utoipa::path(
-    post, path = "/documents",
-    request_body = CreateDocument,
-    responses(
-        (status = 201, description = "Success", body = CreatedDocument),
-        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
-    )
-)]
-async fn create_document(
-    State(s): State<AppState>,
-    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    ApiJson(req): ApiJson<CreateDocument>,
-) -> AppResult<(StatusCode, Json<CreatedDocument>)> {
-    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, req.space_id).await?;
-    let document = Document {
-        id: Uuid::new_v4(),
-        space_id: req.space_id,
-        folder_id: req.folder_id,
-        name: req.name,
-        mime: req.mime,
-        size: req.size,
-        sha256: req.sha256,
-        created_by: user,
-    };
-    // The composite foreign key rejects a folder from another space.
-    db::insert_document(&mut *tx, &document).await?;
-    tx.commit().await?;
-    let storage_prefix = domain::storage_prefix(document.space_id, document.id);
-    let source_key = format!("{storage_prefix}source");
-    Ok((
-        StatusCode::CREATED,
-        Json(CreatedDocument {
-            document,
-            storage_prefix,
-            source_key,
-        }),
     ))
 }
 
@@ -777,134 +703,6 @@ async fn get_document(
     let document = db::document(&s.pool, id).await?;
     require(&s.pool, &s.fga, &user, Permission::Read, document.space_id).await?;
     Ok(Json(document))
-}
-
-#[utoipa::path(
-    patch, path = "/documents/{id}",
-    params(("id" = Uuid, Path)),
-    request_body = Rename,
-    responses(
-        (status = 204, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
-        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
-    )
-)]
-async fn rename_document(
-    State(s): State<AppState>,
-    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path(id): Path<Uuid>,
-    ApiJson(req): ApiJson<Rename>,
-) -> AppResult<StatusCode> {
-    let document = db::document(&s.pool, id).await?;
-    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
-    // A deletion can commit while we wait for authorization's organization lock.
-    db::document(&mut *tx, id).await?;
-    db::rename_document(&mut *tx, id, &req.name).await?;
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// Artefact removal is submitted before the row goes, so a failure leaves a retryable
-/// document rather than orphaned chunks nobody can find.
-#[utoipa::path(
-    delete, path = "/documents/{id}",
-    params(("id" = Uuid, Path)),
-    responses(
-        (status = 204, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
-        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
-    )
-)]
-async fn delete_document(
-    State(s): State<AppState>,
-    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path(id): Path<Uuid>,
-) -> AppResult<StatusCode> {
-    let document = db::document(&s.pool, id).await?;
-    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
-    // A deletion can commit while we wait for authorization's organization lock.
-    let document = db::document(&mut *tx, id).await?;
-    s.ingestion
-        .delete(DeleteDocument {
-            document_id: id,
-            space_id: document.space_id,
-            storage_prefix: domain::storage_prefix(document.space_id, id),
-        })
-        .await?;
-    db::delete_document(&mut *tx, id).await?;
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Deserialize, Default, utoipa::ToSchema)]
-struct IngestRequest {
-    profile: Option<String>,
-}
-
-/// The body is optional; when present it gets the same 422 contract as `ApiJson`.
-fn ingest_request(body: &[u8]) -> AppResult<IngestRequest> {
-    if body.is_empty() {
-        return Ok(IngestRequest::default());
-    }
-    serde_json::from_slice(body).map_err(|e| AppError::Unprocessable(e.to_string()))
-}
-
-#[utoipa::path(
-    post, path = "/documents/{id}/ingest",
-    params(("id" = Uuid, Path)),
-    request_body = IngestRequest,
-    responses(
-        (status = 202, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
-        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
-    )
-)]
-async fn ingest_document(
-    State(s): State<AppState>,
-    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path(id): Path<Uuid>,
-    body: axum::body::Bytes,
-) -> AppResult<StatusCode> {
-    let request = ingest_request(&body)?;
-    let document = db::document(&s.pool, id).await?;
-    let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, document.space_id).await?;
-    // A deletion can commit while we wait for authorization's organization lock.
-    let document = db::document(&mut *tx, id).await?;
-    let folder_path = match document.folder_id {
-        Some(f) => db::folder(&mut *tx, f).await?.path,
-        None => "/".to_string(),
-    };
-    let storage_prefix = domain::storage_prefix(document.space_id, id);
-    let input = IngestDocument {
-        document_id: id,
-        space_id: document.space_id,
-        folder_path,
-        source_key: format!("{storage_prefix}source"),
-        storage_prefix,
-        mime: document.mime,
-        profile: request.profile.unwrap_or_else(|| "medium".into()),
-        requested_by: user,
-    };
-    let submitted = s.ingestion.ingest(input).await?;
-    tx.commit().await?;
-    match submitted {
-        Submitted::Started => Ok(StatusCode::ACCEPTED),
-        Submitted::AlreadyRunning => Err(AppError::Conflict("ingestion already running".into())),
-    }
 }
 
 // ---------------------------------------------------------------- authorization for agents
@@ -987,29 +785,8 @@ async fn authorize_scope(
     }))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ingest_body_is_optional_and_never_plain_text() {
-        assert_eq!(ingest_request(b"").unwrap().profile, None);
-        assert_eq!(
-            ingest_request(br#"{"profile":"rich"}"#)
-                .unwrap()
-                .profile
-                .as_deref(),
-            Some("rich")
-        );
-        assert!(matches!(
-            ingest_request(b"{not json"),
-            Err(AppError::Unprocessable(_))
-        ));
-    }
-}
-
 // Platform mutation entry points require a real authenticated actor, even in dev mode.
-fn require_directory_actor(s: &GovernanceState) -> AppResult<()> {
+fn require_directory_actor(s: &AppState) -> AppResult<()> {
     if !s.auth.enabled() {
         return Err(AppError::Unavailable(
             "authentication must be enabled".into(),
@@ -1028,7 +805,7 @@ fn require_directory_actor(s: &GovernanceState) -> AppResult<()> {
     )
 )]
 async fn list_platform_roles(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
 ) -> AppResult<Json<Vec<platform::Grant>>> {
     require_directory_actor(&s)?;
@@ -1053,7 +830,7 @@ fn platform_role(name: &str) -> AppResult<PlatformRole> {
     )
 )]
 async fn grant_platform_role(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     Path((target, role)): Path<(String, String)>,
 ) -> AppResult<StatusCode> {
@@ -1093,7 +870,7 @@ async fn grant_platform_role(
     )
 )]
 async fn revoke_platform_role(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     Path((target, role)): Path<(String, String)>,
 ) -> AppResult<StatusCode> {
@@ -1117,7 +894,7 @@ struct PlatformCheck {
     )
 )]
 async fn authorize_platform(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiJson(req): ApiJson<PlatformCheck>,
 ) -> AppResult<Json<Allowed>> {
@@ -1144,7 +921,7 @@ struct SpaceCheck {
     )
 )]
 async fn authorize_space(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiJson(req): ApiJson<SpaceCheck>,
 ) -> AppResult<Json<Allowed>> {
@@ -1172,7 +949,7 @@ struct RegistryQuery {
     )
 )]
 async fn team_registry(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     Query(query): Query<RegistryQuery>,
 ) -> AppResult<Json<Vec<Space>>> {
@@ -1201,31 +978,6 @@ async fn team_registry(
     ))
 }
 
-/// Governance routes are usable without an ingestion client. Public configuration
-/// and personal onboarding are separate from consent-gated business operations.
-#[derive(Clone)]
-pub struct GovernanceState {
-    pub auth: Arc<Authenticator>,
-    pub pool: PgPool,
-    pub fga: Fga,
-    pub directory: Option<Directory>,
-    pub onboarding: Onboarding,
-    pub lifecycle: crate::lifecycle::Lifecycle,
-}
-impl FromRef<GovernanceState> for Arc<Authenticator> {
-    fn from_ref(state: &GovernanceState) -> Self {
-        state.auth.clone()
-    }
-}
-impl FromRef<GovernanceState> for AdmissionState {
-    fn from_ref(s: &GovernanceState) -> Self {
-        Self {
-            auth: s.auth.clone(),
-            pool: s.pool.clone(),
-            version: s.onboarding.gcu_version.clone(),
-        }
-    }
-}
 impl FromRef<AppState> for AdmissionState {
     fn from_ref(s: &AppState) -> Self {
         Self {
@@ -1235,12 +987,11 @@ impl FromRef<AppState> for AdmissionState {
         }
     }
 }
-
-pub fn governance_router(state: GovernanceState) -> Router {
+pub fn governance_router(state: AppState) -> Router {
     governance_routes().with_state(state).split_for_parts().0
 }
 
-fn governance_routes() -> OpenApiRouter<GovernanceState> {
+fn governance_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(frontend_config))
         .routes(routes!(onboarding_status))
@@ -1273,9 +1024,7 @@ fn content_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))
-        .routes(routes!(create_document))
-        .routes(routes!(get_document, rename_document, delete_document))
-        .routes(routes!(ingest_document))
+        .routes(routes!(get_document))
         .routes(routes!(authorize_document))
         .routes(routes!(authorize_scope))
         .route_layer(axum::middleware::from_fn(logging::expose_route))
@@ -1303,21 +1052,6 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     let mut api = OpenApiRouter::<()>::new()
         .nest("/fred-manager/v1", OpenApiRouter::with_openapi(api))
         .into_openapi();
-    // utoipa's Option<T> makes both the body optional and its JSON nullable.
-    // This handler accepts no body, but rejects JSON null: only presence is optional.
-    if let Some(utoipa::openapi::RefOr::T(body)) = api
-        .paths
-        .paths
-        .get_mut("/fred-manager/v1/documents/{id}/ingest")
-        .unwrap()
-        .post
-        .as_mut()
-        .unwrap()
-        .request_body
-        .as_mut()
-    {
-        body.required = Some(utoipa::openapi::Required::False);
-    }
     api.info.title = "fred-manager".into();
     api.components
         .get_or_insert_with(|| ComponentsBuilder::new().build())
@@ -1358,7 +1092,7 @@ struct ProvisioningUpload {
     )
 )]
 async fn import_blueprint(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     request: axum::extract::Request,
 ) -> axum::response::Response {
@@ -1425,7 +1159,7 @@ fn upload_error(status: StatusCode) -> axum::response::Response {
     (status = 503, body = crate::error::ErrorBody), (status = 500, body = crate::error::ErrorBody)
 ))]
 async fn delete_space(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
@@ -1446,7 +1180,7 @@ async fn delete_space(
     (status = 404, body = crate::error::ErrorBody), (status = 503, body = crate::error::ErrorBody), (status = 500, body = crate::error::ErrorBody)
 ))]
 async fn deletion_status(
-    State(s): State<GovernanceState>,
+    State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<crate::lifecycle::Receipt>> {

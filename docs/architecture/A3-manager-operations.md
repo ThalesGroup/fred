@@ -39,17 +39,19 @@ Structured stdout, in the format shared by Fred's services.
 
 ## Errors
 
-Every error body is `{"detail": "<message>"}`, as FastAPI.
+Application error bodies use `{"detail": "<message>"}`, as FastAPI.
+Unregistered paths and unsupported methods use the router's 404/405 responses.
 
 | Status | When |
 | --- | --- |
 | 400 | Unknown role name, placement rule broken (I1), malformed multipart import |
 | 401 | Missing or invalid bearer ([authentication details](03-security.md#authentication)) |
 | 403 | Permission denied (`forbidden`), wrong bootstrap secret, `user_not_accept_gcu` |
-| 404 | Unknown id |
-| 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, ingestion already running, `gcu_version_changed`, second or ambiguous organization attachment |
+| 404 | Unknown id or unregistered path |
+| 405 | Unsupported method on a registered path |
+| 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, `gcu_version_changed`, second or ambiguous organization attachment |
 | 413 | Import exceeds 50 MiB compressed or 100 MiB expanded |
-| 422 | Invalid ZIP/declarations, `not_yet_supported` import format; invalid JSON body (optional ones included), short bootstrap token, half a cursor |
+| 422 | Invalid ZIP/declarations, `not_yet_supported` import format; invalid JSON body, short bootstrap token, half a cursor |
 | 503 | Bootstrap or platform-role administration with authentication disabled; grant with no directory or incompatible subject/realm mapping |
 | 500 | Anything else, logged, answered `internal error` |
 
@@ -148,10 +150,6 @@ scheduler:
       workflow_id_prefix: fred-manager-lifecycle
       connect_timeout_seconds: 5
       rpc_timeout_seconds: 10
-  temporal:
-    host: localhost:7233
-    namespace: default
-    task_queue: fred-ingestion
 ```
 <!-- end generated -->
 
@@ -204,6 +202,7 @@ realm starts empty.
 flowchart LR
     subgraph host [Developer host]
         run["make run<br/>config/configuration.yaml<br/>config/.env"]
+        worker["make run-worker"]
         browser["browser"]
     end
     subgraph infra [docker-up or k3d-up]
@@ -217,7 +216,8 @@ flowchart LR
         secrets[["fred-secrets"]]
         traefik["Traefik :8088<br/>/fred-manager"]
     end
-    run --> pg & kc & fga & tmp
+    run --> pg & kc & fga
+    worker --> pg & fga & tmp
     browser --> traefik --> pod
     secrets -. "POSTGRES_FRED_PASSWORD,<br/>OPENFGA_API_TOKEN,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_FRED_MANAGER_CLIENT_SECRET" .-> pod
 ```
@@ -342,7 +342,7 @@ and `space.deletion.completed` on `fred.security.audit` after SQL commit.
 
 The manager-owned schedule defaults to PT10M and 100 candidates (range 1..5000),
 skips overlap and reconciles idempotently at startup. Queue and workflow prefix
-must begin with `fred-manager-`; the queue cannot equal ingestion's. Connect/RPC
+must begin with `fred-manager-`. Connect/RPC
 timeouts default to 5/10 seconds. Sweep cadence, backlog and outages add latency;
 due time is an earliest cleanup time. Disabling every worker prevents cleanup and
 pauses its schedule when Temporal is reachable. Settings load at process startup.

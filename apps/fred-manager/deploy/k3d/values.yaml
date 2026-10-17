@@ -196,11 +196,6 @@ applications:
             workflow_id_prefix: fred-manager-lifecycle
             connect_timeout_seconds: 5
             rpc_timeout_seconds: 10
-        temporal:
-          host: "temporal:7233"            # address
-          namespace: default
-          task_queue: fred-ingestion
-
   # Same image and API-owned configuration; activation follows the documented barrier.
   fred-manager-worker:
     <<: *manager-api

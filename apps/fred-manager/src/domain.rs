@@ -200,11 +200,6 @@ pub fn folder_path(parent: Option<&Folder>, id: Uuid) -> String {
     format!("{base}{id}/")
 }
 
-/// Storage prefix of every artefact derived from a document (source, markdown, tables...).
-pub fn storage_prefix(space_id: Uuid, document_id: Uuid) -> String {
-    format!("{space_id}/{document_id}/")
-}
-
 /// Removing `role` would drop the user's content access to a space while they still hold
 /// a role on one of its child spaces, breaking "a role on a space needs read on its parent".
 pub fn revocation_blocked(role: Role, roles_on_space: &[Role], holds_role_in_child: bool) -> bool {

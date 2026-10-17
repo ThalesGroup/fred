@@ -49,7 +49,11 @@ def configuration(name):
                 "store_name": "fred-manager" if manager else "fred",
             }
         },
-        "scheduler": {"temporal": {"host": "temporal:7233", "namespace": "default"}},
+        "scheduler": (
+            {"lifecycle": {"temporal": {"host": "temporal:7233", "namespace": "default"}}}
+            if manager
+            else {"temporal": {"host": "temporal:7233", "namespace": "default"}}
+        ),
     }
 
 
@@ -222,6 +226,20 @@ class ResetTests(unittest.TestCase):
                 if not any(name in json.dumps(item) for name in reset.MANAGER_APPS)
             ]
         self.r.preflight()
+        self.assert_read_only()
+
+    def test_manager_reset_accepts_only_lifecycle_temporal_configuration(self):
+        for name in reset.MANAGER_APPS:
+            scheduler = self.r.configs[name]["configuration"]["scheduler"]
+            self.assertNotIn("temporal", scheduler)
+            self.assertIn("temporal", scheduler["lifecycle"])
+        self.preflight()
+        self.assert_read_only()
+
+    def test_manager_lifecycle_external_namespace_is_refused(self):
+        self.r.configs["fred-manager-worker"]["configuration"]["scheduler"]["lifecycle"]["temporal"]["namespace"] = "external"
+        with self.assertRaises(reset.Refused):
+            self.preflight()
         self.assert_read_only()
 
     def test_manager_worker_external_temporal_is_refused(self):

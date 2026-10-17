@@ -147,7 +147,7 @@ impl Default for TemporalConfig {
     }
 }
 impl LifecycleConfig {
-    pub fn validate(&self, ingestion_queue: &str) -> Result<()> {
+    pub fn validate(&self) -> Result<()> {
         ensure!(self.sweep_interval.0 > 0, "sweep interval must be positive");
         ensure!(
             (1..=5000).contains(&self.batch_size),
@@ -159,10 +159,6 @@ impl LifecycleConfig {
                 .iter()
                 .all(|s| !s.trim().is_empty() && s.trim() == s.as_str()),
             "blank lifecycle connection field"
-        );
-        ensure!(
-            t.task_queue != ingestion_queue,
-            "lifecycle queue collides with ingestion"
         );
         ensure!(
             t.task_queue.starts_with("fred-manager-")
@@ -387,16 +383,16 @@ mod tests {
     fn lifecycle_defaults_disable_requests_and_validate_bounds() {
         let config = LifecycleConfig::default();
         assert!(!config.enabled);
-        config.validate("fred-ingestion").unwrap();
-        assert!(config.validate(&config.temporal.task_queue).is_err());
+        config.validate().unwrap();
         for yaml in [
             "sweep_interval: PT0S",
             "batch_size: 0",
             "batch_size: 5001",
             "temporal: {connect_timeout_seconds: 0}",
+            "temporal: {task_queue: fred-ingestion}",
         ] {
             let c: LifecycleConfig = serde_yaml_ng::from_str(yaml).unwrap();
-            assert!(c.validate("fred-ingestion").is_err());
+            assert!(c.validate().is_err());
         }
         assert!(serde_yaml_ng::from_str::<LifecycleConfig>("unknown: true").is_err());
     }

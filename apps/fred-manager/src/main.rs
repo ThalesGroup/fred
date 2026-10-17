@@ -17,9 +17,7 @@
 use anyhow::{Context, Result};
 use sqlx::postgres::PgPoolOptions;
 
-use fred_manager::{
-    api, auth, config::Configuration as Config, fga::Fga, ingestion, logging, spaces,
-};
+use fred_manager::{api, auth, config::Configuration as Config, fga::Fga, logging, spaces};
 
 const USAGE: &str = "usage: fred-manager [serve | worker | generate-openapi | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
 
@@ -137,12 +135,6 @@ async fn serve(config: Config) -> Result<()> {
                 config.policies.purge_catalog_path.as_deref(),
             )?,
         },
-        ingestion: ingestion::Ingestion::connect(
-            &config.temporal_url(),
-            &config.scheduler.temporal.namespace,
-            &config.scheduler.temporal.task_queue,
-        )
-        .await?,
     };
     let addr = config.listen_addr();
     let listener = tokio::net::TcpListener::bind(&addr).await?;

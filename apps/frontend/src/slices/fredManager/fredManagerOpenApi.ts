@@ -39,28 +39,8 @@ const injectedRtkApi = api.injectEndpoints({
     deletionStatus: build.query<DeletionStatusApiResponse, DeletionStatusApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/deletions/${queryArg.operationId}` }),
     }),
-    createDocument: build.mutation<CreateDocumentApiResponse, CreateDocumentApiArg>({
-      query: (queryArg) => ({ url: `/fred-manager/v1/documents`, method: "POST", body: queryArg.createDocument }),
-    }),
     getDocument: build.query<GetDocumentApiResponse, GetDocumentApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/documents/${queryArg.id}` }),
-    }),
-    deleteDocument: build.mutation<DeleteDocumentApiResponse, DeleteDocumentApiArg>({
-      query: (queryArg) => ({ url: `/fred-manager/v1/documents/${queryArg.id}`, method: "DELETE" }),
-    }),
-    renameDocument: build.mutation<RenameDocumentApiResponse, RenameDocumentApiArg>({
-      query: (queryArg) => ({
-        url: `/fred-manager/v1/documents/${queryArg.id}`,
-        method: "PATCH",
-        body: queryArg.rename,
-      }),
-    }),
-    ingestDocument: build.mutation<IngestDocumentApiResponse, IngestDocumentApiArg>({
-      query: (queryArg) => ({
-        url: `/fred-manager/v1/documents/${queryArg.id}/ingest`,
-        method: "POST",
-        body: queryArg.ingestRequest,
-      }),
     }),
     createFolder: build.mutation<CreateFolderApiResponse, CreateFolderApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/folders`, method: "POST", body: queryArg.createFolder }),
@@ -188,27 +168,9 @@ export type DeletionStatusApiResponse = /** status 200 undefined */ Receipt;
 export type DeletionStatusApiArg = {
   operationId: string;
 };
-export type CreateDocumentApiResponse = /** status 201 Success */ CreatedDocument;
-export type CreateDocumentApiArg = {
-  createDocument: CreateDocument;
-};
 export type GetDocumentApiResponse = /** status 200 Success */ Document;
 export type GetDocumentApiArg = {
   id: string;
-};
-export type DeleteDocumentApiResponse = unknown;
-export type DeleteDocumentApiArg = {
-  id: string;
-};
-export type RenameDocumentApiResponse = unknown;
-export type RenameDocumentApiArg = {
-  id: string;
-  rename: Rename;
-};
-export type IngestDocumentApiResponse = unknown;
-export type IngestDocumentApiArg = {
-  id: string;
-  ingestRequest?: IngestRequest;
 };
 export type CreateFolderApiResponse = /** status 201 Success */ Folder;
 export type CreateFolderApiArg = {
@@ -391,24 +353,6 @@ export type Document = {
   size: number;
   space_id: string;
 };
-export type CreatedDocument = Document & {
-  source_key: string;
-  storage_prefix: string;
-};
-export type CreateDocument = {
-  folder_id?: string | null;
-  mime: string;
-  name: string;
-  sha256: string;
-  size: number;
-  space_id: string;
-};
-export type Rename = {
-  name: string;
-};
-export type IngestRequest = {
-  profile?: string | null;
-};
 export type Folder = {
   id: string;
   name: string;
@@ -420,6 +364,9 @@ export type CreateFolder = {
   name: string;
   parent_id?: string | null;
   space_id: string;
+};
+export type Rename = {
+  name: string;
 };
 export type PublicAuth = {
   client_id: string;
@@ -499,12 +446,8 @@ export const {
   useBootstrapPlatformAdminMutation,
   useDeletionStatusQuery,
   useLazyDeletionStatusQuery,
-  useCreateDocumentMutation,
   useGetDocumentQuery,
   useLazyGetDocumentQuery,
-  useDeleteDocumentMutation,
-  useRenameDocumentMutation,
-  useIngestDocumentMutation,
   useCreateFolderMutation,
   useDeleteFolderMutation,
   useRenameFolderMutation,

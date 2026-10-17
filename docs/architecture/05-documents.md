@@ -48,9 +48,8 @@ dialog's completion. A 403 disables further submission until the user closes and
 refreshes permissions. Creation is not automatically replayed after a 401; after
 an uncertain response the user can refresh Resources to inspect the persisted state.
 
-The folder handler makes no Temporal call and belongs to the governance router,
-which is constructible without an ingestion client. The full `serve` binary still
-connects to Temporal during startup.
+Folder operations and HTTP startup make no Temporal call. Document metadata has
+read and authorization operations only; the API exposes no document mutation.
 
 ## Uploads, connectors and storage
 
@@ -62,6 +61,6 @@ connects to Temporal during startup.
 
 ## Implementation references
 
-[Manager content checks, scope and workflow submission](A1-manager-runtime.md#content-access).
+[Manager content checks and scope](A1-manager-runtime.md#content-access).
 The [Resources journey](02-user-journeys.md#priya-browses-her-resources) displays
 persisted metadata using the generated manager client and existing explorer.

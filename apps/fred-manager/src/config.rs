@@ -138,17 +138,8 @@ pub struct PostgresConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SchedulerConfig {
-    pub temporal: TemporalConfig,
     #[serde(default)]
     pub lifecycle: crate::lifecycle::policy::LifecycleConfig,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct TemporalConfig {
-    pub host: String,
-    #[serde(default = "default_namespace")]
-    pub namespace: String,
-    pub task_queue: String,
 }
 
 fn terms_version<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
@@ -187,9 +178,6 @@ fn default_timeout() -> Option<u64> {
 fn default_pg_port() -> u16 {
     5432
 }
-fn default_namespace() -> String {
-    "default".into()
-}
 
 fn opt_env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
@@ -218,10 +206,7 @@ impl Configuration {
         let text = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
         let config: Self =
             serde_yaml_ng::from_str(&text).with_context(|| format!("invalid {path}"))?;
-        config
-            .scheduler
-            .lifecycle
-            .validate(&config.scheduler.temporal.task_queue)?;
+        config.scheduler.lifecycle.validate()?;
         Ok((path, config))
     }
 
@@ -250,11 +235,6 @@ impl Configuration {
             .rebac
             .timeout_millisec
             .map(Duration::from_millis)
-    }
-
-    /// `temporal.host` is `host:port`, as for the Python workers.
-    pub fn temporal_url(&self) -> String {
-        format!("http://{}", self.scheduler.temporal.host)
     }
 
     pub fn security(&self) -> Result<SecuritySettings> {

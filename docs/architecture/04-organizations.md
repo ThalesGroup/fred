@@ -96,11 +96,8 @@ flowchart TB
 A caller may restrict a scope to some of the organization, team and project levels;
 levels only remove spaces from it.
 
-Folders classify only and carry no rights. A document's artefacts have no
-authorization identity of their own: they are stored under its storage prefix
-`<space_id>/<document_id>/`, and `IngestDocument` hands over `space_id`, `document_id`
-and `folder_path`, ids only, so indexed content is filtered by scope and a rename
-changes nothing outside the row.
+Folders classify only and carry no rights. Document metadata inherits its owning
+space's authority; read and scope probes use immutable space identifiers.
 
 ## Provisioning people and spaces
 

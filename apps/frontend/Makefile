@@ -253,7 +253,6 @@ update-runtime-api: check-node node_modules ## Regenerate the API client for fre
 update-fred-manager-api: check-node node_modules ## Regenerate the fred-manager API client and types
 	$(MAKE) -C ../fred-manager generate-openapi
 	npx --no-install @rtk-query/codegen-openapi src/slices/fredManager/fredManagerOpenApiConfig.json
-	node scripts/fred-manager-codegen.mjs
 
 # Per-capability client (AGENT-CAPABILITY-RFC §9.1, #1979): each capability's
 # router has its OWN OpenAPI document (dumped by the runtime CLI) and its OWN

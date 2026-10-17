@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! fred-manager: ownership of spaces, folders and documents, their authorization,
-//! and submission of ingestion work to the Python workers.
+//! fred-manager: space governance, folder operations, document metadata reads
+//! and deferred space cleanup with its dedicated Temporal worker.
 
 pub mod api;
 pub mod auth;
@@ -23,7 +23,6 @@ pub mod db;
 pub mod domain;
 pub mod error;
 pub mod fga;
-pub mod ingestion;
 pub mod keycloak;
 pub mod lifecycle;
 pub mod logging;

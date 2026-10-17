@@ -85,11 +85,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /folders",
         "patch /folders/{id}",
         "delete /folders/{id}",
-        "post /documents",
         "get /documents/{id}",
-        "patch /documents/{id}",
-        "delete /documents/{id}",
-        "post /documents/{id}/ingest",
         "post /authorize/document",
         "post /authorize/scope",
         "get /users/platform-roles",
@@ -164,24 +160,19 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
                 .contains(&json!("null"))
         );
     }
-    for (wrapper, inner, extra) in [
-        ("MySpace", "Space", "roles"),
-        ("CreatedDocument", "Document", "source_key"),
-    ] {
-        assert_eq!(
-            schemas[wrapper]["allOf"][0]["$ref"],
-            format!("#/components/schemas/{inner}")
-        );
-        assert!(
-            schemas[wrapper]["allOf"][1]["properties"]
-                .get(extra)
-                .is_some()
-        );
-    }
+    assert_eq!(
+        schemas["MySpace"]["allOf"][0]["$ref"],
+        "#/components/schemas/Space"
+    );
+    assert!(
+        schemas["MySpace"]["allOf"][1]["properties"]
+            .get("roles")
+            .is_some()
+    );
 }
 
 #[test]
-fn upload_optional_body_and_empty_responses_match_the_http_contract() {
+fn upload_and_empty_responses_match_the_http_contract() {
     let api = schema();
     let import = &api["paths"]["/fred-manager/v1/import-export/import"]["post"];
     assert_eq!(import["requestBody"]["required"], true);
@@ -212,12 +203,6 @@ fn upload_optional_body_and_empty_responses_match_the_http_contract() {
         api["paths"]["/fred-manager/v1/users/{user}/platform-roles/{role}"]["delete"]["responses"]
             ["404"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/ErrorBody"
-    );
-    let ingest = &api["paths"]["/fred-manager/v1/documents/{id}/ingest"]["post"];
-    assert_eq!(ingest["requestBody"]["required"], false);
-    assert_eq!(
-        ingest["requestBody"]["content"]["application/json"]["schema"]["$ref"],
-        "#/components/schemas/IngestRequest"
     );
     for item in api["paths"].as_object().unwrap().values() {
         for operation in item.as_object().unwrap().values() {
@@ -256,5 +241,24 @@ fn platform_role_alias_descriptions_match_the_parser() {
     }
     for removed in ["admin", "platform_admin", "team_manager"] {
         assert!(PlatformRole::parse(removed).is_none());
+    }
+}
+
+#[test]
+fn document_mutations_and_their_schemas_are_absent() {
+    let api = schema();
+    let paths = &api["paths"];
+    assert!(paths.get("/fred-manager/v1/documents").is_none());
+    assert!(
+        paths
+            .get("/fred-manager/v1/documents/{id}/ingest")
+            .is_none()
+    );
+    let document = &paths["/fred-manager/v1/documents/{id}"];
+    assert!(document.get("get").is_some());
+    assert!(document.get("patch").is_none());
+    assert!(document.get("delete").is_none());
+    for name in ["CreateDocument", "CreatedDocument", "IngestRequest"] {
+        assert!(api["components"]["schemas"].get(name).is_none());
     }
 }

@@ -96,7 +96,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     lifecycle.config.temporal.workflow_id_prefix = lifecycle.config.temporal.task_queue.clone();
     lifecycle.catalog = Catalog::load(catalog.to_str()).unwrap();
     let identity = support::IdentityServer::start().await;
-    let app = api::governance_router(api::GovernanceState {
+    let app = api::governance_router(api::AppState {
         auth: Arc::new(identity.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),
@@ -134,7 +134,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     let config = json!({"app":{"base_url":"/fred-manager/v1","address":"127.0.0.1","port":0,"log_format":"json"},
       "security":{"user":{"realm_url":"http://unreachable.invalid","client_id":"unused"},"rebac":{"api_url":e.openfga,"store_name":e.store,"create_store_if_needed":false,"sync_schema_on_init":false}},
       "storage":{"postgres":{"host":pg.host_str(),"port":pg.port().unwrap(),"username":"postgres","database":database}},
-      "scheduler":{"temporal":{"host":"unused:7233","task_queue":"fred-ingestion"},"lifecycle":{"enabled":true,"sweep_interval":"PT1S","temporal":{"host":t.host,"namespace":t.namespace,"task_queue":t.task_queue,"workflow_id_prefix":t.workflow_id_prefix}}},
+      "scheduler":{"lifecycle":{"enabled":true,"sweep_interval":"PT1S","temporal":{"host":t.host,"namespace":t.namespace,"task_queue":t.task_queue,"workflow_id_prefix":t.workflow_id_prefix}}},
       "policies":{"purge_catalog_path":catalog}});
     let config_path = workspace.0.join("config.json");
     std::fs::write(&config_path, serde_json::to_vec(&config).unwrap()).unwrap();

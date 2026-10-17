@@ -52,7 +52,3 @@ scheduler:
       workflow_id_prefix: fred-manager-lifecycle
       connect_timeout_seconds: 5
       rpc_timeout_seconds: 10
-  temporal:
-    host: localhost:7233
-    namespace: default
-    task_queue: fred-ingestion

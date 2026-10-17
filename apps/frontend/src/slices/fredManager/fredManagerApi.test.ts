@@ -16,6 +16,7 @@ vi.mock("../../common/platformAccess", () => ({ handlePlatformAccessDenial: vi.f
 
 import { KeyCloakService } from "../../security/KeycloakService";
 
+import * as managerApi from "./fredManagerApiEnhancements";
 import { enhancedFredManagerApi as api } from "./fredManagerApiEnhancements";
 
 const NativeRequest = globalThis.Request;
@@ -122,15 +123,13 @@ describe("generated fred-manager client", () => {
     store.dispatch(api.util.resetApiState());
   });
 
-  it("allows an omitted ingestion body through the typed enhancement", async () => {
-    const { store, fetch } = setup(null);
-    fetch.mockImplementationOnce(async () => new Response(null, { status: 202 }));
-    await store.dispatch(api.endpoints.ingestDocument.initiate({ id: "document-id" })).unwrap();
-    const request = fetch.mock.calls[0][0];
-    expect(request.url).toBe("http://localhost/fred-manager/v1/documents/document-id/ingest");
-    expect(await request.text()).toBe("");
-    expect(request.headers.has("content-type")).toBe(false);
-    store.dispatch(api.util.resetApiState());
+  it("exposes metadata reads without provisional document mutations", () => {
+    for (const operation of ["createDocument", "renameDocument", "deleteDocument", "ingestDocument"]) {
+      expect(api.endpoints).not.toHaveProperty(operation);
+    }
+    expect(managerApi).not.toHaveProperty("useIngestDocumentMutation");
+    expect(api.endpoints).toHaveProperty("getDocument");
+    expect(api.endpoints).toHaveProperty("listDocuments");
   });
 
   it("retains the standard token retry for ordinary queries", async () => {
