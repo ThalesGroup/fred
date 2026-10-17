@@ -92,6 +92,7 @@ from fred_capability_ppt_filler.builder.changes import (
     after_the_cover,
     apply_changes,
     change_shape,
+    deck_delta,
     unchanged,
 )
 from fred_capability_ppt_filler.builder.checks import SlideReport
@@ -1366,6 +1367,19 @@ def build_builder_tools(
             return False
         return stored is not None and stored.delivered
 
+    async def previous_deck(base: Optional[DeckPlan]) -> Optional[DeckPlan]:
+        """The deck the user had before this build, if one was delivered."""
+        if turn_delivered:
+            return turn_delivered[0][0]
+        if base is not None and base.delivered:
+            return base
+        try:
+            stored = await plans.read()
+        except Exception:  # noqa: BLE001 - the delta line is only a help
+            logger.warning("[PPTBUILD][TOOL] base plan unreadable", exc_info=True)
+            return None
+        return stored if stored is not None and stored.delivered else None
+
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         async with build_lock:
             return await _build_plan(**kwargs)
@@ -1625,6 +1639,10 @@ def build_builder_tools(
                 "The deck was built but could not be saved to the conversation files, so the "
                 "user cannot get it. Tell the user and suggest trying again in a moment."
             )
+        previous = await previous_deck(base)
+        delta = (
+            "" if previous is None else deck_delta(previous, deck, _kinds(inventory))
+        )
         # Delivered, the deck is the base: the same changes sent again are a
         # new change to it, not a corrected resend of a refused one.
         turn_base[:] = [deck]
@@ -1644,7 +1662,7 @@ def build_builder_tools(
             + moved_notes
             + _cleared_lines(cleared, plan, numbers),
         )
-        notes = _designs_line(inventory, patterns) + notes
+        notes = delta + _designs_line(inventory, patterns) + notes
 
         pdf_bytes = await convert_office_bytes_to_pdf(
             result.preview_pptx or result.pptx, suffix=".pptx"

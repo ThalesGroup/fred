@@ -28,6 +28,7 @@ from fred_capability_ppt_filler.builder.changes import (
     ChangeError,
     SlideChange,
     apply_changes,
+    deck_delta,
 )
 from fred_capability_ppt_filler.builder.deck_plans import (
     MemoryDeckPlanStore,
@@ -444,6 +445,31 @@ async def test_an_insert_at_the_start_goes_after_the_cover(monkeypatch):
     assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
     assert [s.title for s in turn.rendered[-1].slides] == ["Kick-off", "Why", "Agenda"]
     assert "went after the cover (slide 1)" in text
+
+
+def test_the_delta_names_changed_added_and_removed_slides():
+    after = _apply(
+        {"op": "edit", "slide": 2, "field": "title", "value": "Plan"},
+        {"op": "remove", "slide": 3},
+        {"op": "insert", "after": 4, "slides": [{"title": "Next"}]},
+    )
+    line = deck_delta(BASE, after, {})
+    assert "previous deck (4 slides), slides of this file changed: 2; added: 4" in line
+    assert "removed: 3 of the previous deck; 2 unchanged." in line
+    assert "none changed" in deck_delta(BASE, BASE, {})
+
+
+@pytest.mark.asyncio
+async def test_a_revision_result_says_which_slides_changed(monkeypatch):
+    """Revision replies claimed edits the deck did not hold: the result now
+    says which slides differ from the deck the user had."""
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    text, _ = await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
+    assert "Compared with the previous deck" not in text
+    text, _ = await turn.build(
+        changes=[{"op": "edit", "slide": 2, "field": "title", "value": "Plan"}]
+    )
+    assert "slides of this file changed: 2; 1 unchanged." in text
 
 
 @pytest.mark.asyncio

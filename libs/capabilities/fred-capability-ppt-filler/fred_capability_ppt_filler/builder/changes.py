@@ -18,6 +18,8 @@ assigns and renders it as any full call, so quality never depends on the mode.""
 
 from __future__ import annotations
 
+import difflib
+import json
 import re
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
@@ -487,6 +489,42 @@ def unchanged(base: DeckPlan, changed: DeckPlan, kinds: Mapping[str, str]) -> bo
     return len(base.slides) == len(changed.slides) and all(
         _shown(a, kinds) == _shown(b, kinds)
         for a, b in zip(base.slides, changed.slides)
+    )
+
+
+def _numbers(found: List[int]) -> str:
+    return ", ".join(str(n) for n in found)
+
+
+def deck_delta(before: DeckPlan, after: DeckPlan, kinds: Mapping[str, str]) -> str:
+    """Which slides of ``after`` differ from the delivered ``before`` (content
+    or design), as a line the agent can describe its edit from truthfully."""
+    a = [
+        json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in before.slides
+    ]
+    b = [
+        json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in after.slides
+    ]
+    changed: List[int] = []
+    added: List[int] = []
+    removed: List[int] = []
+    matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        both = min(i2 - i1, j2 - j1) if tag == "replace" else 0
+        changed += range(j1 + 1, j1 + both + 1)
+        if tag in ("replace", "insert"):
+            added += range(j1 + both + 1, j2 + 1)
+        if tag in ("replace", "delete"):
+            removed += range(i1 + both + 1, i2 + 1)
+    kept = len(b) - len(changed) - len(added)
+    parts = [f"changed: {_numbers(changed)}"] if changed else []
+    parts += [f"added: {_numbers(added)}"] if added else []
+    parts += [f"removed: {_numbers(removed)} of the previous deck"] if removed else []
+    parts.append(f"{kept} unchanged" if parts else "none changed")
+    return (
+        f"\nCompared with the previous deck ({len(a)} slides), slides of this file "
+        + "; ".join(parts)
+        + ". Describe only these changes to the user."
     )
 
 
