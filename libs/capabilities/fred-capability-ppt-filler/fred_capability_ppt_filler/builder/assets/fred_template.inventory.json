@@ -3,7 +3,7 @@
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
-  "analysis_version": 19,
+  "analysis_version": 20,
   "patterns": [
    {
     "id": "slide:256",
@@ -4972,8 +4972,8 @@
       },
       "sample": "Value ↑",
       "font_pt": 12.0,
-      "chars_per_line": 1,
-      "max_lines": 19,
+      "chars_per_line": 54,
+      "max_lines": 1,
       "grows": false,
       "purpose": null,
       "table": null,

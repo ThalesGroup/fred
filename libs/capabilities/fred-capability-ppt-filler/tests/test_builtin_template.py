@@ -18,7 +18,11 @@ import json
 import re
 
 from fred_capability_ppt_filler.builder import builtin
-from fred_capability_ppt_filler.builder.analysis import ANALYSIS_VERSION
+from fred_capability_ppt_filler.builder.analysis import (
+    ANALYSIS_VERSION,
+    analyze_template,
+)
+from fred_capability_ppt_filler.builder.plan import zone_summary
 from fred_capability_ppt_filler.builder.tools import _args_schema, _description
 
 _REGENERATE = "run `make builtin-inventory` in the package"
@@ -116,3 +120,15 @@ def test_builtin_rooms_read_as_words_then_chars():
         assert budget <= max(1, (int(chars) + 1) // 7 * int(lines or 1)), words
     # No room left quoted in chars only (table cells aside).
     assert not re.search(r"(?<!\()≈\d+ chars(?! per cell)", text)
+
+
+def test_vertical_text_is_measured_along_its_height():
+    """The matrix's vertical axis label (`vert270`, inherited from its layout)
+    was quoted ≈1 char × 19 lines, so every matrix column read "1 short word"."""
+    inventory = analyze_template(builtin.TEMPLATE_PATH.read_bytes()).inventory
+    assert inventory is not None
+    matrix = next(p for p in inventory.patterns if p.name == "Fred Matrix")
+    axis = next(z for z in matrix.zones if z.sample.startswith("Value"))
+    assert axis.chars_per_line and axis.max_lines
+    assert axis.chars_per_line > 20 and axis.max_lines == 1
+    assert "short word" not in zone_summary(matrix)

@@ -190,7 +190,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 19
+ANALYSIS_VERSION = 20
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -308,6 +308,8 @@ class FrameMetrics:
     # Auto-sizing the *height* does not count — such a box still wraps, and the
     # width limit that follows from it is the one that matters.
     grows: bool = False
+    # Text runs top to bottom (`vert`, `vert270`…): lines run along the height.
+    vertical: bool = False
 
 
 def _pPr_chain(shape, layout, master) -> List[Any]:
@@ -428,6 +430,7 @@ def _frame_metrics(shape, layout, master, font_pt: Optional[float]) -> FrameMetr
         space_before_pt=max(0.0, before or 0.0),
         space_after_pt=max(0.0, after or 0.0),
         grows=attribute("wrap") == "none",
+        vertical=attribute("vert") not in (None, "horz"),
     )
 
 
@@ -609,6 +612,8 @@ def estimate_capacity(
     height_emu_box = box.h / 1000 * height_emu - metrics.tb_inset
     width_pt = max(0.0, width_emu_box) / 914400 * 72
     height_pt = max(0.0, height_emu_box) / 914400 * 72
+    if metrics.vertical:
+        width_pt, height_pt = height_pt, width_pt
 
     pitch = pt * text_metrics.LINE_HEIGHT * metrics.line_spacing
     around = metrics.space_before_pt + metrics.space_after_pt
