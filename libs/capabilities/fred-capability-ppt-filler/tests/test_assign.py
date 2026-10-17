@@ -880,6 +880,34 @@ def test_too_many_column_entries_name_the_column_list():
     ]
 
 
+def test_bullets_over_two_columns_keep_each_point_with_its_sub_points():
+    """The eval slide: one lead and four sub-points were cut by count, its
+    sub-points spread over both columns."""
+    two = _list_pattern("two_columns", 60, 8, bodies=2)
+    nested = [
+        "Valider le budget",
+        "- Cadrage",
+        "- Intégrateur",
+        "- Formation",
+        "- Comité",
+    ]
+    slide = SlidePlan(title="Prochaines étapes", bullets=nested)
+    (reason,), _ = misfit(two, slide, _SIZE)
+    assert reason.text.startswith("bullets: one point with its sub-points")
+    assert not misfit(_list_pattern("bullets", 60, 8), slide, _SIZE)[0]
+    grouped = SlidePlan(title="Axes", bullets=["A", "- a1", "B", "- b1", "- b2"])
+    assert not misfit(two, grouped, _SIZE)[0]
+    placed = _assign_text(two, grouped)
+    assert [line.text for line in placed["ph:1"]] == ["A", "a1"]
+    assert [line.text for line in placed["ph:2"]] == ["B", "b1", "b2"]
+    # A flat list still splits in half, the first column the longer.
+    flat = _assign_text(two, SlidePlan(title="T", bullets=list("abcde")))
+    assert ([x.text for x in flat["ph:1"]], [x.text for x in flat["ph:2"]]) == (
+        ["a", "b", "c"],
+        ["d", "e"],
+    )
+
+
 def test_entries_few_enough_but_too_long_get_a_length_message():
     slide = SlidePlan(title="Detail", kind="bullets", bullets=["a", "word " * 60])
     (reason,), _ = misfit(_list_pattern("bullets", 40, 2), slide, _SIZE)

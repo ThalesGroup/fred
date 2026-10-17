@@ -1214,6 +1214,20 @@ def _assign_text(
     return out
 
 
+def column_split(lines: Sequence[_Line]) -> Optional[int]:
+    """Where a list goes over two columns: at the point nearest its middle, so
+    a point keeps its sub-points; None when it is one point (with its own)."""
+    starts = [
+        i
+        for i in range(1, len(lines))
+        if lines[i].level == 0 and not lines[i - 1].heading
+    ]
+    if not starts:
+        return None
+    half = math.ceil(len(lines) / 2)
+    return min(starts, key=lambda i: (abs(i - half), i))
+
+
 def _place_text(
     pattern: Pattern,
     plan: SlidePlan,
@@ -1319,10 +1333,10 @@ def _place_text(
     if not bodies:
         lost.append("bullets")
         return out
-    if len(bodies) > 1 and pattern.kind in ("two_columns", "comparison"):
-        half = math.ceil(len(bullets) / 2)
-        put(bodies[0], bullets[:half], "bullets")
-        put(bodies[1], bullets[half:], "bullets")
+    at = column_split(bullets)
+    if len(bodies) > 1 and pattern.kind in ("two_columns", "comparison") and at:
+        put(bodies[0], bullets[:at], "bullets")
+        put(bodies[1], bullets[at:], "bullets")
     else:
         put(bodies[0], bullets, "bullets")
     return out

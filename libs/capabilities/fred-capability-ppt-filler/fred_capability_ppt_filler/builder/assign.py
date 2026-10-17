@@ -64,11 +64,13 @@ from fred_capability_ppt_filler.builder.render import (
     _assign_text,
     _fit,
     _Line,
+    _lines_from_bullets,
     _only_names_the_slide,
     _reading_order,
     _takeaway_zone,
     _unused_item_fields,
     chart_hosts,
+    column_split,
     fit_table,
     floor_lines,
     zone_capacity,
@@ -485,6 +487,18 @@ def misfit(
     return reasons, cost
 
 
+def _one_point_over_columns(pattern: Pattern, slide: SlidePlan) -> bool:
+    """Bullets on a two-column slide go over both columns at a point: a single
+    point (its sub-points under it) would leave one column empty."""
+    return (
+        pattern.kind in ("two_columns", "comparison")
+        and bool(slide.bullets)
+        and not slide.columns
+        and sum(z.role == "body" for z in pattern.zones) > 1
+        and column_split(_lines_from_bullets(slide.bullets)) is None
+    )
+
+
 def _weigh(
     pattern: Pattern, slide: SlidePlan, size: Tuple[int, int]
 ) -> Tuple[List[Misfit], float, int]:
@@ -505,6 +519,14 @@ def _weigh(
     reasons: List[Misfit] = []
     lost: List[str] = []
     text = _assign_text(pattern, slide, lost, size)
+    if _one_point_over_columns(pattern, slide):
+        reasons.append(
+            Misfit(
+                "bullets: one point with its sub-points cannot be split over this "
+                "slide's two columns",
+                "use kind 'bullets', or give `columns` [{heading, bullets}], one per column",
+            )
+        )
     images = list(dict.fromkeys(([slide.image] if slide.image else []) + slide.images))
     image_zones = sum(1 for z in pattern.zones if z.role == "image")
     if len(images) > image_zones:
