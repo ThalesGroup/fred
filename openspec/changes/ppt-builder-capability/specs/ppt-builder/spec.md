@@ -51,9 +51,9 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 
 #### Scenario: Placeholders sharing an index
 
-- **GIVEN** an example slide with two placeholders of the same `idx`
-- **WHEN** it is analysed
-- **THEN** each gets its own slot key and the pattern carries a warning
+- **GIVEN** an example slide with two placeholders of the same `idx`, top-level slots or the picture slots of a repeated group
+- **WHEN** it is analysed and then filled, pictures included
+- **THEN** each gets its own slot key (the first in drawing order keeps the `idx`, the next one its shape path), the pattern carries a warning, and each slot is filled on its own; the deck never fails on it
 
 #### Scenario: First slide is the cover
 
@@ -706,6 +706,12 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 
 - **WHEN** the plan names a valid image document for a slide with an image slot
 - **THEN** it fills the slot's frame keeping its aspect ratio, centre-cropped rather than letterboxed, in the slot's own shape (a round frame stays round) and with the example picture's alt text; an image slot left empty is removed, and an invalid reference is named in the result
+
+#### Scenario: A text zone left empty is removed
+
+- **GIVEN** a slide whose text zone is a text box drawn with its own fill or outline (a panel), not a placeholder
+- **WHEN** the plan gives that zone nothing
+- **THEN** the box is removed with its fill, as an empty placeholder is; a shape that is no zone stays
 
 #### Scenario: Fewer team photos than the template shows
 

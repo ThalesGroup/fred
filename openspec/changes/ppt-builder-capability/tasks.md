@@ -549,3 +549,11 @@ Owns: `render.py` (`_place_text`, `section_number`, `_numbered`, `_place_image`,
 - [x] 50.3 A recentred item moves each shape once. Test: three team members, each photo centred on its name (fails before: off by half a step)
 - [x] 50.4 Showcase decks re-rendered on the built-in template and checked as PNG (`~/fred-tmp/default-template/v3-fixes/`): sections numbered, cover, section image, image_text and team pictures filled, team photos round and centred
 
+## WP51. Shared picture slots and empty text boxes (owner decision 2026-10-17, design D30)
+
+Owns: `analysis.py` (`_placeholder_key`, `kicker_keys`, `_records`, step 2 of the slide zones, `ANALYSIS_VERSION`), `render.py` (empty text zones), the built-in inventory, tests, delta spec, `verification.md`.
+
+- [x] 51.1 Two placeholders sharing an idx get distinct keys where records are read, the first in drawing order keeping `ph:<idx>`, so a group's picture slots are each filled. Test: three (picture, text) columns whose first two picture slots share an idx, filled with three pictures (fails before: the build raises)
+- [x] 51.2 A text zone left empty is removed, placeholder or text box. Test: a navy panel box beside the body, given nothing (fails before: emptied but drawn)
+- [x] 51.3 Reproduced and re-rendered on the original Thales template (slide 12) and the showcase decks (`~/fred-tmp/bugfix-1017/`), PNG looked at
+

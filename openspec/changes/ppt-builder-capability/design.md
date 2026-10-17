@@ -324,6 +324,11 @@ Rejected: asking the vision model (optional, and it never labels excluded slides
 - **Cropped pictures.** A filled picture zone is centre-cropped (`a:srcRect`) to its frame at the picture's own aspect ratio, never letterboxed. An example picture is swapped in place (new image relationship, old one dropped), so its frame, its geometry inherited from the layout (an ellipse for the team photos) and its alt text stay; an empty picture placeholder uses python-pptx's own crop; any other shape gets a picture over its box, with the shape's preset geometry. The image bytes are embedded as given: never resampled, and the frame is never enlarged.
 - **Team photos recentred once.** With fewer items than the group shows, a picture-only item zone was also taken as loose decoration and moved twice; each shape now moves once.
 
+### D30. Shared picture slots and empty text boxes (owner decision 2026-10-17)
+
+- **One key per slot.** The original Thales template's slide 12 copies a picture placeholder, so two picture slots share `idx` 16. The repeated group addressed both items' pictures as `ph:16`, the second insert hit a placeholder the first had already replaced, and the whole build failed. The key is now decided where the records are read (`_placeholder_key`): the first placeholder of an idx in drawing order keeps `ph:<idx>`, a later one gets its shape path, which the renderer's index already resolves. One rule for top-level slots (where step 2 used to rename the second one) and grouped items; the analysis version moves so stored inventories are recomputed.
+- **An empty zone goes, whatever its shape.** An empty placeholder was removed, an empty text box only cleared, so a panel drawn as the box's own fill stayed on the slide, against the Help Center's "an area left empty is removed". Every text zone left empty is now removed; shapes that are not zones keep the decoration rules of WP49.
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.
