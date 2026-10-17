@@ -36,6 +36,7 @@ from pptx.enum.chart import (
 )
 from pptx.enum.dml import MSO_THEME_COLOR
 from pptx.oxml.ns import qn
+from pptx.oxml.xmlchemy import OxmlElement
 from pptx.util import Emu, Pt
 
 from fred_capability_ppt_filler import text_metrics
@@ -50,7 +51,7 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanPoint,
     capacity_text,
 )
-from fred_capability_ppt_filler.traversal import PlacedShape
+from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 
 XL_TYPES = {
     "column": XL_CHART_TYPE.COLUMN_CLUSTERED,
@@ -86,14 +87,8 @@ _PERCENT_XL = {
 }
 _HORIZONTAL = ("bar", "stacked_bar")
 ROUND = ("pie", "doughnut")
-_ACCENTS = (
-    MSO_THEME_COLOR.ACCENT_1,
-    MSO_THEME_COLOR.ACCENT_2,
-    MSO_THEME_COLOR.ACCENT_3,
-    MSO_THEME_COLOR.ACCENT_4,
-    MSO_THEME_COLOR.ACCENT_5,
-    MSO_THEME_COLOR.ACCENT_6,
-)
+_ACCENTS = tuple(f"accent{n}" for n in range(1, 7))
+_COLOUR_TAGS = (qn("a:schemeClr"), qn("a:srgbClr"))
 # Readability caps, and the share of the frame the plot gets beside its axes.
 _MAX_CATEGORIES = {"line": 24, "area": 24}
 _MAX_CATEGORIES_DEFAULT = 12
@@ -699,44 +694,96 @@ def number_format(chart: PlanChart, axis: str = "y") -> str:
     return f'{base}"{unit}"' if unit == "%" else f'{base}" {unit}"'
 
 
-def _alpha(fmt: Any, path: str, alpha: Optional[int]) -> None:
-    """``a:alpha`` on the colour at ``path`` under the format's ``c:spPr``."""
-    if alpha is None:
-        return
-    colour = fmt._element.find(f"{qn('c:spPr')}/{path}/{qn('a:schemeClr')}")
-    if colour is not None:
-        colour.append(colour.makeelement(qn("a:alpha"), {"val": str(alpha)}))
+def _scheme(name: str) -> Any:
+    colour = OxmlElement("a:schemeClr")
+    colour.set("val", name)
+    return colour
 
 
-def _theme_fill(fmt: Any, accent: MSO_THEME_COLOR, alpha: Optional[int] = None) -> None:
+def _own_colour(sppr: Any) -> Optional[Any]:
+    """The colour a series or point paints with: its fill, else its line."""
+    if sppr is None:
+        return None
+    for path in (qn("a:solidFill"), f"{qn('a:ln')}/{qn('a:solidFill')}"):
+        fill = sppr.find(path)
+        colour = (
+            next((c for c in fill if c.tag in _COLOUR_TAGS), None)
+            if fill is not None
+            else None
+        )
+        if colour is not None and colour.get("val") != "phClr":
+            return colour
+    return None
+
+
+def example_palette(presentation: Any) -> List[Any]:
+    """The series (or pie points) colours of the template's own charts, in order,
+    then the theme accents they leave out; the accents alone without any."""
+    found: List[Any] = []
+    seen: set[str] = set()
+    for slide in presentation.slides:
+        for placed in walk_shapes(slide.shapes):
+            shape = cast(Any, placed.shape)
+            if not getattr(shape, "has_chart", False):
+                continue
+            for ser in shape.chart._chartSpace.iter(qn("c:ser")):
+                owners = [ser] + ser.findall(qn("c:dPt"))
+                for owner in owners:
+                    colour = _own_colour(owner.find(qn("c:spPr")))
+                    if colour is None:
+                        continue
+                    own = copy.deepcopy(colour)
+                    for alpha in own.findall(qn("a:alpha")):
+                        own.remove(alpha)
+                    key = str(own.xml)
+                    if key not in seen:
+                        seen.add(key)
+                        found.append(own)
+    named = {c.get("val") for c in found if c.tag == qn("a:schemeClr")}
+    return found + [_scheme(name) for name in _ACCENTS if name not in named]
+
+
+def _default_palette() -> Sequence[Any]:
+    return [_scheme(name) for name in _ACCENTS]
+
+
+def _put(fill: Any, colour: Any, alpha: Optional[int]) -> None:
+    """A copy of ``colour`` as the only colour of the ``a:solidFill`` ``fill``."""
+    for child in list(fill):
+        fill.remove(child)
+    own = copy.deepcopy(colour)
+    if alpha is not None:
+        own.append(OxmlElement("a:alpha"))
+        own[-1].set("val", str(alpha))
+    fill.append(own)
+
+
+def _fill(fmt: Any, colour: Any, alpha: Optional[int] = None) -> None:
     fmt.fill.solid()
-    fmt.fill.fore_color.theme_color = accent
-    _alpha(fmt, qn("a:solidFill"), alpha)
+    _put(fmt._element.find(f"{qn('c:spPr')}/{qn('a:solidFill')}"), colour, alpha)
 
 
-def _theme_line(
-    fmt: Any,
-    accent: MSO_THEME_COLOR,
-    width: Optional[float],
-    alpha: Optional[int] = None,
+def _line(
+    fmt: Any, colour: Any, width: Optional[float], alpha: Optional[int] = None
 ) -> None:
-    fmt.line.color.theme_color = accent
+    fmt.line.fill.solid()
     if width is not None:
         fmt.line.width = Pt(width)
-    _alpha(fmt, f"{qn('a:ln')}/{qn('a:solidFill')}", alpha)
+    path = f"{qn('c:spPr')}/{qn('a:ln')}/{qn('a:solidFill')}"
+    _put(fmt._element.find(path), colour, alpha)
 
 
 def _tone(
-    index: int, chosen: Optional[int], alternate: bool = True
-) -> Tuple[MSO_THEME_COLOR, Optional[int]]:
-    """Theme colour and opacity of point or series ``index``: its own accent, or
-    with one ``chosen``, the first accent for it and muted text for the rest."""
+    index: int, chosen: Optional[int], palette: Sequence[Any], alternate: bool = True
+) -> Tuple[Any, Optional[int]]:
+    """Colour and opacity of point or series ``index``: its own in the palette,
+    or with one ``chosen``, the palette's first for it and muted text for the rest."""
     if chosen is None:
-        return _ACCENTS[index % len(_ACCENTS)], None
+        return palette[index % len(palette)], None
     if index == chosen:
-        return MSO_THEME_COLOR.ACCENT_1, None
+        return palette[0], None
     rank = index - (index > chosen) if alternate else 0
-    return MSO_THEME_COLOR.TEXT_1, _MUTED[rank % 2]
+    return _scheme("tx1"), _MUTED[rank % 2]
 
 
 def _text(font: Any, pt: float, bold: bool = False) -> None:
@@ -746,22 +793,21 @@ def _text(font: Any, pt: float, bold: bool = False) -> None:
     font.color.brightness = 0.25
 
 
-def _marker(
-    owner: Any, colour: MSO_THEME_COLOR, alpha: Optional[int], size: int
-) -> None:
+def _marker(owner: Any, colour: Any, alpha: Optional[int], size: int) -> None:
     owner.marker.style = XL_MARKER_STYLE.CIRCLE
     owner.marker.size = size
-    _theme_fill(owner.marker.format, colour, alpha)
-    _theme_line(owner.marker.format, colour, None, alpha)
+    _fill(owner.marker.format, colour, alpha)
+    _line(owner.marker.format, colour, None, alpha)
 
 
 def _colour(
     built: Any,
     chart: PlanChart,
     target: Optional[Tuple[str, int]],
+    palette: Sequence[Any],
     painted: Optional[Sequence[int]] = None,
 ) -> None:
-    """Theme colours per series or point. On the template's own chart (``painted``
+    """Palette colours per series or point. On the template's own chart (``painted``
     given), only the indexes listed and the muted ones of an emphasis are set: the
     emphasised one and the others keep the designer's colour."""
     plot = built.plots[0]
@@ -777,7 +823,7 @@ def _colour(
         for i, point in enumerate(plot.series[0].points):
             if not paints(i):
                 continue
-            _theme_fill(point.format, *_tone(i, chosen))
+            _fill(point.format, *_tone(i, chosen, palette))
             # A thin background-coloured edge keeps neighbouring slices apart.
             point.format.line.color.theme_color = MSO_THEME_COLOR.BACKGROUND_1
             point.format.line.width = Pt(1.5)
@@ -788,18 +834,18 @@ def _colour(
             if not paints(i):
                 continue
             if chart.type == "scatter":
-                _marker(point, *_tone(i, chosen, alternate=False), _SCATTER_MARKER)
+                _marker(point, *_tone(i, chosen, palette, False), _SCATTER_MARKER)
             else:
-                _theme_fill(point.format, *_tone(i, chosen, alternate=False))
+                _fill(point.format, *_tone(i, chosen, palette, False))
         return
     for i, series in enumerate(plot.series):
         if not paints(i):
             continue
-        colour, alpha = _tone(i, chosen)
+        colour, alpha = _tone(i, chosen, palette)
         if chart.type in ("line", "radar"):
             stressed = chosen is None or i == chosen
             width = 2.25 if chosen is None else 3.0 if stressed else 1.5
-            _theme_line(series.format, colour, width, alpha)
+            _line(series.format, colour, width, alpha)
             if chart.type == "line":
                 series.smooth = False
             if stressed:
@@ -810,9 +856,9 @@ def _colour(
             _marker(series, colour, alpha, _SCATTER_MARKER)
         elif chart.type == "bubble":
             # Translucent, so a bubble behind another still shows.
-            _theme_fill(series.format, colour, alpha or _BUBBLE_ALPHA)
+            _fill(series.format, colour, alpha or _BUBBLE_ALPHA)
         else:
-            _theme_fill(series.format, colour, alpha)
+            _fill(series.format, colour, alpha)
 
 
 def _labelled(chart: PlanChart) -> bool:
@@ -1055,10 +1101,12 @@ def example_frame(placed: PlacedShape, chart: PlanChart) -> Any:
     return shape if type_of(shape.chart) == chart.type else None
 
 
-def refill(frame: Any, zone: Zone, chart: PlanChart) -> None:
+def refill(
+    frame: Any, zone: Zone, chart: PlanChart, palette: Sequence[Any] = ()
+) -> None:
     """The plan's data in the template's own chart. Its colours, fonts and layout
     stay; only what depends on the data is set: legend, data labels, number
-    format, the intents, and theme accents for series the example did not have."""
+    format, the intents, and palette colours for series the example did not have."""
     built = frame.chart
     plot = built.plots[0]
     before = len(plot.series[0].points) if chart.type in ROUND else len(plot.series)
@@ -1074,7 +1122,7 @@ def refill(frame: Any, zone: Zone, chart: PlanChart) -> None:
     _legend(built, chart, pt, keep=True)
     count = len(chart.categories) if chart.type in ROUND else len(chart.series)
     target = emphasis(chart)
-    _colour(built, chart, target, painted=range(before, count))
+    _colour(built, chart, target, palette or _default_palette(), range(before, count))
     _relabel(built, chart, pt, fmt, target)
     if chart.type in XY_TYPES:
         _xy_axes(built, chart, pt)
@@ -1117,7 +1165,13 @@ def _relabel(
         _stress_label(plot, target[1], light=chart.type == "doughnut")
 
 
-def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
+def draw(
+    slide: Any,
+    host: PlacedShape,
+    zone: Zone,
+    chart: PlanChart,
+    palette: Sequence[Any] = (),
+) -> Any:
     """Replace ``host`` (a chart or content placeholder, or a duplicated chart
     frame) with a native chart at its box and drawing-order place."""
     for series in chart.series:
@@ -1155,7 +1209,7 @@ def draw(slide: Any, host: PlacedShape, zone: Zone, chart: PlanChart) -> Any:
     _title(built, chart, pt)
     _legend(built, chart, pt)
     target = emphasis(chart)
-    _colour(built, chart, target)
+    _colour(built, chart, target, palette or _default_palette())
     _labels(built, chart, pt, fmt, target)
     if chart.type in ROUND:
         _hole(built)

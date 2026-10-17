@@ -2,7 +2,7 @@
 
 ### Requirement: Charts fill a chart zone the template offers
 
-The system SHALL accept on a plan slide a `chart` field holding only data — `type` (`column`, `bar`, `line`, `pie`, `doughnut`, `stacked_column`, `area`), `categories`, `series` (each a `name` and one numeric value per category), an optional `title` and an optional `unit` — and SHALL NOT expose any colour, position, size, font or style field for it. The closed kind vocabulary SHALL include `chart`. The analysis SHALL expose as a `chart` zone every chart placeholder and every chart frame covering the main area of an example slide, and SHALL mark large content (`OBJECT`) placeholders as chart-capable. The code SHALL place the chart in a chart zone, else in a free chart-capable placeholder as a reported substitution, else return `needs_revision`; it SHALL never draw a chart outside such a zone. Charts SHALL be native, editable python-pptx charts whose series colours reference the template theme's accent colours and whose text references the theme's body font. When the chosen template slide is an example slide whose chart has the requested type, the system SHALL reuse that chart with its own formatting and replace only its data, and SHALL otherwise build a fresh chart.
+The system SHALL accept on a plan slide a `chart` field holding only data — `type` (`column`, `bar`, `line`, `pie`, `doughnut`, `stacked_column`, `area`), `categories`, `series` (each a `name` and one numeric value per category), an optional `title` and an optional `unit` — and SHALL NOT expose any colour, position, size, font or style field for it. The closed kind vocabulary SHALL include `chart`. The analysis SHALL expose as a `chart` zone every chart placeholder and every chart frame covering the main area of an example slide, and SHALL mark large content (`OBJECT`) placeholders as chart-capable. The code SHALL place the chart in a chart zone, else in a free chart-capable placeholder as a reported substitution, else return `needs_revision`; it SHALL never draw a chart outside such a zone. Charts SHALL be native, editable python-pptx charts whose series colours follow, in order, the series colours of the template's own example charts (as theme references when the example uses theme references), then the theme's accent colours those leave out, or the theme's accents alone when no example chart sets a series colour, and whose text references the theme's body font. A chart emphasis SHALL stress the first colour of that same sequence. When the chosen template slide is an example slide whose chart has the requested type, the system SHALL reuse that chart with its own formatting and replace only its data, and SHALL otherwise build a fresh chart.
 
 #### Scenario: Chart placeholder becomes a chart slide
 
@@ -23,8 +23,15 @@ The system SHALL accept on a plan slide a `chart` field holding only data — `t
 
 #### Scenario: Colours come from the theme
 
+- **GIVEN** a template whose example charts set no series colour (the built-in template)
 - **WHEN** a fresh chart (not a reused example chart) with three series is rendered
 - **THEN** the series fills reference the theme's `accent1`, `accent2` and `accent3`, and no literal colour is written
+
+#### Scenario: Colours follow the template's example charts
+
+- **GIVEN** a template whose example column chart paints its two series with the theme's `tx2` and `bg2`
+- **WHEN** a fresh pie of four slices is rendered, then the same pie with one slice highlighted
+- **THEN** the slices reference `tx2`, `bg2`, `accent1`, `accent2`; with the highlight, the stressed slice references `tx2` and the others muted text
 
 #### Scenario: Template without a chart slide
 

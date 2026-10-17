@@ -69,6 +69,11 @@
 - [x] 10.1 `assign._chart_options`: the largest item count over every figures slide, not the last one read
 - Verification: `test_chart_slides.py::test_the_figures_remedy_counts_every_figures_slide` fails before the fix, passes after
 
+### 11. Series colours from the example charts (owner decision 2026-10-17, D14)
+
+- [x] 11.1 `charts.example_palette`: the example charts' series and point colours in order, then the theme accents they leave out; `render.py` reads it once per build and hands it to `draw` and `refill`; `_tone` (emphasis included) takes it
+- Verification: `test_chart_slides.py::test_fresh_charts_take_the_example_charts_colours_first` (fails before: accent1…); `test_colours_and_fonts_come_from_the_theme` unchanged on the built-in deck; Thales showcase re-rendered and looked at
+
 ### 8. Phase B close-out
 
 - [x] 8.1 `verification.md` phase B section; README update; `openspec validate ppt-builder-charts --strict`

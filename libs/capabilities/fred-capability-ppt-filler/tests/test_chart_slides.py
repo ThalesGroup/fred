@@ -46,7 +46,9 @@ from fred_capability_ppt_filler.builder.models import (
 from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
 from pptx import Presentation
+from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+from pptx.enum.dml import MSO_THEME_COLOR
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.package import Part
 from pptx.oxml.ns import qn
@@ -516,6 +518,47 @@ def test_colours_and_fonts_come_from_the_theme(builtin):
         assert f'<a:schemeClr val="{accent}"/>' in xml
     assert "srgbClr" not in xml
     assert '<a:latin typeface="+mn-lt"/>' in xml
+
+
+def _navy_column_example(presentation):
+    """An example column chart whose two series the designer painted with the
+    theme's text 2 and background 2, not its first accents."""
+    add_main_chart_slide(presentation, XL_CHART_TYPE.COLUMN_CLUSTERED)
+    frame = next(s for s in presentation.slides[-1].shapes if s.has_chart)
+    data = CategoryChartData()
+    data.categories = ["Europe", "Amériques", "Asie"]
+    data.add_series("A", (45, 35, 20))
+    data.add_series("B", (40, 30, 30))
+    frame.chart.replace_data(data)
+    for series, colour in zip(frame.chart.plots[0].series, ("TEXT_2", "BACKGROUND_2")):
+        series.format.fill.solid()
+        series.format.fill.fore_color.theme_color = getattr(MSO_THEME_COLOR, colour)
+
+
+def _fills(chart: Any, tag: str) -> List[str]:
+    return [
+        node.get("val")
+        for owner in chart._chartSpace.iter(qn(tag))
+        for node in owner.findall(
+            f"{qn('c:spPr')}/{qn('a:solidFill')}/{qn('a:schemeClr')}"
+        )
+    ]
+
+
+def test_fresh_charts_take_the_example_charts_colours_first():
+    template = build_slides([_navy_column_example])
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    pie = {**REVENUE, "type": "pie", "categories": ["A", "B", "C", "D"]}
+    pie["series"] = [{"name": "Share", "values": [40, 30, 20, 10]}]
+    # Failed before: accent1, accent2… whatever the template's charts show.
+    built = _chart(_render(template, inventory, _chart_slide(pie)))
+    assert _fills(built, "c:dPt") == ["tx2", "bg2", "accent1", "accent2"]
+    # An emphasis stresses the palette's first colour, the rest muted text.
+    pie["highlight"] = "C"
+    built = _chart(_render(template, inventory, _chart_slide(pie)))
+    assert _fills(built, "c:dPt")[2] == "tx2"
+    assert set(_fills(built, "c:dPt")) == {"tx2", "tx1"}
 
 
 def test_the_chart_takes_the_zone_and_no_example_frame_is_left(builtin):

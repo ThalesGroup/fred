@@ -1502,6 +1502,7 @@ class _Renderer:
         self.layouts = _all_layouts(presentation)
         self.theme = theme_fonts(presentation)
         self.slides_by_id = {slide.slide_id: slide for slide in presentation.slides}
+        self.palette = charts.example_palette(presentation)
         self.report = checks.DeckReport()
         self._originals: Dict[int, Dict[str, str]] = {}
         # An intent note's text → (its line in the report, the slides it concerns).
@@ -1989,9 +1990,9 @@ class _Renderer:
             else None
         )
         if example is not None:
-            charts.refill(example, host, chart)
+            charts.refill(example, host, chart, self.palette)
         else:
-            charts.draw(slide, placed, host, chart)
+            charts.draw(slide, placed, host, chart, self.palette)
 
     def _tell_chart(self, chart: PlanChart, position: int, at: str) -> None:
         """What the chart could not show as sent, naming it on a slide of several."""
