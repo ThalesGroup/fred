@@ -1574,3 +1574,28 @@ Seen in the preview, not fixed (owner to decide):
 - Four Cards with 3 items keeps the fourth card's box (decoration) empty.
 - Statement and Big Number slides stay `bullets` (kicker change Follow-ups).
 - The table is 3 columns: a 4-offer comparison (5 columns) now gets `needs_revision`; the old deck had 5.
+
+## Results: built-in deck v3 and unused-item decoration (WP49, 2026-10-17)
+
+Deck: `fred-default-v3.pptx` (beside the owner's files; v1 and v2 kept as iterations), derived from `fred-default-showcase-table-vide.pptx` by an lxml script that rewrites only the slides, layouts and notes it edits. Same 45 slides, colours, fonts and pictures.
+
+| Iteration | Changed | Seen in the showcase PDF |
+| --- | --- | --- |
+| v1 | agenda list, section names, timeline dates, 5-column table, statements as quotes, KPI samples, item heights, cover/process/other notes; render lifts layout decoration | agenda, section, timeline 3/4/5, table and four cards right; a numbered tile left over a removed column; empty takeaway cards beside bare charts |
+| v2 | marks and connectors follow their item; takeaway card as the zone's fill; Three Images items carry their picture | LibreOffice draws a filled layout placeholder the slide left out (prompt text in an empty card) |
+| v3 | the fill on the slide's zone only; chart captions kept (a bullet beside a shown takeaway still has a place) | no empty box, orphan decoration, leftover example text or overflow |
+
+Kinds and slides offered (rules analysis): cover ×3 (Title, Title Image, Title Light), agenda (7 entries), section ×4 (+2 title-only layouts), bullets, two_columns, comparison ×2, cards ×6 (Three Columns, Four, Six, Three Images, Matrix with takeaway), quote ×4 (Quote, Quote Image, Statement, Statement Accent), image_text ×5, figures ×2 (3 and 4, trend arrows), process ×3 (4 steps, 3 arrows, 4-step dark flow), timeline (5), team (photos), table (5 columns × 8 rows), chart ×4 (takeaway card, full, two charts, chart with two figures), closing ×2. Set aside: Code, Big Number, blanks, the palette sheet.
+
+| Rule | Evidence |
+| --- | --- |
+| Frame, mark and connector fates | `test_item_decoration.py` (4 unit tests) |
+| Four Cards with 3 items: 3 cards, 3 tiles, master marks and slide number kept; all 4 used: layout untouched | `test_cards_drawn_on_the_layout_leave_with_their_unused_item`, `test_a_full_set_of_items_leaves_the_layout_as_it_is` |
+| Timeline: dates in the items, 4 dots and the line for 4 milestones | `test_a_timeline_keeps_a_dot_per_milestone_and_each_date_in_its_item` |
+| Process with 3 steps: the layout's tiles 1–3 on the slide, no "4" | `test_builtin_process_with_three_steps_drops_the_fourth` |
+
+Test expectations changed for the deck only: 5 table columns ("2 to 5 columns"), the continuation test at 16 rows (10 now fit), "6 columns given, max 5", and the process slide's lifted step numbers. A pre-existing basedpyright error in `test_chart_slides.py` (a `str` role) typed. The secrets baseline takes the new template digest.
+
+Commands: package `make code-quality` clean (basedpyright 0 errors); `make test`: 897 passed, 5 skipped. Showcase: three decks built in process through `build_presentation` (57 slides), `~/fred-tmp/default-template/v3/showcase-v3.pdf`.
+
+Remaining, recommended, not done: a big number beside a title is no one-item `figures` slide (`_lone_figure` takes exactly two shapes, so the slide is set aside); a section's number zone is never filled (left out); a filled picture placeholder (cover image, team photo) is fitted inside its box rather than cropped to its shape; a bare chart alternates between the full-width slide and the takeaway slide with its card removed.

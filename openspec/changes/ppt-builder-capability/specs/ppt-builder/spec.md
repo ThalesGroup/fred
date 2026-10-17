@@ -689,7 +689,13 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 #### Scenario: Fewer items than the template shows
 
 - **WHEN** a repeated group is filled with fewer items than its count
-- **THEN** the unused items and the decoration drawn only for them are removed and the kept items are recentred
+- **THEN** the unused items and the decoration drawn only for them are removed (the frame around an item and what it holds, a mark just above or beside it, a connector to it), whether the slide or its layout draws it, and the kept items are recentred with their own decoration
+
+#### Scenario: An unused item's frame drawn on the layout
+
+- **GIVEN** a layout drawing a card, tile or dot for each item of its example slide
+- **WHEN** the slide is filled with fewer items
+- **THEN** the layout's graphics are copied onto that slide only, behind its own shapes, the layout's are hidden there, and the unused items' ones are removed like the slide's own; a slide using every item keeps its layout untouched
 
 #### Scenario: Overflow control
 
@@ -744,6 +750,11 @@ The system SHALL ship a real `.pptx` template with example slides and its pre-co
 
 - **WHEN** an agent enables the capability without uploading a template
 - **THEN** the tool is available at once and builds decks from the built-in template's example slides
+
+#### Scenario: Built-in deck read by the rules
+
+- **WHEN** the built-in deck is analysed without a vision model
+- **THEN** its agenda is a list of up to seven numbered entries, its section slides read as `section` with a number zone that never takes the subtitle, each timeline milestone carries its date as the item's number, its table takes up to five columns, its statement slides read as `quote`, and each item slide removes an unused item with its card, tile or dot
 
 #### Scenario: Built-in analysis kept current
 

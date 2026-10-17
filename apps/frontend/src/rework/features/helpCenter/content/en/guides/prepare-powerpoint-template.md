@@ -93,10 +93,12 @@ are built identically.
 - **Or align identical text boxes**: three side by side, or two with a second
   row aligned under them (the number above its label). Same size, same font,
   same weight.
-- A box wider than a third of the slide is read as a column, not an item.
+- A box wider than a third of the slide, or taller than 40 % of it, is read
+  as a column, not an item.
 - **Provide the maximum number of items**: the agent removes the extra ones and
   recentres the others, it never adds any.
-- Icons stay the template's own; an icon goes with its item.
+- Icons stay the template's own; an icon goes with its item, and so do the
+  card, tile or dot drawn for it, even on the layout.
 - A key figure can show a small up, down or level arrow before its number, in
   the number's own font and colour: there is nothing to prepare.
 
@@ -178,6 +180,10 @@ layout. Without such a request, that area is filled like any other text area.
 With it, the agent prefers a slide that has such an area. A key message that
 cannot be shown, too long for the area or on a slide without one, stays in the
 speaker notes, and **What was built** says so.
+
+An area left empty is removed. If a card is drawn behind it, give the area
+itself that fill rather than drawing the card as a separate shape: the card
+then goes with the empty area.
 
 ## What is set aside
 

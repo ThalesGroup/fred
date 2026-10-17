@@ -96,11 +96,12 @@ quand ils sont construits à l'identique.
 - **Ou alignez des zones de texte identiques** : trois côte à côte, ou deux
   avec une deuxième rangée alignée dessous (le chiffre au-dessus de son
   libellé). Même taille, même police, même graisse.
-- Une zone plus large qu'un tiers de la diapositive est lue comme une colonne,
-  pas comme un élément.
+- Une zone plus large qu'un tiers de la diapositive, ou plus haute que 40 %
+  de celle-ci, est lue comme une colonne, pas comme un élément.
 - **Prévoyez le nombre maximal d'éléments** : l'agent retire ceux qui sont en
   trop et recentre les autres, il n'en ajoute jamais.
-- Les icônes restent celles du template ; une icône part avec son élément.
+- Les icônes restent celles du template ; une icône part avec son élément,
+  comme la carte, la pastille ou le point dessinés pour lui, même sur le masque.
 - Un chiffre clé peut afficher devant lui une petite flèche de hausse, de
   baisse ou de stabilité, dans la police et la couleur du chiffre : rien à
   préparer.
@@ -192,6 +193,10 @@ cette demande, la zone est remplie comme toute autre zone de texte. Avec elle,
 l'agent préfère une diapositive qui a une telle zone. Un message clé qui ne
 peut pas être affiché, trop long pour la zone ou sur une diapositive sans zone,
 reste dans les notes de l'orateur, et **Ce qui a été construit** le signale.
+
+Une zone laissée vide est retirée. Si une carte est dessinée derrière elle,
+donnez ce fond à la zone elle-même plutôt que d'en faire une forme à part :
+la carte part alors avec la zone vide.
 
 ## Ce qui est mis de côté
 
