@@ -1633,3 +1633,11 @@ Not proven: the live Thales inventory (vision labels) was not replayed; the harn
 - Prompt size (cl100k, built-in template): working rules 479 → 587 tokens, tool description 3189 → 3196, args schema 4532 → 4540 (+123 per model call).
 - Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 921 passed, 5 skipped; `openspec validate --strict`.
 - Not proven: the model's behaviour. fred-agents was not restarted, so no live run uses this guidance yet (WP53.5).
+
+## WP54 (2026-10-17 overnight): vertical text measured along its height
+
+- `test_builtin_template.py::test_vertical_text_is_measured_along_its_height` failed on the code before the fix (checked by stashing `analysis.py`) and passes after.
+- Catalogue line of the built-in "Fred Matrix": before `columns.bullets×3 1 short word (≈1 chars × 19 lines, max 27 entries)`, after `columns.bullets×3 ≤7 words (≈54 chars × 1 line, max 1 entry)`.
+- LibreOffice render of one matrix slide built offline (`~/fred-tmp/revision-evals/fixes/matrix/before|after/slide-1.png`), PNG looked at: before, the overflow control shrank the vertical axis and the takeaway text to fit the 1-char room; after, both keep the template's size.
+- Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 922 passed, 5 skipped; `openspec validate --strict`.
+- Not proven: the model's choices on the matrix in a live run (fred-agents not restarted).

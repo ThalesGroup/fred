@@ -569,7 +569,7 @@ Owns: `plan.py` (`single_columns`), `changes.py` (`_not_a_list`, one edit per fi
 - [x] 52.6 A key figure's label reads under its heading when the card has no label zone. Test: `test_a_figures_label_reads_under_its_heading_without_a_label_zone`
 - [x] 52.7 The delivery names the slides changed, added and removed since the previous delivered deck. Tests: `test_the_delta_names_changed_added_and_removed_slides`, `test_a_revision_result_says_which_slides_changed`
 - [x] 52.8 Eval calls replayed offline and rendered by LibreOffice (`~/fred-tmp/revision-evals/fixes/`), PNG looked at; package checks; `openspec validate --strict`
-- Not changed: parallel build calls (already one build per round and a per-tool lock; the 4-slide deck was the model splitting its deck); a corrected `changes` resend whose shape changed applies to the refused plan (default r14 `after` 0 → 1); the built-in matrix's axis labels read as `columns.bullets×3 1 short word` (analysis)
+- Not changed: parallel build calls (already one build per round and a per-tool lock; the 4-slide deck was the model splitting its deck); a corrected `changes` resend whose shape changed applies to the refused plan (default r14 `after` 0 → 1); the built-in matrix's axis labels read as `columns.bullets×3 1 short word` (analysis; fixed in WP54)
 
 ## WP53. Agent guidance from the revision evals (owner decision 2026-10-17 overnight, design D32)
 
@@ -580,3 +580,10 @@ Owns: `builder/capability.py` (`_BUILD_INSTRUCTIONS`, `build_instructions`), `to
 - [x] 53.3 `after` 0 described as "first, after the cover" (tool description, `SlideChange.after`, the missing-`after` problem); `slides` described as a new deck or a rewrite of most slides. Tests: `test_the_tool_tells_the_agent_one_call_builds_the_whole_deck`, `test_every_bad_change_is_reported_with_its_remedy`
 - [x] 53.4 Delivery: "none changed: tell the user the deck is the same"; a `slides` resend touching at most two slides of a larger deck adds "send only `changes` next time". Tests: `test_the_delta_names_changed_added_and_removed_slides`, `test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes`, `test_a_small_edit_resent_as_a_whole_deck_is_built_and_pointed_to_changes`
 - [ ] 53.5 Live re-evaluation of the 30 revision requests on both templates once fred-agents runs this code (not restarted by this change)
+
+## WP54. Vertical text measured along its height (owner decision 2026-10-17 overnight)
+
+Owns: `analysis.py` (`FrameMetrics.vertical`, `_frame_metrics`, `estimate_capacity`, `ANALYSIS_VERSION` 19 → 20), the built-in inventory, tests, `verification.md`. Template unchanged: a `keep`-named axis would be swept as leftover example text, and fixed axis words would not match another matrix's content.
+
+- [x] 54.1 A text box whose `bodyPr` (own or inherited) sets `vert` other than `horz` swaps width and height in its capacity, so the built-in matrix's vertical axis is ≈54 chars × 1 line, not ≈1 char × 19 lines. Test: `test_builtin_template.py::test_vertical_text_is_measured_along_its_height`
+- [x] 54.2 Built-in inventory regenerated (`make builtin-inventory`, matrix zone only); a matrix slide rendered before/after by LibreOffice (`~/fred-tmp/revision-evals/fixes/matrix/`), PNG looked at; package checks; `openspec validate --strict`
