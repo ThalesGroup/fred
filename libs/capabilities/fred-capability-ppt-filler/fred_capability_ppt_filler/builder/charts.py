@@ -112,7 +112,7 @@ _PLOT_W = 0.85
 _PLOT_H = 0.75
 _CATEGORY_EM = 3.0
 # Line heights a bar's category takes: its label on one line or two, and the gap.
-_BAR_LINES = {1: 1.5, 2: 2.2}
+_BAR_LINES = {1: 1.7, 2: 2.2}
 # A chart zone's text size when no example chart shows one.
 _CHART_PT = 12.0
 _EMU_PER_PT = 12700
