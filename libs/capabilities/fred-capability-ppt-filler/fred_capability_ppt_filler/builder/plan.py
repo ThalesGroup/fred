@@ -1104,6 +1104,9 @@ class SlidePlan(BaseModel):
     # Keys of the call that match no field and no alias (`key 'text'`): the
     # assigner returns them as a problem rather than drop their text.
     ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
+    # `columns` arrived as one object, not a list: one column or several meant
+    # cannot be told apart, so the assigner refuses it instead of guessing.
+    single_columns: SkipJsonSchema[bool] = False
     # The template slide the delivered deck shows it on: kept while it fits.
     built_on: SkipJsonSchema[Optional[str]] = None
     # Set by a `like` change: the template slide asked for, and the slide whose
@@ -1124,7 +1127,14 @@ class SlidePlan(BaseModel):
             return {"invalid_entry": str(value)[:80]}
         renamed = _with_aliases(value, _SLIDE_ALIASES)
         known = set(cls.model_fields) | set(_SLIDE_ALIASES)
-        return {**renamed, "ignored_fields": _ignored(value, known)}
+        single = bool(value.get("single_columns")) or isinstance(
+            renamed.get("columns"), dict
+        )
+        return {
+            **renamed,
+            "ignored_fields": _ignored(value, known),
+            "single_columns": single,
+        }
 
     @field_validator(
         "takeaway",

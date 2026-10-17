@@ -273,6 +273,21 @@ def _empty_of(kind: _Type) -> Any:
     return {} if kind in _FIELDS else None
 
 
+def _not_a_list(shown: str, kind: _Type, value: Any) -> Optional[str]:
+    """Why ``value`` cannot replace a whole list of objects: one object would
+    become the only entry, silently dropping the others."""
+    if not isinstance(kind, tuple) or kind[1] not in _FIELDS:
+        return None
+    if value is None or isinstance(value, list):
+        return None
+    entry = {"column": "{heading, bullets}", "item": "item", "chart": "chart"}
+    one = entry.get(str(kind[1]), "entry")
+    return (
+        f"'{shown}' is a list: send the whole list as `value` ([{one}, ...], every "
+        f"entry it keeps), or edit one entry with '{shown}[i]' (from 0)"
+    )
+
+
 def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
     """Set ``path`` of a dumped slide in place; the reason it cannot, else None."""
     if not _PATH.match(path):
@@ -297,6 +312,9 @@ def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
                 return f"'{key}' is not a field of {where} (it takes {allowed})"
             shown += ("." if shown else "") + key
             if last:
+                why = _not_a_list(shown, fields[key], value)
+                if why:
+                    return why
                 node[key] = value
                 return None
             kind = fields[key]
@@ -548,6 +566,18 @@ def apply_changes(
         if base.slides[number - 1].invalid_entry is not None:
             report(
                 k, change, f"slide {number} was not a slide object: replace it instead"
+            )
+            continue
+        twice = next(
+            (j for j, c in edits.get(number, []) if c.field == change.field), None
+        )
+        if twice is not None:
+            report(
+                k,
+                change,
+                f"slide {number}: changes[{twice}] already sets '{change.field}', and a "
+                "second edit would replace it: send one edit per field, with every "
+                "entry in its value",
             )
             continue
         edits.setdefault(number, []).append((k, change))

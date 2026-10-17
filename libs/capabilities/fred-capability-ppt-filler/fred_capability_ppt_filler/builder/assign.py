@@ -699,6 +699,12 @@ def _item_entries(items: List[PlanItem]) -> List[Tuple[Optional[str], bool]]:
     ]
 
 
+SINGLE_COLUMNS_FIX = (
+    "write columns as a list, one {heading, bullets} per column: "
+    '[{"heading": ..., "bullets": [...]}, {"heading": ..., "bullets": [...]}]'
+)
+
+
 def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
     """Plan text the coercion could not map, or a half-written column or item."""
     found: List[str] = []
@@ -708,6 +714,13 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
         options.append(
             "put that text in title, subtitle, bullets, columns, items or notes"
         )
+    lone = (
+        ["columns sent as one object, not a list: it cannot tell one column from two"]
+        if slide.single_columns
+        else []
+    )
+    if lone:
+        options.append(SINGLE_COLUMNS_FIX)
     for n, column in enumerate(slide.columns):
         if column.ignored_fields:
             found.append(
@@ -729,10 +742,12 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
     halves = _unbalanced(
         "columns", "bullets", [(c.heading, bool(c.bullets)) for c in slide.columns]
     ) + _unbalanced("items", "text", _item_entries(slide.items))
-    if not found and not halves:
+    if not found and not halves and not lone:
         return None
-    parts = (["this text would be lost: " + "; ".join(found)] if found else []) + (
-        ["incomplete entries: " + "; ".join(halves)] if halves else []
+    parts = (
+        lone
+        + (["this text would be lost: " + "; ".join(found)] if found else [])
+        + (["incomplete entries: " + "; ".join(halves)] if halves else [])
     )
     if halves:
         options.append("complete each entry, or drop the half-written one")

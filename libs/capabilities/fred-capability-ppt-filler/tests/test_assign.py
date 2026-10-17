@@ -1558,6 +1558,23 @@ def test_a_second_column_written_as_heading2_is_a_problem_not_a_lost_heading():
     assert "one {heading, bullets} per column" in text
 
 
+def test_columns_sent_as_one_object_are_a_problem_not_one_column():
+    """The eval call: `columns` one object on a two-column slide rendered one
+    column; the tool cannot tell one column meant from several."""
+    text = _dropped(
+        {
+            "kind": "two_columns",
+            "title": "Les enjeux du projet",
+            "columns": {"heading": "Objectifs", "bullets": ["Gagner", "Réduire"]},
+        }
+    )
+    assert "columns sent as one object, not a list" in text
+    assert '[{"heading": ..., "bullets": [...]}, {"heading"' in text
+    # The marker survives the dump the tool re-validates.
+    slide = SlidePlan.model_validate({"title": "T", "columns": {"bullets": ["x"]}})
+    assert SlidePlan.model_validate(slide.model_dump()).single_columns
+
+
 def test_a_half_written_column_or_item_is_a_problem():
     text = _dropped(
         {

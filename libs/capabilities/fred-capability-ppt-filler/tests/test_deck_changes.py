@@ -1107,3 +1107,32 @@ async def test_a_call_identical_to_a_refused_one_is_not_evaluated_again(monkeypa
         changes=[{"op": "replace", "slide": 4, "slides": [fixed]}]
     )
     assert not result.is_error, text
+
+
+def test_an_edit_of_a_whole_list_with_one_object_is_refused():
+    """The eval call: two `columns` edits, each one object; the second replaced
+    the first and two points were lost without a word."""
+    column = {"heading": "Objectifs", "bullets": ["Gagner"]}
+    (problem,) = _problems(
+        {"op": "edit", "slide": 3, "field": "items", "value": column}
+    )
+    assert "'items' is a list: send the whole list" in problem
+    assert "'items[i]'" in problem
+    # One entry by its index, or the whole list, stays an edit.
+    edited = _apply({"op": "edit", "slide": 3, "field": "items[0].label", "value": "x"})
+    assert edited.slides[2].items[0].label == "x"
+
+
+def test_two_edits_of_one_field_on_one_slide_are_refused():
+    problems = _problems(
+        {"op": "edit", "slide": 2, "field": "bullets", "value": ["A"]},
+        {"op": "edit", "slide": 2, "field": "bullets", "value": ["B"]},
+    )
+    (problem,) = problems
+    assert problem.startswith("changes[1] (edit): slide 2: changes[0] already sets")
+    # Different fields of one slide still go together.
+    edited = _apply(
+        {"op": "edit", "slide": 2, "field": "title", "value": "Plan"},
+        {"op": "edit", "slide": 2, "field": "bullets[0]", "value": "Un"},
+    )
+    assert (edited.slides[1].title, edited.slides[1].bullets[0]) == ("Plan", "Un")
