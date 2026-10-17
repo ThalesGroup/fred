@@ -36,7 +36,7 @@ from deck_builders import png_bytes
 from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder import builtin
 from fred_capability_ppt_filler.builder.analysis import analyze_template
-from fred_capability_ppt_filler.builder.assign import assign
+from fred_capability_ppt_filler.builder.assign import assign, misfit
 from fred_capability_ppt_filler.builder.lexicon import is_sample_text
 from fred_capability_ppt_filler.builder.models import (
     Box,
@@ -684,6 +684,21 @@ def test_preview_copy_draws_wingdings_3_bullets_the_delivered_deck_keeps():
 
     assert bullet(result.pptx) == ("Wingdings 3", "ê")
     assert bullet(result.preview_pptx) == ("Arial", "►")
+
+
+def test_a_closing_holds_its_bullets_and_on_a_section_slide_takes_no_number():
+    """The eval deck: three closing bullets found no place on the built-in
+    closing (one line per box), so it showed as section '01 Merci'."""
+    content, inventory = builtin.builtin_template()
+    by_id = {p.id: p for p in inventory.patterns}
+    size = (inventory.slide_width, inventory.slide_height)
+    lines = ["Un projet clé", "Objectif : performance", "Prochaine étape : lancement"]
+    closing = SlidePlan(title="Merci – questions", kind="closing", bullets=lines)
+    assert misfit(by_id["slide:297"], closing, size) == ([], 0.0)
+    plan = DeckPlan(slides=[closing.model_copy(update={"bullets": []})])
+    result = render_deck(content, inventory, plan, [by_id["slide:261"]])
+    (slide,) = Presentation(io.BytesIO(result.pptx)).slides
+    assert not any(re.fullmatch(r"0?1", text) for text in _texts(slide))
 
 
 REFERENCE = os.environ.get("PPT_BUILDER_REFERENCE_TEMPLATE")

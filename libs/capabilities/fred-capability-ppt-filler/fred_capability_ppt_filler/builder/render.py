@@ -1303,7 +1303,7 @@ def _place_text(
         # elsewhere, and without a number zone, the order shows it: never lost.
         number = plan.number or (
             section_number(zmap.numbers[0], 1)
-            if zmap.numbers and pattern.kind == "section"
+            if zmap.numbers and pattern.kind == "section" and plan.kind != "closing"
             else None
         )
         if number and zmap.numbers:
@@ -1349,6 +1349,10 @@ def _place_text(
 
     if pattern.kind == "closing" and bullets:
         zones = [z for z in zmap.stacked() if z.key not in out]
+        # One line per box suits contact details; a lone body holds the list.
+        if len(bullets) > 1 and [z.role for z in zones] == ["body"]:
+            put(zones[0], bullets, "bullets")
+            return out
         for zone, line in zip(zones, bullets):
             put(zone, [line], "bullets")
         if len(bullets) > len(zones):
@@ -1579,7 +1583,8 @@ class _Renderer:
                     "the same plan; if it persists, tell the user."
                 )
             rendered += 1
-            if pattern.kind == "section":
+            # A closing shown on a section slide ends the deck: it opens no section.
+            if pattern.kind == "section" and slide_plan.kind != "closing":
                 sections += 1
                 slide_plan = _numbered(slide_plan, pattern, sections)
             if pattern.kind == "agenda" and slide_plan.items:
