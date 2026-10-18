@@ -308,6 +308,29 @@ def _not_a_list(shown: str, kind: _Type, value: Any) -> Optional[str]:
     )
 
 
+def _overlap(one: str, other: str) -> bool:
+    """Two paths where one holds the other: no order makes both mean the base."""
+    short, long = sorted((one, other), key=len)
+    return long == short or long.startswith((short + ".", short + "["))
+
+
+def _on_the_base(
+    entries: List[Tuple[int, SlideChange]],
+) -> List[Tuple[int, SlideChange]]:
+    """Edits ordered so every index means the base slide's entry: sets and
+    appends upward, then deletes downward, so none shifts another."""
+
+    def at(change: SlideChange) -> Tuple[int, ...]:
+        return tuple(int(n) for n in re.findall(r"\[(\d+)\]", change.field or ""))
+
+    def deletes(change: SlideChange) -> bool:
+        return change.value is None and (change.field or "").endswith("]")
+
+    kept = sorted((e for e in entries if not deletes(e[1])), key=lambda e: at(e[1]))
+    gone = sorted((e for e in entries if deletes(e[1])), key=lambda e: at(e[1]))
+    return kept + gone[::-1]
+
+
 def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
     """Set ``path`` of a dumped slide in place; the reason it cannot, else None."""
     if not _PATH.match(path):
@@ -784,13 +807,18 @@ def apply_changes(
             )
             continue
         twice = next(
-            (j for j, c in edits.get(number, []) if c.field == change.field), None
+            (
+                (j, c.field)
+                for j, c in edits.get(number, [])
+                if _overlap(c.field or "", change.field or "")
+            ),
+            None,
         )
         if twice is not None:
             report(
                 k,
                 change,
-                f"slide {number}: changes[{twice}] already sets '{change.field}', and a "
+                f"slide {number}: changes[{twice[0]}] already sets '{twice[1]}', and a "
                 "second edit would replace it: send one edit per field, with every "
                 "entry in its value",
             )
@@ -826,12 +854,13 @@ def apply_changes(
     for number in sorted(set(edits) | (set(liked) - set(replaced))):
         entries = edits.get(number, [])
         dumped = base.slides[number - 1].model_dump()
-        failed = False
-        for k, change in entries:
+        failed: List[Tuple[int, SlideChange, str]] = []
+        for k, change in _on_the_base(entries):
             why = _edit(dumped, change.field or "", change.value)
             if why:
-                report(k, change, f"slide {number}: {why}")
-                failed = True
+                failed.append((k, change, f"slide {number}: {why}"))
+        for k, change, why in sorted(failed, key=lambda f: f[0]):
+            report(k, change, why)
         if number in liked:
             dumped.update(_asked(base, liked[number]))
             # The design decides the kind, unless this call sets one.

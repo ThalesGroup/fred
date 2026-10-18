@@ -1436,3 +1436,49 @@ def test_two_edits_of_one_field_on_one_slide_are_refused():
         {"op": "edit", "slide": 2, "field": "bullets[0]", "value": "Un"},
     )
     assert (edited.slides[1].title, edited.slides[1].bullets[0]) == ("Plan", "Un")
+
+
+def test_list_indexes_in_one_call_are_the_base_slides():
+    """ "Remove bullets 2 and 3": the second delete must not take the old 4th."""
+    base = DeckPlan.model_validate(
+        {"slides": [COVER, {"title": "Plan", "bullets": ["A", "B", "C", "D"]}]}
+    )
+
+    def edits(*pairs: Any) -> DeckPlan:
+        return apply_changes(
+            base,
+            [
+                SlideChange.model_validate(
+                    {"op": "edit", "slide": 2, "field": f, "value": v}
+                )
+                for f, v in pairs
+            ],
+        )
+
+    assert edits(("bullets[1]", None), ("bullets[2]", None)).slides[1].bullets == [
+        "A",
+        "D",
+    ]
+    mixed = edits(("bullets[0]", None), ("bullets[3]", "d"), ("bullets[4]", "E"))
+    assert mixed.slides[1].bullets == ["B", "C", "d", "E"]
+    # A whole list and one of its entries, or an entry and a field inside it,
+    # cannot both be meant: refused, never applied in some order.
+    for pair in (
+        (("bullets", ["X"]), ("bullets[1]", "Y")),
+        (("bullets[1]", None), ("bullets[1]", "Y")),
+    ):
+        with pytest.raises(ChangeError) as caught:
+            edits(*pair)
+        assert "already sets" in caught.value.problems[0]
+    with pytest.raises(ChangeError) as caught:
+        apply_changes(
+            BASE,
+            [
+                SlideChange.model_validate(c)
+                for c in (
+                    {"op": "edit", "slide": 3, "field": "items[1]", "value": None},
+                    {"op": "edit", "slide": 3, "field": "items[1].label", "value": "x"},
+                )
+            ],
+        )
+    assert "'items[1]'" in caught.value.problems[0]
