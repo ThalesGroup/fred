@@ -496,6 +496,28 @@ def unchanged(base: DeckPlan, changed: DeckPlan, kinds: Mapping[str, str]) -> bo
     )
 
 
+def repinned(delivered: DeckPlan, plan: DeckPlan, kinds: Mapping[str, str]) -> DeckPlan:
+    """A resent slide identical to a delivered one keeps its template slide: a
+    whole deck resent never moves the slides it leaves as they were."""
+    free = [s for s in delivered.slides if s.built_on]
+    slides = []
+    for slide in plan.slides:
+        twin = next(
+            (
+                d
+                for d in free
+                if _shown(slide.model_copy(update={"built_on": d.built_on}), kinds)
+                == _shown(d, kinds)
+            ),
+            None,
+        )
+        if twin is not None:
+            free.remove(twin)
+            slide = slide.model_copy(update={"built_on": twin.built_on})
+        slides.append(slide)
+    return plan.model_copy(update={"slides": slides})
+
+
 def _numbers(found: List[int]) -> str:
     return ", ".join(str(n) for n in found)
 

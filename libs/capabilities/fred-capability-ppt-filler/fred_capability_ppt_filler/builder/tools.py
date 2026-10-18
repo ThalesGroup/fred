@@ -91,6 +91,7 @@ from fred_capability_ppt_filler.builder.changes import (
     SlideChange,
     apply_changes,
     deck_delta,
+    repinned,
     unchanged,
 )
 from fred_capability_ppt_filler.builder.checks import SlideReport
@@ -821,7 +822,7 @@ def _needs_revision(
         )
     text += (
         " Then call build_presentation again with the same `changes`, corrected (all of them: "
-        "they apply to the deck before them), or the whole deck in `slides`."
+        "they apply to the deck before them)."
         if from_changes
         else " Then call build_presentation again with only `changes` for these slides "
         "(numbers as listed), or the whole deck in `slides`."
@@ -1434,6 +1435,10 @@ def build_builder_tools(
                 and unchanged(base, plan, _kinds(inventory))
             ):
                 return _answer(_UNCHANGED)
+
+        delivered = await previous_deck(None) if base is None else None
+        if delivered is not None:
+            plan = repinned(delivered, plan, _kinds(inventory))
 
         call_key = json.dumps(kwargs, sort_keys=True, default=_jsonable) + (
             base.model_dump_json() if base is not None else ""

@@ -1166,6 +1166,26 @@ async def test_like_gives_a_slide_the_design_of_another(monkeypatch, deck_plan_s
 
 
 @pytest.mark.asyncio
+async def test_a_whole_deck_resent_keeps_the_design_of_the_slides_it_repeats(
+    monkeypatch, deck_plan_store
+):
+    """Thales r20/r23: a full `slides` resend reset every design, so slides the
+    user never touched changed design. An identical slide keeps its own."""
+    workspace = FakeWorkspace()
+    await _delivered_patterns(monkeypatch, workspace, slides=_SPREAD)
+    like = {"op": "edit", "slide": 7, "field": "like", "value": 5}
+    _, _, used = await _delivered_patterns(monkeypatch, workspace, changes=[like])
+    liked = used[-1]
+    resent = [dict(s) for s in _SPREAD]
+    resent[1] = {**resent[1], "title": "Retitled"}
+    text, result, used = await _delivered_patterns(
+        monkeypatch, workspace, slides=resent
+    )
+    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
+    assert used[-1][2:] == liked[2:] and used[-1][6] == used[-1][4]
+
+
+@pytest.mark.asyncio
 async def test_a_design_the_slide_cannot_take_is_a_revision(
     monkeypatch, deck_plan_store
 ):
