@@ -28,8 +28,9 @@ Installed build-only pip copies and their vendored dependencies are removed.
 Knowledge Flow drops the unused LangChain agent runtime and refreshes Docling,
 MCP, Mako, multidict and uv.
 
-Shared fred-core and fred-sdk dependencies require Temporal 1.30 or newer within
-major version 1. Their consumers must refresh their locks when adopting the new
+Shared fred-core and fred-sdk dependencies require the Temporal Python SDK (`temporalio`)
+1.30 or newer within major version 1. This is not a Temporal server upgrade
+requirement. Their consumers must refresh their locks when adopting the new
 packages; the repository locks use 1.30.0. The fred-core MCP extra and runtime
 require patched MCP v1; fred-core requires uv 0.12.23 or newer. Temporal now
 negotiates gRPC compression with downgrade support; no Fred configuration change
