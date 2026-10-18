@@ -172,9 +172,10 @@ editable in PowerPoint.
 ## Key messages on the slides
 
 Each slide's key message, what the audience should remember, goes in the
-speaker notes. To let the agent also show it on the slide when someone asks
-for it ("show the key messages on the slides", or by changing one slide's key
-message), name the text area meant for
+speaker notes. The slide delivers it through what it shows: when you change
+a slide's key message, the agent rewrites that slide's content to convey it,
+without displaying the message itself. To let the agent also show it on the slide when someone asks
+for it ("show the key messages on the slides"), name the text area meant for
 it `takeaway` or `key message` in PowerPoint's Selection pane, or on its
 layout. Without such a request, that area stays empty, unless it is the
 slide's only text area. With it, the agent prefers a slide that has such an

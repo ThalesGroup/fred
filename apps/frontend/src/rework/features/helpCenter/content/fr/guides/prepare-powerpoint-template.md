@@ -184,9 +184,12 @@ mesures), qui reste modifiable dans PowerPoint.
 ## Les messages clés sur les diapositives
 
 Le message clé de chaque diapositive, ce que le public doit en retenir, va
-dans les notes de l'orateur. Pour que l'agent l'affiche aussi sur la
+dans les notes de l'orateur. La diapositive le transmet par ce qu'elle
+montre : quand vous changez le message clé d'une diapositive, l'agent réécrit
+son contenu pour le faire passer, sans afficher le message lui-même. Pour que
+l'agent l'affiche aussi sur la
 diapositive quand on le lui demande (« affiche les messages clés sur les
-slides », ou en changeant le message clé d'une diapositive), nommez la zone de texte prévue pour lui `message clé`, `à retenir`
+slides »), nommez la zone de texte prévue pour lui `message clé`, `à retenir`
 ou `takeaway` dans le volet Sélection de PowerPoint, ou sur son masque. Sans
 cette demande, la zone reste vide, sauf si c'est la seule zone de texte de la
 diapositive. Avec elle,
