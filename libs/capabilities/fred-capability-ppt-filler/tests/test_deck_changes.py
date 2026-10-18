@@ -22,6 +22,7 @@ import json
 from typing import Any, List
 
 import pytest
+from deck_builders import png_bytes
 from fred_capability_ppt_filler.builder import deck_plans
 from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.changes import (
@@ -42,7 +43,7 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
-from port_fakes import FakeWorkspace
+from port_fakes import FakeDocs, FakeWorkspace
 from pptx import Presentation
 from test_build_tool import _REPEATED, COVER, _configured, _ctx, _no_pdf, _tools
 from test_builder_render import _texts
@@ -252,7 +253,7 @@ _DECK = [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}, _TOO_LONG]
 class _Turn:
     """One turn's tools (a fresh tool instance), recording what was rendered."""
 
-    def __init__(self, monkeypatch, workspace: FakeWorkspace) -> None:
+    def __init__(self, monkeypatch, workspace: FakeWorkspace, docs=None) -> None:
         self.rendered: List[DeckPlan] = []
         real = tools_mod.render_deck
 
@@ -263,9 +264,9 @@ class _Turn:
         monkeypatch.setattr(tools_mod, "render_deck", recording)
         monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
         config, assets = _configured()
-        self.build = _tools(_ctx(config, assets=assets, workspace=workspace))[
-            BUILD_TOOL_NAME
-        ].coroutine
+        self.build = _tools(
+            _ctx(config, assets=assets, docs=docs, workspace=workspace)
+        )[BUILD_TOOL_NAME].coroutine
 
 
 def _payload(text: str) -> dict:
@@ -989,6 +990,27 @@ async def _delivered_patterns(monkeypatch, workspace, **kwargs) -> tuple:
     monkeypatch.setattr(tools_mod, "render_deck", recording)
     text, result = await turn.build(**kwargs)
     return text, result, used
+
+
+@pytest.mark.asyncio
+async def test_a_picture_design_asked_for_a_slide_without_picture_is_refused(
+    monkeypatch, deck_plan_store
+):
+    """Seen in the eval: `like` a photo slide on a slide with no picture
+    delivered the photo design with its picture half empty."""
+    workspace = FakeWorkspace()
+    photo = {"title": "Site", "image": "img-1", "bullets": ["Lyon"]}
+    docs = FakeDocs({"img-1": (png_bytes(), "image/png")})
+    turn = _Turn(monkeypatch, workspace, docs=docs)
+    text, result = await turn.build(slides=[COVER, photo, _bullets(3)])
+    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
+    text, result = await turn.build(
+        changes=[{"op": "edit", "slide": 3, "field": "like", "value": 2}]
+    )
+    (problem,) = _payload(text)["slides"]
+    assert "its picture area would stay empty" in problem["problem"]
+    assert "give a picture from list_images_in_folder" in problem["options"]
+    assert len(workspace.writes) == 1
 
 
 @pytest.mark.asyncio

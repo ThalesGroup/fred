@@ -870,6 +870,18 @@ def _asked(slide: _Slide, has_cover: bool) -> Optional[SlideProblem]:
         )
     pattern, reasons, cost = found
     named = f"{whose} (template slide '{pattern.label}', a '{pattern.kind}' slide)"
+    # Chosen by the tool, a design with an empty picture area loses to one
+    # without; asked for, it would show that area empty (framed: `_weigh`).
+    if not (plan.image or plan.images) and any(
+        z.role == "image" and not z.framed for z in pattern.zones
+    ):
+        reasons = reasons + [
+            Misfit(
+                "images: this design shows a picture and the slide has none, so its "
+                "picture area would stay empty",
+                "give a picture from list_images_in_folder",
+            )
+        ]
     if plan.kind and plan.kind != pattern.kind:
         return SlideProblem(
             slide.index,
