@@ -24,10 +24,10 @@ attachment itself grants no extra permission. Removing the last role in an
 organization removes attachment, subject to the existing dependent-role rules.
 
 Bob's provisioning roles attach him to TSN. After authentication and personal CGU,
-`GET /me/spaces` returns his authorized memberships within that context, and Home
-opens TSN at `/home`. The organization link also targets `/home`; team/project
-selection can use a space identifier. There is no organization picker, switch or
-organization identifier required in the landing URL. A supplied identifier never
+`GET /me/spaces` returns his authorized memberships within that context. Home
+retains its usual dashboard and team/personal navigation at `/home`; the organization
+name appears in Profile. Team/project selection uses a space identifier. There is
+no organization picker, switch or organization identifier in the landing URL. A supplied identifier never
 changes server authority. An explicit invalid space selection shows no space.
 
 Creation, direct grants and ZIP import reject a second organization attachment,
@@ -98,6 +98,18 @@ levels only remove spaces from it.
 
 Folders classify only and carry no rights. Document metadata inherits its owning
 space's authority; read and scope probes use immutable space identifiers.
+
+## Platform organization administration
+
+The platform registry exposes active organizations, independently of content
+membership, in pages of at most 100 names/identifiers. Only admitted platform owners
+can list or create them. HTTP creation resolves the exact existing owner/admin
+usernames and writes those two direct roles, with no implicit member grant. One
+account may hold both roles. Name uniqueness and each nominee's single organization
+attachment are rechecked under the platform lock before guarded publication.
+Retired organizations reserve their name until cleanup, and are absent from the list.
+The existing operator `create-org` command retains its owner/admin/member initial
+assignment to one account. Neither creation path creates a personal space.
 
 ## Provisioning people and spaces
 

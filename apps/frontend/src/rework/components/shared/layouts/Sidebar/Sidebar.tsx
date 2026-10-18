@@ -20,10 +20,17 @@ import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
 import { useLocation } from "react-router-dom";
 import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
 import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
-export default function Sidebar({ navigation = true }: { navigation?: boolean }) {
+export default function Sidebar({
+  navigation = true,
+  platformArea = false,
+}: {
+  navigation?: boolean;
+  platformArea?: boolean;
+}) {
   const { pathname } = useLocation();
 
   const getSidebarMode = (): SidebarMode => {
+    if (platformArea) return "ADMIN";
     if (pathname.startsWith("/home")) return "HOME";
     if (pathname.startsWith("/marketplace")) return "MARKETPLACE";
     if (pathname.startsWith("/admin")) return "ADMIN";
@@ -34,9 +41,11 @@ export default function Sidebar({ navigation = true }: { navigation?: boolean })
   return (
     <div className={styles["sidebar-container"]}>
       <div className={styles.rail}>
-        <div className={styles["main-nav-bar-container"]}>{navigation && <MainNavBar />}</div>
+        <div className={styles["main-nav-bar-container"]}>
+          {navigation && <MainNavBar platformArea={platformArea} />}
+        </div>
         <div className={styles["user-profile-container"]}>
-          <UserProfile admitted={navigation} />
+          <UserProfile admitted={navigation} platformArea={platformArea} />
         </div>
       </div>
       {navigation && (
@@ -44,7 +53,7 @@ export default function Sidebar({ navigation = true }: { navigation?: boolean })
           {sidebarMode === "HOME" && <HomeNavPanel />}
           {sidebarMode === "TEAM" && <TeamContentNavbar />}
           {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
-          {sidebarMode === "ADMIN" && <AdminNavbar />}
+          {sidebarMode === "ADMIN" && <AdminNavbar platformArea={platformArea} />}
         </div>
       )}
     </div>

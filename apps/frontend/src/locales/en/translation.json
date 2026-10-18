@@ -4092,6 +4092,19 @@
         "separator": "; "
       }
     },
+    "organizations": {
+      "title": "Organizations",
+      "existing": "Existing organizations",
+      "empty": "No organizations yet.",
+      "loadFailed": "Unable to load organizations.",
+      "create": "Create organization",
+      "name": "Organization name",
+      "owner": "Owner username",
+      "admin": "Administrator username",
+      "accountsHint": "Use the exact usernames of existing accounts. The same account can hold both roles. These roles do not grant access to resources.",
+      "createFailed": "Organization creation failed.",
+      "created": "Organization {{name}} created."
+    },
     "provisioning": {
       "title": "Provisioning",
       "description": "Import users, organizations, teams, projects and their roles from a provisioning ZIP.",

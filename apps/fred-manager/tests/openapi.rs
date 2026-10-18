@@ -92,6 +92,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "put /users/{user}/platform-roles/{role}",
         "delete /users/{user}/platform-roles/{role}",
         "get /admin/teams",
+        "get /admin/organizations",
+        "post /admin/organizations",
         "post /authorize/platform",
         "post /authorize/space",
         "post /import-export/import",
@@ -100,6 +102,11 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
     .map(String::from)
     .collect();
     assert_eq!(actual, expected);
+    assert_eq!(
+        api["paths"]["/fred-manager/v1/admin/organizations"]["get"]["responses"]["400"]["content"]
+            ["text/plain"]["schema"]["type"],
+        "string"
+    );
     assert_eq!(api["security"], json!([{"bearer": []}]));
     assert_eq!(
         api["components"]["securitySchemes"]["bearer"],

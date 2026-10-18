@@ -148,7 +148,7 @@ async fn serve(config: Config) -> Result<()> {
     Ok(())
 }
 
-/// Organizations are created by an operator, not through the API.
+/// Operator creation retains the historical combined owner/admin/member assignment.
 async fn create_org(config: Config, name: &str, admin: &str) -> Result<()> {
     let directory = fred_manager::keycloak::Directory::configured(config.security.m2m.as_ref())?
         .context("organization creation requires configured Keycloak service credentials")?;

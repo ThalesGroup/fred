@@ -5735,3 +5735,6 @@ async fn api_starts_without_temporal_and_exposes_only_document_reads() {
     child.wait().await.unwrap();
     std::fs::remove_file(path).unwrap();
 }
+
+#[path = "support/organization_console.rs"]
+mod organization_console;

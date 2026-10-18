@@ -7,6 +7,7 @@ import { fredManagerApi } from "./fredManagerOpenApi";
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedFredManagerApi = fredManagerApi.enhanceEndpoints({
   endpoints: {
+    createOrganization: { extraOptions: { retryUnauthorized: false } },
     createFolder: { extraOptions: { retryUnauthorized: false } },
     createPersonalSpace: {
       extraOptions: { retryUnauthorized: false },
@@ -28,6 +29,8 @@ export const enhancedFredManagerApi = fredManagerApi.enhanceEndpoints({
 
 export const {
   useImportBlueprintMutation,
+  useOrganizationRegistryQuery,
+  useCreateOrganizationMutation,
   useCreateFolderMutation,
   useMeQuery,
   useMySpacesQuery,

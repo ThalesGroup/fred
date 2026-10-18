@@ -2,7 +2,7 @@
 
 ### Requirement: One Fred UI for the bounded first-user journey
 
-This branch SHALL provide its first-user journey through Fred's existing application, layout, navigation, theme and shared screen components, including the admitted person's profile, preferences, legal pages and static release notes. It SHALL NOT expose a separate manager application or substitute a parallel navigation. CGU SHALL precede bootstrap, and admitted routes SHALL remain unavailable while admission state is loading or cannot be verified. Manager roles SHALL NOT be converted into control-plane permissions to enable unsupported features.
+This branch SHALL provide its first-user journey through Fred's existing application, layout, navigation, theme and shared screen components, including the admitted person's profile, preferences, legal pages and static release notes. It SHALL NOT expose a separate manager application or substitute a parallel business navigation. Platform owners SHALL use the organization governance area described below, including when they hold business roles. CGU SHALL precede bootstrap, and admitted routes SHALL remain unavailable while admission state is loading or cannot be verified. Manager roles SHALL NOT be converted into control-plane permissions to enable unsupported features.
 
 #### Scenario: Switch account before admission
 - **WHEN** a signed-in person is shown CGU, bootstrap or an admission-service error
@@ -13,11 +13,11 @@ This branch SHALL provide its first-user journey through Fred's existing applica
 #### Scenario: Fresh platform and returning user
 - **WHEN** a person enters Fred on a fresh platform
 - **THEN** the existing CGU and bootstrap screens use manager state in that order
-- **AND** completion leads into Fred's existing layout with home, account menu, own profile and authorized provisioning navigation
+- **AND** completion leads the bootstrap owner into Organizations within Fred's existing administration layout, with account/profile and Provisioning access
 - **AND** reload preserves completed consent/bootstrap without repeating them
 
 #### Scenario: Unsupported routes and background work
-- **WHEN** an admitted person opens Home, a team, marketplace, administration, help or account page
+- **WHEN** an admitted ordinary organization user opens Home, a team, marketplace, administration, help or account page
 - **THEN** Fred retains the existing swift routes, components, menus, controls and styles, including Agents, Prompts and Resources
 - **AND** unimplemented backend calls retain their ordinary loading/error behavior rather than causing navigation removal or a replacement page
 - **AND** non-migrated calls remain unchanged until their explicit reconstruction lot; no automatic backend fallback or invented successful data is added
@@ -56,7 +56,7 @@ After ZIP import Fred SHALL retain its original Home dashboard and team/personal
 
 ### Requirement: Personal space opens in the person's organization
 
-Fred SHALL provide its existing personal-space navigation entry using manager authority, with at most one personal space in the person's unique organization. No separate creation button, organization selector or redesigned screen SHALL be introduced. Personal-space identity SHALL come from its returned UUID and personal owner, never a synthesized Python identifier.
+For ordinary organization users, Fred SHALL provide its existing personal-space navigation entry using manager authority, with at most one personal space in the person's unique organization. No separate creation button, organization selector or redesigned screen SHALL be introduced. Personal-space identity SHALL come from its returned UUID and personal owner, never a synthesized Python identifier.
 
 #### Scenario: Priya opens her personal space after import
 - **WHEN** Priya accepts the active terms after demo provisioning and has explicit personal-space creation eligibility and activates the existing personal-space entry
@@ -66,7 +66,7 @@ Fred SHALL provide its existing personal-space navigation entry using manager au
 
 #### Scenario: Root without organization membership
 - **WHEN** a platform-only root opens Home after bootstrap
-- **THEN** the team list is empty and authorized provisioning remains available
+- **THEN** Fred redirects to Organizations with authorized provisioning and shared account access, and no business navigation
 - **AND** no personal space, organization membership or content access is created
 
 ### Requirement: Authorized resource browsing in the provisioned space journey

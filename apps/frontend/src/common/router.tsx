@@ -62,6 +62,8 @@ import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.ts
 import { getConfig } from "./config";
 
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import OrganizationsPage from "@components/pages/admin/OrganizationsPage/OrganizationsPage";
+import ManagerArea from "@core/guards/ManagerArea";
 import GcuGuard from "@core/guards/GcuGuard";
 import BootstrapGuard from "@core/guards/BootstrapGuard";
 import ProvisioningPage from "@components/pages/admin/ProvisioningPage/ProvisioningPage";
@@ -75,13 +77,15 @@ function AdmittedContent() {
   return (
     <GcuGuard>
       <BootstrapGuard>
-        <div className={appStyles.appContent}>
-          <AnnouncementStack />
-          <div className={appStyles.routedContent}>
-            <PatchNoteGate />
-            <Outlet />
+        <ManagerArea>
+          <div className={appStyles.appContent}>
+            <AnnouncementStack />
+            <div className={appStyles.routedContent}>
+              <PatchNoteGate />
+              <Outlet />
+            </div>
           </div>
-        </div>
+        </ManagerArea>
       </BootstrapGuard>
     </GcuGuard>
   );
@@ -107,7 +111,7 @@ const ADMIN_LANDING: [ProtectedRequirement, string][] = [
 const AdminIndexRoute = () => {
   const { isLoading, ...capabilities } = useUserCapabilities();
   const manager = useManagerPlatformAdmin();
-  if (manager.isAdmin) return <Navigate to="/admin/provisioning" replace />;
+  if (manager.isAdmin) return <Navigate to="/admin/organizations" replace />;
   if (isLoading || manager.isLoading) return null;
   const landing = ADMIN_LANDING.find(([requires]) => isProtectedAllowed(requires, capabilities));
   return <Navigate to={landing?.[1] ?? "/unauthorized"} replace />;
@@ -239,6 +243,10 @@ const applicationRoutes: RouteObject[] = [
       {
         path: "admin",
         element: <AdminIndexRoute />,
+      },
+      {
+        path: "admin/organizations",
+        element: <OrganizationsPage />,
       },
       {
         path: "admin/provisioning",

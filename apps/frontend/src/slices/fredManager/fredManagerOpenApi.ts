@@ -1,6 +1,21 @@
 import { fredManagerApi as api } from "./fredManagerApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
+    organizationRegistry: build.query<OrganizationRegistryApiResponse, OrganizationRegistryApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/admin/organizations`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    createOrganization: build.mutation<CreateOrganizationApiResponse, CreateOrganizationApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/admin/organizations`,
+        method: "POST",
+        body: queryArg.createOrganization,
+      }),
+    }),
     teamRegistry: build.query<TeamRegistryApiResponse, TeamRegistryApiArg>({
       query: (queryArg) => ({
         url: `/fred-manager/v1/admin/teams`,
@@ -139,6 +154,15 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as fredManagerApi };
+export type OrganizationRegistryApiResponse = /** status 200 undefined */ OrganizationPage;
+export type OrganizationRegistryApiArg = {
+  /** Exclusive UUID cursor; at most 100 active organizations. */
+  after?: string;
+};
+export type CreateOrganizationApiResponse = /** status 201 undefined */ Space;
+export type CreateOrganizationApiArg = {
+  createOrganization: CreateOrganization;
+};
 export type TeamRegistryApiResponse = /** status 200 Success */ Space[];
 export type TeamRegistryApiArg = {
   /** Exclusive UUID cursor; at most 100 non-personal teams, ordered by ID. */
@@ -269,8 +293,17 @@ export type Space = {
   path: string[];
   personal_owner: string | null;
 };
+export type OrganizationPage = {
+  items: Space[];
+  next_cursor?: string | null;
+};
 export type ErrorBody = {
   detail: string;
+};
+export type CreateOrganization = {
+  admin_username: string;
+  name: string;
+  owner_username: string;
 };
 export type Allowed = {
   allowed: boolean;
@@ -437,6 +470,9 @@ export type Grant = {
   user_id: string;
 };
 export const {
+  useOrganizationRegistryQuery,
+  useLazyOrganizationRegistryQuery,
+  useCreateOrganizationMutation,
   useTeamRegistryQuery,
   useLazyTeamRegistryQuery,
   useAuthorizeDocumentMutation,

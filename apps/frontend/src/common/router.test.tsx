@@ -68,6 +68,7 @@ describe("Fred UI parity during manager reconstruction", () => {
       "marketplace/prompts",
       "marketplace/agents",
       "admin",
+      "admin/organizations",
       "admin/provisioning",
       "admin/platform-prompt",
       "admin/teams",

@@ -459,6 +459,80 @@ pub async fn create_organization(
     name: &str,
     admin: &str,
 ) -> AppResult<Space> {
+    initialize_organization(
+        pool,
+        fga,
+        name,
+        &[
+            (admin, Role::Admin),
+            (admin, Role::Member),
+            (admin, Role::Owner),
+        ],
+        None,
+    )
+    .await
+}
+
+/// HTTP governance creates only the two explicitly selected roles, never content access.
+pub async fn create_managed_organization(
+    pool: &PgPool,
+    fga: &Fga,
+    directory: &crate::keycloak::Directory,
+    caller: &str,
+    name: &str,
+    owner_username: &str,
+    admin_username: &str,
+) -> AppResult<Space> {
+    crate::platform::require_owner(fga, caller).await?;
+    validate_space_name(name)?;
+    for username in [owner_username, admin_username] {
+        if username.is_empty()
+            || username.chars().count() > 255
+            || username.chars().any(char::is_control)
+        {
+            return Err(AppError::Unprocessable(
+                "an existing username is required (1..255 characters)".into(),
+            ));
+        }
+    }
+    // Resolve before taking the global mutation lock. No directory write is performed.
+    let owner = directory
+        .find_username(owner_username)
+        .await?
+        .ok_or_else(|| {
+            AppError::Unprocessable("organization owner account was not found".into())
+        })?;
+    let admin = if admin_username == owner_username {
+        owner.id.clone()
+    } else {
+        directory
+            .find_username(admin_username)
+            .await?
+            .ok_or_else(|| {
+                AppError::Unprocessable("organization administrator account was not found".into())
+            })?
+            .id
+    };
+    initialize_organization(
+        pool,
+        fga,
+        name,
+        &[
+            (owner.id.as_str(), Role::Owner),
+            (admin.as_str(), Role::Admin),
+        ],
+        Some(caller),
+    )
+    .await
+}
+
+async fn initialize_organization(
+    pool: &PgPool,
+    fga: &Fga,
+    name: &str,
+    initial_roles: &[(&str, Role)],
+    caller: Option<&str>,
+) -> AppResult<Space> {
     validate_space_name(name)?;
     let id = Uuid::new_v4();
     let org = Space::placed(
@@ -471,30 +545,31 @@ pub async fn create_organization(
         &[],
         None,
     );
-    let tuples = [
-        Tuple {
-            user: admin,
-            role: Role::Admin,
+    let tuples: Vec<_> = initial_roles
+        .iter()
+        .map(|(user, role)| Tuple {
+            user,
+            role: *role,
             space: id,
-        },
-        Tuple {
-            user: admin,
-            role: Role::Member,
-            space: id,
-        },
-        Tuple {
-            user: admin,
-            role: Role::Owner,
-            space: id,
-        },
-    ];
+        })
+        .collect();
     let mut tx = bootstrap::locked(pool).await?;
+    // Retired names remain reserved until their normal deletion completes.
+    if db::organization_named(&mut *tx, name).await?.is_some() {
+        return Err(AppError::Conflict(SIBLING_NAME.into()));
+    }
     fga.initialize_guard(Scope::Organization(id)).await?;
     let mut guard = fga
         .guard(&[Scope::Platform, Scope::Organization(id)])
         .await?;
-    may_attach(&mut *tx, fga, admin, id).await?;
-    persist(tx, fga, &mut guard, &org, &[], &tuples, None).await?;
+    if let Some(caller) = caller {
+        crate::platform::require_owner(fga, caller).await?;
+    }
+    let targets: BTreeSet<_> = initial_roles.iter().map(|(user, _)| *user).collect();
+    for target in targets {
+        may_attach(&mut *tx, fga, target, id).await?;
+    }
+    persist(tx, fga, &mut guard, &org, &[], &tuples, caller).await?;
     Ok(org)
 }
 

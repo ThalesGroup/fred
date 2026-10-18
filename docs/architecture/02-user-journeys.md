@@ -8,16 +8,17 @@ Rules live in their domain chapters; this chapter shows their composition.
 
 Execution context: Fred's existing application, navigation and screens connected
 to fred-manager on `chore/rust-rebac`, using Keycloak, PostgreSQL and OpenFGA.
-The complete existing Fred UI is mounted after manager consent/bootstrap.
-Manager owns onboarding, provisioning and membership/personal navigation. Other
-product pages retain their existing service calls and ordinary failure states.
+After manager consent/bootstrap, ordinary organization users reach the complete
+existing Fred business UI. Platform owners reach the organization administration
+area. Manager owns onboarding, governance and membership/personal navigation. Other
+business pages retain their existing service calls and ordinary failure states.
 
 | Step | What the person sees or does | Architectural effect |
 | --- | --- | --- |
 | 1. Open Fred | Sign in with a personal Keycloak account. | Public configuration identifies the login authority. The bearer identifies the caller; it grants no organization membership. |
 | 2. Accept the CGU | Read the active terms and explicitly accept. | Manager records that person's subject, version and time in SQL. No role or space is created. |
 | 3. Initialize administration | On an unclaimed platform, enter the deployment bootstrap secret. | Manager reserves this caller as root, writes platform ownership in OpenFGA and records completion. |
-| 4. Open the platform | Root opens Fred and reaches Provisioning in the administration console; the team list is empty. | Platform governance grants no organization membership or content access. |
+| 4. Open the platform | Root reaches Organizations in the administration console, with Provisioning beside it and the shared account menu. | Platform governance grants no organization membership or content access. |
 | 5. Import the ZIP | Select the Make-generated bundle and read the completed report. | Manager uses its own Keycloak service identity to resolve/create users and reconciles declared organizations, teams, projects and direct roles. |
 | 6. Change accounts | Sign out, then sign in as an imported person. | The browser starts a fresh session; the previous person's data is not retained. |
 | 7. Enter the organization | Accept personal CGU and reach the usual Home dashboard; select a team or personal space using the existing navigation. Read the organization name in Profile. | Import has not accepted terms for this person. Manager resolves the unique organization from canonical roles. No organization selector, tenant URL parameter or personal-space creation is involved. |
@@ -59,9 +60,10 @@ in the browser. The same page links to CGU consultation (`/gcu`), privacy inform
 (`/gdpr`) and shipped release notes (`/release-notes`). Consulting CGU does not
 record another acceptance; direct URLs pass through the same admission guards.
 The profile also reads the organization name from current manager memberships.
-The account menu exposes the configured external support link and the existing
-published patch-note history. Account/legal pages retain their standalone layout.
-The original product routes remain registered; unknown URLs use the existing error page.
+The account menu exposes the configured external support link; business users also
+retain published patch-note history. Account/legal pages retain their standalone
+layout. Original business routes remain registered for ordinary users; platform
+owners are redirected from business URLs to Organizations.
 
 Unavailable configuration, onboarding state or legal text keeps the protected
 journey closed and offers retry. A wrong secret grants nothing. A completed
@@ -72,6 +74,21 @@ See [personal consent and bootstrap](03-security.md),
 [organizations and provisioning](04-organizations.md), and
 [automated journey acceptance](09-quality.md#provisioning-ui-acceptance).
 Deployment commands remain in the [manager README](../../apps/fred-manager/README.md).
+
+## A platform owner creates an organization
+
+Organizations lists active organization names in cursor pages. The owner enters a
+name and the exact existing usernames of its owner and administrator, who may be
+the same person. Manager resolves those accounts and commits the organization with
+only the selected Owner and Admin grants. An unknown account, reserved name or
+attachment to another organization produces an error. Creating the organization
+gives the caller no membership and gives neither nominee content access or a
+personal space. The successful result refreshes the registry.
+
+The platform sidebar contains Organizations and Provisioning, plus the shared
+account menu. It has no business navigation, including when the signed-in owner
+also holds organization/team roles. Direct business URLs return to Organizations.
+The registry reuses the existing team-administration table, form controls and styles.
 
 ## Priya opens her personal space
 

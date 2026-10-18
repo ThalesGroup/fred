@@ -22,6 +22,9 @@ const identity = vi.hoisted(() => ({
   username: "alice" as string | null,
   navigate: vi.fn(),
   support: undefined as string | undefined,
+  avatar: undefined as string | undefined,
+  bootstrap: vi.fn(),
+  patchHistory: vi.fn(),
 }));
 vi.mock("../../../../../security/KeycloakService.ts", () => ({
   KeyCloakService: {
@@ -35,9 +38,17 @@ vi.mock("../../../../../security/KeycloakService.ts", () => ({
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ contactSupportLink: identity.support }),
 }));
-vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({ useFrontendBootstrap: () => ({}) }));
+vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
+  useFrontendBootstrap: (skip: boolean) => {
+    identity.bootstrap(skip);
+    return { bootstrap: { current_user: { avatar_image_url: identity.avatar } } };
+  },
+}));
 vi.mock("../../../../features/announcements/usePatchNoteHistory", () => ({
-  usePatchNoteHistory: () => ({ notes: [] }),
+  usePatchNoteHistory: (skip: boolean) => {
+    identity.patchHistory(skip);
+    return { notes: [] };
+  },
 }));
 vi.mock("@shared/molecules/PatchNoteDialog/PatchNoteDialog", () => ({ PatchNoteDialog: () => null }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => identity.navigate }));
@@ -66,6 +77,7 @@ function mount(admitted = false) {
 
 afterEach(() => {
   identity.support = undefined;
+  identity.avatar = undefined;
   vi.clearAllMocks();
   vi.restoreAllMocks();
   identity.name = "Alice";
@@ -124,4 +136,18 @@ it("exposes configured external support only after admission", () => {
   act(() => support.click());
   expect(open).toHaveBeenCalledWith(identity.support, "_blank", "noopener,noreferrer");
   expect(container!.querySelector('[role="menu"]')).toBeNull();
+});
+
+it("retains the shared profile but drops business enrichment when entering the platform area", () => {
+  identity.avatar = "/control-plane/v1/avatar";
+  mount(true);
+  expect(container!.querySelector("img")?.getAttribute("src")).toBe(identity.avatar);
+  act(() => root!.render(<UserProfile admitted platformArea />));
+  expect(identity.bootstrap).toHaveBeenLastCalledWith(true);
+  expect(identity.patchHistory).toHaveBeenLastCalledWith(true);
+  expect(container!.querySelector("img")).toBeNull();
+  const profile = container!.querySelector<HTMLButtonElement>('[role="menuitem"]')!;
+  expect(profile.textContent).toContain("rework.profileMenu.profile");
+  act(() => profile.click());
+  expect(identity.navigate).toHaveBeenCalledWith("/settings");
 });

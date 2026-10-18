@@ -127,13 +127,33 @@ control-plane roles. The page uses the shared `PageHeader`, `FileDropzone` and
 `App`, the existing router, `MainLayout` and `Sidebar` compose this journey.
 `GcuGuard` reads manager onboarding and gates `BootstrapGuard` and admitted routes;
 the same layout keeps the account menu available before admission without protected
-queries. The existing Home widgets, routes, sidebar modes and styles remain mounted.
+queries. For ordinary users, the existing Home widgets, routes, sidebar modes and
+styles remain mounted.
 Home navigation consumes manager `/me/spaces` for team names/roles and personal
 opening, preserving the existing search/sort presentation. Organization data appears
 only in the profile. Selection opens the usual `/team/<UUID>/agents` destination.
 There is no synthetic Python team or permission mapping. Non-migrated service
 consumers keep their original calls, including task polling and announcements;
 service failure does not remove routes. Theme presentation uses startup configuration.
+
+## Frontend organization administration
+
+`ManagerArea`, after consent and bootstrap, resolves current `/me` authority.
+Platform owners enter `/admin/organizations`; business URLs redirect there even
+when the person also has organization/team roles. Organizations and Provisioning
+share the existing administration navigation. The boundary permits the same
+standalone profile/legal/release routes, skips business announcements/task/charter
+consumers, and disables Python avatar/patch-history enrichment in the account menu.
+Ordinary users retain the original business subtree. Normal background authority
+refresh preserves mounted forms; a failed request remains blocked during retry,
+until a successful response replaces it. Focus revalidates authority.
+
+`OrganizationsPage` reuses `AdminTeamsPage` layout styles and the shared table,
+header, input and button components. Its generated registry query distinguishes
+loading, empty and failed responses without displaying stale rows. Cursor history
+provides Previous/Next without a fabricated total. Creation accepts a name and exact
+existing owner/admin usernames, prevents concurrent submissions, reports errors
+without replay, ignores completion after unmount and refreshes the first page on success.
 
 ## Frontend account pages
 
@@ -368,6 +388,18 @@ resolve the space, returning 404 for an unknown id.
 `GET /admin/teams` requires `can_list_all_teams` and returns at most 100 non-personal
 team metadata records ordered by UUID, each placed by one concurrent `parent` Read.
 `?after=<uuid>` continues after the last id; it confers no content access.
+
+`GET /admin/organizations` requires platform ownership and selects active organization
+rows with a UUID keyset and 101-row SQL lookahead. It returns at most 100 `items` and
+an optional `next_cursor`, without FGA placement reads or directory enumeration.
+`POST /admin/organizations` requires the same authority and personal admission. It
+resolves exact existing owner/admin usernames in the configured matching Keycloak
+realm before locking SQL. Under the platform lock it checks name availability,
+initializes the new organization guard, captures platform/organization guards,
+rechecks caller ownership and validates each distinct nominee's attachment. The
+existing persistence path inserts the row, publishes only Owner/Admin direct roles
+with both guards, audits and commits. Failed publication leaves no committed row;
+orphan tuples on an uncommitted UUID confer no effective attachment or access.
 
 Team creation requires management of the parent organization, project creation
 management of the parent team. The nominated administrator must hold a direct content

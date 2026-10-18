@@ -375,7 +375,7 @@ After ZIP import Fred SHALL retain its original Home dashboard and team/personal
 
 ### Requirement: One Fred UI for the bounded first-user journey
 
-This branch SHALL provide its first-user journey through Fred's existing application, layout, navigation, theme and shared screen components, including the admitted person's profile, preferences, legal pages and static release notes. It SHALL NOT expose a separate manager application or substitute a parallel navigation. CGU SHALL precede bootstrap, and admitted routes SHALL remain unavailable while admission state is loading or cannot be verified. Manager roles SHALL NOT be converted into control-plane permissions to enable unsupported features.
+This branch SHALL provide its first-user journey through Fred's existing application, layout, navigation, theme and shared screen components, including the admitted person's profile, preferences, legal pages and static release notes. It SHALL NOT expose a separate manager application or substitute a parallel business navigation. Platform owners SHALL use the organization governance area described below, including when they hold business roles. CGU SHALL precede bootstrap, and admitted routes SHALL remain unavailable while admission state is loading or cannot be verified. Manager roles SHALL NOT be converted into control-plane permissions to enable unsupported features.
 
 #### Scenario: Switch account before admission
 - **WHEN** a signed-in person is shown CGU, bootstrap or an admission-service error
@@ -386,11 +386,11 @@ This branch SHALL provide its first-user journey through Fred's existing applica
 #### Scenario: Fresh platform and returning user
 - **WHEN** a person enters Fred on a fresh platform
 - **THEN** the existing CGU and bootstrap screens use manager state in that order
-- **AND** completion leads into Fred's existing layout with home, account menu, own profile and authorized provisioning navigation
+- **AND** completion leads the bootstrap owner into Organizations within Fred's existing administration layout, with account/profile and Provisioning access
 - **AND** reload preserves completed consent/bootstrap without repeating them
 
 #### Scenario: Unsupported routes and background work
-- **WHEN** an admitted person opens Home, a team, marketplace, administration, help or account page
+- **WHEN** an admitted ordinary organization user opens Home, a team, marketplace, administration, help or account page
 - **THEN** Fred retains the existing swift routes, components, menus, controls and styles, including Agents, Prompts and Resources
 - **AND** unimplemented backend calls retain their ordinary loading/error behavior rather than causing navigation removal or a replacement page
 - **AND** non-migrated calls remain unchanged until their explicit reconstruction lot; no automatic backend fallback or invented successful data is added
@@ -681,7 +681,7 @@ A folder deleted while the caller waits SHALL return not-found without a fabrica
 
 ### Requirement: Personal space opens in the person's organization
 
-Fred SHALL provide its existing personal-space navigation entry using manager authority, with at most one personal space in the person's unique organization. No separate creation button, organization selector or redesigned screen SHALL be introduced. Personal-space identity SHALL come from its returned UUID and personal owner, never a synthesized Python identifier.
+For ordinary organization users, Fred SHALL provide its existing personal-space navigation entry using manager authority, with at most one personal space in the person's unique organization. No separate creation button, organization selector or redesigned screen SHALL be introduced. Personal-space identity SHALL come from its returned UUID and personal owner, never a synthesized Python identifier.
 
 #### Scenario: Priya opens her personal space after import
 - **WHEN** Priya accepts the active terms after demo provisioning and has explicit personal-space creation eligibility and activates the existing personal-space entry
@@ -691,7 +691,7 @@ Fred SHALL provide its existing personal-space navigation entry using manager au
 
 #### Scenario: Root without organization membership
 - **WHEN** a platform-only root opens Home after bootstrap
-- **THEN** the team list is empty and authorized provisioning remains available
+- **THEN** Fred redirects to Organizations with authorized provisioning and shared account access, and no business navigation
 - **AND** no personal space, organization membership or content access is created
 
 ### Requirement: Repeated personal-space opening preserves current authority
@@ -1029,3 +1029,40 @@ Manager SHALL expose document metadata reads and authorization probes, but SHALL
 - **WHEN** PostgreSQL, OpenFGA and configured identity dependencies are available but Temporal is unreachable
 - **THEN** the API starts and serves authorized folder/document reads and folder operations
 - **AND** the separate space-deletion worker retains its Temporal dependency and configured cleanup behavior
+
+### Requirement: Platform organization console
+
+An admitted platform owner SHALL enter an Organizations page within Fred's existing administration area, beside Provisioning. It SHALL reuse the existing team-administration visual components and styles to list organizations and create one by name with an existing owner account and an existing administrator account. Account/profile preferences, legal text and release notes SHALL remain available. Personal spaces, agents, prompts, resources and business navigation SHALL be absent from the platform area, including for owners also holding organization/team roles. Entry into that person's organization is a separate deferred journey.
+
+#### Scenario: Platform landing and direct business URL
+- **WHEN** a platform owner enters Fred, opens Home or directly requests a business route
+- **THEN** Fred opens Organizations without mounting business data consumers
+- **AND** Organizations, Provisioning and shared account pages remain reachable
+- **AND** an ordinary organization user retains the original business UI unchanged
+
+#### Scenario: Authority unavailable or revoked
+- **WHEN** current manager authority cannot be verified or platform ownership is revoked
+- **THEN** organization data and creation controls are not exposed using stale authority
+- **AND** an unavailable service exposes retry without a business-interface fallback
+
+### Requirement: Platform organization registry and creation
+
+Manager SHALL expose an admitted platform-owner-only organization registry and creation operation independently of content membership. The registry SHALL return active organizations in bounded cursor pages without personal spaces or retired rows. Creation SHALL resolve the requested existing identities exactly, preserve unique names and one organization per person, and publish only the explicitly selected owner and administrator roles. The same person MAY hold both roles. The caller SHALL receive no automatic membership, personal space or content authority. Existing operator-command behavior SHALL remain unchanged.
+
+#### Scenario: Create with distinct owner and administrator
+- **WHEN** an admitted platform owner supplies a valid unique name and two known unattached accounts
+- **THEN** one organization is committed with the selected Owner and Admin direct grants
+- **AND** neither assignment nor platform ownership alone grants content access
+- **AND** the UI reports success only after the response and refreshes the registry
+
+#### Scenario: Invalid or conflicting creation
+- **WHEN** a target is unknown, attached to another organization, the name is invalid or already reserved, or current platform authority is absent
+- **THEN** creation fails explicitly without a committed organization or new effective roles
+- **AND** a caller revoked while waiting for the mutation lock cannot finish creation
+- **AND** double submission while pending sends at most one request; errors never trigger automatic replay
+
+#### Scenario: Bounded registry and errors
+- **WHEN** an owner pages through more than 100 active organizations
+- **THEN** cursor pages contain no duplicates or omissions for unchanged data and no retired organizations
+- **AND** a failed read hides stale rows and offers retry, distinct from a successful empty registry
+- **AND** non-owners cannot read this registry even if they administer an organization

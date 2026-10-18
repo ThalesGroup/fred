@@ -978,6 +978,83 @@ async fn team_registry(
     ))
 }
 
+#[derive(Serialize, utoipa::ToSchema)]
+struct OrganizationPage {
+    items: Vec<Space>,
+    next_cursor: Option<Uuid>,
+}
+
+#[utoipa::path(
+    get, path = "/admin/organizations",
+    params(("after" = Option<Uuid>, Query, description = "Exclusive UUID cursor; at most 100 active organizations.")),
+    responses(
+        (status = 200, body = OrganizationPage),
+        (status = 400, description = "Invalid query", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody)
+    )
+)]
+async fn organization_registry(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    Query(query): Query<RegistryQuery>,
+) -> AppResult<Json<OrganizationPage>> {
+    platform::require_owner(&s.fga, &user.uid).await?;
+    let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
+        .bind(query.after).fetch_all(&s.pool).await?;
+    let next_cursor = (rows.len() > 100).then(|| rows[99].id);
+    rows.truncate(100);
+    Ok(Json(OrganizationPage {
+        items: rows
+            .into_iter()
+            .map(|row| Space::placed(row, &[], None))
+            .collect(),
+        next_cursor,
+    }))
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+struct CreateOrganization {
+    name: String,
+    owner_username: String,
+    admin_username: String,
+}
+
+#[utoipa::path(
+    post, path = "/admin/organizations", request_body = CreateOrganization,
+    responses(
+        (status = 201, body = Space),
+        (status = 400, body = crate::error::ErrorBody),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody),
+        (status = 422, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)
+    )
+)]
+async fn create_organization(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiJson(req): ApiJson<CreateOrganization>,
+) -> AppResult<(StatusCode, Json<Space>)> {
+    let directory = s.directory.as_ref().filter(|d| s.auth.directory_subjects_match(d.realm()))
+        .ok_or_else(|| AppError::Unavailable("organization creation requires configured Keycloak service credentials and matching subject authentication".into()))?;
+    let org = spaces::create_managed_organization(
+        &s.pool,
+        &s.fga,
+        directory,
+        &user.uid,
+        &req.name,
+        &req.owner_username,
+        &req.admin_username,
+    )
+    .await?;
+    Ok((StatusCode::CREATED, Json(org)))
+}
+
 impl FromRef<AppState> for AdmissionState {
     fn from_ref(s: &AppState) -> Self {
         Self {
@@ -1013,6 +1090,7 @@ fn governance_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(list_platform_roles))
         .routes(routes!(grant_platform_role, revoke_platform_role))
         .routes(routes!(team_registry))
+        .routes(routes!(organization_registry, create_organization))
         .routes(routes!(authorize_platform))
         .routes(routes!(authorize_space))
         .route_layer(axum::middleware::from_fn(logging::expose_route))

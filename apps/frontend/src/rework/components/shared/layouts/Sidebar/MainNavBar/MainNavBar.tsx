@@ -44,7 +44,7 @@ interface MainNavEntry {
  * bootstrap query subscribed across routes (via `useUserCapabilities`), the way
  * the old rail did.
  */
-export default function MainNavBar() {
+function BusinessMainNavBar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -93,6 +93,33 @@ export default function MainNavBar() {
     });
   }
 
+  return <NavRail entries={entries} />;
+}
+
+export default function MainNavBar({ platformArea = false }: { platformArea?: boolean }) {
+  return platformArea ? <PlatformMainNavBar /> : <BusinessMainNavBar />;
+}
+
+function PlatformMainNavBar() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  return (
+    <NavRail
+      entries={[
+        {
+          key: "admin",
+          icon: "admin_panel_settings",
+          label: t("rework.mainNav.adminConsole"),
+          active: true,
+          onClick: () => navigate("/admin/organizations"),
+        },
+      ]}
+    />
+  );
+}
+
+function NavRail({ entries }: { entries: MainNavEntry[] }) {
+  const { t } = useTranslation();
   return (
     <nav className={styles.bar} aria-label={t("rework.mainNav.ariaLabel")}>
       {entries.map((entry) => (

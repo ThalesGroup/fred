@@ -16,6 +16,8 @@ foreign context, and 409 for ambiguity.
 <!-- generated: routes apps/fred-manager/src/api.rs /fred-manager/v1 -->
 | Method | Path | Handler |
 | --- | --- | --- |
+| GET | `/fred-manager/v1/admin/organizations` | `organization_registry` |
+| POST | `/fred-manager/v1/admin/organizations` | `create_organization` |
 | GET | `/fred-manager/v1/admin/teams` | `team_registry` |
 | POST | `/fred-manager/v1/authorize/document` | `authorize_document` |
 | POST | `/fred-manager/v1/authorize/platform` | `authorize_platform` |

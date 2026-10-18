@@ -101,8 +101,8 @@ async function login(username, password, path = "/admin/provisioning") {
     await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
     await expect(page.getByText("You are now the platform administrator, root.")).toBeVisible();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await expect(page.getByRole("heading", { name: /^Hello / })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Home", exact: true })).toHaveCount(0);
     assert.deepEqual(await get(context, bearer, "/me/spaces"), []);
     await page.getByRole("button", { name: "Technical console", exact: true }).click();
     await page.getByRole("link", { name: "Provisioning", exact: true }).click();
@@ -220,7 +220,7 @@ async function assertAccountPages({ page, context, bearer }, owner) {
       fullPage: true,
     });
     await page.getByRole("button", { name: path === "/release-notes" ? "Back" : "Back to app", exact: true }).click();
-    await expect(page).toHaveURL(origin + "/home");
+    await expect(page).toHaveURL(origin + (owner ? "/admin/organizations" : "/home"));
   }
   const missingNotes = /\/release\.md$/;
   await page.route(missingNotes, (route) => route.fulfill({ status: 404, body: "" }));
@@ -229,7 +229,7 @@ async function assertAccountPages({ page, context, bearer }, owner) {
   await expect(page.getByRole("button", { name: "Copy", exact: true })).toHaveCount(0);
   await page.unroute(missingNotes);
   await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(page).toHaveURL(origin + "/home");
+  await expect(page).toHaveURL(origin + (owner ? "/admin/organizations" : "/home"));
   assert.deepEqual(await get(context, bearer, "/me/onboarding"), consentBefore);
   assert.deepEqual(await get(context, bearer, "/me/spaces"), spacesBefore);
   assert.equal(consentWrites, 0, "Consultation must not accept terms again");
@@ -277,8 +277,11 @@ try {
   await expect(root.page.getByRole("link", { name: "Provisioning", exact: true })).toBeVisible();
   await expect(root.page.getByRole("link", { name: "Migration", exact: true })).toHaveCount(0);
   await assertAccountPages(root, true);
-  await assertPreservedNavigation(root.page);
-  await root.page.getByRole("button", { name: "Technical console", exact: true }).click();
+  await expect(root.page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
+  await expect(root.page.getByRole("button", { name: "Home", exact: true })).toHaveCount(0);
+  await root.page.goto(origin + "/marketplace");
+  await expect(root.page).toHaveURL(origin + "/admin/organizations");
+  await root.page.getByRole("link", { name: "Provisioning", exact: true }).click();
   await expect(root.page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
 
   // Hold the actual outgoing request, assert pending controls, then allow it to
@@ -368,8 +371,8 @@ try {
   await root.page.locator("#username").fill("root");
   await root.page.locator("#password").fill("it-root");
   await root.page.locator("#kc-login").click();
-  await root.page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(root.page.getByRole("heading", { name: /^Hello / })).toBeVisible();
+  await root.page.goto(origin + "/home");
+  await expect(root.page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
   await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toHaveCount(0);
   await logout(root.page);
   await root.page.locator("#username").fill("bob");

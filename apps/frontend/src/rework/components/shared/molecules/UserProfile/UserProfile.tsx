@@ -27,13 +27,19 @@ import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDial
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 
 /** The account menu remains available before admission and never queries business data. */
-export default function UserProfile({ admitted = false }: { admitted?: boolean }) {
+export default function UserProfile({
+  admitted = false,
+  platformArea = false,
+}: {
+  admitted?: boolean;
+  platformArea?: boolean;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
-  const { bootstrap } = useFrontendBootstrap(!admitted);
-  const { notes: patchNotes } = usePatchNoteHistory(!admitted);
+  const { bootstrap } = useFrontendBootstrap(!admitted || platformArea);
+  const { notes: patchNotes } = usePatchNoteHistory(!admitted || platformArea);
   const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -85,7 +91,7 @@ export default function UserProfile({ admitted = false }: { admitted?: boolean }
                         navigate("/settings");
                       }}
                     />,
-                    ...(patchNotes.length > 0
+                    ...(!platformArea && patchNotes.length > 0
                       ? [
                           <MenuPopoverItem
                             key="whatsNew"
@@ -141,11 +147,11 @@ export default function UserProfile({ admitted = false }: { admitted?: boolean }
           <UserAvatar
             name={userFullName}
             size="small"
-            imageUrl={admitted ? bootstrap?.current_user?.avatar_image_url : undefined}
+            imageUrl={admitted && !platformArea ? bootstrap?.current_user?.avatar_image_url : undefined}
           />
         </button>
       </Tooltip>
-      {admitted && (
+      {admitted && !platformArea && (
         <PatchNoteDialog open={readingPatchNotes} notes={patchNotes} onClose={() => setReadingPatchNotes(false)} />
       )}
     </div>

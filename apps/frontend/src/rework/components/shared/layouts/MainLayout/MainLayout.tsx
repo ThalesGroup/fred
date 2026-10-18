@@ -18,6 +18,7 @@ import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate";
 import { useTaskPolling } from "../../../../features/tasks/useTaskPolling";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration";
+import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import styles from "./MainLayout.module.css";
 
 function AdmittedWorkspace() {
@@ -31,12 +32,13 @@ function AdmittedWorkspace() {
 }
 
 export default function MainLayout({ children, navigation = true }: PropsWithChildren<{ navigation?: boolean }>) {
+  const { isAdmin } = useManagerPlatformAdmin(!navigation);
   return (
     <div className={styles.mainLayout}>
       <nav className={styles.sidebar}>
-        <Sidebar navigation={navigation} />
+        <Sidebar navigation={navigation} platformArea={isAdmin} />
       </nav>
-      <main className={styles.content}>{navigation ? <AdmittedWorkspace /> : children}</main>
+      <main className={styles.content}>{navigation ? isAdmin ? <Outlet /> : <AdmittedWorkspace /> : children}</main>
     </div>
   );
 }

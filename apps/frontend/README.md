@@ -536,9 +536,14 @@ for manager public configuration, Keycloak login, personal CGU, root bootstrap,
 team/personal navigation and `/admin/provisioning` in the administration console. The
 generated manager slice is the authority for each step. Root has no implicit
 space; imported users accept their own terms and select their declared
-teams and projects using the existing team list. Organization information appears
-only in the profile. The account menu remains
-available before admission. Existing product routes and non-migrated service consumers remain mounted. The terms assets and `app.gcu_version` are deployed together.
+teams and projects using the existing team list. For business users, organization
+information appears only in Profile; original product routes and non-migrated service
+consumers remain mounted. Platform owners land on `/admin/organizations`, beside
+Provisioning, and can create an organization with exact existing owner/admin usernames.
+This area reuses team-administration components/styles and exposes no business
+navigation, including for owners holding team roles. Shared account/preferences,
+legal texts and static release notes remain available. The account menu remains
+available before admission. The terms assets and `app.gcu_version` are deployed together.
 
 Provisioning imports a ZIP synchronously and shows server counts only after
 completion. Errors retain explicit replay guidance because effects can survive

@@ -27,7 +27,7 @@ import styles from "./AdminNavbar.module.css";
 // `requires` is the same value the page's route guard in router.tsx passes to
 // `Protected`, resolved through the same `isProtectedAllowed` — a page the
 // caller cannot open is hidden rather than left as a link to `/unauthorized`.
-export default function AdminNavbar() {
+function BusinessAdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
   const capabilities = useUserCapabilities();
@@ -139,10 +139,41 @@ export default function AdminNavbar() {
       linkProps: { to: "/admin/provisioning" },
     });
 
+  return <AdminNavigation items={navigationItems} />;
+}
+
+export default function AdminNavbar({ platformArea = false }: { platformArea?: boolean }) {
+  return platformArea ? <PlatformAdminNavbar /> : <BusinessAdminNavbar />;
+}
+
+function PlatformAdminNavbar() {
+  const { t } = useTranslation();
+  return (
+    <AdminNavigation
+      items={[
+        {
+          type: "link",
+          label: t("rework.organizations.title"),
+          icon: { category: "outlined", type: "groups", filled: false },
+          linkProps: { to: "/admin/organizations" },
+        },
+        {
+          type: "link",
+          label: t("rework.provisioning.title"),
+          icon: { category: "outlined", type: "upload", filled: false },
+          linkProps: { to: "/admin/provisioning" },
+        },
+      ]}
+    />
+  );
+}
+
+function AdminNavigation({ items }: { items: NavigationMenuItemProps[] }) {
+  const { t } = useTranslation();
   return (
     <div className={styles.adminNavbarContainer}>
       <NavPanelHeader title={t("rework.sidebar.admin.title")} />
-      <NavigationMenu items={navigationItems} />
+      <NavigationMenu items={items} />
     </div>
   );
 }
