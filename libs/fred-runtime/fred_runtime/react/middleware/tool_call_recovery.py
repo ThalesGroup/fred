@@ -31,6 +31,8 @@ from langchain_core.messages.tool import ToolCall, tool_call
 from langchain_core.tools import BaseTool, InjectedToolCallId
 from pydantic import BaseModel, ValidationError
 
+from fred_runtime.support.reasoning_replay import is_mistral_model_name
+
 from ..react_model_adapter import (
     extract_model_name_from_model_response,
     extract_model_name_from_object,
@@ -95,15 +97,6 @@ def _has_other_raw_string_controls(text: str) -> bool:
         elif ord(char) < 0x20 and char not in "\r\n":
             return True
     return False
-
-
-def is_mistral_model_name(model_name: str | None) -> bool:
-    """Return whether one configured/effective model name is Mistral."""
-
-    if model_name is None:
-        return False
-    normalized = model_name.lower()
-    return normalized.startswith("mistral") or "/mistral" in normalized
 
 
 def is_tool_call_recovery_reference_block(block: object) -> bool:
