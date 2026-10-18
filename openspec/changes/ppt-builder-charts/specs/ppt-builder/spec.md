@@ -112,7 +112,7 @@ The system SHALL accept on a plan slide a `chart` field holding only data — `t
 
 ### Requirement: Pie and doughnut labels show what the plan asks
 
-The system SHALL accept on a chart an optional `show` field — `share`, `value` or `both`, unset meaning `share` — that sets what a pie's or doughnut's slice labels hold: percentages, the values with their `unit`, or the value then its percentage. The model SHALL NOT write a number format; the code SHALL derive it from `show` and `unit`. The system SHALL read loose spellings of `show` and its aliases `display`, `labels_as` and `show_as`, and SHALL keep `labels` as an alias of `categories`. The system SHALL NOT drop a label setting silently: a `unit` other than `%` on a pie or doughnut left in `share` SHALL be told to the model with the way to show it, and `show` on another chart type SHALL be told as not applied.
+The system SHALL accept on a chart an optional `show` field — `share`, `value` or `both`, unset meaning `value` when the chart has a `unit` (data already in `%` or in its own measure) and `share` otherwise — that sets what a pie's or doughnut's slice labels hold: percentages, the values with their `unit`, or the value then its percentage. The model SHALL NOT write a number format; the code SHALL derive it from `show` and `unit`. The system SHALL read loose spellings of `show` and its aliases `display`, `labels_as` and `show_as`, and SHALL keep `labels` as an alias of `categories`. The system SHALL NOT drop a label setting silently: a `unit` other than `%` on a pie or doughnut asked in `share` SHALL be told to the model with the way to show it, and `show` on another chart type SHALL be told as not applied.
 
 #### Scenario: Numbers instead of percentages
 
@@ -124,9 +124,14 @@ The system SHALL accept on a chart an optional `show` field — `share`, `value`
 - **WHEN** the model sends the same pie with `show: "both"`
 - **THEN** each slice label shows the value with its unit, then its percentage on the next line
 
+#### Scenario: Data with a unit shows its own values by default
+
+- **WHEN** the model sends a pie with `unit: "%"` (yearly rates 5 to 22) and no `show`, or edits a column chart with that unit to `chart.type: "pie"`
+- **THEN** the slice labels show the values (`22 %`), never their shares of the sum (`28 %`); without a `unit`, the labels show shares
+
 #### Scenario: Unit hidden by percentages is told
 
-- **WHEN** the model sends a pie with `unit: "collaborateurs"` and no `show`
+- **WHEN** the model sends a pie with `unit: "collaborateurs"` and `show: "share"`
 - **THEN** the labels show percentages, the delivery tells the model the unit is not shown and to set `chart.show` to `value`, and the "What was built" entry notes that the numbers are not displayed
 
 #### Scenario: Labels mode edited through changes

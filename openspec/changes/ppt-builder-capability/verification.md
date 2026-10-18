@@ -1674,3 +1674,11 @@ Not proven: the live Thales inventory (vision labels) was not replayed; the harn
 - Prompt size (cl100k): built-in description 3215, schema 4491 (unchanged); Thales description 3260 → 3248, schema 4471 → 4446.
 - Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 921 passed, 5 skipped; `openspec validate --strict`.
 - Not proven: model behaviour (fred-agents not restarted, 58.8); the live Thales inventory (vision labels) was not replayed.
+
+## WP59 (2026-10-18): revision fixes, round 3 live evals
+
+- Tests (each fails with the package sources stashed): `test_chart_slides.py::test_a_pie_of_data_with_a_unit_shows_its_values_unless_asked`, `test_the_designs_line_says_a_chart_built_as_another_type`; `test_build_tool.py::test_deck_fields_written_inside_changes_are_taken_to_the_top_level`; `test_takeaway.py::test_an_edited_takeaway_goes_on_a_design_of_its_kind_that_shows_it`, `test_an_edited_takeaway_no_design_of_its_kind_shows_names_those_that_do`.
+- Offline replays (`harness/replay.py`, evidence `~/fred-tmp/revision-evals/fixes/r3/`): default r17, the pie labels read 5 % … 22 % (values, `showVal 1`, `showPercent 0`; render `pie/png/revision-0-slide-09.png`, looked at) and the designs line reads `9 'Generated decks per month g…', built as a pie chart`; thales r20, the first call (deck fields inside `changes`) now delivers `added: 3`; thales r04, the takeaway edit moves slide 3 to 'Texte et message clé' with the cost message in its key-message zone (`changed: 3`, LibreOffice render `takeaway/thales-r04-20261018-143616/png/revision-0-slide-03.png`, looked at); default r04, still notes only (no built-in `bullets` design has a key-message zone), and the delivery now names 'Charts stay native and editable' (chart) and 'Which layouts to build next' (cards).
+- Prompt size (cl100k): built-in description 3215 → 3235, schema 4491 → 4488; Thales v2-final description 3248 → 3268, schema 4446 → 4443.
+- Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 926 passed, 5 skipped; `openspec validate --strict`.
+- Not proven: model behaviour (fred-agents not restarted, 59.6); the live Thales inventory (vision labels) was not replayed.

@@ -390,6 +390,14 @@ Universal rules only: the catalogue matches the render, and a slide nobody chang
 - **Split titles recounted (H5).** Splitting stays: it saves a round when a list outgrows the largest slide of its kind. Its ` (k/n)` titles are recounted on every build over delivered slides: adjacent parts are renumbered, a part left alone (a slide inserted between, a part moved or removed) drops its number. Titles never delivered, or counting above two (the builder splits in two at most), are the user's words and stay.
 - **Variety asks only checked recasts (H14).** The `unused` variants and one-slide-per-kind `others` were never checked against the content; they are deleted. The ask carries the capacity-checked `suggested` recasts and is made only when one exists.
 
+### D37. Revision fixes, round 3 live evals (owner decision 2026-10-18: universal builder rules only)
+
+- **A pie of data with a unit shows its values.** Unset, `show` was `share`: yearly rates in `%` turned into pie slices read as shares of their sum (2027: 28 % for 22 %). Unset now means `value` when the chart has a `unit`, `share` without one; the hidden-unit note fires only for an explicit `share`.
+- **The designs line says what a chart became.** After `chart.type` bar → pie the line still read `'Grouped bar chart'`, and the model resent the deck. A chart built as another type than its template slide's example adds `, built as a pie chart`.
+- **Deck fields inside `changes` are read.** Broken quoting left `file_name': 'X` (and `audience`, `main_message`, `}```json`) as entries of `changes`, refused as non-changes. They are unambiguous there: read as top-level fields, debris dropped; the same field given twice with two values is refused in one line.
+- **An edited takeaway is shown when a design of its kind can.** Takeaways stay in the notes by default (`show_takeaways`), but a `changes` edit of one slide's `takeaway` asks for that slide's key message: the slide is flagged (`takeaway_asked`, hidden, kept by `repinned`) and shown like `show_takeaways` would, on a design of its kind with a key-message zone that fits. Otherwise the existing note says it is only in the notes and names the template slides that show one; no further judgement.
+- **Not changed: mixed units in one series (r10).** The units check reads units written in values; Thales r10 sent plain numbers with `unit: "ans pour ROI"` and a series named `Montant (M€)`, which no written unit reveals. Left to the model.
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.

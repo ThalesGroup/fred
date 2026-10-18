@@ -905,6 +905,20 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **WHEN** the model reads the success text
 - **THEN** one `Designs:` line names, per file slide number, the template slide's label as the review shows it (`2 'Process' · 3 'Process'`, three different names for slides 5 to 7), never a template id, and says that different names look different and that `like` gives slide N the design of slide M
 - **AND** two included template slides sharing a label read as distinct names (`'Free text'`, `'Free text #2'`), and a label longer than 28 chars is cut, two labels cut to the same text being numbered the same way
+- **AND** a chart built as another type than its template slide's own chart says so after the name (`9 'Grouped bar chart', built as a pie chart`)
+
+#### Scenario: Deck fields written inside changes are read
+
+- **WHEN** a `changes` call holds, among its entries, `file_name`, `audience` or `main_message` (an object of only those keys, or a string such as `file_name': 'Deck` left by broken quoting), or debris with no content (`}```json`)
+- **THEN** each field is read as the call's own and the debris dropped, and the changes are applied
+- **AND** a field also given at the top level with another value builds nothing, with one line naming both values
+
+#### Scenario: An edited takeaway goes on its slide when a design can show it
+
+- **GIVEN** a delivered deck built without `show_takeaways`
+- **WHEN** a `changes` call edits slide N's `takeaway`
+- **THEN** slide N is built, while its content fits, on a design of its kind with a key-message zone that holds it, and keeps it on later builds
+- **AND** when no design of its kind shows it, the delivery says the takeaway is only in the speaker notes and names the template slides that show one (label and kind), or says none does
 
 #### Scenario: Changes that change nothing
 
