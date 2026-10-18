@@ -1090,9 +1090,9 @@ class SlidePlan(BaseModel):
     )
     source: Optional[str] = Field(
         default=None,
-        description="Where the slide's figures come from, required with a chart, a "
-        "numeric table or numbered items: the document's name, 'user' (typed in the "
-        "chat), or 'illustrative' only when the user asked for made-up data.",
+        description="Where content from the user's documents or data comes from: the "
+        "document's name, 'user' (typed in the chat), or 'illustrative' only when the "
+        "user asked for made-up data. Left out for general knowledge.",
     )
     notes: Optional[str] = Field(default=None, description="Speaker notes.")
     repeat_layout: bool = Field(

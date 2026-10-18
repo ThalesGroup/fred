@@ -170,9 +170,10 @@ suivante, sans relire le template.
 **Le fil de la présentation** — pour chaque diapositive, l'agent décide
 d'abord ce que le public doit en retenir, en une phrase, puis choisit ce qu'il
 montre pour le prouver. Cette phrase n'est pas affichée sur la diapositive :
-elle ouvre les notes de l'orateur, et le titre la résume en quelques mots. Les chiffres viennent de
-vos documents ou de ce que vous avez écrit dans la conversation, et les notes
-disent d'où ils viennent. L'agent n'invente des chiffres que si vous demandez
+elle ouvre les notes de l'orateur, et le titre la résume en quelques mots.
+Quand le contenu vient de vos documents ou de ce que vous avez écrit dans la
+conversation, les notes disent d'où il vient ; les connaissances générales
+n'ont pas de source. L'agent n'invente des chiffres que si vous demandez
 des données d'exemple ou fictives ; le graphique l'indique alors
 (« illustratif »). L'agent ne vérifie pas les chiffres : vérifiez-les avant de
 présenter.

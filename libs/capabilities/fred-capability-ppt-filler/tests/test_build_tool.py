@@ -185,6 +185,20 @@ def test_a_title_states_the_conclusion_and_the_takeaway_stays_in_the_notes():
     assert "shown itself only when the user explicitly asks" in takeaway
 
 
+def test_source_is_asked_only_for_the_user_s_documents_or_data():
+    """A history deck from general knowledge was labelled 'Source : l'utilisateur'."""
+    inventory = analyze_template(TEMPLATE).inventory
+    assert inventory is not None
+    source = SlidePlan.model_fields["source"].description or ""
+    for text in (
+        tools_mod._description(inventory, "template_slide", 2),
+        build_instructions(False),
+        source,
+    ):
+        assert "general knowledge" in text
+    assert "required" not in source
+
+
 def test_each_text_field_states_its_room_where_the_model_writes_it():
     """The cover subtitle and figure labels failed most first calls while their
     sizes sat only in the catalogue."""

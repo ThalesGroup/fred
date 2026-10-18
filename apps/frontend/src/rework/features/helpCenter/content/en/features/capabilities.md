@@ -158,8 +158,9 @@ without reading the template again.
 **The thread of the presentation** — for each slide, the agent first decides
 what the audience should take away, in one sentence, then chooses what to show
 to prove it. That sentence is not shown on the slide: it opens the speaker
-notes, and the title sums it up in a few words. Figures come from your documents or from what you wrote
-in the conversation, and the notes say where they come from. The agent only
+notes, and the title sums it up in a few words. When content comes from your
+documents or from what you wrote in the conversation, the notes say where it
+comes from; general knowledge has no source. The agent only
 makes figures up when you ask for sample or made-up data; the chart then says
 so ("illustrative"). The agent does not check the figures: check them before
 presenting.

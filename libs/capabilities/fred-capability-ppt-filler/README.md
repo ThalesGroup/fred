@@ -66,7 +66,7 @@ has none.
 
 - **Storytelling** (`story.py`, `notes.py`): the working rules ask for a
   `takeaway` per content slide (the first line of the speaker notes, never on
-  the slide) and a `source` for figures; the builder enforces only that a
+  the slide) and a `source` for content from the user's documents or data; the builder enforces only that a
   chart holds one measure (two written units refused) and writes the notes.
   The `validate_plan` setting turns a conversation's first build into an
   outline the user answers first.

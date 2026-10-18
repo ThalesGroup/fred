@@ -1344,8 +1344,9 @@ def _description(
             if several
             else ""
         )
-        + "notes, `source` on a slide with figures (document name, 'user', or "
-        "'illustrative' only when the user asked for made-up data); then, "
+        + "notes, `source` for content from the user's documents or data (document name, 'user', "
+        "or 'illustrative' only when the user asked for made-up data; left out for general "
+        "knowledge); then, "
         "optionally, its `kind` from the list below (left out, it is inferred from the content; a kind "
         "the template cannot use there is replaced by a close kind that holds the content, never an "
         "unrelated one). The tool picks the "

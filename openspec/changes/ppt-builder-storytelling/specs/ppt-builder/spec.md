@@ -40,7 +40,7 @@ The system SHALL return `needs_revision` for a chart whose values are written wi
 
 ### Requirement: Figures are sourced
 
-The system SHALL write a slide's `source` to its speaker notes: a document name, `user` (figures the user typed in the conversation), or `illustrative`. When the source is `illustrative`, the system SHALL say so in the speaker notes, in the chart caption when the slide has a chart, and with an `illustrative_data` note in "What was built", and nowhere else on the slide. The system SHALL NOT refuse a slide for a missing source or an illustrative one, and SHALL NOT check the slide's figures against the conversation: where figures come from is the agent's, by the working rules. The system SHALL NOT claim to verify any figure.
+The system SHALL write a slide's `source` to its speaker notes: a document name, `user` (figures the user typed in the conversation), or `illustrative`. When the source is `illustrative`, the system SHALL say so in the speaker notes, in the chart caption when the slide has a chart, and with an `illustrative_data` note in "What was built", and nowhere else on the slide. The system SHALL NOT refuse a slide for a missing source or an illustrative one, and SHALL NOT check the slide's figures against the conversation: where figures come from is the agent's, by the working rules. The system SHALL NOT claim to verify any figure. The working rules and field descriptions SHALL ask for `source` only for content from the user's documents or data, and SHALL ask to leave it out for general knowledge.
 
 #### Scenario: Illustrative data
 
