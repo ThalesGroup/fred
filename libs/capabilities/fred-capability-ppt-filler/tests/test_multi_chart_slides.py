@@ -237,7 +237,7 @@ def test_variety_never_offers_a_slide_with_another_number_of_charts(owner):
     assignment = assign(inventory, _plan(*slides), "template_slide", 2)
     assert not assignment.problems
     (repeat,) = assignment.repeats
-    assert (repeat.slides, repeat.unused, repeat.revisable) == ([2, 3, 4], [], False)
+    assert (repeat.slides, repeat.revisable) == ([2, 3, 4], False)
 
 
 def test_a_count_no_slide_holds_is_refused_with_the_counts_offered():

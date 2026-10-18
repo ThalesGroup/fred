@@ -119,7 +119,6 @@ SHAPE_HINTS: Dict[str, str] = {
     "bullets": "a short list",
     "team": "people",
 }
-_MAX_OTHER_KINDS = 5
 # Kinds a requested kind may be built as when none of its slides fits, closest
 # first: a list stays a list, a title slide a title slide. A kind absent here
 # ("other") keeps the content-based fallback. Rationale: design.md.
@@ -189,8 +188,6 @@ class Repeat:
     kind: str
     slides: List[int]  # 1-based positions in the plan
     labels: List[str]  # the template slides they use, distinct
-    unused: List[str]  # unused variants of its kind, "label: zones"
-    others: List[str]  # one unused slide per other non-structural kind
     suggested: List[str]  # "slides 9, 10 → cards holds … (why)"
     structural: bool = False  # cover/section/agenda/closing slides: never asked
     at_most: int = _NOTE_USES - 1  # the slides this group may hold
@@ -198,9 +195,7 @@ class Repeat:
 
     @property
     def revisable(self) -> bool:
-        return not self.structural and bool(
-            self.unused or self.others or self.suggested
-        )
+        return not self.structural and bool(self.suggested)
 
 
 @dataclass
@@ -807,10 +802,8 @@ class _Slide:
     tiers: List[List[SlideKind]] = field(default_factory=list)
     # Every assignable pattern, with its misfit reasons and cost.
     checked: List[Tuple[Pattern, List[Misfit], float]] = field(default_factory=list)
-    # Per pattern id, the zones it leaves unfilled; the fits dropped for one
-    # of their kind that fills more (`_fullest`).
+    # Per pattern id, the zones it leaves unfilled.
     empty: Dict[str, int] = field(default_factory=dict)
-    emptier: set[str] = field(default_factory=set)
     # The pattern ids that show the takeaway the user asked to see.
     shows: set[str] = field(default_factory=set)
     candidates: List[Tuple[Pattern, float]] = field(default_factory=list)
@@ -955,7 +948,6 @@ def _fullest(
             for q, other in shown
         )
     ]
-    slide.emptier |= {p.id for p, _ in found} - {p.id for p, _ in kept}
     return kept
 
 
@@ -1755,51 +1747,20 @@ def _repeats(
             for s in slides
             if s.part == 1 and (structural or at.get(s.index, 0) in scope)
         ]
-        used = {chosen[s.index].id for s in within if s.index in chosen}
-        unused = [p for p in pool if p.id not in used]
         budget = budgets.setdefault(
             frozenset(at.get(s.index, 0) for s in within),
             _budget(within, chosen, variants),
         )
-        reused = len({p.id for _, p in group}) < len(group)
-        # Left out: a variant that has the fit problem of every slide of the group.
-        blocked = set.intersection(*(_same_problem(s) for s, _ in group))
-        # And one that would leave a zone unfilled on every slide of it.
-        blocked |= set.intersection(*(s.emptier for s, _ in group))
-        # And a chart slide holding another number of charts than they send.
-        counts = {len(slide_charts(s.plan)) for s, _ in group} - {0}
-        blocked |= {
-            p.id
-            for p in pool
-            if counts and p.kind == "chart" and len(chart_hosts(p, ())) not in counts
-        }
-        plans = [s.plan for s, _ in group]
-        offer = [
-            p for p in unused if p.id not in blocked and not _wants_picture(p, plans)
-        ]
-        same = [f"{p.label}: {zone_summary(p)}" for p in offer if p.kind == kind]
         suggested = (
             _suggested([s for s, _ in group], kind, pool, budget, given)
             if recast
             else []
         )
-        others = [
-            f"'{other}' for {hint}: {p.label}: {zone_summary(p)}"
-            for other, hint in SHAPE_HINTS.items()
-            if recast
-            and other not in _STRUCTURAL
-            and other != kind
-            and budget.get(other, 0) > 0
-            for p in [next((q for q in offer if q.kind == other), None)]
-            if p is not None
-        ]
         repeats.append(
             Repeat(
                 kind,
                 [s.index for s, _ in group],
                 list(dict.fromkeys(p.label for _, p in group)),
-                list(dict.fromkeys(same)) if reused else [],
-                others[:_MAX_OTHER_KINDS],
                 suggested,
                 structural,
                 at_most,
@@ -1810,8 +1771,7 @@ def _repeats(
 
 
 def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
-    """The passive note: the slides, the variants of their kind left unused,
-    and the kinds their content suits."""
+    """The passive note: the slides and the kinds their content suits."""
     at_text = ", ".join(str(at[n]) for n in repeat.slides)
     if repeat.in_a_row:
         note = f"Slides {at_text} use the template slide '{repeat.labels[0]}' in a row."
@@ -1823,15 +1783,8 @@ def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
             + ", ".join(f"'{label}'" for label in repeat.labels)
             + ")."
         )
-    if repeat.unused:
-        note += (
-            f" Unused '{repeat.kind}' variants, to recast one of them: "
-            + " | ".join(repeat.unused)
-            + "."
-        )
     if repeat.suggested:
         note += " Their content suits: " + "; ".join(repeat.suggested) + "."
-    if repeat.unused or repeat.suggested:
         return note + " To vary them, recast one as above; otherwise nothing to do."
     return note + " Nothing to do: no other slide of this template suits them."
 

@@ -481,12 +481,11 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     (repeat,) = payload["variety"]
     assert repeat["slides"] == [2, 3, 4, 5] and repeat["kind"] == "process"
     assert repeat["at_most"] == 2
-    # Two figures variants: two slides suggested, none left to offer as an option.
+    # Two figures variants: two slides suggested, and no design untested on the content.
     assert repeat["suggested"] == [
         "slides 2, 3 (short figures) → figures holds items max 4 [number, label]"
     ]
-    assert not any(o.startswith("'figures'") for o in repeat["options"])
-    assert any(o.startswith("'two_columns'") for o in repeat["options"])
+    assert "options" not in repeat
     assert "send the same call again: it will be built as is" in text
     # The same plan again: built, with the passive note only.
     text, result = await build.coroutine(slides=_REPEATED)

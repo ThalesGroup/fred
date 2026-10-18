@@ -837,9 +837,9 @@ def _needs_revision(
 
 
 _VARIETY_ASK = (
-    "recast some of the slides under `variety` into one of their options (`suggested` names "
-    "the kind each slide's content already suits and what that slide holds), rewriting the "
-    "content in that shape and to those sizes{restated}. " + SECTION_RULE
+    "recast some of the slides under `variety` as `suggested` says (the kind each slide's "
+    "content already suits and what that slide holds), rewriting the content in that shape "
+    "and to those sizes{restated}. " + SECTION_RULE
 )
 
 
@@ -850,9 +850,7 @@ def _variety(repeats: List[Repeat]) -> List[Dict[str, Any]]:
             "kind": r.kind,
             "at_most": r.at_most,
             **({"in_a_row": True} if r.in_a_row else {}),
-            **({"suggested": r.suggested} if r.suggested else {}),
-            "options": [f"another '{r.kind}' variant: {u}" for u in r.unused]
-            + r.others,
+            "suggested": r.suggested,
         }
         for r in repeats
     ]

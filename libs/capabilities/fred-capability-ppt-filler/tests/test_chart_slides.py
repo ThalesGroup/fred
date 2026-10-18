@@ -496,7 +496,7 @@ def test_chart_slides_are_never_asked_to_become_another_kind(builtin):
     slides = [_chart_slide(REVENUE, title=f"Revenue {n}") for n in range(4)]
     assignment = assign(inventory, _plan(*slides), "kind", 2)
     repeats = [r for r in assignment.repeats if r.kind == "chart"]
-    assert repeats and all(not r.suggested and not r.others for r in repeats)
+    assert repeats and all(not r.suggested and not r.revisable for r in repeats)
 
 
 # --- the drawing ------------------------------------------------------------------------

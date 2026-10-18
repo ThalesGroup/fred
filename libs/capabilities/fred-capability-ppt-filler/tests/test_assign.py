@@ -1212,7 +1212,8 @@ def test_max_uses_is_raised_to_what_the_template_allows():
     assert assign(covered, _plan(*with_cover), "kind", 1).repeats == []
 
 
-def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
+def test_a_slide_used_three_times_is_reported_without_designs_that_cannot_hold_it():
+    """Thales r07: "options" offered designs too small for the content."""
     narrow = _bullets("slide:3", "Narrow", source="slide")
     narrow.zones[1].chars_per_line, narrow.zones[1].max_lines = 2, 1
     inventory = _inventory(
@@ -1226,10 +1227,9 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
         for n in range(5)
     ]
     (note,) = [n for n in assign(inventory, _plan(*slides)).notes if "all use" in n]
-    assert note.startswith("Slides 1, 3, 5 all use the template slide 'A'.")
-    assert (
-        "Narrow: title ≤8 words (≈60 chars); bullets 1 short word (≈2 chars × 1 line, max 1 entry)"
-        in note
+    assert note == (
+        "Slides 1, 3, 5 all use the template slide 'A'. Nothing to do: no other "
+        "slide of this template suits them."
     )
     # By kind, the two template slides make one repeat.
     assignment = assign(inventory, _plan(*slides), "kind")
@@ -1237,13 +1237,7 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
     assert note.startswith(
         "Slides 1, 2, 3, 4, 5 are all 'bullets' slides (template slides 'A', 'B')."
     )
-    # The unused variants of that kind, with their sizes; never another kind's.
-    assert (
-        "Narrow: title ≤8 words (≈60 chars); bullets 1 short word (≈2 chars × 1 line, max 1 entry)"
-        in note
-    )
-    assert "cards" not in note
-    assert note.endswith("To vary them, recast one as above; otherwise nothing to do.")
+    assert "Narrow" not in note and "cards" not in note
 
 
 def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
@@ -1372,10 +1366,6 @@ def test_slides_that_fit_nothing_repeat_on_their_closest_fit():
     assert all("closest fit, a 'cards' slide" in p.problem for p in assignment.problems)
     (repeat,) = assignment.repeats
     assert repeat.slides == [2, 4] and repeat.labels == ["Synthetic cards"]
-    assert repeat.revisable
-    # The timeline slide has no place for a label either: never offered.
-    assert not any(o.startswith("'timeline'") for o in repeat.others)
-    assert any(o.startswith("'figures'") for o in repeat.others)
 
 
 def test_content_shapes_are_read_from_text_patterns():
@@ -1467,12 +1457,10 @@ def test_a_kind_is_suggested_no_more_than_the_template_has_variants():
     (repeat,) = assign(single, _plan(*slides), "kind").repeats
     assert sum("→ figures" in s for s in repeat.suggested) == 1
     assert len(repeat.suggested[0].split("(")[0].split(",")) == 1  # one slide
-    assert not any(o.startswith("'figures'") for o in repeat.others)
     # A figures slide already in the deck uses that variant: none left to suggest.
     figures = {"title": "KPI", "items": [{"number": "3", "label": "Sites"}] * 2}
     (repeat,) = assign(single, _plan(*slides, figures), "kind").repeats
-    assert repeat.revisable and not repeat.suggested
-    assert not any(o.startswith("'figures'") for o in repeat.others)
+    assert not repeat.revisable and not repeat.suggested
 
 
 def test_suggestions_spread_across_the_kinds_a_slide_suits():
@@ -1774,8 +1762,9 @@ def _part(name: str) -> SlidePlan:
 
 
 def _revisable(plan: List[SlidePlan], max_uses: int = 2) -> List[Any]:
+    """The content repeats over the limit, whatever could vary them."""
     found = assign(_section_inventory(), _plan(*plan), "template_slide", max_uses)
-    return [r for r in found.repeats if r.revisable]
+    return [r for r in found.repeats if not r.structural]
 
 
 def test_the_limit_counts_within_each_section():
@@ -1866,7 +1855,7 @@ def test_an_agenda_splits_the_deck_into_sections_without_section_slides():
 
     def revisable(plan: List[SlidePlan]) -> List[Any]:
         found = assign(inventory, _plan(*plan), "template_slide", 1).repeats
-        return [r for r in found if r.revisable]
+        return [r for r in found if not r.structural]
 
     assert revisable(slides) == []
     # Titles that name no agenda entry: one deck, a repeat.
@@ -1891,13 +1880,11 @@ def test_variety_never_offers_a_variant_needing_pictures_the_slides_lack():
     photo_cards = _framed_cards("slide:970", "Photo cards")
     inventory = _inventory(_bullets("slide:1", "A", source="slide"), photo_cards)
     (repeat,) = assign(inventory, _plan(*slides), "template_slide", 1).repeats
-    assert not any("Photo cards" in o for o in repeat.others)
     assert not any("cards" in s for s in repeat.suggested)
     # A cards slide without pictures is offered and suggested instead.
     plain = with_item_slides(INVENTORY, kinds=("cards",)).patterns[-1]
     inventory = _inventory(_bullets("slide:1", "A", source="slide"), photo_cards, plain)
     (repeat,) = assign(inventory, _plan(*slides), "template_slide", 1).repeats
-    assert not any("Photo cards" in o for o in repeat.others)
     (advice,) = [s for s in repeat.suggested if "cards holds" in s]
     assert "image" not in advice
 
