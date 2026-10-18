@@ -12,60 +12,105 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
-import Button from "@shared/atoms/Button/Button";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { KeyCloakService } from "../../../../security/KeycloakService";
-import { useMySpacesQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements";
+import HomeSearch from "./HomeSearch/HomeSearch.tsx";
+import ActivityKpis from "./ActivityKpis/ActivityKpis.tsx";
+import RecentAgents from "./RecentAgents/RecentAgents.tsx";
+import ResponsibleAiSection from "./ResponsibleAiSection/ResponsibleAiSection.tsx";
+import TopAgents from "./TopAgents/TopAgents.tsx";
+import TopTeams from "./TopTeams/TopTeams.tsx";
+import MarketplaceTopPrompts from "./MarketplaceTopPrompts/MarketplaceTopPrompts.tsx";
 import styles from "./HomePage.module.scss";
 
-// Kept for the unmounted activity widgets; the home journey does not query them.
+/** Days a home-page statistic is scoped to, chosen by the header selector. */
 export type HomePeriod = 7 | 30 | 90;
+const PERIODS: HomePeriod[] = [7, 30, 90];
 
+/**
+ * Landing page behind the mainNavBar Home entry (`/home`, #2298). First pass of
+ * the user dashboard: a "responsible AI" nudge panel and the top community
+ * prompts. A period selector in the header scopes every statistic on screen.
+ */
 export default function HomePage() {
   const { t } = useTranslation();
-  const [params] = useSearchParams();
-  const spaces = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
+  // Same source as the chat welcome: the `given_name` claim. The bootstrap
+  // payload has no first name and its `username` is an opaque identifier on
+  // real realms, so no name here means the unnamed greeting, never an id.
   const firstName = KeyCloakService.GetUserGivenName() || undefined;
-  const selected = params.get("space") ?? spaces.data?.find((space) => space.kind === "organization")?.id;
-  const visible = (spaces.data ?? []).filter((space) => selected === undefined || space.id === selected);
-  const byId = new Map(
-    spaces.data?.map((space) => [space.id, space.personal_owner ? t("rework.sidebar.team.userTeam") : space.name]),
-  );
+
+  // Default to 30 days (index 1 in PERIODS) — a fuller picture than 7 on landing.
+  const [periodIndex, setPeriodIndex] = useState(1);
+  const period = PERIODS[periodIndex];
+
+  // Tabs split the dashboard so the landing view stays light (#2298). Default to
+  // "Accès rapide" (search + recent agents); the period-scoped stats live under
+  // the other two tabs, so the period selector is hidden on this first one.
+  const [tabIndex, setTabIndex] = useState(0);
+  const showPeriod = tabIndex !== 0;
+
   return (
     <div className={styles.page}>
-      <header className={styles.headerText}>
-        <h1 className={styles.title}>
-          {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
-        </h1>
-        <h2 className={styles.subtitle}>{t("rework.manager.spaces")}</h2>
+      <header className={styles.header}>
+        <ButtonGroup
+          size="2xs"
+          color="secondary"
+          variant="radio"
+          aria-label={t("rework.home.tabs.aria")}
+          selectedIndex={tabIndex}
+          onSelectedIndexChange={setTabIndex}
+          items={[
+            { label: t("rework.home.tabs.quickAccess") },
+            { label: t("rework.home.tabs.activity") },
+            { label: t("rework.home.tabs.trending") },
+          ]}
+        />
+        {showPeriod && (
+          <div className={styles.periodSlot}>
+            <ButtonGroup
+              size="small"
+              color="secondary"
+              variant="radio"
+              aria-label={t("rework.home.period.label")}
+              selectedIndex={periodIndex}
+              onSelectedIndexChange={setPeriodIndex}
+              items={PERIODS.map((days) => ({
+                label: t("rework.home.period.days", { count: days }),
+                title: t(`rework.home.period.d${days}`),
+              }))}
+            />
+          </div>
+        )}
       </header>
-      {spaces.isLoading ? (
-        <p role="status">{t("common.loading")}</p>
-      ) : spaces.isError ? (
-        <div role="alert">
-          <p>{t("rework.manager.unavailable")}</p>
-          <Button color="primary" variant="outlined" size="medium" onClick={() => void spaces.refetch()}>
-            {t("rework.provisioning.retryAuthority")}
-          </Button>
+
+      {/* Only the active tab mounts, so a tab's queries fire when it's opened. */}
+      {tabIndex === 0 && (
+        <div className={styles.quickAccessTab}>
+          <div className={styles.headerText}>
+            <h1 className={styles.title}>
+              {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
+            </h1>
+            <p className={styles.subtitle}>{t("rework.home.subtitle")}</p>
+          </div>
+          <HomeSearch />
+          <RecentAgents />
         </div>
-      ) : visible.length === 0 ? (
-        <p>{t(selected !== undefined ? "rework.manager.missingSpace" : "rework.manager.empty")}</p>
-      ) : (
-        visible.map((space) => (
-          <section key={space.id} className={styles.membership} aria-label={byId.get(space.id)}>
-            <h2>{byId.get(space.id)}</h2>
-            <dl>
-              <dt>{t("rework.manager.kind")}</dt>
-              <dd>{t(`rework.manager.kinds.${space.kind}`)}</dd>
-              <dt>{t("rework.manager.hierarchy")}</dt>
-              <dd>{space.path.map((id) => byId.get(id) ?? id).join(" / ")}</dd>
-              <dt>{t("rework.manager.roleLabel")}</dt>
-              <dd>{space.roles.map((role) => t(`rework.manager.roles.${role}`)).join(", ")}</dd>
-            </dl>
-          </section>
-        ))
       )}
+
+      {tabIndex === 1 && (
+        <>
+          <ActivityKpis period={period} />
+          <ResponsibleAiSection period={period} />
+          <div className={styles.cols}>
+            <TopTeams period={period} />
+            <TopAgents period={period} />
+          </div>
+        </>
+      )}
+
+      {tabIndex === 2 && <MarketplaceTopPrompts period={period} />}
     </div>
   );
 }

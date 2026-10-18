@@ -29,13 +29,11 @@
   flex-direction: column;
   gap: var(--spacing-m);
   width: 100%;
-  min-width: 0;
   max-width: 680px;
 }
 
 .userSettingsHeader {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
@@ -58,15 +56,12 @@
   border-radius: var(--radius-ms);
   background-color: var(--surface-container);
   padding: var(--spacing-m);
-  color: var(--on-surface);
 }
 
 .userSettingsIdentity {
   display: flex;
   flex-direction: column;
-  min-width: 0;
   font: var(--font-body-medium);
-  overflow-wrap: anywhere;
 }
 
 .userSettingsIdentityName {
@@ -104,7 +99,6 @@
   border-radius: var(--radius-ms);
   background-color: var(--surface-container);
   padding: var(--spacing-m);
-  color: var(--on-surface);
 }
 
 .userSettingsCardTitle {
@@ -124,9 +118,15 @@
   width: 200px;
 }
 
+.userSettingsConversation {
+  border-radius: var(--radius-ms);
+  background-color: var(--surface-container);
+  padding: var(--spacing-m);
+  min-height: 15rem;
+}
+
 .userSettingsLegals {
   display: flex;
   flex-direction: row-reverse;
-  flex-wrap: wrap;
   gap: var(--spacing-2xs);
 }

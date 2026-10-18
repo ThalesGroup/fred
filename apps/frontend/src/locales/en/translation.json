@@ -3265,6 +3265,7 @@
     },
     "userSettings": {
       "privacyTitle": "Privacy information",
+      "organization": "Organization: {{name}}",
       "platformRoles": "Platform roles: {{roles}}",
       "noPlatformRoles": "None",
       "accessGcu": "Access to GCU",

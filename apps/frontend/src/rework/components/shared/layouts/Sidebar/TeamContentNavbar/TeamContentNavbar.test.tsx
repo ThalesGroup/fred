@@ -1,48 +1,369 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { act, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
-import TeamContentNavbar from "./TeamContentNavbar";
-const h = vi.hoisted(() => ({ personal: false, denied: false }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("../../../../../../security/KeycloakService", () => ({ KeyCloakService: { GetUserFullName: () => "Priya" } }));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const h = vi.hoisted(() => ({
+  isPersonalTeam: false,
+  pathname: "/team/team-1/agents",
+  relations: ["team_member"] as string[],
+  charterEnabled: undefined as boolean | undefined,
+  applicationsEnabled: false,
+  result: { data: undefined, isError: false } as {
+    data?: { items: Array<Record<string, unknown>> };
+    isError: boolean;
+  },
+  refetchKnowledgeBases: vi.fn(),
+  knowledgeBasesQuery: vi.fn(),
+  canUseKnowledgeBases: true,
+  knowledgeBases: { currentData: undefined, isError: false } as {
+    currentData?: { definition_id: string; name: string; description: string }[];
+    isError: boolean;
+  },
+  wikiEnabled: undefined as boolean | undefined,
+  defaultTeamAvatarFile: "",
+  teamAvatarImageUrl: undefined as string | undefined,
+  userPictureUrl: undefined as string | undefined,
+}));
+
 vi.mock("../../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
-  useMySpacesQuery: () => ({
-    isError: h.denied,
-    currentData: [
-      { id: "space-1", kind: "team", name: "fredlab", roles: ["editor"], personal_owner: h.personal ? "priya" : null },
-    ],
+  useMySpacesQuery: () => ({ currentData: [], isError: false }),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+vi.mock("react-router-dom", () => ({
+  useLocation: () => ({ pathname: h.pathname }),
+  useNavigate: () => vi.fn(),
+  NavLink: ({ to, children }: { to: string; children: ReactNode | ((args: { isActive: boolean }) => ReactNode) }) => (
+    <a href={to}>{typeof children === "function" ? children({ isActive: false }) : children}</a>
+  ),
+}));
+vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
+  useFrontendProperties: () => ({
+    agentIconName: "smart_toy",
+    agentsNicknamePlural: "agents",
+    defaultTeamAvatarFile: h.defaultTeamAvatarFile,
   }),
 }));
-function render() {
-  return renderToStaticMarkup(
-    <MemoryRouter>
-      <TeamContentNavbar spaceId="space-1" />
-    </MemoryRouter>,
-  );
-}
-describe("manager scoped navigation", () => {
-  it("offers only the implemented Resources destination and back navigation", () => {
-    h.personal = false;
-    h.denied = false;
-    const html = render();
-    expect(html).toContain('href="/team/space-1/resources"');
-    expect(html).toContain("fredlab");
-    expect(html).toContain("rework.manager.roles.editor");
-    expect(html).toContain("rework.back");
-    expect(html).not.toContain("/agents");
-    expect(html).not.toContain("/settings");
+vi.mock("../../../../../../hooks/useSelectedTeam.ts", () => ({
+  useSelectedTeam: () => ({
+    teamId: "team-1",
+    isPersonalTeam: h.isPersonalTeam,
+    selectedTeam: {
+      id: "team-1",
+      name: "Team One",
+      is_member: true,
+      my_relations: h.relations,
+      avatar_image_url: h.teamAvatarImageUrl,
+    },
+    canOpenTeamSettings: false,
+  }),
+}));
+vi.mock("@hooks/useTeamCapabilities.ts", () => ({
+  useTeamCapabilities: () => ({
+    canUpdateAgents: true,
+    canUpdateInfo: false,
+    canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
+  }),
+}));
+vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
+  useFrontendBootstrap: () => ({
+    bootstrap:
+      h.charterEnabled === undefined && h.userPictureUrl === undefined
+        ? undefined
+        : {
+            team_admin_charter_enabled: h.charterEnabled,
+            current_user: { id: "u-1", avatar_image_url: h.userPictureUrl },
+          },
+  }),
+}));
+vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
+  useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
+}));
+vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
+vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
+  useTeamApplications: () => h.result,
+}));
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useKnowledgeBaseDefinitionsQuery: (args: unknown, options: unknown) => {
+    h.knowledgeBasesQuery(args, options);
+    return { ...h.knowledgeBases, refetch: h.refetchKnowledgeBases };
+  },
+  useWikiAvailabilityQuery: () => ({
+    data: h.wikiEnabled === undefined ? undefined : { enabled: h.wikiEnabled },
+  }),
+}));
+vi.mock("@shared/organisms/ChatList/ChatList.tsx", () => ({ default: () => <div data-chat-list /> }));
+
+import TeamContentNavbar from "./TeamContentNavbar.tsx";
+
+const application = {
+  id: "example",
+  version: "1.0.0",
+  name: { en: "Example" },
+  description: { en: "An example application" },
+  icon: "extension",
+  ui_prefix: "/apps/example",
+};
+
+describe("TeamContentNavbar applications entry", () => {
+  beforeEach(() => {
+    h.isPersonalTeam = false;
+    h.applicationsEnabled = false;
+    h.result = { data: undefined, isError: false };
   });
-  it("uses personal presentation with the real manager identifier", () => {
-    h.personal = true;
-    h.denied = false;
-    const html = render();
-    expect(html).toContain("rework.sidebar.team.userTeam");
-    expect(html).toContain('href="/team/space-1/resources"');
+
+  it("adds exactly one generic Apps entry when an authorized app is available", () => {
+    h.applicationsEnabled = true;
+    h.result.data = { items: [application] };
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html.match(/href="\/team\/team-1\/apps"/g)).toHaveLength(1);
+    expect(html).toContain("rework.sidebar.team.menu.apps");
+    expect(html).not.toContain(application.id);
   });
-  it("does not expose stale membership navigation after an error", () => {
-    h.denied = true;
-    expect(render()).not.toContain("/team/space-1/resources");
+
+  it("hides Apps when the catalog is unavailable, empty, or failed", () => {
+    h.applicationsEnabled = true;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+
+    h.result = { data: { items: [] }, isError: false };
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+
+    h.result = { data: { items: [application] }, isError: true };
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+  });
+
+  // Fred no longer compiles application code, so an app version Fred has never
+  // heard of is ordinary — it must not suppress the entry the way a build-time
+  // registry miss once did.
+  it("shows Apps for an application version this Fred build predates", () => {
+    h.applicationsEnabled = true;
+    h.result = { data: { items: [{ ...application, version: "2.0.0" }] }, isError: false };
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/apps"');
+  });
+
+  it("never shows Apps for a personal space", () => {
+    h.applicationsEnabled = true;
+    h.isPersonalTeam = true;
+    h.result = { data: { items: [application] }, isError: false };
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+  });
+
+  it("hides Apps behind the default-off deployment switch despite a compatible cached catalog", () => {
+    h.result.data = { items: [application] };
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+  });
+});
+
+// WIKI-03: the wiki exists for a team only where an admin enabled the
+// `team_wiki` capability. The entry has to follow that, or a member clicks
+// into a page the control-plane refuses.
+describe("TeamContentNavbar — the wiki entry", () => {
+  beforeEach(() => {
+    h.isPersonalTeam = false;
+    h.applicationsEnabled = false;
+    h.result = { data: undefined, isError: false };
+    h.wikiEnabled = undefined;
+  });
+
+  it("offers the wiki when the capability is enabled for the team", () => {
+    h.wikiEnabled = true;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/wiki");
+  });
+
+  it("hides it when the capability is off", () => {
+    h.wikiEnabled = false;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/wiki");
+  });
+
+  it("hides it while the answer is still unknown", () => {
+    // Showing it optimistically means an entry that appears and then vanishes
+    // on a slow answer — worse than one that arrives a moment late.
+    h.wikiEnabled = undefined;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/wiki");
+  });
+});
+
+describe("TeamContentNavbar — the team avatar", () => {
+  beforeEach(() => {
+    h.isPersonalTeam = false;
+    h.defaultTeamAvatarFile = "";
+    h.teamAvatarImageUrl = undefined;
+    h.userPictureUrl = undefined;
+  });
+
+  it("falls back to the deployment default when the team has no image of its own", () => {
+    h.defaultTeamAvatarFile = "acme-team-avatar.svg";
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('src="/images/acme-team-avatar.svg"');
+  });
+
+  it("keeps the team's own image ahead of the deployment default", () => {
+    h.defaultTeamAvatarFile = "acme-team-avatar.svg";
+    h.teamAvatarImageUrl = "https://store.example/team-1.png";
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('src="https://store.example/team-1.png"');
+    expect(html).not.toContain("acme-team-avatar.svg");
+  });
+
+  it("renders initials when no default is configured", () => {
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).not.toContain("/images/");
+    expect(html).toContain("TO");
+  });
+
+  // The personal space says "this is you" with the user's own avatar; a team
+  // default there would erase that signal.
+  it("leaves the personal space on the user avatar", () => {
+    h.isPersonalTeam = true;
+    h.defaultTeamAvatarFile = "acme-team-avatar.svg";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("acme-team-avatar.svg");
+  });
+
+  it("shows the user's profile picture in the personal space", () => {
+    h.isPersonalTeam = true;
+    h.userPictureUrl = "https://store.example/me.webp";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('src="https://store.example/me.webp"');
+  });
+});
+
+describe("TeamContentNavbar — knowledge bases and beta badges", () => {
+  beforeEach(() => {
+    h.canUseKnowledgeBases = true;
+    h.knowledgeBases = { currentData: undefined, isError: false };
+    h.wikiEnabled = true;
+  });
+
+  it("shows enabled definitions even before any instance is created, with beta after each label", () => {
+    h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    for (const [route, label] of [
+      ["knowledge-bases", "knowledgeBases"],
+      ["wiki", "wiki"],
+    ]) {
+      const entry = html.split(`href="/team/team-1/${route}"`)[1]?.split("</a>")[0];
+      expect(entry).toBeDefined();
+      expect(entry).toContain("aria-label=");
+      expect(entry!.indexOf("aria-label=")).toBeGreaterThan(entry!.indexOf(`rework.sidebar.team.menu.${label}`));
+    }
+  });
+
+  it.each([
+    { currentData: undefined, isError: false },
+    { currentData: undefined, isError: true },
+    { currentData: [], isError: false },
+  ])("hides knowledge bases when unavailable: %j", (result) => {
+    h.knowledgeBases = result;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/knowledge-bases");
+  });
+
+  it("keeps the last known definitions when a refresh fails", () => {
+    h.knowledgeBases = {
+      currentData: [{ definition_id: "source", name: "Source", description: "" }],
+      isError: true,
+    };
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/knowledge-bases");
+  });
+
+  it("requires team permission even with cached enabled definitions", () => {
+    h.canUseKnowledgeBases = false;
+    h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/knowledge-bases");
+  });
+});
+
+describe("TeamContentNavbar — cross-session knowledge base availability", () => {
+  beforeEach(() => {
+    h.canUseKnowledgeBases = true;
+    h.knowledgeBases = { currentData: undefined, isError: false };
+    h.refetchKnowledgeBases.mockClear();
+  });
+
+  it("polls and refreshes on focus, cleaning up when permission is removed or the menu unmounts", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<TeamContentNavbar />));
+      expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1" },
+        { skip: false, pollingInterval: 60_000, refetchOnMountOrArgChange: 60 },
+      );
+      window.dispatchEvent(new Event("focus"));
+      expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
+      h.canUseKnowledgeBases = false;
+      await act(async () => root.render(<TeamContentNavbar />));
+      expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1" },
+        { skip: true, pollingInterval: 0, refetchOnMountOrArgChange: 60 },
+      );
+      window.dispatchEvent(new Event("focus"));
+      expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
+      h.canUseKnowledgeBases = true;
+      await act(async () => root.render(<TeamContentNavbar />));
+    } finally {
+      await act(async () => root.unmount());
+    }
+    window.dispatchEvent(new Event("focus"));
+    expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
+  });
+});
+
+afterEach(() => {
+  h.pathname = "/team/team-1/agents";
+  h.relations = ["team_member"];
+  h.charterEnabled = undefined;
+});
+
+describe("TeamContentNavbar Responsibilities entry", () => {
+  beforeEach(() => {
+    h.pathname = "/team/team-1/settings/members";
+    h.relations = ["team_admin"];
+  });
+
+  it("shows the entry when the charter is enabled", () => {
+    h.charterEnabled = true;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/settings/responsibilities"');
+  });
+
+  it("also shows the entry to a pending admin when enabled", () => {
+    h.charterEnabled = true;
+    h.relations = ["pending_team_admin"];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/settings/responsibilities"');
+  });
+
+  it("hides the entry when the charter is disabled or bootstrap is unavailable", () => {
+    h.charterEnabled = false;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
+
+    h.charterEnabled = undefined;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
+  });
+});
+
+describe("retired evaluation navigation", () => {
+  it("keeps Members but removes Evaluations for an agent editor", () => {
+    h.pathname = "/team/team-1/settings/members";
+    h.relations = ["team_editor"];
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/settings/members"');
+    expect(html).not.toContain("/settings/evaluations");
+    expect(html).not.toContain("rework.teamSettings.navigation.evaluations");
   });
 });

@@ -24,7 +24,7 @@ import { uiThemeLabel, type UiTheme } from "../../../../app/uiThemes.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
-import { useMeQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements.ts";
+import { useMeQuery, useMySpacesQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements.ts";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { getConfig } from "../../../../common/config";
 
@@ -43,6 +43,9 @@ export default function UserSettingsPage() {
   const userEmail = KeyCloakService.GetUserMail();
   const me = useMeQuery(undefined, { refetchOnMountOrArgChange: 60 });
   useRefetchOnWindowFocus(me.refetch, false);
+  const memberships = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
+  useRefetchOnWindowFocus(memberships.refetch, false);
+  const organization = memberships.currentData?.find((space) => space.kind === "organization");
 
   return (
     <div className={styles.userSettingsPageRoot}>
@@ -92,6 +95,26 @@ export default function UserSettingsPage() {
                 })}
               </span>
             )}
+            {!me.isError &&
+              !me.isLoading &&
+              !me.isFetching &&
+              me.data?.user_id === managerUserId &&
+              (memberships.isLoading || memberships.isFetching ? (
+                <span role="status" className={styles.userSettingsIdentityRole}>
+                  {t("common.loading")}
+                </span>
+              ) : memberships.isError ? (
+                <div role="alert" className={styles.userSettingsIdentityRole}>
+                  <span>{t("rework.manager.unavailable")}</span>
+                  <Button color="primary" variant="text" size="small" onClick={() => void memberships.refetch()}>
+                    {t("rework.provisioning.retryAuthority")}
+                  </Button>
+                </div>
+              ) : organization ? (
+                <span className={styles.userSettingsIdentityRole}>
+                  {t("rework.userSettings.organization", { name: organization.name })}
+                </span>
+              ) : null)}
           </div>
         </div>
         <section className={styles.userSettingsCard}>

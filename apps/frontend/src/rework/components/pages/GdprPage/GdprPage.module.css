@@ -39,12 +39,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-l);
-  box-sizing: border-box;
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m) var(--radius-m) 0 0;
   background-color: var(--surface-container-lowest);
   padding: var(--spacing-m);
-  width: min(660px, 100%);
+  width: 660px;
   min-height: 0;
   overflow: auto;
   color: var(--on-surface);
@@ -71,13 +70,10 @@
 
 .gdprActions {
   display: flex;
-  flex-shrink: 0;
   justify-content: flex-end;
   align-items: center;
-  box-sizing: border-box;
   border-radius: 0 0 var(--radius-m) var(--radius-m);
   background-color: var(--surface-container-high);
   padding: var(--spacing-m);
-  width: min(660px, 100%);
-  color: var(--on-surface);
+  width: 660px;
 }

@@ -15,15 +15,28 @@
 import { type PropsWithChildren } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
+import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate";
+import { useTaskPolling } from "../../../../features/tasks/useTaskPolling";
+import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration";
 import styles from "./MainLayout.module.css";
+
+function AdmittedWorkspace() {
+  useTaskRehydration();
+  useTaskPolling();
+  return (
+    <TeamAdminCharterGate>
+      <Outlet />
+    </TeamAdminCharterGate>
+  );
+}
 
 export default function MainLayout({ children, navigation = true }: PropsWithChildren<{ navigation?: boolean }>) {
   return (
     <div className={styles.mainLayout}>
-      <aside className={styles.sidebar}>
+      <nav className={styles.sidebar}>
         <Sidebar navigation={navigation} />
-      </aside>
-      <main className={styles.content}>{children ?? <Outlet />}</main>
+      </nav>
+      <main className={styles.content}>{navigation ? <AdmittedWorkspace /> : children}</main>
     </div>
   );
 }

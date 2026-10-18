@@ -287,13 +287,14 @@ The UI SHALL offer provisioning to manager platform owners using manager authori
 
 ### Requirement: Repeatable browser acceptance
 
-An automated browser journey SHALL exercise Fred's existing application layout, navigation, OIDC login, manager HTTP API, PostgreSQL and OpenFGA starting without root grants or consent. It SHALL accept terms, bootstrap root through the screen, import the Make-generated ZIP, verify persisted hierarchy and roles, replay without duplicates, sign out and sign in as an imported person, and exercise access refusal and unsupported bundle feedback. No manager or Python shell response SHALL be mocked. Test setup SHALL leave unrelated development data untouched.
+An automated browser journey SHALL exercise Fred's existing application layout, navigation, OIDC login, manager HTTP API, PostgreSQL and OpenFGA starting without root grants or consent. It SHALL accept terms, bootstrap root through the screen, import the Make-generated ZIP, verify persisted hierarchy and roles, replay without duplicates, sign out and sign in as an imported person, and exercise access refusal and unsupported bundle feedback. Manager responses SHALL remain real. Non-migrated services SHALL return explicit unavailable-service responses in this isolated recipe, without fabricated success or permission data. Test setup SHALL leave unrelated development data untouched.
 
 #### Scenario: Run browser acceptance repeatedly
 - **WHEN** the developer runs the documented browser test command on a machine with its prerequisites
 - **THEN** it creates isolated test state, exercises onboarding and import without manual curl or UI actions, and cleans up its services
 - **AND** its assertions fail if consent, bootstrap, import, replay, account isolation or authorization behavior regresses
-- **AND** it verifies Fred's sidebar, home, administration and logout navigation and fails on calls to services outside this journey
+- **AND** it verifies Fred's original sidebar, home, administration and logout navigation
+- **AND** business requests remain absent before admission; ordinary non-migrated requests after admission receive explicit service failures
 
 ### Requirement: Explicit personal terms acceptance
 The manager SHALL expose the active terms version and the caller's persisted acceptance. When enabled, business operations SHALL require acceptance of that version on the server, including bootstrap and import. Acceptance SHALL bind the authenticated person's own subject, submitted active version and server timestamp. It SHALL create no role, organization, team or personal space. Import SHALL NOT accept terms for another person. Repeated acceptance of the same version SHALL preserve the recorded timestamp. Service credentials and delegated assertions SHALL NOT accept terms or bootstrap a root.
@@ -359,28 +360,18 @@ context SHALL fail closed. Platform roles SHALL NOT imply organization membershi
 
 ### Requirement: Imported person enters declared organization
 
-After ZIP import Fred's existing home and space navigation SHALL display the caller's
-unique declared organization and authorized space memberships and roles from manager
-authority. Home SHALL default to that organization without a URL organization
-identifier or selector. Explicit team/project selection SHALL remain within that
-context. Changing accounts SHALL clear the prior person's session data. An imported
-person SHALL accept terms personally before accessing this view. Platform administration
-alone SHALL NOT expose organization content or create membership. The journey SHALL
-make no control-plane, knowledge-flow or agent-runtime calls and SHALL expose only
-its implemented destinations.
+After ZIP import Fred SHALL retain its original Home dashboard and team/personal navigation. The person's authorized teams/projects and displayed roles SHALL come from manager memberships, and their unique organization name SHALL appear only in Profile. No organization selector, navigation row or hierarchy panel SHALL be introduced. Changing accounts SHALL clear the prior person's session data. An imported person SHALL accept terms personally before accessing this view. Platform administration alone SHALL NOT create organization membership or content authority. Non-migrated consumers SHALL keep their existing calls and loading/error behavior.
 
 #### Scenario: Root imports and switches to a member
-- **WHEN** root imports the Make-generated ZIP, signs out through Fred's account
-  menu, and a declared member signs in
+- **WHEN** root imports the Make-generated ZIP, signs out through Fred's account menu, and a declared member signs in
 - **THEN** root sees the real import report and no automatic organization membership
-- **AND** the member accepts terms and enters their organization with navigation
-  to their declared teams/projects and roles
+- **AND** the member accepts terms and reaches the usual Home with navigation to declared teams/projects and roles
 - **AND** the member cannot open provisioning without the required platform role
 
 #### Scenario: Select a declared space
 - **WHEN** an admitted person selects a declared team or project in home navigation
-- **THEN** Home shows that membership's name, hierarchy and roles
-- **AND** no agent or document page is opened and no membership is created
+- **THEN** Fred opens the existing Agents route using that space's manager UUID, preserving the usual team menu including Prompts and Resources
+- **AND** selection creates no membership and displays no organization summary panel
 
 ### Requirement: One Fred UI for the bounded first-user journey
 
@@ -399,9 +390,11 @@ This branch SHALL provide its first-user journey through Fred's existing applica
 - **AND** reload preserves completed consent/bootstrap without repeating them
 
 #### Scenario: Unsupported routes and background work
-- **WHEN** an admitted person browses the implemented journey or opens an unsupported document, agent, marketplace or administration URL directly
-- **THEN** unsupported navigation is absent and unsupported URLs return to home without mounting those features
-- **AND** the application makes no control-plane, knowledge-flow or agent-runtime requests, including task polling, announcements and profile enrichment
+- **WHEN** an admitted person opens Home, a team, marketplace, administration, help or account page
+- **THEN** Fred retains the existing swift routes, components, menus, controls and styles, including Agents, Prompts and Resources
+- **AND** unimplemented backend calls retain their ordinary loading/error behavior rather than causing navigation removal or a replacement page
+- **AND** non-migrated calls remain unchanged until their explicit reconstruction lot; no automatic backend fallback or invented successful data is added
+- **AND** organization information is absent from Home and navigation and appears only in the existing profile
 
 #### Scenario: Admission becomes required or unavailable
 - **WHEN** refreshed manager state requires a new consent version or cannot verify admission
@@ -410,7 +403,7 @@ This branch SHALL provide its first-user journey through Fred's existing applica
 
 ### Requirement: Shared account pages require no organization membership
 
-An admitted person SHALL open Fred's existing Profile entry and `/settings` page independently of organization or space membership. The page SHALL show the current authenticated identity and the platform roles reported by manager, retaining the existing interface-theme, light/dark/system, language and logout controls and the existing links to `/gcu`, `/gdpr` and `/release-notes`. Existing shared presentation and preference persistence SHALL be preserved. A configured contact-support link SHALL use the existing account-menu entry. This lot SHALL NOT expose photo upload/delete or the backend-published patch-note dialog.
+An admitted person SHALL open Fred's existing Profile entry and `/settings` page independently of organization or space membership. The page SHALL show the current authenticated identity and the platform roles reported by manager, retaining the existing interface-theme, light/dark/system, language and logout controls and the existing links to `/gcu`, `/gdpr` and `/release-notes`. Existing shared presentation and preference persistence SHALL be preserved. A configured contact-support link SHALL use the existing account-menu entry. The previously agreed photo upload/delete exclusion remains; other existing UI consumers are restored without claiming their backend reconstruction.
 
 #### Scenario: Platform owner without spaces
 - **GIVEN** an admitted platform owner has no organization or space roles
@@ -438,6 +431,12 @@ An admitted person SHALL open Fred's existing Profile entry and `/settings` page
 - **WHEN** an imported person accepts their own CGU and opens Profile
 - **THEN** the same pages are available with their own identity and platform roles, including a valid empty role list
 - **AND** profile availability grants no platform-administration or content permission
+
+#### Scenario: Organization in Profile only
+- **WHEN** Priya opens her profile after the demo import
+- **THEN** the profile displays her organization name from current manager memberships
+- **AND** Home and team navigation retain their existing team/personal presentation without organization rows, hierarchy or kind panels
+- **AND** pending or failed membership reads do not display stale organization information as current
 
 ### Requirement: Space hierarchy owned by OpenFGA
 The canonical space tree SHALL be stored only as OpenFGA `parent` relations between spaces.
@@ -682,23 +681,17 @@ A folder deleted while the caller waits SHALL return not-found without a fabrica
 
 ### Requirement: Personal space opens in the person's organization
 
-Fred SHALL provide its existing personal-space navigation entry using manager
-authority, with at most one personal space in the person's unique organization.
-No separate creation button, organization selector or redesigned screen SHALL
-be introduced. Personal-space identity SHALL come from its returned UUID and
-personal owner, never a synthesized Python identifier.
+Fred SHALL provide its existing personal-space navigation entry using manager authority, with at most one personal space in the person's unique organization. No separate creation button, organization selector or redesigned screen SHALL be introduced. Personal-space identity SHALL come from its returned UUID and personal owner, never a synthesized Python identifier.
 
 #### Scenario: Priya opens her personal space after import
-- **WHEN** Priya accepts the active terms after demo provisioning and has explicit personal-space creation eligibility and activates
-  the existing personal-space entry in Demo
-- **THEN** Fred opens her personal space, creating it if absent, and shows it
-  through the existing selected-space detail and personal navigation presentation
+- **WHEN** Priya accepts the active terms after demo provisioning and has explicit personal-space creation eligibility and activates the existing personal-space entry
+- **THEN** Fred opens her personal space, creating it if absent, through the existing Agents route and personal navigation presentation using the returned UUID
 - **AND** she retains navigation to fredlab with her admin, editor and analyst roles
 - **AND** merely logging in, accepting terms or listing spaces creates no space
 
 #### Scenario: Root without organization membership
 - **WHEN** a platform-only root opens Home after bootstrap
-- **THEN** the empty-membership view and authorized provisioning remain available
+- **THEN** the team list is empty and authorized provisioning remains available
 - **AND** no personal space, organization membership or content access is created
 
 ### Requirement: Repeated personal-space opening preserves current authority
@@ -784,24 +777,22 @@ models SHALL be refused without resetting spaces or grants.
 
 ### Requirement: Authorized resource browsing in the provisioned space journey
 
-After selecting a personal, team or project space, Fred SHALL expose its existing Resources navigation and read folders and document metadata from fred-manager using its generated contract. It SHALL retain the existing shared presentation and SHALL NOT mount control-plane, knowledge-flow, ingestion or conversation consumers. Organization context SHALL remain implicit and personal spaces SHALL use manager identifiers.
+Fred SHALL retain its existing Resources route, full document workspace, navigation, controls and styles. Existing resource consumers SHALL keep their current service contracts until explicitly migrated; failures SHALL retain ordinary UI feedback without a reduced replacement page or fabricated successful data. Manager folder/document listing SHALL continue enforcing its own space and content authority independently of the UI binding.
 
 #### Scenario: Priya browses personal and collective resources
 - **WHEN** admitted Priya opens her personal space or fredlab and then Resources
-- **THEN** the UI lists only that space's root folders and documents
-- **AND** opening a folder and using its breadcrumb or Back lists the corresponding parent contents
-- **AND** an empty successful response shows the existing empty-folder message
+- **THEN** Fred mounts the original resource workspace for the selected identifier with its existing permission conditions and service requests
+- **AND** an unavailable non-migrated dependency retains its original error/loading behavior rather than a fabricated empty success
 
 #### Scenario: Document pagination
-- **WHEN** a folder contains more documents than one UI page
-- **THEN** Next and Previous traverse the name/id cursor pages without duplicates or omissions for unchanged data
-- **AND** navigation to another folder or space resets pagination and never displays the previous scope's data
-- **AND** the UI does not invent a total count or fetch the whole document collection
+- **WHEN** a caller pages through manager document metadata for an authorized folder
+- **THEN** the manager cursor traverses name/id pages without duplicates or omissions for unchanged data
+- **AND** an eventual UI binding SHALL preserve the existing pagination presentation without inventing totals or conflating folder identifiers with another service's identifiers
 
 #### Scenario: Refusal, failure and revalidation
-- **WHEN** current authorization or a list request fails, including when revisiting cached resources after revocation
-- **THEN** the UI hides cached rows and distinguishes denied access from unavailable service and successful emptiness
-- **AND** a retry reissues the current list requests
+- **WHEN** a caller without current read authority requests a manager folder or document list
+- **THEN** manager refuses without returning content
+- **AND** a failed service request SHALL NOT become a fabricated successful UI response or grant
 
 ### Requirement: Folder filters belong to the authorized space
 
@@ -818,24 +809,21 @@ Manager folder and document listing SHALL enforce current personal admission, un
 
 ### Requirement: Authorized folder creation in Resources
 
-The Resources journey SHALL let an admitted person with effective write permission
-create a folder at the root or inside a folder of the current personal, team or
-project space using fred-manager only. Creation SHALL make no Temporal call; its governance router SHALL require no ingestion client.
-The server MUST enforce the person's unique organization and current write authority;
-administration, membership or analyst rights alone SHALL NOT grant content writes.
+Manager SHALL support folder creation at the root or inside a folder of a personal, team or project space for an admitted caller with current effective write permission. Creation SHALL make no Temporal call; its governance router SHALL require no ingestion client. The server MUST enforce the person's unique organization and current write authority; administration, membership or analyst rights alone SHALL NOT grant content writes. Fred SHALL retain its original folder dialog and existing service binding until that full resource contract is explicitly migrated.
 
 #### Scenario: Create and browse
-- **WHEN** an authorized editor creates a folder in the current location
-- **THEN** the folder is persisted there and appears in the refreshed first page
-- **AND** the user can open it and return using the existing breadcrumb
+- **WHEN** an authorized editor creates a folder through manager in an authorized location
+- **THEN** the folder is persisted there and appears in the corresponding manager folder listing
+- **AND** the original Resources dialog is preserved without claiming that its existing service binding uses this manager operation
 
 #### Scenario: Revocation and isolation
 - **WHEN** a caller lacks write permission, loses it before a waiting write is admitted, or targets another person's private space or another organization
-- **THEN** creation is refused without inserting a folder
+- **THEN** manager refuses creation without inserting a folder
 
 #### Scenario: Repeated submission and navigation
-- **WHEN** the user submits repeatedly while creation is pending or navigates away
-- **THEN** that dialog issues at most one concurrent create request and its completion does not change the new location
+- **WHEN** the user submits the original folder dialog or changes resource location
+- **THEN** its existing pending and navigation behavior is preserved
+- **AND** any later manager binding SHALL prevent concurrent duplicate submissions and prevent a late response from changing a different location
 
 ### Requirement: Folder creation validates location and name
 

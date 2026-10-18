@@ -1,8 +1,8 @@
 # Fred Frontend
 
-On `chore/rust-rebac`, the entry is limited to the [manager first-user journey](#manager-provisioning).
-It requires fred-manager and reuses the existing application, router and layout.
-Unsupported feature pages and their data consumers are not mounted.
+On `chore/rust-rebac`, the [manager first-user journey](#manager-provisioning)
+requires fred-manager while preserving the complete existing UI. Non-migrated
+features keep their existing service calls and ordinary loading/error states.
 
 Fred frontend is a node React/Typescript application. It uses vite.js.
 
@@ -178,8 +178,8 @@ For teams using this structure, onboarding is faster, testing is easier, and fea
 
 ## Configuration Surfaces
 
-This branch uses the existing router for the limited manager journey described
-below. Unsupported pages in the source catalog remain unmounted.
+This branch retains the existing product routes under manager admission guards.
+The profile/legal pages retain their standalone presentation.
 The frontend reads two configuration surfaces during startup:
 
 | Surface                            | Owner                                           | Purpose                                                                                                                                                                                |
@@ -533,17 +533,17 @@ If you need to update one of them, just run one of the command while the corresp
 
 This experimental branch uses Fred's existing `App`, router, layout and sidebar
 for manager public configuration, Keycloak login, personal CGU, root bootstrap,
-Home memberships and `/admin/provisioning` in the administration console. The
+team/personal navigation and `/admin/provisioning` in the administration console. The
 generated manager slice is the authority for each step. Root has no implicit
-space; imported users accept their own terms and select declared organizations,
-teams and projects on Home to read hierarchy and roles. The account menu remains
-available before admission. Unsupported routes return home without mounting Python
-consumers. The terms assets and `app.gcu_version` are deployed together.
+space; imported users accept their own terms and select their declared
+teams and projects using the existing team list. Organization information appears
+only in the profile. The account menu remains
+available before admission. Existing product routes and non-migrated service consumers remain mounted. The terms assets and `app.gcu_version` are deployed together.
 
 Provisioning imports a ZIP synchronously and shows server counts only after
 completion. Errors retain explicit replay guidance because effects can survive
-failure. The browser test starts without a prepared root and forbids Python API
-calls; it also switches accounts in the same browser.
+failure. The browser test starts without a prepared root, simulates unavailable
+non-migrated services and switches accounts in the same browser.
 
 ```sh
 make update-fred-manager-api       # offline Rust OpenAPI + generated RTK client

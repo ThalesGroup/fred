@@ -127,22 +127,22 @@ control-plane roles. The page uses the shared `PageHeader`, `FileDropzone` and
 `App`, the existing router, `MainLayout` and `Sidebar` compose this journey.
 `GcuGuard` reads manager onboarding and gates `BootstrapGuard` and admitted routes;
 the same layout keeps the account menu available before admission without protected
-queries. Home and its navigation consume generated `/me/spaces` data directly.
-Home defaults to the unique organization at `/home`; selecting a team or project
-displays its hierarchy and effective roles on Home,
-distinguishing those inherited from an ancestor. There is
-no synthetic Python team or permission mapping. Unsupported routes redirect home;
-agent widgets, task polling, announcements and Python bootstrap consumers are not
-mounted. Theme presentation uses configuration loaded at startup.
+queries. The existing Home widgets, routes, sidebar modes and styles remain mounted.
+Home navigation consumes manager `/me/spaces` for team names/roles and personal
+opening, preserving the existing search/sort presentation. Organization data appears
+only in the profile. Selection opens the usual `/team/<UUID>/agents` destination.
+There is no synthetic Python team or permission mapping. Non-migrated service
+consumers keep their original calls, including task polling and announcements;
+service failure does not remove routes. Theme presentation uses startup configuration.
 
 ## Frontend account pages
 
 The admitted sidebar enables Profile in the existing `UserProfile` menu. The
 router mounts `UserSettingsPage`, accepted `GcuPageContent`, `GdprPage` and
 `ReleaseNotesPage` under `GcuGuard` and `BootstrapGuard`. These are the shared
-pages and controls, with no second manager renderer. The profile reads identity
+pages and controls, outside the sidebar and with no second manager renderer. The profile reads identity
 from the browser session and effective platform roles from the generated `/me`
-query shared with navigation. It hides cached roles during refresh, on error or
+query shared with navigation, and its organization from `/me/spaces`. It hides cached roles during refresh, on error or
 when the response belongs to another authenticated subject. With authentication
 disabled, it matches manager's fixed mock subject `admin`.
 
@@ -154,17 +154,11 @@ or avatar subscription. These pages add no backend endpoint or persisted model.
 
 ## Frontend resource browsing
 
-The router mounts `TeamResourcesPage` under `/team/:teamId/resources` with the
-existing admission guards. `TeamContentNavbar` uses manager memberships and exposes
-Resources for the selected personal/team/project space. It mounts no Python team,
-knowledge-base or conversation consumers.
-
-The page uses generated lazy folder/document hooks, `ResourceExplorer`, `Breadcrumb`
-and `TablePagination`. A keyed space/folder/page lifecycle owns current data and
-cancels abandoned reads. A readiness barrier accepts only responses to that entry's
-own request IDs, retrying RTK requests deduplicated against an earlier entry.
-Reload starts the same pair of reads. The shared footer's optional unknown-total
-mode preserves the existing count/offset consumers.
+The original `TeamResourcesPage` and `DocumentWorkspace` are mounted at
+`/team/:teamId/resources`, retaining their existing control-plane and knowledge-flow
+bindings, authorization conditions, metadata and commands. Manager resource IDs
+are not cast into that corpus model. The manager folder/document HTTP surface
+remains a separate contract, documented in chapter 05.
 
 ## Content access
 
@@ -480,7 +474,7 @@ held SQL connection. No workflow is dispatched by the API.
 | D17 | Strict guard deletion and role changes share one OpenFGA Write. | A consumed revision rejects stale decisions without copying the role set. | One guard Read and two additional tuple operations per guarded scope; conflicting attempts reauthorize on replay. |
 | D18 | SQL pins store/model; synchronization permits an exact additive predecessor upgrade. | Preserve spaces and grants while refusing unknown model changes. | Upgrade keeps the store and commits its model pointer under the platform lock; ordinary loads stay read-only. |
 | D19 | One version-2 ZIP with explicit organizations, teams, projects and direct roles serves CLI and HTTP. | Reconciliation needs unambiguous parent scope and complete preflight. | Legacy formats are explicitly unsupported; bundle-local references do not add persistent identity or imply content grants. |
-| D20 | The unique organization is derived from canonical direct roles and full placement of committed spaces. Home uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
+| D20 | The unique organization is derived from canonical direct roles and full placement of committed spaces. Workspace discovery uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
 | D21 | Personal creation requires explicit organization eligibility; opening reuses current authority. | Some people have no personal workspace; opening must not undo revocations. | First explicit open creates, repeats write nothing, and organization content remains a prerequisite. |
 
 ## Folder creation from Resources

@@ -35,6 +35,11 @@ vi.mock("../../../../../security/KeycloakService.ts", () => ({
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ contactSupportLink: identity.support }),
 }));
+vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({ useFrontendBootstrap: () => ({}) }));
+vi.mock("../../../../features/announcements/usePatchNoteHistory", () => ({
+  usePatchNoteHistory: () => ({ notes: [] }),
+}));
+vi.mock("@shared/molecules/PatchNoteDialog/PatchNoteDialog", () => ({ PatchNoteDialog: () => null }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => identity.navigate }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),

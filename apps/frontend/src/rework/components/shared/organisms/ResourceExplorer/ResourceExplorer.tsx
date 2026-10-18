@@ -54,8 +54,6 @@ export interface ResourceExplorerProps<T> {
    * the search box — e.g. a bulk-actions bar and/or new-folder/upload
    * buttons. Opaque to this component. */
   toolbarActions?: ReactNode;
-  /** Optional cursor footer; omit built-in table pagination when supplied. */
-  paginationFooter?: ReactNode;
   /** Loading takes precedence over empty; both take precedence over the table. */
   loading?: boolean;
   loadingMessage?: ReactNode;
@@ -96,7 +94,6 @@ export default function ResourceExplorer<T>({
   breadcrumb,
   search,
   toolbarActions,
-  paginationFooter,
   loading = false,
   loadingMessage,
   empty = false,
@@ -199,7 +196,6 @@ export default function ResourceExplorer<T>({
           />
         </div>
       )}
-      {paginationFooter}
     </div>
   );
 }

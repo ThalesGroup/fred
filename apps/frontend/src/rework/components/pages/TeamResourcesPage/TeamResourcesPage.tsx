@@ -1,329 +1,163 @@
 // Copyright Thales 2026
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useParams } from "react-router-dom";
-import ResourceExplorer from "@shared/organisms/ResourceExplorer/ResourceExplorer.tsx";
-import TablePagination from "@shared/molecules/TablePagination/TablePagination.tsx";
-import Button from "@shared/atoms/Button/Button.tsx";
+import { useParams } from "react-router-dom";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import FolderNameDialog from "./CreateFolderModal/FolderNameDialog";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
+import { getQueryUiState } from "@core/utils/queryUiState.ts";
+import { useListTagsQuery, useGetTagCorpusTypeStatsQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { KeyCloakService } from "../../../../security/KeycloakService.ts";
+import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
-import {
-  useAuthorizeSpaceMutation,
-  useLazyListDocumentsQuery,
-  useLazyListFoldersQuery,
-  type Document,
-  type Folder,
-} from "../../../../slices/fredManager/fredManagerOpenApi";
-import { useMySpacesQuery, useCreateFolderMutation } from "../../../../slices/fredManager/fredManagerApiEnhancements";
+import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
+import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
+import { ImportPanel } from "@shared/organisms/ImportPanel/ImportPanel.tsx";
 import styles from "./TeamResourcesPage.module.css";
-import nameStyles from "@shared/molecules/DocumentNameCell/DocumentNameCell.module.css";
-import { fileIconSpec, FOLDER_ICON } from "../../../utils/fileIconSpec.ts";
-import rowStyles from "./DocumentWorkspace/DocumentWorkspace.module.css";
 
-const PAGE_SIZE = 50;
-type Cursor = Pick<Document, "id" | "name"> | undefined;
-
+/** Document ingestion into the searchable corpus. Files live in a library
+ * (folder/tag), so the root creates libraries rather than accepting uploads. */
 export default function TeamResourcesPage() {
-  const { teamId = "" } = useParams();
-  // Historical aliases are not manager space identifiers.
-  if (!/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(teamId)) {
-    return <Navigate to="/home" replace />;
-  }
-  return <SpaceResources key={teamId} spaceId={teamId} />;
-}
-
-function SpaceResources({ spaceId }: { spaceId: string }) {
   const { t } = useTranslation();
-  const memberships = useMySpacesQuery();
-  const personal = !!memberships.currentData?.find((s) => s.id === spaceId)?.personal_owner;
-  const [trail, setTrail] = useState<Folder[]>([]);
-  const [cursors, setCursors] = useState<Cursor[]>([undefined]);
-  const [page, setPage] = useState(0);
-  const [revision, setRevision] = useState(0);
-  const folderId = trail[trail.length - 1]?.id;
-  const cursor = cursors[page];
-  const navigate = (next: Folder[]) => {
-    setTrail(next);
-    setCursors([undefined]);
-    setPage(0);
-  };
+  const { teamId = "" } = useParams<{ teamId: string }>();
+  // isPersonalTeamId alone is authoritative (handles both the bare "personal"
+  // alias and the canonical "personal-<uid>" id — see its own doc comment).
+  const isPersonalTeam = isPersonalTeamId(teamId);
+  const userId = KeyCloakService.GetUserId() ?? "";
+  // Resolve the bare personal alias before querying corpus data and importing files.
+  const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
+  // `refetch` as well as `data`: the storage-quota meter below reads this team
+  // row's `current_resources_storage_size`, but every write to it comes from
+  // the knowledge-flow API (upload charges it, delete releases it) — a
+  // different RTK Query instance, whose tag invalidations cannot reach this
+  // control-plane cache entry. Without a manual refetch on the workspace's own
+  // change signal the meter keeps showing the figure it had at mount.
+  const { data: team, refetch: refetchTeam, isUninitialized: teamUninitialized } = useGetTeamQuery({ teamId });
+  const [statsOpen, setStatsOpen] = useState(false);
+  // The corpus query walks every readable library and document; fetch only
+  // when the usage panel is open.
+  const corpusStats = useGetTagCorpusTypeStatsQuery({ teamId: fsTeamId }, { skip: !statsOpen });
+
+  // KF health gate — identical pattern to the old KnowledgeHubPage.
+  const { isError, isLoading, isFetching, isUninitialized } = useListTagsQuery({
+    type: "document",
+    limit: 1,
+    offset: 0,
+  });
+  // Blocks on the first answer only. This gate returns the whole page to a
+  // spinner, which unmounts DocumentWorkspace with it — and that workspace owns
+  // the folder you are standing in, its loaded document pages and its resolved
+  // folder sizes, none of which survive. Letting a background revalidation do
+  // that turned one probe refetch into a full reload of the page.
+  const kfState = getQueryUiState(
+    { isLoading, isFetching, isUninitialized, isError },
+    { keepPreviousWhileRefetching: true },
+  );
+
+  if (kfState === "loading") {
+    return (
+      <div className={styles.loadingState}>
+        <Spinner size={20} />
+        {t("rework.resources.loading")}
+      </div>
+    );
+  }
+  if (kfState === "error") {
+    return (
+      <ServiceNotice
+        icon="cloud_off"
+        title={t("rework.serviceNotice.knowledgeService.title")}
+        description={t("rework.serviceNotice.knowledgeService.description")}
+        centered
+      />
+    );
+  }
+
+  const hasQuota = team?.max_resources_storage_size != null;
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>
-            {t(personal ? "rework.resources.pageTitlePersonal" : "rework.resources.pageTitle")}
+            {isPersonalTeam ? t("rework.resources.pageTitlePersonal") : t("rework.resources.pageTitle")}
           </h1>
           <p className={styles.subtitle}>
-            {t(personal ? "rework.resources.pageSubtitlePersonal" : "rework.resources.pageSubtitle")}
+            {isPersonalTeam ? t("rework.resources.pageSubtitlePersonal") : t("rework.resources.pageSubtitle")}
           </p>
         </div>
+        <div className={styles.headerEnd}>
+          <Tooltip text={t("rework.resources.stats.toggle")}>
+            <IconButton
+              color={statsOpen ? "secondary" : "on-surface-retreat"}
+              variant={statsOpen ? "tonal" : "icon"}
+              size="medium"
+              icon={{ category: "outlined", type: "bar_chart", filled: statsOpen }}
+              aria-expanded={statsOpen}
+              aria-label={t("rework.resources.stats.toggle")}
+              onClick={() => setStatsOpen((value) => !value)}
+            />
+          </Tooltip>
+          {hasQuota && (
+            <div className={styles.quota}>
+              <div className={styles.quotaLabelRow}>
+                <span className={styles.quotaLabel}>{t("rework.resources.storageQuota")}</span>
+                <span className={styles.quotaValue}>
+                  {formatBytes(team!.current_resources_storage_size ?? 0)} /{" "}
+                  {formatBytes(team!.max_resources_storage_size!)}
+                </span>
+              </div>
+              <ProgressBar
+                theme="primary"
+                current={team!.current_resources_storage_size ?? 0}
+                max={team!.max_resources_storage_size!}
+              />
+            </div>
+          )}
+        </div>
       </header>
+
+      {statsOpen && (
+        <ResourceStatsCards
+          entries={corpusStats.data?.entries}
+          isLoading={corpusStats.isLoading}
+          isError={corpusStats.isError}
+        />
+      )}
+
       <div className={styles.panel}>
         <div className={styles.workspace}>
-          <ResourcePage
-            key={`${spaceId}/${folderId ?? "root"}/${page}/${cursor?.id ?? "first"}/${revision}`}
-            spaceId={spaceId}
-            folderId={folderId}
-            parentPath={trail.map((folder) => folder.name).join("/")}
-            onCreated={() => {
-              setPage(0);
-              setCursors([undefined]);
-              setRevision((value) => value + 1);
-            }}
-            cursor={cursor}
-            page={page}
-            breadcrumb={{
-              segments: [
-                { label: t("rework.sidebar.team.menu.resources"), onClick: () => navigate([]) },
-                ...trail.map((folder, index) => ({
-                  label: folder.name,
-                  onClick: () => navigate(trail.slice(0, index + 1)),
-                })),
-              ],
-              canGoBack: trail.length > 0,
-              onBack: () => navigate(trail.slice(0, -1)),
-              backLabel: t("rework.back"),
-            }}
-            onFolder={(folder) => navigate([...trail, folder])}
-            onPage={setPage}
-            onNext={(last) => {
-              setCursors([...cursors.slice(0, page + 1), { id: last.id, name: last.name }]);
-              setPage(page + 1);
+          <DocumentWorkspace
+            teamId={teamId}
+            importScopeId={fsTeamId}
+            isPersonalTeam={isPersonalTeam}
+            onDocumentsChanged={() => {
+              if (!corpusStats.isUninitialized) void corpusStats.refetch();
+              if (!teamUninitialized) void refetchTeam();
             }}
           />
         </div>
+
+        {/* A rail beside the documents card until it is opened, when it
+            widens in place into the panel itself. */}
+        <ImportPanel teamId={fsTeamId} />
       </div>
     </div>
-  );
-}
-
-function ResourcePage({
-  spaceId,
-  folderId,
-  parentPath,
-  onCreated,
-  cursor,
-  page,
-  breadcrumb,
-  onFolder,
-  onPage,
-  onNext,
-}: {
-  spaceId: string;
-  folderId?: string;
-  parentPath: string;
-  onCreated: () => void;
-  cursor: Cursor;
-  page: number;
-  breadcrumb: import("@shared/organisms/ResourceExplorer/ResourceExplorer.tsx").ResourceExplorerBreadcrumbProps;
-  onFolder: (folder: Folder) => void;
-  onPage: (page: number) => void;
-  onNext: (last: Document) => void;
-}) {
-  const { t } = useTranslation();
-  const [loadFolders, folders] = useLazyListFoldersQuery();
-  const [loadDocuments, documents] = useLazyListDocumentsQuery();
-  const [authorize] = useAuthorizeSpaceMutation();
-  const [createFolder] = useCreateFolderMutation();
-  const [canWrite, setCanWrite] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  const [ready, setReady] = useState(false);
-  // A keyed mount begins uninitialized even when RTK has cached this page.
-  // Re-entering always verifies current authority before showing any rows.
-  const load = useCallback(
-    () => [
-      loadFolders({ id: spaceId, parentId: folderId }),
-      loadDocuments({ id: spaceId, folderId, afterId: cursor?.id, afterName: cursor?.name, limit: PAGE_SIZE + 1 }),
-    ],
-    [spaceId, folderId, cursor?.id, cursor?.name, loadFolders, loadDocuments],
-  );
-  useEffect(() => {
-    let active = true;
-    let requests: ReturnType<typeof load> = [];
-    const refresh = async () => {
-      while (active) {
-        requests = load();
-        const results = await Promise.all(requests);
-        if (!active) return;
-        // RTK may deduplicate against a request started by an abandoned mount
-        // (including StrictMode cleanup). Only this entry's own reads may render.
-        if (results.every((result, index) => result.requestId === requests[index].requestId)) {
-          setReady(true);
-          return;
-        }
-        requests.forEach((request) => request.unsubscribe());
-      }
-    };
-    void refresh();
-    return () => {
-      active = false;
-      requests.forEach((request) => {
-        request.abort();
-        request.unsubscribe();
-      });
-    };
-  }, [load, attempt]);
-  useEffect(() => {
-    let active = true;
-    setCanWrite(false);
-    const request = authorize({ spaceCheck: { space_id: spaceId, permission: "write" } });
-    void request.then((result) => {
-      if (active) setCanWrite(result.data?.allowed === true);
-    });
-    return () => {
-      active = false;
-      request.abort();
-    };
-  }, [authorize, spaceId, attempt]);
-  const refresh = () => {
-    setReady(false);
-    setAttempt((value) => value + 1);
-  };
-  const loading =
-    !ready || folders.isUninitialized || documents.isUninitialized || folders.isFetching || documents.isFetching;
-  const errors = [folders.error, documents.error].filter(Boolean);
-  const failed = errors.length > 0;
-  const status = (code: number) => errors.some((e) => e && "status" in e && e.status === code);
-  const errorKey = status(403) || status(409) ? "denied" : status(404) ? "missing" : "unavailable";
-  const docs = documents.currentData?.slice(0, PAGE_SIZE) ?? [];
-  const rows: (Folder | Document)[] =
-    loading || failed ? [] : [...(page === 0 ? (folders.currentData ?? []) : []), ...docs];
-  return (
-    <>
-      <ResourceExplorer<Folder | Document>
-        breadcrumb={breadcrumb}
-        toolbarActions={
-          <>
-            <Tooltip text={t("rework.resources.action.refresh")}>
-              <IconButton
-                variant="icon"
-                size="medium"
-                icon={{ category: "outlined", type: "refresh" }}
-                aria-label={t("rework.resources.action.refresh")}
-                disabled={loading}
-                onClick={refresh}
-              />
-            </Tooltip>
-            {!loading && !failed && canWrite && (
-              <Tooltip text={t("rework.resources.menu.newFolder")}>
-                <IconButton
-                  color="primary"
-                  variant="icon"
-                  size="medium"
-                  icon={{ category: "outlined", type: "create_new_folder" }}
-                  aria-label={t("rework.resources.menu.newFolder")}
-                  onClick={() => setCreateOpen(true)}
-                />
-              </Tooltip>
-            )}
-          </>
-        }
-        selectable={false}
-        loading={loading}
-        loadingMessage={t("rework.resources.loading")}
-        empty={failed || rows.length === 0}
-        emptyMessage={
-          failed ? (
-            <div role="alert">
-              <p>{t(`rework.resources.managerRead.${errorKey}`)}</p>
-              <Button color="primary" variant="text" size="small" onClick={refresh}>
-                {t("rework.bootstrap.reload")}
-              </Button>
-            </div>
-          ) : (
-            t("rework.resources.empty.folder")
-          )
-        }
-        rows={rows}
-        rowKey={(row) => row.id}
-        columns={[
-          {
-            label: t("rework.resources.columns.name"),
-            size: "minmax(8rem, 2fr)",
-            cellRenderer: (row) =>
-              "mime" in row ? (
-                <span className={nameStyles.nameCell}>
-                  <span
-                    className={nameStyles.rowIcon}
-                    style={{ color: fileIconSpec(row.name.split(".").pop()?.toLowerCase()).color }}
-                  >
-                    <Icon category="outlined" type={fileIconSpec(row.name.split(".").pop()?.toLowerCase()).type} />
-                  </span>
-                  <span>{row.name}</span>
-                </span>
-              ) : (
-                <button type="button" className={rowStyles.nameButton} onClick={() => onFolder(row)}>
-                  <span className={rowStyles.rowIcon} style={{ color: FOLDER_ICON.color }}>
-                    <Icon category="outlined" type="folder" filled />
-                  </span>
-                  <span>{row.name}</span>
-                </button>
-              ),
-          },
-          {
-            label: t("rework.resources.columns.size"),
-            size: "minmax(0, 6.5rem)",
-            cellRenderer: (row) => ("mime" in row ? formatBytes(row.size) : "-"),
-          },
-        ]}
-        paginationFooter={
-          !loading && !failed && (rows.length > 0 || page > 0) ? (
-            <TablePagination
-              currentPage={page}
-              currentPageLabel={t("rework.resources.managerRead.page", { page: page + 1 })}
-              hasNext={(documents.currentData?.length ?? 0) > PAGE_SIZE}
-              rowsPerPage={PAGE_SIZE}
-              rowsPerPageOptions={[]}
-              labels={{
-                first: t("dataTable.pagination.first"),
-                prev: t("dataTable.pagination.prev"),
-                next: t("dataTable.pagination.next"),
-              }}
-              onFirst={() => onPage(0)}
-              onPrev={() => onPage(page - 1)}
-              onNext={() => {
-                if (docs.length) onNext(docs[docs.length - 1]);
-              }}
-            />
-          ) : undefined
-        }
-      />
-      {createOpen && (
-        <FolderNameDialog
-          open
-          parentPath={parentPath}
-          maxNameLength={255}
-          canSubmit={canWrite}
-          onClose={() => setCreateOpen(false)}
-          onCreated={onCreated}
-          onSubmit={async (name) => {
-            try {
-              await createFolder({ createFolder: { space_id: spaceId, parent_id: folderId ?? null, name } }).unwrap();
-            } catch (error) {
-              const code = error && typeof error === "object" && "status" in error ? error.status : undefined;
-              if (code === 403) setCanWrite(false);
-              const key =
-                code === 403
-                  ? "denied"
-                  : code === 409
-                    ? "conflict"
-                    : code === 404 || code === 400
-                      ? "missing"
-                      : code === 422
-                        ? "invalid"
-                        : "unavailable";
-              throw new Error(t(`rework.resources.managerCreate.${key}`));
-            }
-          }}
-        />
-      )}
-    </>
   );
 }

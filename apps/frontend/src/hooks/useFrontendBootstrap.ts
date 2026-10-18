@@ -47,7 +47,7 @@ export type FrontendBootstrapState = {
  * Example:
  * - `const { activeTeam, availableTeams, isLoading } = useFrontendBootstrap();`
  */
-export function useFrontendBootstrap(): FrontendBootstrapState {
+export function useFrontendBootstrap(skip = false): FrontendBootstrapState {
   // #2148: no longer forces a refetch on every mount — the control-plane
   // enrichment behind this endpoint does one OpenFGA `Read` plus one
   // Keycloak lookup per team, and this hook mounts on nearly every page.
@@ -68,7 +68,7 @@ export function useFrontendBootstrap(): FrontendBootstrapState {
   // display — real backend authorization checks are unaffected either way.
   const { data, isLoading, isFetching, refetch } = useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery(
     undefined,
-    { refetchOnMountOrArgChange: 60 },
+    { refetchOnMountOrArgChange: 60, ...(skip ? { skip } : {}) },
   );
 
   return {

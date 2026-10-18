@@ -72,6 +72,7 @@ import GcuGuard from "@core/guards/GcuGuard";
 import BootstrapGuard from "@core/guards/BootstrapGuard";
 import { KeyCloakService } from "../security/KeycloakService";
 import { enhancedFredManagerApi as api } from "../slices/fredManager/fredManagerApiEnhancements";
+import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 afterEach(() => {
@@ -99,8 +100,8 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
     },
   );
   const store = configureStore({
-    reducer: { [api.reducerPath]: api.reducer },
-    middleware: (defaults) => defaults().concat(api.middleware),
+    reducer: { [api.reducerPath]: api.reducer, [controlPlaneApi.reducerPath]: controlPlaneApi.reducer },
+    middleware: (defaults) => defaults().concat(api.middleware, controlPlaneApi.middleware),
   });
   const host = document.createElement("div");
   document.body.append(host);
@@ -126,6 +127,7 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
   } finally {
     act(() => root.unmount());
     store.dispatch(api.util.resetApiState());
+    store.dispatch(controlPlaneApi.util.resetApiState());
     host.remove();
   }
 }

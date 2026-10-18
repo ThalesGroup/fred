@@ -38,11 +38,9 @@ interface TeamSelectionListItemProps {
   pending?: boolean;
   /** Display name: the team name, or the personal-space label. */
   name: string;
-  /** Explicit presentation text for organization/team/project membership rows. */
-  description?: string;
   /** The current user's folded roles on this team (from `Team.my_relations`).
    *  Ignored for the personal space (`personal`), which shows no role line. */
-  roles?: UserTeamRelation[];
+  roles?: (UserTeamRelation | import("../../../../../slices/fredManager/fredManagerOpenApi").Role)[];
   /** Personal space: renders the user's initials avatar and hides the role line. */
   personal?: boolean;
   /** Team banner image, or the user's picture for the personal space; when
@@ -65,7 +63,6 @@ export default function TeamSelectionListItem({
   onActivate,
   pending = false,
   name,
-  description,
   roles = [],
   personal = false,
   imgUrl,
@@ -75,6 +72,7 @@ export default function TeamSelectionListItem({
   const { t } = useTranslation();
 
   const heldRoles = roles
+    .map((role) => (role.startsWith("team_") || role === "pending_team_admin" ? role : `team_${role}`))
     .filter((relation) => relation in ROLE_PRIORITY)
     .slice()
     .sort((a, b) => ROLE_PRIORITY[a] - ROLE_PRIORITY[b]);
@@ -94,7 +92,7 @@ export default function TeamSelectionListItem({
       )}
       <span className={styles.labels}>
         <span className={styles.name}>{name}</span>
-        {!personal && <span className={styles.roles}>{description ?? roleLabel}</span>}
+        {!personal && <span className={styles.roles}>{roleLabel}</span>}
       </span>
     </>
   );

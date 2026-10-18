@@ -46,28 +46,4 @@
   border-radius: var(--radius-s);
   background-color: var(--surface-container);
   min-height: 0;
-  color: var(--on-surface);
-}
-
-@media (max-width: 640px) {
-  .sidebar-container {
-    flex-direction: column;
-    width: 100%;
-  }
-  .rail {
-    flex-direction: row;
-    padding-bottom: 0;
-    width: 100%;
-    height: auto;
-  }
-  .main-nav-bar-container {
-    flex: 1;
-  }
-  .user-profile-container {
-    width: 48px;
-  }
-  .nav-panel-card {
-    margin: 0;
-    max-height: 180px;
-  }
 }

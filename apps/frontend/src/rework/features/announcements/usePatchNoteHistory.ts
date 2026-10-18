@@ -36,9 +36,9 @@ export function resolvePatchNotes(snapshots: PatchNoteSnapshot[], language: stri
  * What "What's new" shows: the package of the announcement in effect, frozen
  * when it was announced, plus that announcement's id while this user has not seen it.
  */
-export function usePatchNoteHistory() {
+export function usePatchNoteHistory(skip = false) {
   const { i18n } = useTranslation();
-  const { data } = usePatchNoteHistoryQuery();
+  const { data } = usePatchNoteHistoryQuery(undefined, { skip });
   const notes = useMemo(() => resolvePatchNotes(data?.patch_notes ?? [], i18n.language), [data, i18n.language]);
   return { notes, pendingAnnouncementId: data?.pending_announcement_id ?? null, loaded: data !== undefined };
 }

@@ -9,9 +9,10 @@ configuration_reason: "The experimental manager reference and standalone k3d ove
 ## Applicability
 
 Experimental `chore/rust-rebac` deployments using manager and the frontend from this
-branch. Fred's existing layout and navigation expose only personal CGU, root
-bootstrap, account pages, Home memberships and administration provisioning. This is a bounded
-journey, not a transparent upgrade enabling the full product.
+branch. The complete existing Fred UI remains available. Manager owns personal
+CGU, root bootstrap, provisioning and membership/personal navigation. Other
+features retain their previous service calls and may fail when those services are
+stopped; visible UI does not imply complete Rust feature reconstruction.
 
 ## Prerequisites
 
@@ -34,9 +35,9 @@ before login and shows a reload action when unavailable. Accept CGU in the UI be
 bootstrap or import; the obsolete `bootstrap-local` helper is removed. Existing
 manager roles and spaces remain unchanged. No organization membership is implicit.
 Rebuilding the frontend restores this journey in Fred's existing layout; it needs
-no additional migration, Keycloak reset or reimport. Use Home for memberships and
+no additional migration, Keycloak reset or reimport. Use Home for team/personal navigation and
 the administration console for Provisioning. The account menu opens the existing
-profile with manager roles, browser preferences, legal texts and static release
+profile with manager roles and organization, browser preferences, legal texts and static release
 notes. Restoring these account pages requires only a frontend rebuild/deployment;
 it adds no manager migration or configuration key.
 
@@ -61,7 +62,9 @@ not edit an applied migration or delete its history record to force a rollback.
 
 ## Limitations
 
-Only the stated destinations are reachable in the existing Fred UI. Existing root roles
+The Resources page uses its original corpus bindings, not a reduced manager
+explorer; manager resource UUIDs are not converted to knowledge-flow tag IDs.
+Existing root roles
 remain authoritative in OpenFGA; there is no role mirroring or compatibility layer.
 The browser acceptance uses real governance APIs but does not start Temporal or
 validate the remaining content, admission and administration journeys.

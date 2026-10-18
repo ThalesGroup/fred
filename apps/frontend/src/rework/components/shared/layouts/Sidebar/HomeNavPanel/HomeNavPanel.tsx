@@ -12,22 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader";
-import SearchInput from "@shared/molecules/SearchInput/SearchInput";
-import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem";
+import styles from "./HomeNavPanel.module.scss";
+import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
+import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { useNavigate } from "react-router-dom";
-import { KeyCloakService } from "../../../../../../security/KeycloakService";
 import {
   useMySpacesQuery,
   useMeQuery,
   useCreatePersonalSpaceMutation,
 } from "../../../../../../slices/fredManager/fredManagerApiEnhancements";
-import styles from "./HomeNavPanel.module.scss";
+import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
+import TeamSortSelect, { type TeamSortOption } from "./TeamSortSelect.tsx";
+import { getTeamRecency, getTeamSortMode, setTeamSortMode, type TeamSortMode } from "@shared/utils/teamRecency.ts";
+import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
+import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
+import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 
+/**
+ * Home view of the main nav panel (mainNavPanel): the app's team switcher,
+ * moved off the former far-left avatar rail. Lists the personal space and every
+ * team the user belongs to; each row navigates into that space. The search box
+ * filters the "Vos équipes" list only — the personal space is a fixed home
+ * anchor, not one of the user's teams.
+ *
+ * Reached via the mainNavBar Home icon (`/home`). Team/roles come from
+ * `useFrontendBootstrap` (`available_teams[].my_relations`, #2298) — no per-team
+ * fetch.
+ */
 export default function HomeNavPanel() {
   const { t } = useTranslation();
+  const { defaultTeamAvatarFile } = useFrontendProperties();
+  const { bootstrap } = useFrontendBootstrap();
   const [search, setSearch] = useState("");
   const spaces = useMySpacesQuery();
   const me = useMeQuery();
@@ -62,7 +81,7 @@ export default function HomeNavPanel() {
       if (!memberships.some((membership) => membership.id === space.id)) {
         throw new Error("Opened space is not in current memberships");
       }
-      if (active.current === user) navigate({ pathname: "/home", search: `?space=${space.id}` });
+      if (active.current === user) navigate(`/team/${space.id}/agents`);
     } catch {
       if (active.current === user) setFailed(true);
     } finally {
@@ -70,57 +89,118 @@ export default function HomeNavPanel() {
       if (active.current === user) setOpening(false);
     }
   };
-  const byId = new Map(spaces.data?.map((space) => [space.id, space.name]));
-  const ordered = spaces.isError
+
+  // The search field is hidden behind a magnifier button and only mounts (as an
+  // overlay over the list header) once opened; it collapses again when it loses
+  // focus, but only while empty — a live filter keeps it open (chosen #2298).
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sortMode, setSortMode] = useState<TeamSortMode>(getTeamSortMode);
+  // Read once on mount — recency only changes while the user is inside a team,
+  // and this panel remounts when they return to Home.
+  const recency = useMemo(() => getTeamRecency(), []);
+
+  const changeSortMode = (mode: TeamSortMode) => {
+    setSortMode(mode);
+    setTeamSortMode(mode);
+  };
+
+  const collaborativeTeams = spaces.isError
     ? []
-    : [...(spaces.data ?? [])].sort((a, b) =>
-        a.path
-          .map((id) => byId.get(id) ?? id)
-          .join(" / ")
-          .localeCompare(b.path.map((id) => byId.get(id) ?? id).join(" / ")),
-      );
+    : (spaces.currentData ?? []).filter((space) => space.kind !== "organization" && !space.personal_owner);
+  const query = search.trim().toLowerCase();
+  const visibleTeams = query
+    ? collaborativeTeams.filter((team) => team.name.toLowerCase().includes(query))
+    : collaborativeTeams;
+
+  const sortedTeams = useMemo(() => {
+    const list = [...visibleTeams];
+    if (sortMode === "alpha") {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      // Most recently visited first; never-visited teams fall to the bottom,
+      // tie-broken alphabetically.
+      list.sort((a, b) => {
+        const diff = (recency[b.id] ?? 0) - (recency[a.id] ?? 0);
+        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      });
+    }
+    return list;
+  }, [visibleTeams, sortMode, recency]);
+
+  const sortOptions: TeamSortOption<TeamSortMode>[] = [
+    { value: "recent", label: t("rework.home.sort.recent") },
+    { value: "alpha", label: t("rework.home.sort.alpha") },
+  ];
+
   return (
     <div className={styles.panel}>
-      <NavPanelHeader title={t("rework.manager.spaces")} />
+      <NavPanelHeader title={t("rework.home.title")} />
+
       {canOpen && (
         <div className={styles.personalSpace}>
           <TeamSelectionListItem
-            personal
-            name={t("rework.sidebar.team.userTeam")}
-            avatarName={KeyCloakService.GetUserFullName()}
-            pending={opening}
             onActivate={() => void activatePersonal()}
+            pending={opening}
+            name={t("rework.sidebar.team.userTeam")}
+            personal
+            imgUrl={bootstrap?.current_user?.avatar_image_url ?? undefined}
+            avatarName={KeyCloakService.GetUserFullName()}
+            avatarColor={PERSONAL_TEAM_COLOR}
           />
           {opening && <p role="status">{t("common.loading")}</p>}
           {failed && <p role="alert">{t("rework.manager.unavailable")}</p>}
         </div>
       )}
-      <div className={styles.teamSort}>
-        <SearchInput
-          size="xs"
-          value={search}
-          onChange={setSearch}
-          placeholder={t("rework.manager.search")}
-          ariaLabel={t("rework.manager.search")}
-          clearAriaLabel={t("rework.home.searchClear")}
-        />
-      </div>
-      <div className={styles.scroll}>
-        {ordered
-          .filter((space) => !space.personal_owner && space.name.toLowerCase().includes(search.trim().toLowerCase()))
-          .map((space) => (
-            <div key={space.id} className={styles[space.kind]}>
-              <TeamSelectionListItem
-                redirection={{ pathname: "/home", search: space.kind === "organization" ? "" : `?space=${space.id}` }}
-                name={space.name}
-                avatarName={space.name}
-                description={[
-                  t(`rework.manager.kinds.${space.kind}`),
-                  ...space.roles.map((role) => t(`rework.manager.roles.${role}`)),
-                ].join(" / ")}
+
+      <div className={styles.teamList}>
+        <div className={styles.teamListHeader}>
+          <span className={styles.teamListHeaderLabel}>{t("rework.home.yourTeams")}</span>
+          <IconButton
+            size="small"
+            variant="icon"
+            icon={{ category: "outlined", type: "search" }}
+            aria-label={t("rework.home.searchPlaceholder")}
+            onClick={() => setSearchOpen(true)}
+          />
+          {searchOpen && (
+            <div className={styles.searchOverlay}>
+              <SearchInput
+                size="xs"
+                value={search}
+                onChange={setSearch}
+                autoFocus
+                // Collapse when focus leaves, but only if the field is empty —
+                // an active filter stays open so the list keeps its context.
+                onBlur={() => {
+                  if (!search.trim()) setSearchOpen(false);
+                }}
+                placeholder={t("rework.home.searchPlaceholder")}
+                ariaLabel={t("rework.home.searchPlaceholder")}
+                clearAriaLabel={t("rework.home.searchClear")}
               />
             </div>
+          )}
+        </div>
+        <div className={styles.teamSort}>
+          <TeamSortSelect<TeamSortMode>
+            value={sortMode}
+            options={sortOptions}
+            onChange={changeSortMode}
+            ariaLabel={t("rework.home.sort.aria")}
+          />
+        </div>
+        <div className={styles.scroll}>
+          {sortedTeams.map((team) => (
+            <TeamSelectionListItem
+              key={team.id}
+              redirection={`/team/${team.id}/agents`}
+              name={team.name}
+              roles={team.roles}
+              imgUrl={defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined}
+              avatarName={team.name}
+            />
           ))}
+        </div>
       </div>
     </div>
   );

@@ -20,9 +20,13 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import type { UiTheme } from "../../../../app/uiThemes.ts";
-import type { Me } from "../../../../slices/fredManager/fredManagerOpenApi.ts";
+import type { Me, MySpace } from "../../../../slices/fredManager/fredManagerOpenApi.ts";
 
 const state = vi.hoisted(() => ({
+  spaces: [] as MySpace[],
+  spacesError: false,
+  spacesFetching: false,
+  spacesRefetch: vi.fn(),
   userId: "ada-id",
   username: "ada",
   fullName: "Ada Lovelace",
@@ -43,7 +47,8 @@ vi.mock("../../../../common/config", () => ({
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, args?: { roles?: string }) => (args?.roles === undefined ? key : `${key}: ${args.roles}`),
+    t: (key: string, args?: { roles?: string; name?: string }) =>
+      args?.name ? `${key}: ${args.name}` : args?.roles === undefined ? key : `${key}: ${args.roles}`,
     i18n: { language: "fr", changeLanguage: state.changeLanguage },
   }),
 }));
@@ -63,6 +68,12 @@ vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
 }));
 vi.mock("../../../../slices/fredManager/fredManagerApiEnhancements.ts", () => ({
   useMeQuery: () => state,
+  useMySpacesQuery: () => ({
+    currentData: state.spaces,
+    isError: state.spacesError,
+    isFetching: state.spacesFetching,
+    refetch: state.spacesRefetch,
+  }),
 }));
 vi.mock("@shared/molecules/Select/Select.tsx", () => ({
   default: ({
@@ -128,6 +139,8 @@ beforeEach(() => {
   state.fullName = "Ada Lovelace";
   state.email = "ada@example.com";
   state.authEnabled = true;
+  state.spaces = [];
+  state.spacesError = state.spacesFetching = false;
   state.data = { user_id: "ada-id", username: "ada", platform_roles: ["platform_owner"] };
   state.isLoading = state.isFetching = state.isError = false;
   container = document.createElement("div");
@@ -233,4 +246,35 @@ describe("shared UserSettingsPage", () => {
     expect(themePicker()).toBeNull();
     expect(container.querySelector('[aria-label="rework.userSettings.app.themeAria"]')).not.toBeNull();
   });
+});
+
+it("shows organization only from current successful manager memberships", () => {
+  state.spaces = [
+    {
+      id: "org",
+      name: "Demo",
+      kind: "organization",
+      organization_id: "org",
+      path: ["org"],
+      parent_id: null,
+      personal_owner: null,
+      roles: ["member"],
+      inherited_roles: [],
+    },
+  ];
+  render();
+  expect(container.textContent).toContain("rework.userSettings.organization: Demo");
+  state.spacesFetching = true;
+  render();
+  expect(container.textContent).not.toContain("Demo");
+  state.spacesFetching = false;
+  state.spacesError = true;
+  render();
+  expect(container.textContent).not.toContain("Demo");
+  clickText("rework.provisioning.retryAuthority");
+  expect(state.spacesRefetch).toHaveBeenCalledOnce();
+  state.spacesError = false;
+  state.userId = "different-person";
+  render();
+  expect(container.textContent).not.toContain("Demo");
 });

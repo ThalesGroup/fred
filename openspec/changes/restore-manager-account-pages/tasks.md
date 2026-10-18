@@ -7,7 +7,7 @@
 ## 2. Validate behavior and reuse
 
 - [x] 2.1 Run the manual recipe with the developer before the automated campaign: owner without spaces opens Profile, sees `platform_owner`, changes language/theme/mode, reads all three linked pages, reloads and logs out; record observations and any deviations in this task response.
-- [ ] 2.2 Extend existing frontend component/router tests and `tests/provisioning-browser.mjs` for the new routes, imported-account isolation and zero Python consumer requests; verify focused tests and `make -C apps/frontend test-provisioning-browser`, including desktop/narrow screenshots and unchanged import/replay behavior.
+- [ ] 2.2 Extend existing frontend component/router tests and `tests/provisioning-browser.mjs` for the new routes, imported-account isolation and no business requests before admission, with explicit unavailable-service responses after admission; verify focused tests and `make -C apps/frontend test-provisioning-browser`, including desktop/narrow screenshots and unchanged import/replay behavior.
 - [x] 2.3 Verify applicable repository quality checks, including root `make code-quality` and the manager step gates required by `AGENTS.md`; record exact commands and results without claiming this focused recipe proves full Fred readiness.
 - [x] 2.4 Obtain an independent read-only review of the account-page lot, fix actionable findings with regression coverage and have corrections reviewed; record base/head, covered consumers, dispositions and exclusions, and verify no copied page/styles or new backend/storage contracts were introduced.
 
@@ -15,6 +15,13 @@
 
 - [x] 3.1 Update implemented behavior in arc42 chapters 02, A1 and 09, the relevant existing UX guidance and the eventual PR migration note; verify `make -C docs/architecture check` and reconcile this change with the actual result.
 - [ ] 3.2 Validate/sync/archive the completed OpenSpec change through the repository procedures and commit the reviewed step on `chore/rust-rebac`; verify a clean scoped diff and recorded checks, preserving unrelated changes and requiring explicit developer agreement before any push.
+
+## 4. Restore the UI invariant after the Priya recipe
+
+- [x] 4.1 Restore swift Home, complete route/navigation inventory, ordinary page layouts and original styles; retain manager admission and provisioning. Restore Resources/DocumentWorkspace and record the resource binding gap instead of a reduced replacement UI.
+- [x] 4.2 Bind existing team/personal navigation to manager membership/opening, show organization only in the existing profile, preserve direct roles and avoid invented permission/bootstrap data.
+- [x] 4.3 Restore ordinary non-migrated consumers unchanged after admission; run focused route/Home/navigation/profile tests and TypeScript checks, obtain bounded independent review, and leave global campaign for the agreed end-of-morning check.
+- [x] 4.4 Reconcile specifications and architecture with restored UI and remaining binding gaps; record manual observations and review/check evidence. Do not claim full feature parity from UI restoration.
 
 ## Verification evidence
 
@@ -27,3 +34,12 @@
 - Spec synchronization preserves all four existing first-user scenarios and adds the shared-account requirement. `openspec validate fred-manager-provisioning --type spec --strict` and change validation pass; normal `openspec validate --specs` passes all 33 specs. Global strict validation reports the pre-existing placeholder Purpose in unchanged `frontend-surface-scale`; no unrelated spec was modified.
 - Both browser attempts failed loading JavaScript with Chromium `ERR_NETWORK_CHANGED`, leaving the startup screen before the first profile assertion. The second attempt ran after the separate integration suite completed, so concurrent integration containers alone do not explain it. No product change or ignored assertion was introduced to hide this failure; desktop/narrow account screenshots and full browser acceptance remain unverified.
 - On 2026-10-18 the developer requested fast small lots, targeted checks only between lots, and a global check at the end of the morning. The broad checks already completed are recorded above and are not repeated. Commit/push is authorized on the accepted manual recipe and passing focused tests; task 2.2 and final archive remain open for the deferred browser validation. This change is not declared fully verified or archived.
+
+### UI parity correction evidence (2026-10-18)
+
+- Developer-confirmed invariant: preserve the complete business UI from swift. Non-migrated calls remain unchanged; the developer accepts their normal errors when control-plane is stopped. Organization presentation is restricted to Profile for business users.
+- Restored Home widgets/styles, all original product routes and sidebar modes, standalone account/legal layout, full Resources/DocumentWorkspace, announcements/patch-note history and task consumers. Manager admission, provisioning and personal opening remain connected. The previous reduced resource explorer is removed; the original full Resources contract is not yet connected to manager. Existing content-control conditions remain service-driven, including personal-ID recognition in non-migrated consumers.
+- Focused checks: 7 component/router files, 66 tests passed; `tsc --noEmit` passed. A subsequent focused admission/hook run passed 18 tests in 5 files; the onboarding fixture now registers the same control-plane API reducer/middleware as the application so the real skipped hooks prove no business request occurs before admission. Browser recipe updated for the complete UI and unavailable non-migrated services, but not executed. Global checks remain deferred by explicit developer instruction.
+- Independent read-only review: base `4ef9d602c`, working-tree patch and direct consumers; no new actionable findings. Reviewed admission topology, standalone pages, pre-admission query skipping, manager display bindings, personal-opening account isolation and organization freshness. No full branch review or runtime parity claim.
+- No deployment, commit or push of this correction yet. Manual UI validation and the previously deferred broad/browser campaign remain open.
+- The developer separately requested a platform-owner governance view limited to organization listing/creation and designation of owner/admin, retaining account/provisioning entry points. This is not implemented by the UI restoration. HTTP organization registry/creation and split initial-role assignment need their own scoped reconstruction. The developer clarified that holding organization/team roles must not add business UI inside the platform area. A separate link will later allow entry into that person's organization; this exception and its switching behavior are explicitly deferred, with no implementation in the current lot.

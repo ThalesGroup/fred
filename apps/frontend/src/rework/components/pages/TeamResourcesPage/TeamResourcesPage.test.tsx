@@ -1,327 +1,274 @@
 // @vitest-environment happy-dom
 // Copyright Thales 2026
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-import { act, StrictMode } from "react";
+// Corpus resources page, quota meter, stats, and health gate.
+
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { Provider } from "react-redux";
-import { configureStore } from "@reduxjs/toolkit";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
-import TeamResourcesPage from "./TeamResourcesPage";
-import { fredManagerApi as api, type Document, type Folder } from "../../../../slices/fredManager/fredManagerOpenApi";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const probe = vi.hoisted(() => ({
+  isPersonalTeam: false,
+  team: { id: "team-1", max_resources_storage_size: 5_368_709_120, current_resources_storage_size: 4_509_715_660 } as
+    | Record<string, unknown>
+    | undefined,
+  corpusStatsUninitialized: false,
+  corpusStatsRefetch: () => {},
+  teamUninitialized: false,
+  teamRefetch: () => {},
+  onDocumentsChanged: undefined as (() => void) | undefined,
+  corpusStatsSkip: true,
+  // Lifecycle flags of the KF health probe that gates the whole page.
+  kfProbe: { isLoading: false, isFetching: false, isUninitialized: false, isError: false },
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { page?: number }) => (options?.page ? `${key} ${options.page}` : key),
+    t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key} ${JSON.stringify(opts)}` : key),
   }),
 }));
-vi.mock("../../../../security/KeycloakService", () => ({
-  KeyCloakService: { GetToken: () => "reader", ensureFreshToken: async () => true, CallLogout: vi.fn() },
+vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1" }) }));
+vi.mock("../../../../security/KeycloakService.ts", () => ({ KeyCloakService: { GetUserId: () => "u-1" } }));
+vi.mock("@shared/utils/teamId.ts", () => ({
+  isPersonalTeamId: () => probe.isPersonalTeam,
+  personalTeamId: (uid: string) => `personal-${uid}`,
 }));
-vi.mock("../../../../common/platformAccess", () => ({ handlePlatformAccessDenial: vi.fn() }));
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useGetTeamQuery: () => ({
+    data: probe.team,
+    isUninitialized: probe.teamUninitialized,
+    refetch: probe.teamRefetch,
+  }),
+}));
+vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  // The rollup reads the team's terminal ingestion history (#2384); no
+  // history in these fixtures, so it falls back to the live task feed.
+  useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
+  useListTagsQuery: () => probe.kfProbe,
+  useGetTagCorpusTypeStatsQuery: (_arg: unknown, options?: { skip?: boolean }) => {
+    probe.corpusStatsSkip = options?.skip ?? false;
+    return {
+      data: { entries: [] },
+      isLoading: false,
+      isError: false,
+      isUninitialized: probe.corpusStatsUninitialized,
+      refetch: probe.corpusStatsRefetch,
+    };
+  },
+}));
+// Reads the task store; this suite renders the page without a Provider and is
+// about the tab switcher, not the import rail — which has its own tests.
+vi.mock("@shared/organisms/ImportPanel/ImportPanel.tsx", () => ({
+  ImportPanel: () => <aside data-testid="import-panel" />,
+}));
+vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({
+  default: (props: { onDocumentsChanged?: () => void }) => {
+    probe.onDocumentsChanged = props.onDocumentsChanged;
+    return <div data-testid="panel-resources" />;
+  },
+}));
+vi.mock("./ResourceStatsCards/ResourceStatsCards.tsx", () => ({ default: () => <div data-testid="stats-cards" /> }));
 
-const firstSpace = "00000000-0000-4000-8000-000000000001";
-const secondSpace = "00000000-0000-4000-8000-000000000002";
-const folder: Folder = { id: "folder-a", space_id: firstSpace, parent_id: null, path: "/folder-a/", name: "Library" };
-const docs: Document[] = Array.from({ length: 53 }, (_, i) => ({
-  id: `doc-${i}`,
-  space_id: firstSpace,
-  folder_id: folder.id,
-  name: `Document ${i}`,
-  mime: "text/plain",
-  size: 10,
-  sha256: "digest",
-  created_by: "reader",
-}));
-const NativeRequest = globalThis.Request;
+import TeamResourcesPage from "./TeamResourcesPage.tsx";
+
+let container: HTMLDivElement;
 let root: Root;
-let host: HTMLDivElement;
-let store: ReturnType<typeof makeStore>;
-let requests: URL[];
-let reply: (url: URL, request: Request) => Promise<Response>;
-let navigate: ReturnType<typeof useNavigate>;
-function makeStore() {
-  return configureStore({ reducer: { [api.reducerPath]: api.reducer }, middleware: (g) => g().concat(api.middleware) });
-}
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
-}
-async function standard(url: URL) {
-  if (url.pathname.endsWith("/authorize/space")) return json({ allowed: false });
-  if (url.pathname.endsWith("/me/spaces")) return json([]);
-  if (url.pathname.includes(secondSpace)) return json([]);
-  if (url.pathname.endsWith("/folders")) return json(url.searchParams.has("parent_id") ? [] : [folder]);
-  const after = url.searchParams.get("after_id");
-  const start = after ? docs.findIndex((d) => d.id === after) + 1 : 0;
-  return json(url.searchParams.has("folder_id") ? docs.slice(start, start + 51) : []);
-}
-function Harness() {
-  navigate = useNavigate();
-  return (
-    <Routes>
-      <Route path="team/:teamId/resources" element={<TeamResourcesPage />} />
-    </Routes>
-  );
-}
-async function flush() {
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 30));
-  });
-}
-async function click(label: string) {
-  const button = [...document.querySelectorAll("button")].find(
-    (b) => b.getAttribute("aria-label") === label || b.textContent?.endsWith(label),
-  );
-  expect(button, label).toBeDefined();
-  await act(async () => button!.click());
-  await flush();
-}
-beforeEach(async () => {
-  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  vi.stubGlobal(
-    "Request",
-    class extends NativeRequest {
-      constructor(input: RequestInfo | URL, init?: RequestInit) {
-        super(typeof input === "string" ? new URL(input, "http://localhost") : input, init);
-      }
-    },
-  );
-  requests = [];
-  reply = standard;
-  vi.stubGlobal("fetch", async (request: Request) => {
-    const url = new URL(request.url);
-    requests.push(url);
-    return reply(url, request);
-  });
-  store = makeStore();
-  host = document.createElement("div");
-  document.body.append(host);
-  root = createRoot(host);
-  await act(async () =>
-    root.render(
-      <StrictMode>
-        <Provider store={store}>
-          <MemoryRouter initialEntries={[`/team/${firstSpace}/resources`]}>
-            <Harness />
-          </MemoryRouter>
-        </Provider>
-      </StrictMode>,
-    ),
-  );
-  await flush();
-});
-afterEach(async () => {
-  await act(async () => root.unmount());
-  store.dispatch(api.util.resetApiState());
-  host.remove();
-  vi.unstubAllGlobals();
-});
 
-it("uses only manager reads, traverses folders and paired cursor pages, then resets at the root", async () => {
-  expect(host.textContent).toContain("Library");
-  await click("Library");
-  expect(host.querySelectorAll('[class*="datatable-row"]').length).toBe(50);
-  expect(host.textContent).not.toContain("Document 50");
-  await click("dataTable.pagination.next");
-  expect(host.textContent).toContain("Document 52");
-  expect(host.querySelectorAll('[class*="datatable-row"]').length).toBe(3);
-  const last = [...requests].reverse().find((url) => url.pathname.endsWith("/documents"))!;
-  expect(last.searchParams.get("after_id")).toBe("doc-49");
-  expect(last.searchParams.get("after_name")).toBe("Document 49");
-  expect(last.searchParams.get("limit")).toBe("51");
-  await click("dataTable.pagination.prev");
-  expect(host.querySelectorAll('[class*="datatable-row"]').length).toBe(50);
-  await click("rework.sidebar.team.menu.resources");
-  expect(host.textContent).toContain("Library");
-  expect(host.textContent).not.toContain("Document 0");
-  expect(requests.every((url) => url.pathname.startsWith("/fred-manager/v1/"))).toBe(true);
-});
-
-it("hides cached rows on re-entry, distinguishes refusals from errors and emptiness, and retries", async () => {
-  await click("Library");
-  await click("rework.back");
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  reply = async (url) => {
-    if (url.pathname.endsWith("/documents") && url.searchParams.has("folder_id")) {
-      await held;
-      return json({ detail: "denied" }, 403);
-    }
-    return standard(url);
-  };
-  await click("Library");
-  expect(host.textContent).toContain("rework.resources.loading");
-  expect(host.textContent).not.toContain("Document 0");
-  await act(async () => release());
-  await flush();
-  expect(host.textContent).toContain("rework.resources.managerRead.denied");
-  expect(host.textContent).not.toContain("rework.resources.empty.folder");
-  reply = async () => json({ detail: "space is pending deletion" }, 409);
-  await click("rework.bootstrap.reload");
-  expect(host.textContent).toContain("rework.resources.managerRead.denied");
-  expect(host.textContent).not.toContain("rework.resources.managerRead.unavailable");
-  expect(host.textContent).not.toContain("Document 0");
-  reply = async () => json({ detail: "failed" }, 500);
-  await click("rework.bootstrap.reload");
-  expect(host.textContent).toContain("rework.resources.managerRead.unavailable");
-  reply = async () => json([]);
-  await click("rework.bootstrap.reload");
-  expect(host.textContent).toContain("rework.resources.empty.folder");
-});
-
-it("does not let a late prior-space response populate the new space", async () => {
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  reply = async (url) => {
-    if (url.pathname.includes(firstSpace) && url.searchParams.has("folder_id")) await held;
-    return standard(url);
-  };
-  await click("Library");
-  await act(async () => navigate(`/team/${secondSpace}/resources`));
-  await flush();
-  expect(host.textContent).toContain("rework.resources.empty.folder");
-  await act(async () => release());
-  await flush();
-  expect(host.textContent).not.toContain("Document 0");
-  expect(host.textContent).not.toContain("Library");
-});
-
-it("re-entering an in-flight folder must revalidate instead of accepting the earlier success", async () => {
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let revoked = false;
-  reply = async (url) => {
-    if (url.searchParams.has("folder_id") || url.searchParams.has("parent_id")) {
-      if (revoked) return json({ detail: "denied" }, 403);
-      await held;
-      return standard(url);
-    }
-    return standard(url);
-  };
-  await click("Library");
-  await click("rework.back");
-  revoked = true;
-  await click("Library");
-  await act(async () => release());
-  await flush();
-  expect(host.textContent).not.toContain("Document 0");
-  expect(host.textContent).toContain("rework.resources.managerRead.denied");
-});
-
-function typeFolderName(value: string) {
-  const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
+function render() {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
   act(() => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    root.render(<TeamResourcesPage />);
   });
-  return input;
 }
 
-it("creates once through the generated mutation and refreshes the first page of the same folder", async () => {
-  let finish!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  const posted: unknown[] = [];
-  let created = false;
-  reply = async (url, request) => {
-    if (url.pathname.endsWith("/authorize/space")) return json({ allowed: true });
-    if (request.method === "POST" && url.pathname.endsWith("/folders")) {
-      posted.push(await request.json());
-      await pending;
-      created = true;
-      return json({ ...folder, id: "new", name: "Notes", parent_id: folder.id }, 201);
-    }
-    if (created && url.pathname.endsWith("/folders") && url.searchParams.has("parent_id"))
-      return json([{ ...folder, id: "new", name: "Notes", parent_id: folder.id }]);
-    return standard(url);
+beforeEach(() => {
+  probe.isPersonalTeam = false;
+  probe.team = {
+    id: "team-1",
+    max_resources_storage_size: 5_368_709_120,
+    current_resources_storage_size: 4_509_715_660,
   };
-  await click("Library");
-  await click("dataTable.pagination.next");
-  await click("rework.resources.menu.newFolder");
-  const input = typeFolderName("  Notes  ");
-  await act(async () => {
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
-  await flush();
-  expect(posted).toEqual([{ space_id: firstSpace, parent_id: folder.id, name: "Notes" }]);
-  await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
-  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-  await act(async () => finish());
-  await flush();
-  await flush();
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-  expect(host.textContent).toContain("Notes");
-  expect(host.textContent).toContain("Document 0");
-  expect(requests.every((url) => url.pathname.startsWith("/fred-manager/v1/"))).toBe(true);
+  probe.corpusStatsUninitialized = false;
+  probe.corpusStatsRefetch = vi.fn();
+  probe.teamUninitialized = false;
+  probe.teamRefetch = vi.fn();
+  probe.onDocumentsChanged = undefined;
+  probe.corpusStatsSkip = true;
+  probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: false };
 });
 
-it("fails closed, preserves the name after a conflict, and disables creation after revocation", async () => {
-  expect(document.querySelector('[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
-  let status = 409,
-    posts = 0;
-  reply = async (url, request) => {
-    if (url.pathname.endsWith("/authorize/space")) return json({ allowed: true });
-    if (request.method === "POST" && url.pathname.endsWith("/folders")) {
-      posts++;
-      return json({ detail: "failure" }, status);
-    }
-    return standard(url);
-  };
-  await click("rework.resources.action.refresh");
-  await click("rework.resources.menu.newFolder");
-  typeFolderName("existing");
-  await click("rework.resources.folderModal.create");
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("rework.resources.managerCreate.conflict");
-  expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')?.value).toBe("existing");
-  status = 403;
-  await click("rework.resources.folderModal.create");
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("rework.resources.managerCreate.denied");
-  expect(posts).toBe(2);
-  await click("rework.resources.folderModal.cancel");
-  expect(document.querySelector('[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
+afterEach(() => {
+  act(() => {
+    root.unmount();
+  });
+  container.remove();
 });
 
-it("does not replay a 401 write or change a different space after a pending creation", async () => {
-  let finish!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    finish = resolve;
+function click(el: Element | null) {
+  act(() => {
+    el?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
-  let delayed = false,
-    posts = 0;
-  reply = async (url, request) => {
-    if (url.pathname.endsWith("/authorize/space")) return json({ allowed: true });
-    if (request.method === "POST" && url.pathname.endsWith("/folders")) {
-      posts++;
-      if (delayed) {
-        await pending;
-        return json(folder, 201);
-      }
-      return json({ detail: "expired" }, 401);
-    }
-    return standard(url);
-  };
-  await click("rework.resources.action.refresh");
-  await click("rework.resources.menu.newFolder");
-  typeFolderName("Late folder");
-  await click("rework.resources.folderModal.create");
-  expect(posts).toBe(1);
-  delayed = true;
-  await click("rework.resources.folderModal.create");
-  await act(async () => navigate(`/team/${secondSpace}/resources`));
-  await flush();
-  const before = requests.length;
-  await act(async () => finish());
-  await flush();
-  expect(requests).toHaveLength(before);
-  expect(host.textContent).not.toContain("Late folder");
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+}
+
+describe("TeamResourcesPage corpus and quota", () => {
+  it("renders the corpus workspace", () => {
+    render();
+    expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
+  });
+
+  it("shows the team storage quota when the team carries a quota", () => {
+    render();
+    expect(container.textContent).toContain("rework.resources.storageQuota");
+  });
+
+  it("omits the quota block when the team has no quota data", () => {
+    probe.team = { id: "team-1" };
+    render();
+    expect(container.textContent).not.toContain("rework.resources.storageQuota");
+  });
+});
+
+// Regression: DocumentWorkspace's useNotifyOnNewTaskTarget does a catch-up
+// fire on mount for any task target already in the store. In the same
+// commit where activeTab just switched to "resources", DocumentWorkspace
+// (child) mounts and can run that effect before corpusStats' own
+// subscribing effect (parent) has dispatched its first fetch — React
+// flushes child effects before parent effects. Calling RTK Query's
+// `.refetch()` on a query that was never started throws ("Cannot refetch a
+// query that has not been started yet") and previously took down the whole
+// app. onDocumentsChanged must no-op instead of calling refetch() while
+// corpusStats is still uninitialized.
+describe("TeamResourcesPage onDocumentsChanged — refetch guard", () => {
+  it("does not call refetch while corpusStats has not started yet", () => {
+    probe.corpusStatsUninitialized = true;
+    render();
+
+    expect(() => probe.onDocumentsChanged?.()).not.toThrow();
+    expect(probe.corpusStatsRefetch).not.toHaveBeenCalled();
+  });
+
+  it("calls refetch once corpusStats has started", () => {
+    probe.corpusStatsUninitialized = false;
+    render();
+
+    probe.onDocumentsChanged?.();
+    expect(probe.corpusStatsRefetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not call the team refetch while the team query has not started yet", () => {
+    probe.teamUninitialized = true;
+    render();
+
+    expect(() => probe.onDocumentsChanged?.()).not.toThrow();
+    expect(probe.teamRefetch).not.toHaveBeenCalled();
+  });
+});
+
+// The storage meter reads the control-plane team row, but every write to its
+// `current_resources_storage_size` comes from the knowledge-flow API — a
+// separate RTK Query instance whose tag invalidations cannot reach this cache
+// entry. Deleting a document or a library therefore left the meter frozen on
+// its mount-time figure until a manual page reload.
+describe("TeamResourcesPage storage meter freshness", () => {
+  it("refetches the team so the quota meter follows corpus add/delete", () => {
+    render();
+
+    probe.onDocumentsChanged?.();
+    expect(probe.teamRefetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("TeamResourcesPage stats toggle", () => {
+  function statsToggle(): HTMLButtonElement {
+    const button = Array.from(container.querySelectorAll("button")).find((b) => b.hasAttribute("aria-expanded"));
+    if (!button) throw new Error("stats toggle button not rendered");
+    return button;
+  }
+
+  it("hides the stats cards by default", () => {
+    render();
+    expect(container.querySelector('[data-testid="stats-cards"]')).toBeNull();
+    expect(statsToggle().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("shows the stats cards when the header button is toggled on, and back off when clicked again", () => {
+    render();
+
+    click(statsToggle());
+    expect(container.querySelector('[data-testid="stats-cards"]')).not.toBeNull();
+    expect(statsToggle().getAttribute("aria-expanded")).toBe("true");
+
+    click(statsToggle());
+    expect(container.querySelector('[data-testid="stats-cards"]')).toBeNull();
+  });
+
+  it("does not query the corpus stats until the cards are opened", () => {
+    // The endpoint walks every library the user can read and every document in
+    // each of them; running it on mount scanned the whole corpus for a panel
+    // nobody had opened.
+    render();
+    expect(probe.corpusStatsSkip).toBe(true);
+
+    click(statsToggle());
+    expect(probe.corpusStatsSkip).toBe(false);
+
+    click(statsToggle());
+    expect(probe.corpusStatsSkip).toBe(true);
+  });
+});
+
+describe("TeamResourcesPage health gate", () => {
+  function rerender() {
+    act(() => {
+      root.render(<TeamResourcesPage />);
+    });
+  }
+
+  it("blocks the page until the probe has answered once", () => {
+    probe.kfProbe = { isLoading: true, isFetching: true, isUninitialized: false, isError: false };
+    render();
+    expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
+  });
+
+  it("keeps the workspace mounted through a background revalidation", () => {
+    // The workspace owns the folder you are standing in, its loaded document
+    // pages and its resolved folder sizes. Sending the page back to a spinner
+    // on a refetch threw all of that away — and, with no subscribers left,
+    // dropped its queries' cache entries too, so everything reloaded.
+    render();
+    const panel = container.querySelector('[data-testid="panel-resources"]');
+    expect(panel).not.toBeNull();
+
+    probe.kfProbe = { isLoading: false, isFetching: true, isUninitialized: false, isError: false };
+    rerender();
+
+    // Same DOM node, not a fresh one: a remount would have replaced it.
+    expect(container.querySelector('[data-testid="panel-resources"]')).toBe(panel);
+  });
+
+  it("shows the service notice once a failed probe has settled", () => {
+    probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: true };
+    render();
+    expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
+  });
 });

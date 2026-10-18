@@ -29,11 +29,50 @@
   scrollbar-gutter: stable;
 }
 
+/* Tabs sit dead-center of the page; the period selector floats at the right
+ * edge (absolute) so it never pulls the tabs off that center. */
+.header {
+  display: flex;
+  position: relative;
+  justify-content: center;
+  align-items: center;
+}
+
+.periodSlot {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+/* "Accès rapide" tab: content centered horizontally and anchored to the top,
+ * pushed down from the tab bar by a comfortable top padding. */
+.quickAccessTab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-l);
+  padding-top: var(--spacing-4xl);
+}
+
 .headerText {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: var(--spacing-m);
+}
+
+@media (max-width: 900px) {
+  .cols {
+    grid-template-columns: 1fr;
+  }
 }
 
 .title {
@@ -48,25 +87,4 @@
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
-}
-
-.membership {
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-s);
-  padding: var(--spacing-m);
-  overflow-wrap: anywhere;
-}
-.membership h2 {
-  margin-top: 0;
-  font: var(--font-title-medium);
-}
-.membership dl {
-  margin: 0;
-}
-.membership dt {
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
-}
-.membership dd {
-  margin: 0 0 var(--spacing-xs);
 }

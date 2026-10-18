@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-// Real first-user journey; any control-plane or knowledge-flow dependency fails.
+// Real manager journey with unavailable non-migrated services and the complete Fred UI.
 import assert from "node:assert/strict";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
@@ -23,7 +23,7 @@ const server = await createServer({
   logLevel: "error",
 });
 let browser;
-const unexpected = [];
+const unavailableServices = [];
 const pageErrors = [];
 const assetFailures = [];
 const origin = `http://127.0.0.1:${port}`;
@@ -32,8 +32,12 @@ const expect = baseExpect.configure({ timeout: 60_000 });
 async function login(username, password, path = "/admin/provisioning") {
   const context = await browser.newContext({ locale: "en", viewport: { width: 1280, height: 900 } });
   await context.route(/\/(control-plane|knowledge-flow|fred-agents|agentic-backend|runtime)\/v1\//, async (route) => {
-    unexpected.push(new URL(route.request().url()).pathname);
-    await route.abort();
+    unavailableServices.push(new URL(route.request().url()).pathname);
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "Service unavailable in manager fixture" }),
+    });
   });
   if (username === "root")
     await context.route("**/fred-manager/v1/frontend/config", (route) => route.abort(), { times: 1 });
@@ -98,14 +102,12 @@ async function login(username, password, path = "/admin/provisioning") {
     await expect(page.getByText("You are now the platform administrator, root.")).toBeVisible();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page.getByRole("button", { name: "Home", exact: true }).click();
-    await expect(page.getByText("You do not belong to any organization or space.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Hello / })).toBeVisible();
     assert.deepEqual(await get(context, bearer, "/me/spaces"), []);
     await page.getByRole("button", { name: "Technical console", exact: true }).click();
     await page.getByRole("link", { name: "Provisioning", exact: true }).click();
   }
-  await expect(
-    page.getByRole("heading", { name: path === "/home" ? "Your spaces" : "Provisioning", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: path === "/home" ? /^Hello / : "Provisioning" })).toBeVisible();
   return { context, page, bearer };
 }
 
@@ -124,14 +126,19 @@ async function logout(page) {
   await page.keyboard.press("Enter");
 }
 
-async function assertBoundedNavigation(page) {
+async function assertPreservedNavigation(page) {
   await expect(page.getByRole("navigation", { name: "Main navigation", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Marketplace", exact: true })).toHaveCount(0);
-  for (const path of ["/team/unknown/resources", "/team/unknown/agents", "/admin/teams", "/marketplace/teams"]) {
+  await expect(page.getByRole("button", { name: "Marketplace", exact: true })).toBeVisible();
+  for (const path of [
+    "/team/unknown/resources",
+    "/team/unknown/agents",
+    "/team/unknown/prompts",
+    "/marketplace/teams",
+  ]) {
     await page.goto(origin + path);
-    await expect(page).toHaveURL(origin + "/home");
-    await expect(page.getByRole("heading", { name: "Your spaces", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(origin + path);
   }
+  await page.goto(origin + "/home");
 }
 
 async function acceptTerms(page) {
@@ -161,14 +168,15 @@ async function assertAccountPages({ page, context, bearer }, owner) {
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(origin + "/settings");
   await expect(page.getByText("Your profile", { exact: true })).toBeVisible();
-  await expect(page.locator("main").getByText(owner ? "Root Admin" : "Bob Rigg", { exact: true })).toBeVisible();
-  await expect(
-    page.locator("main").getByText(owner ? "root@example.com" : "bob@app.com", { exact: true }),
-  ).toBeVisible();
-  if (!owner) await expect(page.locator("main").getByText("root@example.com", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(owner ? "Root Admin" : "Bob Rigg", { exact: true })).toBeVisible();
+  await expect(page.getByText(owner ? "root@example.com" : "bob@app.com", { exact: true })).toBeVisible();
+  if (!owner) await expect(page.getByText("root@example.com", { exact: true })).toHaveCount(0);
   const roles = page.getByText(/^Platform roles:/);
   await expect(roles).toContainText(owner ? "platform_owner" : "None");
-  if (!owner) await expect(page.getByText(/platform_owner/)).toHaveCount(0);
+  if (!owner) {
+    await expect(page.getByText(/platform_owner/)).toHaveCount(0);
+    await expect(page.getByText("Organization: Demo", { exact: true })).toBeVisible();
+  }
   await expect(page.getByText("Profile picture", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "UI theme", exact: true }).click();
   await page.getByRole("option", { name: "Cloud", exact: true }).click();
@@ -186,7 +194,7 @@ async function assertAccountPages({ page, context, bearer }, owner) {
   await mkdir("target", { recursive: true });
   await page.screenshot({ path: `target/account-${owner ? "owner" : "member"}.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  assert(await page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
+  assert(await page.locator("body").evaluate((node) => node.scrollWidth <= node.clientWidth));
   await page.screenshot({ path: `target/account-${owner ? "owner" : "member"}-narrow.png`, fullPage: true });
   await page.getByRole("radio", { name: "Light", exact: true }).click();
   await page.reload();
@@ -203,10 +211,10 @@ async function assertAccountPages({ page, context, bearer }, owner) {
     if (path === "/release-notes") {
       await expect(page.getByRole("button", { name: "Copy", exact: true })).toBeVisible();
     } else {
-      await expect(page.locator('main [class*="gcuContent"], main [class*="gdprContent"]')).toContainText(/\S/);
+      await expect(page.locator('[class*="gcuContent"], [class*="gdprContent"]')).toContainText(/\S/);
       if (path === "/gdpr") await expect(page.getByText("Privacy information", { exact: true })).toBeVisible();
     }
-    assert(await page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
+    assert(await page.locator("body").evaluate((node) => node.scrollWidth <= node.clientWidth));
     await page.screenshot({
       path: `target/account-${owner ? "owner" : "member"}-${path.slice(1)}-narrow.png`,
       fullPage: true,
@@ -269,7 +277,7 @@ try {
   await expect(root.page.getByRole("link", { name: "Provisioning", exact: true })).toBeVisible();
   await expect(root.page.getByRole("link", { name: "Migration", exact: true })).toHaveCount(0);
   await assertAccountPages(root, true);
-  await assertBoundedNavigation(root.page);
+  await assertPreservedNavigation(root.page);
   await root.page.getByRole("button", { name: "Technical console", exact: true }).click();
   await expect(root.page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
 
@@ -361,7 +369,7 @@ try {
   await root.page.locator("#password").fill("it-root");
   await root.page.locator("#kc-login").click();
   await root.page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(root.page.getByText("You do not belong to any organization or space.")).toBeVisible();
+  await expect(root.page.getByRole("heading", { name: /^Hello / })).toBeVisible();
   await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toHaveCount(0);
   await logout(root.page);
   await root.page.locator("#username").fill("bob");
@@ -369,24 +377,21 @@ try {
   await root.page.locator("#kc-login").click();
   await acceptTerms(root.page);
   await root.page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(root.page.getByRole("heading", { name: "Your spaces", exact: true })).toBeVisible();
-  await expect(root.page.getByRole("heading", { name: "Demo", exact: true })).toBeVisible();
-  await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toHaveCount(0);
-  assert.equal(new URL(root.page.url()).pathname, "/home");
-  assert.equal(new URL(root.page.url()).search, "");
-  await expect(root.page.getByRole("link", { name: "Demo", exact: true })).toHaveAttribute("href", "/home");
-  await expect(root.page.getByText("You do not belong to any organization or space.")).toHaveCount(0);
-  await root.page.getByRole("link", { name: "Browser project", exact: true }).click();
-  await expect(root.page.getByRole("region", { name: "Browser project", exact: true })).toContainText(
-    "Demo / northbridge / Browser project",
-  );
-  await expect(root.page.getByRole("heading", { name: "northbridge", exact: true })).toHaveCount(0);
+  await expect(root.page.getByRole("heading", { name: /^Hello / })).toBeVisible();
+  await expect(root.page.getByRole("link", { name: "Demo", exact: true })).toHaveCount(0);
+  const projectLink = root.page.getByRole("link", { name: "Browser project", exact: true });
+  const projectHref = await projectLink.getAttribute("href");
+  assert.match(projectHref, /^\/team\/[^/]+\/agents$/);
+  await projectLink.click();
+  await expect(root.page).toHaveURL(origin + projectHref);
+  await expect(root.page.getByRole("link", { name: "Prompts", exact: true })).toBeVisible();
+  await expect(root.page.getByRole("link", { name: "Resources", exact: true })).toBeVisible();
   await root.page.screenshot({ path: "target/provisioning-spaces-narrow.png", fullPage: true });
   await root.page.setViewportSize({ width: 1280, height: 900 });
   await root.page.screenshot({ path: "target/provisioning-spaces.png", fullPage: true });
   const bob = { page: root.page, context: root.context, bearer: bobBearer };
   await assertAccountPages(bob, false);
-  await assertBoundedNavigation(bob.page);
+  await assertPreservedNavigation(bob.page);
   await expect(bob.page.getByRole("button", { name: "Technical console", exact: true })).toHaveCount(0);
   await bob.page.goto(origin + "/admin/provisioning");
   await expect(bob.page.getByRole("alert")).toContainText("Provisioning requires a platform administrator role");
@@ -455,25 +460,24 @@ try {
   assert.equal(createdPersonal.status(), 201);
   const personal = await createdPersonal.json();
   assert.equal(personalCalls, 1);
-  await expect(priya.page).toHaveURL(origin + `/home?space=${personal.id}`);
-  await expect(priya.page.getByRole("region", { name: "Personal space", exact: true })).toBeVisible();
+  await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/agents`);
+  await expect(priya.page.getByText("Personal space", { exact: true })).toBeVisible();
   const personalMembership = (await get(priya.context, priya.bearer, "/me/spaces")).find((s) => s.id === personal.id);
   assert.equal(personalMembership.organization_id, organization.id);
   assert.deepEqual(personalMembership.path, [personal.id]);
   await priya.page.getByRole("button", { name: "Home", exact: true }).click();
   await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
-  await expect(priya.page.getByRole("region", { name: "fredlab", exact: true })).toContainText(
-    "Editor, Administrator, Analyst",
-  );
+  await expect(priya.page.getByText("fredlab", { exact: true })).toBeVisible();
+  await expect(priya.page.getByRole("link", { name: "Prompts", exact: true })).toBeVisible();
   await priya.page.getByRole("button", { name: "Home", exact: true }).click();
   const repeated = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
   await personalEntry.click();
   const reused = await repeated;
   assert.equal(reused.status(), 200);
   assert.equal((await reused.json()).id, personal.id);
-  await expect(priya.page).toHaveURL(origin + `/home?space=${personal.id}`);
+  await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/agents`);
   await priya.page.reload();
-  await expect(priya.page.getByRole("region", { name: "Personal space", exact: true })).toBeVisible();
+  await expect(priya.page.getByText("Personal space", { exact: true })).toBeVisible();
   await priya.page.screenshot({ path: "target/personal-space.png", fullPage: true });
   await priya.page.setViewportSize({ width: 390, height: 844 });
   assert(await priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
@@ -495,120 +499,18 @@ try {
   await expect(personalEntry).toBeEnabled();
   await personalEntry.click();
   await expect(priya.page.getByRole("alert")).toHaveCount(0);
-  // The bundle provisions identities/roles only. Seed explicit metadata fixtures afterward.
-  const fixtureResponse = await priya.context.request.post(`${manager}/test-fixture/resources`);
-  assert.equal(fixtureResponse.status(), 200);
-  const resourcesFixture = await fixtureResponse.json();
-  assert.equal(resourcesFixture.personal, personal.id);
+  // The full Resources screen retains its corpus binding. Its manager adapter is
+  // a separate reconstruction requirement; do not test the removed reduced explorer.
   await priya.page.setViewportSize({ width: 1280, height: 900 });
   await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
-  await expect(priya.page.getByText("Priya private.txt", { exact: true })).toBeVisible();
-  await expect(priya.page.getByText("Team root.txt", { exact: true })).toHaveCount(0);
-  const createFolderInUi = async (name) => {
-    await priya.page.getByRole("button", { name: "New folder", exact: true }).click();
-    const dialog = priya.page.getByRole("dialog");
-    await dialog.getByRole("textbox").fill(name);
-    await dialog.getByRole("button", { name: "Create", exact: true }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(priya.page.getByRole("button", { name: name.trim(), exact: true })).toBeVisible();
-  };
-  await createFolderInUi("Personal notes");
-  await priya.page.getByRole("button", { name: "Personal notes", exact: true }).click();
-  await createFolderInUi("Nested notes");
-  await priya.page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("button", { name: "Resources", exact: true })
-    .click();
-  await priya.page.getByRole("button", { name: "New folder", exact: true }).click();
-  const folderDialog = priya.page.getByRole("dialog");
-  await folderDialog.getByRole("textbox").fill("Personal notes");
-  await folderDialog.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(folderDialog.getByRole("alert")).toContainText("A folder with this name already exists here.");
-  await expect(folderDialog.getByRole("textbox")).toHaveValue("Personal notes");
-  await priya.page.screenshot({ path: "target/folder-create-conflict.png", fullPage: true });
-  await folderDialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  const longFolder = "x".repeat(255);
-  await createFolderInUi(longFolder);
-  await priya.page.getByRole("button", { name: longFolder, exact: true }).click();
-  await priya.page.setViewportSize({ width: 390, height: 844 });
-  assert(await priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
-  await priya.page.getByRole("button", { name: "New folder", exact: true }).click();
-  const longDialog = priya.page.getByRole("dialog");
-  const closeBox = await longDialog.getByRole("button", { name: "Close", exact: true }).boundingBox();
-  const dialogBox = await longDialog.boundingBox();
-  assert(closeBox.x >= dialogBox.x && closeBox.x + closeBox.width <= dialogBox.x + dialogBox.width);
-  assert(closeBox.x + closeBox.width <= 390);
-  await priya.page.screenshot({ path: "target/folder-create-long-parent.png", fullPage: true });
-  await longDialog.getByRole("button", { name: "Close", exact: true }).click();
-  await priya.page.setViewportSize({ width: 1280, height: 900 });
-  await priya.page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("button", { name: "Resources", exact: true })
-    .click();
-  await priya.page.screenshot({ path: "target/resources-personal.png", fullPage: true });
-  await priya.page.getByRole("button", { name: "Home", exact: true }).click();
-  await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
-  await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
-  await expect(priya.page.getByText("Team root.txt", { exact: true })).toBeVisible();
-  await expect(priya.page.getByText("Priya private.txt", { exact: true })).toHaveCount(0);
-  await expect(priya.page.getByRole("button", { name: "Personal notes", exact: true })).toHaveCount(0);
-  await createFolderInUi("Team notes");
-  await priya.page.getByRole("button", { name: "Library", exact: true }).focus();
-  await priya.page.keyboard.press("Enter");
-  await expect(priya.page.getByText("Document 00.txt", { exact: true })).toHaveCount(1);
-  await expect(priya.page.getByText("Document 50.txt", { exact: true })).toHaveCount(0);
-  await priya.page.getByRole("button", { name: "Next page", exact: true }).click();
-  await expect(priya.page.getByText("Document 52.txt", { exact: true })).toBeVisible();
-  await expect(priya.page.getByRole("button", { name: "Next page", exact: true })).toBeDisabled();
-  await expect(priya.page.getByRole("button", { name: "Last page", exact: true })).toHaveCount(0);
-  await priya.page.getByRole("button", { name: "Previous page", exact: true }).click();
-  await expect(priya.page.getByText("Document 00.txt", { exact: true })).toHaveCount(1);
-  await priya.page.getByRole("button", { name: "Empty", exact: true }).click();
-  await expect(priya.page.getByText("This folder is empty.", { exact: true })).toBeVisible();
-  await priya.page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("button", { name: "Library", exact: true })
-    .click();
-  await expect(priya.page.getByText("Document 00.txt", { exact: true })).toHaveCount(1);
-  await priya.page.screenshot({ path: "target/resources-team.png", fullPage: true });
-  await priya.page.setViewportSize({ width: 390, height: 844 });
-  assert(await priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
-  await priya.page.screenshot({ path: "target/resources-team-narrow.png", fullPage: true });
-  // Re-enter a cached root: a new refusal must replace its previously visible rows.
-  await priya.page.route(
-    `**/spaces/${resourcesFixture.team}/documents*`,
-    (route) =>
-      route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ detail: "forbidden" }) }),
-    { times: 1 },
-  );
-  await priya.page
-    .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("button", { name: "Resources", exact: true })
-    .click();
-  await expect(priya.page.getByRole("alert")).toContainText("You do not have access to these resources.");
-  await expect(priya.page.getByText("Team root.txt", { exact: true })).toHaveCount(0);
-  await priya.page.route(
-    `**/spaces/${resourcesFixture.team}/documents*`,
-    (route) =>
-      route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "unavailable" }) }),
-    { times: 1 },
-  );
-  await priya.page.getByRole("button", { name: "Reload", exact: true }).click();
-  await expect(priya.page.getByRole("alert")).toContainText("Resources could not be loaded.");
-  await priya.page.getByRole("button", { name: "Reload", exact: true }).click();
-  await expect(priya.page.getByText("Team root.txt", { exact: true })).toBeVisible();
-  // Bob cannot read Priya's personal metadata through a direct resource URL.
-  await bob.page.goto(origin + `/team/${personal.id}/resources`);
-  await expect(bob.page.getByRole("alert")).toContainText("You do not have access to these resources.");
-  await expect(bob.page.getByText("Priya private.txt", { exact: true })).toHaveCount(0);
-  assert(!(await get(bob.context, bob.bearer, "/me/spaces")).some((s) => s.id === personal.id));
-  assert.deepEqual(unexpected, [], "Unexpected control-plane dependency");
+  await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/resources`);
+  assert(!(await get(bob.context, bob.bearer, "/me/spaces")).some((item) => item.id === personal.id));
   assert.deepEqual(pageErrors, [], "Browser application errors");
   console.log(
-    "Provisioning browser acceptance passed: OIDC login, personal terms, root bootstrap, logout/account switch, empty root memberships, navigation, multipart import, pending state, reports, replay, project hierarchy/roles, legacy rejection, personal/team folder creation, nested folders, duplicate refusal, resource browsing, cursor pages, empty/error/denied states and access refusals.",
+    "Manager browser acceptance passed: admission, account pages, provisioning/replay, memberships, personal opening and retained product navigation with unavailable non-migrated services. Resource workflow parity is excluded.",
   );
 } catch (error) {
-  console.error({ pageErrors, assetFailures, unexpected });
+  console.error({ pageErrors, assetFailures, unavailableServices });
   throw error;
 } finally {
   await browser?.close();

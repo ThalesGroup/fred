@@ -23,8 +23,10 @@ import type { IconType } from "@shared/utils/Type.ts";
 // precedence than the class) is what shrinks just the icon, not the hit area.
 const ICON_STYLE = { "--icon-size": "1.25rem" } as CSSProperties;
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { canEnterAdminSection } from "@core/guards/Protected";
 
 interface MainNavEntry {
   key: string;
@@ -34,11 +36,23 @@ interface MainNavEntry {
   onClick: () => void;
 }
 
+/**
+ * The application's primary navigation: a top-aligned column of icon buttons on
+ * the far-left rail. Each entry swaps both the main nav panel (mainNavPanel) and
+ * the page — this replaces the former team-switcher rail (the team list now
+ * lives in the Home panel). Always mounted, so it also keeps the frontend
+ * bootstrap query subscribed across routes (via `useUserCapabilities`), the way
+ * the old rail did.
+ */
 export default function MainNavBar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const capabilities = useUserCapabilities();
   const manager = useManagerPlatformAdmin();
+  // Basename-aware href — the Help Center opens in its own tab (HELP-01).
+  const helpCenterHref = useHref("/help");
+
   const entries: MainNavEntry[] = [
     {
       key: "home",
@@ -49,9 +63,27 @@ export default function MainNavBar() {
       active: pathname.startsWith("/home"),
       onClick: () => navigate("/home"),
     },
+    {
+      key: "marketplace",
+      icon: "storefront",
+      label: t("rework.mainNav.marketplace"),
+      active: pathname.startsWith("/marketplace"),
+      onClick: () => navigate("/marketplace/teams"),
+    },
+    {
+      key: "help",
+      icon: "help",
+      label: t("rework.mainNav.helpCenter"),
+      active: false,
+      // Same-origin page: no noopener, so the browser copies this tab's OIDC session.
+      onClick: () => window.open(helpCenterHref, "_blank"),
+    },
   ];
 
-  if (manager.isAdmin) {
+  // Any admin-tier role opens the console — gating the shell on canAdmin
+  // alone would leave a delegated role holder with no way to reach the one
+  // page they own.
+  if (manager.isAdmin || canEnterAdminSection(capabilities)) {
     entries.push({
       key: "admin",
       icon: "admin_panel_settings",

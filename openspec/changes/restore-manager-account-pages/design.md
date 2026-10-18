@@ -33,3 +33,33 @@ The original `UserSettingsPage` remains in place with its shared controls and SC
 No schema or identity migration. After implementation and manual feature validation, run focused component/router checks and the existing isolated provisioning browser recipe, then the applicable quality/review checks. Document the actual implemented path in arc42 chapters 02, A1 and 09 and the frontend UX guidance. Add the ordinary no-operator-action migration note required for the eventual PR.
 
 Rebuild/deploy the branch's frontend with the existing factory workflow; manager and imported data retain their state. A frontend rollback removes the restored navigation without changing consent, grants or imports. Keep commits local on `chore/rust-rebac`; pushing requires the developer's explicit agreement.
+
+## UI parity correction requested during the Priya recipe
+
+The developer's explicit correction supersedes the earlier bounded-shell decision:
+use the complete UI from `origin/swift` at `13029601f` as the restoration reference.
+Restore existing components, styles and route topology, including standalone
+account/legal pages. Keep manager admission around these routes, retaining the
+already accepted photo exclusion. Restore ordinary background consumers after
+admission. Non-migrated control-plane, knowledge-flow and runtime calls remain
+unchanged and may fail normally when those services are unavailable; no forwarding,
+fallback or invented API success is added.
+
+Use manager memberships only for the already migrated team/personal navigation,
+and show organization name only in Profile. Reuse the existing team list's search,
+sort, avatars and role text; remove the generic kind/hierarchy/detail presentation.
+Retain the manager personal-opening operation and navigate to the ordinary agents
+route using its UUID. Do not infer permissions from display roles or fabricate a
+Python bootstrap payload. Non-migrated permission-dependent UI keeps its original
+backend-driven conditions.
+
+Restore the original Resources page and DocumentWorkspace instead of maintaining
+the reduced manager-specific explorer. Its richer library/document contract remains
+an explicit binding gap; manager folder/document APIs themselves stay unchanged.
+Reconnecting that UI must preserve its controls and must not substitute a reduced
+screen. This correction does not claim resource workflow parity.
+
+Verification is focused on route retention, original Home widgets and navigation,
+manager personal opening, profile-only organization display, and TypeScript checks.
+The broad campaign remains deferred by the developer. Review the exact patch
+independently and retain the deferred manual/browser evidence in tasks.

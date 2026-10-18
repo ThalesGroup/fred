@@ -4803,9 +4803,10 @@ is stored; a failed read is shown explicitly and leaves that value unchanged.
 ### `ProvisioningPage` (`/admin/provisioning`, #3092)
 
 On `chore/rust-rebac`, the first-user journey uses the existing `App`, `MainLayout`,
-sidebar, Home and account menu. Home displays manager memberships and roles;
-Provisioning appears in the existing administration console. Unsupported navigation
-and its route consumers are unmounted. The account menu remains usable before
+sidebar, Home and account menu. Home retains its original dashboard; team navigation
+uses manager memberships while organization information appears only in Profile.
+Provisioning appears in the existing administration console. Product routes, menus,
+controls and styles are preserved; non-migrated calls retain their normal errors. The account menu remains usable before
 admission, including keyboard logout; no separate manager shell is mounted.
 
 **Status:** `Functional`
@@ -4831,8 +4832,8 @@ The profile has no photo editor or Python bootstrap subscription.
 The existing pages at `/gcu`, `/gdpr` and `/release-notes` retain their content
 loaders and return controls. CGU consultation uses the accepted presentation,
 without sending an acceptance mutation. Direct URLs retain consent/bootstrap
-protection. Release notes read shipped markdown; published announcements are
-not mounted. Preferences retain their existing browser persistence.
+protection and their standalone layout. Release notes read shipped markdown;
+the original announcement consumers keep their existing service calls. Preferences retain their existing browser persistence.
 
 ### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
 

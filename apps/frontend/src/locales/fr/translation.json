@@ -3265,6 +3265,7 @@
     },
     "userSettings": {
       "privacyTitle": "Protection des données personnelles",
+      "organization": "Organisation : {{name}}",
       "platformRoles": "Rôles plateforme : {{roles}}",
       "noPlatformRoles": "Aucun",
       "accessGcu": "Accéder aux CGU",

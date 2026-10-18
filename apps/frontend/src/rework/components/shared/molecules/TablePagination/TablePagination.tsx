@@ -39,13 +39,10 @@ const defaultLabels: TablePaginationLabels = {
 
 export interface TablePaginationProps {
   labels?: Partial<TablePaginationLabels>;
-  totalItems?: number;
+  totalItems: number;
   /** 0-based. */
   currentPage: number;
-  pageCount?: number;
-  /** Cursor mode has no known total or last page. */
-  hasNext?: boolean;
-  currentPageLabel?: string;
+  pageCount: number;
   rowsPerPage: number;
   rowsPerPageOptions: SelectOption<number>[];
   /** Omit to keep rowsPerPage fixed and hide the selector. */
@@ -53,7 +50,7 @@ export interface TablePaginationProps {
   onFirst: () => void;
   onPrev: () => void;
   onNext: () => void;
-  onLast?: () => void;
+  onLast: () => void;
 }
 
 /**
@@ -69,8 +66,6 @@ export default function TablePagination({
   totalItems,
   currentPage,
   pageCount,
-  hasNext,
-  currentPageLabel,
   rowsPerPage,
   rowsPerPageOptions,
   onRowsPerPageChange,
@@ -84,7 +79,7 @@ export default function TablePagination({
   return (
     <div className={styles["datatable-footer"]}>
       <div className={styles["datatable-footer-left"]}>
-        <span className={styles["footer-label"]}>{totalItems === undefined ? null : text.totalItems(totalItems)}</span>
+        <span className={styles["footer-label"]}>{text.totalItems(totalItems)}</span>
       </div>
       <div className={styles["datatable-footer-right"]}>
         {onRowsPerPageChange && (
@@ -122,7 +117,7 @@ export default function TablePagination({
             onClick={onPrev}
           />
           <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
-            {pageCount === undefined ? currentPageLabel : text.pageNumber(currentPage + 1, pageCount)}
+            {text.pageNumber(currentPage + 1, pageCount)}
           </span>
           <IconButton
             type="button"
@@ -130,20 +125,18 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "chevron_right" }}
             aria-label={text.next}
-            disabled={pageCount === undefined ? !hasNext : currentPage >= pageCount - 1}
+            disabled={currentPage >= pageCount - 1}
             onClick={onNext}
           />
-          {pageCount !== undefined && onLast && (
-            <IconButton
-              type="button"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "last_page" }}
-              aria-label={text.last}
-              disabled={pageCount === undefined ? !hasNext : currentPage >= pageCount - 1}
-              onClick={onLast}
-            />
-          )}
+          <IconButton
+            type="button"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "last_page" }}
+            aria-label={text.last}
+            disabled={currentPage >= pageCount - 1}
+            onClick={onLast}
+          />
         </div>
       </div>
     </div>

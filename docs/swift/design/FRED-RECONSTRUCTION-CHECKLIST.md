@@ -31,9 +31,14 @@ to reconcile with the agreed model, not a reason to copy implicit enrollment.
 | Communications and support | Announcements/patch-note acknowledgment, language, branding, help/contact/support, user settings | Control-plane `announcements/`, frontend help/settings/legal routes | Intended audience and per-person acknowledgments without granting product access |
 | Privacy, audit and operations | Personal data export/erasure/retention, role and consent audit, health/metrics, backups/restore, schema migration, deployment/CI, secret rotation | Fred security/logging contracts, deployment chart/factory, GDPR and administration pages | Auditable effects, restore with consistent authority, rotation/restart, no leaked secrets |
 
+The complete existing UI is the reconstruction reference, as required by
+[the branch instructions](../../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac).
+Keep its pages, routes, navigation, controls and styles while changing API/data
+bindings. Record unavailable manager contracts as backend gaps; do not remove or
+replace their UI. Organization information belongs only in the existing profile.
+UI presence does not prove that the corresponding Rust feature is complete:
+validate admission, authorization, success and error behavior for each lot.
 The content-administrator self-assignment rule requires an explicit decision before
-an editing UI relies on it. Likewise, a visible navigation entry requires its
-admission, authorization, empty/error states and complete automated acceptance;
-it is not enabled merely because an endpoint exists. Measure OpenFGA query types,
+an editing UI relies on it. Measure OpenFGA query types,
 counts, pagination and driving cardinalities for each affected journey, as required
 by [the branch instructions](../../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac).

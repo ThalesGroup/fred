@@ -22,7 +22,6 @@
   z-index: 1300;
   inset: 0;
   background-color: var(--scrim);
-  color: var(--on-surface);
 }
 
 .dialog {
@@ -49,14 +48,6 @@
   gap: var(--spacing-s);
 }
 
-.header > div {
-  min-width: 0;
-}
-
-.header > button {
-  flex-shrink: 0;
-}
-
 .title {
   margin: 0;
   color: var(--on-surface);
@@ -75,7 +66,6 @@
   padding: 0 var(--spacing-2xs);
   color: var(--on-surface);
   font-family: monospace;
-  overflow-wrap: anywhere;
 }
 
 .inlineError {

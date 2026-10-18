@@ -21,6 +21,9 @@ import { useFrontendProperties } from "../../../../../hooks/useFrontendPropertie
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
+import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
+import { usePatchNoteHistory } from "../../../../features/announcements/usePatchNoteHistory";
+import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 
 /** The account menu remains available before admission and never queries business data. */
@@ -29,6 +32,9 @@ export default function UserProfile({ admitted = false }: { admitted?: boolean }
   const navigate = useNavigate();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
+  const { bootstrap } = useFrontendBootstrap(!admitted);
+  const { notes: patchNotes } = usePatchNoteHistory(!admitted);
+  const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const logoutRef = useRef<HTMLButtonElement>(null);
@@ -79,6 +85,19 @@ export default function UserProfile({ admitted = false }: { admitted?: boolean }
                         navigate("/settings");
                       }}
                     />,
+                    ...(patchNotes.length > 0
+                      ? [
+                          <MenuPopoverItem
+                            key="whatsNew"
+                            icon={{ category: "outlined", type: "new_releases" }}
+                            label={t("rework.profileMenu.whatsNew")}
+                            onClick={() => {
+                              setOpen(false);
+                              setReadingPatchNotes(true);
+                            }}
+                          />,
+                        ]
+                      : []),
                   ]
                 : [],
               admitted && contactSupportLink
@@ -119,9 +138,16 @@ export default function UserProfile({ admitted = false }: { admitted?: boolean }
           aria-haspopup="menu"
           aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
         >
-          <UserAvatar name={userFullName} size="small" />
+          <UserAvatar
+            name={userFullName}
+            size="small"
+            imageUrl={admitted ? bootstrap?.current_user?.avatar_image_url : undefined}
+          />
         </button>
       </Tooltip>
+      {admitted && (
+        <PatchNoteDialog open={readingPatchNotes} notes={patchNotes} onClose={() => setReadingPatchNotes(false)} />
+      )}
     </div>
   );
 }

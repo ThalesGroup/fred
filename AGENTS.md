@@ -123,7 +123,19 @@ arc42 conformity. It does not claim full-Fred or full-PR readiness. The generic
 branch review below remains applicable to a full PR readiness request.
 
 Rebuild Fred's Python behavior in Rust one complete feature at a time, using
-the organization/team/project model. For each feature, inventory the existing
+the organization/team/project model. Preserve the complete existing Fred business UI as
+a reconstruction invariant: reuse the same pages, routes, navigation, controls
+and styles, changing data/API bindings rather than replacing or removing UI to
+match the currently implemented Rust surface. Organization information appears
+only in the existing profile page unless the developer explicitly approves a
+different presentation. A missing manager API is a backend reconstruction gap,
+not authorization to hide its UI. The unchanged business UI is the reference for manual
+revalidation. Platform governance is a separate, explicitly requested scope:
+organization listing/creation and designation of the organization owner/admin,
+with account and provisioning access. The platform area must not expose personal
+spaces or business resources, even when its user also holds organization/team
+roles. Access to that person's organization belongs to a separate entry point.
+For each feature, inventory the existing
 roles, permissions, edge cases and configuration, logging and security
 conventions before implementing it. Preserve their meaning in the new model;
 do not silently drop a supported role, accept an ineffective grant, weaken a

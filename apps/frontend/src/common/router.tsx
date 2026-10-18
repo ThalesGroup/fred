@@ -1,43 +1,448 @@
-// Copyright Thales 2026
-// SPDX-License-Identifier: Apache-2.0
+import PlatformAccessPage from "@components/pages/admin/PlatformAccessPage/PlatformAccessPage";
+import PlatformAccessDeniedPage from "@components/pages/PlatformAccessPage/PlatformAccessDeniedPage";
+import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollmentPage";
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-import { createBrowserRouter, Navigate, type RouteObject } from "react-router-dom";
-import GcuGuard from "@core/guards/GcuGuard";
-import BootstrapGuard from "@core/guards/BootstrapGuard";
-import MainLayout from "@shared/layouts/MainLayout/MainLayout";
-import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage";
-import HomePage from "@components/pages/HomePage/HomePage";
-import ProvisioningPage from "@components/pages/admin/ProvisioningPage/ProvisioningPage";
-import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage";
-import { GcuPageContent } from "@components/pages/GcuPage/GcuPage";
-import GdprPage from "@components/pages/GdprPage/GdprPage";
-import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage";
+import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
+import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
+import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
+import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
+import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
+import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
+import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
+import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
+import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
+import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
+import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
+import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
+import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
+import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
+import { GcuPageContent } from "@components/pages/GcuPage/GcuPage.tsx";
+import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
+import HomePage from "@components/pages/HomePage/HomePage.tsx";
+import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
+import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
+import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
+import MarketplaceAgents from "@components/pages/marketplace/MarketplaceAgents/MarketplaceAgents.tsx";
+import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
+import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
+import KnowledgeBaseDocumentsPage from "@components/pages/TeamKnowledgeBasesPage/KnowledgeBaseDocumentsPage.tsx";
+import TeamKnowledgeBasesPage from "@components/pages/TeamKnowledgeBasesPage/TeamKnowledgeBasesPage.tsx";
+import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
+import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
+import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
+import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
+import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
+import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
+import TeamApplicationHostPage from "@components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx";
+import TeamApplicationsPage from "@components/pages/TeamApplicationsPage/TeamApplicationsPage.tsx";
+import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
+import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
+import React, { lazy, Suspense } from "react";
+import { useTranslation } from "react-i18next";
+import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet } from "react-router-dom";
+import LoadingWithProgress from "../components/LoadingWithProgress";
+import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
+import { isProtectedAllowed, Protected, type ProtectedRequirement } from "@core/guards/Protected";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { PageError } from "@components/pages/PageError/PageError.tsx";
+import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
 import { getConfig } from "./config";
 
-// Only implemented destinations mount; hidden links alone would leave legacy calls reachable.
-export const routes: RouteObject[] = [
+import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import GcuGuard from "@core/guards/GcuGuard";
+import BootstrapGuard from "@core/guards/BootstrapGuard";
+import ProvisioningPage from "@components/pages/admin/ProvisioningPage/ProvisioningPage";
+import AnnouncementStack from "../rework/features/announcements/AnnouncementStack";
+import PatchNoteGate from "../rework/features/announcements/PatchNoteGate";
+import appStyles from "../app/App.module.css";
+
+const basename = getConfig().frontend_basename;
+
+function AdmittedContent() {
+  return (
+    <GcuGuard>
+      <BootstrapGuard>
+        <div className={appStyles.appContent}>
+          <AnnouncementStack />
+          <div className={appStyles.routedContent}>
+            <PatchNoteGate />
+            <Outlet />
+          </div>
+        </div>
+      </BootstrapGuard>
+    </GcuGuard>
+  );
+}
+
+// Remounts cleanly on every agent change — prevents stale hook state leaking across agents.
+const ManagedChatPageRoute = () => {
+  const { agentInstanceId } = useParams<{ agentInstanceId: string }>();
+  return <ManagedChatPage key={agentInstanceId} />;
+};
+
+// Bare `/admin` has no page of its own — land on the first page the caller can
+// actually see. A hardcoded redirect would bounce every delegated role holder
+// to `/unauthorized` before they ever reach the one page they own. Ordered:
+// the admin lands on teams, exactly as before.
+const ADMIN_LANDING: [ProtectedRequirement, string][] = [
+  ["teams", "/admin/teams"],
+  ["features", "/admin/features"],
+  ["platformPrompt", "/admin/platform-prompt"],
+  ["observer", "/admin/analytics"],
+];
+
+const AdminIndexRoute = () => {
+  const { isLoading, ...capabilities } = useUserCapabilities();
+  const manager = useManagerPlatformAdmin();
+  if (manager.isAdmin) return <Navigate to="/admin/provisioning" replace />;
+  if (isLoading || manager.isLoading) return null;
+  const landing = ADMIN_LANDING.find(([requires]) => isProtectedAllowed(requires, capabilities));
+  return <Navigate to={landing?.[1] ?? "/unauthorized"} replace />;
+};
+
+const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
+const LibraryTreePlayground = lazy(() => import("@components/pages/LibraryTreePlayground/LibraryTreePlayground.tsx"));
+// Lazy: the Help Center chunk carries its whole markdown corpus (HELP-01).
+const HelpCenterPage = lazy(() => import("@components/pages/HelpCenterPage/HelpCenterPage.tsx"));
+
+// Bare `/help` picks the content language from the app language, then the
+// page itself redirects to the first section.
+const HelpIndexRoute = () => {
+  const { i18n } = useTranslation();
+  const lang = i18n.language?.toLowerCase().startsWith("en") ? "en" : "fr";
+  return <Navigate to={`/help/${lang}`} replace />;
+};
+
+const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
+  <Suspense fallback={<LoadingWithProgress />}>{children}</Suspense>
+);
+
+const applicationRoutes: RouteObject[] = [
+  { path: "/platform-access-denied", element: <PlatformAccessDeniedPage /> },
+  { path: "/join/:token", element: <FreeEnrollmentPage /> },
   {
     path: "/",
-    element: (
-      <GcuGuard>
-        <BootstrapGuard>
-          <MainLayout />
-        </BootstrapGuard>
-      </GcuGuard>
-    ),
+    element: <MainLayout />,
     children: [
-      { index: true, element: <Navigate to="/home" replace /> },
-      { path: "home", element: <HomePage /> },
-      { path: "settings", element: <UserSettingsPage /> },
-      { path: "gcu", element: <GcuPageContent accepted /> },
-      { path: "gdpr", element: <GdprPage /> },
-      { path: "release-notes", element: <ReleaseNotesPage /> },
-      { path: "team/:teamId/resources", element: <TeamResourcesPage /> },
-      { path: "admin", element: <Navigate to="/admin/provisioning" replace /> },
-      { path: "admin/provisioning", element: <ProvisioningPage /> },
-      { path: "*", element: <Navigate to="/home" replace /> },
-    ],
+      {
+        // Bare `/` lands on the Home dashboard (#2298). The team switcher lives
+        // in the Home nav panel; the personal-space agents page is reached from
+        // there rather than being the app's landing route.
+        index: true,
+        element: <Navigate to="/home" replace />,
+      },
+      {
+        // Landing behind the mainNavBar Home entry (#2298). The team switcher
+        // renders in the Home nav panel (Sidebar HOME mode); this is the
+        // content-area placeholder.
+        path: "home",
+        element: <HomePage />,
+      },
+      {
+        path: "team/:teamId/agents",
+        element: <TeamAgentsPage />,
+      },
+      {
+        path: "team/:teamId/managed-chat/:agentInstanceId",
+        element: <ManagedChatPageRoute />,
+      },
+      {
+        path: "team/:teamId/prompts",
+        element: <PromptsPage />,
+      },
+      {
+        path: "team/:teamId/resources",
+        element: <TeamResourcesPage />,
+      },
+      {
+        path: "team/:teamId/knowledge-bases",
+        element: <TeamKnowledgeBasesPage />,
+      },
+      {
+        path: "team/:teamId/knowledge-bases/:instanceId",
+        element: <KnowledgeBaseDocumentsPage />,
+      },
+      {
+        path: "team/:teamId/wiki",
+        element: <TeamWikiPage />,
+      },
+      {
+        // Same page: the slug selects which article is open, so a wiki page is
+        // deep-linkable and the browser's back button walks the pages.
+        path: "team/:teamId/wiki/:slug",
+        element: <TeamWikiPage />,
+      },
+      {
+        path: "team/:teamId/apps",
+        element: (
+          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
+            <TeamApplicationsPage />
+          </FrontendFeatureGate>
+        ),
+      },
+      {
+        // Every deeper segment belongs to the selected build-time application.
+        // The host resolves the team catalog before touching its local loader.
+        path: "team/:teamId/apps/:appId/*",
+        element: (
+          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
+            <TeamApplicationHostPage />
+          </FrontendFeatureGate>
+        ),
+      },
+      {
+        path: "team/:teamId/usage",
+        element: <TeamUsagePage />,
+      },
+      {
+        // Team settings render in the main content area while the sidebar shell
+        // (coloured team banner + dimmed team rail) stays mounted. Bare
+        // `/settings` lands on the members section.
+        path: "team/:teamId/settings",
+        element: <Navigate to="members" replace />,
+      },
+      {
+        path: "team/:teamId/settings/:section",
+        element: <TeamSettingsPage />,
+      },
+      {
+        // Bare /team/:teamId lands on the agents page; the legacy KnowledgePage
+        // (old team document library) was superseded by the Resources/Files page.
+        path: "team/:teamId",
+        element: <Navigate to="agents" replace />,
+      },
+      {
+        path: "marketplace/teams",
+        element: <MarketplaceTeams />,
+      },
+      {
+        path: "marketplace/prompts",
+        element: <MarketplacePrompts />,
+      },
+      {
+        path: "marketplace/agents",
+        element: <MarketplaceAgents />,
+      },
+      {
+        path: "admin",
+        element: <AdminIndexRoute />,
+      },
+      {
+        path: "admin/provisioning",
+        element: <ProvisioningPage />,
+      },
+      {
+        // Platform-wide platform prompt: the first block of every agent's
+        // system prompt. Gated on `can_edit_platform_prompt`, the narrow
+        // relation the backend routes enforce.
+        path: "admin/platform-prompt",
+        element: (
+          <Protected requires="platformPrompt">
+            <PlatformPromptPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/teams",
+        element: (
+          <Protected requires="teams">
+            <AdminTeamsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform roles (PLATFORM-ADMIN-DELEGATION-RFC.md §3.7, #2405). Gated
+        // on the admin role like the backend's `can_administer_users`; the
+        // stricter bootstrap-root-only rules on the platform_admin relation
+        // are enforced server-side and only mirrored in the page's UI.
+        path: "admin/platform-access",
+        element: (
+          <Protected requires="admin">
+            <PlatformAccessPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/platform-roles",
+        element: (
+          <Protected requires="admin">
+            <PlatformRolesPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/tasks",
+        element: (
+          <Protected requires="admin">
+            <TasksPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/analytics",
+        element: (
+          <Protected requires="observer">
+            <AnalyticsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform features dashboard — capabilities, agent templates and
+        // models. Gated on `can_manage_capabilities`, the same narrow relation
+        // the backend enforces on the enablement endpoints.
+        path: "admin/features",
+        element: (
+          <Protected requires="features">
+            <FeaturesPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform announcements: the banners every authenticated user sees at
+        // the top of the app. Full platform-admin gate, matching the backend's
+        // `can_manage_platform` on the admin routes.
+        path: "admin/annonces",
+        element: (
+          <Protected requires="admin">
+            <AnnouncementsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform UI theme settings; same platform-admin gate as the backend's
+        // `can_manage_platform` on /admin/platform/ui-settings.
+        path: "admin/interface",
+        element: (
+          <Protected requires="admin">
+            <UiSettingsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Agents marketplace settings; same platform-admin gate as the backend's
+        // `can_manage_platform` on /admin/marketplace-settings.
+        path: "admin/marketplaces",
+        element: (
+          <Protected requires="admin">
+            <MarketplacesPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/self-test",
+        element: (
+          <Protected requires="admin">
+            <SelfTestPage />
+          </Protected>
+        ),
+      },
+      {
+        // Corpus audit (#2112): platform-admin-only surface over the document
+        // store audit/fix endpoints (`CAN_MANAGE_PLATFORM`) — same gate as the
+        // other admin-only pages above.
+        path: "admin/corpus-audit",
+        element: (
+          <Protected requires="admin">
+            <CorpusAuditPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/migration",
+        element: (
+          <Protected requires="admin">
+            <MigrationPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "dev/tasks",
+        element: import.meta.env.DEV ? (
+          <SuspenseWrapper>
+            <TaskPlayground />
+          </SuspenseWrapper>
+        ) : (
+          <PageError />
+        ),
+      },
+      {
+        path: "dev/library",
+        element: import.meta.env.DEV ? (
+          <SuspenseWrapper>
+            <LibraryTreePlayground />
+          </SuspenseWrapper>
+        ) : (
+          <PageError />
+        ),
+      },
+      {
+        path: "*",
+        element: <PageError />,
+      },
+    ].filter(Boolean),
+  },
+  {
+    path: "/bootstrap",
+    element: <BootstrapPage />,
+  },
+  {
+    path: "/documents/:uid",
+    element: <DocumentViewerPage />,
+  },
+  {
+    path: "/gcu",
+    element: <GcuPageContent accepted />,
+  },
+  {
+    path: "/gdpr",
+    element: <GdprPage />,
+  },
+  {
+    path: "/release-notes",
+    element: <ReleaseNotesPage />,
+  },
+  {
+    // Help Center (HELP-01) — own tab, no app chrome, shareable URLs.
+    path: "/help",
+    element: <HelpIndexRoute />,
+  },
+  {
+    path: "/help/:lang/:sectionId?/:pageId?",
+    element: (
+      <SuspenseWrapper>
+        <HelpCenterPage />
+      </SuspenseWrapper>
+    ),
+  },
+  {
+    // PPT Filler capability documentation — opened in a new tab from the
+    // agent-creation form, so it renders without the app chrome.
+    path: "/ppt-filler-help",
+    element: <PptFillerHelpPage />,
+  },
+  {
+    path: "/settings",
+    element: <UserSettingsPage />,
+  },
+  {
+    path: "unauthorized",
+    element: <Unauthorized />,
   },
 ];
 
-export const router = createBrowserRouter(routes, { basename: getConfig().frontend_basename });
+export const routes: RouteObject[] = [{ element: <AdmittedContent />, children: applicationRoutes }];
+
+export const router = createBrowserRouter(routes, { basename });

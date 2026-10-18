@@ -23,6 +23,56 @@
   min-height: 0;
 }
 
+.personalSpace {
+  padding: 0 var(--spacing-xs);
+}
+
+.teamList {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.teamListHeader {
+  display: flex;
+  position: relative;
+  justify-content: space-between;
+  align-items: center;
+  /* Trailing inset tightened (m → s) so the search IconButton sits flush with
+   * the row below it, while the label keeps its `m` inset on the left. */
+  padding: 0 var(--spacing-s) 0 var(--spacing-m);
+  height: 48px;
+}
+
+.teamListHeaderLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* The search field is revealed on demand: it overlays the whole header row
+ * (label + button) rather than occupying its own line, so opening it doesn't
+ * shift the list. Opaque background = the sidebar's own, to mask what's under
+ * it. Same horizontal inset as the personal space and the sort dropdown. */
+.searchOverlay {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  align-items: center;
+  background: var(--surface-container);
+  padding: 0 var(--spacing-xs);
+  height: 100%;
+
+  /* The field (32px) is shorter than the header (48px): flex-center it
+   * vertically and let it grow to the full inset width horizontally. */
+  > * {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 /* Sort dropdown — same horizontal inset and width as the search field above. */
 .teamSort {
   padding: 0 var(--spacing-xs) var(--spacing-xs);
@@ -38,20 +88,4 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
-}
-
-.team {
-  padding-left: var(--spacing-xs);
-}
-.project {
-  padding-left: var(--spacing-m);
-}
-@media (max-width: 640px) {
-  .panel {
-    width: 100%;
-  }
-}
-
-.personalSpace {
-  padding: 0 var(--spacing-xs);
 }
