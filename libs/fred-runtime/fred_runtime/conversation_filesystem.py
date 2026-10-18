@@ -220,9 +220,7 @@ class ConversationFilesystemService:
             quota=_NamespaceQuota(max_bytes, max_files),
             kpi=self._kpi,
             mutation_source=self._mutation_source,
-            changes=self._changes()
-            if namespace_id == "scratchpad" and self._mutation_source != "agent"
-            else None,
+            changes=self._changes() if namespace_id == "scratchpad" else None,
         )
 
     def _changes(self) -> ConversationChanges:
@@ -320,18 +318,23 @@ class _ConversationTextNamespace:
         async with self._lock:
             await self._ensure_accounting()
             self._check_write_quota(relative_path, len(encoded))
+            recording = False
             if self._changes:
-                await self._changes.recover(self.read_optional_text)
-            before = (
-                await self.read_optional_text(relative_path) if self._changes else None
-            )
-            if self._changes:
-                await self._changes.prepare(relative_path, before, content)
+                if self.mutation_source == "agent":
+                    recording = await self._changes.prepare_agent(
+                        relative_path, content, self.read_optional_text
+                    )
+                else:
+                    await self._changes.recover(self.read_optional_text)
+                    before = await self.read_optional_text(relative_path)
+                    recording = await self._changes.prepare(
+                        relative_path, before, content
+                    )
             await self._write_encoded(relative_path, encoded, operation="write")
             assert self._accounting.sizes is not None
             self._accounting.sizes[relative_path] = len(encoded)
             self._emit_usage()
-            if self._changes:
+            if recording and self._changes:
                 await self._changes.finish()
 
     async def read_optional_text(self, path: str) -> str | None:
@@ -366,7 +369,7 @@ class _ConversationTextNamespace:
         _encode_text(new_text)  # validation precedes any storage operation
         async with self._lock:
             await self._ensure_accounting()
-            if self._changes:
+            if self._changes and self.mutation_source != "agent":
                 await self._changes.recover(self.read_optional_text)
             current = await self._read_text(relative_path)
             match_count = current.count(old_text)
@@ -377,13 +380,20 @@ class _ConversationTextNamespace:
             updated = current.replace(old_text, new_text, -1 if replace_all else 1)
             encoded = _encode_text(updated)
             self._check_write_quota(relative_path, len(encoded))
+            recording = False
             if self._changes:
-                await self._changes.prepare(relative_path, current, updated)
+                recording = (
+                    await self._changes.prepare_agent(
+                        relative_path, updated, self.read_optional_text
+                    )
+                    if self.mutation_source == "agent"
+                    else await self._changes.prepare(relative_path, current, updated)
+                )
             await self._write_encoded(relative_path, encoded, operation="edit")
             assert self._accounting.sizes is not None
             self._accounting.sizes[relative_path] = len(encoded)
             self._emit_usage()
-            if self._changes:
+            if recording and self._changes:
                 await self._changes.finish()
             return match_count
 
@@ -430,26 +440,33 @@ class _ConversationTextNamespace:
         relative_path = _normalize_path(path)
         async with self._lock:
             await self._ensure_accounting()
+            recording = False
             if self._changes:
-                await self._changes.recover(self.read_optional_text)
-            if self._changes:
-                descendants = await self.list_metadata(relative_path)
-                if descendants:
-                    semaphore = asyncio.Semaphore(16)
-
-                    async def read_deleted(path: str) -> tuple[str, str]:
-                        async with semaphore:
-                            return path, await self.read_text(path)
-
-                    files = dict(
-                        await asyncio.gather(
-                            *(read_deleted(entry.path) for entry in descendants)
-                        )
+                if self.mutation_source == "agent":
+                    recording = await self._changes.prepare_agent(
+                        relative_path, None, self.read_optional_text, delete_tree=True
                     )
-                    await self._changes.prepare_deletions(files)
                 else:
-                    before = await self.read_optional_text(relative_path)
-                    await self._changes.prepare(relative_path, before, None)
+                    await self._changes.recover(self.read_optional_text)
+                    descendants = await self.list_metadata(relative_path)
+                    if descendants:
+                        semaphore = asyncio.Semaphore(16)
+
+                        async def read_deleted(path: str) -> tuple[str, str]:
+                            async with semaphore:
+                                return path, await self.read_text(path)
+
+                        files = dict(
+                            await asyncio.gather(
+                                *(read_deleted(entry.path) for entry in descendants)
+                            )
+                        )
+                        recording = await self._changes.prepare_deletions(files)
+                    else:
+                        before = await self.read_optional_text(relative_path)
+                        recording = await self._changes.prepare(
+                            relative_path, before, None
+                        )
             token = _MUTATION_SOURCE.set(self.mutation_source)
             try:
                 await self._filesystem.delete(self._physical_path(relative_path))
@@ -461,7 +478,7 @@ class _ConversationTextNamespace:
             finally:
                 _MUTATION_SOURCE.reset(token)
             self._forget_path(relative_path)
-            if self._changes:
+            if recording and self._changes:
                 await self._changes.finish()
 
     async def purge(self) -> None:

@@ -21,8 +21,9 @@ import difflib
 import hashlib
 import json
 from urllib.parse import quote
+from collections import Counter
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from fred_sdk.contracts.runtime import (
     ConversationScratchpadError,
@@ -62,11 +63,15 @@ class _Group(BaseModel):
     closed: bool = False
 
 
+class _Intent(_Group):
+    source: Literal["external", "agent"] = "external"
+
+
 class _State(BaseModel):
     pending: list[_Group] = Field(default_factory=list)
     sealing: dict[str, list[_Group]] = Field(default_factory=dict)
     completed: dict[str, ChangePublication] = Field(default_factory=dict)
-    intent: list[_Group] = Field(default_factory=list)
+    intent: list[_Intent] = Field(default_factory=list)
 
 
 class ConversationChanges:
@@ -109,7 +114,7 @@ class ConversationChanges:
         values = await asyncio.gather(*(current(change) for change in state.intent))
         for intent, value in zip(state.intent, values, strict=True):
             if value == intent.after:
-                _record(state, intent)
+                _apply(state, intent)
             elif value != intent.before:
                 raise ConversationScratchpadStorageError(
                     "External change recovery found an unresolved partial mutation"
@@ -117,22 +122,53 @@ class ConversationChanges:
         state.intent = []
         await self._save(state)
 
-    async def prepare(self, path: str, before: str | None, after: str | None) -> None:
+    async def prepare(self, path: str, before: str | None, after: str | None) -> bool:
         if before == after:
-            return
+            return False
         state = await self._load()
-        state.intent = [_Group(path=path, before=before, after=after)]
+        state.intent = [_Intent(path=path, before=before, after=after)]
         await self._save(state)
+        return True
 
-    async def prepare_deletions(self, files: dict[str, str]) -> None:
+    async def prepare_deletions(self, files: dict[str, str]) -> bool:
         if not files:
-            return
+            return False
         state = await self._load()
         state.intent = [
-            _Group(path=path, before=content, after=None)
+            _Intent(path=path, before=content, after=None)
             for path, content in files.items()
         ]
         await self._save(state)
+        return True
+
+    async def prepare_agent(
+        self,
+        path: str,
+        after: str | None,
+        read: Callable[[str], Awaitable[str | None]],
+        *,
+        delete_tree: bool = False,
+    ) -> bool:
+        state = await self._load()
+        if state.intent:
+            await self.recover(read)
+            state = await self._load()
+        # The latest open external group's end is the known current baseline.
+        # Ordinary full agent writes do not read their overwrite target.
+        state.intent = [
+            _Intent(path=group.path, before=group.after, after=after, source="agent")
+            for group in state.pending
+            if not group.closed
+            and group.after != after
+            and (
+                group.path == path
+                or (delete_tree and group.path.startswith(path + "/"))
+            )
+        ]
+        if not state.intent:
+            return False
+        await self._save(state)
+        return True
 
     async def finish(self) -> None:
         try:
@@ -140,7 +176,7 @@ class ConversationChanges:
             if not state.intent:
                 return
             for change in state.intent:
-                _record(state, change)
+                _apply(state, change)
             state.intent = []
             await self._save(state)
         except ConversationScratchpadError as exc:
@@ -183,23 +219,48 @@ class ConversationChanges:
         return receipt
 
 
-def _record(state: _State, change: _Group) -> None:
-    group = next(
-        (g for g in reversed(state.pending) if g.path == change.path and not g.closed),
+def _apply(state: _State, change: _Intent) -> None:
+    if change.source == "agent":
+        group = _open_group(state, change.path)
+        if group is not None:
+            group.closed = True
+    else:
+        _record(state, change)
+
+
+def _open_group(state: _State, path: str) -> _Group | None:
+    return next(
+        (
+            group
+            for group in reversed(state.pending)
+            if group.path == path and not group.closed
+        ),
         None,
     )
+
+
+def _record(state: _State, change: _Group) -> None:
+    group = _open_group(state, change.path)
     if group is None:
-        state.pending.append(change)
+        state.pending.append(
+            _Group(path=change.path, before=change.before, after=change.after)
+        )
     else:
         group.after = change.after
 
 
 def _render(exchange_id: str, groups: list[_Group]) -> dict[str, str]:
     artifacts: dict[str, str] = {}
-    names = _artifact_names({g.path for g in groups if g.before != g.after})
+    counts = Counter(g.path for g in groups if g.before != g.after)
+    names = _artifact_names(counts)
+    indexes: Counter[str] = Counter()
     for group in groups:
         if group.before == group.after:
             continue
+        indexes[group.path] += 1
+        sequence = _sequence(indexes[group.path], counts[group.path])
+        label = f"External change group {sequence}" if sequence else ""
+        header_label = "\t" + label if label else ""
         path = "/" + group.path
         if not path.isprintable() or '"' in path:
             path = json.dumps(path, ensure_ascii=True)
@@ -211,6 +272,8 @@ def _render(exchange_id: str, groups: list[_Group]) -> dict[str, str]:
                 _diff_lines(group.after),
                 fromfile=before_path,
                 tofile=after_path,
+                fromfiledate=label,
+                tofiledate=label,
             )
         )
         content = (
@@ -221,9 +284,10 @@ def _render(exchange_id: str, groups: list[_Group]) -> dict[str, str]:
                 for line in lines
             )
             if lines
-            else f"--- {before_path}\n+++ {after_path}\n"
+            else f"--- {before_path}{header_label}\n+++ {after_path}{header_label}\n"
         )
-        artifacts[f"changes/{exchange_id}/{names[group.path]}.diff"] = content
+        suffix = f".{sequence}" if sequence else ""
+        artifacts[f"changes/{exchange_id}/{names[group.path]}{suffix}.diff"] = content
     return artifacts
 
 
@@ -236,11 +300,28 @@ def _diff_lines(content: str | None) -> list[str]:
     return [part + "\n" for part in parts[:-1]] + ([parts[-1]] if parts[-1] else [])
 
 
-def _artifact_names(paths: set[str]) -> dict[str, str]:
-    names = {path: quote(path, safe="") for path in paths}
+def _artifact_names(counts: Counter[str]) -> dict[str, str]:
+    names = {path: quote(path, safe="") for path in counts}
     for path, name in names.items():
         # quote() escapes literal !, so generated hash names have a reserved
         # separator that cannot collide with an ordinary escaped source name.
         if len(name) > 180:
-            names[path] = name[:100] + "!" + hashlib.sha256(path.encode()).hexdigest()
+            names[path] = _hashed_name(path, name)
+    owners: dict[str, list[str]] = {}
+    for path, count in counts.items():
+        for index in range(1, count + 1):
+            sequence = _sequence(index, count)
+            suffix = f".{sequence}" if sequence else ""
+            owners.setdefault(names[path] + suffix, []).append(path)
+    colliding = {path for paths in owners.values() if len(paths) > 1 for path in paths}
+    for path in colliding:
+        names[path] = _hashed_name(path, quote(path, safe=""))
     return names
+
+
+def _sequence(index: int, count: int) -> str:
+    return f"{index:0{max(3, len(str(count)))}d}" if count > 1 else ""
+
+
+def _hashed_name(path: str, escaped: str) -> str:
+    return escaped[:100] + "!" + hashlib.sha256(path.encode()).hexdigest()

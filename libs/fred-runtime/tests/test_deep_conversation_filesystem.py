@@ -81,6 +81,8 @@ class _ConcurrentReadFilesystem(_MemoryFilesystem):
         self._overlap = asyncio.Event()
 
     async def read(self, path: str) -> bytes:
+        if "/scratchpad/" not in path:
+            return await super().read(path)
         self.in_flight += 1
         self.max_in_flight = max(self.max_in_flight, self.in_flight)
         if self.in_flight >= 2:
@@ -210,6 +212,7 @@ async def test_backend_lists_and_globs_from_storage_metadata_without_reads() -> 
     backend = _backend(service)
     await namespace.write_text("research/notes.md", "café")
     await namespace.write_text("research/raw.txt", "ignored")
+    storage.read_count = 0  # Measure discovery, excluding mutation bookkeeping.
 
     listing = await backend.als("/research")
     globbed = await backend.aglob("**/*.md", path="/")

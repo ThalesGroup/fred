@@ -925,3 +925,303 @@ async def test_diff_preserves_carriage_returns_and_unicode_line_separators() -> 
         )
         == "--- /report.md\n+++ /report.md\n@@ -1 +1 @@\n-first\rsecond\u2028third\n\\ No newline at end of file\n+changed\rsecond\u2028third\n\\ No newline at end of file\n"
     )
+
+
+@pytest.mark.asyncio
+async def test_agent_write_separates_only_external_changes_in_chronological_groups() -> (
+    None
+):
+    storage = _MemoryFilesystem()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    await agent.scratchpad().write_text("report.md", "A\n")
+    await user.scratchpad().write_text("report.md", "B\n")
+    await agent.scratchpad().write_text("report.md", "C\n")
+    await user.scratchpad().write_text("report.md", "D\n")
+    publication = await agent.publish_external_changes("turn")
+    assert publication.file_count == 1
+    assert publication.paths == (
+        "/.deep/changes/turn/report.md.001.diff",
+        "/.deep/changes/turn/report.md.002.diff",
+    )
+    deep = agent.namespace(".deep", max_bytes=1000000, max_files=100)
+    assert (
+        await deep.read_text("changes/turn/report.md.001.diff")
+        == "--- /report.md\tExternal change group 001\n+++ /report.md\tExternal change group 001\n@@ -1 +1 @@\n-A\n+B\n"
+    )
+    assert (
+        await deep.read_text("changes/turn/report.md.002.diff")
+        == "--- /report.md\tExternal change group 002\n+++ /report.md\tExternal change group 002\n@@ -1 +1 @@\n-C\n+D\n"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["write", "edit", "delete"])
+async def test_failed_and_noop_agent_mutations_do_not_split_external_group(
+    operation: str,
+) -> None:
+    from fred_runtime.conversation_filesystem import current_mutation_source
+
+    class FailedAgentStorage(_MemoryFilesystem):
+        fail = False
+
+        async def write(self, path: str, data: bytes | str) -> None:
+            if (
+                self.fail
+                and path.endswith("/scratchpad/report.md")
+                and current_mutation_source() == "agent"
+            ):
+                raise OSError("working write failed")
+            await super().write(path, data)
+
+        async def delete(self, path: str) -> None:
+            if self.fail and path.endswith("/scratchpad/report.md"):
+                raise OSError("working delete failed")
+            await super().delete(path)
+
+    storage = FailedAgentStorage()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    await agent.scratchpad().write_text("report.md", "A\n")
+    await user.scratchpad().write_text("report.md", "B\n")
+    storage.fail = True
+    with pytest.raises(ConversationScratchpadStorageError):
+        if operation == "write":
+            await agent.scratchpad().write_text("report.md", "C\n")
+        elif operation == "edit":
+            await agent.scratchpad().edit_text("report.md", "B", "C")
+        else:
+            await agent.scratchpad().delete("report.md")
+    storage.fail = False
+    await agent.scratchpad().write_text("report.md", "B\n")
+    await agent.scratchpad().edit_text("report.md", "B", "B")
+    with pytest.raises(ConversationScratchpadEditConflictError):
+        await agent.scratchpad().edit_text("report.md", "not present", "replacement")
+    await agent.scratchpad().write_text("unrelated.md", "Agent activity\n")
+    await user.scratchpad().write_text("report.md", "D\n")
+    publication = await user.publish_external_changes("turn")
+    assert publication.paths == ("/.deep/changes/turn/report.md.diff",)
+    assert (
+        await user.namespace(".deep", max_bytes=1000000, max_files=100).read_text(
+            "changes/turn/report.md.diff"
+        )
+        == "--- /report.md\n+++ /report.md\n@@ -1 +1 @@\n-A\n+D\n"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed_source", ["user", "agent"])
+async def test_unfinished_mutation_is_recovered_before_next_writer_overwrites_evidence(
+    failed_source: str,
+) -> None:
+    class PartialStorage(_MemoryFilesystem):
+        fail = True
+
+        async def write(self, path: str, data: bytes | str) -> None:
+            target = b"B\n" if failed_source == "user" else b"C\n"
+            if (
+                self.fail
+                and path.endswith("/.changes/state.json")
+                and self.files.get("conversations/c/scratchpad/report.md") == target
+            ):
+                self.fail = False
+                raise OSError("recording unavailable")
+            await super().write(path, data)
+
+    storage = PartialStorage()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    await agent.scratchpad().write_text("report.md", "A\n")
+    if failed_source == "user":
+        with pytest.raises(ConversationScratchpadStorageError, match="file changed"):
+            await user.scratchpad().write_text("report.md", "B\n")
+        await agent.scratchpad().write_text("report.md", "C\n")
+    else:
+        await user.scratchpad().write_text("report.md", "B\n")
+        with pytest.raises(ConversationScratchpadStorageError, match="file changed"):
+            await agent.scratchpad().write_text("report.md", "C\n")
+    await user.scratchpad().write_text("report.md", "D\n")
+    publication = await user.publish_external_changes("turn")
+    assert len(publication.paths) == 2
+    deep = user.namespace(".deep", max_bytes=1000000, max_files=100)
+    assert (await deep.read_text("changes/turn/report.md.001.diff")).endswith(
+        "-A\n+B\n"
+    )
+    assert (await deep.read_text("changes/turn/report.md.002.diff")).endswith(
+        "-C\n+D\n"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("writer", ["native_edit", "helper", "concat"])
+async def test_agent_adapters_close_groups_without_requiring_output_read(
+    writer: str,
+) -> None:
+    from fred_runtime.deep.concat_files import ConcatFilesMiddleware
+    from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
+    from fred_runtime.deep.deep_runtime import build_conversation_filesystem
+
+    class UnreadOutputStorage(_MemoryFilesystem):
+        deny_output_read = False
+
+        async def read(self, path: str) -> bytes:
+            if self.deny_output_read and path.endswith("/scratchpad/report.md"):
+                raise AssertionError(
+                    "An explicit replacement must not require reading the old output"
+                )
+            return await super().read(path)
+
+    storage = UnreadOutputStorage()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    backend, permissions = build_conversation_filesystem(agent)
+    port = DeepConversationFilesystemPort(backend, permissions)
+    await agent.scratchpad().write_text("report.md", "A\n")
+    await agent.scratchpad().write_text("part.md", "C\n")
+    await user.scratchpad().write_text("report.md", "B\n")
+    if writer == "native_edit":
+        assert (await backend.aedit("/report.md", "B", "C")).error is None
+    else:
+        storage.deny_output_read = True
+        if writer == "helper":
+            await port.write_text("/report.md", "C\n", origin="system")
+        else:
+            await (
+                ConcatFilesMiddleware(port)
+                .tools[0]
+                .ainvoke(
+                    {
+                        "paths": ["/part.md"],
+                        "output_path": "/report.md",
+                        "replace": True,
+                    }
+                )
+            )
+        storage.deny_output_read = False
+    assert await user.scratchpad().read_text("report.md") == "C\n"
+    await user.scratchpad().write_text("report.md", "D\n")
+    publication = await user.publish_external_changes("turn")
+    assert len(publication.paths) == 2
+    deep = user.namespace(".deep", max_bytes=1000000, max_files=100)
+    assert (await deep.read_text("changes/turn/report.md.001.diff")).endswith(
+        "-A\n+B\n"
+    )
+    assert (await deep.read_text("changes/turn/report.md.002.diff")).endswith(
+        "-C\n+D\n"
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_directory_delete_closes_each_external_group_before_recreation() -> (
+    None
+):
+    storage = _MemoryFilesystem()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    for path in ("sections/one.md", "sections/two.md"):
+        await agent.scratchpad().write_text(path, "A\n")
+        await user.scratchpad().write_text(path, "B\n")
+    await agent.scratchpad().delete("sections")
+    for path in ("sections/one.md", "sections/two.md"):
+        await user.scratchpad().write_text(path, "D\n")
+    publication = await user.publish_external_changes("turn")
+    assert publication.file_count == 2
+    assert len(publication.paths) == 4
+    deep = user.namespace(".deep", max_bytes=1000000, max_files=100)
+    assert (
+        await deep.read_text("changes/turn/sections%2Fone.md.002.diff")
+        == "--- /dev/null\tExternal change group 002\n+++ /sections/one.md\tExternal change group 002\n@@ -0,0 +1 @@\n+D\n"
+    )
+
+
+@pytest.mark.asyncio
+async def test_numbered_group_names_do_not_collide_with_suffix_like_source_names() -> (
+    None
+):
+    storage = _MemoryFilesystem()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    for path in ("report.md", "report.md.001", "report.md.001.001"):
+        await agent.scratchpad().write_text(path, "A\n")
+        await user.scratchpad().write_text(path, "B\n")
+    for path in ("report.md", "report.md.001"):
+        await agent.scratchpad().write_text(path, "C\n")
+        await user.scratchpad().write_text(path, "D\n")
+    first = await user.publish_external_changes("turn-1")
+    assert first.file_count == 3
+    assert len(first.paths) == 5
+    deep = user.namespace(".deep", max_bytes=1000000, max_files=100)
+    contents = [
+        await deep.read_text(path.removeprefix("/.deep/")) for path in first.paths
+    ]
+    assert sorted(text.splitlines()[0] for text in contents) == sorted(
+        [
+            "--- /report.md.001.001",
+            "--- /report.md.001\tExternal change group 001",
+            "--- /report.md.001\tExternal change group 002",
+            "--- /report.md\tExternal change group 001",
+            "--- /report.md\tExternal change group 002",
+        ]
+    )
+    await user.scratchpad().write_text("report.md", "E\n")
+    assert await user.publish_external_changes("turn-1") == first
+    assert [
+        await deep.read_text(path.removeprefix("/.deep/")) for path in first.paths
+    ] == contents
+    second = await user.publish_external_changes("turn-2")
+    assert second.paths == ("/.deep/changes/turn-2/report.md.diff",)
+    assert (
+        await deep.read_text("changes/turn-2/report.md.diff")
+        == "--- /report.md\n+++ /report.md\n@@ -1 +1 @@\n-D\n+E\n"
+    )
+
+
+@pytest.mark.asyncio
+async def test_more_than_999_segments_sort_in_numeric_order_and_retry_keeps_names() -> (
+    None
+):
+    storage = _MemoryFilesystem()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    await agent.scratchpad().write_text("report.md", "agent-0\n")
+    for index in range(1, 1002):
+        await user.scratchpad().write_text("report.md", f"external-{index}\n")
+        if index < 1001:
+            await agent.scratchpad().write_text("report.md", f"agent-{index}\n")
+    publication = await agent.publish_external_changes("turn")
+    deep = agent.namespace(".deep", max_bytes=10000000, max_files=2000)
+    listing = await deep.list("changes/turn")
+    assert len(listing) == 1001
+    assert listing[0] == "changes/turn/report.md.0001.diff"
+    assert listing[998:] == (
+        "changes/turn/report.md.0999.diff",
+        "changes/turn/report.md.1000.diff",
+        "changes/turn/report.md.1001.diff",
+    )
+    assert tuple("/.deep/" + path for path in listing) == publication.paths
+    assert (await deep.read_text(listing[0])).endswith("-agent-0\n+external-1\n")
+    assert (await deep.read_text(listing[999])).endswith("-agent-999\n+external-1000\n")
+    assert (await deep.read_text(listing[1000])).endswith(
+        "-agent-1000\n+external-1001\n"
+    )
+    assert await agent.publish_external_changes("turn") == publication
+
+
+@pytest.mark.asyncio
+async def test_net_zero_closed_group_does_not_number_the_only_remaining_diff() -> None:
+    storage = _MemoryFilesystem()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    await agent.scratchpad().write_text("report.md", "A\n")
+    await user.scratchpad().write_text("report.md", "temporary\n")
+    await user.scratchpad().write_text("report.md", "A\n")
+    await agent.scratchpad().write_text("report.md", "C\n")
+    await user.scratchpad().write_text("report.md", "D\n")
+    publication = await agent.publish_external_changes("turn")
+    assert publication.paths == ("/.deep/changes/turn/report.md.diff",)
+    assert (
+        await agent.namespace(".deep", max_bytes=1000000, max_files=100).read_text(
+            "changes/turn/report.md.diff"
+        )
+        == "--- /report.md\n+++ /report.md\n@@ -1 +1 @@\n-C\n+D\n"
+    )
