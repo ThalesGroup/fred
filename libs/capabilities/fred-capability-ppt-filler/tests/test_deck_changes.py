@@ -1061,6 +1061,24 @@ async def test_a_picture_design_asked_for_a_slide_without_picture_is_refused(
 
 
 @pytest.mark.asyncio
+async def test_a_refused_like_never_pins_a_later_edit(monkeypatch, deck_plan_store):
+    """Seen in the eval: after a refused `like`, every later edit of the slide
+    stayed pinned to that design and was told to drop a like it never sent."""
+    workspace = FakeWorkspace()
+    turn = _Turn(monkeypatch, workspace)
+    await turn.build(slides=_SPREAD)
+    text, _ = await turn.build(
+        changes=[{"op": "edit", "slide": 3, "field": "like", "value": 1}]
+    )
+    assert "drop the `like` change" in text
+    text, result = await turn.build(
+        changes=[{"op": "edit", "slide": 3, "field": "title", "value": "Plan"}]
+    )
+    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
+    assert turn.rendered[-1].slides[2].title == "Plan"
+
+
+@pytest.mark.asyncio
 async def test_like_gives_a_slide_the_design_of_another(monkeypatch, deck_plan_store):
     """Live: bullets slides spread over several template slides; "slide 7 like
     slide 5" was sent as a no-op kind edit. `like` makes them share."""
