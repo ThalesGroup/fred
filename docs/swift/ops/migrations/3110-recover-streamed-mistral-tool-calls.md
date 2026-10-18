@@ -3,7 +3,7 @@ schema: 1
 title: "Recover Mistral tool calls written as text in long reasoning turns"
 impact: none
 configuration: none
-configuration_reason: "Only fred-runtime's Mistral tool-call recovery bound and its text rendering of content blocks change; no configuration key, default or chart value is involved."
+configuration_reason: "Only fred-runtime's tool-call recovery and content-block rendering, and fred-core's log-scope string bound, change; no configuration key, default or chart value is involved."
 no_action_reason: "No API, event, data or configuration change: a Mistral tool call written as text now runs as a tool call, and empty provider blocks no longer appear as text, once the new runtime is deployed."
 ---
 ## Applicability

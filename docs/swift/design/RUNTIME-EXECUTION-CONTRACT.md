@@ -7104,5 +7104,9 @@ A `refusal` block renders as its refusal text. Unknown block types and non-dict
 objects keep the visible `str()` fallback; text blocks, plain strings and
 reasoning handling are unchanged. Text made only of closing brackets or braces
 between or after recovered calls (Mistral over-closing its JSON) is dropped
-from the recovered message content.
+from the recovered message content. A native call whose name is not registered
+but ends in a registered tool name (a model looping its output into the name, any
+model) is renamed to that tool; other unknown names keep the tool node's "not a
+valid tool" error, clipped to 256 characters, and an oversized string bound in a
+log scope is shortened instead of failing the turn.
 Migration note: `docs/swift/ops/migrations/3110-recover-streamed-mistral-tool-calls.md`.
