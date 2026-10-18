@@ -1853,6 +1853,29 @@ def _repeated_note(number: int, kept: bool) -> str:
 _PART_TITLE = re.compile(r"^(.*) \((\d+)/(\d+)\)$")
 
 
+def renumber_parts(plan: DeckPlan) -> DeckPlan:
+    """The "(k/n)" of a list split by an earlier build, recounted on the deck as
+    it now stands: a part left alone (moved, removed, a slide put between) drops it."""
+    slides = list(plan.slides)
+    runs: List[List[int]] = []
+    for i, slide in enumerate(slides):
+        found = _PART_TITLE.match(slide.title or "") if slide.built_on else None
+        if found is None or int(found[3]) > _MAX_PARTS:
+            continue
+        before = _PART_TITLE.match(slides[i - 1].title or "") if i else None
+        if runs and runs[-1][-1] == i - 1 and before and before[1] == found[1]:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+    for run in runs:
+        name = _PART_TITLE.match(slides[run[0]].title or "")[1]  # type: ignore[index]
+        for k, i in enumerate(run, start=1):
+            title = f"{name} ({k}/{len(run)})" if len(run) > 1 else name
+            if title != slides[i].title:
+                slides[i] = slides[i].model_copy(update={"title": title})
+    return plan.model_copy(update={"slides": slides})
+
+
 def _rejoin(slides: List[_Slide]) -> None:
     """Parts of a list split by an earlier build, now slides of their own in the
     stored deck: one list again for variety, and never split a second time."""

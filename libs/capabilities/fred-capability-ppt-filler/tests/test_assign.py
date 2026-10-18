@@ -28,6 +28,7 @@ from fred_capability_ppt_filler.builder.assign import (
     content_shape,
     infer_kinds,
     misfit,
+    renumber_parts,
 )
 from fred_capability_ppt_filler.builder.models import (
     Box,
@@ -687,6 +688,18 @@ def test_a_delivered_split_rebuilds_as_it_was_and_still_counts_once():
     assert not [n for n in again.notes if "continue on" in n]
     first, second = again.patterns[1:]
     assert first and second and first.id == second.id
+
+
+def test_part_numbers_are_recounted_on_delivered_slides_only():
+    def titles(*sent: tuple) -> List[str]:
+        slides = [SlidePlan(title=t, built_on=b) for t, b in sent]
+        return [s.title or "" for s in renumber_parts(_plan(*slides)).slides]
+
+    pin = "slide:2"
+    assert titles(("A (2/2)", pin), ("A (1/2)", pin)) == ["A (1/2)", "A (2/2)"]
+    assert titles(("A (1/2)", pin), ("B", pin)) == ["A", "B"]
+    # A title the builder never numbered keeps its own words.
+    assert titles(("A (1/2)", None), ("Plan (1/3)", pin)) == ["A (1/2)", "Plan (1/3)"]
 
 
 def test_a_delivered_slide_keeps_its_template_slide_while_it_fits_its_kind():

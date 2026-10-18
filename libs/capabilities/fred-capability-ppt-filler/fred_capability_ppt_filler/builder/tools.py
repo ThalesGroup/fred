@@ -82,6 +82,7 @@ from fred_capability_ppt_filler.builder.assign import (
     VarietyCheck,
     assign,
     assignable,
+    renumber_parts,
     unplaced,
 )
 from fred_capability_ppt_filler.builder.changes import (
@@ -1471,7 +1472,7 @@ def build_builder_tools(
         kept = {id(s) for s in base.slides} if base is not None else set()
         checked = [n for n, s in enumerate(plan.slides, start=1) if id(s) not in kept]
         # After `checked`: the copies it makes are not slides the call changed.
-        plan = _shown_takeaways(plan)
+        plan = renumber_parts(_shown_takeaways(plan))
         assignment, plan, bad = await asyncio.to_thread(
             _evaluate,
             inventory,

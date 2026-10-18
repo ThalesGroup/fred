@@ -919,6 +919,36 @@ def test_change_slides_do_not_repeat_the_slide_schema():
 
 
 @pytest.mark.asyncio
+async def test_a_split_list_part_left_alone_drops_its_part_number(
+    monkeypatch, deck_plan_store
+):
+    """Default r02/r11: a slide inserted between the parts, or one part moved
+    away, left "(1/2)" and "(2/2)" on slides no longer continued."""
+    workspace = FakeWorkspace()
+    method = {"title": "Method", "kind": "process", "items": _STEPS[:5]}
+    deck = [COVER, method, {"title": "Contact", "bullets": ["a"]}]
+    turn = _Turn(monkeypatch, workspace)
+    text, result = await turn.build(slides=deck)
+    assert not result.is_error, text
+    inserted = {
+        "op": "insert",
+        "after": 2,
+        "slides": [{"title": "Aside", "bullets": ["b"]}],
+    }
+    text, result = await _Turn(monkeypatch, workspace).build(changes=[inserted])
+    assert not result.is_error, text
+    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    titles = [s.title for s in stored.slides]
+    assert titles == ["Kick-off", "Method", "Aside", "Method", "Contact"]
+    # Dropped, a part number never comes back: the titles are the slides' own.
+    moved = {"op": "move", "slide": 3, "after": 4}
+    text, result = await _Turn(monkeypatch, workspace).build(changes=[moved])
+    assert not result.is_error, text
+    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    assert [s.title for s in stored.slides][1:4] == ["Method", "Method", "Aside"]
+
+
+@pytest.mark.asyncio
 async def test_a_split_list_is_stored_as_the_delivered_deck(
     monkeypatch, deck_plan_store
 ):
