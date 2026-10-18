@@ -1369,11 +1369,14 @@ def _substitution(
         head += ", the chart in its content area"
     why = _why_not(slide, offered, asked)
     if why is not None:
-        remedy = (
-            "To make it the closing slide, move it to the end; otherwise nothing to do."
-            if asked == "closing" and not slide.last
-            else "Nothing to do."
-        )
+        if asked == "closing" and not slide.last:
+            remedy = "To make it the closing slide, move it to the end; otherwise nothing to do."
+        elif asked == "cover" and not slide.first:
+            remedy = (
+                "To make it the cover, move it to the start; otherwise nothing to do."
+            )
+        else:
+            remedy = "Nothing to do."
         return f"{head}: {why}. {remedy}"
     mine = [
         (p, r) for p, r, _ in slide.checked if p.kind == asked and _allowed(p, slide)

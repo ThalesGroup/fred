@@ -299,7 +299,7 @@ def test_a_later_cover_is_built_from_its_content_and_the_swap_is_named():
     assert [p.kind for p in assignment.patterns if p] == ["cover", "section"]
     assert assignment.notes == [
         "Slide 2: built as 'section' instead of 'cover': only the first slide can be "
-        "the cover. Nothing to do."
+        "the cover. To make it the cover, move it to the start; otherwise nothing to do."
     ]
 
 
