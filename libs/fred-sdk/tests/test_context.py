@@ -749,7 +749,7 @@ def test_turn_command_offsets_are_not_measured_against_any_text() -> None:
     assert command.prompts[0].text_offset == 10_000
 
 
-def test_conversation_file_reference_survives_tool_result_history_serialization():
+def test_conversation_file_reference_survives_tool_result_history_serialization() -> None:
     from fred_sdk.contracts.context import ToolInvocationResult
 
     payload = {
