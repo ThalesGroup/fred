@@ -1688,7 +1688,7 @@ def build_builder_tools(
         delta = (
             ""
             if previous is None
-            else deck_delta(previous, deck, _kinds(inventory), base is None)
+            else deck_delta(previous, deck, _kinds(inventory), base is None, numbers)
         )
         # Delivered, the deck is the base: the same changes sent again are a
         # new change to it, not a corrected resend of a refused one.

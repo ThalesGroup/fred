@@ -552,6 +552,35 @@ async def test_a_slide_moved_by_a_removal_renders_unchanged(monkeypatch):
     assert "slides of this file removed: 2 of the previous deck; 3 unchanged." in text
 
 
+def test_the_delta_counts_the_points_a_recast_slide_lost():
+    """Seen in the eval: a narrative slide recast as a process over two
+    slides silently dropped one of its seven points."""
+    points = [f"Point {n}" for n in range(1, 8)]
+    before = DeckPlan.model_validate(
+        {
+            "slides": [
+                {**COVER, "built_on": "cover"},
+                {"title": "Change", "bullets": points, "built_on": "text"},
+                {"title": "Same", "bullets": ["a", "b"], "built_on": "text"},
+            ]
+        }
+    )
+    steps = [{"heading": p} for p in points[:6]]
+    after = DeckPlan.model_validate(
+        {
+            "slides": [
+                before.slides[0].model_dump(),
+                {"title": "Change", "items": steps[:3], "built_on": "process"},
+                {"title": "Change", "items": steps[3:], "built_on": "process"},
+                {"title": "Same", "bullets": ["a"], "built_on": "text"},
+            ]
+        }
+    )
+    line = deck_delta(before, after, {}, numbers=[1, 2, 2, 3])
+    # Slide 4 keeps its design: one bullet less is an edit, not a recast.
+    assert "; fewer points where the design changed: slide 2 (7 → 6)." in line
+
+
 def test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes():
     """Most revisions resent every slide for a one-slide edit: the result says so."""
     after = _apply({"op": "edit", "slide": 2, "field": "title", "value": "Plan"})

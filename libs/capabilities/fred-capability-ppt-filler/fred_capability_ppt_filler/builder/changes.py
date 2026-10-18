@@ -21,7 +21,17 @@ from __future__ import annotations
 import difflib
 import json
 import re
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -526,13 +536,49 @@ def _paired(before: List[str], after: List[str]) -> List[Tuple[int, int]]:
     return pairs
 
 
+def _points(slide: SlidePlan) -> int:
+    rows = len(slide.table.rows) if slide.table is not None else 0
+    columns = sum(len([b for b in c.bullets if b.strip()]) for c in slide.columns)
+    bullets = len([b for b in slide.bullets if b.strip()])
+    return bullets + columns + len(slide.items) + rows
+
+
+def _fewer(
+    before: DeckPlan,
+    after: DeckPlan,
+    pairs: List[Tuple[int, int]],
+    numbers: Optional[Sequence[int]],
+) -> List[str]:
+    """Slides whose design changed and that hold fewer points than before, a
+    list continued on the next slides counted whole: what a recast lost."""
+    found = []
+    for i, j in pairs:
+        old, new = before.slides[i], after.slides[j]
+        if old.built_on == new.built_on:
+            continue
+        group = [j]
+        if numbers is not None and len(numbers) == len(after.slides):
+            if j and numbers[j - 1] == numbers[j]:
+                continue  # counted with the list's first part
+            group = [k for k in range(j, len(numbers)) if numbers[k] == numbers[j]]
+        had, has = _points(old), sum(_points(after.slides[k]) for k in group)
+        if has < had:
+            found.append(f"slide {j + 1} ({had} → {has})")
+    return found
+
+
 def deck_delta(
-    before: DeckPlan, after: DeckPlan, kinds: Mapping[str, str], resent: bool = False
+    before: DeckPlan,
+    after: DeckPlan,
+    kinds: Mapping[str, str],
+    resent: bool = False,
+    numbers: Optional[Sequence[int]] = None,
 ) -> str:
     """Which slides of ``after`` differ from the delivered ``before`` (content
     or design), as a line the agent can describe its edit from truthfully;
-    ``resent``: the whole deck came in `slides`. Rendered slides compare by
-    what the file shows: an edit that renders the same is no change."""
+    ``resent``: the whole deck came in `slides`; ``numbers``: each slide's
+    number in the sent plan (a split list's parts share it). Rendered slides
+    compare by what the file shows: an edit that renders the same is no change."""
     a = [
         json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in before.slides
     ]
@@ -548,6 +594,7 @@ def deck_delta(
     in_notes: List[int] = []
     added: List[int] = []
     removed: List[int] = []
+    fewer: List[str] = []
     matcher = difflib.SequenceMatcher(a=keys_a, b=keys_b, autojunk=False)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
@@ -557,6 +604,7 @@ def deck_delta(
         for i, j in pairs:
             same = rendered and _face(keys_a[i1 + i]) == _face(keys_b[j1 + j])
             (in_notes if same else changed).append(j1 + j + 1)
+        fewer += _fewer(before, after, [(i1 + i, j1 + j) for i, j in pairs], numbers)
         added += [j1 + j + 1 for j in range(j2 - j1) if j not in news]
         removed += [i1 + i + 1 for i in range(i2 - i1) if i not in olds]
     kept = len(b) - len(changed) - len(in_notes) - len(added)
@@ -583,6 +631,11 @@ def deck_delta(
     return (
         lead
         + "; ".join(parts + [f"{kept} unchanged"])
+        + (
+            f"; fewer points where the design changed: {', '.join(fewer)}"
+            if fewer
+            else ""
+        )
         + ". Describe only these changes to the user."
         + hint
     )
