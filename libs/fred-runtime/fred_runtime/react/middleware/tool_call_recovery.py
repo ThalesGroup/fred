@@ -304,6 +304,29 @@ def _recover_calls(
     return (preamble + "".join(retained)).strip(), native_calls
 
 
+def _repaired_call_names(
+    calls: list[ToolCall], tools_by_name: dict[str, BaseTool]
+) -> list[ToolCall] | None:
+    # A model can loop its own output into a native call's name. A name ending in
+    # a registered tool keeps that tool; other unknown names reach the tool node's
+    # "not a valid tool" error, clipped so the error echo stays bounded.
+    repaired: list[ToolCall] = []
+    changed = False
+    for call in calls:
+        name = call["name"]
+        if name not in tools_by_name:
+            fixed = (
+                _trailing_registered_name(name, tools_by_name)
+                or name[:MAX_TOOL_CALL_RECOVERY_NAME_CHARS]
+            )
+            if fixed != name:
+                call = call.copy()
+                call["name"] = fixed
+                changed = True
+        repaired.append(call)
+    return repaired if changed else None
+
+
 class ToolCallTextRecoveryMiddleware(AgentMiddleware):
     """Adapt unambiguous completed tool-call text before agent routing."""
 
@@ -334,11 +357,15 @@ class ToolCallTextRecoveryMiddleware(AgentMiddleware):
         changed = False
         recovered_counts: dict[str, int] = {}
         for index, message in enumerate(result):
-            if (
-                not isinstance(message, AIMessage)
-                or message.tool_calls
-                or message.invalid_tool_calls
-            ):
+            if not isinstance(message, AIMessage):
+                continue
+            if message.tool_calls:
+                repaired = _repaired_call_names(message.tool_calls, tools_by_name)
+                if repaired is not None:
+                    result[index] = message.model_copy(update={"tool_calls": repaired})
+                    changed = True
+                continue
+            if message.invalid_tool_calls:
                 continue
             model_name = extract_model_name_from_model_response(message)
             if model_name is None or not is_mistral_model_name(model_name):

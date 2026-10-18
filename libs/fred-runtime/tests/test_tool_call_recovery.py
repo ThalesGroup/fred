@@ -23,6 +23,7 @@ from fred_core.kpi import BaseKPIWriter
 from fred_runtime.react.middleware import hitl as hitl_module
 from fred_runtime.react.middleware.hitl import FredHitlMiddleware
 from fred_runtime.react.middleware.tool_call_recovery import (
+    MAX_TOOL_CALL_RECOVERY_NAME_CHARS,
     ToolCallTextRecoveryMiddleware,
 )
 from fred_runtime.runtime_support.ask_user import AskUserArgs
@@ -1162,6 +1163,63 @@ async def test_native_duplicate_calls_are_preserved_exactly() -> None:
 
     assert response.result[0] is original
     assert original.tool_calls == before
+
+
+@pytest.mark.asyncio
+async def test_native_call_with_looped_name_keeps_its_trailing_registered_tool() -> (
+    None
+):
+    looped = '{"path": "/"}' + " repeat the plan" * 400 + " >>> ls"
+    original = AIMessage(
+        content="",
+        tool_calls=[{"name": looped, "args": {"path": "/"}, "id": "call-1"}],
+        response_metadata={"model_name": "gpt-4o"},
+    )
+
+    response, _ = await _recover_message(original)
+
+    message = response.result[0]
+    assert isinstance(message, AIMessage)
+    assert [(c["name"], c["args"], c["id"]) for c in message.tool_calls] == [
+        ("ls", {"path": "/"}, "call-1")
+    ]
+    assert original.tool_calls[0]["name"] == looped
+
+
+@pytest.mark.asyncio
+async def test_unknown_native_call_name_is_only_clipped_for_the_tool_error() -> None:
+    original = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "x" * 6000, "args": {}, "id": "call-1"},
+            {"name": "not_a_tool", "args": {}, "id": "call-2"},
+            {"name": "ls", "args": {"path": "/"}, "id": "call-3"},
+        ],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original)
+
+    message = response.result[0]
+    assert isinstance(message, AIMessage)
+    assert [c["name"] for c in message.tool_calls] == [
+        "x" * MAX_TOOL_CALL_RECOVERY_NAME_CHARS,
+        "not_a_tool",
+        "ls",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_registered_native_call_names_leave_the_message_untouched() -> None:
+    original = AIMessage(
+        content="",
+        tool_calls=[{"name": "ls", "args": {"path": "/"}, "id": "call-1"}],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original)
+
+    assert response.result[0] is original
 
 
 @pytest.mark.asyncio
