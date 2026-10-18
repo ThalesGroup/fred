@@ -45,3 +45,10 @@
 - [x] 5.5 Package checks; `openspec validate --strict`
 - Not changed: L13 (the `source` value read as an exact phrase for the illustrative caption), M14 (chart readability caps), M20 (title words as a kind hint), M27, L10, L12: other rules, not this lot
 
+## 6. Titles, sources and the outline's notes (owner decision 2026-10-18, design D8)
+
+- [x] 6.1 Title = the slide's conclusion as a short sentence (description, `SlidePlan.title`, working rules); Help Center fr + en. Test: `test_build_tool.py::test_a_title_states_the_conclusion_and_the_takeaway_stays_in_the_notes`
+- [x] 6.2 `source` for the user's documents or data, left out for general knowledge (description, field, working rules, README); Help Center fr + en. Test: `test_build_tool.py::test_source_is_asked_only_for_the_user_s_documents_or_data`
+- [x] 6.3 The `plan_proposed` outline lists the assignment notes the build would give; Help Center fr + en. Test: `test_plan_validation.py::test_the_outline_carries_the_notes_its_build_would_give`; offline replay of 4fbe0531 call 10 with the gate on shows the cover fallback note
+- [x] 6.4 Repeat note without alternative and split note end on their fix. Tests: `test_assign.py`, `test_table_slides.py`
+- [x] 6.5 Package checks (933 passed); `openspec validate --strict`

@@ -48,3 +48,10 @@ Date: 2026-10-15, branch `feat/ppt-builder-capability`.
 - Any figure (design D7: the spot-check is deleted).
 - Model behaviour: tasks 4.1 metrics (prompts added to `eval/prompts.py`, metrics not added) and 4.2 evidence with `mistral-medium` need a real LLM run; not done here.
 - The plan's language is guessed from its words (fr/en only).
+
+## 2026-10-18 — titles, sources, outline notes (D8)
+
+- Package `make test`: 933 passed, 5 skipped; ruff (incl. `--select I`), format, basedpyright clean. Each new test fails on the code before its fix.
+- Tokens (cl100k, Thales v3 inventory of 4fbe0531): description 3365 → 3387, schema 4371 → 4376, working rules 585 → 587.
+- Offline replay of 4fbe0531 call 10 with `validate_plan` on (`~/fred-tmp/revision-evals/fixes/audit/review-4fbe0531/`): the outline now ends with the slide 1 cover → section note and the section repeat note "use fewer 'section' slides".
+- Not verified: a live mistral-medium turn (titles as claims, no `source` on general knowledge) — judgement of the model.

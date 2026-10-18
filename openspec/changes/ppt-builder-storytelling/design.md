@@ -116,6 +116,15 @@ Lot 3 of the audit of 2026-10-18 (`~/fred-tmp/revision-evals/AUDIT-2026-10-18.md
 - Help Center (fr + en): figures are not checked by the agent; check them before presenting.
 - The cover of the same lot (H16) is in `ppt-builder-capability` D35.
 
+### D8. Titles, sources and the outline's notes (owner decision 2026-10-18: audit fixes)
+
+Review of session 4fbe0531 (`~/fred-tmp/deck-review-4fbe0531/REVIEW.md`). Wording replaced, not added.
+
+- **Title = the slide's conclusion** as a short sentence (a claim, not a topic), in the description, the field and the working rules; "title (short)" and "not the takeaway itself" gave topical titles. The takeaway stays in the speaker notes, shown only when the user asks (unchanged).
+- **`source` only for the user's documents or data**, left out for general knowledge ("Source : l'utilisateur" on a history deck). The field no longer says it is required.
+- **The outline carries the assignment notes** its build would give (`assignment.notes`, same text as at delivery): the user validated "Couverture" for a slide built as a section, and the fix cost one more build.
+- **Repeated slides and a split list state their fix** ("use fewer 'section' slides", "To keep one slide, …") instead of "Nothing to do". Kept: the advisory variety notes, and intent notes whose slide is built as asked.
+
 ## Risks / Trade-offs
 
 - [More revision rounds on weak models] → checks run before the assignment and share one revision; each option is a concrete edit; measured in the eval (first-call success, rounds per deck).
