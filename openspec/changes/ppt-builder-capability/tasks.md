@@ -653,3 +653,13 @@ Owns: `charts.py` (`pie_show`), `render.py` (hidden-unit note), `tools.py` (`_re
 - [x] 59.5 Package checks; `openspec validate --strict`
 - Not changed: mixed units in one series without written units (D37)
 - [ ] 59.6 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+
+## WP60. Look-alike designs, fallback fix, kinds' use (owner decision 2026-10-18: Paintress deck review, design D38)
+
+Owns: `analysis.py` (`design`, ANALYSIS_VERSION 21), `models.py`, `assign.py` (design keys, `SHAPE_HINTS`, substitution remedy), `render.py` (two notes), `tools.py` (designs line, catalogue, guide), built-in inventory, tests, delta spec, `verification.md`.
+
+- [x] 60.1 Look-alike template slides are one design. Tests: `test_builder_analysis.py::test_look_alike_template_slides_are_one_design`, `test_assign.py::test_look_alike_template_slides_count_as_one_design`, `test_build_tool.py::test_the_designs_line_names_look_alike_template_slides_once`
+- [x] 60.2 Fallback notes state the fix without an exit. Test: `test_assign.py::test_a_kind_fallback_note_states_the_fix_without_an_exit`
+- [x] 60.3 One "use for" clause per content kind on its catalogue line. Test: `test_build_tool.py::test_schema_and_description_offer_kinds_never_pattern_ids` (updated)
+- [x] 60.4 Package checks; `openspec validate --strict`; `make builtin-inventory`
+- [ ] 60.5 Live re-evaluation once fred-agents runs this code (not restarted; stored inventories re-analyse on the version bump)

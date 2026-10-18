@@ -1689,3 +1689,10 @@ Not proven: the live Thales inventory (vision labels) was not replayed; the harn
 - Test: `test_takeaway.py::test_an_edited_takeaway_never_switches_design_nor_shows` fails on the previous sources (`'Fred Chart' == 'Fred Chart Full'`: the edit moved the slide to the card design) and passes now.
 - Prompt size (cl100k): `takeaway` field description +14 (schema); the takeaway rule in the tool description −15 (templates with a key-message zone).
 - Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 925 passed, 5 skipped; `openspec validate --strict`.
+
+## WP60 (D38), 2026-10-18
+
+- Offline rebuild of the Paintress call (`~/fred-tmp/revision-evals/fixes/variety-designs/rebuild.py`, stored v3 inventory + this analysis's designs, overrides, `validate_plan` off): before, delivered with designs `Title and body`/`Vide`/`1_Blank`/`Titre et contenu`; now `needs_revision` variety on slides 2, 6, 8, 9 suggesting cards for slide 6; resent as is, the designs line reads `Vide` four times and slide 9's note ends "call again and merge bullets into at most 1 entry." Built-in template: unchanged choices; renders in `after-thales/`, `after-builtin/`.
+- New tests fail on the previous sources (no `design` field / no repeat / old remedy wording) and pass now.
+- Prompt size (cl100k): tool description +24 tokens on both Thales v3 and the built-in template.
+- Commands: ruff, `ruff check --select I`, ruff format, bandit, `make type-check` (0 errors); `make test`: 929 passed, 5 skipped; `openspec validate --strict`.

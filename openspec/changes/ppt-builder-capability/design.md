@@ -420,3 +420,12 @@ the item text in bold (D12); Q9 balanced reuse cost, an unused slide of the same
 kind wins at the first reuse and another kind from the second (D12); Q10 tables
 may drop columns (minimum 2) and grow or shrink rows within the height budget
 (D14); Q11 the Gantt grid stays excluded.
+
+### D38. Look-alike designs, fallback fix, kinds' use (owner decision 2026-10-18: Paintress deck review)
+
+From the review of a Thales v3 deck (`~/fred-tmp/deck-review-ec3df500/REVIEW.md`): four bullet slides on four nearly identical layouts read as four designs.
+
+- **One design per look.** The analysis (version 21) sets `Pattern.design` to the first earlier pattern that looks the same once filled: same backdrop, same drawn shapes of 2 % of the slide or more (XML without ids, pictures by content) and the same zones (role, capacity, flags) within 20 ‰. Names never count. Variety caps, repeats, runs and the `Designs:` line count `design_key`; "different names look different" is then true. Thales v3: `Vide`, `Title and body`, `1_Blank`, `Titre et contenu` are one design; the built-in template has no look-alike content slide.
+- **A fallback states its fix, no exit.** A kind substitution, a misplaced cover/closing, a fixed slide that dropped content and an agenda gap no longer end with "otherwise nothing to do"; a substitution also drops the "or use another kind" alternative (it already is another kind). The passive repeat note keeps its exit (variety is the author's setting).
+- **Each content kind says what it is for** on its catalogue line (`- cards (parallel items, each 'heading: explanation'): …`), replacing the "Shape the content" pairs of the guide; chart forms (scatter, radar, `charts`) stay in the guide. Structural kinds carry no clause.
+- Not changed: takeaway-zone scoring (a key-message card left empty is rightly avoided while takeaways are not shown).

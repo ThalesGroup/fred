@@ -316,7 +316,7 @@ The system SHALL accept from the model a plan of slides carrying content only �
 #### Scenario: Semantic fallback
 
 - **WHEN** a slide asks for `agenda` with 17 items, the agenda slide holds 8 items (two slides hold 16) and a process slide holds 20
-- **THEN** the slide is built on the process slide, never on a team, figures, cards or other unrelated slide, and the note reads "built as 'process' instead of 'agenda': the 'agenda' slide does not fit (items: 17 given, max 8). To get the 'agenda' slide, call again and trim to 8 items or split them over two slides; otherwise nothing to do."
+- **THEN** the slide is built on the process slide, never on a team, figures, cards or other unrelated slide, and the note reads "built as 'process' instead of 'agenda': the 'agenda' slide does not fit (items: 17 given, max 8). To get the 'agenda' slide, call again and trim to 8 items or split them over two slides."
 
 #### Scenario: No absurd substitution
 
@@ -668,7 +668,7 @@ The system SHALL NOT substitute an unfitting pattern for a slide. When a slide f
 #### Scenario: Renderer findings reach the model
 
 - **WHEN** the render finds something the after-check report does not carry (an agenda announcing more parts than slides follow it, a one-line heading that runs into the text below, an items slide given no items, content sent to a fixed slide, a table it cannot fit)
-- **THEN** the delivery's "To review" notes hold one line for it with its remedy (`Slide 2: the agenda announces 6 parts but only 2 slide(s) follow it. Add the missing slides or remove those parts from the agenda; otherwise nothing to do.`), after the unchanged success prefix; findings the report already names stay in the logs only
+- **THEN** the delivery's "To review" notes hold one line for it with its remedy (`Slide 2: the agenda announces 6 parts but only 2 slide(s) follow it. Add the missing slides or remove those parts from the agenda.`), after the unchanged success prefix; findings the report already names stay in the logs only
 
 ### Requirement: Rendering only fills the template
 
@@ -903,7 +903,7 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 - **GIVEN** a deck delivered with bullets slides 5, 6 and 7 on three template slides and a process list split over slides 2 and 3
 - **WHEN** the model reads the success text
-- **THEN** one `Designs:` line names, per file slide number, the template slide's label as the review shows it (`2 'Process' · 3 'Process'`, three different names for slides 5 to 7), never a template id, and says that different names look different and that `like` gives slide N the design of slide M
+- **THEN** one `Designs:` line names, per file slide number, the template slide's label as the review shows it (`2 'Process' · 3 'Process'`, three different names for slides 5 to 7), never a template id; template slides that look the same once filled (same backdrop, large decoration and zones) share the first one's name and count as one design for the variety limits; it says that different names look different and that `like` gives slide N the design of slide M
 - **AND** two included template slides sharing a label read as distinct names (`'Free text'`, `'Free text #2'`), and a label longer than 28 chars is cut, two labels cut to the same text being numbered the same way
 - **AND** a chart built as another type than its template slide's own chart says so after the name (`9 'Grouped bar chart', built as a pie chart`)
 
