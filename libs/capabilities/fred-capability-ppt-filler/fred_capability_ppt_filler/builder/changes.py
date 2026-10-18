@@ -513,7 +513,12 @@ def repinned(delivered: DeckPlan, plan: DeckPlan, kinds: Mapping[str, str]) -> D
         )
         if twin is not None:
             free.remove(twin)
-            slide = slide.model_copy(update={"built_on": twin.built_on})
+            slide = slide.model_copy(
+                update={
+                    "built_on": twin.built_on,
+                    "takeaway_asked": twin.takeaway_asked,
+                }
+            )
         slides.append(slide)
     return plan.model_copy(update={"slides": slides})
 
@@ -854,6 +859,8 @@ def apply_changes(
                 failed.append((k, change, f"slide {number}: {why}"))
         for k, change, why in sorted(failed, key=lambda f: f[0]):
             report(k, change, why)
+        if any(c.field == "takeaway" and c.value for _, c in entries):
+            dumped["takeaway_asked"] = True
         if number in liked:
             dumped.update(_asked(base, liked[number]))
             # The design decides the kind, unless this call sets one.

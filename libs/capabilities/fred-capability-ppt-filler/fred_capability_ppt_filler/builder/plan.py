@@ -1122,6 +1122,8 @@ class SlidePlan(BaseModel):
     # The user asked for the key messages on the slides: the takeaway goes in
     # the template's takeaway zone when it fits. Set by the tool only.
     takeaway_shown: SkipJsonSchema[bool] = False
+    # A `changes` edit set this slide's takeaway: it is shown like the above.
+    takeaway_asked: SkipJsonSchema[bool] = False
 
     @model_validator(mode="before")
     @classmethod
@@ -1188,6 +1190,7 @@ HIDDEN_FIELDS = (
     "asked_from",
     "rendered",
     "takeaway_shown",
+    "takeaway_asked",
 )
 
 

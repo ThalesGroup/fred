@@ -237,7 +237,7 @@ async def test_on_request_bullets_no_longer_fall_into_the_card(monkeypatch):
     assert _card(slide) == []
     assert "Q3 porté par l'export" in texts(slide)
     assert notes(slide).split("\n")[0] == TAKEAWAY
-    assert "has no key-message zone, so the takeaway stays" in text
+    assert "has no key-message zone, so the takeaway is only" in text
 
 
 @pytest.mark.asyncio
@@ -288,7 +288,9 @@ async def test_a_bullets_slide_without_a_zone_is_unchanged(monkeypatch):
     assert [(n.code, n.field) for n in part.summary[1].notes] == [
         ("intent_not_shown", "takeaway")
     ]
-    assert "has no key-message zone, so the takeaway stays in the speaker notes" in text
+    assert (
+        "has no key-message zone, so the takeaway is only in the speaker notes" in text
+    )
 
 
 @pytest.mark.asyncio
@@ -327,3 +329,61 @@ def test_the_flag_is_offered_only_with_a_takeaway_zone():
         "show_takeaways"
         not in tools._args_schema(plain).model_json_schema()["properties"]
     )
+
+
+async def _edited(monkeypatch, slides, changes_sent):
+    """A deck delivered without show_takeaways, then each list of changes."""
+    workspace = FakeWorkspace()
+    delivered, _, _ = await _built(monkeypatch, slides, "", workspace=workspace)
+    texts_back = []
+    for changes in changes_sent:
+        build = await build_tool(
+            monkeypatch,
+            answered(delivered, PLAIN) + [HumanMessage(content="Change")],
+            workspace=workspace,
+        )
+        text, _ = await build(changes=changes)
+        assert text.startswith("Delivered"), text
+        texts_back.append(text)
+    return texts_back, workspace
+
+
+@pytest.mark.asyncio
+async def test_an_edited_takeaway_goes_on_a_design_of_its_kind_that_shows_it(
+    monkeypatch,
+):
+    """Changing one slide's key message is about what the slide shows: a design of
+    its kind with a key-message zone takes it, and keeps it on the next edit."""
+    new = "Le troisième trimestre double presque le premier"
+    texts_back, workspace = await _edited(
+        monkeypatch,
+        [COVER, CHART],
+        [
+            [{"op": "edit", "slide": 2, "field": "takeaway", "value": new}],
+            [{"op": "edit", "slide": 2, "field": "title", "value": "Ventes"}],
+        ],
+    )
+    assert _card(deck(workspace).slides[1]) == [new]
+    assert "speaker notes only" not in texts_back[0]
+
+
+@pytest.mark.asyncio
+async def test_an_edited_takeaway_no_design_of_its_kind_shows_names_those_that_do(
+    monkeypatch,
+):
+    points = {
+        "takeaway": "Nos équipes se concentrent sur deux pays européens",
+        "title": "Nos équipes",
+        "bullets": ["Italie en tête", "Espagne en retrait"],
+    }
+    new = "Nos équipes réduisent les coûts dans deux pays"
+    (text,), workspace = await _edited(
+        monkeypatch,
+        [COVER, points],
+        [[{"op": "edit", "slide": 2, "field": "takeaway", "value": new}]],
+    )
+    assert not any(new in t for t in texts(deck(workspace).slides[1]))
+    assert (
+        "so the takeaway is only in the speaker notes. Designs that show one: " in text
+    )
+    assert "'Charts stay native and editable' (chart)" in text
