@@ -113,13 +113,22 @@ keep their existing service consumers.
 
 ## Priya opens Resources
 
-The existing team sidebar opens `/team/<UUID>/resources`. `TeamResourcesPage`
-uses the original `DocumentWorkspace`, statistics, quota and import presentation.
-Its library/document data, controls and service failures follow the existing
-control-plane and knowledge-flow bindings. It does not reinterpret a manager folder
-UUID as a knowledge-flow tag or report a Python mutation as a manager mutation.
-Manager's separate folder/document API and authorization contracts are described in
-[content ownership](05-documents.md); they do not supply this full UI data contract.
+Priya opens Resources from the unchanged personal/team sidebar. The existing
+corpus toolbar, table, breadcrumbs and dialogs display the selected space's manager
+folders. The two familiar creation controls remain in place; current write authority
+enables folder creation and document-panel access in the selected directory.
+
+She creates a library, opens it and creates a subfolder. Refreshing preserves them.
+Renaming the library changes its label while the subfolder keeps its identity and
+location. Searching and sorting cover the current directory, with accurate folder
+counts and bounded pages. She confirms subtree deletion; a document anywhere below
+it refuses the entire operation. A selection of several roots reports any partial
+failure. Creation, rename and deletion recheck authority on the server.
+
+The document panel opens with sending unavailable. It does not ingest content or
+create knowledge-flow tags. Statistics and quota keep their existing service
+behavior; their failure does not block folder management. See
+[content ownership](05-documents.md) for the boundaries and guarantees.
 
 ## Joining and governing organizations, teams and projects
 

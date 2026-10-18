@@ -24,6 +24,7 @@
 // backend, so DocumentWorkspace has to patch its own local doc list from
 // the hook's returned next value.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

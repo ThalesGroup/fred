@@ -23,7 +23,11 @@ async fn get(app: &axum::Router, token: &str, path: &str) -> (u16, Value) {
         .unwrap();
     let status = response.status().as_u16();
     let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
-    (status, serde_json::from_slice(&body).unwrap())
+    (
+        status,
+        serde_json::from_slice(&body)
+            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&body).into_owned())),
+    )
 }
 
 // Proves: I1, I6, I8, I23
@@ -50,6 +54,7 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
     let folder = |space_id, name: &str, parent: Option<&Folder>| {
         let id = Uuid::new_v4();
         Folder {
+            created_at: chrono::Utc::now(),
             id,
             space_id,
             name: name.into(),
@@ -106,7 +111,17 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
     for (suffix, expected_rows) in [("folders", 1), ("documents", 0)] {
         let (status, body) = get(&app, &reader, &format!("{base}/{suffix}")).await;
         assert_eq!(status, 200, "{body}");
-        assert_eq!(body.as_array().unwrap().len(), expected_rows);
+        assert_eq!(
+            if suffix == "folders" {
+                &body["items"]
+            } else {
+                &body
+            }
+            .as_array()
+            .unwrap()
+            .len(),
+            expected_rows
+        );
     }
     let docs = format!("{base}/documents?folder_id={}&limit=50", root.id);
     let (status, first) = get(&app, &reader, &docs).await;
@@ -151,14 +166,22 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
                 404
             );
         }
-        assert_eq!(
-            get(
-                &app,
-                &reader,
-                &format!("{base}/{suffix}?{param}={}", child.id)
-            )
-            .await,
-            (200, serde_json::json!([]))
+        let (status, body) = get(
+            &app,
+            &reader,
+            &format!("{base}/{suffix}?{param}={}", child.id),
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert!(
+            if suffix == "folders" {
+                &body["items"]
+            } else {
+                &body
+            }
+            .as_array()
+            .unwrap()
+            .is_empty()
         );
         for user in ["reader", "editor", "analyst"] {
             assert_eq!(
@@ -306,7 +329,11 @@ async fn create(
         .unwrap();
     let status = response.status().as_u16();
     let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
-    (status, serde_json::from_slice(&body).unwrap())
+    (
+        status,
+        serde_json::from_slice(&body)
+            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&body).into_owned())),
+    )
 }
 
 // Proves: I1, I2, I5, I6, I8, I23
@@ -615,4 +642,161 @@ async fn space_names_match_operator_and_http_creation_contracts() {
         content_request(app, &identity.token("alice"), "POST", "/spaces", &body).await,
         201
     );
+}
+
+// Proves: I2
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
+    let e = env().await;
+    let identity = support::IdentityServer::start().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Editor, "writer").await;
+    grant(&e, org.id, Role::Member, "reader").await;
+    grant(&e, team.id, Role::Member, "reader").await;
+    let app = content_app(&e, &identity).await;
+    let token = identity.token("writer");
+    let root = spaces::create_folder(&e.pool, &e.fga, "writer", team.id, None, "root".into())
+        .await
+        .unwrap();
+    let child = spaces::create_folder(
+        &e.pool,
+        &e.fga,
+        "writer",
+        team.id,
+        Some(root.id),
+        "child".into(),
+    )
+    .await
+    .unwrap();
+    let grandchild = spaces::create_folder(
+        &e.pool,
+        &e.fga,
+        "writer",
+        team.id,
+        Some(child.id),
+        "leaf".into(),
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "insert into folder (id, space_id, parent_id, name, path, created_at)
+        select id, $1, $2, 'entry-' || lpad(n::text, 4, '0'), $3 || id || '/',
+            '2026-01-01'::timestamptz + n * interval '1 second'
+        from (select n, gen_random_uuid() id from generate_series(1, 230) n) seeded",
+    )
+    .bind(team.id)
+    .bind(root.id)
+    .bind(&root.path)
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    let url = format!(
+        "/fred-manager/v1/spaces/{}/folders?parent_id={}",
+        team.id, root.id
+    );
+    let (status, first) = get(&app, &token, &url).await;
+    assert_eq!(status, 200, "{first}");
+    assert_eq!(first["items"].as_array().unwrap().len(), 50);
+    assert_eq!(first["total"], 231);
+    assert_eq!(first["can_write"], true);
+    assert_eq!(first["ancestors"][0]["id"], root.id.to_string());
+    assert_eq!(
+        first["items"][0]["created_at"],
+        serde_json::to_value(child.created_at).unwrap()
+    );
+    assert_eq!(
+        get(&app, &identity.token("reader"), &url).await.1["can_write"],
+        false
+    );
+    let (_, last) = get(&app, &token, &format!("{url}&offset=200&limit=200")).await;
+    assert_eq!(last["items"].as_array().unwrap().len(), 31);
+    let (_, capped) = get(&app, &token, &format!("{url}&limit=99999")).await;
+    assert_eq!(capped["items"].as_array().unwrap().len(), 200);
+    let (_, past_end) = get(&app, &token, &format!("{url}&offset=99999")).await;
+    assert_eq!(past_end["total"], 231);
+    assert!(past_end["items"].as_array().unwrap().is_empty());
+    let (_, filtered) = get(
+        &app,
+        &token,
+        &format!("{url}&search=ENTRY-02&order=created_desc&limit=2"),
+    )
+    .await;
+    assert_eq!(filtered["total"], 31);
+    assert_eq!(filtered["items"][0]["name"], "entry-0230");
+    assert_eq!(filtered["items"][1]["name"], "entry-0229");
+    assert_eq!(
+        get(&app, &token, &format!("{url}&search=%25")).await.1["total"],
+        0
+    );
+    assert_eq!(
+        get(&app, &token, &format!("{url}&order=invalid")).await.0,
+        400
+    );
+    assert_eq!(
+        get(&app, &token, &format!("{url}&search={}", "a".repeat(256)))
+            .await
+            .0,
+        422
+    );
+    let path = format!("/folders/{}", root.id);
+    assert_eq!(
+        content_request(app.clone(), &token, "PATCH", &path, r#"{"name":"renamed"}"#).await,
+        204
+    );
+    assert_eq!(
+        db::folder(&e.pool, grandchild.id).await.unwrap().path,
+        grandchild.path
+    );
+    let (_, deep) = get(
+        &app,
+        &token,
+        &format!(
+            "/fred-manager/v1/spaces/{}/folders?parent_id={}",
+            team.id, grandchild.id
+        ),
+    )
+    .await;
+    assert_eq!(deep["ancestors"].as_array().unwrap().len(), 3);
+    assert_eq!(deep["ancestors"][0]["name"], "renamed");
+    let doc = document(team.id, Some(grandchild.id), "kept.txt");
+    db::insert_document(&e.pool, &doc).await.unwrap();
+    assert_eq!(
+        content_request(app.clone(), &token, "DELETE", &path, "").await,
+        409
+    );
+    assert_eq!(get(&app, &token, &url).await.1["total"], 231);
+    assert!(db::folder(&e.pool, grandchild.id).await.is_ok());
+    assert!(db::document(&e.pool, doc.id).await.is_ok());
+    for method in ["DELETE", "PATCH"] {
+        assert_eq!(
+            content_request(
+                app.clone(),
+                &identity.token("reader"),
+                method,
+                &path,
+                r#"{"name":"denied"}"#
+            )
+            .await,
+            403
+        );
+    }
+    // Fixture-only document removal: no product document mutation is introduced.
+    sqlx::query("delete from document where id=$1")
+        .bind(doc.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        content_request(app.clone(), &token, "DELETE", &path, "").await,
+        204
+    );
+    assert_eq!(get(&app, &token, &url).await.0, 404);
+    let remaining: i64 = sqlx::query_scalar("select count(*) from folder where space_id=$1")
+        .bind(team.id)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining, 0);
+    assert_eq!(content_request(app, &token, "DELETE", &path, "").await, 404);
 }

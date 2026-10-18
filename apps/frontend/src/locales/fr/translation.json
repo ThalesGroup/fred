@@ -2241,6 +2241,7 @@
       "versionsAria": "Versions des notes de version"
     },
     "resources": {
+      "documentsUnavailable": "L'import de documents n'est pas encore disponible dans cet espace.",
       "managerRead": {
         "denied": "Vous n'avez pas accès à ces ressources.",
         "missing": "Cet espace ou ce dossier est introuvable.",
@@ -2309,6 +2310,9 @@
         "searchable": "Exclure de la recherche"
       },
       "confirm": {
+        "deleteManagerFolder": "Supprimer \"{{name}}\" et ses sous-dossiers ? Rien ne sera supprimé si un document est présent.",
+        "deleteManagerFolders": "Supprimer les {{count}} dossiers sélectionnés et leurs sous-dossiers ? Chaque dossier contenant des documents sera conservé.",
+        "deleteManagerPartial": "{{failed}} dossiers sur {{count}} n'ont pas pu être supprimés. La liste a été actualisée.",
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
         "deleteBulkMessage": "Retirer {{count}} documents de ce dossier ?",
         "deleteTitle": "Retirer le document",

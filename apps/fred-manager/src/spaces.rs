@@ -910,8 +910,9 @@ pub async fn create_folder(
         parent_id,
         name: name.to_owned(),
         path: domain::folder_path(parent.as_ref(), id),
+        created_at: chrono::Utc::now(),
     };
-    db::insert_folder(&mut *tx, &folder).await?;
+    let folder = db::insert_folder(&mut *tx, &folder).await?;
     tx.commit().await?;
     Ok(folder)
 }

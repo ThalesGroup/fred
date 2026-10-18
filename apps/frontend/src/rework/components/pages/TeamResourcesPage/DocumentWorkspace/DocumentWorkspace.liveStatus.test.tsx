@@ -22,6 +22,7 @@
 // upload that used to sit on "En attente" for its whole run and jump straight
 // to done without ever showing "Traitement…".
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

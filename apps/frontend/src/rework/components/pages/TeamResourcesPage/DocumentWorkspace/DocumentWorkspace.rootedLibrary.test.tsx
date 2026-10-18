@@ -21,6 +21,7 @@
 // library outliving its folder is a supported state, not a corrupt one:
 // deleting a machine-filled folder stays available to people.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";

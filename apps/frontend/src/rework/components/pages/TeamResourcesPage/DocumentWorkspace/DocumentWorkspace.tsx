@@ -57,7 +57,7 @@ import {
   findNode,
   fullPath,
   withoutMachineWritten,
-  type TagNode,
+  type TagNode as LegacyTagNode,
 } from "../../../../../shared/utils/tagTree.ts";
 import {
   importPanelOpenRequested,
@@ -100,6 +100,25 @@ import {
   type DocumentSortField,
 } from "./documentOrdering.ts";
 
+import {
+  useListFoldersQuery,
+  useCreateFolderMutation,
+  useRenameFolderMutation,
+  useDeleteFolderMutation,
+} from "../../../../../slices/fredManager/fredManagerApiEnhancements";
+import type { Folder } from "../../../../../slices/fredManager/fredManagerOpenApi";
+
+// Presentation nodes retain the original renderer. Manager metadata is never a KF tag:
+// no tag id is synthesized and document operations cannot consume these nodes.
+type TagNode = LegacyTagNode & { managerFolder?: Folder };
+const folderNode = (folder: Folder): TagNode => ({
+  name: folder.name,
+  full: folder.id,
+  children: new Map(),
+  tagsHere: [],
+  managerFolder: folder,
+});
+
 const DEFAULT_PAGE_SIZE = 50;
 // Port of main's DocumentLibraryList live-status loop: while a loaded row is
 // processing, its folder page is reloaded on this cadence so the badge flips
@@ -121,6 +140,7 @@ interface PageState {
 
 interface DocumentWorkspaceProps {
   teamId: string;
+  managerSpaceId?: string;
   /** The owning team's real id, when `teamId` is the "personal" URL alias.
    *  Only the import panel's scoping uses it; everywhere else `teamId` is
    *  already the real one. */
@@ -201,6 +221,7 @@ function descendantTagsWithPaths(node: TagNode, basePrefix: string): { tagId: st
  */
 function DocumentWorkspace({
   teamId,
+  managerSpaceId,
   importScopeId,
   isPersonalTeam,
   onDocumentsChanged,
@@ -216,7 +237,52 @@ function DocumentWorkspace({
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
-  const { data: team } = useGetTeamQuery({ teamId });
+  const [currentFolderFull, setCurrentFolderFull] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
+  const [ordering, setOrdering] = useState<DocumentOrdering>(DEFAULT_ORDERING);
+  const [folderOffset, setFolderOffset] = useState(0);
+  const managerQuery = useListFoldersQuery(
+    {
+      id: managerSpaceId ?? "",
+      parentId: currentFolderFull ?? undefined,
+      search,
+      order: `${ordering.by === "created" ? "created" : "name"}_${ordering.order}`,
+      offset: folderOffset,
+      limit: rowsPerPage,
+    },
+    { skip: !managerSpaceId, refetchOnMountOrArgChange: true },
+  );
+  const failedManagerRead = useRef(false);
+  if (managerQuery.isError) failedManagerRead.current = true;
+  if (managerQuery.isSuccess && !managerQuery.isFetching) failedManagerRead.current = false;
+  const directory = failedManagerRead.current ? undefined : managerQuery.currentData;
+  const [createManagerFolder] = useCreateFolderMutation();
+  const [renameManagerFolder] = useRenameFolderMutation();
+  const [deleteManagerFolder] = useDeleteFolderMutation();
+  const folderDeletions = useRef(new Map<string, Promise<unknown>>());
+  const deleteManagerOnce = useCallback(
+    (id: string) => {
+      const existing = folderDeletions.current.get(id);
+      if (existing) return existing;
+      const request = deleteManagerFolder({ id }).unwrap();
+      folderDeletions.current.set(id, request);
+      void request.finally(() => folderDeletions.current.delete(id)).catch(() => {});
+      return request;
+    },
+    [deleteManagerFolder],
+  );
+  // The explorer hides its table on an empty page, so its own pagination
+  // cannot recover after the last row of the last page is removed.
+  useEffect(() => {
+    if (!directory) return;
+    const last = Math.max(0, Math.ceil(directory.total / rowsPerPage) - 1) * rowsPerPage;
+    if (folderOffset > last) {
+      setFolderOffset(last);
+      setSelectedKeys(new Set());
+    }
+  }, [directory, folderOffset, rowsPerPage]);
+  const { data: team } = useGetTeamQuery({ teamId }, { skip: !!managerSpaceId });
   const { canUpdateResources } = useTeamCapabilities(team);
   // The single gate every write affordance already passes through — folder and
   // document menus, both drop targets, the toolbar, folder creation on upload.
@@ -225,20 +291,23 @@ function DocumentWorkspace({
   // a machine-filled library, so offering the action could only produce a
   // failed request. Reading is untouched — download is deliberately outside
   // this gate below.
-  const canCreateFolder = canUpdateResources && !readOnly;
+  const canCreateFolder = (managerSpaceId ? directory?.can_write === true : canUpdateResources) && !readOnly;
 
   const ownerFilter: OwnerFilter = isPersonalTeam ? "personal" : "team";
   const {
     data: tags,
     isLoading: tagsLoading,
     refetch: refetchTagsQuery,
-  } = useListTagsQuery({
-    type: "document",
-    ownerFilter,
-    teamId: isPersonalTeam ? undefined : teamId,
-    limit: 10000,
-    offset: 0,
-  });
+  } = useListTagsQuery(
+    {
+      type: "document",
+      ownerFilter,
+      teamId: isPersonalTeam ? undefined : teamId,
+      limit: 10000,
+      offset: 0,
+    },
+    { skip: !!managerSpaceId },
+  );
   // Every add/delete path in this workspace (upload, single/bulk removal,
   // folder deletion, a newly-registered ingestion task) already calls
   // refetchTags() to refresh the folder tree — piggyback the stats refresh
@@ -283,7 +352,6 @@ function DocumentWorkspace({
     return rootTag ? fullPath(rootTag) : null;
   }, [tags, rootTagId]);
 
-  const [currentFolderFull, setCurrentFolderFull] = useState<string | null>(null);
   // Null means the base, wherever that is — so navigation keeps working across
   // the render where `baseFull` resolves.
   const currentFull = currentFolderFull ?? baseFull;
@@ -330,15 +398,16 @@ function DocumentWorkspace({
   // Team history includes terminal outcomes; personal history needs explicit state queries.
   const { data: taskHistory } = useListTasksKnowledgeFlowV1TasksGetQuery(
     isPersonalTeam ? { scope: "user", kind: "ingestion" } : { scope: "team", teamId, kind: "ingestion" },
+    { skip: !!managerSpaceId },
   );
   // User-scoped listing hides terminal tasks unless a state is explicitly requested.
   const { data: personalFailures } = useListTasksKnowledgeFlowV1TasksGetQuery(
     { scope: "user", kind: "ingestion", state: "failed" },
-    { skip: !isPersonalTeam },
+    { skip: !!managerSpaceId || !isPersonalTeam },
   );
   const { data: personalSuccesses } = useListTasksKnowledgeFlowV1TasksGetQuery(
     { scope: "user", kind: "ingestion", state: "succeeded" },
-    { skip: !isPersonalTeam },
+    { skip: !!managerSpaceId || !isPersonalTeam },
   );
   const allTasks = useSelector(selectAllTasks);
   // Keyed on the session's terminal outcomes, not on `allTasks` itself: the task
@@ -423,14 +492,11 @@ function DocumentWorkspace({
   // the deferred server-side search from RFC §13.4 (POST .../browse's
   // `query` field), which would search across the whole library, not just
   // what's on screen. Same pattern as the team members table's search.
-  const [search, setSearch] = useState("");
   // Shared across the whole browser (not per-tag) — matches how the members
   // table's rows-per-page selector is one setting for the whole DataTable.
-  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
   // Ordering travels to the server with every browse: only one page comes
   // back, so sorting it in the browser would order 50 rows and call it a
   // sorted folder. Same lifetime as rowsPerPage — one setting for the view.
-  const [ordering, setOrdering] = useState<DocumentOrdering>(DEFAULT_ORDERING);
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
   const latestPageRequest = useRef(new Map<string, symbol>());
@@ -445,7 +511,19 @@ function DocumentWorkspace({
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
 
-  const currentNode = currentFull ? findNode(tree, currentFull) : tree;
+  const managerNode = useMemo<TagNode>(() => {
+    const current = directory?.ancestors[directory.ancestors.length - 1];
+    return {
+      ...(current ? folderNode(current) : { name: "", full: "", tagsHere: [], children: new Map() }),
+      children: new Map((directory?.items ?? []).map((folder) => [folder.id, folderNode(folder)])),
+    };
+  }, [directory]);
+  const currentNode: TagNode = managerSpaceId ? managerNode : currentFull ? findNode(tree, currentFull) : tree;
+  const displayPath = managerSpaceId ? directory?.ancestors.map((folder) => folder.name).join("/") : currentFull;
+  const location = `${teamId}:${currentFull ?? ""}`;
+  const locationRef = useRef(location);
+  locationRef.current = location;
+  const documentsUnavailable = () => showInfo?.({ summary: t("rework.resources.documentsUnavailable") });
   const currentTag = currentNode.tagsHere[0] ?? null;
 
   const loadTagPage = useCallback(
@@ -482,6 +560,7 @@ function DocumentWorkspace({
   const handleRowsPerPageChange = useCallback(
     (limit: number) => {
       setRowsPerPage(limit);
+      setFolderOffset(0);
       if (currentTag) void loadTagPage(currentTag.id, 0, limit);
     },
     [currentTag, loadTagPage],
@@ -496,6 +575,7 @@ function DocumentWorkspace({
     (next: SortState | null) => {
       const sort = orderingFromSortState(next, columnLabel);
       setOrdering(sort);
+      setFolderOffset(0);
       if (currentTag) void loadTagPage(currentTag.id, 0, rowsPerPage, sort);
     },
     [currentTag, loadTagPage, rowsPerPage, columnLabel],
@@ -511,6 +591,10 @@ function DocumentWorkspace({
   const refreshView = useCallback(async () => {
     setRefreshing(true);
     try {
+      if (managerSpaceId) {
+        await managerQuery.refetch();
+        return;
+      }
       const tagId = currentTag?.id;
       await Promise.all([
         refetchTags(),
@@ -519,25 +603,39 @@ function DocumentWorkspace({
     } finally {
       setRefreshing(false);
     }
-  }, [refetchTags, loadTagPage, currentTag]);
+  }, [refetchTags, loadTagPage, currentTag, managerSpaceId, managerQuery]);
 
   const navigateTo = useCallback(
     (full: string | null) => {
       setNavigationHistory((prev) => [...prev, currentFolderFull]);
       setCurrentFolderFull(full);
+      if (managerSpaceId) {
+        setFolderOffset(0);
+        setSearch("");
+        setCreateOpen(false);
+        setRenameTarget(null);
+        setUploadOpen(false);
+      }
       setSelectedKeys(new Set());
     },
-    [currentFolderFull],
+    [currentFolderFull, managerSpaceId],
   );
 
   const navigateBack = useCallback(() => {
     setNavigationHistory((prev) => {
       if (prev.length === 0) return prev;
       setCurrentFolderFull(prev[prev.length - 1]);
+      if (managerSpaceId) {
+        setFolderOffset(0);
+        setSearch("");
+        setCreateOpen(false);
+        setRenameTarget(null);
+        setUploadOpen(false);
+      }
       setSelectedKeys(new Set());
       return prev.slice(0, -1);
     });
-  }, []);
+  }, [managerSpaceId]);
 
   // Load the current folder's document page on EVERY entry, not just the first:
   // a folder opened while its files were still uploading (or their fresh ReBAC
@@ -603,6 +701,7 @@ function DocumentWorkspace({
   // Refresh document state and quota after a durable terminal task event.
   // A batch of tasks settling together reloads each affected folder once.
   useRefetchOnTaskSettled("document", (documentUids) => {
+    if (managerSpaceId) return;
     onDocumentsChanged?.();
     const settled = new Set(documentUids);
     for (const [tagId, page] of Object.entries(perTag)) {
@@ -617,6 +716,7 @@ function DocumentWorkspace({
   // refetch — its check requires the document to already be in a loaded page.
   // Fire on first sighting of the task instead (any state, not just succeeded).
   useNotifyOnNewTaskTarget("document", () => {
+    if (managerSpaceId) return;
     void refetchTags();
     for (const [tagId, page] of Object.entries(perTag)) {
       void loadTagPage(tagId, page.offset);
@@ -703,6 +803,29 @@ function DocumentWorkspace({
   // to be destroyed, which is the direction that actually costs data.
   const confirmDeleteFolder = useCallback(
     async (node: TagNode) => {
+      if (node.managerFolder) {
+        const id = node.managerFolder.id;
+        showConfirmationDialog({
+          title: t("rework.resources.confirm.deleteFolderTitle"),
+          message: t("rework.resources.confirm.deleteManagerFolder", { name: node.name }),
+          onConfirm: async () => {
+            if (!mounted.current || locationRef.current !== location || folderDeletions.current.has(id)) return;
+            try {
+              await deleteManagerOnce(id);
+              if (mounted.current && locationRef.current === location)
+                showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
+            } catch (e) {
+              if (mounted.current && locationRef.current === location)
+                showError?.({
+                  summary: t("validation.error"),
+                  detail:
+                    (e as { data?: { detail?: string } }).data?.detail ?? t("rework.resources.toast.deleteFolderError"),
+                });
+            }
+          },
+        });
+        return;
+      }
       const tag = node.tagsHere[0];
       if (!tag) return;
       // One `total` per tag in the subtree, `limit: 1` so the response carries a
@@ -750,6 +873,8 @@ function DocumentWorkspace({
     [
       browseDocumentsByTag,
       deleteTag,
+      deleteManagerOnce,
+      location,
       showConfirmationDialog,
       showSuccess,
       showError,
@@ -867,6 +992,7 @@ function DocumentWorkspace({
   // server applies to the documents. They come from the in-memory tag tree,
   // not from the paginated browse, so their order is ours to compute.
   const childFolders = useMemo(() => {
+    if (managerSpaceId) return [...managerNode.children.values()] as TagNode[];
     const nodes = [...currentNode.children.values()];
     const direction = ordering.order === "desc" ? -1 : 1;
     if (ordering.by === "created") {
@@ -877,7 +1003,7 @@ function DocumentWorkspace({
     // not known here — so ordering by size falls back to the name, which at
     // least keeps the group stable instead of shuffling it.
     return nodes.sort((a, b) => direction * a.name.localeCompare(b.name));
-  }, [currentNode, ordering]);
+  }, [currentNode, ordering, managerSpaceId, managerNode]);
 
   // Folder rows show the total size of every document the folder contains,
   // including its subfolders' — a folder tag's own item_ids never cover
@@ -1005,9 +1131,9 @@ function DocumentWorkspace({
 
   const filteredRows = useMemo(() => {
     const trimmed = search.trim().toLowerCase();
-    if (!trimmed) return rows;
+    if (managerSpaceId || !trimmed) return rows;
     return rows.filter((row) => rowLabel(row).toLowerCase().includes(trimmed));
-  }, [rows, search]);
+  }, [rows, search, managerSpaceId]);
 
   // Batched once for the whole page (not one query per row, same pattern as
   // TeamAgentsPage's audit-user resolution, #2096) — the Auteur column shows
@@ -1115,8 +1241,35 @@ function DocumentWorkspace({
   // generically once folders are involved, while the single-folder delete keeps
   // its live count.
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const managerBulkPending = useRef(false);
   const bulkDelete = () => {
     if (!hasSelection) return;
+    if (managerSpaceId) {
+      showConfirmationDialog({
+        title: t("rework.resources.confirm.deleteTitle"),
+        message: t("rework.resources.confirm.deleteManagerFolders", { count: selectedFolders.length }),
+        onConfirm: async () => {
+          if (!mounted.current || locationRef.current !== location || managerBulkPending.current) return;
+          managerBulkPending.current = true;
+          setBulkDeleting(true);
+          const outcomes = await Promise.allSettled(
+            selectedFolders.map((node) => deleteManagerOnce(node.managerFolder!.id)),
+          );
+          managerBulkPending.current = false;
+          if (mounted.current) setBulkDeleting(false);
+          if (!mounted.current || locationRef.current !== location) return;
+          setSelectedKeys(new Set());
+          const failures = outcomes.filter((result) => result.status === "rejected").length;
+          if (failures)
+            showError?.({
+              summary: t("validation.error"),
+              detail: t("rework.resources.confirm.deleteManagerPartial", { failed: failures, count: outcomes.length }),
+            });
+          else showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
+        },
+      });
+      return;
+    }
     const docCount = selectedDocs.length;
     const folderCount = selectedFolders.length;
     const message =
@@ -1237,6 +1390,10 @@ function DocumentWorkspace({
   // bulkToggleSearchable's one-toast-per-doc path (kept for the file-only case).
   const [bulkExcluding, setBulkExcluding] = useState(false);
   const bulkExcludeSelection = async () => {
+    if (managerSpaceId) {
+      documentsUnavailable();
+      return;
+    }
     setBulkExcluding(true);
     try {
       const folderDocs = selectedFolders.length > 0 ? (await resolveFolderDocs(selectedFolders)).map((e) => e.doc) : [];
@@ -1282,6 +1439,10 @@ function DocumentWorkspace({
   // same rows again right after downloading them).
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const bulkDownload = async () => {
+    if (managerSpaceId) {
+      documentsUnavailable();
+      return;
+    }
     setBulkDownloading(true);
     try {
       // Folder-aware (#2446): resolve each selected folder's documents and zip
@@ -1317,7 +1478,7 @@ function DocumentWorkspace({
   };
 
   const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
-    if (!canCreateFolder || !node.tagsHere[0]) return [];
+    if (!canCreateFolder || (!node.managerFolder && !node.tagsHere[0])) return [];
     return [
       {
         value: "rename",
@@ -1546,7 +1707,11 @@ function DocumentWorkspace({
       size: "minmax(0, 9rem)",
       cellRenderer: (row) => (
         <span className={styles.nowrapCell}>
-          {formatDateTime(row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.source.date_added_to_kb)}
+          {formatDateTime(
+            row.kind === "folder"
+              ? (row.node.managerFolder?.created_at ?? row.node.tagsHere[0]?.created_at)
+              : row.doc.source.date_added_to_kb,
+          )}
         </span>
       ),
     },
@@ -1658,6 +1823,14 @@ function DocumentWorkspace({
   ];
 
   const breadcrumbSegments = useMemo(() => {
+    if (managerSpaceId)
+      return [
+        { label: t("rework.resources.roots.resources"), onClick: currentFull ? () => navigateTo(null) : undefined },
+        ...(directory?.ancestors ?? []).map((folder, i, ancestors) => ({
+          label: folder.name,
+          onClick: i < ancestors.length - 1 ? () => navigateTo(folder.id) : undefined,
+        })),
+      ];
     // Rooted inside a library, the trail starts at the library itself: the
     // corpus above it is not somewhere this workspace can go.
     const rootLabel = baseFull ? baseFull.split("/").pop()! : t("rework.resources.roots.resources");
@@ -1678,9 +1851,11 @@ function DocumentWorkspace({
       segments.push({ label: part, onClick: isLast ? undefined : () => navigateTo(stepPath) });
     });
     return segments;
-  }, [currentFull, baseFull, t, navigateTo]);
+  }, [currentFull, baseFull, t, navigateTo, managerSpaceId, directory]);
 
-  const failedInitialLoad = Boolean(currentTag && page && !page.loading && !page.loaded);
+  const failedInitialLoad = managerSpaceId
+    ? failedManagerRead.current
+    : Boolean(currentTag && page && !page.loading && !page.loaded);
   const isEmpty =
     !tagsLoading &&
     childFolders.length === 0 &&
@@ -1755,7 +1930,7 @@ function DocumentWorkspace({
   // FOLDERS are accepted there — each one becomes a library mirroring its
   // structure (openDrawerWithDroppedFiles filters loose files out).
   const atRoot = currentFull === baseFull;
-  const pageDroppable = canCreateFolder && (!!currentTag || atRoot);
+  const pageDroppable = canCreateFolder && (!!managerSpaceId || !!currentTag || atRoot);
   const pageDropProps = pageDroppable
     ? {
         onDragOver: (event: React.DragEvent) => {
@@ -1816,7 +1991,13 @@ function DocumentWorkspace({
         }}
         search={{
           value: search,
-          onChange: setSearch,
+          onChange: (value) => {
+            setSearch(value);
+            if (managerSpaceId) {
+              setFolderOffset(0);
+              setSelectedKeys(new Set());
+            }
+          },
           placeholder: t("rework.resources.search.placeholder"),
           ariaLabel: t("rework.resources.search.ariaLabel"),
           clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
@@ -1882,7 +2063,11 @@ function DocumentWorkspace({
                     />
                   </Tooltip>
                   <Tooltip
-                    text={currentTag ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
+                    text={
+                      (managerSpaceId ? currentFull : currentTag)
+                        ? t("rework.resources.action.addFile")
+                        : t("rework.resources.action.addFileHint")
+                    }
                   >
                     <IconButton
                       color="primary"
@@ -1890,7 +2075,7 @@ function DocumentWorkspace({
                       size="medium"
                       icon={{ category: "outlined", type: "upload_file" }}
                       aria-label={t("rework.resources.action.addFile")}
-                      disabled={!currentTag}
+                      disabled={managerSpaceId ? !currentFull || !directory : !currentTag}
                       onClick={() => setUploadOpen(true)}
                     />
                   </Tooltip>
@@ -1899,7 +2084,11 @@ function DocumentWorkspace({
             </>
           )
         }
-        loading={tagsLoading || Boolean(currentTag && (!page || (page.loading && !page.loaded)))}
+        loading={
+          managerSpaceId
+            ? managerQuery.isFetching && !directory
+            : tagsLoading || Boolean(currentTag && (!page || (page.loading && !page.loaded)))
+        }
         loadingMessage={t("rework.resources.loading")}
         empty={isEmpty}
         emptyMessage={emptyMessage}
@@ -1909,15 +2098,28 @@ function DocumentWorkspace({
         selectedKeys={selectedKeys}
         onSelectedKeysChange={setSelectedKeys}
         serverPagination={
-          currentTag
-            ? {
-                totalCount: page?.total ?? 0,
-                offset: page?.offset ?? 0,
-                limit: rowsPerPage,
-                onOffsetChange: (offset) => void loadTagPage(currentTag.id, offset),
-                onLimitChange: handleRowsPerPageChange,
-              }
-            : undefined
+          managerSpaceId
+            ? directory
+              ? {
+                  totalCount: directory?.total ?? 0,
+                  offset: folderOffset,
+                  limit: rowsPerPage,
+                  onOffsetChange: (offset) => {
+                    setFolderOffset(offset);
+                    setSelectedKeys(new Set());
+                  },
+                  onLimitChange: handleRowsPerPageChange,
+                }
+              : undefined
+            : currentTag
+              ? {
+                  totalCount: page?.total ?? 0,
+                  offset: page?.offset ?? 0,
+                  limit: rowsPerPage,
+                  onOffsetChange: (offset) => void loadTagPage(currentTag.id, offset),
+                  onLimitChange: handleRowsPerPageChange,
+                }
+              : undefined
         }
         // Controlled: the server ordered the whole tag before cutting this
         // page, so the table must not re-sort the rows it was handed. And the
@@ -1951,10 +2153,13 @@ function DocumentWorkspace({
         initialFiles={droppedFiles}
         teamId={teamId}
         importScopeId={importScopeId}
-        destinationPath={uploadTargetNode.full || undefined}
+        destinationPath={
+          managerSpaceId ? (dropTargetNode?.name ?? displayPath) || undefined : uploadTargetNode.full || undefined
+        }
+        unavailableReason={managerSpaceId ? t("rework.resources.documentsUnavailable") : undefined}
         metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
-        ensureFolderPath={canCreateFolder ? ensureFolderPath : undefined}
-        requireFolderPerFile={!uploadTargetTag}
+        ensureFolderPath={!managerSpaceId && canCreateFolder ? ensureFolderPath : undefined}
+        requireFolderPerFile={managerSpaceId ? !uploadTargetNode.managerFolder : !uploadTargetTag}
         // Reached long after the drawer closed — the transfer is detached, and
         // by then this workspace may be gone. Refetching a query whose
         // subscription has ended throws, so nothing is refreshed once it is:
@@ -1966,21 +2171,51 @@ function DocumentWorkspace({
         }}
       />
       <CreateFolderModal
+        key={managerSpaceId ? location : undefined}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        parentPath={currentFull ?? undefined}
+        parentPath={displayPath ?? undefined}
+        maxDepth={managerSpaceId ? 15 : undefined}
+        onSubmit={
+          managerSpaceId
+            ? async (name) => {
+                if (!canCreateFolder) throw new Error("forbidden");
+                await createManagerFolder({
+                  createFolder: { space_id: managerSpaceId, parent_id: currentFull, name },
+                }).unwrap();
+              }
+            : undefined
+        }
         teamId={isPersonalTeam ? undefined : teamId}
-        onCreated={() => void refetchTags()}
+        onCreated={() => {
+          if (!managerSpaceId) void refetchTags();
+        }}
       />
       {renameTarget && (
         <RenameModal
+          key={managerSpaceId ? location : undefined}
           open={!!renameTarget}
           onClose={() => setRenameTarget(null)}
           initialName={renameTarget.kind === "folder" ? renameTarget.node.name : documentDisplayName(renameTarget.doc)}
           lockedSuffix={renameTarget.kind === "document" ? documentExtension(renameTarget.doc) : undefined}
           onSubmit={async (newName) => {
             if (renameTarget.kind === "folder") {
-              await commands.renameFolder(renameTarget.node, newName);
+              if (renameTarget.node.managerFolder) {
+                try {
+                  await renameManagerFolder({
+                    id: renameTarget.node.managerFolder.id,
+                    rename: { name: newName },
+                  }).unwrap();
+                } catch (e) {
+                  if (mounted.current && locationRef.current === location)
+                    showError?.({
+                      summary: t("validation.error"),
+                      detail:
+                        (e as { data?: { detail?: string } }).data?.detail ?? t("rework.resources.folderModal.error"),
+                    });
+                  throw e;
+                }
+              } else await commands.renameFolder(renameTarget.node, newName);
             } else {
               await commands.renameDocument(renameTarget.doc, newName, currentTag?.id);
             }

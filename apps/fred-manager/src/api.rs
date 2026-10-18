@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! REST surface. Content access costs exactly one OpenFGA check on one space;
-//! governance calls (spaces, roles) may add the invariant checks they enforce.
+//! REST surface. Content permissions are checked on the owning space.
+//! Directory responses also check write capability for the existing UI controls.
 
 use std::sync::Arc;
 
@@ -507,21 +507,29 @@ async fn require_folder_in_space(
     Ok(())
 }
 
-#[derive(Deserialize, utoipa::ToSchema)]
-struct FolderQuery {
-    parent_id: Option<Uuid>,
+#[derive(Serialize, utoipa::ToSchema)]
+struct FolderDirectory {
+    #[serde(flatten)]
+    page: crate::domain::FolderPage,
+    /// Current OpenFGA decision for the existing write controls, not a grant.
+    can_write: bool,
 }
 
 #[utoipa::path(
     get, path = "/spaces/{id}/folders",
-    params(("id" = Uuid, Path), ("parent_id" = Option<Uuid>, Query)),
+    params(("id" = Uuid, Path), ("parent_id" = Option<Uuid>, Query),
+        ("search" = Option<String>, Query, description = "Literal case-insensitive substring within this directory; at most 255 characters."),
+        ("order" = Option<crate::domain::FolderOrder>, Query),
+        ("offset" = Option<i64>, Query, description = "Defaults to 0; negative values clamp to 0."),
+        ("limit" = Option<i64>, Query, description = "Defaults to 50; clamped to 1..200.")),
     responses(
-        (status = 200, description = "Success", body = [Folder]),
+        (status = 200, description = "Directory page and ancestors from one SQL snapshot", body = FolderDirectory),
         (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Unknown space or folder in this space", body = crate::error::ErrorBody),
         (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
+        (status = 422, description = "Search exceeds 255 characters", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -529,11 +537,19 @@ async fn list_folders(
     State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     Path(space): Path<Uuid>,
-    Query(q): Query<FolderQuery>,
-) -> AppResult<Json<Vec<Folder>>> {
+    Query(q): Query<crate::domain::FolderQuery>,
+) -> AppResult<Json<FolderDirectory>> {
     require(&s.pool, &s.fga, &user, Permission::Read, space).await?;
-    require_folder_in_space(&s.pool, space, q.parent_id).await?;
-    Ok(Json(db::folders(&s.pool, space, q.parent_id).await?))
+    if q.search.as_ref().is_some_and(|s| s.chars().count() > 255) {
+        return Err(AppError::Unprocessable(
+            "folder search exceeds 255 characters".into(),
+        ));
+    }
+    let can_write = s.fga.check(&user, Permission::Write, space).await?;
+    Ok(Json(FolderDirectory {
+        page: db::folders(&s.pool, space, &q).await?,
+        can_write,
+    }))
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -1131,12 +1147,17 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
         .nest("/fred-manager/v1", OpenApiRouter::with_openapi(api))
         .into_openapi();
     api.info.title = "fred-manager".into();
-    api.components
-        .get_or_insert_with(|| ComponentsBuilder::new().build())
-        .add_security_scheme(
-            "bearer",
-            SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
-        );
+    let components = api
+        .components
+        .get_or_insert_with(|| ComponentsBuilder::new().build());
+    components.schemas.insert(
+        "FolderOrder".into(),
+        <crate::domain::FolderOrder as utoipa::PartialSchema>::schema(),
+    );
+    components.add_security_scheme(
+        "bearer",
+        SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
+    );
     api.security = Some(vec![SecurityRequirement::new(
         "bearer",
         Vec::<String>::new(),

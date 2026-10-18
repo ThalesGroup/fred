@@ -17,7 +17,7 @@
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domain::{Document, Folder, Space, SpaceRow};
+use crate::domain::{Document, Folder, FolderOrder, FolderPage, FolderQuery, Space, SpaceRow};
 
 // Macros rather than consts: sqlx only accepts compile-time SQL strings.
 macro_rules! space {
@@ -27,7 +27,7 @@ macro_rules! space {
 }
 macro_rules! folder {
     () => {
-        "select id, space_id, parent_id, name, path from folder"
+        "select id, space_id, parent_id, name, path, created_at from folder"
     };
 }
 macro_rules! document {
@@ -130,33 +130,102 @@ pub async fn folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Resu
         .await
 }
 
-pub async fn folders(
-    pool: &PgPool,
-    space: Uuid,
-    parent: Option<Uuid>,
-) -> sqlx::Result<Vec<Folder>> {
-    sqlx::query_as(concat!(
-        folder!(),
-        " where space_id = $1 and parent_id is not distinct from $2 order by name, id"
-    ))
-    .bind(space)
-    .bind(parent)
-    .fetch_all(pool)
-    .await
+pub async fn folders(pool: &PgPool, space: Uuid, query: &FolderQuery) -> sqlx::Result<FolderPage> {
+    // Count, page and breadcrumbs describe one snapshot, including during deletion.
+    let mut tx = pool.begin().await?;
+    sqlx::query("set transaction isolation level repeatable read, read only")
+        .execute(&mut *tx)
+        .await?;
+    let ancestors = if let Some(parent) = query.parent_id {
+        let rows = sqlx::query_as::<_, Folder>(
+            "with recursive ancestors as (
+                select f.*, 1 as depth from folder f where id = $1 and space_id = $2
+                union all
+                select p.*, a.depth + 1 from folder p join ancestors a
+                    on p.id = a.parent_id and p.space_id = a.space_id where a.depth < 15
+            ) select id, space_id, parent_id, name, path, created_at from ancestors order by depth desc"
+        ).bind(parent).bind(space).fetch_all(&mut *tx).await?;
+        if rows.is_empty() {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        rows
+    } else {
+        Vec::new()
+    };
+    let total = folder_selection("select count(*)", space, query)
+        .build_query_scalar::<i64>()
+        .fetch_one(&mut *tx)
+        .await?;
+    let offset = query.offset.unwrap_or(0).max(0);
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let order = match query.order.unwrap_or_default() {
+        FolderOrder::NameAsc => " order by name asc, id asc",
+        FolderOrder::NameDesc => " order by name desc, id desc",
+        FolderOrder::CreatedAsc => " order by created_at asc, id asc",
+        FolderOrder::CreatedDesc => " order by created_at desc, id desc",
+    };
+    let items = folder_selection(
+        "select id, space_id, parent_id, name, path, created_at",
+        space,
+        query,
+    )
+    .push(order)
+    .push(" limit ")
+    .push_bind(limit)
+    .push(" offset ")
+    .push_bind(offset)
+    .build_query_as::<Folder>()
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(FolderPage {
+        items,
+        ancestors,
+        total,
+        offset,
+        limit,
+    })
 }
 
-pub async fn insert_folder<'e>(pool: impl sqlx::PgExecutor<'e>, f: &Folder) -> sqlx::Result<()> {
-    sqlx::query(
-        "insert into folder (id, space_id, parent_id, name, path) values ($1, $2, $3, $4, $5)",
+fn folder_selection(
+    select: &'static str,
+    space: Uuid,
+    query: &FolderQuery,
+) -> sqlx::QueryBuilder<Postgres> {
+    let mut sql = sqlx::QueryBuilder::new(select);
+    sql.push(" from folder where space_id = ").push_bind(space);
+    // Null-safe equality prevents a selective parent index condition in PostgreSQL.
+    match query.parent_id {
+        Some(parent) => {
+            sql.push(" and parent_id = ").push_bind(parent);
+        }
+        None => {
+            sql.push(" and parent_id is null");
+        }
+    }
+    if let Some(search) = query.search.as_deref().filter(|s| !s.is_empty()) {
+        sql.push(" and strpos(lower(name), lower(")
+            .push_bind(search)
+            .push(")) > 0");
+    }
+    sql
+}
+
+pub async fn insert_folder<'e>(
+    pool: impl sqlx::PgExecutor<'e>,
+    f: &Folder,
+) -> sqlx::Result<Folder> {
+    sqlx::query_as(
+        "insert into folder (id, space_id, parent_id, name, path, created_at) values ($1, $2, $3, $4, $5, $6) returning id, space_id, parent_id, name, path, created_at",
     )
     .bind(f.id)
     .bind(f.space_id)
     .bind(f.parent_id)
     .bind(&f.name)
     .bind(&f.path)
-    .execute(pool)
-    .await?;
-    Ok(())
+    .bind(f.created_at)
+    .fetch_one(pool)
+    .await
 }
 
 pub async fn rename_folder<'e>(
@@ -172,12 +241,20 @@ pub async fn rename_folder<'e>(
     Ok(())
 }
 
-/// Fails with a foreign-key violation while the folder holds documents or sub-folders.
+/// One SQL statement removes the whole subtree or fails its document foreign key.
+/// The caller holds the owning organization lock through commit.
 pub async fn delete_folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<()> {
-    sqlx::query("delete from folder where id = $1")
-        .bind(id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "with recursive subtree as (
+        select id, space_id from folder where id = $1
+        union all
+        select f.id, f.space_id from folder f join subtree p
+            on f.space_id = p.space_id and f.parent_id = p.id
+    ) delete from folder f using subtree s where f.id = s.id",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 

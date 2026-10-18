@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -40,6 +40,18 @@ interface RenameModalProps {
  */
 export default function RenameModal({ open, onClose, initialName, onSubmit, lockedSuffix }: RenameModalProps) {
   const { t } = useTranslation();
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const requestClose = () => {
+    if (!pending.current) onClose();
+  };
+
   const initialBase =
     lockedSuffix && initialName.endsWith(lockedSuffix) ? initialName.slice(0, -lockedSuffix.length) : initialName;
   const [name, setName] = useState(initialBase);
@@ -56,7 +68,7 @@ export default function RenameModal({ open, onClose, initialName, onSubmit, lock
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !pending.current) onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -68,24 +80,26 @@ export default function RenameModal({ open, onClose, initialName, onSubmit, lock
   const unchanged = trimmed === initialBase.trim();
 
   const submit = async () => {
-    if (!trimmed || isSaving || unchanged) return;
+    if (!trimmed || isSaving || unchanged || pending.current) return;
+    pending.current = true;
     setIsSaving(true);
     try {
       await onSubmit(trimmed + (lockedSuffix ?? ""));
-      onClose();
+      if (mounted.current) onClose();
     } catch {
       // Every onSubmit caller (renameTag/renameDocument/the /fs rename) already
       // shows its own, more specific error toast before rethrowing —
       // a second generic one here was a duplicate. Keep the modal open (no
       // onClose()) so the user can retry with the toast's detail in view.
     } finally {
-      setIsSaving(false);
+      pending.current = false;
+      if (mounted.current) setIsSaving(false);
     }
   };
 
   return (
     <Portal id="modal-portal">
-      <div className={styles.overlay} onClick={onClose}>
+      <div className={styles.overlay} onClick={requestClose}>
         <div
           className={styles.dialog}
           role="dialog"
@@ -103,7 +117,7 @@ export default function RenameModal({ open, onClose, initialName, onSubmit, lock
                 size="small"
                 icon={{ category: "outlined", type: "close" }}
                 aria-label={t("common.close")}
-                onClick={onClose}
+                onClick={requestClose}
               />
             </div>
 
@@ -120,7 +134,7 @@ export default function RenameModal({ open, onClose, initialName, onSubmit, lock
           </div>
 
           <div className={styles.actions}>
-            <Button color="on-surface" variant="outlined" size="medium" onClick={onClose}>
+            <Button color="on-surface" variant="outlined" size="medium" onClick={requestClose}>
               {t("rework.resources.folderModal.cancel")}
             </Button>
             <Button

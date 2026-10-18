@@ -21,10 +21,10 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
-import { useListTagsQuery, useGetTagCorpusTypeStatsQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useGetTagCorpusTypeStatsQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
-import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
+import { useMySpacesQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
@@ -36,12 +36,10 @@ import styles from "./TeamResourcesPage.module.css";
 export default function TeamResourcesPage() {
   const { t } = useTranslation();
   const { teamId = "" } = useParams<{ teamId: string }>();
-  // isPersonalTeamId alone is authoritative (handles both the bare "personal"
-  // alias and the canonical "personal-<uid>" id — see its own doc comment).
-  const isPersonalTeam = isPersonalTeamId(teamId);
   const userId = KeyCloakService.GetUserId() ?? "";
-  // Resolve the bare personal alias before querying corpus data and importing files.
-  const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
+  const memberships = useMySpacesQuery();
+  const isPersonalTeam = Boolean(memberships.currentData?.find((space) => space.id === teamId)?.personal_owner);
+  const fsTeamId = teamId;
   // `refetch` as well as `data`: the storage-quota meter below reads this team
   // row's `current_resources_storage_size`, but every write to it comes from
   // the knowledge-flow API (upload charges it, delete releases it) — a
@@ -54,23 +52,19 @@ export default function TeamResourcesPage() {
   // when the usage panel is open.
   const corpusStats = useGetTagCorpusTypeStatsQuery({ teamId: fsTeamId }, { skip: !statsOpen });
 
-  // KF health gate — identical pattern to the old KnowledgeHubPage.
-  const { isError, isLoading, isFetching, isUninitialized } = useListTagsQuery({
-    type: "document",
-    limit: 1,
-    offset: 0,
-  });
+  // Folder availability follows manager; content services do not gate classification.
+  const { isError, isLoading, isFetching, isUninitialized } = memberships;
   // Blocks on the first answer only. This gate returns the whole page to a
   // spinner, which unmounts DocumentWorkspace with it — and that workspace owns
   // the folder you are standing in, its loaded document pages and its resolved
   // folder sizes, none of which survive. Letting a background revalidation do
   // that turned one probe refetch into a full reload of the page.
-  const kfState = getQueryUiState(
+  const managerState = getQueryUiState(
     { isLoading, isFetching, isUninitialized, isError },
     { keepPreviousWhileRefetching: true },
   );
 
-  if (kfState === "loading") {
+  if (managerState === "loading") {
     return (
       <div className={styles.loadingState}>
         <Spinner size={20} />
@@ -78,12 +72,12 @@ export default function TeamResourcesPage() {
       </div>
     );
   }
-  if (kfState === "error") {
+  if (managerState === "error") {
     return (
       <ServiceNotice
         icon="cloud_off"
-        title={t("rework.serviceNotice.knowledgeService.title")}
-        description={t("rework.serviceNotice.knowledgeService.description")}
+        title={t("rework.resources.empty.loadError")}
+        description={t("rework.resources.empty.loadError")}
         centered
       />
     );
@@ -144,6 +138,8 @@ export default function TeamResourcesPage() {
       <div className={styles.panel}>
         <div className={styles.workspace}>
           <DocumentWorkspace
+            key={`${userId}:${teamId}`}
+            managerSpaceId={teamId}
             teamId={teamId}
             importScopeId={fsTeamId}
             isPersonalTeam={isPersonalTeam}
@@ -156,7 +152,11 @@ export default function TeamResourcesPage() {
 
         {/* A rail beside the documents card until it is opened, when it
             widens in place into the panel itself. */}
-        <ImportPanel teamId={fsTeamId} />
+        <ImportPanel
+          key={`${userId}:${teamId}`}
+          teamId={fsTeamId}
+          unavailableReason={t("rework.resources.documentsUnavailable")}
+        />
       </div>
     </div>
   );

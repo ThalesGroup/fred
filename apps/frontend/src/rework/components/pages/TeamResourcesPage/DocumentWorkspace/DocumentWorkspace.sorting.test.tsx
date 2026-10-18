@@ -19,6 +19,7 @@
 // the header cycle, and the offset reset that keeps a reader from landing in
 // an unrelated slice of a freshly reordered folder.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";

@@ -2241,6 +2241,7 @@
       "versionsAria": "Release versions"
     },
     "resources": {
+      "documentsUnavailable": "Document import is not available in this workspace yet.",
       "managerRead": {
         "denied": "You do not have access to these resources.",
         "missing": "This space or folder could not be found.",
@@ -2309,6 +2310,9 @@
         "searchable": "Exclude from search"
       },
       "confirm": {
+        "deleteManagerFolder": "Delete \"{{name}}\" and its subfolders? Nothing will be deleted if a document is present.",
+        "deleteManagerFolders": "Delete the {{count}} selected folders and their subfolders? Each folder containing documents will be kept.",
+        "deleteManagerPartial": "{{failed}} of {{count}} folders could not be deleted. The list has been refreshed.",
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
         "deleteBulkMessage": "Remove {{count}} documents from this folder?",
         "deleteTitle": "Remove document",

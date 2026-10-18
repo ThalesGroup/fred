@@ -17,6 +17,7 @@
 // rename mutation (DOCUMENT-RENAME-RFC.md), not the old cosmetic title edit,
 // and the row reflects the new name after the modal's own refresh.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

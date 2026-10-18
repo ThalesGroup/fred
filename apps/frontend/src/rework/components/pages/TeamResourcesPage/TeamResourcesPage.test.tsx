@@ -36,8 +36,8 @@ const probe = vi.hoisted(() => ({
   teamRefetch: () => {},
   onDocumentsChanged: undefined as (() => void) | undefined,
   corpusStatsSkip: true,
-  // Lifecycle flags of the KF health probe that gates the whole page.
-  kfProbe: { isLoading: false, isFetching: false, isUninitialized: false, isError: false },
+  // Lifecycle flags of the manager health probe that gates the whole page.
+  managerProbe: { isLoading: false, isFetching: false, isUninitialized: false, isError: false },
 }));
 
 vi.mock("react-i18next", () => ({
@@ -47,9 +47,11 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1" }) }));
 vi.mock("../../../../security/KeycloakService.ts", () => ({ KeyCloakService: { GetUserId: () => "u-1" } }));
-vi.mock("@shared/utils/teamId.ts", () => ({
-  isPersonalTeamId: () => probe.isPersonalTeam,
-  personalTeamId: (uid: string) => `personal-${uid}`,
+vi.mock("../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+  useMySpacesQuery: () => ({
+    ...probe.managerProbe,
+    currentData: [{ id: "team-1", personal_owner: probe.isPersonalTeam ? "admin" : null }],
+  }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({
@@ -62,7 +64,7 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
-  useListTagsQuery: () => probe.kfProbe,
+  useListTagsQuery: () => probe.managerProbe,
   useGetTagCorpusTypeStatsQuery: (_arg: unknown, options?: { skip?: boolean }) => {
     probe.corpusStatsSkip = options?.skip ?? false;
     return {
@@ -114,7 +116,7 @@ beforeEach(() => {
   probe.teamRefetch = vi.fn();
   probe.onDocumentsChanged = undefined;
   probe.corpusStatsSkip = true;
-  probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: false };
+  probe.managerProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: false };
 });
 
 afterEach(() => {
@@ -245,7 +247,7 @@ describe("TeamResourcesPage health gate", () => {
   }
 
   it("blocks the page until the probe has answered once", () => {
-    probe.kfProbe = { isLoading: true, isFetching: true, isUninitialized: false, isError: false };
+    probe.managerProbe = { isLoading: true, isFetching: true, isUninitialized: false, isError: false };
     render();
     expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
   });
@@ -259,7 +261,7 @@ describe("TeamResourcesPage health gate", () => {
     const panel = container.querySelector('[data-testid="panel-resources"]');
     expect(panel).not.toBeNull();
 
-    probe.kfProbe = { isLoading: false, isFetching: true, isUninitialized: false, isError: false };
+    probe.managerProbe = { isLoading: false, isFetching: true, isUninitialized: false, isError: false };
     rerender();
 
     // Same DOM node, not a fresh one: a remount would have replaced it.
@@ -267,8 +269,15 @@ describe("TeamResourcesPage health gate", () => {
   });
 
   it("shows the service notice once a failed probe has settled", () => {
-    probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: true };
+    probe.managerProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: true };
     render();
     expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
   });
+});
+
+it("uses manager personal-space metadata even when the local display subject differs", () => {
+  probe.isPersonalTeam = true;
+  render();
+  expect(container.textContent).toContain("rework.resources.pageTitlePersonal");
+  expect(container.textContent).toContain("rework.resources.pageSubtitlePersonal");
 });

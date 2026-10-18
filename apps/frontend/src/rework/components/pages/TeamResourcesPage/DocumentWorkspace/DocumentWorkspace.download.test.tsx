@@ -18,6 +18,7 @@
 // moved there from a standalone icon per a later request — and a bulk zip
 // download wired into BulkActionsBar once 2+ rows are selected.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

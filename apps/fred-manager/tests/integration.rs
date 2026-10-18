@@ -377,6 +377,7 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
     let (org, team) = org_and_team(&e).await;
     let id = Uuid::new_v4();
     let folder = Folder {
+        created_at: chrono::Utc::now(),
         id,
         space_id: team.id,
         parent_id: None,
@@ -3144,6 +3145,7 @@ async fn sql_mutation_loses_to_a_delayed_revocation_after_its_check() {
         db::insert_folder(
             &mut *tx,
             &Folder {
+                created_at: chrono::Utc::now(),
                 id,
                 space_id: team.id,
                 parent_id: None,
@@ -4414,21 +4416,26 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
     grant(&e, org.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let app = content_app(&e, &identity).await;
-    for method in ["PATCH", "DELETE"] {
+    for method in ["PATCH", "DELETE", "POST"] {
         let folder = spaces::create_folder(&e.pool, &e.fga, "alice", org.id, None, "folder".into())
             .await
             .unwrap();
         let mut deleting = hold_organization_lock(&e, org.id).await;
         let (app, token) = (app.clone(), identity.token("alice"));
         let pending = tokio::spawn(async move {
-            content_request(
-                app,
-                &token,
-                method,
-                &format!("/folders/{}", folder.id),
-                r#"{"name":"renamed"}"#,
-            )
-            .await
+            let (path, body) = if method == "POST" {
+                (
+                    "/folders".into(),
+                    serde_json::json!({"space_id":org.id,"parent_id":folder.id,"name":"child"})
+                        .to_string(),
+                )
+            } else {
+                (
+                    format!("/folders/{}", folder.id),
+                    r#"{"name":"renamed"}"#.into(),
+                )
+            };
+            content_request(app, &token, method, &path, &body).await
         });
         wait_for_advisory_waiter(&e.pool).await;
         db::delete_folder(&mut *deleting, folder.id).await.unwrap();
@@ -5738,3 +5745,6 @@ async fn api_starts_without_temporal_and_exposes_only_document_reads() {
 
 #[path = "support/organization_console.rs"]
 mod organization_console;
+
+#[path = "support/folder_scaling.rs"]
+mod folder_scaling;

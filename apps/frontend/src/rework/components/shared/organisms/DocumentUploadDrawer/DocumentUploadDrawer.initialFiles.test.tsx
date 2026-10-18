@@ -118,3 +118,20 @@ describe("DocumentUploadDrawer initialFiles seeding", () => {
     );
   });
 });
+
+it("keeps the original panel and picked files visible while manager document sending is unavailable", () => {
+  render(
+    <DocumentUploadDrawer
+      isOpen
+      onClose={() => {}}
+      initialFiles={[new File(["a"], "report.pdf")]}
+      unavailableReason="Document sending unavailable"
+    />,
+  );
+  expect(container.textContent).toContain("report.pdf");
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Document sending unavailable");
+  const send = [...container.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("documentLibrary.importCount"),
+  )!;
+  expect(send.disabled).toBe(true);
+});

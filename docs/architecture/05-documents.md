@@ -1,66 +1,75 @@
 # 5. Documents and knowledge
 
-## Knowledge bases, libraries and content ownership
+## Classification and content ownership
 
-Manager folders and documents belong to one immutable space. A folder's parent
-and a document's folder belong to that same space, enforced by composite SQL foreign
-keys. Names are unique within a parent folder; the same name in another folder does
-not identify the same content. Listing a space does not include its ancestors' or
-descendants' documents. Personal content inherits no organization/team authority.
+A space owns its folder tree and document registry. Manager is the authority for
+folder identity, containment and lifecycle. The Resources screen uses that
+classification directly; knowledge-flow tags are a separate identity domain.
+Folder navigation and mutation need neither knowledge-flow nor Temporal.
 
-An admitted caller's unique organization must match the space before OpenFGA
-checks `can_read`. A local member or effective editor/analyst reads content; an
-admin or organization owner alone does not. Every list request checks current
-authority, including direct resource URLs. See [security](03-security.md).
+A folder has one immutable space and at most one parent in that space. Its stable
+UUID identifies it; its path contains UUIDs, not display names. Renaming changes
+one label without rewriting descendants, references or permissions. Sibling names
+are unique, including at the space root. Folders in different parents can share a
+name. Containment is enforced independently of authorization, including document
+references to folders in the same space.
 
-`GET /spaces/{id}/folders` lists direct children of `parent_id`, or root folders
-when omitted, ordered by name and id. `GET /spaces/{id}/documents` selects the
-same space and `folder_id`, or root documents when omitted. A supplied folder
-must exist in the requested space; a missing or foreign filter returns 404 after
-space authorization. Empty successful lists represent empty contents.
+## Authority
 
-Documents use the paired `(after_name, after_id)` cursor in name/id order. The
-API defaults to 50 and clamps limits to 1..200. The UI requests 51, renders 50 and
-uses the extra row only to enable Next. It carries the last rendered document's
-cursor, retains cursors for Previous/First, and resets them on folder/space changes.
-Folder lists are unpaginated. Cursor pages are live reads, not a snapshot: concurrent
-renames can move documents across page boundaries.
+The space is the authorization boundary for its whole tree. Folders and documents
+carry no OpenFGA grants, parent tuples or individual permission lists. Increasing
+the number or depth of folders adds no authorization tuples. Folder depth is
+limited to 15 as a classification rule, independently of OpenFGA evaluation depth.
 
-## Folder creation
+Every request requires personal admission, the caller's unique organization and
+current authority on the owning space. Members and effective editors/analysts read;
+only effective editors write. Administrator and owner titles confer no content
+access. Personal spaces inherit no organization or team authority. The
+[action/role matrix](03a-action-role-matrix.md) defines these distinctions.
 
-`POST /folders` creates one root folder or one child in its owning space. It checks
-current organization and `can_write` under the organization lock and fences the
-OpenFGA guard before the SQL insert. A local or inherited editor writes; member,
-analyst, administrator and organization owner alone do not. Personal spaces inherit
-no authority. The [action/role matrix](03a-action-role-matrix.md) details the scope.
+The directory response carries a current write decision for the existing controls.
+It is not a grant: mutations recheck authority after acquiring the organization
+lock. A guard fence orders those decisions against revocation; the lock remains
+held through commit. Failures publish no partial folder mutation.
 
-Creation and `PATCH /folders/{id}` trim the name, accept 1..255 Unicode scalar
-values, and reject slashes, backslashes and control characters. A root has depth 1; depth 15 is accepted and
-16 is refused. Invalid name/depth returns 422, missing parent 404, foreign-space
-parent 400 and duplicate sibling name 409. SQL uniqueness also applies at the root;
-the same name in another parent is permitted. Concurrent identical creations yield
-one folder and one conflict. Renaming preserves the folder id and hierarchy; pre-existing names are not rewritten.
+## Navigation and lifecycle
 
-The existing dialog keeps its name and reports localized errors on failure. During
-submission it prevents duplicate Enter/click requests and dismissal. A successful
-creation refreshes page one of the same location; navigation discards the old
-dialog's completion. A 403 disables further submission until the user closes and
-refreshes permissions. Creation is not automatically replayed after a 401; after
-an uncertain response the user can refresh Resources to inspect the persisted state.
+Navigation returns only immediate children and the ancestor chain of the requested
+directory. A page contains at most 200 folders (50 by default), ordered by name or
+stored creation date with a stable identity tie-breaker. Search is a literal,
+case-insensitive substring within the entire directory. The page, its exact matching
+total and its ancestors share one database snapshot. Separate page requests are
+live views: concurrent changes can shift offset boundaries.
 
-Folder operations and HTTP startup make no Temporal call. Document metadata has
-read and authorization operations only; the API exposes no document mutation.
+Creation and rename trim names, accept 1..255 Unicode scalar values, and reject
+slashes, backslashes and control characters. Conflicting sibling names are refused,
+including concurrent creation of the same name. Placement cannot be changed.
+A missing or foreign directory filter returns not-found after space authorization.
 
-## Uploads, connectors and storage
+Deletion removes a selected folder and all its descendants in one transaction.
+A document reference anywhere in that subtree refuses the whole operation;
+no document, stored file or index is removed. Multiple selected roots are independent
+operations, so the UI reports partial success when only some can be deleted.
+A mutation waiting behind a committed deletion sees not-found.
 
-## Ingestion, extraction and indexing
+## Presentation and content-service boundary
 
-## Retrieval, search scope and citations
+The existing Resources toolbar, rows, breadcrumbs, search, pagination and dialogs
+serve manager folders. Account/space navigation isolates pending actions; writes
+are not automatically replayed after an unauthorized response. Creation dates are
+real, while document-derived sizes use the existing unknown-value placeholder.
+Size sorting retains the existing folder fallback to name.
 
-## Versioning, deletion and reconciliation
+The original document panel opens with sending explicitly unavailable. Upload,
+drop, import retry/resume and selected-folder document actions issue no content or
+tag mutations in this view. Manager UUIDs never become knowledge-flow tag UUIDs.
+The separate knowledge-base consumer retains its existing service bindings.
 
-## Implementation references
+The document registry has authorized metadata reads and paired name/UUID cursor
+pagination, with a default of 50 and maximum of 200. Those metadata pages are not
+combined with folder pages or counted in their totals. Statistics and quota retain
+their existing service bindings and do not gate folder management.
 
-[Manager content checks and scope](A1-manager-runtime.md#content-access).
-The [Resources journey](02-user-journeys.md#priya-browses-her-resources) displays
-persisted metadata using the generated manager client and existing explorer.
+See the [Resources journey](02-user-journeys.md#priya-opens-resources),
+[measured costs](09-quality.md#folder-navigation-and-write-costs) and
+[runtime boundary](A1-manager-runtime.md#frontend-resource-browsing).

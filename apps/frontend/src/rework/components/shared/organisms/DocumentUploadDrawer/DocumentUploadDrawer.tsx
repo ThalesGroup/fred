@@ -65,6 +65,8 @@ import styles from "./DocumentUploadDrawer.module.css";
 
 interface DocumentUploadDrawerProps {
   isOpen: boolean;
+  /** Keep the existing panel available while its destination cannot accept uploads. */
+  unavailableReason?: string;
   onClose: () => void;
   onUploadComplete?: () => void;
   metadata?: Record<string, unknown>;
@@ -93,6 +95,7 @@ interface DocumentUploadDrawerProps {
 
 export function DocumentUploadDrawer({
   isOpen,
+  unavailableReason,
   onClose,
   onUploadComplete,
   metadata,
@@ -165,7 +168,7 @@ export function DocumentUploadDrawer({
   }, [isOpen, initialFiles, requireFolderPerFile, destinationPath]);
 
   const resolvedTeamId = teamId ?? "personal";
-  const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId });
+  const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId }, { skip: !!unavailableReason });
   const { canUpdateResources: canSelectProfile } = useTeamCapabilities(team);
 
   const newFilesSize = useMemo(() => files.reduce((acc, f) => acc + f.size, 0), [files]);
@@ -285,6 +288,10 @@ export function DocumentUploadDrawer({
   };
 
   const handleSave = async () => {
+    if (unavailableReason) {
+      showInfo({ summary: unavailableReason });
+      return;
+    }
     if (!files.length || isLoading) return;
     setIsLoading(true);
     // Quota precheck FIRST (#2360): one request with the batch's declared
@@ -605,6 +612,11 @@ export function DocumentUploadDrawer({
               </div>
             )}
 
+            {unavailableReason && (
+              <div className={styles.quotaWarning} role="status">
+                {unavailableReason}
+              </div>
+            )}
             {quotaDenial && (
               <div className={styles.quotaWarning} role="alert">
                 <strong className={styles.quotaTitle}>{t("documentLibrary.storageQuotaExceededTitle")}</strong>
@@ -638,7 +650,7 @@ export function DocumentUploadDrawer({
               variant="filled"
               size="small"
               onClick={handleSave}
-              disabled={!files.length || isLoading || !!quotaDenial || unansweredCount > 0}
+              disabled={!!unavailableReason || !files.length || isLoading || !!quotaDenial || unansweredCount > 0}
             >
               {/* What the button does, and to how many files — "Save" said
                   neither, and nothing is being saved here. */}

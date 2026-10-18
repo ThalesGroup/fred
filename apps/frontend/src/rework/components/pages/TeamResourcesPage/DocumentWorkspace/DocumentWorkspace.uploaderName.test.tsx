@@ -22,6 +22,7 @@
 // uid (the regression this covers: the uploader's UUID briefly flashed in
 // place of their name for a just-uploaded doc).
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

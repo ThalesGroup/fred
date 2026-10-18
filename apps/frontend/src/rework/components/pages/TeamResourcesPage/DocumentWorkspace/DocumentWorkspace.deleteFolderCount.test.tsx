@@ -22,6 +22,7 @@
 // documents only, while `delete_tag` recurses into every sub-tag, so a folder
 // with subfolders under-announced what it was about to destroy.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

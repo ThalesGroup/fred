@@ -17,6 +17,7 @@
 // answer is given in the panel. All the row does is say so and point there —
 // the table is no place to be deciding anything.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

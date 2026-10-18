@@ -18,6 +18,7 @@
 // what makes returning to this page instant — this button is how you force the
 // round trip when you know the data moved under you.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

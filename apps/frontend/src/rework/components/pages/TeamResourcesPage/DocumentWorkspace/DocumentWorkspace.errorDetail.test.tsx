@@ -18,6 +18,7 @@
 // `processing.errors` — the detail rides the chip itself, with no menu entry
 // and no modal (the row menu must not offer one).
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

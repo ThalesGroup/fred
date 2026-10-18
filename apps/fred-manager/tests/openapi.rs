@@ -269,3 +269,40 @@ fn document_mutations_and_their_schemas_are_absent() {
         assert!(api["components"]["schemas"].get(name).is_none());
     }
 }
+
+#[test]
+fn folder_directory_contract_resolves_order_enum_and_metadata() {
+    let api = schema();
+    let schemas = &api["components"]["schemas"];
+    assert_eq!(
+        schemas["FolderOrder"]["enum"],
+        json!(["name_asc", "name_desc", "created_asc", "created_desc"])
+    );
+    assert_eq!(
+        schemas["Folder"]["properties"]["created_at"]["format"],
+        "date-time"
+    );
+    let directory = &schemas["FolderDirectory"]["allOf"];
+    assert!(
+        directory
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|part| part["$ref"] == "#/components/schemas/FolderPage")
+    );
+    assert!(
+        directory
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|part| part["properties"]["can_write"]["type"] == "boolean")
+    );
+    for field in ["items", "ancestors", "total", "offset", "limit"] {
+        assert!(
+            schemas["FolderPage"]["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(field))
+        );
+    }
+}

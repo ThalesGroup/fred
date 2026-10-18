@@ -18,6 +18,7 @@
 // failed or never ran; a document that is already ingested must not offer it,
 // and a mixed selection must relaunch only the ones that qualify.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { Provider } from "react-redux";
 import { configureStore } from "@reduxjs/toolkit";

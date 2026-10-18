@@ -17,6 +17,7 @@
 // actually visited before, which is not necessarily the current folder's
 // parent (e.g. jumping between two unrelated top-level folders).
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

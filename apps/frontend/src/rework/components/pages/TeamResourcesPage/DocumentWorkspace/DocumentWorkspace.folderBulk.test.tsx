@@ -19,6 +19,7 @@
 // folder-relative path, exclude-from-search forces every descendant document
 // non-retrievable. Documents are fetched only when the action fires.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

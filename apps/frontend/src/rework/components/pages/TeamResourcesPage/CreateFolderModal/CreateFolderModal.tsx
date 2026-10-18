@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -28,6 +28,7 @@ interface CreateFolderModalProps {
   onClose: () => void;
   /** Parent folder full path, e.g. "CIR" or "CIR/Sub". `undefined` => top level. */
   parentPath?: string;
+  maxDepth?: number;
   /** Team id for a collaborative team; omit/undefined for the personal space. */
   teamId?: string;
   /**
@@ -47,13 +48,28 @@ export default function CreateFolderModal({
   open,
   onClose,
   parentPath,
+  maxDepth,
   teamId,
   onSubmit,
   onCreated,
 }: CreateFolderModalProps) {
   const { t } = useTranslation();
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const requestClose = () => {
+    if (!pending.current) onClose();
+  };
+
   const { showError } = useToast();
-  const [createTag, { isLoading }] = useCreateTagMutation();
+  const [createTag, { isLoading: tagLoading }] = useCreateTagMutation();
+  const [submitting, setSubmitting] = useState(false);
+  const isLoading = submitting || tagLoading;
   const [name, setName] = useState("");
 
   // Reset the field each time the modal opens (it mounts fresh, so the input's
@@ -65,7 +81,7 @@ export default function CreateFolderModal({
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !pending.current) onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -83,16 +99,19 @@ export default function CreateFolderModal({
   // variant (custom onSubmit) is not tag-backed, so the depth cap — a
   // ReBAC-chain constraint — doesn't apply there; the slash rule does.
   const nameHasSlash = trimmed.includes("/") || trimmed.includes("\\");
-  const tooDeep = !onSubmit && folderPathDepth(parentPath) + 1 > MAX_FOLDER_DEPTH;
+  const depthLimit = maxDepth ?? (!onSubmit ? MAX_FOLDER_DEPTH : undefined);
+  const tooDeep = depthLimit !== undefined && folderPathDepth(parentPath) + 1 > depthLimit;
   const blocked = !trimmed || nameHasSlash || tooDeep;
   const inlineError = tooDeep
-    ? t("rework.resources.folderModal.tooDeep", { max: MAX_FOLDER_DEPTH })
+    ? t("rework.resources.folderModal.tooDeep", { max: depthLimit })
     : nameHasSlash
       ? t("rework.resources.folderModal.nameNoSlash")
       : undefined;
 
   const submit = async () => {
-    if (blocked || isLoading) return;
+    if (blocked || isLoading || pending.current) return;
+    pending.current = true;
+    setSubmitting(true);
     try {
       if (onSubmit) {
         await onSubmit(trimmed);
@@ -106,19 +125,25 @@ export default function CreateFolderModal({
           },
         }).unwrap();
       }
-      onCreated();
-      onClose();
+      if (mounted.current) {
+        onCreated();
+        onClose();
+      }
     } catch (e: unknown) {
+      if (!mounted.current) return;
       showError?.({
         summary: t("validation.error"),
         detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.folderModal.error"),
       });
+    } finally {
+      pending.current = false;
+      if (mounted.current) setSubmitting(false);
     }
   };
 
   return (
     <Portal id="modal-portal">
-      <div className={styles.overlay} onClick={onClose}>
+      <div className={styles.overlay} onClick={requestClose}>
         <div
           className={styles.dialog}
           role="dialog"
@@ -147,7 +172,7 @@ export default function CreateFolderModal({
                 size="small"
                 icon={{ category: "outlined", type: "close" }}
                 aria-label={t("common.close")}
-                onClick={onClose}
+                onClick={requestClose}
               />
             </div>
 
@@ -169,7 +194,7 @@ export default function CreateFolderModal({
           </div>
 
           <div className={styles.actions}>
-            <Button color="on-surface" variant="outlined" size="medium" onClick={onClose}>
+            <Button color="on-surface" variant="outlined" size="medium" onClick={requestClose}>
               {t("rework.resources.folderModal.cancel")}
             </Button>
             <Button

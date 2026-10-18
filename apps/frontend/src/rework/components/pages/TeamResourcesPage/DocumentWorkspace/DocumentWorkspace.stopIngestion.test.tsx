@@ -15,6 +15,7 @@
 
 // Active ingestion has no user cancellation action and prevents document deletion.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

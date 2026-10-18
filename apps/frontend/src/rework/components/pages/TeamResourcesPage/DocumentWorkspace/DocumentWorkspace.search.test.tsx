@@ -17,6 +17,7 @@
 // current folder's already-loaded rows (folders + documents), same pattern
 // as the team members table's search — not the deferred server-side search.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

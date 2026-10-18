@@ -19,6 +19,7 @@
 // track exists only while something has a state to report, and that the
 // actions track only reserves its third slot for a real exclusion.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";

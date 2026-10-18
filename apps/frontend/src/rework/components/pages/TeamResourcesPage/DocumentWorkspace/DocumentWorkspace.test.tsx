@@ -19,6 +19,7 @@
 // CAN_UPDATE_RESOURCES gate as the row's explicit upload action. The drawer is
 // mocked as a probe so assertions read the exact props it receives.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

@@ -19,10 +19,10 @@ pub fn router(pool: PgPool, fga: Fga, directory: Directory) -> axum::Router {
             let memberships = fred_manager::spaces::memberships(&pool, &fga, &priya.id).await.unwrap();
             let team = memberships.iter().find(|m| m.space.name == "fredlab").unwrap().space.id;
             let personal = memberships.iter().find(|m| m.space.personal_owner.as_deref() == Some(&priya.id)).unwrap().space.id;
-            let folder = Folder { id: Uuid::new_v4(), space_id: team, parent_id: None, name:"Library".into(), path:String::new() };
+            let folder = Folder { created_at: chrono::Utc::now(), id: Uuid::new_v4(), space_id: team, parent_id: None, name:"Library".into(), path:String::new() };
             let folder = Folder {path:format!("/{}/",folder.id),..folder};
             db::insert_folder(&pool,&folder).await.unwrap();
-            let empty = Folder {id:Uuid::new_v4(),space_id:team,parent_id:Some(folder.id),name:"Empty".into(),path:String::new()};
+            let empty = Folder {created_at: chrono::Utc::now(),id:Uuid::new_v4(),space_id:team,parent_id:Some(folder.id),name:"Empty".into(),path:String::new()};
             let empty = Folder {path:format!("{}{}/",folder.path,empty.id),..empty};
             db::insert_folder(&pool,&empty).await.unwrap();
             for i in 0..55 {

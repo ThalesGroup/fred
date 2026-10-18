@@ -84,6 +84,36 @@ pub struct Folder {
     pub parent_id: Option<Uuid>,
     pub name: String,
     pub path: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FolderOrder {
+    #[default]
+    NameAsc,
+    NameDesc,
+    CreatedAsc,
+    CreatedDesc,
+}
+
+#[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
+pub struct FolderQuery {
+    pub parent_id: Option<Uuid>,
+    pub search: Option<String>,
+    pub order: Option<FolderOrder>,
+    pub offset: Option<i64>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct FolderPage {
+    pub items: Vec<Folder>,
+    /// Root to current directory, excluding the synthetic corpus root.
+    pub ancestors: Vec<Folder>,
+    pub total: i64,
+    pub offset: i64,
+    pub limit: i64,
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
@@ -268,6 +298,7 @@ mod tests {
     fn folder_paths_nest_by_id() {
         let space_id = Uuid::new_v4();
         let ao = Folder {
+            created_at: chrono::Utc::now(),
             id: Uuid::new_v4(),
             space_id,
             parent_id: None,

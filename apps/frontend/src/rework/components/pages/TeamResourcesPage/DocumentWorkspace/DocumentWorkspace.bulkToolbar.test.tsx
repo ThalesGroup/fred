@@ -18,6 +18,7 @@
 // actions bar (delete/exclude) replaces them entirely instead of the two
 // sitting side by side, for as long as at least one row is selected.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

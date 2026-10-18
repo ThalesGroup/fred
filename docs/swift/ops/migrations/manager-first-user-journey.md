@@ -10,7 +10,7 @@ configuration_reason: "The experimental manager reference and standalone k3d ove
 
 Experimental `chore/rust-rebac` deployments using manager and the frontend from this
 branch. The complete existing Fred UI remains available. Manager owns personal
-CGU, root bootstrap, provisioning and membership/personal navigation. Other
+CGU, root bootstrap, provisioning, membership/personal navigation and Resources folders. Other
 features retain their previous service calls and may fail when those services are
 stopped; visible UI does not imply complete Rust feature reconstruction.
 
@@ -46,6 +46,12 @@ It adds no SQL migration or FGA model change. Owner/admin nominees must already 
 in Keycloak and be unattached to another organization. HTTP creation grants only
 Owner/Admin, while the operator `create-org` behavior remains unchanged.
 
+Resources folder listing now returns a paged directory object instead of an array;
+deploy manager and frontend together. Creation, rename and document-free subtree
+deletion use manager. This requires no SQL migration, model replacement or role
+rewrite. Existing manager folder IDs remain valid. No legacy knowledge-flow tags
+or documents are converted.
+
 ## Validation
 
 Run `make -C apps/frontend test-provisioning-browser` against its disposable services.
@@ -70,8 +76,11 @@ not edit an applied migration or delete its history record to force a rollback.
 
 ## Limitations
 
-The Resources page uses its original corpus bindings, not a reduced manager
-explorer; manager resource UUIDs are not converted to knowledge-flow tag IDs.
+The original Resources components display manager folders. Document sending is
+explicitly unavailable from upload/drop/import and selection actions; this deployment
+does not migrate ingestion or display manager documents in that view. Knowledge-base
+consumers and statistics/quota retain their existing services. Manager resource UUIDs
+are not converted to knowledge-flow tag IDs.
 Existing root roles
 remain authoritative in OpenFGA; there is no role mirroring or compatibility layer.
 The browser acceptance uses real governance APIs but does not start Temporal or

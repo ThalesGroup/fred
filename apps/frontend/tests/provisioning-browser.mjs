@@ -502,8 +502,8 @@ try {
   await expect(personalEntry).toBeEnabled();
   await personalEntry.click();
   await expect(priya.page.getByRole("alert")).toHaveCount(0);
-  // The full Resources screen retains its corpus binding. Its manager adapter is
-  // a separate reconstruction requirement; do not test the removed reduced explorer.
+  // Retained navigation reaches the original Resources screen. Folder lifecycle
+  // and visual parity have separate focused acceptance.
   await priya.page.setViewportSize({ width: 1280, height: 900 });
   await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
   await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/resources`);

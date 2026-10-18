@@ -20,6 +20,7 @@
 // .mutateLabels -> useMutateDocumentLabelsMutation), including values the old
 // URL-path-segment routes could not carry.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

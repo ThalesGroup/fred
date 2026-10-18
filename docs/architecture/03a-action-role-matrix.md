@@ -60,13 +60,13 @@ have no separate ACL, sharing grant or role inheritance tree.
 | Read one document's metadata - `GET /documents/{id}` | Yes, local | Yes | No | Yes | Checks the document's owning space |
 | Create a folder - `POST /folders` | No | Yes | No | No | Same-space parent, valid name, depth <= 15, unique sibling name |
 | Rename a folder - `PATCH /folders/{id}` | No | Yes | No | No | Name changes; space, parent and path stay immutable |
-| Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | SQL foreign keys refuse a folder with child folders/documents |
+| Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | Atomic subtree removal; any referenced document refuses the whole subtree |
 | Resolve search scope - `POST /authorize/scope` | Yes, local | Yes | No | Yes | Read on requested space; returns it and ancestors, never descendants; personal returns itself; optional levels only narrow |
 
-The manager Resources UI exposes listing, navigation and folder creation. Other
-rows describe API operations, not additional buttons in that UI. A directory name
-is display metadata; its path uses immutable UUID segments. The create-name/depth
-validation is specific to creation and does not describe the rename contract.
+The original Resources UI binds listing, navigation, creation, rename and subtree
+deletion to manager. Its directory response supplies the current write decision;
+each mutation rechecks it. Names are display metadata; paths use immutable UUIDs.
+Document controls preserve their presentation with sending unavailable in this view.
 
 ## Space governance and personal-space actions
 

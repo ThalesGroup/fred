@@ -6,9 +6,13 @@ import { fredManagerApi } from "./fredManagerOpenApi";
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedFredManagerApi = fredManagerApi.enhanceEndpoints({
+  addTagTypes: ["Folders"],
   endpoints: {
     createOrganization: { extraOptions: { retryUnauthorized: false } },
-    createFolder: { extraOptions: { retryUnauthorized: false } },
+    listFolders: { providesTags: ["Folders"] },
+    createFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
+    renameFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
+    deleteFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
     createPersonalSpace: {
       extraOptions: { retryUnauthorized: false },
     },
@@ -32,6 +36,9 @@ export const {
   useOrganizationRegistryQuery,
   useCreateOrganizationMutation,
   useCreateFolderMutation,
+  useListFoldersQuery,
+  useRenameFolderMutation,
+  useDeleteFolderMutation,
   useMeQuery,
   useMySpacesQuery,
   useCreatePersonalSpaceMutation,

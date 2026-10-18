@@ -120,6 +120,10 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/fred-manager/v1/spaces/${queryArg.id}/folders`,
         params: {
           parent_id: queryArg.parentId,
+          search: queryArg.search,
+          order: queryArg.order,
+          offset: queryArg.offset,
+          limit: queryArg.limit,
         },
       }),
     }),
@@ -252,10 +256,18 @@ export type ListDocumentsApiArg = {
   /** Defaults to 50; clamped to 1..200. Both cursor fields must be supplied together. */
   limit?: number;
 };
-export type ListFoldersApiResponse = /** status 200 Success */ Folder[];
+export type ListFoldersApiResponse =
+  /** status 200 Directory page and ancestors from one SQL snapshot */ FolderDirectory;
 export type ListFoldersApiArg = {
   id: string;
   parentId?: string;
+  /** Literal case-insensitive substring within this directory; at most 255 characters. */
+  search?: string;
+  order?: FolderOrder;
+  /** Defaults to 0; negative values clamp to 0. */
+  offset?: number;
+  /** Defaults to 50; clamped to 1..200. */
+  limit?: number;
 };
 export type GrantApiResponse = unknown;
 export type GrantApiArg = {
@@ -387,6 +399,7 @@ export type Document = {
   space_id: string;
 };
 export type Folder = {
+  created_at: string;
   id: string;
   name: string;
   parent_id: string | null;
@@ -465,6 +478,19 @@ export type CreateSpace = {
   name: string;
   parent_id: string;
 };
+export type FolderPage = {
+  /** Root to current directory, excluding the synthetic corpus root. */
+  ancestors: Folder[];
+  items: Folder[];
+  limit: number;
+  offset: number;
+  total: number;
+};
+export type FolderDirectory = FolderPage & {
+  /** Current OpenFGA decision for the existing write controls, not a grant. */
+  can_write: boolean;
+};
+export type FolderOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc";
 export type Grant = {
   role: PlatformRole;
   user_id: string;

@@ -22,6 +22,7 @@
 // unless dataset pointer chunks are enabled), so the indicator must stay
 // hidden — it isn't a real exclusion for that content type.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

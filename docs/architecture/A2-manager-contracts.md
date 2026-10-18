@@ -140,7 +140,7 @@ What the schema enforces by itself:
 | Unique organization names | unique index on `name` where `kind = 'organization'` |
 | A document's folder is in the document's space | composite foreign key `(folder_id, space_id)` |
 | A sub-folder is in its parent's space | composite foreign key `(parent_id, space_id)` |
-| A non-empty folder cannot be deleted | foreign keys, answered 409 |
+| A document-bearing folder subtree cannot be deleted | document foreign key refuses the atomic subtree DELETE with 409 |
 | Placement never changes | `before update` triggers on `space` kind and owner, `folder`, `document` |
 | One root bootstrap, ever | `platform_bootstrap` single row (`singleton` key) |
 

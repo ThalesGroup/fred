@@ -19,6 +19,7 @@
 // The marker's ephemerality (gone on refresh) needs no test — it *is* the
 // Redux store's own lifetime.
 
+import "./inactiveManagerFolders.test-support";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

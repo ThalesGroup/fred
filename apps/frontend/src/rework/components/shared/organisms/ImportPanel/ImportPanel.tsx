@@ -90,7 +90,7 @@ function cardForMissingFile(entry: UnfinishedFile): TaskViewModel {
 const SETTLED_CARD_LINGER_MS = 3000;
 
 /** @param teamId whose resources the page beside this panel shows. */
-export function ImportPanel({ teamId }: { teamId: string | null }) {
+export function ImportPanel({ teamId, unavailableReason }: { teamId: string | null; unavailableReason?: string }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { showError } = useToast();
@@ -175,6 +175,10 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   // file is not an answer for it.
   const resending = useRef<UnfinishedFile[]>([]);
   const onFilesPicked = (picked: File[]) => {
+    if (unavailableReason) {
+      showError({ summary: unavailableReason });
+      return;
+    }
     void resumeUnfinishedImports(picked, resending.current, {
       dispatch,
       onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
@@ -209,12 +213,16 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
 
   const onResend = useCallback(
     (entryId: string) => {
+      if (unavailableReason) {
+        showError({ summary: unavailableReason });
+        return;
+      }
       const entry = interrupted.find((candidate) => candidate.entryId === entryId);
       if (!entry) return;
       resending.current = [entry];
       resumeInput.current?.click();
     },
-    [interrupted],
+    [interrupted, unavailableReason, showError],
   );
 
   // Hoisted out of the list and keyed by task id: an arrow function built per
@@ -222,25 +230,32 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   // and an import dispatches a great many of those.
   const failFast = (detail: string) => showError({ summary: t("rework.imports.panel.title"), detail });
   const onRetry = useCallback(
-    (taskId: string) => void retryImport(taskId, { dispatch, onError: failFast }),
+    (taskId: string) =>
+      unavailableReason ? failFast(unavailableReason) : void retryImport(taskId, { dispatch, onError: failFast }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- failFast closes
     // over showError and t, both stable for the life of the provider.
-    [dispatch],
+    [dispatch, unavailableReason],
   );
   const onDecide = useCallback(
     (taskId: string, decision: ConflictDecision) =>
-      void resolveConflict(taskId, decision, { dispatch, onError: failFast }),
+      unavailableReason
+        ? failFast(unavailableReason)
+        : void resolveConflict(taskId, decision, { dispatch, onError: failFast }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above.
-    [dispatch],
+    [dispatch, unavailableReason],
   );
   const onCancel = useCallback(
     (taskId: string) => {
+      if (unavailableReason) {
+        failFast(unavailableReason);
+        return;
+      }
       if (!cancelImport(taskId, dispatch)) {
         showError({ summary: t("rework.imports.panel.title"), detail: t("rework.imports.cancel.tooLate") });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above.
-    [dispatch],
+    [dispatch, unavailableReason],
   );
   const onDismiss = useCallback(
     (task: TaskViewModel) => {

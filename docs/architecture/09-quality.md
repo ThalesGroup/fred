@@ -179,10 +179,13 @@ bootstrap hook. These checks do not replace a deployed visual recipe.
 
 ## Resource browsing acceptance
 
-The original Resources component tests cover its existing corpus/service presentation.
-Manager API regressions independently cover invalid/foreign folder filters, role
-semantics, revoked access and cursor boundaries. They do not certify the full Resources
-UI against manager's folder/document contract.
+Focused API tests cover containment, role semantics, paged search/order/ancestors,
+concurrent duplicate creation, revocation waiters, stable identities after rename
+and atomic document-bearing subtree refusal. A concurrent SQL reader/writer fixture
+checks page/total consistency. Component tests exercise the original controls,
+stale completions, pending deletion deduplication, recovery after the last page becomes empty and document
+write refusal, alongside the separate knowledge-base consumer. These checks do not
+replace visual acceptance on a deployed instance.
 
 ## OpenFGA request costs
 
@@ -201,7 +204,7 @@ revalidates on focus for both platform and business areas.
 Concurrent subscribers deduplicate the request. Home navigation, scoped navigation
 and Profile share `/me/spaces`; Profile requests a fresh result on mount and window
 focus. Scoped navigation revalidates cached data older than 60 seconds on mount.
-Space selection uses those memberships; Resources keeps its existing service reads. Each `/me` network fetch performs
+Space selection uses those memberships; Resources adds directory reads and retains its statistics/quota service reads. Each `/me` network fetch performs
 the four concurrent platform Checks listed below; it does not select an organization; `/me/spaces` uses the tuple and link Reads listed below. There is no additional import-specific FGA query; ordinary non-migrated background consumers keep their own request behavior. The
 browser fixture (15 imported users, one organization, three teams and one project,
 one active import at a time) proves behavior, not throughput or scalability.
@@ -230,6 +233,7 @@ It exhausts all pages, grants no permissions, and fails on distinct organization
 
 | Operation | OpenFGA calls | Read filter or decision scope |
 | --- | --- | --- |
+| Folder directory | `Q(caller) + L Read + 2 C` | Unique context, target placement, current read and write decisions on that space; zero Writes |
 | Content access; authorize document/space | `Q(caller) + L Read + 1 C` | Unique caller context, target placement, exact permission; a foreign context short-circuits before Check |
 | Authorize platform | `1 C` | Exact platform permission; no business context |
 | Authorize scope | `Q(caller) + 1 C + L Read` | Target placement, caller context, then read permission Check |
@@ -274,49 +278,72 @@ Sources: [client](../../apps/fred-manager/src/fga.rs),
 [platform mutations](../../apps/fred-manager/src/platform.rs), and
 [HTTP handlers](../../apps/fred-manager/src/api.rs).
 
-Resource entry and each folder/document-page transition issue two concurrent manager
-list requests, in addition to admission/navigation queries. Each list costs
-`Q(caller) + L Read + 1 C`, with zero Writes and no SQL transaction/advisory lock.
-An additional `POST /authorize/space` checks write visibility on each entry and
-explicit refresh, costing `Q(caller) + L Read + 1 C`. A create POST costs
-`Q(caller) + L Read + 1 R_g + 1 C + W(2)`: its Write replaces one guard revision
-(delete one, write one), not a content grant. A successful UI create remounts the
-first page, repeating the two list reads and write-visibility probe. No role is
-inferred by the UI. A failed probe hides the create action.
+## Folder navigation and write costs
 
-After authorization, a supplied folder adds one indexed SQL existence lookup.
-Document SQL returns at most 51 rows to the UI; folder SQL returns all direct children.
-A retry or abandoned-request recovery can issue another pair.
+Resources issues one folder-directory request on entry, navigation, search, sort
+or page change, in addition to shared admission/membership queries. Its response
+contains current read-authorized rows and a write decision: `L + Q` Reads and
+2 Checks, zero Writes. No separate write probe or document listing is issued.
+Successful mutations invalidate the directory query. A failed read hides cached
+write authority until a fresh successful decision; it does not grant permission.
 
-A fixture with one organization, one team, one personal space and five direct role
-tuples for the reader forces one tuple per Read page. At HTTP concurrency 1, each
-list of either zero or 53 stored documents measures 8 Reads, 1 Check and 0 Writes.
-An additional fixture with one organization, 40 teams and 41 direct member tuples
-forces 10 tuples per page and a 20 ms proxy delay: one organization resolution uses
-45 Reads, no Checks/Writes, and overlapping Reads with a peak at most 32. The limit
-is per resolution, not global; concurrent HTTP callers multiply it. Project parent
-reads remain ordered. SQL mutation callers retain their existing locks across context
-resolution; listing takes no such lock. Cardinalities remain direct memberships,
-hierarchy depth, direct child folders and requested document-page size, not a claimed
-constant server-side authorization cost. These fixtures do not measure production
-latency or throughput.
+Mutations cost `L + Q + 1` Reads, 1 Check and 1 Write containing two guard-version
+operations. Stored tuple count is unchanged: no folder tuple is created or deleted.
+Target placement precedes locking; guard Read, context resolution, Check, fence,
+local mutation and SQL commit occur while the organization lock is held. Waiting
+writers retain a SQL connection. Different organizations have independent locks;
+replicas share these database locks and OpenFGA guards.
 
-The folder creation fixture uses one direct organization editor tuple, one tuple
-per forced Read page and HTTP concurrency 1: 3 Read RPCs (team parent, guard version,
-user roles), 1 Check and 1 Write with two guard tuple operations. It also exercises
-15 nested levels, 255 Unicode scalar names, personal isolation, denied roles, foreign
-parents/organizations, a revoked lock waiter, and two concurrent identical names
-(one 201 and one 409). Neither folder depth nor document count adds FGA tuples.
-The SQL lock covers guard/context/Check/fence, parent lookup and insertion until
-commit; OpenFGA network waits are inside this interval. Test wall time is not a
-measurement of lock duration or production capacity.
+The directory query has no advisory lock. Page, total and up to 15 ancestors use
+one read-only repeatable-read transaction. Root/child predicates use the existing
+space/parent/name index. Counts, substring searches, creation-date sorting and deep
+offsets still examine work proportional to the directory; limiting returned rows
+does not make that work constant. Recursive deletion scales with the removed
+subtree and its foreign-key checks, under the organization lock.
 
-Frontend tests exercise repeated Enter, pending dismissal, retained conflict input,
-revocation, disabled 401 replay and navigation before completion. The disposable
-browser journey creates personal and team folders, creates a nested folder, rejects
-a duplicate and checks the dialog's close control with a 255-character parent name
-at a 390-pixel viewport. Its Vite cache is isolated and the router graph warms before
-interactive assertions, avoiding optimizer interference from other test runs.
+A reproducible disposable fixture (`folder_scaling`, 2026-10-18) uses PostgreSQL
+15.12, OpenFGA 1.15.1 with in-memory storage, a debug manager called through its in-memory Axum router, a ten-connection SQL
+pool and an observing HTTP proxy. It starts with 10,000 folders: a root, 9,985
+immediate children and a branch reaching depth 15. A listing returns 50 folders;
+adding folders changes neither its FGA budget nor the initial 11 stored tuples.
+With one organization editor role, `L=0, Q=1`; adding 40 team-member roles and
+forcing ten tuples per page gives `Q=5+40=45`. Unrelated users are not enumerated.
+
+| Operation / caller | p95 latency ms, concurrency 1 / 10 / 50 | Requests/s at 50 |
+| --- | --- | --- |
+| Directory, one role | 14 / 110 / 87 | 534 |
+| Directory, 41 roles | 37 / 156 / 611 | 81 |
+| Create, one organization, one role | 15 / 104 / 891 | 53 |
+| Create, one organization, 41 roles | 40 / 402 / 1604 | 30 |
+| Create, separate organizations, one role each | 13 / 23 / 99 | 461 |
+
+Each cell is one burst of 1, 10 or 50 requests, not a steady-state throughput or
+production percentile estimate. The separate-organization comparison uses distinct
+callers creating root folders in initially empty spaces; the same-organization
+writes add children to the large tree. Folder writes add 122 rows before deletion.
+The SQL fixture's unfiltered first page takes 0.05 ms / 4 shared buffers; a one-child
+branch 0.02 ms / 3 buffers. Wide count, offset 9,900, substring selection and date
+sorting take respectively 0.74, 2.82, 2.20, 1.06 ms
+(214, 214, 269, 214 buffers).
+These warm local plans do not promise those latencies on other hardware or volumes.
+
+A separate connection polls advisory locks every requested millisecond. Its observed
+first-to-last sightings approximate lock residency, exclude SQL pool acquisition
+waits and miss short holds. Client sampling and scheduling can under- or overestimate
+individual durations; these are not exact lock timers or guaranteed bounds. At concurrency 50, p95 sampled wait/hold is 195/22 ms for
+one-role same-organization writers and 353/48 ms for 41-role writers. Separate
+organizations show no sampled advisory wait and 19 ms p95 hold. Maximum sampling
+gaps for those bursts are 6.9, 13.5 and 8.4 ms. Removing the 10,122-folder subtree
+takes 412 ms, with a 406 ms sampled hold and a 3.9 ms maximum sampling gap;
+stored FGA tuples are unchanged. The campaign asserts filtered Reads, exact RPC
+counts, two guard operations per mutation and no folder tuples.
+
+The measured limit is shared organization write serialization and membership
+resolution, not folder-specific FGA evaluation. Membership placement reads overlap
+with at most 32 in flight per resolution; concurrent callers multiply that work.
+The model traverses at most two space-parent links for its Check, independently of
+folder depth. These results support bounded folder navigation at the measured size;
+they do not establish optimal or unlimited concurrent write capacity.
 
 For the ZIP importer, let `U` be users, `O` organizations, `N` new organizations,
 `G` normalized platform grants, `D` space-role tuples, `C` new teams and projects,
@@ -458,7 +485,7 @@ Generated from the `// Proves:` markers.
 | Invariant | Proved by |
 | --- | --- |
 | I1 | `apps/fred-manager/src/domain.rs::parent_rules`<br>`apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock`<br>`apps/fred-manager/tests/integration.rs::sibling_names_are_unique_and_uncommitted_links_are_ignored`<br>`apps/fred-manager/tests/support/organization_console.rs::organization_console_creation_authority_roles_failures_and_budget`<br>`apps/fred-manager/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics`<br>`apps/fred-manager/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization` |
-| I2 | `apps/fred-manager/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space`<br>`apps/fred-manager/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_migration_preserves_existing_spaces_and_folders` |
+| I2 | `apps/fred-manager/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space`<br>`apps/fred-manager/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/fred-manager/tests/support/resource_browsing.rs::folder_directory_pages_and_atomic_subtree_lifecycle`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_migration_preserves_existing_spaces_and_folders` |
 | I3 | `apps/fred-manager/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space` |
 | I4 | `apps/fred-manager/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/fred-manager/tests/integration.rs::concurrent_revocations_keep_parent_access`<br>`apps/fred-manager/tests/integration.rs::concurrent_grant_and_revoke_keep_the_invariant`<br>`apps/fred-manager/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed`<br>`apps/fred-manager/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/fred-manager/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/fred-manager/tests/integration.rs::provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::a_timed_out_child_grant_cannot_arrive_after_parent_revocation`<br>`apps/fred-manager/tests/integration.rs::a_cancelled_child_grant_is_fenced_after_client_restart`<br>`apps/fred-manager/tests/integration.rs::noop_revocation_and_multiple_scopes_fence_stale_attempts`<br>`apps/fred-manager/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/fred-manager/tests/integration.rs::inherited_access_does_not_replace_parent_membership`<br>`apps/fred-manager/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/fred-manager/tests/integration.rs::import_orders_personal_eligibility_after_content_across_failed_batches`<br>`apps/fred-manager/tests/integration.rs::personal_grant_budget_and_failed_creation_preserve_authority`<br>`apps/fred-manager/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_filtered_batches_lost_ack_and_unrelated_state`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once`<br>`apps/fred-manager/tests/support/space_deletion.rs::lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates` |
 | I5 | `apps/fred-manager/tests/integration.rs::a_revoked_admin_cannot_finish_a_waiting_request`<br>`apps/fred-manager/tests/integration.rs::revoked_platform_actor_cannot_complete_a_waiting_platform_or_owner_grant`<br>`apps/fred-manager/tests/integration.rs::simultaneous_imports_reuse_usernames_and_space_names`<br>`apps/fred-manager/tests/integration.rs::provisioning_waiter_rechecks_revoked_or_expired_operator`<br>`apps/fred-manager/tests/integration.rs::preflight_does_not_block_revocation_and_cancelled_identity_creation_replays`<br>`apps/fred-manager/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/fred-manager/tests/integration.rs::a_timed_out_platform_grant_cannot_arrive_after_actor_revocation`<br>`apps/fred-manager/tests/integration.rs::noop_revocation_and_multiple_scopes_fence_stale_attempts`<br>`apps/fred-manager/tests/integration.rs::sql_mutation_loses_to_a_delayed_revocation_after_its_check`<br>`apps/fred-manager/tests/integration.rs::folder_creation_keeps_one_connection_through_placement_and_write`<br>`apps/fred-manager/tests/integration.rs::a_late_attachment_cannot_publish_after_assignment_elsewhere`<br>`apps/fred-manager/tests/support/organization_console.rs::organization_console_creation_authority_roles_failures_and_budget`<br>`apps/fred-manager/tests/support/organization_console.rs::organization_console_rechecks_waiting_creator_and_serializes_attachment`<br>`apps/fred-manager/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget` |

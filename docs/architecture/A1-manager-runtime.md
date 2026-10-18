@@ -174,11 +174,11 @@ or avatar subscription. These pages add no backend endpoint or persisted model.
 
 ## Frontend resource browsing
 
-The original `TeamResourcesPage` and `DocumentWorkspace` are mounted at
-`/team/:teamId/resources`, retaining their existing control-plane and knowledge-flow
-bindings, authorization conditions, metadata and commands. Manager resource IDs
-are not cast into that corpus model. The manager folder/document HTTP surface
-remains a separate contract, documented in chapter 05.
+The existing Resources components consume bounded manager directory pages and
+current write decisions through the generated client. Their presentation remains
+shared with the separate knowledge-base consumer, whose service contract is
+unchanged. Manager folder identities never cross into knowledge-flow tag requests.
+The [content chapter](05-documents.md) defines this boundary and lifecycle.
 
 ## Content access
 
@@ -487,7 +487,7 @@ held SQL connection. No workflow is dispatched by the API.
 
 | Id | Decision | Because | Consequence |
 | --- | --- | --- | --- |
-| D1 | The space tree lives only in OpenFGA as immutable `parent` links; editor, admin and analyst descend, member does not. | One authority answers who may do what where, including roles reaching descendants. | One Check per access, evaluated through at most two parents; placement and structure operations read links (I20). |
+| D1 | The space tree lives only in OpenFGA as immutable `parent` links; editor, admin and analyst descend, member does not. | One authority answers who may do what where, including roles reaching descendants. | One Check per permission decision, evaluated through at most two parents; placement and structure operations read links (I20). Chapter 09 records complete request budgets. |
 | D2 | Organization > team > project; a personal space is a one-member team without parent. | One model for every container; a personal space stays private to its owner. | Personal spaces inherit nothing and have their own management rule (I6). |
 | D3 | Folders carry no rights. | Rights per folder bring back traversal and per-item lists. | Access granularity is the space. |
 | D4 | Space and content placement are immutable. | SQL constraints and OpenFGA links preserve ownership. | Folder renames preserve placement; the API exposes no move operation. |
@@ -509,18 +509,15 @@ held SQL connection. No workflow is dispatched by the API.
 | D20 | The unique organization is derived from canonical direct roles and full placement of committed spaces. Workspace discovery uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
 | D21 | Personal creation requires explicit organization eligibility; opening reuses current authority. | Some people have no personal workspace; opening must not undo revocations. | First explicit open creates, repeats write nothing, and organization content remains a prerequisite. |
 
-## Folder creation from Resources
+## Folder mutations from Resources
 
-The generated manager client probes `write`, then sends `POST /folders` with the
-current space and parent. The existing folder-name presentation is independent of
-the legacy corpus adapter. The manager mutation disables automatic unauthorized
-replay. Keyed resource/dialog mounts isolate late responses from navigation.
-
-The handler uses `AppState` and the existing `spaces::create_folder` write
-boundary. Placement lookup precedes the transaction; organization lock, guard read,
-current context and `can_write` Check, then fence precede parent lookup and insertion
-on the held connection. `main::serve` binds HTTP without connecting to Temporal;
-only the separate lifecycle worker requires Temporal.
+Creation, rename and deletion use the same organization write boundary. Placement
+lookup precedes the transaction; organization lock, guard capture, current context,
+write Check and guard fence precede the local mutation. Existing folders are reread
+under that lock. Recursive deletion is one atomic operation and fails if a document
+references any included folder. No per-folder authorization or Temporal dispatch
+occurs. The original dialogs prevent duplicate submission and discard completion
+after navigation; pending deletions of the same UUID share one request.
 
 ## Space deletion lifecycle
 
