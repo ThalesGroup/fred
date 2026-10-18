@@ -1807,27 +1807,25 @@ def test_three_uses_inside_one_section_are_still_revised():
     assert repeat.slides == [2, 4, 6] and repeat.at_most == 2 and not repeat.in_a_row
 
 
-def _across_a_boundary(asked: bool) -> List[SlidePlan]:
-    """Agenda parts, so no section slide sits between Italy's end and Spain."""
-    agenda = SlidePlan(title="Sommaire", kind="agenda", bullets=["Italie", "Espagne"])
+def _in_a_row(asked: bool) -> List[SlidePlan]:
+    """Three bullets slides in a row, the third asked alike when ``asked``."""
     spain = _points(3).model_copy(update={"title": "Espagne", "repeat_layout": asked})
-    italy = _quoted(0).model_copy(update={"title": "Italie"})
-    return [agenda, italy, _points(1), _points(2), spain, _quoted(1)]
+    return [_quoted(0), _points(1), _points(2), spain, _quoted(1)]
 
 
-def test_three_identical_slides_in_a_row_are_revised_across_sections():
-    (repeat,) = _revisable(_across_a_boundary(asked=False))
-    assert repeat.in_a_row and repeat.slides == [3, 4, 5]
+def test_three_identical_slides_in_a_row_are_revised_under_the_cap():
+    (repeat,) = _revisable(_in_a_row(asked=False), max_uses=3)
+    assert repeat.in_a_row and repeat.slides == [2, 3, 4]
     assert repeat.labels == ["A"] and repeat.at_most == 2
 
 
 def test_identical_slides_the_user_asked_for_are_built_and_noted():
-    slides = _across_a_boundary(asked=True)
+    slides = _in_a_row(asked=True)
     assignment = assign(_section_inventory(), _plan(*slides), "template_slide", 2)
     assert not assignment.problems and _revisable(slides) == []
-    assert [p.label if p else "-" for p in assignment.patterns][2:5] == ["A"] * 3
-    assert assignment.repeated == {5: True}
-    assert "Slide 5 keeps slide 4's template slide, as the user asked" in " ".join(
+    assert [p.label if p else "-" for p in assignment.patterns][1:4] == ["A"] * 3
+    assert assignment.repeated == {4: True}
+    assert "Slide 4 keeps slide 3's template slide, as the user asked" in " ".join(
         assignment.notes
     )
 
@@ -1858,28 +1856,19 @@ def test_repeat_layout_the_content_cannot_keep_is_noted():
     )
 
 
-def test_an_agenda_splits_the_deck_into_sections_without_section_slides():
-    inventory = _section_inventory()
+def test_an_agenda_never_splits_the_deck_into_sections():
+    """Content titled as agenda entries stays one section: only section slides cut it."""
     agenda = SlidePlan(
         title="Sommaire", kind="agenda", bullets=["1. Italie", "2. Espagne", "France"]
     )
     slides = [agenda]
     for n, name in enumerate(("Italie", "Espagne", "France")):
         slides += [
-            SlidePlan(title=name, bullets=["a", "b"], kind="bullets"),
+            SlidePlan(title=f"{n + 1}. {name}", bullets=["a", "b"], kind="bullets"),
             _quoted(n),
         ]
-
-    def revisable(plan: List[SlidePlan]) -> List[Any]:
-        found = assign(inventory, _plan(*plan), "template_slide", 1).repeats
-        return [r for r in found if not r.structural]
-
-    assert revisable(slides) == []
-    # Titles that name no agenda entry: one deck, a repeat.
-    renamed = [agenda] + [
-        s.model_copy(update={"title": f"{s.title} x"}) for s in slides[1:]
-    ]
-    assert revisable(renamed)
+    found = assign(_section_inventory(), _plan(*slides), "template_slide", 1)
+    assert {r.kind for r in found.repeats if not r.structural} == {"bullets", "quote"}
 
 
 def _framed_cards(pid: str, label: str) -> Pattern:

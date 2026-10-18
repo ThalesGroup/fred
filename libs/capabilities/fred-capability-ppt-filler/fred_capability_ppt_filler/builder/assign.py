@@ -103,8 +103,8 @@ _STRUCTURAL = ("cover", "section", "agenda", "closing")
 VarietyCheck = Literal["template_slide", "kind", "off"]
 # Told wherever variety is limited or asked: `_sections` and the runs of `_repeats`.
 SECTION_RULE = (
-    "The limit counts within each section (from one section slide, or agenda part, to the "
-    "next): a later section may reuse an earlier one's slides, in any order. Never three "
+    "The limit counts within each section (from one section slide to the next): a "
+    "later section may reuse an earlier one's slides, in any order. Never three "
     "identical slides in a row, unless the user explicitly asked for it (`repeat_layout`)."
 )
 # What each content kind is for, on its catalogue line.
@@ -1431,31 +1431,13 @@ def _caps(
     return _Caps(cap(len(designs)), cap(len(set(designs.values()))))
 
 
-_NUMBERED = re.compile(r"^\s*\d+\s*[.)\-:]?\s+")
-
-
-def _entry(text: str) -> str:
-    """An agenda entry or a title, compared without its number or case."""
-    return " ".join(_NUMBERED.sub("", text).casefold().split()).strip(" .:;-")
-
-
 def _sections(slides: List[_Slide]) -> Dict[int, int]:
-    """Per slide (plan index), its section: one starts at each `section` slide
-    or, with none, at a content slide titled as an agenda entry; slides before
-    the first are a section of their own. Empty unless the deck has two."""
-    split = any(_wanted(s) == "section" for s in slides)
-    entries: set[str] = set()
-    for s in slides:
-        if not split and _wanted(s) == "agenda":
-            texts = list(s.plan.bullets) + [i.heading or i.text for i in s.plan.items]
-            entries |= {_entry(t) for t in texts if t} - {""}
+    """Per slide (plan index), its section: one starts at each `section` slide;
+    slides before the first are a section of their own. Empty unless the deck has two."""
     found: Dict[int, int] = {}
     section = 0
     for s in slides:
-        if s.part == 1 and (
-            _wanted(s) == "section"
-            or (entries and _content(s) and _entry(s.plan.title or "") in entries)
-        ):
+        if s.part == 1 and _wanted(s) == "section":
             section += 1
         found[s.index] = section
     return found if section > 1 else {}

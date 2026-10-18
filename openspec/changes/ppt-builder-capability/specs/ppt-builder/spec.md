@@ -461,10 +461,10 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 #### Scenario: The limit counts within each section
 
-- **GIVEN** a first deck with two sections, each starting at a `section` slide (or, when the deck has none, at a slide titled as an entry of its agenda), and a variety cap of 2
+- **GIVEN** a first deck with two sections, each starting at a `section` slide, and a variety cap of 2
 - **WHEN** one template slide is used twice in Italy (its 2nd and 4th content slides) and twice in Spain (its 1st and 3rd)
 - **THEN** no variety ask is returned and the deck is built: the count resets from one section to the next, so a later section may reuse an earlier one's slides in any order
-- **AND** the same slides without section boundaries count four uses and are asked to vary; a deck with fewer than two sections is one section; cover, agenda, section and closing slides are never counted
+- **AND** the same slides without section boundaries count four uses and are asked to vary; a deck with fewer than two sections is one section, and agenda entries never start one; cover, agenda, section and closing slides are never counted
 - **AND** the variety ask and the choice guide say that the limit counts within each section and that a later section may reuse an earlier one's slides
 
 #### Scenario: Three uses inside one section are revised
@@ -473,11 +473,11 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** one template slide is used three times inside one section, wherever it sits in it
 - **THEN** `needs_revision` lists those three slides under `variety` with `at_most` 2; the other section's uses are not listed
 
-#### Scenario: Three identical slides in a row are revised across a section boundary
+#### Scenario: Three identical slides in a row are revised under the cap
 
-- **GIVEN** a first deck whose sections start at agenda entries, so no section slide separates them
-- **WHEN** the last two content slides of one section and the first of the next use the same template slide and no other slide fits them
-- **THEN** `needs_revision` lists those three slides under `variety` with `in_a_row` true, although each section is within its cap; when another slide fits, the assignment avoids the run itself
+- **GIVEN** a first deck whose cap allows three uses of one template slide
+- **WHEN** three consecutive content slides use the same template slide and no other slide fits them
+- **THEN** `needs_revision` lists those three slides under `variety` with `in_a_row` true, although they are within the cap; when another slide fits, the assignment avoids the run itself
 
 #### Scenario: Identical slides the user asked for are built and noted
 
