@@ -168,12 +168,14 @@ def test_every_bad_change_is_reported_with_its_remedy():
         {"op": "edit", "slide": 2},
         {"op": "edit", "slide": "last", "field": "title", "value": "x"},
         {"op": "remove", "slide": 1, "colour": "red"},
+        {"op": "swap", "slide": 2},
     )
     assert problems == [
         "changes[0] (remove): slide 14 does not exist; the previous deck has 4 slides. "
         "Use a number from 1 to 4.",
-        "changes[1] (move): 'move' is not an operation: use replace, insert, remove or edit.",
-        "changes[2] (insert): insert needs `after`: the slide number the new slides follow "
+        "changes[1] (move): move needs `after`: the slide number the slides go after "
+        "(0 = first).",
+        "changes[2] (insert): insert needs `after`: the slide number the slides go after "
         "(0 = first).",
         "changes[3] (replace): replace needs `slides`: the new slide objects.",
         "changes[4] (edit): edit needs `field`, e.g. 'title' or 'items[2].label'.",
@@ -181,6 +183,36 @@ def test_every_bad_change_is_reported_with_its_remedy():
         "changes[5] (edit): `slide` 'last' is not a number: give the slide's number.",
         "changes[6] (remove): unknown key 'colour': a change takes op, slide, after, "
         "slides, field and value; drop it.",
+        "changes[7] (swap): 'swap' is not an operation: use replace, insert, remove, edit "
+        "or move.",
+    ]
+
+
+def test_move_puts_a_slide_after_another():
+    """Seen in the eval: swapping two slides took six calls without `move`."""
+    plan = _apply({"op": "move", "slide": 2, "after": 3})
+    assert _titles(plan) == ["Kick-off", "Figures", "Agenda", "Thanks"]
+    assert plan.slides[2] is BASE.slides[1]
+    # Edited and moved; after a removed slide, it takes that slide's place.
+    plan = _apply(
+        {"op": "move", "slide": 4, "after": 2},
+        {"op": "edit", "slide": 4, "field": "title", "value": "Merci"},
+        {"op": "remove", "slide": 2},
+    )
+    assert _titles(plan) == ["Kick-off", "Merci", "Figures"]
+    # A chain follows the moved slide; a loop and a moved removed slide are refused.
+    plan = _apply(
+        {"op": "move", "slide": 2, "after": 4}, {"op": "move", "slide": 3, "after": 2}
+    )
+    assert _titles(plan) == ["Kick-off", "Thanks", "Agenda", "Figures"]
+    assert _problems(
+        {"op": "move", "slide": 2, "after": 3}, {"op": "move", "slide": 3, "after": 2}
+    )[0].startswith("changes[0] (move): the slides moved form a loop")
+    assert _problems(
+        {"op": "move", "slide": 2, "after": 3}, {"op": "remove", "slide": 2}
+    ) == ["changes[0] (move): slide 2 is removed by changes[1]."]
+    assert _problems({"op": "move", "slide": 2, "after": 2}) == [
+        "changes[0] (move): `after` 2 is the moved slide itself: give the slide it goes after."
     ]
 
 
@@ -541,6 +573,19 @@ async def test_a_change_only_the_speaker_notes_show_is_said_so(monkeypatch):
         "changed in the speaker notes only, the slide itself looks the same: 2; "
         "2 unchanged." in text
     )
+
+
+@pytest.mark.asyncio
+async def test_a_moved_slide_is_built_and_listed_as_moved(monkeypatch):
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    deck = [COVER, *({"title": f"Part {n}", "bullets": [f"b{n}"]} for n in range(1, 4))]
+    await turn.build(slides=deck)
+    text, result = await turn.build(changes=[{"op": "move", "slide": 2, "after": 3}])
+    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
+    titles = [s.title for s in turn.rendered[-1].slides]
+    assert titles == ["Kick-off", "Part 2", "Part 1", "Part 3"]
+    # Two neighbours swapped: one of them is the moved one.
+    assert "slides of this file moved: 2 (was 3); 3 unchanged." in text
 
 
 @pytest.mark.asyncio

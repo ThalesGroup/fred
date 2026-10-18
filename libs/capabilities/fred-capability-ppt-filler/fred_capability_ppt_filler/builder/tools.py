@@ -1276,8 +1276,8 @@ def _description(
         "for, even on several slides), send only `changes`, numbered on that deck's slides: "
         '{"op": "replace", "slide": N, "slides": [...]}, {"op": "insert", "after": N '
         + ("(0 = first, after the cover)" if "cover" in kinds else "(0 = at the start)")
-        + ', "slides": [...]}, {"op": "remove", "slide": '
-        'N}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label"'
+        + ', "slides": [...]}, {"op": "remove", "slide": N}, {"op": "move", "slide": N, '
+        '"after": M}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label"'
         + (
             ' | "chart.series[0].values[2]" | "chart.series[0].points[2].y" | '
             '"chart.x_title" | "chart.show" | "chart.highlight"'

@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Changes against the previous deck plan: replace, insert, remove or edit
-slides by their number in that plan. The result is a whole plan; the tool
+"""Changes against the previous deck plan: replace, insert, remove, edit or
+move slides by their number in that plan. The result is a whole plan; the tool
 assigns and renders it as any full call, so quality never depends on the mode."""
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from fred_capability_ppt_filler.builder.plan import (
     SlidePlan,
 )
 
-_OPS: Tuple[str, ...] = ("replace", "insert", "remove", "edit")
+_OPS: Tuple[str, ...] = ("replace", "insert", "remove", "edit", "move")
 _OP_ALIASES = {
     "delete": "remove",
     "add": "insert",
@@ -115,16 +115,19 @@ class SlideChange(BaseModel):
 
     op: Optional[str] = Field(
         default=None,
-        description="replace | insert | remove | edit.",
+        description="replace | insert | remove | edit | move.",
         json_schema_extra={"enum": list(_OPS)},
     )
     slide: Optional[int] = Field(
         default=None,
-        description="replace, remove, edit: the slide's number in the previous deck.",
+        description="replace, remove, edit, move: the slide's number in the previous deck.",
     )
     after: Optional[int] = Field(
         default=None,
-        description="insert: the new slides follow this slide of the previous deck; 0 = first, after a cover.",
+        description=(
+            "insert, move: the slides go after this slide of the previous deck; 0 = first, "
+            "after a cover."
+        ),
     )
     slides: List[SlidePlan] = Field(
         default_factory=list,
@@ -372,7 +375,7 @@ def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
 
 
 AFTER_THE_COVER = (
-    "The slides inserted with `after` 0 went after the cover (slide 1): the first slide "
+    "The slides sent with `after` 0 went after the cover (slide 1): the first slide "
     "is always the template's cover. Nothing to do; to open the deck on them, use "
     "`after` 1 next time."
 )
@@ -389,9 +392,11 @@ def after_the_cover(
         return changes, False
     moved = [
         c.model_copy(update={"after": 1})
-        if c.op == "insert"
-        and c.after == 0
-        and all(s.kind != "cover" for s in c.slides)
+        if c.after == 0
+        and (
+            (c.op == "insert" and all(s.kind != "cover" for s in c.slides))
+            or (c.op == "move" and c.slide != 1)
+        )
         else c
         for c in changes
     ]
@@ -406,18 +411,24 @@ def _check(change: SlideChange, n: int) -> List[str]:
     if change.op not in _OPS:
         given = f"'{change.op}'" if change.op else "no `op`"
         return issues + [
-            f"{given} is not an operation: use replace, insert, remove or edit"
+            f"{given} is not an operation: use replace, insert, remove, edit or move"
         ]
-    if change.op == "insert":
+    if change.op in ("insert", "move"):
         if change.after is None and "after" not in change.raw_numbers:
             issues.append(
-                "insert needs `after`: the slide number the new slides follow (0 = first)"
+                f"{change.op} needs `after`: the slide number the slides go after (0 = first)"
             )
         elif change.after is not None and not 0 <= change.after <= n:
             issues.append(
                 f"`after` {change.after} does not exist; the previous deck has {n} slides. "
                 f"Use a number from 0 to {n}"
             )
+        elif change.op == "move" and change.after == change.slide:
+            issues.append(
+                f"`after` {change.after} is the moved slide itself: give the slide it goes after"
+            )
+    if change.op == "insert":
+        pass  # new slides, numbered by `after` only
     elif change.slide is None:
         if "slide" not in change.raw_numbers:
             issues.append(
@@ -607,8 +618,17 @@ def deck_delta(
         fewer += _fewer(before, after, [(i1 + i, j1 + j) for i, j in pairs], numbers)
         added += [j1 + j + 1 for j in range(j2 - j1) if j not in news]
         removed += [i1 + i + 1 for i in range(i2 - i1) if i not in olds]
-    kept = len(b) - len(changed) - len(in_notes) - len(added)
+    # A slide the same elsewhere moved: never a removal and an addition.
+    moves: List[str] = []
+    for j in list(added):
+        i = next((i for i in removed if keys_a[i - 1] == keys_b[j - 1]), None)
+        if i is not None:
+            added.remove(j)
+            removed.remove(i)
+            moves.append(f"{j} (was {i})")
+    kept = len(b) - len(changed) - len(in_notes) - len(added) - len(moves)
     parts = [f"changed: {_numbers(changed)}"] if changed else []
+    parts += [f"moved: {', '.join(moves)}"] if moves else []
     parts += (
         [
             f"changed in the speaker notes only, the slide itself looks the same: "
@@ -622,7 +642,7 @@ def deck_delta(
     lead = f"\nCompared with the previous deck ({len(a)} slides), slides of this file "
     if not parts:
         return lead + "none changed: tell the user the deck is the same as before."
-    touched = len(changed) + len(in_notes) + len(added) + len(removed)
+    touched = len(changed) + len(in_notes) + len(added) + len(removed) + len(moves)
     hint = (
         " For an edit of a few slides, send only `changes` next time."
         if resent and touched <= _SMALL_EDIT < kept
@@ -694,7 +714,9 @@ def apply_changes(
     removed: set[int] = set()
     # The change that took each slide first: a second one on it is a conflict.
     owner: Dict[int, int] = {}
-    inserts: Dict[int, List[Tuple[int, SlidePlan]]] = {}
+    # Per slide of the base, what goes after it: new slides, or a moved slide's number.
+    inserts: Dict[int, List[Tuple[int, Union[SlidePlan, int]]]] = {}
+    moved: Dict[int, int] = {}
     edits: Dict[int, List[Tuple[int, SlideChange]]] = {}
     likes: List[Tuple[int, SlideChange, int]] = []
 
@@ -713,6 +735,17 @@ def apply_changes(
             )
             continue
         number = change.slide or 0
+        if change.op == "move":
+            if number in moved:
+                report(
+                    k,
+                    change,
+                    f"slide {number} is already moved by changes[{moved[number]}]",
+                )
+            else:
+                moved[number] = k
+                inserts.setdefault(change.after or 0, []).append((k, number))
+            continue
         if change.op == "edit" and change.field == LIKE:
             why = _like_problem(base, number, change.value)
             if why:
@@ -764,6 +797,11 @@ def apply_changes(
             continue
         edits.setdefault(number, []).append((k, change))
 
+    for number, k in moved.items():
+        if number in removed:
+            report(
+                k, changes[k], f"slide {number} is removed by changes[{owner[number]}]"
+            )
     # Resolved once every replace and remove is known, whatever their order.
     liked: Dict[int, int] = {}
     for k, change, ref in likes:
@@ -814,9 +852,10 @@ def apply_changes(
         slides.append(slide)
         where[len(slides)] = origin
 
-    for k, slide in inserts.get(0, []):
-        add(slide, ("new", k))
-    for number, slide in enumerate(base.slides, start=1):
+    def emit(number: int) -> None:
+        """Base slide ``number`` as the changes leave it, then what goes after it."""
+        placed.add(number)
+        slide = base.slides[number - 1]
         if number in replaced:
             # The replacement keeps the replaced slide's design when it fits.
             new = replaced[number]
@@ -830,8 +869,29 @@ def apply_changes(
             add(edited.get(number, slide), ("base", number))
             if gone.get(number) and cleared is not None:
                 cleared[len(slides)] = gone[number]
+        follow(number)
+
+    def follow(number: int) -> None:
         for k, entry in inserts.get(number, []):
-            add(entry, ("new", k))
+            if isinstance(entry, int):
+                emit(entry)
+            else:
+                add(entry, ("new", k))
+
+    placed: set[int] = set()
+    follow(0)
+    for number in range(1, n + 1):
+        if number not in moved:
+            emit(number)
+    looped = [k for number, k in moved.items() if number not in placed]
+    if looped:
+        raise ChangeError(
+            [
+                f"changes[{k}] (move): the slides moved form a loop, each after "
+                "another moved one: move each slide after a slide that stays."
+                for k in looped
+            ]
+        )
     return DeckPlan(
         slides=slides,
         file_name=base.file_name,
