@@ -56,7 +56,7 @@ it.each(["s1", "constructor"])(
               session_id: sessionId,
               path: "/notes.txt",
               viewer: "text",
-              editable: true,
+              editable: false,
               content: "Latest saved notes",
             }),
             { headers: { "Content-Type": "application/json" } },
@@ -167,14 +167,14 @@ async function panelHarness(
   await render();
   return { host, render };
 }
-const fileResponse = (content: string) =>
+const fileResponse = (content: string, editable = true) =>
   new Response(
     JSON.stringify({
       type: "conversation_file",
       session_id: "s1",
       path: "/notes.txt",
       viewer: "text",
-      editable: true,
+      editable,
       content,
     }),
     { headers: { "Content-Type": "application/json" } },
@@ -271,6 +271,7 @@ it.each([false, true])(
     const streamReady = new Promise<void>((resolve) => {
       connected = resolve;
     });
+    let liveContent = "Content selected by native child";
     vi.stubGlobal("fetch", async (input: Request | string) => {
       const url = typeof input === "string" ? input : input.url;
       if (url.includes("prepare-execution"))
@@ -291,7 +292,7 @@ it.each([false, true])(
         });
         return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
       }
-      return fileResponse("Content selected by native child");
+      return fileResponse(liveContent);
     });
     const store = configureStore({
       reducer: {
@@ -354,13 +355,31 @@ it.each([false, true])(
             `data: ${JSON.stringify({ kind: "tool_result", call_id, content: "File presentation requested", ui_parts: [{ type: "conversation_file", session_id: "s1", path, viewer: "text", editable: true }] })}\n\n`,
           ),
         );
-      controller.close();
     });
     await settle();
-    if (navigate) expect(host.querySelector("aside")?.getAttribute("aria-hidden")).toBe("true");
-    else {
+    if (navigate) {
+      expect(host.querySelector("aside")?.getAttribute("aria-hidden")).toBe("true");
+      controller.close();
+    } else {
       expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("/child.txt");
       expect(host.textContent).toContain("Content selected by native child");
+      liveContent = "Concatenated output without another open";
+      await act(async () =>
+        controller.enqueue(
+          new TextEncoder().encode(
+            `data: ${JSON.stringify({ kind: "tool_result", call_id: "child-concat", tool_name: "concat_files", content: "Saved" })}\n\n`,
+          ),
+        ),
+      );
+      await settle();
+      expect(host.textContent).toContain("Concatenated output without another open");
+      liveContent = "Final saved output";
+      await act(async () => {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ kind: "final", content: "Done" })}\n\n`));
+        controller.close();
+      });
+      await settle();
+      expect(host.textContent).toContain("Final saved output");
     }
   },
 );
@@ -369,6 +388,7 @@ it("switches opened files by keyboard and keeps their source read-only", async (
   vi.stubGlobal("fetch", async (input: Request) =>
     fileResponse(
       new URL(input.url).searchParams.get("path") === "/second.txt" ? "Second saved file" : "First saved file",
+      false,
     ),
   );
   const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", [
@@ -387,4 +407,232 @@ it("switches opened files by keyboard and keeps their source read-only", async (
   expect(tabs[0].getAttribute("aria-selected")).toBe("true");
   expect(host.textContent).toContain("First saved file");
   expect(host.querySelector('[role="textbox"]')?.getAttribute("aria-readonly")).toBe("true");
+});
+
+it("serializes autosaves and keeps typing during a save dirty until the next save", async () => {
+  const { EditorView } = await import("@codemirror/view");
+  const writes: string[] = [];
+  const pending: (() => void)[] = [];
+  vi.stubGlobal("fetch", async (request: Request) => {
+    if (request.method === "PUT") {
+      const { content } = await request.json();
+      writes.push(content);
+      return new Promise<Response>((resolve) => pending.push(() => resolve(fileResponse(content))));
+    }
+    return fileResponse("Original");
+  });
+  const { host } = await panelHarness();
+  await settle();
+  expect(host.querySelector('[role="textbox"]')?.getAttribute("aria-readonly")).toBe("false");
+  const editor = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+  await act(async () => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "Revision one" } }));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  });
+  expect(writes).toEqual(["Revision one"]);
+  await act(async () => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "Revision two" } }));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  });
+  expect(writes).toEqual(["Revision one"]);
+  await act(async () => {
+    pending.shift()!();
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  });
+  expect(writes).toEqual(["Revision one", "Revision two"]);
+  expect(host.textContent).toContain("Revision two");
+  await act(async () => {
+    pending.shift()!();
+  });
+  await settle();
+  expect(host.textContent).toContain("conversationFiles.saved");
+});
+
+it("refreshes clean source on focus without reopening and stops after close", async () => {
+  let content = "Parent output";
+  let reads = 0;
+  vi.stubGlobal("fetch", async () => {
+    reads += 1;
+    return fileResponse(content);
+  });
+  const { host, render } = await panelHarness();
+  await settle();
+  content = "Native child and concatenation output";
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await settle();
+  expect(host.textContent).toContain("Native child and concatenation output");
+  await render("s1", false);
+  const beforeFocus = reads;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await settle();
+  expect(reads).toBe(beforeFocus);
+});
+
+it("preserves a failed draft through close and refresh and reconciles after retry", async () => {
+  const { EditorView } = await import("@codemirror/view");
+  const { flushConversationEditors } = await import("./conversationEditors");
+  let reject = true;
+  let content = "Original";
+  vi.stubGlobal("fetch", async (request: Request) => {
+    if (request.method === "PUT") {
+      if (reject) return new Response("{}", { status: 503 });
+      content = (await request.json()).content;
+      return fileResponse(content);
+    }
+    return fileResponse(content);
+  });
+  const { host, render } = await panelHarness();
+  await settle();
+  const view = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+  await act(async () =>
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "Unsaved human draft" } }),
+  );
+  await act(async () => {
+    await expect(flushConversationEditors("s1")).rejects.toBeDefined();
+  });
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("conversationFiles.saveFailed");
+  content = "Agent wrote meanwhile";
+  await render("s1", false);
+  await render();
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await settle();
+  expect(host.textContent).toContain("Unsaved human draft");
+  expect(host.textContent).not.toContain("Agent wrote meanwhile");
+  reject = false;
+  await act(async () => {
+    await flushConversationEditors("s1");
+  });
+  await settle();
+  expect(content).toBe("Unsaved human draft");
+  expect(host.textContent).toContain("conversationFiles.saved");
+});
+
+it("flushes drafts from every switched and closed editor in the conversation", async () => {
+  const { EditorView } = await import("@codemirror/view");
+  const { flushConversationEditors } = await import("./conversationEditors");
+  const saved: Record<string, string> = { "/notes.txt": "First", "/second.txt": "Second" };
+  vi.stubGlobal("fetch", async (request: Request) => {
+    const path = new URL(request.url).searchParams.get("path")!;
+    if (request.method === "PUT") saved[path] = (await request.json()).content;
+    return fileResponse(saved[path]);
+  });
+  const { host, render } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", [
+    "/notes.txt",
+    "/second.txt",
+  ]);
+  await settle();
+  const edit = async (insert: string) => {
+    const view = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+    await act(async () => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert } }));
+  };
+  await edit("Second revised");
+  await act(async () => host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[0].click());
+  await settle();
+  await edit("First revised");
+  await render("s1", false);
+  await act(async () => {
+    await flushConversationEditors("s1");
+  });
+  expect(saved).toEqual({ "/notes.txt": "First revised", "/second.txt": "Second revised" });
+});
+
+it("rejects a delayed clean refresh after typing and reconciles the completed save", async () => {
+  const { EditorView } = await import("@codemirror/view");
+  const { flushConversationEditors } = await import("./conversationEditors");
+  let reads = 0;
+  let late!: (response: Response) => void;
+  let content = "Original";
+  vi.stubGlobal("fetch", async (request: Request) => {
+    if (request.method === "PUT") {
+      content = (await request.json()).content;
+      return fileResponse(content);
+    }
+    reads += 1;
+    if (reads === 2)
+      return new Promise<Response>((resolve) => {
+        late = resolve;
+      });
+    return fileResponse(reads > 2 ? "Agent update after save" : content);
+  });
+  const { host } = await panelHarness();
+  await settle();
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  const view = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+  await act(async () =>
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "Human local buffer" } }),
+  );
+  await act(async () => late(fileResponse("Old refresh snapshot")));
+  await settle();
+  expect(host.textContent).toContain("Human local buffer");
+  await act(async () => {
+    await flushConversationEditors("s1");
+  });
+  await settle();
+  expect(content).toBe("Human local buffer");
+  expect(host.textContent).toContain("Agent update after save");
+  expect(host.textContent).not.toContain("Old refresh snapshot");
+});
+
+it("polls visible clean views at a bounded cadence and suspends polling while hidden", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  let content = "Original";
+  let reads = 0;
+  const visible = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  vi.stubGlobal("fetch", async () => {
+    reads += 1;
+    return fileResponse(content);
+  });
+  try {
+    const { host, render } = await panelHarness();
+    await settle();
+    const initialReads = reads;
+    content = "Independent background output";
+    visible.mockReturnValue("hidden");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(reads).toBe(initialReads);
+    visible.mockReturnValue("visible");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await settle();
+    expect(host.textContent).toContain("Independent background output");
+    await render("s1", false);
+    const closedReads = reads;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(reads).toBe(closedReads);
+  } finally {
+    visible.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+it("lets a slow initial read finish when the visible poll fires", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const visible = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  let finishFirst!: (response: Response) => void;
+  let reads = 0;
+  vi.stubGlobal("fetch", () => {
+    reads += 1;
+    return new Promise<Response>((resolve) => {
+      if (reads === 1) finishFirst = resolve;
+    });
+  });
+  try {
+    const { host } = await panelHarness();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => finishFirst(fileResponse("Slow storage result")));
+    await settle();
+    expect(host.textContent).toContain("Slow storage result");
+  } finally {
+    visible.mockRestore();
+    vi.useRealTimers();
+  }
 });

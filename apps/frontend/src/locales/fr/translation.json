@@ -4214,6 +4214,11 @@
     "updated": "Mis à jour"
   },
   "conversationFiles": {
+    "saveFailedSummary": "Le fichier n'a pas pu être enregistré",
+    "saving": "Enregistrement...",
+    "unsaved": "Modifications non enregistrées",
+    "saved": "Toutes les modifications sont enregistrées",
+    "saveFailed": "Impossible d'enregistrer ce fichier. Vos modifications sont conservées. Réessayez avant de continuer.",
     "title": "Fichiers de la conversation",
     "files": "Fichiers ouverts",
     "open": "Ouvrir",

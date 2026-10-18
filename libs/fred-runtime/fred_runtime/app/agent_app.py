@@ -5839,14 +5839,17 @@ def _build_agent_router(
                 raise HTTPException(503, "Conversation authorization is unavailable.")
         if config.filesystem is None:
             raise HTTPException(503, "Conversation filesystem storage is unavailable.")
-        service = ConversationFilesystemService(
-            config.filesystem,
-            session_id,
-            quotas=config.conversation_filesystem_quotas
-            or ConversationFilesystemQuotaConfig(),
-            kpi=config.kpi_writer,
-            mutation_source="user",
-        )
+        try:
+            service = ConversationFilesystemService(
+                config.filesystem,
+                session_id,
+                quotas=config.conversation_filesystem_quotas
+                or ConversationFilesystemQuotaConfig(),
+                kpi=config.kpi_writer,
+                mutation_source="user",
+            )
+        except ConversationScratchpadInvalidPathError as exc:
+            raise HTTPException(422, "Use a safe conversation identifier.") from exc
         backend, permissions = build_conversation_filesystem(
             service, skills=config.skills
         )

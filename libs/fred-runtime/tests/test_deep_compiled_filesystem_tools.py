@@ -240,6 +240,16 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
                 content="",
                 tool_calls=[
                     _tool_call(
+                        "write_file",
+                        {"file_path": "/part-2.md", "content": "two"},
+                        "native-child-write",
+                    )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
                         "concat_files",
                         {
                             "paths": [
@@ -303,7 +313,7 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
 
     updates = await _drive(agent)
 
-    assert [source for _path, source in storage.mutations] == ["agent"] * 5
+    assert [source for _path, source in storage.mutations] == ["agent"] * 6
     assert await workspace.read_text("/report.md", origin="system") == "one\ntwo"
     assert await workspace.read_text("/final.md", origin="system") == "one\ntwo\nend"
     messages = [

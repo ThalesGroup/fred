@@ -7072,6 +7072,38 @@ def test_read_conversation_file_without_execution(monkeypatch, tmp_path) -> None
         }
 
 
+@pytest.mark.parametrize("method", ["GET", "PUT"])
+def test_conversation_file_rejects_unsafe_owned_session_id(
+    monkeypatch, tmp_path, method
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        history = get_runtime_context().config.history_store
+        asyncio.run(
+            history.save(
+                "unsafe~session",
+                [make_user_text("unsafe~session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        result = client.request(
+            method,
+            "/pod/v1/agents/sessions/unsafe~session/filesystem/file",
+            params={"path": "/notes.txt"},
+            **({"json": {"content": "forged"}} if method == "PUT" else {}),
+        )
+        assert result.status_code == 422
+
+
 def test_conversation_file_save_is_readable_without_execution(
     monkeypatch, tmp_path
 ) -> None:
@@ -7096,12 +7128,23 @@ def test_conversation_file_save_is_readable_without_execution(
         )
         service = ConversationFilesystemService(config.filesystem, "edit-session")
         asyncio.run(service.scratchpad().write_text("notes.txt", "Before"))
+        sources: list[str] = []
+        write = config.filesystem.write
+
+        async def attributed_write(path: str, data: bytes | str) -> None:
+            from fred_runtime.conversation_filesystem import current_mutation_source
+
+            sources.append(current_mutation_source())
+            await write(path, data)
+
+        monkeypatch.setattr(config.filesystem, "write", attributed_write)
         saved = client.put(
             "/pod/v1/agents/sessions/edit-session/filesystem/file",
             params={"path": "/notes.txt"},
             json={"content": "Human revision\n"},
         )
         assert saved.status_code == 200
+        assert sources == ["user"]
         assert saved.json()["content"] == "Human revision\n"
         assert (
             asyncio.run(service.scratchpad().read_text("notes.txt"))
@@ -7115,6 +7158,7 @@ def test_conversation_file_save_is_readable_without_execution(
     ("path", "body", "status"),
     [
         ("/.deep/notes.txt", {"content": "forged"}, 403),
+        ("/skills/example/SKILL.md", {"content": "forged"}, 403),
         ("/../notes.txt", {"content": "forged"}, 422),
         ("/notes.txt", {"content": "forged", "origin": "system"}, 422),
         ("/notes.txt", {"content": "forged", "editable": True}, 422),
@@ -7132,7 +7176,17 @@ def test_conversation_file_save_rejects_forged_policy(
             ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
         ),
     )
-    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    from fred_runtime.app.config import PodSkillsConfig
+
+    skills_directory = tmp_path / "skills" / "example"
+    skills_directory.mkdir(parents=True)
+    (skills_directory / "SKILL.md").write_text(
+        "---\nname: example\ndescription: Example skill\n---\nTrusted skill\n"
+    )
+    pod_config = _build_test_config(tmp_path).model_copy(
+        update={"skills": PodSkillsConfig(directory=str(skills_directory.parent))}
+    )
+    app = create_agent_app(registry={}, config=pod_config)
     with TestClient(app) as client:
         config = get_runtime_context().config
         asyncio.run(
@@ -7329,7 +7383,30 @@ def test_deep_parent_and_child_open_stream_and_history(monkeypatch, tmp_path) ->
             content="", tool_calls=[{"name": name, "args": arguments, "id": call_id}]
         )
 
-    model = ToolFriendlyFakeChatModel(
+    from langchain_core.messages import BaseMessage, ToolMessage
+    from langchain_core.outputs import ChatResult
+
+    class ReviewingModel(ToolFriendlyFakeChatModel):
+        child_read: str | None = None
+
+        async def _agenerate(
+            self,
+            messages: list[BaseMessage],
+            stop: list[str] | None = None,
+            run_manager: Any = None,
+            **kwargs: Any,
+        ) -> ChatResult:
+            for message in messages:
+                if (
+                    isinstance(message, ToolMessage)
+                    and message.tool_call_id == "child-read-saved"
+                ):
+                    self.child_read = str(message.content)
+            return await super()._agenerate(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+
+    model = ReviewingModel(
         responses=[
             call("open", {"path": "/parent.txt"}, "parent-open"),
             call(
@@ -7340,6 +7417,17 @@ def test_deep_parent_and_child_open_stream_and_history(monkeypatch, tmp_path) ->
             call("open", {"path": "/child.txt"}, "child-open"),
             AIMessage(content="Child finished"),
             AIMessage(content="Ready for human review"),
+            call(
+                "task",
+                {
+                    "description": "Read the saved child.txt and continue",
+                    "subagent_type": "general-purpose",
+                },
+                "continue-child",
+            ),
+            call("read_file", {"file_path": "/child.txt"}, "child-read-saved"),
+            AIMessage(content="Child continued"),
+            AIMessage(content="Continuation finished"),
         ]
     )
     monkeypatch.setattr(
@@ -7400,6 +7488,34 @@ def test_deep_parent_and_child_open_stream_and_history(monkeypatch, tmp_path) ->
             params={"path": "/child.txt"},
         )
         assert current.json()["content"] == "CHILD PRIVATE BODY"
+
+        saved = client.put(
+            "/pod/v1/agents/sessions/review-session/filesystem/file",
+            params={"path": "/child.txt"},
+            json={"content": "Human reviewed content for the next native child"},
+        )
+        assert saved.status_code == 200
+        continuation = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": agent.agent_id,
+                "input": "continue",
+                "session_id": "review-session",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert continuation.status_code == 200
+        events = [
+            json.loads(line[6:])
+            for line in continuation.text.splitlines()
+            if line.startswith("data: ") and line != "data: [DONE]"
+        ]
+        assert model.child_read is not None
+        assert "Human reviewed content for the next native child" in model.child_read
+        assert not any(
+            event.get("kind") == "tool_call" and event.get("tool_name") == "read_file"
+            for event in events
+        )
 
 
 @pytest.mark.parametrize("method", ["GET", "PUT"])

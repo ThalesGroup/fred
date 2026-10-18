@@ -13,7 +13,7 @@ import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { openConversationFile } from "../../features/conversationFiles/conversationFileSlice";
+import { openConversationFile, refreshConversationFiles } from "../../features/conversationFiles/conversationFileSlice";
 import { requestSidePanelOpen } from "../../features/capabilities/sidePanelOpenRequestSlice";
 
 import { runtimeExecuteStreamPath } from "../utils/runtimeExecutionUrl";
@@ -497,6 +497,7 @@ export function useChatSse(
         }
 
         case "final": {
+          if (isTurnCurrent?.(sessionId) !== false) dispatch(refreshConversationFiles(sessionId));
           // `final` is the only reliable end-of-turn signal on this stream (see
           // agent_app.py's `execute_stream` docstring) — the contract's
           // `turn_persisted` event is defined but never actually emitted, so the
@@ -562,6 +563,7 @@ export function useChatSse(
         }
 
         case "tool_result": {
+          if (isTurnCurrent?.(sessionId) !== false) dispatch(refreshConversationFiles(sessionId));
           for (const part of event.ui_parts ?? []) {
             if (
               part.type === "conversation_file" &&

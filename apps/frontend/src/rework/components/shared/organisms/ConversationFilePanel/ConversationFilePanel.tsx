@@ -13,13 +13,12 @@
 // limitations under the License.
 
 import { useEffect, useId } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch, useSelector, useStore } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { SourceEditor } from "@shared/molecules/SourceEditor/SourceEditor";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import Button from "@shared/atoms/Button/Button";
-import { useReadConversationFileQuery } from "../../../../../slices/runtime/runtimeOpenApi";
 import {
   openConversationFile,
   selectConversationFileSession,
@@ -27,6 +26,12 @@ import {
   setConversationFileRoute,
   type ConversationFileRootState,
 } from "@rework/features/conversationFiles/conversationFileSlice";
+import {
+  conversationEditorsFor,
+  registerConversationEditors,
+  type ConversationEditors,
+} from "@rework/features/conversationFiles/conversationEditors";
+import { useConversationFileEditor } from "@rework/features/conversationFiles/useConversationFileEditor";
 import styles from "./ConversationFilePanel.module.css";
 
 interface ConversationFilePanelProps {
@@ -36,21 +41,37 @@ interface ConversationFilePanelProps {
   open: boolean;
   onClose: () => void;
 }
-function FileContent({ sessionId, teamId, path }: { sessionId: string; teamId: string; path: string }) {
+function FileContent({
+  sessionId,
+  teamId,
+  path,
+  coordinator,
+  refreshRevision,
+}: {
+  sessionId: string;
+  teamId: string;
+  path: string;
+  coordinator: ConversationEditors;
+  refreshRevision: number;
+}) {
   const { t } = useTranslation();
-  const { currentData, error, isFetching, refetch } = useReadConversationFileQuery(
-    { sessionId, teamId, path },
-    { refetchOnMountOrArgChange: true },
+  const { draft, error, loading, refresh, change, flush } = useConversationFileEditor(
+    coordinator,
+    sessionId,
+    teamId,
+    path,
+    refreshRevision,
   );
-  if (isFetching)
+  if (loading && !draft)
     return (
       <div className={styles.status} role="status">
         <Spinner />
         {t("conversationFiles.loading")}
       </div>
     );
+  let readError;
   if (error) {
-    const status = "status" in error ? error.status : undefined;
+    const status = typeof error === "object" && "status" in error ? error.status : undefined;
     const key =
       status === 403 || status === 401
         ? "denied"
@@ -59,20 +80,41 @@ function FileContent({ sessionId, teamId, path }: { sessionId: string; teamId: s
           : status === 415 || status === 422
             ? "unsupported"
             : "unavailable";
-    return (
+    readError = (
       <div className={styles.status} role="alert">
         {t(`conversationFiles.${key}`)}
-        <Button color="primary" size="small" variant="text" onClick={() => void refetch()}>
+        <Button type="button" color="primary" size="small" variant="text" onClick={refresh}>
           {t("conversationFiles.retry")}
         </Button>
       </div>
     );
   }
-  if (!currentData) return null;
+  if (!draft) return readError ?? null;
   return (
     <>
-      <div className={styles.caption}>{t("conversationFiles.readOnly")}</div>
-      <SourceEditor value={currentData.content} label={t("conversationFiles.source", { path })} readOnly />
+      {readError}
+      <div className={styles.caption} role={draft.failed ? "alert" : "status"}>
+        {t(
+          `conversationFiles.${!draft.editable ? "readOnly" : draft.failed ? "saveFailed" : draft.saving ? "saving" : draft.content !== draft.savedContent ? "unsaved" : "saved"}`,
+        )}
+        {draft.failed && (
+          <Button
+            type="button"
+            color="primary"
+            size="small"
+            variant="text"
+            onClick={() => void flush().catch(() => undefined)}
+          >
+            {t("conversationFiles.retry")}
+          </Button>
+        )}
+      </div>
+      <SourceEditor
+        value={draft.content}
+        label={t("conversationFiles.source", { path })}
+        readOnly={!draft.editable}
+        onChange={change}
+      />
     </>
   );
 }
@@ -80,6 +122,9 @@ export function ConversationFilePanel({ sessionId, teamId, messagesUrl, open, on
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const panelId = useId();
+  const store = useStore<ConversationFileRootState>();
+  const coordinator = conversationEditorsFor(store);
+  useEffect(() => registerConversationEditors(coordinator), [coordinator]);
   const session = useSelector((state: ConversationFileRootState) => selectConversationFileSession(state, sessionId));
   const routed = useSelector((state: ConversationFileRootState) => selectConversationFileRoute(state, sessionId));
   const suffix = `/agents/sessions/${encodeURIComponent(sessionId)}/messages`;
@@ -150,7 +195,9 @@ export function ConversationFilePanel({ sessionId, teamId, messagesUrl, open, on
               </div>
             ) : selected && routed === baseUrl ? (
               <FileContent
-                key={`${sessionId}:${selected.path}:${session?.revision}`}
+                key={JSON.stringify([sessionId, teamId, selected.path, session?.revision])}
+                coordinator={coordinator}
+                refreshRevision={session?.refreshRevision ?? 0}
                 sessionId={sessionId}
                 teamId={teamId}
                 path={selected.path}

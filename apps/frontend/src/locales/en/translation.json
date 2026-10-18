@@ -4214,6 +4214,11 @@
     "updated": "Updated"
   },
   "conversationFiles": {
+    "saveFailedSummary": "File could not be saved",
+    "saving": "Saving...",
+    "unsaved": "Unsaved changes",
+    "saved": "All changes saved",
+    "saveFailed": "Could not save this file. Your edits are preserved. Try again before continuing.",
     "title": "Conversation files",
     "files": "Opened files",
     "open": "Open",

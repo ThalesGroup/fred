@@ -18,7 +18,12 @@ import type { ConversationFilePart } from "../../../slices/runtime/runtimeOpenAp
 interface ConversationFileState {
   sessions: Record<
     string,
-    { files: Record<string, ConversationFilePart>; selectedPath: string | null; revision: number }
+    {
+      files: Record<string, ConversationFilePart>;
+      selectedPath: string | null;
+      revision: number;
+      refreshRevision: number;
+    }
   >;
   routes: Record<string, string>;
 }
@@ -35,6 +40,7 @@ export const conversationFileSlice = createSlice({
         files: {},
         selectedPath: null,
         revision: 0,
+        refreshRevision: 0,
       });
       session.files[payload.path] = payload;
     },
@@ -43,10 +49,15 @@ export const conversationFileSlice = createSlice({
         files: {},
         selectedPath: null,
         revision: 0,
+        refreshRevision: 0,
       });
       session.files[payload.path] = payload;
       session.selectedPath = payload.path;
       session.revision += 1;
+    },
+    refreshConversationFiles(state, { payload }: PayloadAction<string>) {
+      const session = state.sessions[sessionKey(payload)];
+      if (session) session.refreshRevision += 1;
     },
     setConversationFileRoute(state, { payload }: PayloadAction<{ sessionId: string; baseUrl: string | null }>) {
       if (payload.baseUrl) state.routes[sessionKey(payload.sessionId)] = payload.baseUrl;
@@ -54,7 +65,7 @@ export const conversationFileSlice = createSlice({
     },
   },
 });
-export const { rememberConversationFile, openConversationFile, setConversationFileRoute } =
+export const { rememberConversationFile, openConversationFile, setConversationFileRoute, refreshConversationFiles } =
   conversationFileSlice.actions;
 export type ConversationFileRootState = { conversationFiles: ConversationFileState };
 
