@@ -631,12 +631,11 @@ def _to_plan(validated: Any) -> DeckPlan:
 
 def _shown_takeaways(plan: DeckPlan) -> DeckPlan:
     """Each slide told whether its takeaway may go on the slide."""
+    shown = plan.show_takeaways
     slides = [
         s
-        if s.takeaway_shown == (plan.show_takeaways or s.takeaway_asked)
-        else s.model_copy(
-            update={"takeaway_shown": plan.show_takeaways or s.takeaway_asked}
-        )
+        if s.takeaway_shown == shown
+        else s.model_copy(update={"takeaway_shown": shown})
         for s in plan.slides
     ]
     return plan.model_copy(update={"slides": slides})
@@ -1277,8 +1276,7 @@ def _description(
         rules += " A closing slide can only be the last one."
     if takeaway_zones(inventory):
         rules += (
-            " Takeaways stay in the speaker notes (one a `changes` edit sets goes on its "
-            "slide when it can); set show_takeaways: true only when the "
+            " Takeaways stay in the speaker notes; set show_takeaways: true only when the "
             "user explicitly asks to show the key messages on the slides: a slide listing a "
             "takeaway zone then shows its takeaway there, in place of bullets."
         )

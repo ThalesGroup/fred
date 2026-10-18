@@ -1045,8 +1045,9 @@ class SlidePlan(BaseModel):
         default=None,
         description="What the audience concludes when looking at this slide, as a full "
         "sentence ('Italy weighs twice Spain in headcount, so hiring should start "
-        "there'). It shapes the slide; it is not the title and is not shown on it. Not "
-        "needed on cover, agenda, section, closing and quote slides.",
+        "there'). Not the title: the slide's visible content delivers it, so changing it "
+        "means rewriting that content; it is shown itself only when the user explicitly "
+        "asks. Not needed on cover, agenda, section, closing and quote slides.",
     )
     title: Optional[str] = Field(
         default=None,
@@ -1122,8 +1123,6 @@ class SlidePlan(BaseModel):
     # The user asked for the key messages on the slides: the takeaway goes in
     # the template's takeaway zone when it fits. Set by the tool only.
     takeaway_shown: SkipJsonSchema[bool] = False
-    # A `changes` edit set this slide's takeaway: it is shown like the above.
-    takeaway_asked: SkipJsonSchema[bool] = False
 
     @model_validator(mode="before")
     @classmethod
@@ -1190,7 +1189,6 @@ HIDDEN_FIELDS = (
     "asked_from",
     "rendered",
     "takeaway_shown",
-    "takeaway_asked",
 )
 
 

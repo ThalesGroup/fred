@@ -2115,20 +2115,9 @@ class _Renderer:
             "the takeaway is too long for the slide's key-message zone and stays in "
             "the speaker notes. To show it, shorten takeaway."
             if any(z.takeaway for z in pattern.zones)
-            else f"'{pattern.label}' has no key-message zone, so the takeaway is only "
-            "in the speaker notes. " + self._takeaway_designs(),
+            else f"'{pattern.label}' has no key-message zone, so the takeaway stays "
+            "in the speaker notes. Nothing to do.",
         )
-
-    def _takeaway_designs(self) -> str:
-        """The template slides that show a takeaway, named for the agent."""
-        shown = [
-            f"'{p.label}' ({p.kind})"
-            for p in self.inventory.patterns
-            if p.included and p.reusable and any(z.takeaway for z in p.zones)
-        ]
-        if not shown:
-            return "No design of this template shows one."
-        return f"Designs that show one: {', '.join(shown)}."
 
     def _tell_axes(self, chart: PlanChart, where: str, at: str) -> None:
         """Axis fields the chart type does not draw: said, never dropped quietly."""
