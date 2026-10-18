@@ -417,7 +417,7 @@ async def test_a_later_turn_edit_keeps_every_other_slide_identical(
 
 
 @pytest.mark.asyncio
-async def test_numbers_in_a_revision_are_the_new_plans(monkeypatch):
+async def test_numbers_in_a_revision_are_the_deck_the_changes_apply_to(monkeypatch):
     turn = _Turn(monkeypatch, FakeWorkspace())
     await turn.build(slides=_DECK)
     text, _ = await turn.build(
@@ -426,9 +426,16 @@ async def test_numbers_in_a_revision_are_the_new_plans(monkeypatch):
         ]
     )
     (problem,) = _payload(text)["slides"]
-    # Slide 3 of the base is slide 4 now, and is still the slide refused before.
-    assert problem["slide"] == 4
+    # Slide 4 of the changed plan, numbered 3 as the corrected resend numbers it;
+    # still the slide refused before.
+    assert problem["slide"] == 3
     assert problem["repeated"].startswith("you resent this slide unchanged")
+    # A slide the changes sent is pointed to its change, not to a number.
+    text, _ = await turn.build(
+        changes=[{"op": "insert", "after": 1, "slides": [_TOO_LONG]}]
+    )
+    numbers = [p["slide"] for p in _payload(text)["slides"]]
+    assert numbers == ["new, sent in changes[0]: fix it there", 3]
 
 
 @pytest.mark.asyncio
@@ -513,8 +520,8 @@ async def test_the_same_changes_resent_are_never_applied_twice(
     await turn.build(changes=insert)
     text, _ = await turn.build(changes=insert, file_name="again")
     (problem,) = _payload(text)["slides"]
-    # Applied twice, the refused slide would be slide 5.
-    assert problem["slide"] == 4
+    # Applied twice, the refused slide would be slide 4 of the base.
+    assert problem["slide"] == 3
     # Nothing was delivered: nothing is stored for a later turn.
     assert deck_plan_store.plans == {}
 
@@ -661,7 +668,8 @@ async def test_a_corrected_resend_of_refused_changes_replaces_them(
     text, result = await second.build(
         changes=[{"op": "insert", "after": 1, "slides": [_TOO_LONG]}]
     )
-    assert not result.is_error and _payload(text)["slides"][0]["slide"] == 2
+    assert not result.is_error
+    assert _payload(text)["slides"][0]["slide"].startswith("new, sent in changes[0]")
     assert "with the same `changes`, corrected (all of them" in text
     fixed = {"title": "Method", "kind": "process", "items": _STEPS[:3]}
     text, result = await second.build(
@@ -673,18 +681,35 @@ async def test_a_corrected_resend_of_refused_changes_replaces_them(
         "Method",
         "Agenda",
     ]
-    # A fix numbered on the refused plan (another shape) applies to that plan.
+    # A fix numbered on the refused plan is not applied to it: the refused
+    # insert left no trace, slide 4 does not exist.
     await second.build(changes=[{"op": "insert", "after": 3, "slides": [_TOO_LONG]}])
     text, result = await second.build(
         changes=[{"op": "replace", "slide": 4, "slides": [fixed]}]
     )
-    assert not result.is_error, text
-    assert [s.title for s in second.rendered[-1].slides] == [
-        "Kick-off",
-        "Method",
-        "Agenda",
-        "Method",
-    ]
+    assert result.is_error and "slide 4 does not exist" in text
+
+
+@pytest.mark.asyncio
+async def test_a_refused_changes_call_leaves_no_trace(monkeypatch):
+    """Seen in the eval: an edit sent in a refused call (items emptied) came
+    back in the next call of another shape, which was built with it."""
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
+    text, _ = await turn.build(
+        changes=[
+            {"op": "edit", "slide": 2, "field": "bullets", "value": []},
+            {"op": "insert", "after": 2, "slides": [_TOO_LONG]},
+        ]
+    )
+    assert _payload(text)["status"] == "needs_revision"
+    text, result = await turn.build(
+        changes=[{"op": "edit", "slide": 2, "field": "title", "value": "Plan"}]
+    )
+    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
+    plan = turn.rendered[-1]
+    assert [s.title for s in plan.slides] == ["Kick-off", "Plan"]
+    assert plan.slides[1].bullets == ["a"]
 
 
 @pytest.mark.asyncio
@@ -1172,10 +1197,11 @@ async def test_a_call_identical_to_a_refused_one_is_not_evaluated_again(monkeypa
     await turn.build(changes=insert)
     text, _ = await turn.build(changes=insert)
     assert len(evaluated) == 2 and "drop the change that causes it" in text
-    # The slide sent whole breaks the loop.
+    # The slide sent whole breaks the loop, numbered on the refused `slides`
+    # plan the refused insert left as it was.
     fixed = {"title": "Method", "kind": "process", "items": _STEPS[:3]}
     text, result = await turn.build(
-        changes=[{"op": "replace", "slide": 4, "slides": [fixed]}]
+        changes=[{"op": "replace", "slide": 3, "slides": [fixed]}]
     )
     assert not result.is_error, text
 

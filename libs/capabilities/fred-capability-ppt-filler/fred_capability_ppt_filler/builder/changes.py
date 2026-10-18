@@ -64,6 +64,11 @@ _SLIDE_KEYS = frozenset(
 )
 
 
+# Where a slide of the changed plan comes from: ("base", its number there),
+# ("replaced", the number it replaces) or ("new", the index of its change).
+Origin = Tuple[str, int]
+
+
 class ChangeError(ValueError):
     """Every bad change of one call, each with its remedy."""
 
@@ -356,22 +361,6 @@ def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
 # --- applying ---------------------------------------------------------------------------
 
 
-def change_shape(changes: List[SlideChange]) -> Tuple[Tuple[str, int, int, str], ...]:
-    """What a list of changes does, without its content: a corrected resend of
-    the same changes has the same shape."""
-    return tuple(
-        sorted(
-            (
-                c.op or "",
-                -1 if c.slide is None else c.slide,
-                -1 if c.after is None else c.after,
-                c.field or "",
-            )
-            for c in changes
-        )
-    )
-
-
 AFTER_THE_COVER = (
     "The slides inserted with `after` 0 went after the cover (slide 1): the first slide "
     "is always the template's cover. Nothing to do; to open the deck on them, use "
@@ -584,18 +573,20 @@ def apply_changes(
     changes: List[SlideChange],
     unplaced: Optional[Callable[[SlidePlan], List[str]]] = None,
     cleared: Optional[Dict[int, List[str]]] = None,
+    origins: Optional[Dict[int, Origin]] = None,
 ) -> DeckPlan:
     """The whole plan after ``changes``, all numbered on ``base``. Untouched
     slides stay the base's objects; raises :class:`ChangeError` listing every
     bad change, so nothing is built from half of them. With ``unplaced``, a kind
-    edit clears the fields it names; ``cleared`` gets them per resulting slide."""
+    edit clears the fields it names; ``cleared`` gets them per resulting slide,
+    ``origins`` where each resulting slide comes from."""
     n = len(base.slides)
     problems: List[str] = []
     replaced: Dict[int, List[SlidePlan]] = {}
     removed: set[int] = set()
     # The change that took each slide first: a second one on it is a conflict.
     owner: Dict[int, int] = {}
-    inserts: Dict[int, List[SlidePlan]] = {}
+    inserts: Dict[int, List[Tuple[int, SlidePlan]]] = {}
     edits: Dict[int, List[Tuple[int, SlideChange]]] = {}
     likes: List[Tuple[int, SlideChange, int]] = []
 
@@ -609,7 +600,9 @@ def apply_changes(
                 report(k, change, issue)
             continue
         if change.op == "insert":
-            inserts.setdefault(change.after or 0, []).extend(change.slides)
+            inserts.setdefault(change.after or 0, []).extend(
+                (k, s) for s in change.slides
+            )
             continue
         number = change.slide or 0
         if change.op == "edit" and change.field == LIKE:
@@ -706,7 +699,15 @@ def apply_changes(
     if problems:
         raise ChangeError(problems)
 
-    slides: List[SlidePlan] = list(inserts.get(0, []))
+    slides: List[SlidePlan] = []
+    where: Dict[int, Origin] = {} if origins is None else origins
+
+    def add(slide: SlidePlan, origin: Origin) -> None:
+        slides.append(slide)
+        where[len(slides)] = origin
+
+    for k, slide in inserts.get(0, []):
+        add(slide, ("new", k))
     for number, slide in enumerate(base.slides, start=1):
         if number in replaced:
             # The replacement keeps the replaced slide's design when it fits.
@@ -714,12 +715,15 @@ def apply_changes(
             first = new[0].model_copy(update={"built_on": slide.built_on})
             if number in liked:
                 first = first.model_copy(update=_asked(base, liked[number]))
-            slides.extend([first, *new[1:]])
+            add(first, ("replaced", number))
+            for entry in new[1:]:
+                add(entry, ("new", owner[number]))
         elif number not in removed:
-            slides.append(edited.get(number, slide))
+            add(edited.get(number, slide), ("base", number))
             if gone.get(number) and cleared is not None:
                 cleared[len(slides)] = gone[number]
-        slides.extend(inserts.get(number, []))
+        for k, entry in inserts.get(number, []):
+            add(entry, ("new", k))
     return DeckPlan(
         slides=slides,
         file_name=base.file_name,

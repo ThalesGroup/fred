@@ -88,10 +88,10 @@ from fred_capability_ppt_filler.builder.changes import (
     AFTER_THE_COVER,
     CLEARABLE,
     ChangeError,
+    Origin,
     SlideChange,
     after_the_cover,
     apply_changes,
-    change_shape,
     deck_delta,
     unchanged,
 )
@@ -773,17 +773,31 @@ def _unverified_lines(
     ]
 
 
+def _numbered(index: int, origins: Optional[Mapping[int, Origin]]) -> Any:
+    """A refused slide as the corrected call numbers it: on the deck `changes`
+    apply to, or the change that sent it."""
+    origin = (origins or {}).get(index)
+    if origin is None:
+        return index
+    if origin[0] == "new":
+        return f"new, sent in changes[{origin[1]}]: fix it there"
+    return origin[1]
+
+
 def _needs_revision(
     assignment: Assignment,
     plan: DeckPlan,
     previous: _Previous,
     repeats: List[Repeat],
     lead: List[str],
-    from_changes: bool = False,
+    origins: Optional[Mapping[int, Origin]] = None,
 ) -> tuple[str, ToolInvocationResult]:
     """The problems, each flagged when the previous call already had it, so the
     model never reads the same message twice without learning what changed;
-    a first call's variety ask joins them, so it never costs a round of its own."""
+    a first call's variety ask joins them, so it never costs a round of its own.
+    With ``origins`` (a `changes` call), slides are numbered on the deck the
+    changes apply to, as the corrected resend is."""
+    from_changes = origins is not None
     current: _Previous = {}
     slides = []
     # A slide renumbered by `changes` is still the one refused before.
@@ -791,8 +805,11 @@ def _needs_revision(
     for problem in assignment.problems:
         sent = plan.slides[problem.index - 1].model_dump_json()
         entry = problem.as_dict()
-        if from_changes:
-            entry["options"] = [_drop_op(o, problem.index) for o in problem.options]
+        origin = (origins or {}).get(problem.index)
+        if origin is not None:
+            entry["slide"] = _numbered(problem.index, origins)
+        if origin is not None and origin[0] == "base":
+            entry["options"] = [_drop_op(o, origin[1]) for o in problem.options]
         before = previous.get(problem.index) or by_sent.get(sent)
         if before is not None and before[0] == problem.problem:
             entry["repeated"] = (
@@ -1348,12 +1365,11 @@ def build_builder_tools(
     # One build at a time: parallel calls of a round are refused by the
     # middleware, this guards the turn's state when the tool is called directly.
     build_lock = asyncio.Lock()
-    # The last plan this turn evaluated and, when `changes` produced a refused
-    # one, the plan they applied to and their shape: a corrected resend applies
-    # there again. Only a delivered deck is stored for later turns.
+    # What this turn's `changes` apply to: the deck delivered, or a refused or
+    # proposed `slides` plan. A refused `changes` call leaves it as it was, so
+    # a later call never builds on changes it did not send. Only a delivered
+    # deck is stored for later turns.
     turn_base: List[DeckPlan] = []
-    turn_parent: List[DeckPlan] = []
-    turn_shape: List[Any] = [None]
     # Calls refused this turn, keyed with the plan they applied to: the same
     # call on the same base is refused again without a new evaluation.
     refused_calls: Dict[str, str] = {}
@@ -1416,16 +1432,15 @@ def build_builder_tools(
                 "again with 'slides' as a list of objects, each with its content (title, "
                 "bullets, items…)."
             )
-        shape: Any = None
         base: Optional[DeckPlan] = None
         cleared: Dict[int, List[str]] = {}
+        origins: Dict[int, Origin] = {}
         moved_notes: List[str] = []
         if changes is not None and (changes or not plan.slides):
             if plan.slides:
                 return _error(_BOTH_MODES)
             if not changes:
                 return _error(_NO_CHANGE)
-            shape = change_shape(changes)
             try:
                 base = turn_base[0] if turn_base else await plans.read()
             except Exception:  # noqa: BLE001 - the model can resend the whole deck
@@ -1433,9 +1448,6 @@ def build_builder_tools(
                 return _error(_BASE_UNREADABLE)
             if base is None:
                 return _error(_NO_BASE)
-            # Models resend refused changes corrected, never applied twice.
-            if turn_parent and shape == turn_shape[0]:
-                base = turn_parent[0]
             changes, moved = after_the_cover(base, changes, _kinds(inventory))
             if moved:
                 moved_notes.append(AFTER_THE_COVER)
@@ -1445,6 +1457,7 @@ def build_builder_tools(
                     changes,
                     lambda slide: unplaced(inventory, slide, slide.kind),
                     cleared,
+                    origins,
                 )
             except ChangeError as exc:
                 return _error(
@@ -1477,9 +1490,8 @@ def build_builder_tools(
             return _answer(_same_call(refused_calls[call_key], base is not None))
 
         def refused(stored: DeckPlan) -> None:
-            turn_base[:] = [stored]
-            turn_parent[:] = [] if base is None else [base]
-            turn_shape[0] = shape
+            if base is None:
+                turn_base[:] = [stored]
 
         if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
             return _error(
@@ -1543,7 +1555,8 @@ def build_builder_tools(
             # Refused once only (soft checks): the same call resent is built.
             if told.hard:
                 refused_calls[call_key] = "; ".join(
-                    f"slide {p.index}: {p.problem}" for p in assignment.problems
+                    f"slide {_numbered(p.index, origins)}: {p.problem}"
+                    for p in assignment.problems
                 )
             return _needs_revision(
                 assignment,
@@ -1551,7 +1564,7 @@ def build_builder_tools(
                 previous_problems,
                 repeats,
                 unloadable + _cleared_lines(cleared, plan),
-                base is not None,
+                origins if base is not None else None,
             )
         previous_problems.clear()
         if repeats:
@@ -1563,7 +1576,7 @@ def build_builder_tools(
                 proposed = plan.model_copy(
                     update={"proposed": True, "delivered": False}
                 )
-                refused(proposed)
+                turn_base[:] = [proposed]
                 await plans.write(proposed)
                 return _proposal(plan, assignment, bool(validated.skip_plan))
 
@@ -1669,8 +1682,6 @@ def build_builder_tools(
         turn_base[:] = [deck]
         turn_delivered[:] = [(deck, file_name)]
         refused_calls.clear()
-        turn_parent.clear()
-        turn_shape[0] = None
         await plans.write(deck)
 
         notes = _build_notes(
