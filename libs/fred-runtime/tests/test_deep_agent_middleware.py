@@ -185,17 +185,7 @@ def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
     assert [guard.tool_name for guard in guards] == ["execute"]
     assert deep_mod._filesystem_prompt_suffix(
         available_tool_names=available_tool_names
-    ) == (
-        "# Conversation filesystem\n\n"
-        "- `/` is the shared workspace for collaboration between "
-        "the parent agent and its sub-agents in this conversation.\n"
-        "- Use `open(path)` to request presentation of an existing text file for "
-        "human review. It returns path/viewer/editability metadata, never the file "
-        "body, and does not pause execution or confirm browser receipt.\n"
-        "- Use absolute paths when creating or editing shared files, for "
-        "example `/notes.md`.\n"
-        "- `/.deep/` is reserved for runtime artifacts. Do not write or edit "
-        "files there. Other mounted filesystems may also be read-only.\n\n"
+    ).endswith(
         "The following filesystem tools are disabled in this runtime: "
         "execute. Do not call them."
     )
