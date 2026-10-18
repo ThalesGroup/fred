@@ -155,9 +155,7 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
     assert "items max 3 [number, heading, text" in description
     assert "≈chars per line × lines" in description
     # The only cover was excluded: no cover kind, and no cover rule announced.
-    assert "- cover:" not in description and "always the template's cover" not in (
-        description
-    )
+    assert "- cover:" not in description and "is the cover" not in description
     properties = tools[BUILD_TOOL_NAME].args_schema.model_json_schema()["$defs"][
         "BuildSlide"
     ]["properties"]
@@ -209,13 +207,13 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
         in description
     )
     assert "To CHANGE the last deck of this conversation" in description
-    assert '{"op": "insert", "after": N (0 = first, after the cover)' in description
+    assert '{"op": "insert", "after": N (0 = at the start)' in description
     assert (
         "To change text inside a slide, use `edit`: the slide keeps its design"
         in description
     )
     assert "Never split a deck across several calls" in description
-    assert "The first slide is always the template's cover" in description
+    assert "A first slide of only a title and subtitle is the cover." in description
     # The choice guide names only kinds this template offers.
     assert (
         "key numbers, each a value + a short label → figures" in description
@@ -1136,36 +1134,17 @@ async def test_a_single_build_call_or_a_copy_in_parallel_is_handled_once(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_a_fragment_after_a_delivered_deck_is_pointed_to_changes(monkeypatch):
-    """Without a delivered deck the remedy adds a cover; with one, a new plan
-    that does not start with the cover is a change to that deck."""
+async def test_a_deck_without_a_cover_is_built_as_sent(monkeypatch):
+    """No cover refusal: the deck holds exactly what the model sends."""
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=FakeWorkspace()))[
         BUILD_TOOL_NAME
     ]
-    fragment = [
-        {"title": "Method", "columns": [{"heading": "A", "bullets": ["x"]}] * 2}
-    ]
-    text, result = await build.coroutine(slides=fragment)
-    assert not result.is_error
-    (problem,) = json.loads(text[text.index("{") :])["slides"]
-    assert problem["problem"].startswith(
-        "the first slide is always the template's cover"
-    )
-    assert any(o.startswith("add a cover slide before it") for o in problem["options"])
-
-    text, result = await build.coroutine(slides=[COVER, fragment[0]])
+    alone = [{"title": "Method", "columns": [{"heading": "A", "bullets": ["x"]}] * 2}]
+    text, result = await build.coroutine(slides=alone)
     assert text.startswith(tools_mod._DELIVERED), text
-    text, result = await build.coroutine(slides=fragment)
-    assert not result.is_error
-    (problem,) = json.loads(text[text.index("{") :])["slides"]
-    assert problem["options"] == [
-        "a deck was already delivered in this conversation: to add these slides to it, "
-        'send only `changes` with {"op": "insert", "after": N, "slides": [...]} (N = the '
-        'slide they follow), or {"op": "replace", "slide": N, "slides": [...]} to swap a '
-        "slide; a new deck goes in ONE call with every slide, the cover first"
-    ]
+    assert "Designs: 1 'Two columns'." in text
 
 
 @pytest.mark.asyncio

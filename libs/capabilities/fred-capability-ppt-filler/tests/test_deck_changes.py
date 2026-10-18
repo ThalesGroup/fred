@@ -473,9 +473,8 @@ async def test_numbers_in_a_revision_are_the_deck_the_changes_apply_to(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_an_insert_at_the_start_goes_after_the_cover(monkeypatch):
-    """The eval turn: `after` 0 put a Sommaire before the cover, refused three
-    times as a cover with no place for its items."""
+async def test_an_insert_at_the_start_opens_the_deck(monkeypatch):
+    """`after` 0 means first: the builder no longer moves it behind the cover."""
     turn = _Turn(monkeypatch, FakeWorkspace())
     await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["One", "Two"]}])
     text, result = await turn.build(
@@ -483,9 +482,8 @@ async def test_an_insert_at_the_start_goes_after_the_cover(monkeypatch):
             {"op": "insert", "after": 0, "slides": [{"title": "Why", "bullets": ["a"]}]}
         ]
     )
-    assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
-    assert [s.title for s in turn.rendered[-1].slides] == ["Kick-off", "Why", "Agenda"]
-    assert "went after the cover (slide 1)" in text
+    assert [s.title for s in turn.rendered[-1].slides] == ["Why", "Kick-off", "Agenda"]
+    assert "went after the cover" not in text
 
 
 def test_the_delta_names_changed_added_and_removed_slides():

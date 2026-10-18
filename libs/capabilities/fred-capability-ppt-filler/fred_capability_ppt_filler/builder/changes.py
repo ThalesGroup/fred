@@ -125,8 +125,8 @@ class SlideChange(BaseModel):
     after: Optional[int] = Field(
         default=None,
         description=(
-            "insert, move: the slides go after this slide of the previous deck; 0 = first, "
-            "after a cover."
+            "insert, move: the slides go after this slide of the previous deck; 0 = at the "
+            "start."
         ),
     )
     slides: List[SlidePlan] = Field(
@@ -395,35 +395,6 @@ def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
 
 
 # --- applying ---------------------------------------------------------------------------
-
-
-AFTER_THE_COVER = (
-    "The slides sent with `after` 0 went after the cover (slide 1): the first slide "
-    "is always the template's cover. Nothing to do; to open the deck on them, use "
-    "`after` 1 next time."
-)
-
-
-def after_the_cover(
-    base: DeckPlan, changes: List[SlideChange], kinds: Mapping[str, str]
-) -> Tuple[List[SlideChange], bool]:
-    """An insert at the start of a deck that opens on its cover goes after the
-    cover, which stays first; ``kinds`` maps a template slide to its kind.
-    Returns the changes and whether one moved."""
-    first = base.slides[0].built_on if base.slides else None
-    if kinds.get(first or "") != "cover":
-        return changes, False
-    moved = [
-        c.model_copy(update={"after": 1})
-        if c.after == 0
-        and (
-            (c.op == "insert" and all(s.kind != "cover" for s in c.slides))
-            or (c.op == "move" and c.slide != 1)
-        )
-        else c
-        for c in changes
-    ]
-    return moved, moved != changes
 
 
 def _check(change: SlideChange, n: int) -> List[str]:

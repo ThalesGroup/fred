@@ -1722,12 +1722,7 @@ class _Renderer:
         drawn = slide_charts(slide_plan) if shown else []
         # A chart in a content area is a substitution even when no kind was asked.
         asked = slide_plan.kind or ("chart" if drawn else None)
-        # The first slide is the cover by rule: not a substitution.
-        if (
-            asked
-            and asked != pattern.kind
-            and not (rendered == 1 and pattern.kind == "cover")
-        ):
+        if asked and asked != pattern.kind:
             self.report.note("other_kind", kind=asked)
         for chart in drawn:
             if chart.asked_type:

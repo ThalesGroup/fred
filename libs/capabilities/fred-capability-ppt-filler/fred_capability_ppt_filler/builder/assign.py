@@ -841,7 +841,7 @@ def _kept(
     return kept or _fullest(slide, candidates)
 
 
-def _asked(slide: _Slide, has_cover: bool) -> Optional[SlideProblem]:
+def _asked(slide: _Slide) -> Optional[SlideProblem]:
     """A design the user asked for (`like`): that template slide alone, priced
     as no reuse, or why the slide cannot take it."""
     plan = slide.plan
@@ -871,15 +871,11 @@ def _asked(slide: _Slide, has_cover: bool) -> Optional[SlideProblem]:
             ],
             plan.kind,
         )
-    if not _allowed(pattern, slide, has_cover):
-        why = (
-            f"{named} can only be the {'first' if pattern.kind == 'cover' else 'last'} slide"
-            if pattern.kind in ("cover", "closing")
-            else f"the first slide is always the template's cover, not {named}"
-        )
+    if not _allowed(pattern, slide):
+        where = "first" if pattern.kind == "cover" else "last"
         return SlideProblem(
             slide.index,
-            why,
+            f"{named} can only be the {where} slide",
             ["use the design of another slide", drop],
             plan.kind,
         )
@@ -894,25 +890,24 @@ def _asked(slide: _Slide, has_cover: bool) -> Optional[SlideProblem]:
     return None
 
 
-def _allowed(pattern: Pattern, slide: _Slide, has_cover: bool) -> bool:
+def _allowed(pattern: Pattern, slide: _Slide) -> bool:
     if pattern.kind == "cover":
         return slide.first
-    if slide.first and has_cover:
-        return False
     if pattern.kind == "closing":
         return slide.last
     return True
 
 
-def _tiers(slide: _Slide, has_cover: bool) -> List[List[SlideKind]]:
+def _tiers(slide: _Slide, offered: set[str]) -> List[List[SlideKind]]:
     """The requested kind, then its close kinds; with no kind (or one with no
-    close kinds), the kinds the content suggests, then any kind."""
-    if slide.first and has_cover:
-        return [["cover"]]
+    close kinds), the kinds the content suggests, then any kind. A title slide
+    with no kind opening the deck is the cover, as the description states."""
     asked = slide.plan.kind
     if asked and asked in CLOSE_KINDS:
         return [[asked], list(CLOSE_KINDS[asked])]
     inferred = infer_kinds(slide.plan)
+    if slide.first and not asked and inferred[0] == "section" and "cover" in offered:
+        return [["cover"]]
     tiers: List[List[SlideKind]] = [[asked]] if asked else []
     # A chart has one natural form: a content area only when no chart slide holds it.
     first: List[SlideKind] = (
@@ -932,12 +927,12 @@ def _close(slide: _Slide) -> Optional[Tuple[SlideKind, ...]]:
     return CLOSE_KINDS.get(asked) if asked else None
 
 
-def _candidates(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
+def _candidates(slide: _Slide) -> List[Tuple[Pattern, float]]:
     for tier in slide.tiers:
         found = [
             (p, cost + _KIND_STEP * tier.index(p.kind))
             for p, reasons, cost in slide.checked
-            if not reasons and p.kind in tier and _allowed(p, slide, has_cover)
+            if not reasons and p.kind in tier and _allowed(p, slide)
         ]
         if found:
             return found
@@ -1053,13 +1048,13 @@ def _parts(slide: _Slide, count: int) -> List[_Slide]:
 
 
 def _split(
-    slide: _Slide, pool: List[Pattern], size: Tuple[int, int], has_cover: bool
+    slide: _Slide, pool: List[Pattern], size: Tuple[int, int]
 ) -> Optional[_Split]:
     """The slide's list over at most ``_MAX_PARTS`` slides of its own kind (the
     requested one, or the first inferred one that holds it), when its entry
     count alone keeps it off that kind; None otherwise. Bullets never split."""
     plan, entries = slide.plan, _entries(slide.plan)
-    if entries < 2 or (slide.first and has_cover):
+    if entries < 2:
         return None
     for kind in slide.tiers[0]:
         mine = [p for p in pool if p.kind == kind]
@@ -1088,7 +1083,7 @@ def _split(
                 [
                     (p, cost)
                     for p, reasons, cost in part.checked
-                    if not reasons and _allowed(p, part, has_cover)
+                    if not reasons and _allowed(p, part)
                 ],
             )
         if all(part.candidates for part in parts):
@@ -1120,13 +1115,11 @@ def _split_note(split: _Split, at: Dict[int, int]) -> str:
     )
 
 
-def _own(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, List[Misfit]]]:
+def _own(slide: _Slide) -> List[Tuple[Pattern, List[Misfit]]]:
     """Patterns the position allows, of a kind the slide's tiers rank."""
     kinds = {k for tier in slide.tiers for k in tier}
     return [
-        (p, r)
-        for p, r, _ in slide.checked
-        if p.kind in kinds and _allowed(p, slide, has_cover)
+        (p, r) for p, r, _ in slide.checked if p.kind in kinds and _allowed(p, slide)
     ]
 
 
@@ -1211,14 +1204,14 @@ def _chart_options(slide: _Slide) -> List[str]:
     return options
 
 
-def _closest(slide: _Slide, has_cover: bool) -> Optional[Tuple[Pattern, List[Misfit]]]:
+def _closest(slide: _Slide) -> Optional[Tuple[Pattern, List[Misfit]]]:
     """The kind closest to the content, then fewest problems, then the roomiest;
     None when no slide can take the position or a table must be rewritten."""
     # The asked kind (or, with none, the inferred kinds) ranks first: the advice
     # should be about that shape, not about an unrelated kind that happens to fit.
     rank = {k: 0 for tier in slide.tiers[:-1] for k in tier}
     rank.update({k: 1 for k in slide.tiers[-1]})
-    own = _own(slide, has_cover)
+    own = _own(slide)
     if not own or _tableless(slide) or _chartless(slide):
         return None
     # A chart's advice is about a slide that can show as many.
@@ -1255,7 +1248,7 @@ def _why_not(
     return None
 
 
-def _once_fixed(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
+def _once_fixed(slide: _Slide) -> List[Tuple[Pattern, float]]:
     """Where a misfit slide lands once its closest fit's problems are fixed: that
     pattern, and the variants of its kind with no other problem."""
     if slide.closest is None:
@@ -1266,7 +1259,7 @@ def _once_fixed(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
         (p, 0.0)
         for p, found, _ in slide.checked
         if p.kind == closest.kind
-        and _allowed(p, slide, has_cover)
+        and _allowed(p, slide)
         and {r.text for r in found} <= fixed
     ]
 
@@ -1281,19 +1274,9 @@ def _same_problem(slide: _Slide) -> set[str]:
     }
 
 
-_CONTINUE_DELIVERED = (
-    "a deck was already delivered in this conversation: to add these slides to it, send "
-    'only `changes` with {"op": "insert", "after": N, "slides": [...]} (N = the slide they '
-    'follow), or {"op": "replace", "slide": N, "slides": [...]} to swap a slide; a new deck '
-    "goes in ONE call with every slide, the cover first"
-)
-
-
-def _problem(
-    slide: _Slide, has_cover: bool, offered: set[str], continuing: bool = False
-) -> SlideProblem:
+def _problem(slide: _Slide, offered: set[str]) -> SlideProblem:
     """The closest pattern's misfits, named down to the element, with fixes."""
-    own = _own(slide, has_cover)
+    own = _own(slide)
     options: List[str] = []
     if _tableless(slide):
         return SlideProblem(
@@ -1319,10 +1302,8 @@ def _problem(
         options.append("merge this content into another slide, or remove it")
     else:
         closest, reasons = slide.closest
-        # A forced cover is not a close kind: the cover prefix below says why.
-        forced = slide.first and has_cover
         lead = "closest fit"
-        if close is not None and closest.kind != asked and not forced:
+        if close is not None and closest.kind != asked:
             why = _why_not(slide, offered)
             lead = f"{why}; closest close kind" if why else "closest close kind"
         problem = f"{lead}, a '{closest.kind}' slide: " + "; ".join(
@@ -1350,22 +1331,6 @@ def _problem(
         options += [r.option for r in reasons if r.option]
         options.append(f"a '{closest.kind}' slide takes: {zone_summary(closest)}")
         options += _close_options(slide, own, closest.kind)
-    if slide.first and has_cover and continuing:
-        # A fragment of the delivered deck: fitting it as a cover, or adding one,
-        # would make it a second deck, so `changes` is the only remedy.
-        problem = "the first slide is always the template's cover; " + problem
-        options = [_CONTINUE_DELIVERED]
-    elif slide.first and has_cover:
-        problem = "the first slide is always the template's cover; " + problem
-        takes = f": {zone_summary(own[0][0])}" if own else ""
-        options.append(f"add a cover slide before it{takes}")
-        fitting = [
-            p.kind
-            for p, reasons, _ in slide.checked
-            if not reasons and p.kind != "cover"
-        ]
-        for kind in list(dict.fromkeys(fitting))[:_MAX_KIND_OPTIONS]:
-            options.append(f"as a second slide, kind '{kind}' holds this content")
     return SlideProblem(
         slide.index, problem, list(dict.fromkeys(options)), slide.plan.kind
     )
@@ -1391,14 +1356,13 @@ def _close_options(
 
 
 def _substitution(
-    slide: _Slide, chosen: Pattern, offered: set[str], has_cover: bool, number: int
+    slide: _Slide, chosen: Pattern, offered: set[str], number: int
 ) -> Optional[str]:
     """What was built instead of the requested kind, why, and the edit that
     would give the requested kind."""
     # A chart in a content area is a substitution even when no kind was asked.
     asked = slide.plan.kind or ("chart" if slide_charts(slide.plan) else None)
-    # The first slide is the cover by rule, and the description says so.
-    if not asked or chosen.kind == asked or (slide.first and chosen.kind == "cover"):
+    if not asked or chosen.kind == asked:
         return None
     head = f"Slide {number}: built as '{chosen.kind}' instead of '{asked}'"
     if asked == "chart" and chosen.kind != "chart":
@@ -1412,9 +1376,7 @@ def _substitution(
         )
         return f"{head}: {why}. {remedy}"
     mine = [
-        (p, r)
-        for p, r, _ in slide.checked
-        if p.kind == asked and _allowed(p, slide, has_cover)
+        (p, r) for p, r, _ in slide.checked if p.kind == asked and _allowed(p, slide)
     ]
     if not mine:  # pragma: no cover - _why_not covers every absent kind
         return f"{head}. Nothing to do."
@@ -1913,14 +1875,11 @@ def assign(
     plan: DeckPlan,
     variety: VarietyCheck = "template_slide",
     max_uses: int = 2,
-    continuing: bool = False,
 ) -> Assignment:
     """One pattern per slide of ``plan``, or the problems that prevent it;
     ``variety`` says how repeats are grouped (``off`` groups by kind, for the
-    note) and, unless ``off``, ``max_uses`` caps each group. ``continuing``:
-    a deck was delivered, so a plan without a cover is pointed to `changes`."""
+    note) and, unless ``off``, ``max_uses`` caps each group."""
     pool = assignable(inventory)
-    has_cover = any(p.kind == "cover" for p in pool)
     offered = {p.kind for p in pool}
     size = (inventory.slide_width, inventory.slide_height)
     usable = [
@@ -1952,30 +1911,26 @@ def assign(
                 )
             )
             continue
-        slide.tiers = _tiers(slide, has_cover)
+        slide.tiers = _tiers(slide, offered)
         _check(slide, pool, size)
         if slide.plan.asked_design is not None:
-            asked = _asked(slide, has_cover)
+            asked = _asked(slide)
             if asked is not None:
                 problems.append(asked)
             continue
-        slide.candidates = _kept(slide, _candidates(slide, has_cover))
+        slide.candidates = _kept(slide, _candidates(slide))
         own_kind = (
             bool(slide.candidates) and slide.candidates[0][0].kind in slide.tiers[0]
         )
         # Its own kind over two slides before a close kind, before a revision.
-        split = (
-            None
-            if own_kind or slide.parts > 1
-            else _split(slide, pool, size, has_cover)
-        )
+        split = None if own_kind or slide.parts > 1 else _split(slide, pool, size)
         if split is not None:
             splits[slide.index] = split
         elif not slide.candidates:
-            slide.closest = _closest(slide, has_cover)
-            problems.append(_problem(slide, has_cover, offered, continuing))
+            slide.closest = _closest(slide)
+            problems.append(_problem(slide, offered))
             # Counted for variety where it lands once fixed: the ask joins this round.
-            slide.candidates = _once_fixed(slide, has_cover)
+            slide.candidates = _once_fixed(slide)
     if not slides:
         return Assignment(problems=problems)
     slides = [
@@ -2025,7 +1980,7 @@ def assign(
     notes = [
         note
         for number, (slide, pattern) in enumerate(zip(slides, chosen), start=1)
-        if (note := _substitution(slide, pattern, offered, has_cover, number))
+        if (note := _substitution(slide, pattern, offered, number))
     ]
     # With a limit, a run is a repeat and noted as one.
     notes += [

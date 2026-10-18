@@ -279,17 +279,18 @@ def test_the_cover_is_used_once_and_only_first():
     assert "Title Slide" not in labels[1:]
 
 
-def test_the_first_slide_must_fit_the_cover():
-    assignment = assign(
-        INVENTORY,
-        _plan(
-            {"title": "Topics", "items": [{"heading": "A"}, {"heading": "B"}]}, COVER
-        ),
+def test_a_deck_may_open_without_a_cover():
+    """No cover forced: a first slide with a kind or a content shape keeps it;
+    a title slide with no kind is the cover, the default the description states."""
+    topics = {"title": "Topics", "items": [{"heading": "A"}, {"heading": "B"}]}
+    assignment = assign(INVENTORY, _plan(topics, COVER))
+    assert not assignment.problems
+    assert [p.kind for p in assignment.patterns if p][0] != "cover"
+    single = assign(
+        INVENTORY, _plan({"title": "Summary", "kind": "bullets", "bullets": ["a"]})
     )
-    (problem,) = assignment.problems
-    assert problem.index == 1 and assignment.patterns == []
-    assert "always the template's cover" in problem.problem
-    assert any("add a cover slide" in o for o in problem.options)
+    assert not single.problems and [p.kind for p in single.patterns if p] == ["bullets"]
+    assert [p.kind for p in assign(INVENTORY, _plan(COVER)).patterns if p] == ["cover"]
 
 
 def test_a_later_cover_is_built_from_its_content_and_the_swap_is_named():
@@ -789,15 +790,6 @@ def test_a_text_too_long_everywhere_names_the_element_and_its_measured_limit():
         "this zone holds 11 (longest: bullets[1], 999 chars)"
     )
     assert any(o.startswith("keep each bullets entry") for o in problem.options)
-
-
-def test_a_forced_cover_misfit_reads_once_without_a_close_kind_lead():
-    slide = SlidePlan(title="T" * 400, kind="bullets", bullets=["a"])
-    (problem,) = assign(INVENTORY, _plan(slide)).problems
-    assert problem.problem == (
-        "the first slide is always the template's cover; closest fit, a 'cover' "
-        "slide: title is 400 chars; this zone holds ≤8 words (≈29 chars × 2 lines)"
-    )
 
 
 def test_a_close_kind_misfit_names_why_and_the_close_kind_once():

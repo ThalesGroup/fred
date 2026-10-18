@@ -85,12 +85,10 @@ from fred_capability_ppt_filler.builder.assign import (
     unplaced,
 )
 from fred_capability_ppt_filler.builder.changes import (
-    AFTER_THE_COVER,
     CLEARABLE,
     ChangeError,
     Origin,
     SlideChange,
-    after_the_cover,
     apply_changes,
     deck_delta,
     unchanged,
@@ -633,7 +631,6 @@ def _assign_loadable(
     prefetched: Mapping[str, object],
     variety: VarietyCheck,
     max_uses: int,
-    continuing: bool = False,
 ) -> Tuple[Assignment, DeckPlan, List[str]]:
     """Assign with the pictures that load only: an id that does not must not
     count as filling a framed picture zone, which would then show its frame."""
@@ -642,7 +639,7 @@ def _assign_loadable(
         plan = plan.model_copy(
             update={"slides": [_without(slide, set(bad)) for slide in plan.slides]}
         )
-    return assign(inventory, plan, variety, max_uses, continuing), plan, bad
+    return assign(inventory, plan, variety, max_uses), plan, bad
 
 
 def _without(slide: SlidePlan, bad: set[str]) -> SlidePlan:
@@ -1008,7 +1005,6 @@ def _evaluate(
     prefetched: Mapping[str, object],
     variety: VarietyCheck,
     max_uses: int,
-    continuing: bool,
     checked: Sequence[int],
     conversation: story.Conversation,
     seen: set[str],
@@ -1016,7 +1012,7 @@ def _evaluate(
     """The storytelling checks, then the assignment: one revision for both."""
     told = story.check(plan, checked, conversation, seen)
     assignment, plan, bad = _assign_loadable(
-        inventory, plan, prefetched, variety, max_uses, continuing
+        inventory, plan, prefetched, variety, max_uses
     )
     told.hard = told.hard or bool(assignment.problems)
     assignment.problems = _merged(assignment.problems, told.problems)
@@ -1270,7 +1266,7 @@ def _description(
     trends = trend_figures(inventory)
     rules = ""
     if "cover" in kinds:
-        rules += " The first slide is always the template's cover."
+        rules += " A first slide of only a title and subtitle is the cover."
     if "closing" in kinds:
         rules += " A closing slide can only be the last one."
     if takeaway_zones(inventory):
@@ -1287,7 +1283,7 @@ def _description(
         "To CHANGE the last deck of this conversation (a fix after needs_revision, or a change the user asks "
         "for, even on several slides), send only `changes`, numbered on that deck's slides: "
         '{"op": "replace", "slide": N, "slides": [...]}, {"op": "insert", "after": N '
-        + ("(0 = first, after the cover)" if "cover" in kinds else "(0 = at the start)")
+        + "(0 = at the start)"
         + ', "slides": [...]}, {"op": "remove", "slide": N}, {"op": "move", "slide": N, '
         '"after": M}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label"'
         + (
@@ -1454,7 +1450,6 @@ def build_builder_tools(
         base: Optional[DeckPlan] = None
         cleared: Dict[int, List[str]] = {}
         origins: Dict[int, Origin] = {}
-        moved_notes: List[str] = []
         if changes is not None and (changes or not plan.slides):
             if plan.slides:
                 has_deck = await delivered_before(None)
@@ -1468,9 +1463,6 @@ def build_builder_tools(
                 return _error(_BASE_UNREADABLE)
             if base is None:
                 return _error(_NO_BASE)
-            changes, moved = after_the_cover(base, changes, _kinds(inventory))
-            if moved:
-                moved_notes.append(AFTER_THE_COVER)
             try:
                 changed = apply_changes(
                     base,
@@ -1529,10 +1521,6 @@ def build_builder_tools(
             await _prefetch_image_bytes(image_ids, services) if image_ids else {}
         )
         sent = plan
-        # A new plan after a delivered deck is a change to it, not a second deck.
-        continuing = base is None and (
-            bool(turn_delivered) or deck_delivered(history())
-        )
         # Only the slides `changes` touch are checked: an edit is never refused
         # over a slide it leaves as it was.
         kept = {id(s) for s in base.slides} if base is not None else set()
@@ -1547,7 +1535,6 @@ def build_builder_tools(
             prefetched,
             variety,
             max_uses,
-            continuing,
             checked,
             talk,
             soft_refused,
@@ -1721,7 +1708,6 @@ def build_builder_tools(
             + takeaway_note
             + unloadable
             + assignment.notes
-            + moved_notes
             + _cleared_lines(cleared, plan, numbers)
             + _unverified_lines(plan, checked, numbers),
         )
