@@ -167,7 +167,8 @@ presenting.
 
 **Validate the plan before building** — off by default. When on, the agent
 first shows its plan for the first presentation of a conversation: the
-audience, the main message and one line per slide. It waits for your answer:
+audience, the main message, one line per slide and what the build would
+change (a slide built as another kind, for instance). It waits for your answer:
 approve it or say what to change, and it builds. To skip this step once, ask it
 to build directly, without a plan. Changes to a presentation already delivered
 never wait.

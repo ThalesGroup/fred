@@ -180,7 +180,9 @@ présenter.
 
 **Valider le plan avant de construire** — désactivé par défaut. Activé, l'agent
 montre d'abord son plan pour la première présentation d'une conversation : le
-public, le message principal et une ligne par diapositive. Il attend votre
+public, le message principal, une ligne par diapositive et ce que la
+construction changerait (une diapositive construite sous un autre type, par
+exemple). Il attend votre
 réponse : validez-le ou dites ce qu'il faut changer, et il construit. Pour
 passer cette étape une fois, demandez-lui de construire directement, sans plan.
 Les modifications d'une présentation déjà livrée n'attendent jamais.

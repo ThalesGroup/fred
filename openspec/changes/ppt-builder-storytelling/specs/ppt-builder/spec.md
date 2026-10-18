@@ -54,7 +54,7 @@ The system SHALL write a slide's `source` to its speaker notes: a document name,
 
 ### Requirement: Plan validation before the first build
 
-The capability SHALL offer one setting, "Validate the plan before building", off by default. When it is off, the system SHALL behave as without it. When it is on and the conversation holds no delivered deck, the system SHALL answer a `build_presentation` call whose plan has no problem with a `plan_proposed` result holding an outline written by the code — audience, main message, and per slide its kind, title, takeaway and source — SHALL store that plan, and SHALL NOT build a deck until a user message follows that result. After that message, the system SHALL build a whole plan sent in `slides` or apply `changes` to the proposed plan. A plan with problems SHALL get `needs_revision` instead of an outline. The system SHALL build without an outline when the call carries `skip_plan` (the field asks the model to quote the user's request; the system SHALL NOT match the user's words against a word list), and SHALL return the outline when it is left out. Changes to a delivered deck SHALL NOT wait for validation. The working rules SHALL be the same whatever the setting.
+The capability SHALL offer one setting, "Validate the plan before building", off by default. When it is off, the system SHALL behave as without it. When it is on and the conversation holds no delivered deck, the system SHALL answer a `build_presentation` call whose plan has no problem with a `plan_proposed` result holding an outline written by the code — audience, main message, and per slide its kind, title, takeaway and source, followed by the assignment notes the build of that plan would give (the same text as at delivery) — SHALL store that plan, and SHALL NOT build a deck until a user message follows that result. After that message, the system SHALL build a whole plan sent in `slides` or apply `changes` to the proposed plan. A plan with problems SHALL get `needs_revision` instead of an outline. The system SHALL build without an outline when the call carries `skip_plan` (the field asks the model to quote the user's request; the system SHALL NOT match the user's words against a word list), and SHALL return the outline when it is left out. Changes to a delivered deck SHALL NOT wait for validation. The working rules SHALL be the same whatever the setting.
 
 #### Scenario: Setting off
 
@@ -66,6 +66,12 @@ The capability SHALL offer one setting, "Validate the plan before building", off
 - **GIVEN** the setting is on and no deck delivered in the conversation
 - **WHEN** the model sends a sound five-slide plan
 - **THEN** no deck is built, the result's status is `plan_proposed` and the outline lists five lines with kind, title, takeaway and source
+
+#### Scenario: Outline with a fallback note
+
+- **GIVEN** the setting is on and no deck delivered in the conversation
+- **WHEN** the model sends a plan whose second slide asks for kind `closing`
+- **THEN** the outline lists that slide as `section` and the result holds the note the delivery would give ("built as 'section' instead of 'closing' … move it to the end")
 
 #### Scenario: Second call before the user answers
 

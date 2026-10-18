@@ -82,6 +82,24 @@ async def test_the_first_build_returns_the_outline_and_stores_the_plan(
 
 
 @pytest.mark.asyncio
+async def test_the_outline_carries_the_notes_its_build_would_give(
+    monkeypatch, deck_plan_store
+):
+    """A cover shown as 'Couverture' was built as a section: one more build."""
+    early = [COVER, {**POINTS, "kind": "closing"}, CHART]
+    note = (
+        "Slide 2: built as 'section' instead of 'closing': a closing slide can only "
+        "end the deck. To make it the closing slide, move it to the end."
+    )
+    gated = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
+    proposed, _ = await gated(slides=early)
+    direct = await build_tool(monkeypatch, _first_turn())
+    delivered, _ = await direct(slides=early)
+    assert note in delivered and note in proposed
+    assert proposed.startswith("Plan proposed")
+
+
+@pytest.mark.asyncio
 async def test_after_the_users_answer_the_deck_is_built(monkeypatch):
     first = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
     proposed, _ = await first(slides=DECK)

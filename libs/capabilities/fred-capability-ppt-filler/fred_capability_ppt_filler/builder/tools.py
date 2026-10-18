@@ -1051,15 +1051,25 @@ def _evaluate(
 
 
 def _proposal(
-    plan: DeckPlan, assignment: Assignment
+    plan: DeckPlan, assignment: Assignment, notes: List[str]
 ) -> tuple[str, ToolInvocationResult]:
+    """The outline with the notes its build would give, so the user validates
+    what would be built."""
     kinds = [p.kind if p else None for p in assignment.patterns]
     payload = {"status": "plan_proposed", "slides": len(plan.slides)}
+    told = (
+        "Building this plan would also give these notes: tell the user what they change "
+        "in the outline, and apply their fixes when you build:\n"
+        + "\n".join(notes)
+        + "\n"
+        if notes
+        else ""
+    )
     return _answer(
         f"{_PROPOSED} Show this outline to the user in their language and ask them to "
         "validate or correct it; end your answer; do not call build_presentation again in "
         "this answer. Once they answer, build it: the whole deck in `slides`, or `changes` "
-        f"to this plan.\n{story.outline(plan, kinds)}\n"
+        f"to this plan.\n{story.outline(plan, kinds)}\n{told}"
         + json.dumps(payload, ensure_ascii=False)
     )
 
@@ -1588,7 +1598,11 @@ def build_builder_tools(
             proposed = plan.model_copy(update={"proposed": True, "delivered": False})
             turn_base[:] = [proposed]
             await plans.write(proposed)
-            return _proposal(plan, assignment)
+            return _proposal(
+                plan,
+                assignment,
+                unloadable + assignment.notes + _cleared_lines(cleared, plan),
+            )
 
         # Stored as delivered: a split list's parts become slides of their own,
         # so the file, the model and later `changes` share one numbering.
