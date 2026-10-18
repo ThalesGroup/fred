@@ -360,6 +360,13 @@ The system SHALL accept from the model a plan of slides carrying content only ‚Ä
 - **WHEN** a later `changes` call rebuilds the deck
 - **THEN** the two slides are neither split nor suffixed again, stay on one template slide, and count as one slide for variety, even at a max of one use
 
+#### Scenario: A part left alone drops its part number
+
+- **GIVEN** a stored deck whose slides 2 and 3 are `Offers (1/2)` and `Offers (2/2)` from an earlier split
+- **WHEN** a later call inserts a slide between them, moves one away or removes one
+- **THEN** the part numbers of delivered slides are recounted on the deck as it stands: a part left alone is titled `Offers`, parts swapped back in order read `(1/2)` and `(2/2)`
+- **AND** a title on a slide never delivered, or with a count above two, keeps its own words
+
 #### Scenario: Fit check
 
 - **WHEN** a pattern lacks a slot for a non-empty field, holds fewer items than the slide carries, or cannot hold the text above the shrink floor
@@ -385,13 +392,14 @@ The system SHALL accept from the model a plan of slides carrying content only ‚Ä
 
 - **GIVEN** a pattern already used earlier in the deck, not necessarily on the previous slide
 - **WHEN** an unused pattern of the same kind tier also fits the slide
-- **THEN** the unused pattern is chosen; a pattern used three times or more is reported in the success message with the unused variants and their sizes
+- **THEN** the unused pattern is chosen; a pattern used three times or more is reported in the success message with the kinds its content suits, when the template holds one
 
 #### Scenario: First deck asked to vary once
 
 - **GIVEN** a conversation whose history holds no delivered deck yet
-- **WHEN** the variety check is `template_slide` (the default) and the assignment uses one template slide that is not a cover, section, agenda or closing three times or more, and the template has an unused variant of its kind or an unused slide of another such kind
-- **THEN** no deck is written and `needs_revision` names the repeated slides and the alternatives with the content each suits; the next call is built as sent, even when it repeats the same plan
+- **WHEN** the variety check is `template_slide` (the default) and the assignment uses one template slide that is not a cover, section, agenda or closing three times or more, and the content of one of those slides suits another kind the template holds (`suggested`, checked against that content)
+- **THEN** no deck is written and `needs_revision` names the repeated slides and the suggested recasts; the next call is built as sent, even when it repeats the same plan
+- **AND** a template slide never checked against the content (an unused variant, one slide per other kind) is never offered
 
 #### Scenario: Later deck keeps the note
 
@@ -503,7 +511,7 @@ The system SHALL accept from the model a plan of slides carrying content only ‚Ä
 
 - **GIVEN** a template with a single `figures` variant and a deck that already has one figures slide
 - **WHEN** a variety ask is returned
-- **THEN** neither its suggestions nor its options offer `figures`; a kind is offered only while its distinct variants outnumber the deck's slides of that kind, counting each suggestion of the same answer
+- **THEN** its suggestions do not offer `figures`; a kind is offered only while its distinct variants outnumber the deck's slides of that kind, counting each suggestion of the same answer
 
 #### Scenario: Variety check setting
 
@@ -747,11 +755,18 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 - **WHEN** the plan has wrong JSON shapes (a bullet list as one string, a field under an alias or given twice, a non-object entry)
 - **THEN** the tool coerces what it can without losing text, a non-object entry is named in the result, and a key it cannot map is a `needs_revision` problem
 
-#### Scenario: Bullets over two columns keep each point with its sub-points
+#### Scenario: A two-column slide takes columns only
 
-- **WHEN** a slide's `bullets` land on a two-column slide (two body zones)
-- **THEN** the list is split at the top-level point nearest its middle, so a point and its `- ` sub-points stay in one column; a flat list splits in half, the first column the longer
-- **AND** a list that is one point with its sub-points does not fit a two-column slide (`bullets: one point with its sub-points cannot be split over this slide's two columns`), so a one-column slide holds it
+- **WHEN** a slide sends `bullets` and no `columns`, and a `two_columns` or `comparison` template slide has two body zones
+- **THEN** that template slide does not fit it (`bullets: this slide has no place for it`, option: give the points as `columns`), as the catalogue lists `columns.bullets√ó2` for it; the list is never cut over the two columns
+- **AND** a template slide that takes `columns` and has headings but no title zone is listed without `title`, and a titled slide does not fit it (option: another kind, never "drop title")
+
+#### Scenario: A takeaway zone beside a body is never a column
+
+- **GIVEN** a template slide with a body and, beside it, a takeaway zone
+- **WHEN** the catalogue lists it or a slide is placed on it
+- **THEN** its body is `bullets` at its own room, never `columns.bullets√ó2` capped by the takeaway zone, and the takeaway zone holds only the takeaway shown on the slide, else it is left empty and removed
+- **AND** a takeaway zone that is the slide's only body holds its bullets when the takeaway is not shown
 
 #### Scenario: A closing's single text box holds its bullets
 
@@ -871,6 +886,7 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **THEN** the rebuilt closing slide is on the same template slide; a replacement of another kind, or one that no longer fits there, is assigned as any slide
 - **AND** a slide whose requested kind the template replaced (a timeline built on one of two process slides) stays on that template slide when an unrelated change rebuilds the deck
 - **AND** a template slide pin written by the model itself (`built_on`, `asked_design`, `asked_from` in a sent slide) is ignored: only delivery and `like` set it
+- **AND** a whole deck resent in `slides` after a delivery: a slide identical to a delivered slide keeps that slide's template slide while it fits; a changed slide is assigned as any slide
 - **AND** the tool description tells the model to change text inside a slide with `edit`, which keeps the slide's design, and to use `replace` for a different slide
 
 #### Scenario: Same design as another slide

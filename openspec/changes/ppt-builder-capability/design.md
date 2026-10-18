@@ -380,6 +380,16 @@ Lot 3 of the audit: rules that hold only in most cases are deleted, not tuned; t
 - **No forced cover (H16).** The first slide was always fitted as the cover, so "no cover", a one-slide summary or removing slide 1 was refused, and a plan sent after a delivery that did not open on a cover was pointed to `changes`. Now the cover may only be slide 1, and a kind-less slide 1 holding only a title and subtitle takes it (the default the description states); any other first slide keeps its kind or content shape. `after` 0 means first: the move behind the cover and its note are deleted.
 - The storytelling refusals left in the same lot are recorded in `ppt-builder-storytelling` D7.
 
+### D36. Layouts and resends (owner decision 2026-10-18: audit fixes, lot 4)
+
+Universal rules only: the catalogue matches the render, and a slide nobody changed keeps its design.
+
+- **Two columns take `columns` (H1, H2, M4).** A flat list was cut over a two-column design while the catalogue says its two bodies take `columns`; the cut (`column_split`) and its one-point misfit are deleted, and flat `bullets` do not fit such a design (option: give `columns`). A design that takes `columns` and has headings but no title zone is no longer listed with a `title` it cannot show; a titled slide does not fit it, and the refusal points to another kind, never "drop title".
+- **A takeaway zone is never a column (H3).** Beside another body, the takeaway zone is left out of the slide fields and of the zones content falls into: the body is quoted at its own room, and the zone shows only a takeaway the user asked to see, else it is removed. A takeaway zone that is the slide's only body still holds its bullets (the chart-and-commentary slides).
+- **A resend keeps what it repeats (H4).** A whole deck resent in `slides` reset every pin. A resent slide identical to a delivered one (content and kind, hidden fields aside) gets that slide's `built_on` again; it is kept while it fits, as after an edit. A changed slide is assigned as before. A refused `changes` call no longer invites a whole-deck resend.
+- **Split titles recounted (H5).** Splitting stays: it saves a round when a list outgrows the largest slide of its kind. Its ` (k/n)` titles are recounted on every build over delivered slides: adjacent parts are renumbered, a part left alone (a slide inserted between, a part moved or removed) drops its number. Titles never delivered, or counting above two (the builder splits in two at most), are the user's words and stay.
+- **Variety asks only checked recasts (H14).** The `unused` variants and one-slide-per-kind `others` were never checked against the content; they are deleted. The ask carries the capacity-checked `suggested` recasts and is made only when one exists.
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.

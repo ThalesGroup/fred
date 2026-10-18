@@ -562,7 +562,7 @@ Owns: `analysis.py` (`_placeholder_key`, `kicker_keys`, `_records`, step 2 of th
 Owns: `plan.py` (`single_columns`), `changes.py` (`_not_a_list`, one edit per field, `after_the_cover`, `deck_delta`), `assign.py` (`_dropped_text`, `_one_point_over_columns`), `render.py` (`column_split`, closing body, unnumbered closing, `_figure_heading`, `_plain_symbol_bullets`), `tools.py` (cover note, delta line), tests, delta spec, `verification.md`.
 
 - [x] 52.1 `columns` sent as one object is refused with the list form; an edit of a list of objects with one object, and two edits of one field of one slide, are refused. Tests: `test_columns_sent_as_one_object_are_a_problem_not_one_column`, `test_an_edit_of_a_whole_list_with_one_object_is_refused`, `test_two_edits_of_one_field_on_one_slide_are_refused`
-- [x] 52.2 Bullets on a two-column slide split at a top-level point; one point with sub-points is a misfit there. Test: `test_bullets_over_two_columns_keep_each_point_with_its_sub_points`
+- [x] 52.2 Bullets on a two-column slide split at a top-level point; one point with sub-points is a misfit there. Test: `test_bullets_over_two_columns_keep_each_point_with_its_sub_points` (deleted by WP58: a two-column slide takes `columns` only)
 - [x] 52.3 An insert at `after` 0 of a deck opening on its cover goes after the cover, with a note. Test: `test_an_insert_at_the_start_goes_after_the_cover` (deleted by WP57: `after` 0 means first)
 - [x] 52.4 Wingdings 3 bullets drawn as `►` in the preview copy only. Test: `test_preview_copy_draws_wingdings_3_bullets_the_delivered_deck_keeps`
 - [x] 52.5 A closing's lone body holds its bullets; a closing on a section slide is unnumbered. Test: `test_a_closing_holds_its_bullets_and_on_a_section_slide_takes_no_number`
@@ -627,3 +627,17 @@ Owns: `assign.py` (`_allowed`, `_tiers`, `_problem`, `_asked`, `_substitution`, 
 - [x] 57.3 Package checks; `openspec validate --strict`
 - Not changed: a cover pattern still serves slide 1 only, and a closing pattern the last slide only (position rules of the kinds themselves)
 - [ ] 57.4 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+
+## WP58. Layouts and resends (owner decision 2026-10-18: audit fixes, lot 4, design D36)
+
+Owns: `render.py` (`column_split` deleted, `_ZoneMap`, `_place_text`), `plan.py` (`takeaway_aside`, `_slide_fields`), `assign.py` (`_one_point_over_columns` deleted, `_no_place`, `renumber_parts`, `Repeat.unused`/`others` and their computation deleted), `changes.py` (`repinned`), `tools.py` (re-pin on a `slides` resend, part renumbering, variety payload and ask, refused-`changes` text), Help Center fr+en (key-message area), tests, delta specs (also `ppt-builder-intent-fields`), `verification.md`.
+
+- [x] 58.1 (H1) Flat `bullets` do not fit a two-body `two_columns`/`comparison` design; option: give `columns`. Test: `test_assign.py::test_a_flat_list_is_never_split_over_a_two_column_design`
+- [x] 58.2 (H2, M4) No `title` in the catalogue of a design that takes `columns` without a title zone; a titled slide is refused with "another kind". Test: `test_assign.py::test_a_title_less_two_panel_design_never_advertises_a_title`
+- [x] 58.3 (H3) A takeaway zone beside a body is never a column nor filled from content; alone, it holds the bullets. Test: `test_assign.py::test_a_takeaway_zone_beside_a_body_is_never_a_column`
+- [x] 58.4 (H4) A resent slide identical to a delivered one keeps its template slide. Test: `test_deck_changes.py::test_a_whole_deck_resent_keeps_the_design_of_the_slides_it_repeats`
+- [x] 58.5 (H5) Split part numbers recounted on delivered slides. Tests: `test_deck_changes.py::test_a_split_list_part_left_alone_drops_its_part_number`, `test_assign.py::test_part_numbers_are_recounted_on_delivered_slides_only`
+- [x] 58.6 (H14) Variety asks carry only `suggested` recasts. Tests: `test_build_tool.py::test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built`, `test_assign.py::test_a_slide_used_three_times_is_reported_without_designs_that_cannot_hold_it`
+- [x] 58.7 Package checks; `openspec validate --strict`
+- Not changed: splitting itself (needed when a list outgrows the largest slide of its kind); each column quoted at its own room (the tightest body is quoted; no case left after H3); a part title near its room plus ` (k/n)` makes the split fail and the slide is refused as before
+- [ ] 58.8 Live re-evaluation once fred-agents runs this code (not restarted by this change)
