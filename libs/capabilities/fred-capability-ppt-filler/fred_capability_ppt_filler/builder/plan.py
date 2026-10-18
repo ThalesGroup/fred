@@ -567,7 +567,9 @@ def _decimal(digits: str) -> Optional[float]:
         last = separators[-1]
         decimals = len(digits) - last - 1
         mixed = len({digits[i] for i in separators}) > 1
-        if mixed or (decimals != 3 and digits.count(digits[last]) == 1):
+        # "0,125" is a decimal: no number is written with a leading 0 group.
+        zero = digits[:last].lstrip("+-") == "0"
+        if mixed or (digits.count(digits[last]) == 1 and (decimals != 3 or zero)):
             digits = re.sub(r"[.,]", "", digits[:last]) + "." + digits[last + 1 :]
         else:
             digits = re.sub(r"[.,]", "", digits)
@@ -585,7 +587,9 @@ def read_number(value: Any) -> Tuple[Optional[float], str]:
         return None, ""
     if isinstance(value, (int, float)):
         return (float(value), "") if math.isfinite(value) else (None, "")
-    match = _NUMBER.match(str(value).replace(" ", " ").replace(" ", " "))
+    match = _NUMBER.match(
+        str(value).replace("\u2212", "-").replace(" ", " ").replace(" ", " ")
+    )
     if match is None:
         return None, ""
     number = _decimal(match.group(2))

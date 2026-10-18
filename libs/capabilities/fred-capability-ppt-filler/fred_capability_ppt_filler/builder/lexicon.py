@@ -233,7 +233,7 @@ _YEAR = re.compile(r"^(19|20)[0-9]{2}$")
 _FIGURE_SAMPLE = re.compile(r"^[\s#]*x{2,4}\s*%?\s*$", re.IGNORECASE)
 _YEAR_SAMPLE = re.compile(r"^(19|20)xx$", re.IGNORECASE)
 # A figure shown big: a number with at most a short unit ("386,000 km", "+12 %").
-_FIGURE = re.compile(r"^[+\-~<>$€£]?\s*[0-9][0-9\s.,]*\s*[^\s0-9]{0,6}$")
+_FIGURE = re.compile(r"^[+\-\u2212~<>$€£]?\s*[0-9][0-9\s.,]*\s*[^\s0-9]{0,6}$")
 _URL = re.compile(r"^(https?://|www\.|bit\.ly/)\S+$", re.IGNORECASE)
 
 

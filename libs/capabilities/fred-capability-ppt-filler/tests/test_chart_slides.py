@@ -43,7 +43,8 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
     ZoneRole,
 )
-from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart
+from fred_capability_ppt_filler.builder.lexicon import is_figure
+from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart, read_number
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
@@ -178,6 +179,24 @@ def test_a_chart_is_read_from_what_small_models_write():
     assert pairs.categories == ["Q1", "Q2"] and pairs.series[0].values == [1200, 3.5]
     # Units that disagree are not a unit; the values are never rescaled.
     assert pairs.unit is None
+
+
+@pytest.mark.parametrize(
+    "written, value, unit",
+    [
+        ("−3 %", -3.0, "%"),
+        ("−1 200", -1200.0, ""),
+        ("0,125", 0.125, ""),
+        ("0.125", 0.125, ""),
+        ("-0,125 %", -0.125, "%"),
+        ("1,200", 1200.0, ""),
+    ],
+)
+def test_a_typographic_minus_and_a_leading_zero_decimal_read_as_written(
+    written, value, unit
+):
+    assert read_number(written) == (value, unit)
+    assert is_figure(written)
 
 
 def test_an_unknown_type_is_built_as_columns_and_said():
