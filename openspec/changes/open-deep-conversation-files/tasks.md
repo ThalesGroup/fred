@@ -1,53 +1,88 @@
 # Tasks
 
-Planning artifacts only are complete. The implementation tasks below remain unchecked intentionally.
+Planning artifacts only are complete. All implementation tasks remain unchecked intentionally. The approved execution order is slices 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7, followed by integration close-out. This serial schedule is a quality/cost choice; the narrower technical blockers below do not authorize parallel implementation. See [design.md](design.md#implementation-sequencing-and-ownership) for shared contracts, ownership, and handoffs.
 
-## 1. Runtime contracts and authorized file access
+Use TDD within each slice: one meaningful failing behavior test, then the minimum implementation to pass it. Test through the public seams listed below, using independent expected outcomes from the acceptance scenarios. Avoid tautological assertions, private implementation coupling, and tests that only repeat type-system guarantees. Run the affected tests for red/green feedback; defer broad suites and quality checks to final validation or verified CI coverage at the integrated revision. Reuse valid results when their inputs have not changed.
 
-- [ ] 1.1 Add the built-in typed conversation-file UI part and minimal file response models in `fred-sdk`; verify UI-part serialization, history round trips, and OpenAPI exposure without a presentation capability.
-- [ ] 1.2 Add conversation-bound file read/save operations beside the runtime filesystem route, with explicit ownership, mount permissions, and normalized virtual paths; verify authorized access, unknown/foreign sessions, traversal, forged parts, and read-only saves using offline API tests.
-- [ ] 1.3 Add file-backed Markdown download/Word export by reusing the existing converter; verify exports reflect the saved filesystem file and require no writable-document row.
+## 1. Open a conversation text file from a parent or child
 
-## 2. Standard Deep open tool
+Blocked by: none. Delivers a complete read-only plain-text presentation path, including history and reopening. Seams: standard Deep tool execution, authenticated runtime file API, serialized UI parts/history, and rendered chat panel.
 
-- [ ] 2.1 Register `open(path)` through standard Deep assembly for parents and native children; verify both can present a file without optional capabilities, without reading it into model context, and without an execution pause.
-- [ ] 2.2 Propagate child file-reference artifacts through the existing user-facing stream and history pipeline; verify a child open reaches the panel and survives conversation reload.
-- [ ] 2.3 Return path/viewer/editability metadata and actionable missing/denied/unsupported errors; verify tool results contain no document body and do not claim browser acknowledgment.
+- [ ] 1.1 Add the built-in typed conversation-file UI part and minimal read response models; verify serialization/history round trips, OpenAPI exposure, and consistent path/viewer/editability metadata without a presentation capability.
+- [ ] 1.2 Add conversation-bound read access beside the runtime filesystem route; verify authenticated ownership, team/historical-session routing, unknown/foreign sessions, traversal, forged references, and read-only mount policy without starting an agent execution.
+- [ ] 1.3 Register standard `open(path)` for parents and native children and propagate child artifacts through stream/history; verify both reach the panel with bounded metadata, no document-body injection, no execution pause, and no claim of browser acknowledgment.
+- [ ] 1.4 Regenerate runtime OpenAPI and frontend clients and add session/path-keyed dispatch with the reusable CodeMirror plain-text surface; verify deduplication, current-content reopening after reload, stale navigation responses, and actionable missing/denied/unsupported or unavailable-runtime states.
+- [ ] 1.5 Apply localization, theme tokens, accessible labels, and keyboard opening to this path; verify rendered loading/error/read-only states and an end-to-end parent/child open demonstration.
 
-## 3. External-change capture and publication
+## 2. Edit a file and immediately continue the conversation
 
-- [ ] 3.1 Add trusted mutation-source recording at the shared conversation filesystem boundary; verify parent, child, concatenation, and agent-invoked capability writes are excluded while user and independent-system writes are included, including during execution.
-- [ ] 3.2 Persist per-file consolidated external groups in runtime-owned storage; verify autosave collapse, no-op/net-zero changes, failed writes, and A-to-B / agent B-to-C / C-to-D grouping without changing existing write semantics.
-- [ ] 3.3 Seal pending intervals using the existing user exchange identity and publish full unified diffs; verify later-replica reads, resume/retry idempotency, boundary writes, and explicit storage/quota errors without acknowledging unpublished changes.
-- [ ] 3.4 Implement flat `.diff` and numbered `.001.diff` naming with original source headers; verify nested/equal basenames, suffix collisions, Unicode, long paths, and ordering, and confirm `ls` alone discovers all artifacts with no index file.
-- [ ] 3.5 Add static Deep filesystem guidance and short path-only turn-start notifications; verify zero changes produce no notification, large edits never inject content, count/length truncation retains a complete directory path, and no notifications interrupt a running turn.
-- [ ] 3.6 Include pending state and published history in existing quota and erasure handling; verify earlier diffs survive normal turns and all conversation-owned files disappear on eligible erasure, without silent history eviction.
+Blocked by: slice 1. Delivers source editing of the same authoritative file followed by a child reading the saved content. Seams: authenticated save/read APIs, filesystem mutation interface, editor/composer interaction, and subsequent agent reads.
 
-## 4. Native frontend viewers and save coordination
+- [ ] 2.1 Add typed authorized file saves and regenerate clients; verify same-path session isolation, server-side mount editability, rejected `/.deep/` and forged saves, and no privileged authorization through a browser-supplied origin.
+- [ ] 2.2 Establish server-assigned mutation-source propagation at the shared filesystem boundary, separate from authorization origin; verify parent, child, concatenation, capability/helper, user, and independent-system attribution without changing full-write or exact-text-edit semantics.
+- [ ] 2.3 Implement serialized autosave and a reusable explicit flush operation; verify edits typed during an in-flight save remain dirty, failures preserve drafts, and successful saves become visible through the filesystem read interface.
+- [ ] 2.4 Flush conversation editors before message execution; verify immediate continuation starts once after saving, failures preserve both drafts and prevent execution, and navigation invalidates the pending submission.
+- [ ] 2.5 Implement bounded active-view refresh on relevant tool/run/save completion and focus; verify clean views observe parent/child/concatenation writes, dirty buffers survive refreshes, completed saves reconcile, and close/navigation cancels stale work. Verify localized save failures and no new read-before-overwrite guard.
 
-- [ ] 4.1 Regenerate runtime OpenAPI and frontend clients, then add built-in file-part dispatch and a session/path-keyed side-panel adapter; verify current-content reopening, deduplication, missing files, read-only state, and stale responses across navigation.
-- [ ] 4.2 Reuse the Markdown editor with file-backed saving/export and keep its legacy adapter; verify the edit/save/Word-export flow and existing ReAct documents in frontend tests.
-- [ ] 4.3 Adapt the existing static HTML preview to a filesystem file and add source editing; verify source preservation, preview refresh, and the existing script/network/sandbox restrictions, including downloadable/open-in-new-tab preview paths if retained.
-- [ ] 4.4 Add the shared CodeMirror text editor and bundled language catalog; verify common-language highlighting, unknown-format fallback, and that a built deployment fetches all parser chunks from Fred with public-network access blocked.
-- [ ] 4.5 Implement serialized autosave, explicit flush-before-send/export, dirty-buffer preservation, and bounded active-view refresh; verify immediate continuation, writes from children, typing during a save, agent writes while open, save failures, and navigation during a pending submission.
-- [ ] 4.6 Apply localization, accessible labels, and existing theme tokens to file actions and states; verify keyboard opening/source switching and localized loading, denied, missing, read-only, and save-failure states.
+## 3. Report external edits at the next user turn
 
-## 5. Retire the demo bridge and preserve coexistence
+Blocked by: slice 2. Delivers consecutive external edits -> durable consolidated history -> next-turn path-only notification -> agent discovery/read. Seams: filesystem mutation/read/list interfaces and user-turn execution/model-input boundary. Use a group-capable representation so slice 4 extends this implementation.
 
-- [ ] 5.1 Remove only the `open_writable_document` implementation, registration, optional selection, and obsolete copy-path references; verify saved retired selections do not cause Control Plane availability/config-health reconciliation to suspend the instance and remain usable through preparation/runtime assembly without a migration. Preserve validation/suspension for unrelated missing IDs and verify no callable importer remains.
-- [ ] 5.2 Keep the main writable-document/HTML capabilities, legacy records, tables, routes, exports, and historical UI parts; verify a ReAct regression flow and a Deep agent with no presentation capability selected, without any document migration.
+- [ ] 3.1 Persist consolidated external groups in runtime-owned storage outside the public diff directory; verify autosave collapse, independent background edits, same-content/net-zero saves, failed writes, and exclusion of agent/internal mutations through public filesystem behavior.
+- [ ] 3.2 Seal intervals with the existing user exchange identity and publish full unified diffs; verify later-replica publication, retry/resume idempotency, writes after the boundary remaining pending, and explicit storage/quota or partial-save errors without acknowledging unpublished changes.
+- [ ] 3.3 Publish flat single-group `.diff` files with authoritative original-path headers; verify create/delete headers, nested/equal basenames, encoded separators, Unicode, long paths, collision safety, and discovery through `ls` without an index or internal bookkeeping files.
+- [ ] 3.4 Install static parent/child guidance and bounded path-only turn-start notifications; verify distinct source-file counts, no notification for no net changes, no document/diff content injection, filename quoting, and truncation retaining a complete history directory path.
+- [ ] 3.5 Include pending data and published history in existing quotas and erasure; verify older diffs survive normal turns, eligible erasure removes all conversation-owned data, and no silent eviction or local-storage fallback occurs.
 
-## 6. Integration validation and documentation
+## 4. Preserve distinct human edits around agent writes
 
-- [ ] 6.1 Exercise the full offline parent/child write -> open -> human save -> next child read -> concatenate -> live refresh scenario with a large document; verify the parent never needs the document body and model input contains only bounded change-path metadata.
-- [ ] 6.2 Run `make code-quality` and `make test` in every implementation-touched project, plus raw `basedpyright` where its baseline is non-empty; record exact results here and keep default tests independent of third-party services. Mark any real storage-provider tests as integration.
-- [ ] 6.3 Update the runtime execution contract, relevant viewer guidance, and required operator migration note to match the implemented APIs and coexistence behavior; verify generated clients and documentation references agree, explicitly recording that no document migration is required.
-- [ ] 6.4 Before syncing or archiving this change, reconcile the completed `add-deep-agent-conversation-filesystem` delta's stale `/scratchpad/` requirements with the implemented `/` namespace, validate it, and sync/archive that foundation first. This is a blocking archive-order dependency, not a request to change mounts or migrate data.
-- [ ] 6.5 Run the repository author/independent branch review and applicable runtime performance review; address findings, record verification in these tasks or the PR, and reconcile this delta with the final implementation before syncing/archiving the completed change, after task 6.4.
+Blocked by: slice 3. Delivers editing during execution with distinct historical external segments. Seams: the same mutation and user-turn interfaces as slice 3, driven by interleaved writers.
+
+- [ ] 4.1 Close external groups around successful parent/child/helper/concatenation writes; verify A-to-B externally, B-to-C by an agent, C-to-D externally produces only A-to-B and C-to-D in chronological order, and failed/no-op writes follow the agreed consolidation rules.
+- [ ] 4.2 Publish stable numbered `.001.diff` segments when multiple groups remain; verify suffix-like source names, single/multiple-group collisions, numeric ordering at high segment counts, exact original headers, and unchanged published names on retries.
+- [ ] 4.3 Exercise human editing during parent and child execution; verify immediate later reads observe saved content, notification occurs only at the next user-turn start, child/model steps do not advance the boundary, and retries do not consume the following turn's changes. Preserve the documented concurrent-replica limitations.
+
+## 5. Review and export a Markdown report
+
+Blocked by: slice 2 technically; scheduled after slice 4. Delivers file-backed Markdown editing and Markdown/Word export. Seams: rendered editor/export actions, authenticated export API, saved file reads, and legacy document APIs/UI.
+
+- [ ] 5.1 Extract/reuse the existing Markdown editor with a file-backed adapter and retain its legacy adapter; verify saved edits reach subsequent agent reads, dirty-buffer/refresh behavior uses the common coordinator, and existing ReAct documents remain editable.
+- [ ] 5.2 Reuse the existing converter for authorized file-backed Markdown download/Word export and regenerate API clients; verify export flushes pending saves and uses the latest saved filesystem content without a legacy document row, with localized errors and accessible actions.
+
+## 6. Review HTML and edit highlighted source offline
+
+Blocked by: slice 2 technically; scheduled after slice 5. Delivers restricted HTML preview/source editing and the supported offline source-language catalog. Seams: rendered preview/source actions, saved file reads, and built browser asset/network behavior.
+
+- [ ] 6.1 Adapt the existing static HTML preview and add common source-editor switching; verify preview refresh, unchanged stored source, and script/network/sandbox restrictions, including downloadable/open-in-new-tab preview paths if retained.
+- [ ] 6.2 Bundle the supported CodeMirror language catalog with filename/extension detection; verify the spec's representative languages load from Fred-hosted build assets with public-network access blocked and unknown text extensions fall back to plain text.
+- [ ] 6.3 Verify keyboard source switching, localized loading/denied/missing/read-only/save-failure states, theme consistency, and enforcement of effective editability in both source and preview workflows.
+
+## 7. Retire the demo bridge without breaking existing agents
+
+Blocked by: slices 5 and 6. Delivers compatible retirement after replacement viewers work. Seams: capability catalog/configuration health, preparation/runtime assembly, and legacy/new conversation workflows.
+
+- [ ] 7.1 Remove only `open_writable_document`, its registration/optional selection, importer tests, and obsolete copy-path references; verify saved retired selections do not suspend instances during Control Plane availability/config-health reconciliation or block preparation/execution, while unrelated missing IDs retain validation/suspension and no callable importer remains.
+- [ ] 7.2 Preserve the main writable-document/HTML capabilities, legacy records/tables/routes/exports, and historical UI parts; verify a ReAct regression flow and a Deep Markdown/HTML workflow with no presentation capability selected, with no document migration.
+
+## 8. Integration validation and close-out
+
+Blocked by: all seven slices for final delivery. The archive dependency in 8.4 does not block implementation. Review checkpoints after slices 2 and 4 occur before proceeding to the next slice; final review covers the integrated change.
+
+- [ ] 8.1 Obtain independent read-only reviews after slices 2 and 4; record base/head, covered seams, findings/dispositions, focused verification, and exclusions here or in the PR before continuing. Reuse valid evidence rather than rerunning unrelated checks.
+- [ ] 8.2 Exercise the full offline parent/child write -> open -> human save -> next child read -> concatenate -> live refresh scenario with a large document; verify no parent document-body requirement and only bounded change-path metadata in model input.
+- [ ] 8.3 At final integration, verify affected project tests, root `make code-quality`, and raw `basedpyright` where its baseline is non-empty, either locally or through equivalent successful CI jobs covering the integrated revision. Inspect actual CI coverage/results; run only uncovered required checks locally. Record commands/jobs, revision, outcomes, and limitations; keep default tests offline and mark real storage-provider tests as integration.
+- [ ] 8.4 Before syncing/archiving this change, reconcile the completed `add-deep-agent-conversation-filesystem` delta's stale `/scratchpad/` requirements with implemented `/`, validate it, and sync/archive that foundation first; verify archive order without changing mounts or migrating data.
+- [ ] 8.5 Update runtime execution contracts, relevant viewer guidance, and the operator migration note to match implemented APIs/coexistence; verify generated clients and docs agree and explicitly state no document migration is required.
+- [ ] 8.6 Complete author and independent full-branch review against the actual PR target, plus applicable runtime performance review; resolve findings, record exact verification/exclusions, reconcile final artifacts, then sync/archive after 8.4 and all implementation/verification obligations are complete.
+- [ ] 8.7 Push the integrated implementation and deliver a draft PR assigned to the requesting developer; verify it is conflict-free and required checks pass at its current head, with review evidence and remaining limitations recorded. Keep it draft for human review; do not merge automatically.
 
 ## Planning validation
 
+The original independent planning review below predates the sequential-schedule revision.
+
 - `openspec validate open-deep-conversation-files --strict`: passed.
 - `git diff --cached --check` and artifact ASCII/local-link checks: passed.
-- Independent read-only planning review against `13029601f` covered the proposed contracts and affected runtime, frontend, and capability-retirement consumers. Both findings were addressed: task 6.4 now blocks archival on reconciliation of the older filesystem delta; design, scenario, and task 5.1 now cover Control Plane suspension of saved retired selections.
+- Independent read-only planning review against `13029601f` covered the proposed contracts and affected runtime, frontend, and capability-retirement consumers. Both findings were addressed: task 8.4 now blocks archival on reconciliation of the older filesystem delta; design, scenario, and task 7.1 now cover Control Plane suspension of saved retired selections.
 - Application quality/test suites were not run because this change contains planning artifacts only. Implementation checks remain unchecked above; no runtime behavior is claimed as delivered.
+
+- 2026-10-19 schedule revision: strict OpenSpec validation, whitespace, ASCII/local-link/task-reference checks, and `UV_CACHE_DIR=/tmp/fred-2706-uv-cache make migration-check` passed. Author review covered the six-file planning branch against `origin/swift` at `13029601f`, HEAD `61bfb560e` plus the design/tasks working changes: all original obligations retained, sequential dependencies consistent, and no product-scope changes or actionable findings. No new independent review or application tests were run for this documentation-only revision.

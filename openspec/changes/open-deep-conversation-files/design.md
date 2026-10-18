@@ -8,7 +8,7 @@ See [proposal.md](proposal.md) for motivation and [the delta spec](specs/managed
 - `deep/conversation_backend.py` implements native reads, full writes, and exact-text edits. `deep/conversation_port.py` exposes the filesystem to capabilities; `deep/concat_files.py` supports explicit output replacement. No read-before-write enforcement is present or added here.
 - `OpenWritableDocumentCapability` copies a file into legacy writable-document storage. The legacy editor and export router are useful reusable components; its copied document identity is not the identity for this feature.
 - The frontend already has typed UI-part dispatch, native side panels, MDXEditor, CodeMirror consumers, and a static HTML viewer with sanitization, sandboxing, and CSP. No iframe extension host is needed for this delivery.
-- The existing `add-deep-agent-conversation-filesystem` change is implementation-complete but unarchived and still describes older `/scratchpad/` naming. This follow-on uses the actual `/` mount and does not reopen its completed storage work. Before this change is synced or archived, reconcile the older delta to the implemented root namespace, validate it, and sync/archive it first (task 6.4). Do not implement a second mount or migrate paths here.
+- The existing `add-deep-agent-conversation-filesystem` change is implementation-complete but unarchived and still describes older `/scratchpad/` naming. This follow-on uses the actual `/` mount and does not reopen its completed storage work. Before this change is synced or archived, reconcile the older delta to the implemented root namespace, validate it, and sync/archive it first (task 8.4). Do not implement a second mount or migrate paths here.
 
 ## Goals / Non-Goals
 
@@ -105,6 +105,27 @@ Remove `OpenWritableDocumentCapability`, its registration, optional selection, i
 
 The main `writable_document` and `html_artifact` capabilities, tables, APIs, and historical UI parts remain. Deep users can use the built-in file workflow without those selections; do not require a new "open capability" checkbox. Do not migrate existing documents or delete the main capabilities as part of this delivery.
 
+## Implementation sequencing and ownership
+
+Implement the seven vertical slices in [tasks.md](tasks.md) sequentially, with one active implementation owner and one integrated working tree. Quality and token economy take precedence over throughput. Each slice owns a narrow observable workflow across every affected layer and its focused tests; intermediate checkpoints do not claim the complete feature is shippable. Do not divide ownership into independent backend/frontend/test projects.
+
+Use a fresh focused implementation context per slice by default. Reuse the previous implementer only while its context remains useful and bounded; slices 3 and 4 are the strongest candidate. Ownership belongs to the slice, not a permanent agent identity. The orchestrator retains cross-slice decisions, manages shared registrations and generated-artifact reconciliation, reviews integration, and records evidence in the existing tasks/PR. Workers regenerate clients alongside their API changes; generated files are never hand-edited. Commit completed reviewable blocks and integrate/verify each slice before dispatching the next. Separate worktrees are unnecessary for this serial arrangement.
+
+Before each handoff, identify the affected shared contracts below and the public seams listed in that slice. Record concrete interface choices here as they are settled within the approved design; surface any product-contract change before expanding scope. Small reuse extractions belong immediately before their use in the owning slice, not in a broad speculative prefactoring project.
+
+| Shared contract | Owner and agreement |
+| --- | --- |
+| File identity/presentation | Slice 1 establishes trusted session plus normalized path, typed UI reference, and the common viewer/editability mapping. Later viewers extend this path without introducing another identity. |
+| Browser access | Slices 1/2 own authorized read/save models, consistent errors, routing and generated clients; slice 5 adds export using those same access rules. |
+| Editor lifecycle | Slice 2 owns load/save/flush/refresh coordination, buffer-version acknowledgment and navigation cancellation; slices 5/6 reuse it. |
+| Mutation attribution | Slice 2 establishes trusted source propagation, separate from authorization origin; slices 3/4 consume it at the shared filesystem boundary for all writer kinds. |
+| Turn publication | Slice 3 owns exchange identity, durable boundary capture, idempotent publication/acknowledgment and notification; slice 4 extends external-group segmentation without redefining the boundary. |
+| Legacy coexistence | Slice 5 preserves legacy editor/conversion adapters; slice 7 owns retirement across catalog, preparation, runtime assembly and Control Plane health. |
+
+A handoff contains the slice objective, relevant spec/design references, owned scope and shared contracts, integrated revision, accepted public test seams, reusable verification evidence, and unresolved questions. It does not repeat the full specification. Independent reviewers receive requirements and the actual diff/evidence, not expected findings. Review the shared open/edit foundation after slice 2, history after slice 4, and the full integrated branch at close-out; reviews run sequentially too.
+
+The dependency graph permits slices 3, 5 and 6 after slice 2, but implementation deliberately runs 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7. This avoids concurrent shared-module edits and branch reconciliation at the cost of elapsed time. Models, reasoning settings and session-specific worker instructions belong in the implementation handoff, not the durable capability requirements. The tasks retain the testing policy and delivery gates so they survive a handoff change.
+
 ## Risks / Trade-offs
 
 - **Concurrent edits can be overwritten:** accepted for this version. Preserve existing mutation semantics and local drafts; evaluate stronger guards separately rather than claiming read tracking or automatic merge.
@@ -112,7 +133,7 @@ The main `writable_document` and `html_artifact` capabilities, tables, APIs, and
 - **Large files and many groups consume internal quota:** consolidate autosaves, diff only touched files off the model context path, honor existing quotas, and surface failures. Do not add hidden retention eviction or an unbounded notification.
 - **Refresh can race navigation or user typing:** key all state by session/path, serialize local saves, preserve dirty buffers, and test stale responses explicitly.
 - **Permission drift or forged UI parts:** reauthorize file operations on the server. Neither a stored editable flag nor system-origin access is sufficient authority.
-- **Old filesystem planning text is stale:** task 6.4 blocks sync/archive of this change until the older delta agrees with the implemented root namespace and is synced/archived first. Strict validation of this delta alone cannot establish cross-change consistency.
+- **Old filesystem planning text is stale:** task 8.4 blocks sync/archive of this change until the older delta agrees with the implemented root namespace and is synced/archived first. Strict validation of this delta alone cannot establish cross-change consistency.
 
 ## Migration Plan
 
