@@ -120,9 +120,8 @@ size.
 - A picture area is a picture placeholder, a picture covering at least a
   quarter of the slide, or a picture named `image` or `picture`. Smaller
   pictures (logos, icons) are decoration.
-- If the layout draws a frame or band behind a picture area, the slide is only
-  picked when the agent has pictures to put there: otherwise the frame would
-  stay empty.
+- A slide with picture areas is only picked when the agent has a picture for
+  each: otherwise the area would stay empty.
 
 ## Tables
 

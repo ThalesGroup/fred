@@ -124,9 +124,8 @@ et son interligne. L'agent en est informé (« environ 40 caractères sur
 - Une zone d'image est un espace réservé pour image, une image qui couvre au
   moins un quart de la diapositive, ou une image nommée `image` ou `photo`.
   Les images plus petites (logos, icônes) sont de la décoration.
-- Si le masque dessine un cadre ou un bandeau derrière une zone d'image, la
-  diapositive n'est choisie que lorsque l'agent a des images à y placer :
-  sinon, le cadre resterait vide.
+- Une diapositive avec des zones d'image n'est choisie que lorsque l'agent a
+  une image pour chacune : sinon, la zone resterait vide.
 
 ## Les tableaux
 
