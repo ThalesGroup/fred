@@ -300,7 +300,7 @@ def test_a_later_cover_is_built_from_its_content_and_the_swap_is_named():
     assert [p.kind for p in assignment.patterns if p] == ["cover", "section"]
     assert assignment.notes == [
         "Slide 2: built as 'section' instead of 'cover': only the first slide can be "
-        "the cover. To make it the cover, move it to the start; otherwise nothing to do."
+        "the cover. To make it the cover, move it to the start."
     ]
 
 
@@ -340,7 +340,7 @@ def test_closing_is_used_at_most_once_and_only_last():
     assert assignment.patterns[1] and assignment.patterns[1].label != "Merci"
     assert assignment.notes[0].endswith(
         "a closing slide can only end the deck. To make it the closing slide, move it "
-        "to the end; otherwise nothing to do."
+        "to the end."
     )
 
 
@@ -356,7 +356,7 @@ def test_a_fixed_closing_slide_takes_no_content_so_a_close_kind_holds_it():
     assert assignment.notes == [
         "Slide 2: built as 'section' instead of 'closing': the 'closing' slide does not "
         "fit (this slide is shown as is and takes no content). To get the 'closing' "
-        "slide, call again and send only the title 'Merci'; otherwise nothing to do."
+        "slide, call again and send only the title 'Merci'."
     ]
 
 
@@ -524,7 +524,7 @@ def test_an_agenda_too_long_goes_to_a_close_kind_that_holds_it():
     assert assignment.notes == [
         "Slide 2: built as 'process' instead of 'agenda': the 'agenda' slide does not "
         "fit (items: 17 given, max 8). To get the 'agenda' slide, call again and trim "
-        "to 8 items or split them over two slides; otherwise nothing to do."
+        "to 8 items or split them over two slides."
     ]
 
 
@@ -782,7 +782,7 @@ def test_an_agenda_written_as_bullets_goes_to_a_bullets_slide():
     assert assignment.notes[0] == (
         "Slide 2: built as 'bullets' instead of 'agenda': the 'agenda' slide does not "
         "fit (bullets: this slide has no place for it). To get the 'agenda' slide, "
-        "call again and give the bullets as items (at most 8); otherwise nothing to do."
+        "call again and give the bullets as items (at most 8)."
     )
 
 
@@ -1916,3 +1916,20 @@ def test_a_fit_remedy_never_names_a_kind_needing_a_missing_picture():
     pictured = too_long.model_copy(update={"image": "doc"})
     (problem,) = assign(inventory, _plan(pictured)).problems
     assert any("'image_text'" in o for o in problem.options), problem.options
+
+
+def test_a_kind_fallback_note_states_the_fix_without_an_exit():
+    """Live case: a 'statement' sent with three lines fell back to bullets, and the
+    note's "otherwise nothing to do" let the agent stop there."""
+    quote = _list_pattern("quote", 101, 1)
+    bullets = _list_pattern("bullets", 101, 8).model_copy(update={"id": "layout:2"})
+    slide = {
+        "kind": "quote",
+        "title": "À retenir",
+        "bullets": ["La paix", "Le respect", "La coopération"],
+    }
+    assignment = assign(_inventory(quote, bullets), _plan(slide))
+    (note,) = assignment.notes
+    assert note.endswith(
+        "To get the 'quote' slide, call again and merge bullets into at most 1 entry."
+    )

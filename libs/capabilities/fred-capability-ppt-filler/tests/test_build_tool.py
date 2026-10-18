@@ -830,7 +830,7 @@ async def test_a_renderer_finding_reaches_the_model_in_the_review_notes(monkeypa
     review = text[text.index("\nTo review") :]
     assert (
         "Slide 2: the agenda announces 4 parts but only 0 slide(s) follow it. Add the "
-        "missing slides or remove those parts from the agenda; otherwise nothing to do."
+        "missing slides or remove those parts from the agenda."
     ) in review
 
 

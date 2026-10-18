@@ -1628,8 +1628,7 @@ class _Renderer:
                 self.report.note("fixed_slide")
                 self._tell(
                     f"Slide {position}: '{pattern.label}' is a fixed slide shown as is, so its "
-                    "content was left out. If it matters, move it to another slide; otherwise "
-                    "nothing to do."
+                    "content was left out. If it matters, move it to another slide."
                 )
             # A copied notes slide keeps its formatting, never the template's
             # own notes (author guidance, `intent:` annotations).
@@ -1660,7 +1659,7 @@ class _Renderer:
                 self._tell(
                     f"Slide {position}: the agenda announces {topics} parts but only {remaining} "
                     "slide(s) follow it. Add the missing slides or remove those parts from the "
-                    "agenda; otherwise nothing to do."
+                    "agenda."
                 )
         _remove_slides(self.prs, original_ids)
         buffer = io.BytesIO()

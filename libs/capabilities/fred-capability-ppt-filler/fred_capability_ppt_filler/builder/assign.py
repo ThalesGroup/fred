@@ -94,6 +94,7 @@ _NOT_REPEATED = 1000.0
 # another variant of the tier wins while one fits.
 _OVER_MAX = 100.0
 _BEAM = 32
+_OR_OTHER_KIND = ", or use another kind"
 _NOTE_USES = 3  # the passive note when the variety check is off
 # Slides a deck legitimately repeats: never a reason to ask for variety.
 _STRUCTURAL = ("cover", "section", "agenda", "closing")
@@ -404,7 +405,7 @@ def _too_long(
         )
         return Misfit(
             f"{name}: {count}; this zone holds {held}: at most {entries_text(most)}",
-            f"merge {name} into at most {entries_text(most)}, or use another kind",
+            f"merge {name} into at most {entries_text(most)}{_OR_OTHER_KIND}",
         )
     # Few enough entries, but some wrap: each one-line entry would fit.
     costs = floor_lines(zone, lines, *size)
@@ -630,7 +631,7 @@ def _weigh(
             Misfit(
                 "images: this design shows a picture the slide does not have, so its "
                 "picture area would stay empty",
-                "give a picture from list_images_in_folder for each, or use another kind",
+                f"give a picture from list_images_in_folder for each{_OR_OTHER_KIND}",
             )
         )
     if reasons:
@@ -1354,11 +1355,9 @@ def _substitution(
     why = _why_not(slide, offered, asked)
     if why is not None:
         if asked == "closing" and not slide.last:
-            remedy = "To make it the closing slide, move it to the end; otherwise nothing to do."
+            remedy = "To make it the closing slide, move it to the end."
         elif asked == "cover" and not slide.first:
-            remedy = (
-                "To make it the cover, move it to the start; otherwise nothing to do."
-            )
+            remedy = "To make it the cover, move it to the start."
         else:
             remedy = "Nothing to do."
         return f"{head}: {why}. {remedy}"
@@ -1368,10 +1367,14 @@ def _substitution(
     if not mine:  # pragma: no cover - _why_not covers every absent kind
         return f"{head}. Nothing to do."
     _, reasons = min(mine, key=_fewest)
-    fixes = list(dict.fromkeys(r.option for r in reasons if r.option))
+    # It already is another kind: only the fix is left to say, never an exit.
+    fixes = list(
+        dict.fromkeys(
+            r.option.removesuffix(_OR_OTHER_KIND) for r in reasons if r.option
+        )
+    )
     remedy = (
-        f"To get the '{asked}' slide, call again and {'; '.join(fixes)}; "
-        "otherwise nothing to do."
+        f"To get the '{asked}' slide, call again and {'; '.join(fixes)}."
         if fixes
         else "Nothing to do."
     )

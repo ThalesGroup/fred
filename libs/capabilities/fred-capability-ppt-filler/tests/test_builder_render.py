@@ -443,7 +443,7 @@ def test_content_the_pattern_cannot_show_is_reported():
     assert "Slide 2: not placed: items' text" in findings
     assert result.report.notes == [
         "Slide 3: 'Motif' is a fixed slide shown as is, so its content was left out. "
-        "If it matters, move it to another slide; otherwise nothing to do."
+        "If it matters, move it to another slide."
     ]
     # A fixed slide named by its own title lost nothing.
     assert "Slide 4:" not in findings
@@ -1344,7 +1344,7 @@ def test_an_agenda_announcing_more_than_the_deck_holds_is_reported():
     )
     assert result.report.notes == [
         "Slide 2: the agenda announces 4 parts but only 0 slide(s) follow it. Add the "
-        "missing slides or remove those parts from the agenda; otherwise nothing to do."
+        "missing slides or remove those parts from the agenda."
     ]
 
 
