@@ -32,6 +32,11 @@ const h = vi.hoisted(() => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
+// Model reads are outside these form interaction tests; keep them isolated from Redux.
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useTeamRoutingPolicyQuery: () => ({ currentData: undefined, isError: false }),
+  useAvailableModelProfilesQuery: () => ({ currentData: undefined, isError: false }),
+}));
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "agent" }),
 }));

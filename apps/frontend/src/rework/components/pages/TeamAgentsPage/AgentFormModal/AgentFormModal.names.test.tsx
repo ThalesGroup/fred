@@ -33,6 +33,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
+// Model reads are outside these form interaction tests; keep them isolated from Redux.
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useTeamRoutingPolicyQuery: () => ({ currentData: undefined, isError: false }),
+  useAvailableModelProfilesQuery: () => ({ currentData: undefined, isError: false }),
+}));
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "Agent" }),
 }));
@@ -54,10 +59,12 @@ vi.mock("./TemplateBrowser/TemplateBrowser.tsx", () => ({
     <button data-testid="pick-template" onClick={() => onSelect("tpl")} />
   ),
 }));
-// Only the name field matters here: the rest of the body is out of scope.
+// Keep the required usage statement fillable so only name validation blocks Create.
 vi.mock("./AgentFormBody.tsx", () => ({
   AgentFormBody: (props: {
     displayName: string;
+    usageStatement: string;
+    onUsageStatementChange: (v: string) => void;
     nameTaken?: boolean;
     onDisplayNameChange: (v: string) => void;
     onDisplayNameBlur?: () => void;
@@ -68,6 +75,11 @@ vi.mock("./AgentFormBody.tsx", () => ({
         value={props.displayName}
         onChange={(e) => props.onDisplayNameChange(e.target.value)}
         onBlur={props.onDisplayNameBlur}
+      />
+      <input
+        data-testid="usage"
+        value={props.usageStatement}
+        onChange={(e) => props.onUsageStatementChange(e.target.value)}
       />
       {props.nameTaken && <p data-testid="taken">taken</p>}
     </div>
@@ -122,11 +134,16 @@ const nameInput = () => container.querySelector('[data-testid="name"]') as HTMLI
 const submitButton = () => container.querySelector("footer button:last-of-type") as HTMLButtonElement;
 const isTaken = () => container.querySelector('[data-testid="taken"]') !== null;
 
-function type(value: string) {
+function type(value: string, input = nameInput()) {
   act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(nameInput(), value);
-    nameInput().dispatchEvent(new Event("input", { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+function chooseTemplate() {
+  act(() => (container.querySelector('[data-testid="pick-template"]') as HTMLButtonElement).click());
+  type("Internal team use.", container.querySelector('[data-testid="usage"]') as HTMLInputElement);
 }
 
 function leaveField() {
@@ -138,7 +155,7 @@ function leaveField() {
 describe("agent form name check", () => {
   it("warns on leaving the field, not while typing, and keeps Create disabled", () => {
     render({ mode: "create", takenNames: new Set(["writer"]) });
-    act(() => (container.querySelector('[data-testid="pick-template"]') as HTMLButtonElement).click());
+    chooseTemplate();
 
     type("  WRITER");
     expect(isTaken()).toBe(false);
@@ -156,7 +173,7 @@ describe("agent form name check", () => {
 
   it("flags a template name already used in the team as soon as the form opens on it", () => {
     render({ mode: "create", takenNames: new Set(["analyst"]) });
-    act(() => (container.querySelector('[data-testid="pick-template"]') as HTMLButtonElement).click());
+    chooseTemplate();
 
     expect(isTaken()).toBe(true);
     expect(submitButton().disabled).toBe(true);
@@ -164,7 +181,7 @@ describe("agent form name check", () => {
 
   it("shows a name the server refused once the page adds it to the taken names", () => {
     render({ mode: "create", takenNames: new Set() });
-    act(() => (container.querySelector('[data-testid="pick-template"]') as HTMLButtonElement).click());
+    chooseTemplate();
     expect(isTaken()).toBe(false);
 
     render({ mode: "create", takenNames: new Set(["analyst"]) });
