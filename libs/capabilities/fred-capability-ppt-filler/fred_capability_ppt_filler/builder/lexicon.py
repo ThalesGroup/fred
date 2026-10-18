@@ -342,29 +342,6 @@ def has_contact_words(texts: list[str]) -> bool:
 # Slide kinds that make no point of their own: no takeaway asked.
 TAKEAWAY_EXEMPT_KINDS = frozenset({"cover", "agenda", "section", "closing", "quote"})
 
-# User words that allow made-up figures, matched as word prefixes.
-ILLUSTRATIVE_WORDS = (
-    "illustrati",
-    "fictif",
-    "fictive",
-    "fictitious",
-    "exemple de donnees",
-    "donnees d exemple",
-    "donnees exemple",
-    "chiffres d exemple",
-    "invente",
-    "inventer",
-    "invented",
-    "dummy",
-    "fake",
-    "sample data",
-    "made up",
-    "placeholder",
-    "mock",
-    "hypothetique",
-    "hypothetical",
-)
-
 # Shape or layout-placeholder names of a kicker: the small line above a title
 # (eyebrow, surtitre). It is no slot: the builder leaves it out of the deck.
 KICKER_NAMES = ("kicker", "eyebrow", "surtitre", "sur titre", "overline", "pretitle")
@@ -382,40 +359,6 @@ TAKEAWAY_NAMES = (
 )
 # Text roles a takeaway zone can have.
 TAKEAWAY_ROLES = frozenset({"body", "caption", "subtitle"})
-
-# User words that ask for the key messages on the slides themselves.
-SHOW_TAKEAWAY_WORDS = (
-    "messages cles",
-    "message cle",
-    "a retenir",
-    "points cles",
-    "key message",
-    "takeaway",
-    "key point",
-)
-
-# User words that ask to build without showing the plan first.
-SKIP_PLAN_WORDS = (
-    "sans plan",
-    "pas de plan",
-    "sans valider",
-    "sans validation",
-    "sans me montrer le plan",
-    "construis directement",
-    "construis la directement",
-    "genere directement",
-    "fais la directement",
-    "no plan",
-    "without a plan",
-    "without plan",
-    "skip the plan",
-    "skip plan",
-    "skip the outline",
-    "no outline",
-    "build directly",
-    "build it directly",
-    "just build",
-)
 
 # How a slide's `source` names the user or made-up data (whole value, normalized).
 SOURCE_USER = frozenset(
@@ -439,11 +382,6 @@ SOURCE_ILLUSTRATIVE = frozenset(
         "placeholder",
     }
 )
-
-
-def says_any(texts: list[str], words: tuple[str, ...]) -> bool:
-    """Whether one of ``texts`` holds one of ``words`` (word-prefix match)."""
-    return any(name_matches(_unquote(text), words) for text in texts)
 
 
 def _unquote(text: str) -> str:

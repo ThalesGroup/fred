@@ -1119,9 +1119,6 @@ class SlidePlan(BaseModel):
     asked_from: SkipJsonSchema[Optional[int]] = None
     # The delivered file slide's hash (`slide_fingerprints`): what it shows.
     rendered: SkipJsonSchema[Optional[str]] = None
-    # Summary notes a storytelling check accepted the slide with
-    # (`figures_unverified`, `wide_range_chart`): set by the tool only.
-    story_notes: SkipJsonSchema[List[str]] = Field(default_factory=list)
     # The user asked for the key messages on the slides: the takeaway goes in
     # the template's takeaway zone when it fits. Set by the tool only.
     takeaway_shown: SkipJsonSchema[bool] = False
@@ -1184,13 +1181,12 @@ class SlidePlan(BaseModel):
         return [value]
 
 
-# Set by delivery, `like` and the checks only: never read from the model's call.
+# Set by delivery and `like` only: never read from the model's call.
 HIDDEN_FIELDS = (
     "built_on",
     "asked_design",
     "asked_from",
     "rendered",
-    "story_notes",
     "takeaway_shown",
 )
 

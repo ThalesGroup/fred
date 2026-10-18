@@ -213,13 +213,16 @@ async def test_on_request_the_takeaway_fills_the_card_of_the_chart_slide(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_the_flag_without_the_user_s_request_is_ignored_and_told(monkeypatch):
+async def test_the_flag_is_applied_whatever_the_user_s_language(monkeypatch):
+    """The model judges the request: no word list overrides the flag."""
     text, _, workspace = await _built(
-        monkeypatch, [COVER, WITH_BULLET], "", show_takeaways="yes"
+        monkeypatch,
+        [COVER, CHART],
+        "Zeig die Kernaussagen auf den Folien",
+        show_takeaways="yes",
     )
     assert text.startswith("Delivered"), text
-    assert "the user did not ask to show the key messages" in text
-    assert _card(deck(workspace).slides[1]) == ["Q3 porté par l'export"]
+    assert _card(deck(workspace).slides[1]) == [TAKEAWAY]
 
 
 @pytest.mark.asyncio

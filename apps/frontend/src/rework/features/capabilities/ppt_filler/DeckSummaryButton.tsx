@@ -39,8 +39,6 @@ const PLAIN_NOTES = new Set([
   "layout_repeated",
   "layout_not_repeated",
   "illustrative_data",
-  "figures_unverified",
-  "wide_range_chart",
 ]);
 
 // Per intent code, the fields with their own wording; any other field gets the generic one.

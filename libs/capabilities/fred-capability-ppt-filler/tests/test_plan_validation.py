@@ -30,8 +30,6 @@ from langchain_core.messages import HumanMessage
 from port_fakes import FakeWorkspace
 from story_tools import CHART, COVER, DECK, POINTS, USER, answered, build_tool, deck
 
-pytestmark = pytest.mark.storytelling
-
 
 @pytest.fixture(autouse=True)
 def preview_union():
@@ -115,20 +113,18 @@ async def test_a_correction_applies_to_the_proposed_plan(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_skip_plan_needs_the_users_own_request(monkeypatch, deck_plan_store):
+async def test_skip_plan_is_the_model_s_call_in_any_language(
+    monkeypatch, deck_plan_store
+):
+    """No word list second-guesses the field: the model quotes the request."""
     asked = await build_tool(
         monkeypatch,
-        _first_turn("Construis-la directement, sans plan. " + USER),
+        _first_turn("Hazlo directamente, sin plan. " + USER),
         validate_plan=True,
     )
-    text, _ = await asked(slides=DECK, skip_plan="construis-la directement, sans plan")
+    text, _ = await asked(slides=DECK, skip_plan="hazlo directamente, sin plan")
     assert text.startswith("Delivered"), text
     deck_plan_store.plans.clear()  # another conversation
-
-    not_asked = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
-    text, _ = await not_asked(slides=DECK, skip_plan="the user is in a hurry")
-    assert text.startswith("Plan proposed")
-    assert "does not ask to skip the plan" in text
     # The user's words alone, without the argument, never skip.
     words_only = await build_tool(
         monkeypatch, _first_turn("Sans plan : " + USER), validate_plan=True
@@ -138,26 +134,17 @@ async def test_skip_plan_needs_the_users_own_request(monkeypatch, deck_plan_stor
 
 
 @pytest.mark.asyncio
-async def test_a_delivered_decks_edit_never_waits(monkeypatch):
-    first = await build_tool(monkeypatch, _first_turn())
-    delivered, _ = await first(slides=DECK)
-    build = await build_tool(
-        monkeypatch,
-        answered(delivered) + [HumanMessage(content="Change le titre de la slide 2")],
-        validate_plan=True,
-    )
-    text, _ = await build(
-        changes=[{"op": "edit", "slide": 2, "field": "title", "value": "Nos équipes"}]
-    )
-    assert text.startswith("Delivered"), text
-
-
-@pytest.mark.asyncio
 async def test_a_plan_with_problems_gets_a_revision_not_the_outline(monkeypatch):
     build = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
-    untold = {k: v for k, v in POINTS.items() if k != "takeaway"}
-    text, _ = await build(slides=[COVER, untold, CHART])
-    assert '"status": "needs_revision"' in text and "no takeaway" in text
+    mixed = {
+        **CHART,
+        "chart": {
+            **CHART["chart"],
+            "series": [{"name": "E", "values": ["12 %", "3 M€"]}],
+        },
+    }
+    text, _ = await build(slides=[COVER, POINTS, mixed])
+    assert '"status": "needs_revision"' in text and "chart mixes units" in text
 
 
 def test_the_plan_gate_is_visible_to_the_model_only_when_it_is_on():

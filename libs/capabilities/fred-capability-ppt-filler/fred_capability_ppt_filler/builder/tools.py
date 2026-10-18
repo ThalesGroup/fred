@@ -100,7 +100,6 @@ from fred_capability_ppt_filler.builder.models import (
     SlideKind,
     TemplateInventory,
 )
-from fred_capability_ppt_filler.builder.notes import FIGURES_UNVERIFIED
 from fred_capability_ppt_filler.builder.plan import (
     REPEAT_LAYOUT_HINT,
     DeckPlan,
@@ -584,27 +583,16 @@ def _to_plan(validated: Any) -> DeckPlan:
     )
 
 
-_NOT_ASKED = (
-    "`show_takeaways` was not applied: the user did not ask to show the key messages "
-    "on the slides, so the takeaways stay in the speaker notes. Nothing to do; set it "
-    "only when the user asks."
-)
-
-
-def _shown_takeaways(
-    plan: DeckPlan, conversation: story.Conversation
-) -> Tuple[DeckPlan, List[str]]:
-    """Each slide told whether its takeaway may go on the slide: only when the
-    user asked for the key messages there. Returns the agent note, if any."""
-    shown = plan.show_takeaways and conversation.asks_show_takeaways()
+def _shown_takeaways(plan: DeckPlan) -> DeckPlan:
+    """Each slide told whether its takeaway may go on the slide."""
+    shown = plan.show_takeaways
     slides = [
         s
         if s.takeaway_shown == shown
         else s.model_copy(update={"takeaway_shown": shown})
         for s in plan.slides
     ]
-    note = [_NOT_ASKED] if plan.show_takeaways and not shown else []
-    return plan.model_copy(update={"slides": slides}), note
+    return plan.model_copy(update={"slides": slides})
 
 
 def _to_changes(validated: Any) -> List[SlideChange]:
@@ -767,19 +755,6 @@ def _cleared_lines(
         f"{'them' if len(fields) > 1 else 'it'} beside the rest (to keep "
         "that text, put it in a field this kind shows)."
         for n, fields in sorted(cleared.items())
-    ]
-
-
-def _unverified_lines(
-    plan: DeckPlan, checked: Sequence[int], numbers: List[int]
-) -> List[str]:
-    """Figures built with no source in the conversation: replies called them the
-    user's, so the agent is told to present them as to be confirmed."""
-    return [
-        f"Slide {numbers.index(n) + 1}: its figures are in no document read nor any "
-        "user message: tell the user they are to be confirmed, never that they are theirs."
-        for n in checked
-        if FIGURES_UNVERIFIED in plan.slides[n - 1].story_notes and n in numbers
     ]
 
 
@@ -953,9 +928,8 @@ def _no_history() -> Sequence[BaseMessage]:
 _PROPOSED = "Plan proposed: nothing was built yet."
 
 
-def read_conversation(history: Sequence[BaseMessage]) -> story.Conversation:
-    """What the storytelling checks and the plan gate read from the messages:
-    the user's words, where figures may come from, the build tool's answers."""
+def plan_answered(history: Sequence[BaseMessage]) -> bool:
+    """Whether a user message follows the last plan the tool proposed."""
     calls = {
         call.get("id")
         for m in history
@@ -963,25 +937,17 @@ def read_conversation(history: Sequence[BaseMessage]) -> story.Conversation:
         for call in m.tool_calls
         if call.get("name") == BUILD_TOOL_NAME
     }
-    found = story.Conversation()
     proposal_at = -1
     for position, message in enumerate(history):
-        if message.type == "human":
-            text = _text_of(message.content)
-            found.users.append(text)
-            found.sources.append(text)
-        elif isinstance(message, ToolMessage):
-            text = _text_of(message.content)
-            if message.name == BUILD_TOOL_NAME or message.tool_call_id in calls:
-                found.builds.append(text)
-                if text.startswith(_PROPOSED):
-                    proposal_at = position
-            else:
-                found.sources.append(text)
-    found.answered = proposal_at >= 0 and any(
+        if (
+            isinstance(message, ToolMessage)
+            and (message.name == BUILD_TOOL_NAME or message.tool_call_id in calls)
+            and _text_of(message.content).startswith(_PROPOSED)
+        ):
+            proposal_at = position
+    return proposal_at >= 0 and any(
         m.type == "human" for m in history[proposal_at + 1 :]
     )
-    return found
 
 
 def _merged(
@@ -1006,41 +972,26 @@ def _evaluate(
     variety: VarietyCheck,
     max_uses: int,
     checked: Sequence[int],
-    conversation: story.Conversation,
-    seen: set[str],
-) -> Tuple[Assignment, DeckPlan, List[str], story.StoryResult]:
-    """The storytelling checks, then the assignment: one revision for both."""
-    told = story.check(plan, checked, conversation, seen)
+) -> Tuple[Assignment, DeckPlan, List[str]]:
+    """The chart-unit check, then the assignment: one revision for both."""
+    told = story.check(plan, checked)
     assignment, plan, bad = _assign_loadable(
         inventory, plan, prefetched, variety, max_uses
     )
-    told.hard = told.hard or bool(assignment.problems)
-    assignment.problems = _merged(assignment.problems, told.problems)
-    accepted = [
-        s.model_copy(update={"story_notes": told.accepted.get(n, [])})
-        if n in checked
-        else s
-        for n, s in enumerate(plan.slides, start=1)
-    ]
-    return assignment, plan.model_copy(update={"slides": accepted}), bad, told
+    assignment.problems = _merged(assignment.problems, told)
+    return assignment, plan, bad
 
 
 def _proposal(
-    plan: DeckPlan, assignment: Assignment, skip_refused: bool
+    plan: DeckPlan, assignment: Assignment
 ) -> tuple[str, ToolInvocationResult]:
     kinds = [p.kind if p else None for p in assignment.patterns]
-    skip = (
-        " The user's latest message does not ask to skip the plan, so `skip_plan` was "
-        "not applied."
-        if skip_refused
-        else ""
-    )
     payload = {"status": "plan_proposed", "slides": len(plan.slides)}
     return _answer(
         f"{_PROPOSED} Show this outline to the user in their language and ask them to "
         "validate or correct it; end your answer; do not call build_presentation again in "
         "this answer. Once they answer, build it: the whole deck in `slides`, or `changes` "
-        f"to this plan.{skip}\n{story.outline(plan, kinds)}\n"
+        f"to this plan.\n{story.outline(plan, kinds)}\n"
         + json.dumps(payload, ensure_ascii=False)
     )
 
@@ -1393,17 +1344,6 @@ def build_builder_tools(
     # answered without a rebuild (same turn only, so the template is the same).
     turn_delivered: List[Tuple[DeckPlan, str]] = []
     plans = _BasePlans(identity.session_id, identity.agent_instance_id)
-    # Storytelling refusals given once this turn: the same slide resent is built.
-    soft_refused: set[str] = set()
-    # The conversation as read for the last history seen: one scan per model call.
-    read: List[Any] = [None, None]
-
-    def conversation() -> story.Conversation:
-        messages = history()
-        key = (id(messages), len(messages))
-        if read[0] != key:
-            read[:] = [key, read_conversation(messages)]
-        return read[1]
 
     async def delivered_before(base: Optional[DeckPlan]) -> bool:
         if turn_delivered or (base is not None and base.delivered):
@@ -1525,10 +1465,9 @@ def build_builder_tools(
         # over a slide it leaves as it was.
         kept = {id(s) for s in base.slides} if base is not None else set()
         checked = [n for n, s in enumerate(plan.slides, start=1) if id(s) not in kept]
-        talk = conversation()
         # After `checked`: the copies it makes are not slides the call changed.
-        plan, takeaway_note = _shown_takeaways(plan, talk)
-        assignment, plan, bad, told = await asyncio.to_thread(
+        plan = _shown_takeaways(plan)
+        assignment, plan, bad = await asyncio.to_thread(
             _evaluate,
             inventory,
             plan,
@@ -1536,8 +1475,6 @@ def build_builder_tools(
             variety,
             max_uses,
             checked,
-            talk,
-            soft_refused,
         )
         first, called = not called, True
         unloadable = [
@@ -1554,17 +1491,15 @@ def build_builder_tools(
         if repeats and (base is not None or deck_delivered(history())):
             repeats = []
         # The user validated the plan: its slides stay as they agreed.
-        if validate_plan and talk.answered:
+        answered = validate_plan and plan_answered(history())
+        if answered:
             repeats = []
         if assignment.problems:
             refused(plan)
-            soft_refused.update(told.refused_soft)
-            # Refused once only (soft checks): the same call resent is built.
-            if told.hard:
-                refused_calls[call_key] = "; ".join(
-                    f"slide {_numbered(p.index, origins)}: {p.problem}"
-                    for p in assignment.problems
-                )
+            refused_calls[call_key] = "; ".join(
+                f"slide {_numbered(p.index, origins)}: {p.problem}"
+                for p in assignment.problems
+            )
             return _needs_revision(
                 assignment,
                 plan,
@@ -1577,15 +1512,16 @@ def build_builder_tools(
         if repeats:
             refused(plan)
             return _variety_revision(repeats, assignment)
-        if validate_plan and not talk.answered and not await delivered_before(base):
-            skip = bool(validated.skip_plan) and talk.asks_skip_plan()
-            if not skip:
-                proposed = plan.model_copy(
-                    update={"proposed": True, "delivered": False}
-                )
-                turn_base[:] = [proposed]
-                await plans.write(proposed)
-                return _proposal(plan, assignment, bool(validated.skip_plan))
+        if (
+            validate_plan
+            and not answered
+            and not validated.skip_plan
+            and not await delivered_before(base)
+        ):
+            proposed = plan.model_copy(update={"proposed": True, "delivered": False})
+            turn_base[:] = [proposed]
+            await plans.write(proposed)
+            return _proposal(plan, assignment)
 
         # Stored as delivered: a split list's parts become slides of their own,
         # so the file, the model and later `changes` share one numbering.
@@ -1705,11 +1641,9 @@ def build_builder_tools(
             plan,
             result.report.issues(),
             result.report.notes
-            + takeaway_note
             + unloadable
             + assignment.notes
-            + _cleared_lines(cleared, plan, numbers)
-            + _unverified_lines(plan, checked, numbers),
+            + _cleared_lines(cleared, plan, numbers),
         )
         notes = delta + _designs_line(inventory, patterns) + notes
 

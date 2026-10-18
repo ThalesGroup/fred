@@ -1730,8 +1730,6 @@ class _Renderer:
         if part == 1:
             if notes.is_illustrative(slide_plan):
                 self.report.note("illustrative_data")
-            for code in slide_plan.story_notes:
-                self.report.note(code)  # type: ignore[arg-type]
 
     def _tell(self, note: str) -> None:
         """A finding the after-check report does not carry: sent to the agent."""

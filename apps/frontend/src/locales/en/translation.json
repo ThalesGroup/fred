@@ -538,9 +538,7 @@
           "intent_shown_otherwise_total_row": "The total row is shown in bold: the table's style has no total formatting.",
           "intent_shown_otherwise_highlight_row": "The emphasised row is shown in bold only, to stay readable on the table's dark colours.",
           "intent_shown_otherwise_highlight_column": "The emphasised column is shown in bold only, to stay readable on the table's dark colours.",
-          "illustrative_data": "The figures on this slide are illustrative, as you asked: they do not come from your documents.",
-          "figures_unverified": "These figures were not found in the documents read: check them before presenting.",
-          "wide_range_chart": "This chart puts very different values on one axis: check that they measure the same thing."
+          "illustrative_data": "The figures on this slide are illustrative: they do not come from your documents."
         }
       }
     }

@@ -143,8 +143,6 @@ BuildNoteCode = Literal[
     "intent_not_shown",
     "intent_shown_otherwise",
     "illustrative_data",
-    "figures_unverified",
-    "wide_range_chart",
 ]
 
 

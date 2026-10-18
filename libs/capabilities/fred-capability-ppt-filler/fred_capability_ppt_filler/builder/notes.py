@@ -24,9 +24,6 @@ from typing import Optional
 from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart, SlidePlan
 
-FIGURES_UNVERIFIED = "figures_unverified"
-WIDE_RANGE_CHART = "wide_range_chart"
-
 _FRENCH = frozenset(
     "le la les des du un une et est sont pour dans sur avec par au aux ce cette nous "
     "notre nos plus qui que en".split()
@@ -56,7 +53,6 @@ _LINES = {
         "source": "Source: {}",
         "user": "the user",
         "illustrative": "Illustrative figures, not from the documents.",
-        "unverified": "Figures not found in the documents read.",
         "caption": "(illustrative)",
         "caption_alone": "Illustrative data",
         "bubble_size": "Bubble size: {}",
@@ -65,7 +61,6 @@ _LINES = {
         "source": "Source : {}",
         "user": "l'utilisateur",
         "illustrative": "Chiffres illustratifs, non issus des documents.",
-        "unverified": "Chiffres non retrouvés dans les documents lus.",
         "caption": "(illustratif)",
         "caption_alone": "Données illustratives",
         "bubble_size": "Taille des bulles : {}",
@@ -91,8 +86,6 @@ def speaker_notes(slide: SlidePlan, language: str) -> Optional[str]:
             notes.append(
                 lines["source"].format(lines["user"] if kind == "user" else source)
             )
-    if FIGURES_UNVERIFIED in slide.story_notes:
-        notes.append(lines["unverified"])
     if slide.notes:
         notes.append(slide.notes)
     return "\n".join(notes) if notes else None

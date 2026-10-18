@@ -538,9 +538,7 @@
           "intent_shown_otherwise_total_row": "La ligne de total est affichée en gras : le style du tableau n'a pas de mise en forme de total.",
           "intent_shown_otherwise_highlight_row": "La ligne mise en avant est affichée en gras seulement, pour rester lisible sur les couleurs sombres du tableau.",
           "intent_shown_otherwise_highlight_column": "La colonne mise en avant est affichée en gras seulement, pour rester lisible sur les couleurs sombres du tableau.",
-          "illustrative_data": "Les chiffres de cette slide sont illustratifs, comme vous l'avez demandé : ils ne viennent pas de vos documents.",
-          "figures_unverified": "Ces chiffres n'ont pas été retrouvés dans les documents lus : vérifiez-les avant de présenter.",
-          "wide_range_chart": "Ce graphique place des valeurs très différentes sur un même axe : vérifiez qu'elles mesurent la même chose."
+          "illustrative_data": "Les chiffres de cette slide sont illustratifs : ils ne viennent pas de vos documents."
         }
       }
     }

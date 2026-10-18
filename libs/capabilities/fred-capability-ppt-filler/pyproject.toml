@@ -67,7 +67,6 @@ minversion = "8.0"
 addopts = "-ra"
 markers = [
     "integration: marks tests that require external services",
-    "storytelling: runs the storytelling checks, off in the other tests (their plans carry no takeaway or source)",
 ]
 testpaths = ["tests"]
 

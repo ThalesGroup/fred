@@ -225,7 +225,7 @@ describe("DeckSummaryButton", () => {
     ]);
   });
 
-  it("says where a slide's figures could not be confirmed", async () => {
+  it("says a slide's figures are illustrative", async () => {
     const slide: BuiltSlide = {
       number: 2,
       part: 1,
@@ -233,15 +233,11 @@ describe("DeckSummaryButton", () => {
       title: "Ventes",
       kind: "chart",
       template: "Chart",
-      notes: [{ code: "illustrative_data" }, { code: "figures_unverified" }, { code: "wide_range_chart" }],
+      notes: [{ code: "illustrative_data" }],
     };
     const dialog = open(await mount("fr", [slide]));
     const notes = [...dialog.querySelectorAll("ol > li li")].map((li) => li.textContent);
-    expect(notes).toEqual([
-      fr.capability.ppt_builder.summary.notes.illustrative_data,
-      fr.capability.ppt_builder.summary.notes.figures_unverified,
-      fr.capability.ppt_builder.summary.notes.wide_range_chart,
-    ]);
+    expect(notes).toEqual([fr.capability.ppt_builder.summary.notes.illustrative_data]);
   });
 
   it("has a wording for every note code the backend sends", () => {
@@ -278,8 +274,6 @@ describe("DeckSummaryButton", () => {
       "intent_shown_otherwise_highlight_row",
       "intent_shown_otherwise_highlight_column",
       "illustrative_data",
-      "figures_unverified",
-      "wide_range_chart",
     ];
     for (const locale of [en, fr]) {
       expect(Object.keys(locale.capability.ppt_builder.summary.notes).sort()).toEqual([...codes].sort());

@@ -38,7 +38,6 @@ from fred_capability_ppt_filler.builder.render import (
     RenderResult,
     render_deck,
 )
-from fred_capability_ppt_filler.builder.story import Conversation
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
@@ -200,23 +199,20 @@ def test_a_chart_of_several_is_named_in_its_problems(owner):
 
 def _story(*slides: Dict[str, Any]) -> Dict[int, str]:
     plan = _plan(*slides)
-    users = ["CA 12 15 18 21, marge 8 % 9 % 9 % 10 %, 3 M€"]
-    talk = Conversation(users=users, sources=users)
-    result = story.check(plan, range(1, len(plan.slides) + 1), talk, set())
-    return {p.index: p.problem for p in result.problems}
+    return {
+        p.index: p.problem for p in story.check(plan, range(1, len(plan.slides) + 1))
+    }
 
 
-@pytest.mark.storytelling
-def test_each_chart_shows_one_measure_and_has_a_title():
+def test_each_chart_shows_one_measure_and_may_go_untitled():
     mixed = {**MARGIN, "series": [{"name": "Margin", "values": ["8 %", "3 M€"]}]}
     untitled = {**REVENUE, "title": None}
     problems = _story(
-        _multi(REVENUE, {**mixed, "categories": ["Q1", "Q2"]}, source="user"),
-        _multi(untitled, MARGIN, source="user"),
+        _multi(REVENUE, {**mixed, "categories": ["Q1", "Q2"]}),
+        _multi(untitled, MARGIN),
     )
     assert "charts[1]: chart mixes units (%, m€)" in problems[2]
-    assert "charts[0] has no title" in problems[3]
-    assert "charts[1]" not in problems[3]
+    assert 3 not in problems
 
 
 # --- assignment ----------------------------------------------------------------------
