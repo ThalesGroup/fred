@@ -604,3 +604,17 @@ Owns: `changes.py` (`apply_changes` origins and `move`, `deck_delta` pairing, re
 - [x] 55.10 Eval calls replayed offline; LibreOffice render for the visual items (`~/fred-tmp/revision-evals/fixes/r3/`), PNG looked at; package checks; `openspec validate --strict`
 - Not changed (not universal, D33): a process `number` too long for its banner (a growing zone, no capacity); content the agent itself wrote in `notes` on a slide that also changed visibly (default r10)
 - [ ] 55.11 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+
+## WP56. Audit fixes: silent losses and prompt/tool contradictions (owner decision 2026-10-18: audit fixes, design D34)
+
+Owns: `changes.py` (`_overlap`, `_on_the_base`), `plan.py` (`read_number`, `_decimal`, `_required`), `lexicon.py` (`_FIGURE`), `assign.py` (`_weigh` picture zones, `_asked`, `_wants_picture`), `capability.py` (`_OUTLINE`, `build_instructions`), `tools.py` (`skip_plan` behind the gate, refusal wording), tests, delta spec, `verification.md`. Audit: `~/fred-tmp/revision-evals/AUDIT-2026-10-18.md`.
+
+- [x] 56.1 (H7) Several edits of one slide in one call: every list index means the base slide's entry (sets and appends upward, deletes downward); a path inside another edit's path (`bullets` and `bullets[1]`, `items[1]` and `items[1].label`) is refused. Test: `test_deck_changes.py::test_list_indexes_in_one_call_are_the_base_slides`
+- [x] 56.2 (H8) A typographic minus (U+2212) reads as a minus in chart data and figures; `0,125` / `0.125` read as decimals. `3.141` stays a thousands reading (ambiguous). Test: `test_chart_slides.py::test_a_typographic_minus_and_a_leading_zero_decimal_read_as_written`
+- [x] 56.3 (H15) Any picture zone left empty is a misfit (framed or not, slide or item level), with the option to give a picture or use another kind; the `like`-only check and the empty-picture cost are deleted; the catalogue marks every picture zone `(required)`; Help Center template guide (fr+en) updated. Tests: `test_deck_changes.py::test_a_picture_kind_without_picture_never_gets_an_empty_picture_area`, `test_assign.py::test_an_image_pattern_is_not_chosen_for_a_plan_without_images`, `test_empty_item_pictures_are_a_misfit_like_empty_slide_pictures`
+- [x] 56.4 (H6, with M12) After needs_revision the working rules defer to the result; a refused `changes` call (ChangeError, identical call) asks for every change again. Spec base sentence and the turn-base comment match the code. Tests: `test_plan_validation.py::test_a_refused_call_is_resent_as_its_result_says`, `test_deck_changes.py::test_no_base_both_modes_and_bad_changes_build_nothing`
+- [x] 56.5 (H13) With `validate_plan` on, the working rules say the tool shows the outline (never one written in the chat); `skip_plan` is in the schema only then. Test: `test_plan_validation.py::test_the_plan_gate_is_visible_to_the_model_only_when_it_is_on`
+- [x] 56.6 Medium Thales r22 replayed offline and rendered (`~/fred-tmp/revision-evals/fixes/audit/H15/`), PNG looked at; package checks; `openspec validate --strict`
+- Not changed: L16 (one number reader for story, plan and lexicon: story already reads U+2212 and both readings, a merge is its own change); M29 (any reply to a proposed outline counts as approval); M22/M23 (refused plan dies with the turn; recoverable mistakes returned as tool errors)
+- [ ] 56.7 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+

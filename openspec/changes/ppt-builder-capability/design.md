@@ -363,6 +363,16 @@ Only logic that holds in every case goes into the builder; what depends on judge
 - **`move`.** `{"op": "move", "slide": N, "after": M}`; moves chain, loops are refused.
 - Not done: a process step `number` is a growing zone whose only capacity is the designer's sample, so a long label there has no universal limit to refuse on; notes the agent wrote itself on a slide that also changed visibly are its own choice, not a builder placement.
 
+### D34. Audit fixes (owner decision 2026-10-18: audit fixes)
+
+Universal rules from the read-only audit of 2026-10-18; judgement stays with the agent.
+
+- **Indexes mean the base.** Several edits of one slide apply so each index names the entry the agent saw: sets and appends upward, then deletes downward. Two edits where one path holds the other have no order that means both, so they are refused.
+- **Numbers as written.** U+2212 is a minus; a leading `0` group before one separator is a decimal (`0,125`). A lone `3.141` stays ambiguous and keeps its thousands reading.
+- **No empty picture area.** A picture zone the slide cannot fill leaves a frame or a hole, whatever the zone: it is a misfit everywhere, not only after a `like`, so a picture design is chosen only with its pictures.
+- **The result owns the remedy.** After needs_revision the rules say only "as its result says"; a refused `changes` call changed nothing, so its result asks for every change again.
+- **The plan gate is told.** With `validate_plan` on, the rules say the tool shows the outline and `skip_plan` is declared; off, neither.
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.
