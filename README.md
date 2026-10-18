@@ -30,10 +30,9 @@ no other option.
 Apache 2.0 end to end. No licence, no hosted tier, nothing to sign. **A third
 party can install the whole thing without us — that is deliberate.**
 
-> **One exception to that, today:** Fred still depends on a library licensed under
-> the AGPL. It will be removed in an upcoming release, but until then the AGPL terms
-> may apply to deployments that use the affected component. Full detail, and the rest
-> of the dependency picture, in [Licensing Note](#licensing-note).
+> The default PDF/PPTX pipeline uses pypdf, Docling and pypdfium2. PyMuPDF is
+> available only through an explicit extra/image variant and processor selection.
+> Third-party packages retain their own licenses; see [Licensing Note](#licensing-note).
 
 For local development above deployment-factory, follow the [local delegation and startup guide](scripts/README-local-delegation.md). The shared assistant workflow is the [Fred skill](.claude/skills/fred/SKILL.md).
 
@@ -754,7 +753,7 @@ Fred's own code is released under the **Apache License 2.0**. Optional integrati
 
 Fred currently depends on a small number of third-party Python packages under copyleft licenses, tracked under `LICENSE-01`/`LICENSE-02`/`LICENSE-03`. Full detail, severity assessment, and remediation status for each: [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
 
-- `pymupdf` / `pymupdf4llm` (PDF processing, `knowledge-flow-backend`) — dual-licensed **AGPL-3.0 / Artifex Commercial License**. Currently a mandatory dependency; being made optional with a non-AGPL (`docling`/`pypdf`) default path so the default distribution ships with no AGPL code (tracked in [issue #1950](https://github.com/ThalesGroup/fred/issues/1950)).
+- `pymupdf` / `pymupdf4llm` are optional under AGPL-3.0 or Artifex commercial terms. The locked extra also includes `pymupdf-layout`, under PolyForm Noncommercial 1.0.0; it is not covered by an AGPL-only assessment. These packages are excluded from ordinary development installs and the standard Knowledge Flow image. See [installation and deployment](apps/knowledge-flow-backend/README.md#optional-pymupdf-processing) and [issue #3159](https://github.com/ThalesGroup/fred/issues/3159).
 - `psycopg2-binary` / `psycopg` (PostgreSQL driver, `fred-core` / `knowledge-flow-backend`) — **LGPL-3.0-only**, used as an unmodified, dynamically imported package (not statically linked or embedded).
 - `jwcrypto` (transitive, via `python-keycloak`'s admin client, `fred-core` / `control-plane-backend` / `knowledge-flow-backend` / `fred-agents`) — **LGPL-3.0-or-later**, used as an unmodified, dynamically imported package; never directly invoked by Fred's own code (Fred's JWT verification path uses PyJWT).
 

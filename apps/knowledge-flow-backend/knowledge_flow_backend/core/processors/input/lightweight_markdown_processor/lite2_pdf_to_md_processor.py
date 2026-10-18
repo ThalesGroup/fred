@@ -19,11 +19,8 @@ import re
 from pathlib import Path
 from typing import List
 
-import fitz
-import pymupdf4llm
 from markitdown import MarkItDown
 
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     LiteMarkdownOptions,
@@ -34,6 +31,8 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
     normalize_repeated_chars,
     strip_surrogates,
 )
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import LitePdfMarkdownProcessor as DefaultPdfMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.optional_pymupdf import require_pymupdf
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +98,7 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
         # (instead of letting pymupdf4llm open it from the path) so we can guarantee
         # it's closed: pymupdf4llm.to_markdown() never closes a document it opens
         # internally, which leaks native MuPDF memory (pages, xref table) per file.
+        fitz, pymupdf4llm = require_pymupdf(type(self).__name__)
         doc = fitz.open(file_path)
         try:
             pages = pymupdf4llm.to_markdown(doc, ignore_images=True, ignore_graphics=True, header=False, footer=False, page_chunks=True)
@@ -158,6 +158,8 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
         """
         opts = options or LiteMarkdownOptions()
 
+        require_pymupdf(type(self).__name__)
+
         # Primary extraction: PyMuPDF4LLM
         try:
             result: LiteMarkdownResult = self._extract_pymupdf4llm(file_path, opts)
@@ -169,7 +171,11 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
                 result.truncated,
             )
             return result
+        except ImportError:
+            raise
         except Exception as e:
+            if opts.page_range or opts.return_per_page or opts.add_page_headings:
+                raise
             logger.warning(f"Pymupdf4llm PDF extraction failed, trying markitdown: {e}")
 
         # Fallback extraction: Markitdown
@@ -188,85 +194,9 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
             raise e
 
 
-class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
-    """
-    Adapter so the lightweight PDF processor can be used as a full
-    ingestion-time BaseMarkdownProcessor (for the Temporal pipeline),
-    while still reusing the same lightweight extraction engine.
-
-    - check_file_validity / extract_file_metadata satisfy BaseInputProcessor.
-    - convert_file_to_markdown writes an 'output.md' file, as expected by
-      IngestionService.process_input and downstream processors.
-    """
-
-    description = "Lightweight PDF ingestion path that writes Markdown previews via a fast extractor."
+class LitePdfMarkdownProcessor(DefaultPdfMarkdownProcessor):
+    """Explicit PyMuPDF ingestion adapter, sharing validation and metadata with pypdf."""
 
     def __init__(self) -> None:
         super().__init__()
         self._lite = LitePdfToMdExtractor()
-
-    def check_file_validity(self, file_path: Path) -> bool:
-        """
-        Basic validity check using PyMuPDF: the file must be a readable
-        PDF with at least one page.
-        """
-        try:
-            doc = fitz.open(str(file_path))
-            if doc.page_count <= 0:
-                doc.close()
-                logger.warning("LitePdfMarkdownProcessor: PDF %s has no pages.", file_path)
-                return False
-            doc.close()
-            return True
-        except Exception as e:
-            logger.error("LitePdfMarkdownProcessor: invalid PDF %s: %s", file_path, e)
-            return False
-
-    def extract_file_metadata(self, file_path: Path) -> dict:
-        """
-        Lightweight metadata extraction based on PyMuPDF.
-        Returns only fields that are cheap to compute.
-        """
-        try:
-            doc = fitz.open(str(file_path))
-            info = doc.metadata or {}
-            page_count = doc.page_count
-            doc.close()
-            return {
-                "title": info.get("title") or None,
-                "author": info.get("author") or None,
-                "document_name": file_path.name,
-                "page_count": page_count,
-                "extras": {
-                    "pdf.subject": info.get("subject") or None,
-                    "pdf.producer": info.get("producer") or None,
-                    "pdf.creator": info.get("creator") or None,
-                },
-            }
-        except Exception as e:
-            logger.error("LitePdfMarkdownProcessor: error extracting metadata from %s: %s", file_path, e)
-            return {"document_name": file_path.name, "error": str(e)}
-
-    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
-        """
-        Use the lightweight extractor to generate Markdown and persist it
-        to 'output.md' in the given output directory.
-        """
-        output_markdown_path = output_dir / "output.md"
-        try:
-            result = self._lite.extract(file_path, LiteMarkdownOptions())
-            markdown = result.markdown or ""
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_markdown_path.write_text(markdown, encoding="utf-8")
-
-            engine = (result.extras or {}).get("engine") if isinstance(result.extras, dict) else None
-            message = f"Lite PDF conversion succeeded (engine={engine})" if engine else "Lite PDF conversion succeeded."
-        except Exception as exc:
-            logger.exception("LitePdfMarkdownProcessor: conversion failed for %s", file_path)
-            raise InputConversionError(f"LitePdfMarkdownProcessor failed for '{file_path.name}': {exc}") from exc
-
-        return {
-            "doc_dir": str(output_dir),
-            "md_file": str(output_markdown_path),
-            "message": message,
-        }

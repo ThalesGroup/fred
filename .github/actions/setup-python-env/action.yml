@@ -20,7 +20,7 @@ runs:
       working-directory: ${{ inputs.working-directory }}
 
     - name: Install dependencies
-      run: uv sync --locked  --all-extras --dev
+      run: uv sync --locked --extra dev --dev
       shell: bash
       working-directory: ${{ inputs.working-directory }}
     

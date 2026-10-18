@@ -32,7 +32,7 @@ class SelectionTest(unittest.TestCase):
 
     def test_markdown_under_apps_is_code(self):
         # The fred-agents pyproject builds with its README, so it is not documentation.
-        self.assertEqual(built("apps/fred-agents/README.md"), ALL - {KF})
+        self.assertEqual(built("apps/fred-agents/README.md"), ALL - {KF, "knowledge-flow-backend-pymupdf"})
 
     def test_frontend_application_builds_only_frontend(self):
         self.assertEqual(built("apps/frontend/src/App.tsx", "apps/frontend/package-lock.json"), {"frontend"})
@@ -48,7 +48,7 @@ class SelectionTest(unittest.TestCase):
             "apps/control-plane-backend/control_plane_backend/a.py",
             "apps/fred-agents/dockerfiles/Dockerfile-prod",
         ):
-            self.assertEqual(built(path), ALL - {KF}, path)
+            self.assertEqual(built(path), ALL - {KF, "knowledge-flow-backend-pymupdf"}, path)
 
     def test_knowledge_flow_inputs_build_everything(self):
         for path in (
@@ -56,6 +56,8 @@ class SelectionTest(unittest.TestCase):
             "libs/fred-core/fred_core/a.py",
             "libs/fred-pod/pyproject.toml",
             "scripts/download_models.py",
+            "developer_tools/benchmarks/pdf_ingestion.py",
+            "developer_tools/benchmarks/pdf_image_smoke.py",
             "alembic.ini",
             ".dockerignore",
             ".github/docker-images.json",
@@ -69,7 +71,7 @@ class SelectionTest(unittest.TestCase):
         self.assertIn(KF, built("libs/fred-core/pyproject.toml"))
 
     def test_unknown_path_falls_back_to_general(self):
-        self.assertEqual(built("new-top-level/thing.py"), ALL - {KF})
+        self.assertEqual(built("new-top-level/thing.py"), ALL - {KF, "knowledge-flow-backend-pymupdf"})
 
     def test_selection_is_a_union(self):
         self.assertEqual(built("docs/a.md", "apps/frontend/src/a.ts"), {"frontend"})

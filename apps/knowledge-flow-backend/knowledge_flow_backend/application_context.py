@@ -183,6 +183,16 @@ def get_filesystem() -> BaseFilesystem:
     return get_app_context().get_filesystem()
 
 
+def _validate_pdf_dependencies(class_path: str, selection: str, extractor: str = "docling") -> None:
+    prefix = "knowledge_flow_backend.core.processors.input."
+    if class_path == prefix + "lightweight_markdown_processor.lite2_pdf_to_md_processor.LitePdfMarkdownProcessor" or (
+        class_path == prefix + "pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor" and extractor == "pymupdf"
+    ):
+        from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.optional_pymupdf import require_pymupdf
+
+        require_pymupdf(selection)
+
+
 def validate_profile_input_processor_config(config: Configuration):
     """Ensure all profile input processor classes can be imported and subclass BaseInputProcessor."""
     default_profile_cfg = config.processing.get_profile_config(config.processing.default_profile)
@@ -202,6 +212,7 @@ def validate_profile_input_processor_config(config: Configuration):
                 )
             seen_suffixes.add(suffix)
 
+            _validate_pdf_dependencies(entry.class_path, f"processing.profiles.{profile_name} ({entry.class_path}, pdf.extractor={profile_cfg.pdf.extractor})", profile_cfg.pdf.extractor)
             module_path, class_name = entry.class_path.rsplit(".", 1)
             try:
                 module = importlib.import_module(module_path)
