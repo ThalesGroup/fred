@@ -662,4 +662,5 @@ Owns: `analysis.py` (`design`, ANALYSIS_VERSION 21), `models.py`, `assign.py` (d
 - [x] 60.2 Fallback notes state the fix without an exit. Test: `test_assign.py::test_a_kind_fallback_note_states_the_fix_without_an_exit`
 - [x] 60.3 One "use for" clause per content kind on its catalogue line. Test: `test_build_tool.py::test_schema_and_description_offer_kinds_never_pattern_ids` (updated)
 - [x] 60.4 Package checks; `openspec validate --strict`; `make builtin-inventory`
+- [x] 60.6 Deck fields lifted out of `slides` entries too (one helper with `changes`); a deck field reaching a slide is never told to go in its text. Tests: `test_build_tool.py::test_a_deck_field_written_inside_a_slide_is_read_as_the_decks` (replays the a611e51e first call, `tests/replays/a611e51e_first_call.json`), `test_assign.py::test_a_field_the_model_invented_is_a_problem_naming_its_text` (extended)
 - [ ] 60.5 Live re-evaluation once fred-agents runs this code (not restarted; stored inventories re-analyse on the version bump)

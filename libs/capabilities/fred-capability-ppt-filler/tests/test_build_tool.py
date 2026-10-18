@@ -22,6 +22,7 @@ import asyncio
 import io
 import itertools
 import json
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -1216,6 +1217,32 @@ def test_deck_fields_written_inside_changes_are_taken_to_the_top_level():
     )
     other = {"changes": [edit, "not a change"]}
     assert tools_mod._hoisted(other) == (other, None)
+
+
+@pytest.mark.asyncio
+async def test_a_deck_field_written_inside_a_slide_is_read_as_the_decks(monkeypatch):
+    """Live (mistral-medium): `file_name` sat inside the cover slide and the
+    whole deck was refused, telling the model to put it in the slide's text."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    # The session's own template is not in the repo: the built-in one, whose
+    # variety note that template did not raise, checked apart.
+    config = PptBuilderConfig.model_validate({"variety_check": "off"})
+    build = _tools(_ctx(config))[BUILD_TOOL_NAME]
+    sent = json.loads(
+        (Path(__file__).parent / "replays" / "a611e51e_first_call.json").read_text()
+    )
+    assert sent["slides"][0]["file_name"] == "Seconde_Guerre_mondiale_ados"
+    text, result = await build.coroutine(**sent)
+    assert text.startswith(tools_mod._DELIVERED), text
+    assert (
+        cast(Any, result.ui_parts[0]).file_name == "Seconde_Guerre_mondiale_ados.pptx"
+    )
+    _, twice = tools_mod._hoisted({**sent, "file_name": "Autre"})
+    assert twice == (
+        "No deck was built: `file_name` is given twice, 'Autre' and "
+        "'Seconde_Guerre_mondiale_ados' inside `slides`; send it once, next to "
+        "`slides`."
+    )
 
 
 def test_the_designs_line_names_look_alike_template_slides_once():

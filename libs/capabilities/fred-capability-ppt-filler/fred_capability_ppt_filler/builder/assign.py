@@ -41,6 +41,7 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
 )
 from fred_capability_ppt_filler.builder.plan import (
+    DECK_FIELDS,
     ITEM_FIELDS,
     SLIDE_FIELDS,
     DeckPlan,
@@ -714,8 +715,13 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
     """Plan text the coercion could not map, or a half-written column or item."""
     found: List[str] = []
     options: List[str] = []
-    if slide.ignored_fields:
-        found.append(f"{', '.join(slide.ignored_fields)}: not a slide field")
+    deck = [f for f in slide.ignored_fields if f.split(" ", 1)[0] in DECK_FIELDS]
+    other = [f for f in slide.ignored_fields if f not in deck]
+    if deck:
+        found.append(f"{', '.join(deck)}: a deck field, not a slide field")
+        options.append("send it once, next to `slides`, not inside a slide")
+    if other:
+        found.append(f"{', '.join(other)}: not a slide field")
         options.append(
             "put that text in title, subtitle, bullets, columns, items or notes"
         )

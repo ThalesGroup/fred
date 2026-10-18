@@ -104,6 +104,7 @@ from fred_capability_ppt_filler.builder.models import (
     TemplateInventory,
 )
 from fred_capability_ppt_filler.builder.plan import (
+    DECK_FIELDS,
     REPEAT_LAYOUT_HINT,
     DeckPlan,
     PlanChart,
@@ -542,7 +543,6 @@ def _listed(value: Any, info: ValidationInfo) -> Any:
     return [value] if isinstance(value, dict) else value
 
 
-_DECK_FIELDS = ("file_name", "audience", "main_message")
 # `file_name': 'Deck` as a list entry: a deck field whose JSON quoting broke.
 _STRAY_FIELD = re.compile(
     r"""\s*["']?(file_name|audience|main_message)["']?\s*:\s*["']?(.*?)["']?\s*""", re.S
@@ -551,34 +551,45 @@ _STRAY_FIELD = re.compile(
 _DEBRIS = re.compile(r"[\s{}\[\]`'\",:]*(json)?[\s{}\[\]`'\",:]*")
 
 
+def _deck_pairs(entry: Any) -> Tuple[List[Tuple[str, str]], Any]:
+    """A `slides` or `changes` entry's deck fields, and what is left of it
+    (None when nothing is)."""
+    if isinstance(entry, dict):
+        pairs = [
+            (k, v) for k, v in entry.items() if k in DECK_FIELDS and isinstance(v, str)
+        ]
+        rest = {k: v for k, v in entry.items() if k not in dict(pairs)}
+        return pairs, (rest if rest or not pairs else None)
+    if isinstance(entry, str) and (match := _STRAY_FIELD.fullmatch(entry)):
+        return [(match[1], match[2])], None
+    if isinstance(entry, str) and _DEBRIS.fullmatch(entry):
+        return [], None
+    return [], entry
+
+
 def _hoisted(kwargs: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
-    """Deck fields written inside `changes` taken to the top level, and debris
-    of broken JSON dropped; a field given twice with two values is refused."""
-    changes = kwargs.get("changes")
-    if not isinstance(changes, list):
-        return kwargs, None
-    kept: List[Any] = []
-    found: Dict[str, str] = {}
-    for entry in changes:
-        if isinstance(entry, dict) and entry and set(entry) <= set(_DECK_FIELDS):
-            pairs = [(k, v) for k, v in entry.items() if isinstance(v, str)]
-        elif isinstance(entry, str) and (match := _STRAY_FIELD.fullmatch(entry)):
-            pairs = [(match[1], match[2])]
-        elif isinstance(entry, str) and _DEBRIS.fullmatch(entry):
+    """Deck fields written inside `slides` or `changes` taken to the top level,
+    and debris of broken JSON dropped; a field given twice with two values is
+    refused."""
+    out = dict(kwargs)
+    found: Dict[str, Tuple[str, str]] = {}
+    for where in ("slides", "changes"):
+        entries = kwargs.get(where)
+        if not isinstance(entries, list):
             continue
-        else:
-            kept.append(entry)
-            continue
-        for key, value in pairs:
-            if value.strip():
-                found[key] = value.strip()
-    out = {**kwargs, "changes": kept}
-    for key, value in found.items():
+        kept: List[Any] = []
+        for entry in entries:
+            pairs, rest = _deck_pairs(entry)
+            if rest is not None:
+                kept.append(rest)
+            found.update((k, (v.strip(), where)) for k, v in pairs if v.strip())
+        out[where] = kept
+    for key, (value, where) in found.items():
         given = kwargs.get(key)
         if isinstance(given, str) and given.strip() and given.strip() != value:
             return kwargs, (
                 f"No deck was built: `{key}` is given twice, '{given.strip()}' and "
-                f"'{value}' inside `changes`; send it once, next to `changes`."
+                f"'{value}' inside `{where}`; send it once, next to `{where}`."
             )
         out[key] = value
     return out, None

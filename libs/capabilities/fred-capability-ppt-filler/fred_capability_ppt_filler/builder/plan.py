@@ -1202,6 +1202,10 @@ def without_hidden(slide: SlidePlan) -> SlidePlan:
     )
 
 
+# Fields of the whole deck, never of one slide.
+DECK_FIELDS = ("file_name", "audience", "main_message")
+
+
 class DeckPlan(BaseModel):
     slides: List[SlidePlan]
     file_name: Optional[str] = Field(

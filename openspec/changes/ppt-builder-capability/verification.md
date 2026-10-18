@@ -1696,3 +1696,4 @@ Not proven: the live Thales inventory (vision labels) was not replayed; the harn
 - New tests fail on the previous sources (no `design` field / no repeat / old remedy wording) and pass now.
 - Prompt size (cl100k): tool description +24 tokens on both Thales v3 and the built-in template.
 - Commands: ruff, `ruff check --select I`, ruff format, bandit, `make type-check` (0 errors); `make test`: 929 passed, 5 skipped; `openspec validate --strict`.
+- 60.6: the a611e51e first call (exact args from its LangGraph checkpoint, SELECT only) was refused on the previous sources (`file_name 'Seconde_Guerre_mondiale_ados': not a slide field`) and now delivers `Seconde_Guerre_mondiale_ados.pptx` on the built-in template (variety check off: the session's own template raised no variety note). `make test`: 930 passed, 5 skipped; ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors). No prompt or description change.

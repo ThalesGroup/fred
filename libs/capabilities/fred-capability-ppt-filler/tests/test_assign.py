@@ -1699,6 +1699,10 @@ def test_a_field_the_model_invented_is_a_problem_naming_its_text():
         {"title": "Axes", "items": [{"heading": "Cloud", "detail": "Migrate"}] * 2}
     )
     assert "items[0]: detail 'Migrate' is not an item field" in text
+    # A deck field that still reaches a slide is never to be put in its text.
+    text = _dropped({"title": "Results", "bullets": ["Up"], "file_name": "Deck"})
+    assert "file_name 'Deck': a deck field, not a slide field" in text
+    assert "next to `slides`" in text and "put that text" not in text
 
 
 def test_the_coercion_keeps_every_text_it_maps():
