@@ -441,7 +441,7 @@ async def test_only_exact_empty_reference_sentinel_is_recovered(
 
 
 @pytest.mark.asyncio
-async def test_recover_valid_calls_with_prose_before_between_and_after() -> None:
+async def test_recover_valid_calls_keeps_only_the_prose_before_the_first_call() -> None:
     original = AIMessage(
         content=_structured_call_content(
             "read_query",
@@ -458,9 +458,7 @@ async def test_recover_valid_calls_with_prose_before_between_and_after() -> None
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == (
-        "I will inspect the data.\n\n\nChecking another dataset.\n\nDone."
-    )
+    assert recovered.content == "I will inspect the data."
     assert [call["name"] for call in recovered.tool_calls] == ["read_query", "ls"]
 
 
@@ -490,7 +488,7 @@ async def test_exact_typed_call_recovers_despite_instructional_preamble(
 
 
 @pytest.mark.asyncio
-async def test_invalid_followup_stays_text_while_later_valid_call_recovers() -> None:
+async def test_invalid_followup_is_dropped_while_later_valid_call_recovers() -> None:
     original = AIMessage(
         content=_structured_call_content(
             "ls",
@@ -503,7 +501,7 @@ async def test_invalid_followup_stays_text_while_later_valid_call_recovers() -> 
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == 'read_query{"sql":}'
+    assert recovered.content == ""
     assert [call["args"] for call in recovered.tool_calls] == [
         {"path": "/"},
         {"path": "/tmp"},
@@ -1142,7 +1140,7 @@ async def test_ambiguous_or_invalid_content_remains_assistant_text(
 
 
 @pytest.mark.asyncio
-async def test_native_duplicate_calls_are_preserved_exactly() -> None:
+async def test_native_duplicate_calls_are_preserved_after_the_text_call() -> None:
     native_calls = [
         {"name": "ls", "args": {"path": "/"}, "id": "call-1"},
         {"name": "ls", "args": {"path": "/"}, "id": "call-2"},
@@ -1161,8 +1159,234 @@ async def test_native_duplicate_calls_are_preserved_exactly() -> None:
 
     response, _ = await _recover_message(original)
 
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [call["name"] for call in recovered.tool_calls] == ["read_query", "ls", "ls"]
+    assert recovered.tool_calls[1:] == before
+
+
+@tool
+def read_document(
+    document_uid: str, offset: int = 0, max_chars: int | None = None
+) -> str:
+    """Read a fake document."""
+
+    return "fake text"
+
+
+_REFERENCE: dict[str, Any] = {"type": "reference", "reference_ids": []}
+
+
+def _leaked_content(
+    name_head: str, name_tail: str, *texts: str | dict[str, Any]
+) -> list[str | dict[str, Any]]:
+    """The leaked shape: thinking deltas, a split name, the reference, then text."""
+
+    split = [
+        piece
+        for text in texts
+        for piece in (
+            [text]
+            if isinstance(text, dict)
+            else [{"type": "text", "text": text[:12]}, text[12:]]
+        )
+    ]
+    return [
+        "",
+        *({"type": "thinking", "thinking": "<redacted>"} for _ in range(3)),
+        {"type": "text", "text": name_head},
+        name_tail,
+        _REFERENCE,
+        *split,
+    ]
+
+
+_DECK_CHANGES = {
+    "file_name": "fake_deck",
+    "changes": [{"op": "replace", "slide": 2, "slides": [{"title": "Fake"}]}],
+}
+_DECK_SLIDES = {"file_name": "fake_deck", "slides": [{"title": "Fake cover"}]}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_text_and_native_call_keeps_one_call_and_clears_content() -> (
+    None
+):
+    native = {"name": "build_presentation", "args": _DECK_CHANGES, "id": "call-1"}
+    original = AIMessage(
+        content=_leaked_content(
+            "build",
+            "_presentation",
+            json.dumps(_DECK_CHANGES) + ']"}] } } } ######\n---------- ----------',
+        ),
+        tool_calls=[native],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[build_presentation])
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert recovered.tool_calls == [{**native, "type": "tool_call"}]
+
+
+@pytest.mark.asyncio
+async def test_distinct_text_and_native_calls_are_both_kept_text_first() -> None:
+    original = AIMessage(
+        content=_leaked_content(
+            "build", "_presentation", json.dumps(_DECK_CHANGES) + " } }"
+        ),
+        tool_calls=[
+            {"name": "build_presentation", "args": _DECK_SLIDES, "id": "call-1"}
+        ],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[build_presentation])
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [(call["args"], call["id"]) for call in recovered.tool_calls] == [
+        (_DECK_CHANGES, recovered.tool_calls[0]["id"]),
+        (_DECK_SLIDES, "call-1"),
+    ]
+    assert (recovered.tool_calls[0]["id"] or "").startswith("recovered-")
+
+
+@pytest.mark.asyncio
+async def test_sentence_ending_in_dot_then_tool_name_anchors_next_call() -> None:
+    def read(offset: int) -> str:
+        return json.dumps(
+            {"document_uid": "fake-doc", "offset": offset, "max_chars": 5000}
+        )
+
+    looping = "\n\n\n+++++ internal tasks + history. I will read the next part."
+    original = AIMessage(
+        content=_leaked_content(
+            "read",
+            "_document",
+            read(5000) + looping + "read_document",
+            _REFERENCE,
+            read(10000) + looping + "read_document",
+            _REFERENCE,
+            read(15000) + looping,
+        ),
+        tool_calls=[
+            {
+                "name": "I'll read the final section now. >>> read_document",
+                "args": json.loads(read(20000)),
+                "id": "call-1",
+            }
+        ],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[read_document])
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [
+        (call["name"], call["args"]["offset"]) for call in recovered.tool_calls
+    ] == [
+        ("read_document", 5000),
+        ("read_document", 10000),
+        ("read_document", 15000),
+        ("read_document", 20000),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_two_calls_back_to_back_after_one_reference() -> None:
+    changes = {"changes": _DECK_CHANGES["changes"]}
+    original = AIMessage(
+        content=_leaked_content(
+            "build",
+            "_presentation",
+            json.dumps(changes) + "build_presentation" + json.dumps(_DECK_SLIDES),
+        ),
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[build_presentation])
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [call["args"] for call in recovered.tool_calls] == [changes, _DECK_SLIDES]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "runaway",
+    [
+        "\n\n\n+++++ .gitignore\n\n\n+++++ .gitignore.orig.orig",
+        "} {} {} {} {}",
+        " I will read the document. I will read the document. I will read it.",
+        ' } }\n```json\n{"file_name": "fake_deck_v2',
+    ],
+    ids=["diff_headers", "empty_objects", "looping_prose", "half_second_call"],
+)
+async def test_runaway_text_after_recovered_call_is_dropped(runaway: str) -> None:
+    original = AIMessage(
+        content=_leaked_content(
+            "Let me read it.\n\nread",
+            "_document",
+            '{"document_uid": "fake-doc"}' + runaway,
+        ),
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[read_document])
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == "Let me read it."
+    assert [call["args"] for call in recovered.tool_calls] == [
+        {"document_uid": "fake-doc"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_registered_dotted_name_wins_over_its_suffix_at_the_anchor() -> None:
+    dotted = StructuredTool.from_function(
+        func=lambda document_uid: "fake text",
+        name="ns.read_document",
+        description="Read a fake namespaced document.",
+    )
+    original = AIMessage(
+        content=_leaked_content(
+            "Reading.ns.read", "_document", '{"document_uid": "fake-doc"}'
+        ),
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[read_document, dotted])
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == "Reading."
+    assert [call["name"] for call in recovered.tool_calls] == ["ns.read_document"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_text_call_next_to_a_native_call_leaves_the_message() -> None:
+    original = AIMessage(
+        content=_leaked_content(
+            "read", "_document", '{"document_uid": "fake-doc", "page": 2}'
+        ),
+        tool_calls=[
+            {"name": "read_document", "args": {"document_uid": "x"}, "id": "c-1"}
+        ],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[read_document])
+
     assert response.result[0] is original
-    assert original.tool_calls == before
 
 
 @pytest.mark.asyncio

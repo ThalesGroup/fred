@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from collections.abc import Awaitable, Callable
@@ -35,6 +36,8 @@ from ..react_model_adapter import (
     extract_model_name_from_object,
 )
 
+logger = logging.getLogger(__name__)
+
 RECOVERED_TOOL_CALL_TEXT_METADATA_KEY = "fred_tool_call_text_recovered"
 
 MAX_TOOL_CALL_RECOVERY_CHARS = 16_384
@@ -44,16 +47,9 @@ _TOOL_NAME_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
 )
 _FOLLOWUP_CALL = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,256})\s*(?=\{)")
-# Mistral can over-close the JSON it writes as text; a residue of closers alone
-# after a recovered call is not prose and must not reach the user as content.
-_CLOSER_RESIDUE = re.compile(r"\s*[\]}][\s\]}]*")
 # Keys that carry no visible content: streaming leaves `{}` or bare typed
 # markers (e.g. `{"type": "signature"}`) between deltas.
 _PAYLOADLESS_KEYS = frozenset({"type", "index", "id"})
-
-
-def _without_closer_residue(text: str) -> str:
-    return "" if _CLOSER_RESIDUE.fullmatch(text) else text
 
 
 class _DuplicateJsonKey(ValueError):
@@ -129,14 +125,20 @@ def recovery_text_fragment(block: object) -> str | None:
 
 
 def _trailing_registered_name(
-    text: str, tools_by_name: dict[str, BaseTool]
+    text: str, tools_by_name: dict[str, BaseTool], *, dot_boundary: bool = False
 ) -> str | None:
+    # At the reference anchor a sentence can end right on the name
+    # ("...landscape.read_document"); a longer dotted registered name still wins.
     matching_names = [
         name
         for name in tools_by_name
         if len(name) <= MAX_TOOL_CALL_RECOVERY_NAME_CHARS
         and text.endswith(name)
-        and (len(text) == len(name) or text[-len(name) - 1] not in _TOOL_NAME_CHARS)
+        and (
+            len(text) == len(name)
+            or text[-len(name) - 1] not in _TOOL_NAME_CHARS
+            or (dot_boundary and text[-len(name) - 1] == ".")
+        )
     ]
     return max(matching_names, key=len) if matching_names else None
 
@@ -177,13 +179,17 @@ def _anchored_text(
         elif is_tool_call_recovery_reference_block(block):
             if marked_name is None:
                 before_text = "".join(before)
-                marked_name = _trailing_registered_name(before_text, tools_by_name)
+                marked_name = _trailing_registered_name(
+                    before_text, tools_by_name, dot_boundary=True
+                )
                 if marked_name is None:
                     return None
                 preamble = before_text[: -len(marked_name)]
             else:
                 current = "".join(segment)
-                next_name = _trailing_registered_name(current, tools_by_name)
+                next_name = _trailing_registered_name(
+                    current, tools_by_name, dot_boundary=True
+                )
                 if next_name is None:
                     return None
                 segments.append((marked_name, current[: -len(next_name)]))
@@ -203,11 +209,12 @@ def _parse_sequence(
     first_name: str,
     tools_by_name: dict[str, BaseTool],
     max_calls: int,
-) -> tuple[list[tuple[str, dict[str, Any]]], str] | None:
+) -> tuple[list[tuple[str, dict[str, Any]]], int] | None:
+    """Parse the calls in one segment; return them and the leftover text length."""
     if max_calls < 1:
         return None
     parsed: list[tuple[str, dict[str, Any]]] = []
-    retained: list[str] = []
+    leftover_chars = 0
     position = 0
 
     def decode_args(name: str, start: int) -> tuple[dict[str, Any], int] | None:
@@ -265,26 +272,31 @@ def _parse_sequence(
                 next_call = name, candidate_args, candidate.start(), end
                 break
         if next_call is None:
-            retained.append(_without_closer_residue(text[position:]))
+            leftover_chars += len(text[position:].strip())
             break
         if len(parsed) >= max_calls:
             return None
         name, args, start, end = next_call
-        retained.append(_without_closer_residue(text[position:start]))
+        leftover_chars += len(text[position:start].strip())
         parsed.append((name, args))
         position = end
-    return parsed, "".join(retained)
+    return parsed, leftover_chars
 
 
 def _recover_calls(
     content: object, tools_by_name: dict[str, BaseTool]
-) -> tuple[str, list[ToolCall]] | None:
+) -> tuple[str, list[ToolCall], int] | None:
+    """Return the preamble, the recovered calls and the dropped text length.
+
+    Text after the first recovered call is dropped: in every observed leak it
+    was runaway output (closers, diff headers, looping prose), never an answer.
+    """
     anchored = _anchored_text(content, tools_by_name)
     if anchored is None:
         return None
     preamble, segments = anchored
     parsed_calls: list[tuple[str, dict[str, Any]]] = []
-    retained: list[str] = []
+    dropped_chars = 0
     for first_name, segment in segments:
         parsed = _parse_sequence(
             segment.lstrip(),
@@ -294,14 +306,14 @@ def _recover_calls(
         )
         if parsed is None:
             return None
-        calls, remaining = parsed
+        calls, leftover_chars = parsed
         parsed_calls.extend(calls)
-        retained.append(remaining)
+        dropped_chars += leftover_chars
     native_calls = [
         tool_call(name=name, args=args, id=f"recovered-{uuid.uuid4().hex}")
         for name, args in parsed_calls
     ]
-    return (preamble + "".join(retained)).strip(), native_calls
+    return preamble.strip(), native_calls, dropped_chars
 
 
 def _repaired_call_names(
@@ -359,37 +371,58 @@ class ToolCallTextRecoveryMiddleware(AgentMiddleware):
         for index, message in enumerate(result):
             if not isinstance(message, AIMessage):
                 continue
-            if message.tool_calls:
-                repaired = _repaired_call_names(message.tool_calls, tools_by_name)
+            native_calls = message.tool_calls
+            repaired = (
+                _repaired_call_names(native_calls, tools_by_name)
+                if native_calls
+                else None
+            )
+            if repaired is not None:
+                native_calls = repaired
+            model_name = extract_model_name_from_model_response(message)
+            recovered = (
+                _recover_calls(message.content, tools_by_name)
+                if not message.invalid_tool_calls and is_mistral_model_name(model_name)
+                else None
+            )
+            if recovered is None or model_name is None:
                 if repaired is not None:
                     result[index] = message.model_copy(update={"tool_calls": repaired})
                     changed = True
                 continue
-            if message.invalid_tool_calls:
-                continue
-            model_name = extract_model_name_from_model_response(message)
-            if model_name is None or not is_mistral_model_name(model_name):
-                continue
-            recovered = _recover_calls(message.content, tools_by_name)
-            if recovered is None:
-                continue
-            preamble, calls = recovered
+            preamble, text_calls, dropped_chars = recovered
+            # Text calls precede the native delta in the stream; a text call
+            # equal to a native one is the same call written twice.
+            text_calls = [
+                call
+                for call in text_calls
+                if not any(
+                    (call["name"], call["args"]) == (native["name"], native["args"])
+                    for native in native_calls
+                )
+            ]
+            if dropped_chars:
+                logger.info(
+                    "Tool-call recovery dropped %d chars of text after the call",
+                    dropped_chars,
+                )
             metadata = dict(message.response_metadata)
             metadata[RECOVERED_TOOL_CALL_TEXT_METADATA_KEY] = True
             result[index] = message.model_copy(
                 update={
                     "content": preamble,
-                    "tool_calls": calls,
+                    "tool_calls": [*text_calls, *native_calls],
                     "response_metadata": metadata,
                 }
             )
             changed = True
-            metric_model_name = (
-                extract_model_name_from_object(request.model) or model_name
-            )
-            recovered_counts[metric_model_name] = recovered_counts.get(
-                metric_model_name, 0
-            ) + len(calls)
+            if text_calls:
+                metric_model_name = (
+                    extract_model_name_from_object(request.model) or model_name
+                )
+                recovered_counts[metric_model_name] = recovered_counts.get(
+                    metric_model_name, 0
+                ) + len(text_calls)
         if not changed:
             return response
         if self._kpi is not None:
