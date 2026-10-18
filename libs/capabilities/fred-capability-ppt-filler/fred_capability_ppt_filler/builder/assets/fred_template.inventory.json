@@ -3,7 +3,7 @@
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
-  "analysis_version": 20,
+  "analysis_version": 21,
   "patterns": [
    {
     "id": "slide:256",
@@ -82,7 +82,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:259",
@@ -182,7 +183,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:260",
@@ -261,7 +263,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:257",
@@ -626,7 +629,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:261",
@@ -705,7 +709,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:262",
@@ -784,7 +789,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:289",
@@ -863,7 +869,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:274",
@@ -963,7 +970,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:263",
@@ -1021,7 +1029,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:264",
@@ -1100,7 +1109,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:265",
@@ -1285,7 +1295,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:266",
@@ -1406,7 +1417,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:267",
@@ -1527,7 +1539,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:268",
@@ -1757,7 +1770,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:269",
@@ -2077,7 +2091,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:270",
@@ -2135,7 +2150,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:271",
@@ -2193,7 +2209,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:272",
@@ -2251,7 +2268,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:273",
@@ -2330,7 +2348,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:275",
@@ -2409,7 +2428,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:276",
@@ -2488,7 +2508,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:277",
@@ -2567,7 +2588,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:278",
@@ -2730,7 +2752,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:279",
@@ -2979,7 +3002,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:280",
@@ -3058,7 +3082,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:281",
@@ -3264,7 +3289,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:282",
@@ -3515,7 +3541,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:283",
@@ -3594,7 +3621,8 @@
     "exclusion_reason": null,
     "reusable": false,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:284",
@@ -3673,7 +3701,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:285",
@@ -3752,7 +3781,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:286",
@@ -3894,7 +3924,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:287",
@@ -4055,7 +4086,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:288",
@@ -4134,7 +4166,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:290",
@@ -4364,7 +4397,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:291",
@@ -4549,7 +4583,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:292",
@@ -4930,7 +4965,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:293",
@@ -5223,7 +5259,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:294",
@@ -5538,7 +5575,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:295",
@@ -5617,7 +5655,8 @@
     "exclusion_reason": null,
     "reusable": false,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "layout:39",
@@ -5654,7 +5693,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "layout:40",
@@ -5691,7 +5731,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:297",
@@ -5749,7 +5790,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:298",
@@ -5807,7 +5849,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "layout:43",
@@ -5822,7 +5865,8 @@
     "exclusion_reason": "no_placeholder",
     "reusable": false,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "layout:44",
@@ -5837,7 +5881,8 @@
     "exclusion_reason": "no_placeholder",
     "reusable": false,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:258",
@@ -6304,7 +6349,8 @@
     "exclusion_reason": "library",
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:296",
@@ -6449,7 +6495,8 @@
     "exclusion_reason": null,
     "reusable": true,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": ""
    },
    {
     "id": "slide:299",
@@ -6464,7 +6511,8 @@
     "exclusion_reason": null,
     "reusable": false,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": "layout:43"
    },
    {
     "id": "slide:300",
@@ -6479,7 +6527,8 @@
     "exclusion_reason": null,
     "reusable": false,
     "labelled_by": "heuristic",
-    "warnings": []
+    "warnings": [],
+    "design": "layout:44"
    }
   ],
   "shared_texts": []

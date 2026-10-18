@@ -1413,12 +1413,12 @@ def _caps(
             at = (sections or {}).get(s.index, 0)
             per[at] = per.get(at, 0) + 1
     content = max(per.values(), default=0)
-    variants = [p.kind for p in pool if p.kind not in _STRUCTURAL]
+    designs = {p.design_key: p.kind for p in pool if p.kind not in _STRUCTURAL}
 
     def cap(distinct: int) -> int:
         return max(max_uses, math.ceil(content / distinct)) if distinct else max_uses
 
-    return _Caps(cap(len(variants)), cap(len(set(variants))))
+    return _Caps(cap(len(designs)), cap(len(set(designs.values()))))
 
 
 _NUMBERED = re.compile(r"^\s*\d+\s*[.)\-:]?\s+")
@@ -1480,7 +1480,7 @@ def _beam(
     programming; paths with the same last two choices and uses are merged."""
     at = sections or {}
     structural = {
-        p.id for s in slides for p, _ in s.candidates if p.kind in _STRUCTURAL
+        p.design_key for s in slides for p, _ in s.candidates if p.kind in _STRUCTURAL
     }
     paths = [_Path(0.0, (), {}, {})]
     for i, slide in enumerate(slides):
@@ -1492,30 +1492,36 @@ def _beam(
         free = _exempt(slide)
         steps: List[Tuple[float, int, int]] = []
         for n, path in enumerate(paths):
-            last = slides[i - 1].candidates[path.chosen[-1]][0].id if i >= 1 else None
-            before = slides[i - 2].candidates[path.chosen[-2]][0].id if i >= 2 else None
+            last_pattern = slides[i - 1].candidates[path.chosen[-1]][0] if i else None
+            last = last_pattern.design_key if last_pattern else None
+            before = (
+                slides[i - 2].candidates[path.chosen[-2]][0].design_key
+                if i >= 2
+                else None
+            )
             # Asked to keep the previous slide's layout, and its content fits it.
             keep = slide.plan.repeat_layout and any(
-                p.id == last for p, _ in slide.candidates
+                p.design_key == last for p, _ in slide.candidates
             )
             for c, (pattern, cost) in enumerate(slide.candidates):
-                step = path.cost + cost + _REUSE * path.uses.get(pattern.id, 0)
+                design = pattern.design_key
+                step = path.cost + cost + _REUSE * path.uses.get(design, 0)
                 if slide.part > 1:
                     # A list's continuation: its first part's slide again is free.
-                    if pattern.id != last:
+                    if last_pattern is None or pattern.id != last_pattern.id:
                         step += _SPLIT_SWITCH
                     else:
                         step = path.cost + cost
                 elif keep:
-                    step += 0.0 if pattern.id == last else _NOT_REPEATED
-                elif pattern.id == last:
-                    step += _REPEAT + (_TRIPLE if pattern.id == before else 0.0)
+                    step += 0.0 if design == last else _NOT_REPEATED
+                elif design == last:
+                    step += _REPEAT + (_TRIPLE if design == before else 0.0)
                 if (
                     caps is not None
                     and slide.part == 1
                     and not free
                     and _content(slide, pattern)
-                    and path.content.get(pattern.id, 0) >= caps.slide
+                    and path.content.get(design, 0) >= caps.slide
                 ):
                     step += _OVER_MAX
                 steps.append((step, n, c))
@@ -1528,10 +1534,11 @@ def _beam(
             uses = dict(path.uses)
             content = dict(path.content)
             # A split list counts as one slide, a slide asked alike not against the cap.
+            design = pattern.design_key
             if slide.part == 1:
-                uses[pattern.id] = uses.get(pattern.id, 0) + 1
+                uses[design] = uses.get(design, 0) + 1
             if slide.part == 1 and not free and _content(slide, pattern):
-                content[pattern.id] = content.get(pattern.id, 0) + 1
+                content[design] = content.get(design, 0) + 1
             state = (
                 path.chosen[-1:],
                 c,
@@ -1670,7 +1677,7 @@ def _runs(
         pattern = chosen.get(slide.index) if slide.part == 1 else None
         if pattern is None or not _content(slide, pattern):
             run = []
-        elif run and run[-1][1].id == pattern.id and not _exempt(slide):
+        elif run and run[-1][1].design_key == pattern.design_key and not _exempt(slide):
             run.append((slide, pattern))
             if len(run) == 3:
                 runs.append(run)  # the same list: later slides of the run join it
@@ -1705,8 +1712,10 @@ def _repeats(
     out; structural slides count apart, deck-wide. Alternatives are read from
     the sections concerned. Full rule: design.md D27."""
     at = sections or {}
+    named: Dict[str, str] = {}
     variants: Dict[str, set[str]] = {}
     for p in pool:
+        named.setdefault(p.design_key, p.label)
         variants.setdefault(p.kind, set()).add(zone_summary(p))
     groups: Dict[Tuple[str, int, str], List[Tuple[_Slide, Pattern]]] = {}
     for slide in slides:
@@ -1714,11 +1723,11 @@ def _repeats(
         if pattern is None or slide.part > 1 or _exempt(slide):
             continue
         if not _content(slide, pattern):
-            key = ("structural", 0, pattern.id)
+            key = ("structural", 0, pattern.design_key)
         elif by_kind:
             key = ("kind", at.get(slide.index, 0), pattern.kind)
         else:
-            key = ("slide", at.get(slide.index, 0), pattern.id)
+            key = ("slide", at.get(slide.index, 0), pattern.design_key)
         groups.setdefault(key, []).append((slide, pattern))
     found = [(key[0] == "structural", False, g) for key, g in groups.items()]
     if caps is not None:
@@ -1760,7 +1769,7 @@ def _repeats(
             Repeat(
                 kind,
                 [s.index for s, _ in group],
-                list(dict.fromkeys(p.label for _, p in group)),
+                list(dict.fromkeys(named.get(p.design_key, p.label) for _, p in group)),
                 suggested,
                 structural,
                 at_most,
@@ -1960,12 +1969,12 @@ def assign(
         "then give one of them another content shape."
         for i in range(2, len(chosen))
         if caps is None
-        and chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
+        and chosen[i].design_key == chosen[i - 1].design_key == chosen[i - 2].design_key
         and slides[i].part == slides[i - 1].part == 1
         and not _exempt(slides[i])
     ]
     repeated = {
-        slide.index: chosen[k].id == chosen[k - 1].id
+        slide.index: chosen[k].design_key == chosen[k - 1].design_key
         for k, slide in enumerate(slides)
         if k and slide.part == 1 and slide.plan.repeat_layout
     }

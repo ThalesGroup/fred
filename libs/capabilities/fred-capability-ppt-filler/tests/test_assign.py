@@ -1193,6 +1193,15 @@ def test_max_uses_one_takes_another_variant_of_the_same_kind():
     assert [p.label for p in alone.patterns if p] == ["A", "Two cols", "A"]
 
 
+def test_look_alike_template_slides_count_as_one_design():
+    plan = [_points(1), _points(2, "two_columns"), _points(3), _points(4)]
+    twin = _bullets("layout:3", "B").model_copy(update={"design": "slide:1"})
+    assignment = assign(_max_uses_inventory(twin), _plan(*plan), "template_slide", 1)
+    # Two designs for four slides: three lists on 'A' or its twin are a repeat.
+    (repeat,) = assignment.repeats
+    assert repeat.slides == [1, 3, 4] and repeat.labels == ["A"]
+
+
 def test_max_uses_is_raised_to_what_the_template_allows():
     plan = [_points(1), _points(2, "two_columns"), _points(3), _points(4)]
     inventory = _max_uses_inventory(_bullets("layout:3", "B"))

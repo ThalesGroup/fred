@@ -1216,3 +1216,17 @@ def test_deck_fields_written_inside_changes_are_taken_to_the_top_level():
     )
     other = {"changes": [edit, "not a change"]}
     assert tools_mod._hoisted(other) == (other, None)
+
+
+def test_the_designs_line_names_look_alike_template_slides_once():
+    inventory = analyze_template(build_showcase_template()).inventory
+    assert inventory is not None
+    first, second = [p for p in inventory.patterns if p.included][:2]
+    twin = second.model_copy(update={"design": first.id})
+    inventory = inventory.model_copy(
+        update={"patterns": [twin if p is second else p for p in inventory.patterns]}
+    )
+    line = tools_mod._designs_line(
+        inventory, [SlidePlan(title="a"), SlidePlan(title="b")], [first, twin]
+    )
+    assert f"1 '{first.label}' · 2 '{first.label}'." in line

@@ -973,3 +973,35 @@ def test_pairing_leaves_the_existing_designs_alone(showcase):
 )
 def test_figures_lexicon(text, figure):
     assert is_figure(text) is figure
+
+
+def test_look_alike_template_slides_are_one_design():
+    """Same zones on the same backdrop are one design, whatever their names; a
+    large drawn shape or a moved zone makes another one."""
+
+    def drawn(presentation) -> None:
+        slide = add_placeholder_two_ideas_slide(presentation)
+        slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, Inches(6.5), Inches(2), Inches(3), Inches(4)
+        )
+
+    def moved(presentation) -> None:
+        slide = add_placeholder_two_ideas_slide(presentation)
+        slide.shapes[1].left += Inches(1)
+
+    inventory = analyze_template(
+        build_slides(
+            [
+                add_placeholder_two_ideas_slide,
+                add_placeholder_two_ideas_slide,
+                drawn,
+                moved,
+            ]
+        )
+    ).inventory
+    assert inventory is not None
+    first, twin, decorated, shifted = [
+        p for p in inventory.patterns if p.source == "slide"
+    ]
+    assert twin.design == first.id and twin.design_key == first.design_key
+    assert decorated.design == "" and shifted.design == ""

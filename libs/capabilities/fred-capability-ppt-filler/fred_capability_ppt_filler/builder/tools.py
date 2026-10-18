@@ -728,15 +728,18 @@ _DESIGN_NAME_CHARS = 28
 
 
 def _design_names(inventory: TemplateInventory) -> Dict[str, str]:
-    """Each template slide's name as the user sees it, numbered when several
-    share one shown (cut) label: the model must never read two designs as one."""
-    shown = {
-        p.id: p.label
-        if len(p.label) <= _DESIGN_NAME_CHARS
-        else p.label[: _DESIGN_NAME_CHARS - 1].rstrip() + "…"
-        for p in inventory.patterns
-        if p.included
-    }
+    """Each design's name as the user sees it (its first template slide's),
+    numbered when several share one shown (cut) label: the model must never
+    read two designs as one, nor two look-alike template slides as two."""
+    shown: Dict[str, str] = {}
+    for p in inventory.patterns:
+        if p.included:
+            shown.setdefault(
+                p.design_key,
+                p.label
+                if len(p.label) <= _DESIGN_NAME_CHARS
+                else p.label[: _DESIGN_NAME_CHARS - 1].rstrip() + "…",
+            )
     seen: Counter = Counter()
     names: Dict[str, str] = {}
     for pid, label in shown.items():
@@ -760,7 +763,7 @@ def _designs_line(
     "same layout as slide M" is answered with `like`, not by comparing kinds."""
     names = _design_names(inventory)
     listed = " · ".join(
-        f"{number} '{names.get(p.id) or p.label}'{_redrawn(slide, p)}"
+        f"{number} '{names.get(p.design_key) or p.label}'{_redrawn(slide, p)}"
         for number, (slide, p) in enumerate(zip(slides, patterns), start=1)
         if p is not None
     )

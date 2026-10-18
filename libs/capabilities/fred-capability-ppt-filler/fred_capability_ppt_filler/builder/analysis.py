@@ -27,6 +27,8 @@ a heuristic the vision pass refines. Optional annotations
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -140,6 +142,10 @@ _PAIR_OVERLAP = -40
 _FIGURE_MIN_PT = 40
 # A text-free slide drawing this many shapes is a graphic resource sheet.
 _RESOURCE_SHAPES = 8
+# Two patterns are one design when their zones and drawn decoration (shapes
+# from this share of the slide) sit this close (per mille) on one backdrop.
+_SAME_DESIGN = 20
+_DECOR_MIN_AREA = 0.02
 
 
 @dataclass
@@ -190,7 +196,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 20
+ANALYSIS_VERSION = 21
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -815,6 +821,8 @@ class _Analyzer:
         self.theme = theme_fonts(presentation)
         self.default_pt = _default_text_pt(presentation)
         self._frames: Dict[Any, List[Box]] = {}
+        # Pattern id → (backdrop, drawn decoration): what `_same_design` compares.
+        self._looks: Dict[str, Tuple[str, List[Tuple[str, Box]]]] = {}
 
     def frames(self, layout) -> List[Box]:
         """Shapes every slide on ``layout`` shows and none can remove: the
@@ -890,12 +898,45 @@ class _Analyzer:
                 patterns.append(pattern)
             copied.add(part)
 
+        for n, pattern in enumerate(patterns):
+            pattern.design = next(
+                (
+                    q.id
+                    for q in patterns[:n]
+                    if not q.design and self._same_design(q, pattern)
+                ),
+                "",
+            )
         return TemplateInventory(
             analysis_version=ANALYSIS_VERSION,
             slide_width=self.width,
             slide_height=self.height,
             patterns=patterns,
             shared_texts=sorted(self.shared_texts),
+        )
+
+    # -- designs -------------------------------------------------------------------
+
+    def _decor(self, owner) -> List[Tuple[str, Box]]:
+        return _decor_of(_records(owner.shapes, self.width, self.height), owner)
+
+    def _layout_look(self, layout) -> List[Tuple[str, Box]]:
+        decor = self._decor(layout)
+        if layout._element.get("showMasterSp") != "0":
+            decor += self._decor(layout.slide_master)
+        return decor
+
+    def _same_design(self, a: Pattern, b: Pattern) -> bool:
+        look_a, look_b = self._looks.get(a.id), self._looks.get(b.id)
+        if look_a is None or look_b is None or look_a[0] != look_b[0]:
+            return False
+        groups = [
+            sorted((g.count, tuple(g.item_zones)) for g in p.groups) for p in (a, b)
+        ]
+        return (
+            groups[0] == groups[1]
+            and _alike(look_a[1], look_b[1])
+            and _alike(_zone_marks(a), _zone_marks(b))
         )
 
     # -- shared decoration -------------------------------------------------------
@@ -972,6 +1013,10 @@ class _Analyzer:
         mark_takeaway(pattern, {rec.key: [rec.name] for rec in records})
         _mark_framed(pattern, self.frames(layout))
         pattern.reusable = pattern.kind != "other"
+        self._looks[pattern.id] = (
+            _backdrop(layout, layout.slide_master),
+            self._layout_look(layout),
+        )
         return pattern, {
             rec.ph_idx: cast(ZoneRole, _placeholder_role(rec))
             for rec in slotted
@@ -1151,7 +1196,25 @@ class _Analyzer:
         if slide._element.get("showMasterSp") != "0":
             _mark_framed(pattern, self.frames(slide.slide_layout))
         pattern.reusable = pattern.kind != "other"
+        self._looks[pattern.id] = self._slide_look(slide, pattern, records)
         return pattern
+
+    def _slide_look(
+        self, slide, pattern: Pattern, records: List[_Rec]
+    ) -> Tuple[str, List[Tuple[str, Box]]]:
+        """The slide's backdrop and the decoration it shows: its own shapes
+        that hold no zone, then its layout's and master's."""
+        keys = {z.key for z in pattern.zones} | {
+            key
+            for g in pattern.groups
+            for key in g.item_keys + [z.key for item in g.items for z in item]
+        }
+        content = {rec.path[0] for rec in records if rec.key in keys}
+        decor = _decor_of([r for r in records if r.path[0] not in content], slide)
+        layout = slide.slide_layout
+        if slide._element.get("showMasterSp") != "0":
+            decor += self._layout_look(layout)
+        return _backdrop(slide, layout, layout.slide_master), decor
 
     @staticmethod
     def _names(slide, records: List[_Rec]) -> Dict[str, List[str]]:
@@ -1458,6 +1521,77 @@ class _Analyzer:
                     f"Slide holds a part that cannot be copied: {rel.reltype.rsplit('/', 1)[-1]}."
                 )
                 return
+
+
+def _drawn(element, part) -> str:
+    """A shape or background as drawn: its XML without shape ids or names, its
+    pictures named by content (two layouts may embed one image twice)."""
+    element = copy.deepcopy(element)
+    for props in element.iter(qn("p:cNvPr")):
+        for attr in ("id", "name", "descr"):
+            props.attrib.pop(attr, None)
+
+    def blob(match: "re.Match[str]") -> str:
+        try:
+            return hashlib.sha256(part.related_part(match.group(1)).blob).hexdigest()
+        except KeyError:
+            return match.group(1)
+
+    xml = etree.tostring(element).decode()
+    return hashlib.sha256(
+        re.sub(r'(?<=embed=")([^"]+)', blob, xml).encode()
+    ).hexdigest()
+
+
+def _decor_of(records: List[_Rec], owner) -> List[Tuple[str, Box]]:
+    """The large drawn shapes of ``records`` (no placeholder), as drawn."""
+    return [
+        (_drawn(rec.shape._element, owner.part), rec.box)
+        for rec in records
+        if len(rec.path) == 1 and rec.ph_idx is None and rec.area >= _DECOR_MIN_AREA
+    ]
+
+
+def _backdrop(*owners) -> str:
+    """The background of the first of ``owners`` (slide, layout, master) to set one."""
+    for owner in owners:
+        bg = owner._element.find(f"{qn('p:cSld')}/{qn('p:bg')}")
+        if bg is not None:
+            return _drawn(bg, owner.part)
+    return ""
+
+
+def _zone_marks(pattern: Pattern) -> List[Tuple[str, Box]]:
+    """Every zone, groups' included, by what changes its look once filled
+    (its capacity reads font, spacing and text direction)."""
+    zones = pattern.zones + [
+        z for g in pattern.groups for item in g.items for z in item
+    ]
+    return [
+        (
+            f"{z.role}|{z.takeaway}|{z.framed}|{z.chart_type}|{z.table is not None}"
+            f"|{round(z.font_pt or 0)}|{z.chars_per_line}|{z.max_lines}|{z.grows}",
+            z.box,
+        )
+        for z in zones
+    ]
+
+
+def _mark_order(mark: Tuple[str, Box]) -> Tuple[str, int, int]:
+    return mark[0], mark[1].y, mark[1].x
+
+
+def _alike(a: List[Tuple[str, Box]], b: List[Tuple[str, Box]]) -> bool:
+    """Same marks, each box within `_SAME_DESIGN` of its counterpart."""
+    if len(a) != len(b):
+        return False
+    return all(
+        ma == mb
+        and all(abs(getattr(ba, f) - getattr(bb, f)) <= _SAME_DESIGN for f in "xywh")
+        for (ma, ba), (mb, bb) in zip(
+            sorted(a, key=_mark_order), sorted(b, key=_mark_order)
+        )
+    )
 
 
 def _icons(records: List[_Rec]) -> int:

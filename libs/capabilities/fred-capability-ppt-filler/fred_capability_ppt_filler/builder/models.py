@@ -201,6 +201,13 @@ class Pattern(BaseModel):
     labelled_by: LabelSource = "heuristic"
     # Analysis notes surfaced in the form (e.g. why a slide cannot be copied).
     warnings: List[str] = []
+    # Id of an earlier pattern that looks the same once filled (same backdrop,
+    # decoration and zones): one design for variety and names. Empty: its own.
+    design: str = ""
+
+    @property
+    def design_key(self) -> str:
+        return self.design or self.id
 
     @property
     def fillable(self) -> bool:
