@@ -720,6 +720,7 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 
 - **WHEN** a text is too long for its slot at its font size
 - **THEN** the font is reduced down to a floor, measured with the font the slot is drawn in; text still too long is cut at a word boundary and reported, and shrinking alone is not reported as a truncation
+- **AND** a one-line key figure (`number` zone) is measured against its own box, a trend arrow at the size it is drawn, and shrinks down to the same floor before the fit check refuses it; its room is quoted at that floor (`1 word (≈7 chars)` for a 5-char box)
 
 #### Scenario: Images from team folders
 
@@ -909,8 +910,9 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 #### Scenario: Deck fields written inside changes are read
 
-- **WHEN** a `changes` call holds, among its entries, `file_name`, `audience` or `main_message` (an object of only those keys, or a string such as `file_name': 'Deck` left by broken quoting), or debris with no content (`}```json`)
-- **THEN** each field is read as the call's own and the debris dropped, and the changes are applied
+- **WHEN** a `slides` entry holds `file_name`, `audience` or `main_message` beside its content, or a `changes` call holds, among its entries, `file_name`, `audience` or `main_message` (an object of only those keys, or a string such as `file_name': 'Deck` left by broken quoting), or debris with no content (`}```json`)
+- **THEN** each field is read as the call's own and the debris dropped, and the slides or changes are applied
+- **AND** the lift happens when the tool runtime validates the call, before the slides are parsed
 - **AND** a field also given at the top level with another value builds nothing, with one line naming both values
 
 #### Scenario: An edited takeaway is delivered through content, not displayed

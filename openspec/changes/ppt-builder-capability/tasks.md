@@ -676,3 +676,12 @@ Owns: `assign.py` (`_sections`, `SECTION_RULE`, `Repeat.suggested`, `_suggested`
 - [x] 61.3 A suggestion never names a template slide already at its cap. Test: `test_assign.py::test_a_suggestion_never_names_a_template_slide_already_at_its_cap`
 - [x] 61.4 Variety notes state their fix without "nothing to do". Test: `test_assign.py::test_every_note_numbers_slides_as_its_outline_does` (asserts the phrase is gone)
 - [ ] 61.7 Live re-evaluation once fred-agents runs this code (not restarted by this change)
+
+## WP62. Pro-session fixes: deck fields and key figures (owner decision 2026-10-18: audit fixes, design D40)
+
+Owns: `tools.py` (`_deck_fields_lifted`, `deck_conflict`), `render.py` (`_figure_scale`), `plan.py` (`quoted_chars`), `assign.py` (`_too_long`), tests, delta spec.
+
+- [x] 62.1 Deck fields lifted by the args schema, before the runtime parses the slides. Tests: `test_build_tool.py::test_a_deck_field_inside_a_parsed_slide_is_never_a_slide_problem` (replays the 0f2506ea first build, `tests/replays/0f2506ea_first_build.json`), `test_build_tool.py::test_a_deck_field_written_inside_a_slide_is_read_as_the_decks` (now through `ainvoke`)
+- [x] 62.2 A one-line key figure shrinks to the floor before it is refused; its room is quoted at the floor. Test: `test_builder_render.py::test_a_key_figure_shrinks_to_fit_its_line_down_to_the_floor`
+- [x] 62.3 Package checks; `openspec validate --strict`
+- [ ] 62.4 Live re-evaluation once fred-agents runs this code (not restarted by this change)
