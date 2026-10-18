@@ -48,6 +48,7 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    cast,
 )
 
 from fred_core import convert_office_bytes_to_pdf
@@ -70,6 +71,7 @@ from pydantic import (
     ValidationInfo,
     create_model,
     field_validator,
+    model_validator,
 )
 from pydantic.json_schema import SkipJsonSchema
 
@@ -467,6 +469,7 @@ def _schema_for(
         __validators__={
             "_lists": field_validator("slides", "changes", mode="before")(_listed),
             "_show": field_validator("show_takeaways", mode="before")(_flag_or_none),
+            "_deck": cast(Any, model_validator(mode="before")(_deck_fields_lifted)),
         },
         slides=(
             List[slide_model],
@@ -524,6 +527,7 @@ def _schema_for(
             if takeaways
             else (SkipJsonSchema[Optional[bool]], None)
         ),
+        deck_conflict=(SkipJsonSchema[Optional[str]], None),
     )
     return model
 
@@ -602,6 +606,15 @@ def _hoisted(kwargs: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
             )
         out[key] = value
     return out, None
+
+
+def _deck_fields_lifted(cls: Any, data: Any) -> Any:
+    """Before the slides are parsed: the tool runtime validates the call
+    against the schema, so a lift done later sees slide objects, not dicts."""
+    if not isinstance(data, dict):
+        return data
+    lifted, twice = _hoisted(data)
+    return {**data, "deck_conflict": twice} if twice else lifted
 
 
 def _sent(slide: Any) -> SlidePlan:
@@ -1455,11 +1468,10 @@ def build_builder_tools(
 
     async def _build_plan(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         nonlocal called
-        kwargs, twice = _hoisted(kwargs)
-        if twice:
-            return _error(twice)
         try:
             validated: Any = args_schema(**kwargs)
+            if validated.deck_conflict:
+                return _error(validated.deck_conflict)
             plan = _to_plan(validated)
             changes = None if validated.changes is None else _to_changes(validated)
         except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected

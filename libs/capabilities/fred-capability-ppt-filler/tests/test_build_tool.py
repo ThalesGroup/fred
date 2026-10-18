@@ -1247,6 +1247,18 @@ def test_deck_fields_written_inside_changes_are_taken_to_the_top_level():
     assert tools_mod._hoisted(other) == (other, None)
 
 
+async def _called(build: Any, args: dict[str, Any]) -> tuple[str, Any]:
+    """As the runtime calls it: the args schema parses the call first."""
+    message = await build.ainvoke(
+        {"type": "tool_call", "id": "call-1", "name": build.name, "args": args}
+    )
+    return message.content, message.artifact
+
+
+def _replay(name: str) -> dict[str, Any]:
+    return json.loads((Path(__file__).parent / "replays" / name).read_text())
+
+
 @pytest.mark.asyncio
 async def test_a_deck_field_written_inside_a_slide_is_read_as_the_decks(monkeypatch):
     """Live (mistral-medium): `file_name` sat inside the cover slide and the
@@ -1256,21 +1268,35 @@ async def test_a_deck_field_written_inside_a_slide_is_read_as_the_decks(monkeypa
     # variety note that template did not raise, checked apart.
     config = PptBuilderConfig.model_validate({"variety_check": "off"})
     build = _tools(_ctx(config))[BUILD_TOOL_NAME]
-    sent = json.loads(
-        (Path(__file__).parent / "replays" / "a611e51e_first_call.json").read_text()
-    )
+    sent = _replay("a611e51e_first_call.json")
     assert sent["slides"][0]["file_name"] == "Seconde_Guerre_mondiale_ados"
-    text, result = await build.coroutine(**sent)
+    text, result = await _called(build, sent)
     assert text.startswith(tools_mod._DELIVERED), text
     assert (
         cast(Any, result.ui_parts[0]).file_name == "Seconde_Guerre_mondiale_ados.pptx"
     )
-    _, twice = tools_mod._hoisted({**sent, "file_name": "Autre"})
-    assert twice == (
+    text, _ = await _called(build, {**sent, "file_name": "Autre"})
+    assert text == (
         "No deck was built: `file_name` is given twice, 'Autre' and "
         "'Seconde_Guerre_mondiale_ados' inside `slides`; send it once, next to "
         "`slides`."
     )
+
+
+@pytest.mark.asyncio
+async def test_a_deck_field_inside_a_parsed_slide_is_never_a_slide_problem(
+    monkeypatch,
+):
+    """Live (0f2506ea, mistral-medium): the cover's `file_name` came back as
+    'a deck field, not a slide field' once the runtime had parsed the slides."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    build = _tools(_ctx(PptBuilderConfig()))[BUILD_TOOL_NAME]
+    sent = _replay("0f2506ea_first_build.json")
+    assert "file_name" in sent["slides"][0] and "file_name" not in sent
+    text, result = await _called(build, sent)
+    assert "deck field" not in text and "file_name" not in text, text
+    if text.startswith(tools_mod._DELIVERED):
+        assert cast(Any, result.ui_parts[0]).file_name.startswith("Valteris_")
 
 
 def test_the_designs_line_names_look_alike_template_slides_once():
