@@ -910,7 +910,7 @@ def _labels(
     labels.number_format_is_linked = False
     _text(labels.font, pt)
     if chart.type in ROUND:
-        _round_labels(labels, chart.show or "share", fmt)
+        _round_labels(labels, pie_show(chart), fmt)
         if chart.type == "pie":
             labels.position = XL_LABEL_POSITION.OUTSIDE_END
         elif point is None:
@@ -972,6 +972,12 @@ def _stress_label(plot: Any, index: int, light: bool = False) -> None:
                 colour.set("val", "bg1")
                 for child in list(colour):
                     colour.remove(child)
+
+
+def pie_show(chart: PlanChart) -> str:
+    """What a pie's labels show unless asked: data with a unit (already %, M€)
+    shows its own values, a share of their sum would misstate them."""
+    return chart.show or ("value" if (chart.unit or "").strip() else "share")
 
 
 def _round_labels(labels: Any, show: str, fmt: str) -> None:
@@ -1182,7 +1188,7 @@ def _relabel(
         labels = DataLabels(node)
         labels.number_format_is_linked = False
         if chart.type in ROUND:
-            _round_labels(labels, chart.show or "share", fmt)
+            _round_labels(labels, pie_show(chart), fmt)
         else:
             labels.number_format = fmt
             labels.show_value = True

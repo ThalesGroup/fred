@@ -671,7 +671,7 @@ def test_pie_labels_mode_defaults_to_shares_and_keeps_labels_as_categories():
     )
     assert (chart.show, chart.categories) == (None, ["A", "B", "C"])
     schema = PlanChart.model_json_schema()["properties"]["show"]
-    assert "set show: 'value'" in schema["description"]
+    assert "value when `unit` is set" in schema["description"]
     assert set(schema["anyOf"][0]["enum"]) == {"share", "value", "both"}
 
 
@@ -692,7 +692,7 @@ def _labels_xml(built: Any) -> Any:
 @pytest.mark.parametrize(
     "show, value, percent, fmt, linked, separator",
     [
-        (None, "0", "1", "0%", "0", None),
+        (None, "1", "0", '#,##0" collaborateurs"', "0", None),
         ("share", "0", "1", "0%", "0", None),
         ("value", "1", "0", '#,##0" collaborateurs"', "0", None),
         ("both", "1", "1", '#,##0" collaborateurs"', "1", "\n"),
@@ -716,10 +716,24 @@ def test_pie_labels_show_what_the_plan_asks(
     assert cache.text == '#,##0" collaborateurs"'
 
 
+def test_a_pie_of_data_with_a_unit_shows_its_values_unless_asked(builtin):
+    """Rates already in % shown as shares of their sum read wrong (22 % as 28 %)."""
+    template, inventory = builtin
+    rates = {**PIE, "unit": "%"}
+    labels = _labels_xml(_chart(_render(template, inventory, _chart_slide(rates))))
+    assert labels.find(qn("c:showVal")).get("val") == "1"
+    assert labels.find(qn("c:showPercent")).get("val") == "0"
+    bare = {k: v for k, v in PIE.items() if k != "unit"}
+    labels = _labels_xml(_chart(_render(template, inventory, _chart_slide(bare))))
+    assert labels.find(qn("c:showPercent")).get("val") == "1"
+
+
 def test_a_unit_hidden_by_percentages_is_told(builtin):
     template, inventory = builtin
     result = _render(
-        template, inventory, _chart_slide({**PIE, "unit": "collaborateurs"})
+        template,
+        inventory,
+        _chart_slide({**PIE, "unit": "collaborateurs", "show": "share"}),
     )
     assert (
         "Slide 2: the pie's labels show percentages, so unit 'collaborateurs' is not "
@@ -728,7 +742,9 @@ def test_a_unit_hidden_by_percentages_is_told(builtin):
     )
     built = result.report.built[1]
     assert [n.code for n in built.notes] == ["chart_shows_shares"]
-    shares = _render(template, inventory, _chart_slide({**PIE, "unit": "%"}))
+    shares = _render(
+        template, inventory, _chart_slide({**PIE, "unit": "%", "show": "share"})
+    )
     assert not any("chart.show" in n for n in shares.report.notes)
     values = _render(
         template,
@@ -1038,9 +1054,7 @@ def test_the_tool_offers_charts_only_where_the_template_has_a_place(builtin):
         "chart {type, categories, series [{name, values}], title, unit, show}"
         in description
     )
-    assert "to display numbers instead of percentages on a pie, set show: 'value'" in (
-        description
-    )
+    assert "with their values when `unit` is set" in description
     assert '"chart.show"' in description
     assert "categories max 12" in tools.catalogue(fred)
     none = _chartless(fred)

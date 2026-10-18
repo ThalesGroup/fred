@@ -1269,8 +1269,8 @@ def _description(
         + (
             "chart {type, categories, series [{name, values}], title, unit, show} for numbers "
             "(data only: the template sets its colours, fonts and place; a pie or doughnut "
-            "labels its slices with percentages: to display numbers instead of percentages "
-            "on a pie, set show: 'value', or 'both' for the two; to make one category or "
+            "labels its slices with their values when `unit` is set, else with percentages "
+            "of the total: set show 'share', 'value' or 'both' to choose; to make one category or "
             "series stand out, set highlight to its name, never a colour; sort: 'desc' "
             "puts the largest first; stacked_as: 'percent' shows a stacked_column as "
             "shares of 100 %, stacked_bar too; scatter and bubble take series [{name, "

@@ -2138,7 +2138,7 @@ class _Renderer:
         """A label setting the chart cannot show: said, never dropped quietly."""
         unit = (chart.unit or "").strip()
         if chart.type in charts.ROUND:
-            if chart.show in (None, "share") and unit and unit != "%":
+            if charts.pie_show(chart) == "share" and unit and unit != "%":
                 self.report.note("chart_shows_shares")
                 self._tell(
                     f"{where}: the {chart.type}'s labels show percentages, so "

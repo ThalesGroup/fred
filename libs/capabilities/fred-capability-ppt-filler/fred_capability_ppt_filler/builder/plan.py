@@ -759,8 +759,8 @@ class PlanChart(BaseModel):
     show: Optional[PieShow] = Field(
         default=None,
         description="pie and doughnut only, what the slice labels show: share "
-        "(percentages, the default), value (the numbers, with `unit`) or both. To "
-        "display numbers instead of percentages on a pie, set show: 'value'.",
+        "(percentages of the total), value (the numbers, with `unit`) or both. Left "
+        "out: value when `unit` is set, else share.",
     )
     highlight: Optional[str] = Field(
         default=None,
