@@ -925,6 +925,10 @@ def _fit(
     # font, so a line of capitals counts for what it draws.
     line_em = chars_per_line * text_metrics.char_em(font_name, bold)
 
+    figure = _figure_scale(zone, lines, width, line_em, font_name, bold)
+    if figure is not None and figure >= MIN_FONT_SCALE:
+        return lines, (None if figure >= 1.0 else math.floor(figure * 100) / 100), False
+
     def needed(scale: float) -> int:
         return sum(_line_cost(line, line_em / scale, font_name, bold) for line in lines)
 
@@ -969,6 +973,28 @@ def _fit(
     # Everything fitted once shrunk to the floor: shrinking is not truncating,
     # and saying it is sends the agent rewriting text that was never cut.
     return kept, MIN_FONT_SCALE, dropped
+
+
+def _figure_scale(
+    zone: Zone,
+    lines: List[_Line],
+    width: int,
+    line_em: float,
+    font_name: Optional[str],
+    bold: bool,
+) -> Optional[float]:
+    """The scale a key figure fits its one line at: measured against its box
+    (the stored count is floored to whole average characters, wider digits
+    lose a further one), its trend arrow at the size it is drawn."""
+    if zone.role != "number" or (zone.max_lines or 1) > 1 or len(lines) != 1:
+        return None
+    text = lines[0].text
+    arrow = 2 if text[:1] in TREND_GLYPHS.values() else 0
+    drawn = text_metrics.width_em(text[:arrow], font_name, bold) * _GLYPH_SCALE
+    drawn += text_metrics.width_em(text[arrow:], font_name, bold)
+    box_pt = (zone.box.w / 1000 * width - 2 * _DEFAULT_INSET_EMU) / 914400 * 72
+    room = max(line_em, box_pt * text_metrics.SAFETY / (zone.font_pt or 1e9))
+    return room / drawn if drawn else None
 
 
 def _cut(text: str, room: int) -> str:

@@ -66,6 +66,7 @@ from fred_capability_ppt_filler.builder.plan import (
     has_content,
     max_entries,
     named_charts,
+    quoted_chars,
     shown_charts,
     slide_charts,
     takeaway_aside,
@@ -402,6 +403,7 @@ def _too_long(
     zone: Zone, lines: List[_Line], what: str, size: Tuple[int, int]
 ) -> Misfit:
     per_line, rows = zone_capacity(zone, *size)
+    per_line = quoted_chars(zone, per_line, rows)
     room = capacity_text(per_line, rows)
     if len(lines) == 1:
         source = lines[0].source or what

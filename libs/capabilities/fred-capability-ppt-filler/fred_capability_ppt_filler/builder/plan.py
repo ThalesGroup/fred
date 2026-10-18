@@ -1308,7 +1308,16 @@ def _room(zones: Sequence[Zone]) -> Optional[Tuple[int, int]]:
     if not bounded:
         return None
     tightest = min(bounded, key=lambda z: (z.chars_per_line or 0) * (z.max_lines or 0))
-    return tightest.chars_per_line or 1, tightest.max_lines or 1
+    lines = tightest.max_lines or 1
+    return quoted_chars(tightest, tightest.chars_per_line or 1, lines), lines
+
+
+def quoted_chars(zone: Zone, per_line: int, lines: int) -> int:
+    """A key figure shrinks to fit its one line (render `_figure_scale`): its
+    room is quoted at the smallest size."""
+    if zone.role == "number" and lines == 1:
+        return int(per_line / MIN_FONT_SCALE)
+    return per_line
 
 
 def _limit(zones: Sequence[Zone], listed: bool = False) -> str:

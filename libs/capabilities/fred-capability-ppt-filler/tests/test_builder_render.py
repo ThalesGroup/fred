@@ -49,6 +49,7 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanColumn,
     PlanItem,
     SlidePlan,
+    quoted_chars,
 )
 from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.builder.render import (
@@ -952,6 +953,30 @@ def test_shrinking_text_to_the_floor_is_not_reported_as_truncated():
     assert [line.text for line in kept] == [line.text for line in lines]
     assert not truncated
     assert scale == MIN_FONT_SCALE
+
+
+def test_a_key_figure_shrinks_to_fit_its_line_down_to_the_floor():
+    """Live (0f2506ea, Thales 'Chiffres clés'): a 157-permille box at 44 pt
+    quoted 5 chars and refused '124 412' k€; it fits once shrunk, as drawn."""
+    zone = Zone(
+        key="sp:7/11",
+        role="number",
+        box=Box(x=78, y=481, w=157, h=98),
+        font_pt=44.0,
+        chars_per_line=5,
+        max_lines=1,
+    )
+    size = (12192000, 6858000)
+    for figure in ("124 412", "▼\u2009124 412"):
+        kept, scale, truncated = _fit(zone, [_Line(figure)], *size)
+        assert not truncated and [line.text for line in kept] == [figure]
+        assert scale is not None and MIN_FONT_SCALE <= scale < 1.0, (figure, scale)
+    for figure in ("62 %", "▼\u2009-3 838"):
+        assert _fit(zone, [_Line(figure)], *size)[2] is False
+    assert _fit(zone, [_Line("1 234 567 890")], *size)[2]
+    # The room quoted to the agent is the one at the smallest size.
+    assert quoted_chars(zone, 5, 1) == 7
+    assert quoted_chars(zone.model_copy(update={"role": "label"}), 5, 1) == 5
 
 
 def test_a_truncated_zone_is_never_left_empty():
