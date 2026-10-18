@@ -36,6 +36,7 @@ from fred_capability_ppt_filler.builder.assign import Assignment, assign, infer_
 from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.changes import SlideChange, apply_changes
 from fred_capability_ppt_filler.builder.labelling import kind_fits_slots
+from fred_capability_ppt_filler.builder.lexicon import is_figure
 from fred_capability_ppt_filler.builder.models import (
     Box,
     RepeatGroup,
@@ -43,7 +44,6 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
     ZoneRole,
 )
-from fred_capability_ppt_filler.builder.lexicon import is_figure
 from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart, read_number
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
 from pptx import Presentation
