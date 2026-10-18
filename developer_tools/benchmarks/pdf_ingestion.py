@@ -231,8 +231,10 @@ def measure(folder: Path, engine: str, output: Path, jobs: int) -> None:
                         try:
                             rss += child.memory_info().rss
                         except psutil.NoSuchProcess:
+                            # A process can exit after enumeration, before its RSS is read.
                             pass
                 except psutil.NoSuchProcess:
+                    # Extraction can finish after poll(), before child enumeration.
                     pass
                 peak = max(peak, rss)
                 if time.perf_counter() - start > 180:
