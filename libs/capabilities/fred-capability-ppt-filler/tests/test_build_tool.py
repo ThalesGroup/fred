@@ -1183,3 +1183,36 @@ async def test_resending_the_delivered_deck_rebuilds_nothing(monkeypatch):
     text, _ = await build.coroutine(slides=[COVER], file_name="Kick-off")
     assert text.startswith(tools_mod._DELIVERED), text
     assert len(rendered) == 2
+
+
+def test_deck_fields_written_inside_changes_are_taken_to_the_top_level():
+    """A model's broken quoting leaves `file_name': 'X` among the changes: the
+    field is unambiguous there, so it is read rather than the call refused."""
+    edit = {"op": "edit", "slide": 3, "field": "title", "value": "Coûts"}
+    sent = {
+        "changes": [
+            edit,
+            "file_name': 'Modernisation_SI",
+            "audience': 'Comité de pilotage",
+            "main_message': ",
+            "}```json",
+            {"main_message": "Réduire les coûts"},
+        ]
+    }
+    hoisted, twice = tools_mod._hoisted(sent)
+    assert twice is None
+    assert hoisted == {
+        "changes": [edit],
+        "file_name": "Modernisation_SI",
+        "audience": "Comité de pilotage",
+        "main_message": "Réduire les coûts",
+    }
+    same, twice = tools_mod._hoisted({**sent, "audience": "Comité de pilotage"})
+    assert twice is None and same["changes"] == [edit]
+    _, twice = tools_mod._hoisted({**sent, "file_name": "Autre"})
+    assert twice == (
+        "No deck was built: `file_name` is given twice, 'Autre' and "
+        "'Modernisation_SI' inside `changes`; send it once, next to `changes`."
+    )
+    other = {"changes": [edit, "not a change"]}
+    assert tools_mod._hoisted(other) == (other, None)

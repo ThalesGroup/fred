@@ -34,6 +34,7 @@ import asyncio
 import io
 import json
 import logging
+import re
 import time
 from collections import Counter
 from functools import lru_cache
@@ -539,6 +540,48 @@ def _listed(value: Any, info: ValidationInfo) -> Any:
         except ValueError:
             return value
     return [value] if isinstance(value, dict) else value
+
+
+_DECK_FIELDS = ("file_name", "audience", "main_message")
+# `file_name': 'Deck` as a list entry: a deck field whose JSON quoting broke.
+_STRAY_FIELD = re.compile(
+    r"""\s*["']?(file_name|audience|main_message)["']?\s*:\s*["']?(.*?)["']?\s*""", re.S
+)
+# What is left of a broken JSON object or code fence: no content at all.
+_DEBRIS = re.compile(r"[\s{}\[\]`'\",:]*(json)?[\s{}\[\]`'\",:]*")
+
+
+def _hoisted(kwargs: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
+    """Deck fields written inside `changes` taken to the top level, and debris
+    of broken JSON dropped; a field given twice with two values is refused."""
+    changes = kwargs.get("changes")
+    if not isinstance(changes, list):
+        return kwargs, None
+    kept: List[Any] = []
+    found: Dict[str, str] = {}
+    for entry in changes:
+        if isinstance(entry, dict) and entry and set(entry) <= set(_DECK_FIELDS):
+            pairs = [(k, v) for k, v in entry.items() if isinstance(v, str)]
+        elif isinstance(entry, str) and (match := _STRAY_FIELD.fullmatch(entry)):
+            pairs = [(match[1], match[2])]
+        elif isinstance(entry, str) and _DEBRIS.fullmatch(entry):
+            continue
+        else:
+            kept.append(entry)
+            continue
+        for key, value in pairs:
+            if value.strip():
+                found[key] = value.strip()
+    out = {**kwargs, "changes": kept}
+    for key, value in found.items():
+        given = kwargs.get(key)
+        if isinstance(given, str) and given.strip() and given.strip() != value:
+            return kwargs, (
+                f"No deck was built: `{key}` is given twice, '{given.strip()}' and "
+                f"'{value}' inside `changes`; send it once, next to `changes`."
+            )
+        out[key] = value
+    return out, None
 
 
 def _sent(slide: Any) -> SlidePlan:
@@ -1387,6 +1430,9 @@ def build_builder_tools(
 
     async def _build_plan(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         nonlocal called
+        kwargs, twice = _hoisted(kwargs)
+        if twice:
+            return _error(twice)
         try:
             validated: Any = args_schema(**kwargs)
             plan = _to_plan(validated)
