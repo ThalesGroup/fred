@@ -468,6 +468,34 @@ def test_the_delta_names_changed_added_and_removed_slides():
     )
 
 
+def test_the_delta_names_the_slide_a_resend_dropped():
+    """Seen in the eval: a resend without slide 2 that also retitled slides 3
+    and 4 read 'removed: 4' (paired by position), not the slide that went."""
+    before = DeckPlan.model_validate(
+        {
+            "slides": [
+                COVER,
+                {"title": "Calendar", "bullets": ["Scoping in Q1", "Design in Q2"]},
+                {"title": "Budget (1/2)", "bullets": ["Licences 2.4 M", "Training"]},
+                {"title": "Budget (2/2)", "bullets": ["Savings 2.8 M", "ROI 3 years"]},
+                {"title": "Thanks", "bullets": ["Questions"]},
+            ]
+        }
+    )
+    after = before.model_copy(
+        update={
+            "slides": [
+                before.slides[0],
+                before.slides[2].model_copy(update={"title": "Budget"}),
+                before.slides[3].model_copy(update={"title": "Budget, savings"}),
+                before.slides[4],
+            ]
+        }
+    )
+    line = deck_delta(before, after, {})
+    assert "changed: 2, 3; removed: 2 of the previous deck; 2 unchanged." in line
+
+
 def test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes():
     """Most revisions resent every slide for a one-slide edit: the result says so."""
     after = _apply({"op": "edit", "slide": 2, "field": "title", "value": "Plan"})

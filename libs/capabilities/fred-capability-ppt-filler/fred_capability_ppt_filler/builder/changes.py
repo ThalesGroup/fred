@@ -489,6 +489,38 @@ def _numbers(found: List[int]) -> str:
 _SMALL_EDIT = 2
 
 
+def _words(shown: str) -> set[str]:
+    return set(re.findall(r"\w+", shown.lower()))
+
+
+def _paired(before: List[str], after: List[str]) -> List[Tuple[int, int]]:
+    """The slides of a differing run that are edits of each other, in order:
+    the most shared words, so a removal is the slide that went, not the last."""
+    if not before or not after:
+        return []
+    bw, aw = [_words(x) for x in before], [_words(y) for y in after]
+    score = [[len(x & y) / (len(x | y) or 1) for y in aw] for x in bw]
+    n, m = len(before), len(after)
+    # best[i][j]: the best total over before[i:], after[j:].
+    best = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            best[i][j] = max(
+                best[i + 1][j], best[i][j + 1], score[i][j] + best[i + 1][j + 1]
+            )
+    pairs: List[Tuple[int, int]] = []
+    i = j = 0
+    while i < n and j < m:
+        if best[i][j] == score[i][j] + best[i + 1][j + 1] and score[i][j] > 0:
+            pairs.append((i, j))
+            i, j = i + 1, j + 1
+        elif best[i][j] == best[i + 1][j]:
+            i += 1
+        else:
+            j += 1
+    return pairs
+
+
 def deck_delta(
     before: DeckPlan, after: DeckPlan, kinds: Mapping[str, str], resent: bool = False
 ) -> str:
@@ -506,12 +538,13 @@ def deck_delta(
     removed: List[int] = []
     matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        both = min(i2 - i1, j2 - j1) if tag == "replace" else 0
-        changed += range(j1 + 1, j1 + both + 1)
-        if tag in ("replace", "insert"):
-            added += range(j1 + both + 1, j2 + 1)
-        if tag in ("replace", "delete"):
-            removed += range(i1 + both + 1, i2 + 1)
+        if tag == "equal":
+            continue
+        pairs = _paired(a[i1:i2], b[j1:j2])
+        olds, news = {i for i, _ in pairs}, {j for _, j in pairs}
+        changed += [j1 + j + 1 for j in sorted(news)]
+        added += [j1 + j + 1 for j in range(j2 - j1) if j not in news]
+        removed += [i1 + i + 1 for i in range(i2 - i1) if i not in olds]
     kept = len(b) - len(changed) - len(added)
     parts = [f"changed: {_numbers(changed)}"] if changed else []
     parts += [f"added: {_numbers(added)}"] if added else []
