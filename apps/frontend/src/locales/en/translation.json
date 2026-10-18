@@ -3264,6 +3264,9 @@
       }
     },
     "userSettings": {
+      "privacyTitle": "Privacy information",
+      "platformRoles": "Platform roles: {{roles}}",
+      "noPlatformRoles": "None",
       "accessGcu": "Access to GCU",
       "accessGdpr": "How does {{siteTitle}} {{siteSubtitle}} handle my data ?",
       "accessReleaseNotes": "Release Notes",

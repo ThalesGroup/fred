@@ -8,6 +8,10 @@ import MainLayout from "@shared/layouts/MainLayout/MainLayout";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage";
 import HomePage from "@components/pages/HomePage/HomePage";
 import ProvisioningPage from "@components/pages/admin/ProvisioningPage/ProvisioningPage";
+import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage";
+import { GcuPageContent } from "@components/pages/GcuPage/GcuPage";
+import GdprPage from "@components/pages/GdprPage/GdprPage";
+import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage";
 import { getConfig } from "./config";
 
 // Only implemented destinations mount; hidden links alone would leave legacy calls reachable.
@@ -24,6 +28,10 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Navigate to="/home" replace /> },
       { path: "home", element: <HomePage /> },
+      { path: "settings", element: <UserSettingsPage /> },
+      { path: "gcu", element: <GcuPageContent accepted /> },
+      { path: "gdpr", element: <GdprPage /> },
+      { path: "release-notes", element: <ReleaseNotesPage /> },
       { path: "team/:teamId/resources", element: <TeamResourcesPage /> },
       { path: "admin", element: <Navigate to="/admin/provisioning" replace /> },
       { path: "admin/provisioning", element: <ProvisioningPage /> },

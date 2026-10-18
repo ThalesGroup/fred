@@ -64,10 +64,10 @@ export function GcuPageContent({
   version,
 }: {
   version?: string | null;
-  accepted?: boolean;
-  isLoading: boolean;
-  onAccept: () => Promise<void>;
-}) {
+} & (
+  | { accepted: true; isLoading?: never; onAccept?: never }
+  | { accepted?: false; isLoading: boolean; onAccept: () => Promise<void> }
+)) {
   const { t } = useTranslation();
   const { gcuVersion } = useFrontendProperties();
   const { markdown: gcuMarkdown, failed } = useLegalMarkdownState("gcu");

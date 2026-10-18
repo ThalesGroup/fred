@@ -3264,6 +3264,9 @@
       }
     },
     "userSettings": {
+      "privacyTitle": "Protection des données personnelles",
+      "platformRoles": "Rôles plateforme : {{roles}}",
+      "noPlatformRoles": "Aucun",
       "accessGcu": "Accéder aux CGU",
       "accessGdpr": "Que fait {{siteTitle}} {{siteSubtitle}} de mes données ?",
       "accessReleaseNotes": "Notes de version",

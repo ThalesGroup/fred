@@ -135,6 +135,23 @@ no synthetic Python team or permission mapping. Unsupported routes redirect home
 agent widgets, task polling, announcements and Python bootstrap consumers are not
 mounted. Theme presentation uses configuration loaded at startup.
 
+## Frontend account pages
+
+The admitted sidebar enables Profile in the existing `UserProfile` menu. The
+router mounts `UserSettingsPage`, accepted `GcuPageContent`, `GdprPage` and
+`ReleaseNotesPage` under `GcuGuard` and `BootstrapGuard`. These are the shared
+pages and controls, with no second manager renderer. The profile reads identity
+from the browser session and effective platform roles from the generated `/me`
+query shared with navigation. It hides cached roles during refresh, on error or
+when the response belongs to another authenticated subject. With authentication
+disabled, it matches manager's fixed mock subject `admin`.
+
+Preferences use the existing application context, local storage and i18n.
+Legal content and static release notes use their existing markdown loaders.
+The consultation route mounts the accepted content without the acceptance
+mutation wrapper. The profile renders initials and mounts no Python bootstrap
+or avatar subscription. These pages add no backend endpoint or persisted model.
+
 ## Frontend resource browsing
 
 The router mounts `TeamResourcesPage` under `/team/:teamId/resources` with the

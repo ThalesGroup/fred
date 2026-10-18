@@ -18,21 +18,15 @@ import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
-import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
-import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
-import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useContext } from "react";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { uiThemeLabel, type UiTheme } from "../../../../app/uiThemes.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
-import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
-import {
-  useDeleteUserAvatarMutation,
-  useUploadUserAvatarMutation,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import { useMeQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements.ts";
+import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
+import { getConfig } from "../../../../common/config";
 
 export default function UserSettingsPage() {
   const navigate = useNavigate();
@@ -41,46 +35,14 @@ export default function UserSettingsPage() {
   const { themeMode, setThemeMode, uiTheme, setUiTheme, offeredUiThemes } = useContext(ApplicationContext);
   const { i18n } = useTranslation();
 
-  const userFullName = KeyCloakService.GetUserFullName();
+  const userId = KeyCloakService.GetUserId();
+  // Manager uses its fixed mock subject when user authentication is disabled.
+  const managerUserId = getConfig().user_auth.enabled ? userId : "admin";
+  const userFullName = KeyCloakService.GetUserFullName() || KeyCloakService.GetUserName() || userId;
   const username = KeyCloakService.GetUserName();
   const userEmail = KeyCloakService.GetUserMail();
-  const userRoles = KeyCloakService.GetUserRoles();
-
-  const { bootstrap } = useFrontendBootstrap();
-  const pictureUrl = bootstrap?.current_user?.avatar_image_url ?? undefined;
-  const [uploadPicture, { isLoading: isUploadingPicture }] = useUploadUserAvatarMutation();
-  const [deletePicture, { isLoading: isDeletingPicture }] = useDeleteUserAvatarMutation();
-  const { showConfirmationDialog } = useConfirmationDialog();
-  const { notifyApiError } = useApiErrorToast();
-  const { showSuccess } = useToast();
-
-  const handlePictureUpload = async (file: File) => {
-    // The generated client types the multipart file as `string`; the enhanced
-    // endpoint sends the real File via FormData.
-    await uploadPicture({ bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: { file: file as never } }).unwrap();
-    showSuccess({ summary: t("rework.userSettings.picture.uploaded") });
-  };
-
-  const handlePictureDelete = () => {
-    showConfirmationDialog({
-      criticalAction: true,
-      title: t("rework.userSettings.picture.deleteTitle"),
-      message: t("rework.userSettings.picture.deleteMessage"),
-      confirmButtonLabel: t("rework.userSettings.picture.deleteConfirm"),
-      cancelButtonLabel: t("rework.userSettings.picture.deleteCancel"),
-      onConfirm: () => {
-        deletePicture()
-          .unwrap()
-          .then(() => showSuccess({ summary: t("rework.userSettings.picture.deleted") }))
-          .catch((error) =>
-            notifyApiError(error, {
-              summary: t("rework.userSettings.picture.deleteFailed"),
-              fallbackDetail: t("rework.userSettings.picture.deleteFailedDetail"),
-            }),
-          );
-      },
-    });
-  };
+  const me = useMeQuery(undefined, { refetchOnMountOrArgChange: 60 });
+  useRefetchOnWindowFocus(me.refetch, false);
 
   return (
     <div className={styles.userSettingsPageRoot}>
@@ -107,30 +69,31 @@ export default function UserSettingsPage() {
           </Button>
         </div>
         <div className={styles.userSettingsDescription}>
-          <UserAvatar name={userFullName} size={"large"} imageUrl={pictureUrl} />
+          <UserAvatar name={userFullName} size={"large"} />
           <div className={styles.userSettingsIdentity}>
             <span className={styles.userSettingsIdentityName}>{username}</span>
             <span className={styles.userSettingsIdentityFullname}>{userFullName}</span>
             <span className={styles.userSettingsIdentityEmail}>{userEmail}</span>
-            {userRoles.includes("admin") && (
-              <span className={styles.userSettingsIdentityRole}>{userRoles.join(", ")}</span>
+            {me.isLoading || me.isFetching ? (
+              <span role="status" className={styles.userSettingsIdentityRole}>
+                {t("common.loading")}
+              </span>
+            ) : me.isError || me.data?.user_id !== managerUserId ? (
+              <div role="alert" className={styles.userSettingsIdentityRole}>
+                <span>{t("rework.manager.unavailable")}</span>
+                <Button color="primary" variant="text" size="small" onClick={() => void me.refetch()}>
+                  {t("rework.provisioning.retryAuthority")}
+                </Button>
+              </div>
+            ) : (
+              <span className={styles.userSettingsIdentityRole}>
+                {t("rework.userSettings.platformRoles", {
+                  roles: me.data.platform_roles.join(", ") || t("rework.userSettings.noPlatformRoles"),
+                })}
+              </span>
             )}
           </div>
         </div>
-        <section className={styles.userSettingsCard}>
-          <AvatarUploadCard
-            title={t("rework.userSettings.picture.title")}
-            hint={t("rework.userSettings.picture.hint")}
-            importLabel={t("rework.userSettings.picture.import")}
-            emptyLabel={t("rework.userSettings.picture.empty")}
-            imageUrl={pictureUrl}
-            onUpload={handlePictureUpload}
-            uploading={isUploadingPicture}
-            onDelete={handlePictureDelete}
-            deleteLabel={t("rework.userSettings.picture.delete")}
-            deleting={isDeletingPicture}
-          />
-        </section>
         <section className={styles.userSettingsCard}>
           <h2 className={styles.userSettingsCardTitle}>{t("rework.userSettings.app.interfaceTitle")}</h2>
           <div className={styles.userSettingsCardRow}>
@@ -197,14 +160,6 @@ export default function UserSettingsPage() {
             color={"secondary"}
           ></ButtonGroup>
         </div>
-        {/*  <div className={styles.userSettingsConversation}>
-        <TextArea
-          disabled={true}
-          label={t("rework.userSettings.conversationProfile.title")}
-          placeholder={t("rework.userSettings.conversationProfile.placeholder", { agentsNicknamePlural })}
-          maxLength={300}
-        ></TextArea>
-      </div>*/}
         <div className={styles.userSettingsLegals}>
           <Link to={"/gdpr"}>
             <Button color={"primary"} variant={"text"} size={"medium"}>

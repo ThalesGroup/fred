@@ -161,7 +161,15 @@ Nginx smoke tests verify canonical paths, multipart bodies and bearer forwarding
 
 Frontend regressions prove that unavailable onboarding fails closed, stale consent
 never advances the journey, and a changed version reloads the displayed legal text.
-Account tests cover missing name/username claims and menu focus restoration.
+Account tests cover missing name/username claims, menu focus restoration,
+manager-only platform roles, empty/pending/failed role reads, subject changes,
+unauthenticated mock identity, focus refresh and the existing preference handlers.
+The browser recipe opens the owner's profile without spaces and the imported
+member's identity and profile in the same browser, checks language/theme/mode
+persistence after reload, opens all three content links and their direct URLs, and compares consent and
+memberships before/after consultation. Missing release assets show the existing
+unavailable-content presentation. Account-page requests use the same
+Python-service denial assertions as provisioning.
 Membership tests distinguish an empty result, a missing selection and a failed query;
 a failed query hides cached memberships.
 Integration regressions exercise version changes, timestamp-preserving retry,
@@ -191,9 +199,10 @@ user, permission and space; the model evaluates descending roles through at most
 `parent` links inside OpenFGA. A fixed number of HTTP calls does not specify OpenFGA's
 datastore work, latency or throughput.
 
-The frontend navigation and provisioning guard share one cached `/me` query.
+The frontend navigation, provisioning guard and profile share one cached `/me` query.
 Navigation and page subscribers refetch `/me` data older than 60 seconds when
-they mount; this threshold does not schedule periodic refresh.
+they mount; this threshold does not schedule periodic refresh. The mounted profile
+also refreshes on window focus or an explicit retry after failure.
 Concurrent subscribers deduplicate the request. Home and the space navigation
 share `/me/spaces`; Home and scoped navigation request a fresh result on mount.
 Space selection uses those memberships; opening Resources performs its separate

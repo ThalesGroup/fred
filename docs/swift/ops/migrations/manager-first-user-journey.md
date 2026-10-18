@@ -10,7 +10,7 @@ configuration_reason: "The experimental manager reference and standalone k3d ove
 
 Experimental `chore/rust-rebac` deployments using manager and the frontend from this
 branch. Fred's existing layout and navigation expose only personal CGU, root
-bootstrap, Home memberships and administration provisioning. This is a bounded
+bootstrap, account pages, Home memberships and administration provisioning. This is a bounded
 journey, not a transparent upgrade enabling the full product.
 
 ## Prerequisites
@@ -35,7 +35,10 @@ bootstrap or import; the obsolete `bootstrap-local` helper is removed. Existing
 manager roles and spaces remain unchanged. No organization membership is implicit.
 Rebuilding the frontend restores this journey in Fred's existing layout; it needs
 no additional migration, Keycloak reset or reimport. Use Home for memberships and
-the administration console for Provisioning.
+the administration console for Provisioning. The account menu opens the existing
+profile with manager roles, browser preferences, legal texts and static release
+notes. Restoring these account pages requires only a frontend rebuild/deployment;
+it adds no manager migration or configuration key.
 
 ## Validation
 
@@ -43,7 +46,10 @@ Run `make -C apps/frontend test-provisioning-browser` against its disposable ser
 For the deployed journey, accept CGU, bootstrap root, import the Make ZIP and read
 its completed report. Sign out and sign in as an imported person: accept their own
 CGU and verify their organization/space memberships. Root remains without implicit
-membership. Legacy Python admission records do not satisfy manager admission.
+membership. From either admitted account, open Profile, check the platform roles,
+change a preference and reload, then consult CGU, privacy and release notes. CGU
+consultation must not ask for a second acceptance. Legacy Python admission records
+do not satisfy manager admission.
 
 ## Rollback
 

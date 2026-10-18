@@ -4816,6 +4816,24 @@ import, and displays server counts or an error with explicit replay guidance.
 Desktop and narrow browser screenshots cover the responsive report grid. Behavior
 and automated acceptance: [manager README](../../../apps/fred-manager/README.md#import-through-the-frontend).
 
+### Shared account pages on `chore/rust-rebac` (#3092)
+
+After admission, `UserProfile` exposes Profile and the configured external support
+link. Profile receives initial keyboard focus; Escape restores the avatar trigger.
+Before admission, the same menu retains identity and logout only.
+`/settings` mounts the existing `UserSettingsPage`, its shared avatar initials,
+preference controls and legal/release links. It requires no organization or space.
+Identity comes from the signed-in session; effective platform roles come from
+manager `/me`. Loading and failures replace cached roles, while a successful empty
+list explicitly shows no platform role. Retry and window focus refresh authority.
+The profile has no photo editor or Python bootstrap subscription.
+
+The existing pages at `/gcu`, `/gdpr` and `/release-notes` retain their content
+loaders and return controls. CGU consultation uses the accepted presentation,
+without sending an acceptance mutation. Direct URLs retain consent/bootstrap
+protection. Release notes read shipped markdown; published announcements are
+not mounted. Preferences retain their existing browser persistence.
+
 ### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
 
 **Status:** `Functional`
@@ -5628,12 +5646,11 @@ agent author's responsibility; a generic confirmation cannot make an unsafe call
 title, Import button, hint, 96px square preview, the client-side checks
 (JPEG/PNG/WebP, 5 MB) and the `AvatarCropEditor` mount. A text `error` Delete
 button sits under Import only when the caller passes `onDelete` and an image is
-set; team settings pass none, user settings pass one behind the critical
-`ConfirmationDialog`. Styles are unchanged from the team card. The card hands
+set. Team settings pass no delete action. The manager account page renders
+initials without mounting this editor. Styles are unchanged from the team card. The card hands
 `onUpload` a ready `File` named and typed after the crop output: WebP, or PNG
 where the browser cannot encode WebP (Safari). A refused pick (type, size) or
-a failed upload shows an error toast (`useToast` / `useApiErrorToast`); user
-settings report a failed delete the same way.
+a failed upload shows an error toast (`useToast` / `useApiErrorToast`).
 
 `UserAvatar` takes an optional `imageUrl`: a round `<img>` with intrinsic size
 and `decoding="async"`, initials when absent or when the image fails to load,

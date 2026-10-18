@@ -63,6 +63,15 @@ async function login(username, password, path = "/admin/provisioning") {
   });
   assert.equal(denied.status(), 403);
   if (username === "root") {
+    // Every direct account URL still passes personal admission first.
+    for (const accountPath of ["/settings", "/gcu", "/gdpr", "/release-notes"]) {
+      await page.goto(origin + accountPath);
+      await expect(page.getByRole("button", { name: "Accept the TOS", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: /'s account$/ }).click();
+      await expect(page.getByRole("menuitem", { name: "Profile", exact: true })).toHaveCount(0);
+      await page.keyboard.press("Escape");
+    }
+    await page.goto(origin + path);
     // Logout before consent must not imply acceptance when the person returns.
     await logout(page);
     await page.locator("#username").fill(username);
@@ -76,6 +85,9 @@ async function login(username, password, path = "/admin/provisioning") {
     await page.locator("#password").fill(password);
     await page.locator("#kc-login").click();
 
+    await page.goto(origin + "/settings");
+    await expect(page.getByLabel("Bootstrap secret", { exact: false })).toBeVisible();
+    await page.goto(origin + path);
     const secret = page.getByLabel("Bootstrap secret", { exact: false });
     await secret.fill("wrong-but-long-enough");
     await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
@@ -102,10 +114,12 @@ async function logout(page) {
   await trigger.focus();
   await page.keyboard.press("Enter");
   const disconnect = page.getByRole("menuitem", { name: "Disconnect", exact: true });
-  await expect(disconnect).toBeFocused();
+  await expect(page.getByRole("menuitem").first()).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
   await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem").first()).toBeFocused();
+  for (let item = 1; item < (await page.getByRole("menuitem").count()); item++) await page.keyboard.press("Tab");
   await expect(disconnect).toBeFocused();
   await page.keyboard.press("Enter");
 }
@@ -127,6 +141,92 @@ async function acceptTerms(page) {
   await expect(accept).toBeEnabled();
   await accept.click();
   await expect(accept).toHaveCount(0);
+}
+
+// Uses the real shared screens and preferences, preserving governance state.
+async function assertAccountPages({ page, context, bearer }, owner) {
+  const consentBefore = await get(context, bearer, "/me/onboarding");
+  const spacesBefore = await get(context, bearer, "/me/spaces");
+  let consentWrites = 0;
+  const trackConsent = (request) => {
+    if (request.url() === `${origin}/fred-manager/v1/gcu` && request.method() === "POST") consentWrites++;
+  };
+  page.on("request", trackConsent);
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const trigger = page.getByRole("button", { name: /'s account$/ });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem", { name: "Profile", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(origin + "/settings");
+  await expect(page.getByText("Your profile", { exact: true })).toBeVisible();
+  await expect(page.locator("main").getByText(owner ? "Root Admin" : "Bob Rigg", { exact: true })).toBeVisible();
+  await expect(
+    page.locator("main").getByText(owner ? "root@example.com" : "bob@app.com", { exact: true }),
+  ).toBeVisible();
+  if (!owner) await expect(page.locator("main").getByText("root@example.com", { exact: true })).toHaveCount(0);
+  const roles = page.getByText(/^Platform roles:/);
+  await expect(roles).toContainText(owner ? "platform_owner" : "None");
+  if (!owner) await expect(page.getByText(/platform_owner/)).toHaveCount(0);
+  await expect(page.getByText("Profile picture", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "UI theme", exact: true }).click();
+  await page.getByRole("option", { name: "Cloud", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "UI theme", exact: true })).toContainText("Cloud");
+  await expect(page.locator("html")).toHaveAttribute("data-ui-theme", "cloud");
+  await page.getByRole("radio", { name: "Dark", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
+  await page.getByRole("radio", { name: "French", exact: true }).click();
+  await page.reload();
+  await expect(page.getByText("Votre profil", { exact: true })).toBeVisible();
+  await page.getByRole("radio", { name: "Anglais", exact: true }).click();
+  await expect(page.getByText("Your profile", { exact: true })).toBeVisible();
+  await mkdir("target", { recursive: true });
+  await page.screenshot({ path: `target/account-${owner ? "owner" : "member"}.png`, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert(await page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
+  await page.screenshot({ path: `target/account-${owner ? "owner" : "member"}-narrow.png`, fullPage: true });
+  await page.getByRole("radio", { name: "Light", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("radio", { name: "Light", exact: true })).toBeChecked();
+  await page.screenshot({ path: `target/account-${owner ? "owner" : "member"}-light.png`, fullPage: true });
+
+  for (const path of ["/gcu", "/gdpr", "/release-notes"]) {
+    await page.goto(origin + "/settings");
+    await page.locator(`a[href="${path}"]`).click();
+    await expect(page).toHaveURL(origin + path);
+    await page.reload(); // Direct URLs retain the same admitted page.
+    await expect(page).toHaveURL(origin + path);
+    await expect(page.getByRole("button", { name: "Accept the TOS", exact: true })).toHaveCount(0);
+    if (path === "/release-notes") {
+      await expect(page.getByRole("button", { name: "Copy", exact: true })).toBeVisible();
+    } else {
+      await expect(page.locator('main [class*="gcuContent"], main [class*="gdprContent"]')).toContainText(/\S/);
+      if (path === "/gdpr") await expect(page.getByText("Privacy information", { exact: true })).toBeVisible();
+    }
+    assert(await page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
+    await page.screenshot({
+      path: `target/account-${owner ? "owner" : "member"}-${path.slice(1)}-narrow.png`,
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: path === "/release-notes" ? "Back" : "Back to app", exact: true }).click();
+    await expect(page).toHaveURL(origin + "/home");
+  }
+  const missingNotes = /\/release\.md$/;
+  await page.route(missingNotes, (route) => route.fulfill({ status: 404, body: "" }));
+  await page.goto(origin + "/release-notes");
+  await expect(page.getByText("No release notes available.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy", exact: true })).toHaveCount(0);
+  await page.unroute(missingNotes);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page).toHaveURL(origin + "/home");
+  assert.deepEqual(await get(context, bearer, "/me/onboarding"), consentBefore);
+  assert.deepEqual(await get(context, bearer, "/me/spaces"), spacesBefore);
+  assert.equal(consentWrites, 0, "Consultation must not accept terms again");
+  page.off("request", trackConsent);
+  await page.setViewportSize(viewport);
 }
 
 async function importFile(page, file, expectedStatus = 200) {
@@ -168,6 +268,7 @@ try {
   const root = await login("root", "it-root", "/admin");
   await expect(root.page.getByRole("link", { name: "Provisioning", exact: true })).toBeVisible();
   await expect(root.page.getByRole("link", { name: "Migration", exact: true })).toHaveCount(0);
+  await assertAccountPages(root, true);
   await assertBoundedNavigation(root.page);
   await root.page.getByRole("button", { name: "Technical console", exact: true }).click();
   await expect(root.page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
@@ -284,6 +385,7 @@ try {
   await root.page.setViewportSize({ width: 1280, height: 900 });
   await root.page.screenshot({ path: "target/provisioning-spaces.png", fullPage: true });
   const bob = { page: root.page, context: root.context, bearer: bobBearer };
+  await assertAccountPages(bob, false);
   await assertBoundedNavigation(bob.page);
   await expect(bob.page.getByRole("button", { name: "Technical console", exact: true })).toHaveCount(0);
   await bob.page.goto(origin + "/admin/provisioning");

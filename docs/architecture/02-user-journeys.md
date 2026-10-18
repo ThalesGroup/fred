@@ -8,7 +8,7 @@ Rules live in their domain chapters; this chapter shows their composition.
 
 Execution context: Fred's existing application, navigation and screens connected
 to fred-manager on `chore/rust-rebac`, using Keycloak, PostgreSQL and OpenFGA.
-The reachable journey contains onboarding, memberships, provisioning and resource browsing.
+The reachable journey contains onboarding, account pages, memberships, provisioning and resource browsing.
 Other product pages and their Python data consumers are not mounted.
 
 | Step | What the person sees or does | Architectural effect |
@@ -49,7 +49,15 @@ sequenceDiagram
 ```
 
 The account menu displays the authenticated identity and allows logout even before
-CGU acceptance or bootstrap, including when admission is unavailable. Unknown or
+CGU acceptance or bootstrap, including when admission is unavailable. After admission,
+Profile opens the existing `/settings` page even without an organization or space.
+It shows the signed-in identity and manager's effective platform roles, including
+`platform_owner`, with distinct loading, unavailable and empty-role states. The
+existing controls persist language, offered UI theme and light/dark/system mode
+in the browser. The same page links to CGU consultation (`/gcu`), privacy information
+(`/gdpr`) and shipped release notes (`/release-notes`). Consulting CGU does not
+record another acceptance; direct URLs pass through the same admission guards.
+The account menu also exposes the configured external support link. Unknown or
 unsupported URLs return to Home after admission without mounting their consumers.
 
 Unavailable configuration, onboarding state or legal text keeps the protected

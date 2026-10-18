@@ -14,20 +14,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 
 /** The account menu remains available before admission and never queries business data. */
-export default function UserProfile() {
+export default function UserProfile({ admitted = false }: { admitted?: boolean }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const logoutRef = useRef<HTMLButtonElement>(null);
+  const profileRef = useRef<HTMLButtonElement>(null);
 
   const userFullName =
     KeyCloakService.GetUserFullName() || KeyCloakService.GetUserName() || KeyCloakService.GetUserId();
@@ -35,7 +40,7 @@ export default function UserProfile() {
 
   useEffect(() => {
     if (!open) return;
-    logoutRef.current?.focus();
+    (admitted ? profileRef : logoutRef).current?.focus();
     const onPointer = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -51,7 +56,7 @@ export default function UserProfile() {
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, admitted]);
 
   return (
     <div className={styles.container} ref={containerRef}>
@@ -62,6 +67,33 @@ export default function UserProfile() {
             headerTitle={userFullName}
             headerSubtitle={userEmail}
             groups={[
+              admitted
+                ? [
+                    <MenuPopoverItem
+                      key="profile"
+                      ref={profileRef}
+                      icon={{ category: "outlined", type: "person" }}
+                      label={t("rework.profileMenu.profile")}
+                      onClick={() => {
+                        setOpen(false);
+                        navigate("/settings");
+                      }}
+                    />,
+                  ]
+                : [],
+              admitted && contactSupportLink
+                ? [
+                    <MenuPopoverItem
+                      key="support"
+                      icon={{ category: "outlined", type: "chat" }}
+                      label={t("rework.profileMenu.contactSupport")}
+                      onClick={() => {
+                        setOpen(false);
+                        window.open(contactSupportLink, "_blank", "noopener,noreferrer");
+                      }}
+                    />,
+                  ]
+                : [],
               [
                 <MenuPopoverItem
                   key="logout"

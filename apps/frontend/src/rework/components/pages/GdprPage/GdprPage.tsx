@@ -25,7 +25,7 @@ export default function GdprPage() {
 
   return (
     <div className={styles.gdprContainer}>
-      <div className={styles.gdprTitle}>{t("rework.gcu.title")}</div>
+      <div className={styles.gdprTitle}>{t("rework.userSettings.privacyTitle")}</div>
       <div className={styles.gdprContent}>
         <MarkdownRenderer text={gdprMarkdown} />
       </div>

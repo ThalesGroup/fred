@@ -30,7 +30,7 @@ export default function Sidebar({ navigation = true }: { navigation?: boolean })
       <div className={styles.rail}>
         <div className={styles["main-nav-bar-container"]}>{navigation && <MainNavBar />}</div>
         <div className={styles["user-profile-container"]}>
-          <UserProfile />
+          <UserProfile admitted={navigation} />
         </div>
       </div>
       {navigation && (
