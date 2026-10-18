@@ -95,23 +95,23 @@ def _rels(archive: zipfile.ZipFile, part: str) -> List[Tuple[str, str, str]]:
 
 
 def slide_fingerprints(content: bytes) -> List[str]:
-    """One hash per slide, in deck order, of what it shows: its XML and the
-    parts it uses (charts, pictures, notes). Two renders that look the same
-    hash the same, wherever the slide sits in the deck."""
+    """Per slide, in deck order, ``<shown>:<notes>``: a hash of what the slide
+    shows (its XML and the charts and pictures it uses), then of its speaker
+    notes. Two renders that look the same hash the same, wherever they sit."""
     archive = zipfile.ZipFile(io.BytesIO(content))
+    names = set(archive.namelist())
     order = etree.fromstring(archive.read("ppt/presentation.xml"))
     targets = {rid: target for rid, _, target in _rels(archive, "ppt/presentation.xml")}
     prints: List[str] = []
     for slide_id in order.iter("{*}sldId"):
         part = targets.get(slide_id.get(_R_ID, ""), "")
-        digest = hashlib.sha256(archive.read(part))
+        shown, notes = hashlib.sha256(archive.read(part)), hashlib.sha256()
         for rid, kind, target in _rels(archive, part):
+            digest = notes if kind.endswith("/notesSlide") else shown
             digest.update(f"\n{rid} {kind.rsplit('/', 1)[-1]} ".encode())
             if any(kind.endswith(k) for k in _BY_NAME):
                 digest.update(target.encode())
             elif not any(kind.endswith(k) for k in _SKIPPED):
-                digest.update(
-                    archive.read(target) if target in archive.namelist() else b""
-                )
-        prints.append(digest.hexdigest())
+                digest.update(archive.read(target) if target in names else b"")
+        prints.append(f"{shown.hexdigest()}:{notes.hexdigest()}")
     return prints

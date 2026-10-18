@@ -489,6 +489,11 @@ def _numbers(found: List[int]) -> str:
 _SMALL_EDIT = 2
 
 
+def _face(rendered: str) -> str:
+    """What a rendered slide shows, its speaker notes left out."""
+    return rendered.split(":")[0]
+
+
 def _words(shown: str) -> set[str]:
     return set(re.findall(r"\w+", shown.lower()))
 
@@ -534,12 +539,13 @@ def deck_delta(
     b = [
         json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in after.slides
     ]
-    both = before.slides + after.slides
+    rendered = all(s.rendered for s in before.slides + after.slides)
     keys_a, keys_b = a, b
-    if all(s.rendered for s in both):
+    if rendered:
         keys_a = [s.rendered or "" for s in before.slides]
         keys_b = [s.rendered or "" for s in after.slides]
     changed: List[int] = []
+    in_notes: List[int] = []
     added: List[int] = []
     removed: List[int] = []
     matcher = difflib.SequenceMatcher(a=keys_a, b=keys_b, autojunk=False)
@@ -548,17 +554,27 @@ def deck_delta(
             continue
         pairs = _paired(a[i1:i2], b[j1:j2])
         olds, news = {i for i, _ in pairs}, {j for _, j in pairs}
-        changed += [j1 + j + 1 for j in sorted(news)]
+        for i, j in pairs:
+            same = rendered and _face(keys_a[i1 + i]) == _face(keys_b[j1 + j])
+            (in_notes if same else changed).append(j1 + j + 1)
         added += [j1 + j + 1 for j in range(j2 - j1) if j not in news]
         removed += [i1 + i + 1 for i in range(i2 - i1) if i not in olds]
-    kept = len(b) - len(changed) - len(added)
+    kept = len(b) - len(changed) - len(in_notes) - len(added)
     parts = [f"changed: {_numbers(changed)}"] if changed else []
+    parts += (
+        [
+            f"changed in the speaker notes only, the slide itself looks the same: "
+            f"{_numbers(in_notes)}"
+        ]
+        if in_notes
+        else []
+    )
     parts += [f"added: {_numbers(added)}"] if added else []
     parts += [f"removed: {_numbers(removed)} of the previous deck"] if removed else []
     lead = f"\nCompared with the previous deck ({len(a)} slides), slides of this file "
     if not parts:
         return lead + "none changed: tell the user the deck is the same as before."
-    touched = len(changed) + len(added) + len(removed)
+    touched = len(changed) + len(in_notes) + len(added) + len(removed)
     hint = (
         " For an edit of a few slides, send only `changes` next time."
         if resent and touched <= _SMALL_EDIT < kept

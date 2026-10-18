@@ -526,6 +526,24 @@ def test_the_delta_compares_what_the_slides_render():
 
 
 @pytest.mark.asyncio
+async def test_a_change_only_the_speaker_notes_show_is_said_so(monkeypatch):
+    """Seen in the eval: a takeaway edit on a slide that does not show it was
+    described to the user as a new key message on the slide."""
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    agenda = {"title": "Agenda", "bullets": ["a"], "takeaway": "We start now."}
+    await turn.build(slides=[COVER, agenda, {"title": "Next", "bullets": ["b"]}])
+    text, _ = await turn.build(
+        changes=[
+            {"op": "edit", "slide": 2, "field": "takeaway", "value": "We cut costs."}
+        ]
+    )
+    assert (
+        "changed in the speaker notes only, the slide itself looks the same: 2; "
+        "2 unchanged." in text
+    )
+
+
+@pytest.mark.asyncio
 async def test_a_slide_moved_by_a_removal_renders_unchanged(monkeypatch):
     turn = _Turn(monkeypatch, FakeWorkspace())
     deck = [COVER, *({"title": f"Part {n}", "bullets": [f"b{n}"]} for n in range(1, 4))]
