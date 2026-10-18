@@ -336,3 +336,153 @@ async def test_hitl_resume_on_rebuilt_runtime_keeps_next_exchange_edits_pending(
     assert '"/.deep/changes/turn-2/report.md.diff"' in str(
         next_inputs.inputs[0][0].content
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("child", [False, True])
+async def test_human_saves_during_parent_or_child_run_reach_later_reads_and_next_exchange_only(
+    child: bool,
+) -> None:
+    import asyncio
+    import json
+    from langchain_core.callbacks import AsyncCallbackHandler
+    from langchain_core.messages import ToolMessage
+
+    class PausedModelInputs(AsyncCallbackHandler):
+        def __init__(self) -> None:
+            self.inputs: list[list[BaseMessage]] = []
+            self.pauses = {
+                index: (asyncio.Event(), asyncio.Event())
+                for index in ((2, 4) if child else (1, 3))
+            }
+
+        async def on_chat_model_start(
+            self, serialized: dict, messages: list[list[BaseMessage]], **kwargs: object
+        ) -> None:
+            self.inputs.extend(messages)
+            if pause := self.pauses.get(len(self.inputs)):
+                pause[0].set()
+                await pause[1].wait()
+
+    storage = _MemoryFilesystem()
+    agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
+    user = ConversationFilesystemService(storage, "c", mutation_source="user")
+    await agent.scratchpad().write_text("report.md", "AGENT-BASELINE-A\n")
+    inputs = PausedModelInputs()
+    responses: list[BaseMessage] = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "read_file",
+                    "args": {"file_path": "/report.md"},
+                    "id": "read-B",
+                }
+            ],
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "edit_file",
+                    "args": {
+                        "file_path": "/report.md",
+                        "old_string": "USER-REVIEW-B\n",
+                        "new_string": "AGENT-REVISION-C\n",
+                    },
+                    "id": "edit-C",
+                }
+            ],
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "read_file",
+                    "args": {"file_path": "/report.md"},
+                    "id": "read-D",
+                }
+            ],
+        ),
+        AIMessage(content="Finished reviewing the current file."),
+    ]
+    if child:
+        responses.insert(
+            0,
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "task",
+                        "args": {
+                            "description": "Review and revise /report.md.",
+                            "subagent_type": "general-purpose",
+                        },
+                        "id": "child",
+                    }
+                ],
+            ),
+        )
+        responses.append(AIMessage(content="Parent finished."))
+    execution = asyncio.create_task(
+        _run(
+            agent,
+            "turn-1",
+            ToolFriendlyFakeChatModel(responses=responses, callbacks=[inputs]),
+        )
+    )
+    pauses = list(inputs.pauses.values())
+    try:
+        await asyncio.wait_for(pauses[0][0].wait(), timeout=5)
+        await user.scratchpad().write_text("report.md", "USER-REVIEW-B\n")
+        assert await agent.scratchpad().read_text("report.md") == "USER-REVIEW-B\n"
+        pauses[0][1].set()
+        await asyncio.wait_for(pauses[1][0].wait(), timeout=5)
+        assert await user.scratchpad().read_text("report.md") == "AGENT-REVISION-C\n"
+        await user.scratchpad().write_text("report.md", "USER-REVIEW-D\n")
+        assert await agent.scratchpad().read_text("report.md") == "USER-REVIEW-D\n"
+    finally:
+        for _, release in pauses:
+            release.set()
+        await execution
+    assert all(
+        "External file changes:" not in str(messages[0].content)
+        for messages in inputs.inputs
+    )
+    reads = {
+        message.tool_call_id: str(message.content)
+        for messages in inputs.inputs
+        for message in messages
+        if isinstance(message, ToolMessage)
+    }
+    assert "USER-REVIEW-B" in reads["read-B"]
+    assert "USER-REVIEW-D" in reads["read-D"]
+    next_inputs = _ModelInputs()
+    await _run(
+        agent,
+        "turn-2",
+        ToolFriendlyFakeChatModel(
+            responses=[AIMessage(content="ready")], callbacks=[next_inputs]
+        ),
+    )
+    prompt = str(next_inputs.inputs[0][0].content)
+    notification = json.loads(prompt.split("External file changes: ", 1)[1])
+    assert notification == {
+        "files": 1,
+        "diff_paths": [
+            "/.deep/changes/turn-2/report.md.001.diff",
+            "/.deep/changes/turn-2/report.md.002.diff",
+        ],
+    }
+    assert (
+        "USER-REVIEW-B" not in prompt
+        and "USER-REVIEW-D" not in prompt
+        and "AGENT-REVISION-C" not in prompt
+    )
+    deep = agent.namespace(".deep", max_bytes=1000000, max_files=100)
+    assert (await deep.read_text("changes/turn-2/report.md.001.diff")).endswith(
+        "-AGENT-BASELINE-A\n+USER-REVIEW-B\n"
+    )
+    assert (await deep.read_text("changes/turn-2/report.md.002.diff")).endswith(
+        "-AGENT-REVISION-C\n+USER-REVIEW-D\n"
+    )
