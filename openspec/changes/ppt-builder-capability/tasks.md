@@ -673,3 +673,4 @@ Owns: `assign.py` (`_sections`, `SECTION_RULE`, `Repeat.suggested`, `_suggested`
 - [x] 61.5 A content kind with one design says `1 look` on its catalogue line. Tests: `test_builder_render.py::test_catalogue_says_a_content_kind_with_one_design_has_one_look`, `test_build_tool.py::test_the_tool_tells_the_agent_one_call_builds_the_whole_deck` (updated)
 - [x] 61.2 Every note numbers slides as the outline of its result does (delivery: the file; proposal and revision: the plan), suggestions included. Test: `test_assign.py::test_every_note_numbers_slides_as_its_outline_does`
 - [x] 61.3 A suggestion never names a template slide already at its cap. Test: `test_assign.py::test_a_suggestion_never_names_a_template_slide_already_at_its_cap`
+- [x] 61.4 Variety notes state their fix without "nothing to do". Test: `test_assign.py::test_every_note_numbers_slides_as_its_outline_does` (asserts the phrase is gone)

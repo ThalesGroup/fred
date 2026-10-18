@@ -1999,3 +1999,4 @@ def test_every_note_numbers_slides_as_its_outline_does():
         planned.startswith("Slides 1, 3, 4, 5, 6 ")
         and "slide 4 (dated items)" in planned
     )
+    assert "nothing to do" not in " ".join(assignment.notes).casefold()

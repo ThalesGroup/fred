@@ -1843,7 +1843,7 @@ def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
         )
     if repeat.suggested:
         note += " Their content suits: " + "; ".join(repeat.suggestions(at)) + "."
-        return note + " To vary them, recast one as above; otherwise nothing to do."
+        return note + " To vary them, recast one as above."
     return (
         note + " No other slide of this template suits them: to vary them, use fewer "
         f"'{repeat.kind}' slides."
@@ -2027,8 +2027,8 @@ def assign(
         # With a limit, a run is a repeat and noted as one.
         notes += [
             f"Slides {number(i - 2)} to {number(i)} use the same template slide: no other "
-            "one holds their content. Nothing to do, unless they must look different: "
-            "then give one of them another content shape."
+            "one holds their content. To make them look different, give one of them "
+            "another content shape."
             for i in range(2, len(chosen))
             if caps is None
             and chosen[i].design_key
