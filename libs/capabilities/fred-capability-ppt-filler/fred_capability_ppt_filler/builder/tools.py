@@ -1101,9 +1101,13 @@ def _prepare_and_render(
 
 # --- the base of a `changes` call ----------------------------------------------------------
 
+# Both sent: which one to keep, by whether the user already has a deck.
 _BOTH_MODES = (
-    "No deck was built: the call sent both `slides` and `changes`. Send `slides` alone for a "
-    "new deck, or `changes` alone to change the last deck."
+    "No deck was built: the call sent both `slides` and `changes`, which never go together. ",
+    "There is no delivered deck yet: send only `slides`, with every slide of the deck in "
+    "order (the slides `changes` added included).",
+    "The user has a deck: send only `changes`, numbered on its slides (`slides` only to "
+    "rewrite most of the deck).",
 )
 _NO_CHANGE = (
     "No deck was built: `changes` is empty. List at least one change, or send the whole deck "
@@ -1441,7 +1445,8 @@ def build_builder_tools(
         moved_notes: List[str] = []
         if changes is not None and (changes or not plan.slides):
             if plan.slides:
-                return _error(_BOTH_MODES)
+                has_deck = await delivered_before(None)
+                return _error(_BOTH_MODES[0] + _BOTH_MODES[2 if has_deck else 1])
             if not changes:
                 return _error(_NO_CHANGE)
             try:

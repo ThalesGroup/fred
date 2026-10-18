@@ -684,13 +684,19 @@ async def test_no_base_both_modes_and_bad_changes_build_nothing(
         "No deck was built: there is no previous deck in this conversation to change. "
         "Send the whole deck in `slides`."
     )
-    text, _ = await turn.build(slides=[COVER], changes=[{"op": "remove", "slide": 1}])
+    # Seen in the eval: the same call sent seven times when told to pick one.
+    both = {"slides": [COVER], "changes": [{"op": "remove", "slide": 1}]}
+    text, _ = await turn.build(**both)
     assert text.startswith(
         "No deck was built: the call sent both `slides` and `changes`"
     )
+    assert "There is no delivered deck yet: send only `slides`" in text
+    assert "\n" not in text
     text, _ = await turn.build(changes=[])
     assert text.startswith("No deck was built: `changes` is empty.")
     await turn.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
+    text, _ = await turn.build(**both)
+    assert "The user has a deck: send only `changes`" in text
     stored = dict(deck_plan_store.plans)
     text, result = await turn.build(changes=[{"op": "remove", "slide": 9}])
     assert result.is_error and text == (
