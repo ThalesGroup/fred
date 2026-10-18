@@ -301,15 +301,24 @@ def catalogue(inventory: TemplateInventory) -> str:
     """One line per kind the template offers, with every distinct variant: its
     label and what it holds. A hidden variant is one the model never writes for."""
     variants: Dict[str, Dict[str, str]] = {}
+    designs: Dict[str, set[str]] = {}
     in_content = chart_hosts(inventory) == "content"
     for pattern in assignable(inventory):
+        designs.setdefault(pattern.kind, set()).add(pattern.design_key)
         summary = zone_summary(pattern)
         if in_content and any(z.chart_capable for z in pattern.zones):
             # No chart slide: say which content area takes one instead of bullets.
             summary += "; or a chart in place of the bullets"
         variants.setdefault(pattern.kind, {}).setdefault(summary, pattern.label)
+
+    def hint(kind: str) -> str:
+        """What the kind is for and, with one design, that it always looks the same."""
+        if kind not in SHAPE_HINTS:
+            return ""
+        return f" ({SHAPE_HINTS[kind]}{'; 1 look' if len(designs[kind]) == 1 else ''})"
+
     return "\n".join(
-        f"- {kind}{f' ({SHAPE_HINTS[kind]})' if kind in SHAPE_HINTS else ''}: "
+        f"- {kind}{hint(kind)}: "
         + " | ".join(f"{label}: {summary}" for summary, label in variants[kind].items())
         for kind in offered_kinds(inventory)
     )

@@ -905,8 +905,20 @@ def test_catalogue_names_columns_when_a_pattern_has_several_bodies():
     line = catalogue(
         TemplateInventory(slide_width=1, slide_height=1, patterns=[columns, contact])
     )
-    assert "two_columns (two groups of points): Contact: columns.bullets×2" in line
+    assert (
+        "two_columns (two groups of points; 1 look): Contact: columns.bullets×2" in line
+    )
     assert "closing: Contact: bullets, one per line,×2" in line
+
+
+def test_catalogue_says_a_content_kind_with_one_design_has_one_look():
+    """A fact, not advice: a second slide of that kind will look the same."""
+    columns = _two_body_pattern(40, 40).model_copy(update={"kind": "two_columns"})
+    other = columns.model_copy(update={"id": "slide:99", "label": "Other"})
+    inventory = TemplateInventory(slide_width=1, slide_height=1, patterns=[columns])
+    assert "two_columns (two groups of points; 1 look):" in catalogue(inventory)
+    inventory.patterns.append(other)
+    assert "two_columns (two groups of points):" in catalogue(inventory)
 
 
 def test_catalogue_quotes_no_limit_for_a_box_that_grows_with_its_text():

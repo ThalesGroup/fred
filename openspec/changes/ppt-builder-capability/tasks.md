@@ -670,3 +670,4 @@ Owns: `analysis.py` (`design`, ANALYSIS_VERSION 21), `models.py`, `assign.py` (d
 Owns: `assign.py` (`_sections`, `SECTION_RULE`, `Repeat.suggested`, `_suggested`, notes), `tools.py` (proposal notes, catalogue), tests.
 
 - [x] 61.1 Only `section` slides start a section; agenda matching deleted. Tests: `test_assign.py::test_an_agenda_never_splits_the_deck_into_sections`, `test_assign.py::test_three_identical_slides_in_a_row_are_revised_under_the_cap`
+- [x] 61.5 A content kind with one design says `1 look` on its catalogue line. Tests: `test_builder_render.py::test_catalogue_says_a_content_kind_with_one_design_has_one_look`, `test_build_tool.py::test_the_tool_tells_the_agent_one_call_builds_the_whole_deck` (updated)

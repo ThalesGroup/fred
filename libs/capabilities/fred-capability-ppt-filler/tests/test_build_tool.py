@@ -246,7 +246,7 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
     # Each offered kind says what it is for, on its own catalogue line only.
     assert (
         "- figures (a few big numbers, each with a short label): " in description
-        and "- process (ordered steps or a causal chain): " in description
+        and "- process (ordered steps or a causal chain; 1 look): " in description
     )
     assert "timeline" not in description
     assert "Use any variant below at most 2 times." in description
