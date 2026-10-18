@@ -22,6 +22,7 @@ from typing import Literal
 from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware.filesystem import FilesystemPermission
+from fred_runtime.conversation_changes import ConversationFilesystemPartialSaveError
 from fred_sdk.contracts.runtime import (
     ConversationFilesystemInterruptError,
     ConversationFilesystemPermissionError,
@@ -120,6 +121,8 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         self._check(path, "write", origin)
         result = await self._backend.awrite(path, content)
         if result.error is not None:
+            if result.error == ConversationFilesystemPartialSaveError.MESSAGE:
+                raise ConversationFilesystemPartialSaveError()
             if "quota exceeded" in result.error:
                 raise ConversationFilesystemQuotaError(result.error)
             raise ConversationScratchpadStorageError(result.error)
@@ -137,6 +140,8 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         self._check(path, "write", origin)
         result = await self._backend.aedit(path, old_text, new_text, replace_all)
         if result.error is not None:
+            if result.error == ConversationFilesystemPartialSaveError.MESSAGE:
+                raise ConversationFilesystemPartialSaveError()
             if "uniquely match" in result.error:
                 raise ConversationScratchpadEditConflictError(result.error)
             raise ConversationScratchpadStorageError(result.error)

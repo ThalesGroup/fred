@@ -45,6 +45,7 @@ from fred_sdk.contracts.runtime import (
     ConversationScratchpadUnsupportedContentError,
 )
 
+from fred_runtime.conversation_changes import ConversationFilesystemPartialSaveError
 from fred_runtime.conversation_filesystem import (
     ConversationFilesystemService,
     ConversationTextFileMetadata,
@@ -234,6 +235,8 @@ async def _bounded_gather(
 
 
 def _error_message(error: ConversationScratchpadError) -> str:
+    if isinstance(error, ConversationFilesystemPartialSaveError):
+        return error.MESSAGE
     if isinstance(error, ConversationScratchpadStorageError):
         return "Shared scratchpad storage failed"
     if isinstance(

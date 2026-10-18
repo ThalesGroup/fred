@@ -43,6 +43,8 @@ from fred_sdk.contracts.runtime import (
 if TYPE_CHECKING:
     from fred_core.kpi import BaseKPIWriter
 
+from fred_runtime.conversation_changes import ChangePublication, ConversationChanges
+
 MutationSource = Literal["agent", "user", "independent_system"]
 _MUTATION_SOURCE: ContextVar[MutationSource] = ContextVar(
     "conversation_mutation_source", default="independent_system"
@@ -57,6 +59,7 @@ def current_mutation_source() -> MutationSource:
 _SAFE_SESSION_ID_FIRST_CHARACTERS = frozenset(string.ascii_letters + string.digits)
 _SAFE_SESSION_ID_CHARACTERS = _SAFE_SESSION_ID_FIRST_CHARACTERS | frozenset("._:@+-")
 _LOGGER = logging.getLogger(__name__)
+_TEXT_OFFLOAD_THRESHOLD = 64 * 1024
 _LOCK_REGISTRY_GUARD = threading.Lock()
 _STATES_BY_FILESYSTEM: weakref.WeakKeyDictionary[
     object, dict[str, _NamespaceAccounting]
@@ -116,6 +119,9 @@ class ConversationTextNamespacePort(Protocol):
         raise NotImplementedError
 
     async def read_text(self, path: str) -> str:
+        raise NotImplementedError
+
+    async def read_optional_text(self, path: str) -> str | None:
         raise NotImplementedError
 
     async def write_text(self, path: str, content: str) -> None:
@@ -193,7 +199,7 @@ class ConversationFilesystemService:
         self._session_id = session_id
         self._quotas = quotas
         self._kpi = kpi
-        self._mutation_source = mutation_source
+        self._mutation_source: MutationSource = mutation_source
 
     def scratchpad(self) -> ConversationTextNamespacePort:
         """Return the trusted physical default namespace for runtime maintenance."""
@@ -214,7 +220,32 @@ class ConversationFilesystemService:
             quota=_NamespaceQuota(max_bytes, max_files),
             kpi=self._kpi,
             mutation_source=self._mutation_source,
+            changes=self._changes()
+            if namespace_id == "scratchpad" and self._mutation_source != "agent"
+            else None,
         )
+
+    def _changes(self) -> ConversationChanges:
+        return ConversationChanges(
+            self.namespace(
+                ".deep",
+                max_bytes=self._quotas.deep_max_bytes,
+                max_files=self._quotas.deep_max_files,
+            )
+        )
+
+    async def publish_external_changes(self, exchange_id: str) -> ChangePublication:
+        if not _is_safe_session_id(exchange_id) or len(exchange_id) > 256:
+            raise ConversationScratchpadInvalidPathError("Unsafe exchange identifier")
+        working = _namespace_accounting(
+            self._filesystem, f"conversations/{self._session_id}/scratchpad/"
+        )
+        async with working.lock:
+            changes = self._changes()
+            namespace = self.scratchpad()
+            await changes.recover(namespace.read_optional_text)
+            await changes.seal(exchange_id)
+        return await changes.publish(exchange_id, working.lock)
 
     @property
     def quotas(self) -> ConversationFilesystemQuotaSettings:
@@ -234,12 +265,14 @@ class _ConversationTextNamespace:
         quota: _NamespaceQuota,
         kpi: BaseKPIWriter | None,
         mutation_source: MutationSource,
+        changes: ConversationChanges | None = None,
     ) -> None:
         if not _is_safe_namespace_id(namespace):
             raise ConversationScratchpadInvalidPathError(
                 "Namespace identifier must be one safe path segment"
             )
-        self.mutation_source = mutation_source
+        self._changes = changes
+        self.mutation_source: MutationSource = mutation_source
         self._filesystem = filesystem
         self._conversation_id = session_id
         self._namespace = namespace
@@ -267,7 +300,11 @@ class _ConversationTextNamespace:
     async def _read_text(self, relative_path: str) -> str:
         content = await self.read_bytes(relative_path)
         try:
-            return content.decode("utf-8")
+            return (
+                await asyncio.to_thread(content.decode, "utf-8")
+                if len(content) > _TEXT_OFFLOAD_THRESHOLD
+                else content.decode("utf-8")
+            )
         except UnicodeDecodeError as exc:
             raise ConversationScratchpadUnsupportedContentError(
                 "Scratchpad supports UTF-8 text only"
@@ -275,14 +312,33 @@ class _ConversationTextNamespace:
 
     async def write_text(self, path: str, content: str) -> None:
         relative_path = _normalize_path(path)
-        encoded = _encode_text(content)
+        encoded = (
+            await asyncio.to_thread(_encode_text, content)
+            if isinstance(content, str) and len(content) > _TEXT_OFFLOAD_THRESHOLD
+            else _encode_text(content)
+        )
         async with self._lock:
             await self._ensure_accounting()
             self._check_write_quota(relative_path, len(encoded))
+            if self._changes:
+                await self._changes.recover(self.read_optional_text)
+            before = (
+                await self.read_optional_text(relative_path) if self._changes else None
+            )
+            if self._changes:
+                await self._changes.prepare(relative_path, before, content)
             await self._write_encoded(relative_path, encoded, operation="write")
             assert self._accounting.sizes is not None
             self._accounting.sizes[relative_path] = len(encoded)
             self._emit_usage()
+            if self._changes:
+                await self._changes.finish()
+
+    async def read_optional_text(self, path: str) -> str | None:
+        try:
+            return await self.read_text(path)
+        except ConversationScratchpadFileNotFoundError:
+            return None
 
     async def _write_encoded(
         self, relative_path: str, encoded: bytes, *, operation: str
@@ -310,6 +366,8 @@ class _ConversationTextNamespace:
         _encode_text(new_text)  # validation precedes any storage operation
         async with self._lock:
             await self._ensure_accounting()
+            if self._changes:
+                await self._changes.recover(self.read_optional_text)
             current = await self._read_text(relative_path)
             match_count = current.count(old_text)
             if match_count == 0 or (match_count > 1 and not replace_all):
@@ -319,10 +377,14 @@ class _ConversationTextNamespace:
             updated = current.replace(old_text, new_text, -1 if replace_all else 1)
             encoded = _encode_text(updated)
             self._check_write_quota(relative_path, len(encoded))
+            if self._changes:
+                await self._changes.prepare(relative_path, current, updated)
             await self._write_encoded(relative_path, encoded, operation="edit")
             assert self._accounting.sizes is not None
             self._accounting.sizes[relative_path] = len(encoded)
             self._emit_usage()
+            if self._changes:
+                await self._changes.finish()
             return match_count
 
     async def list(self, path: str = "") -> tuple[str, ...]:
@@ -368,6 +430,26 @@ class _ConversationTextNamespace:
         relative_path = _normalize_path(path)
         async with self._lock:
             await self._ensure_accounting()
+            if self._changes:
+                await self._changes.recover(self.read_optional_text)
+            if self._changes:
+                descendants = await self.list_metadata(relative_path)
+                if descendants:
+                    semaphore = asyncio.Semaphore(16)
+
+                    async def read_deleted(path: str) -> tuple[str, str]:
+                        async with semaphore:
+                            return path, await self.read_text(path)
+
+                    files = dict(
+                        await asyncio.gather(
+                            *(read_deleted(entry.path) for entry in descendants)
+                        )
+                    )
+                    await self._changes.prepare_deletions(files)
+                else:
+                    before = await self.read_optional_text(relative_path)
+                    await self._changes.prepare(relative_path, before, None)
             token = _MUTATION_SOURCE.set(self.mutation_source)
             try:
                 await self._filesystem.delete(self._physical_path(relative_path))
@@ -379,6 +461,8 @@ class _ConversationTextNamespace:
             finally:
                 _MUTATION_SOURCE.reset(token)
             self._forget_path(relative_path)
+            if self._changes:
+                await self._changes.finish()
 
     async def purge(self) -> None:
         """Idempotently remove this entire code-owned namespace."""

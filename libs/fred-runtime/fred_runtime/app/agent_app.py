@@ -216,6 +216,7 @@ from fred_runtime.common.outbound_credentials import (
     set_delegation_runtime,
     static_person_provider,
 )
+from fred_runtime.conversation_changes import ConversationFilesystemPartialSaveError
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
@@ -5932,6 +5933,8 @@ def _build_agent_router(
             raise HTTPException(415, "Only UTF-8 text files can be saved.") from exc
         except ConversationFilesystemQuotaError as exc:
             raise HTTPException(413, "Conversation filesystem quota exceeded.") from exc
+        except ConversationFilesystemPartialSaveError as exc:
+            raise HTTPException(503, str(exc)) from exc
         except ConversationScratchpadStorageError as exc:
             raise HTTPException(
                 503, "Conversation filesystem storage is unavailable."

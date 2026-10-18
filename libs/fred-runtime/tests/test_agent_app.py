@@ -1098,6 +1098,8 @@ def test_delete_session_filesystem_purges_both_runtime_namespaces(
         assert filesystem is not None
         service = ConversationFilesystemService(filesystem, "session-filesystem")
         asyncio.run(service.scratchpad().write_text("notes.md", "scratchpad"))
+        asyncio.run(service.publish_external_changes("turn-1"))
+        asyncio.run(service.scratchpad().write_text("notes.md", "pending change"))
         asyncio.run(
             service.namespace(
                 ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
@@ -1110,6 +1112,15 @@ def test_delete_session_filesystem_purges_both_runtime_namespaces(
 
         assert response.status_code == 200
         assert response.json() == {"purged": True}
+        assert asyncio.run(service.scratchpad().list()) == ()
+        assert (
+            asyncio.run(
+                service.namespace(
+                    ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+                ).list()
+            )
+            == ()
+        )
         assert asyncio.run(service.scratchpad().exists("notes.md")) is False
         assert (
             asyncio.run(
@@ -7134,7 +7145,8 @@ def test_conversation_file_save_is_readable_without_execution(
         async def attributed_write(path: str, data: bytes | str) -> None:
             from fred_runtime.conversation_filesystem import current_mutation_source
 
-            sources.append(current_mutation_source())
+            if "/scratchpad/" in path:
+                sources.append(current_mutation_source())
             await write(path, data)
 
         monkeypatch.setattr(config.filesystem, "write", attributed_write)
@@ -7536,3 +7548,69 @@ def test_conversation_file_read_requires_authentication(
             params={"path": "/notes.txt", "team_id": "team-1"},
         )
         assert response.status_code == 401
+
+
+def test_conversation_file_partial_save_reports_changed_content_and_can_retry(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        asyncio.run(
+            config.history_store.save(
+                "partial-session",
+                [make_user_text("partial-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        service = ConversationFilesystemService(
+            config.filesystem, "partial-session", mutation_source="agent"
+        )
+        asyncio.run(service.scratchpad().write_text("notes.txt", "before\n"))
+        original_write = config.filesystem.write
+        failed = False
+
+        async def fail_bookkeeping_after_save(path: str, data: bytes | str) -> None:
+            nonlocal failed
+            if path.endswith("/.changes/state.json") and not failed:
+                current = await config.filesystem.read(
+                    "conversations/partial-session/scratchpad/notes.txt"
+                )
+                if current == b"saved\n":
+                    failed = True
+                    raise OSError("private provider detail")
+            await original_write(path, data)
+
+        monkeypatch.setattr(config.filesystem, "write", fail_bookkeeping_after_save)
+        response = client.put(
+            "/pod/v1/agents/sessions/partial-session/filesystem/file",
+            params={"path": "/notes.txt"},
+            json={"content": "saved\n"},
+        )
+        assert response.status_code == 503
+        assert response.json() == {
+            "detail": "The file changed, but change history bookkeeping failed; retry to recover"
+        }
+        assert (
+            client.get(
+                "/pod/v1/agents/sessions/partial-session/filesystem/file",
+                params={"path": "/notes.txt"},
+            ).json()["content"]
+            == "saved\n"
+        )
+        retry = client.put(
+            "/pod/v1/agents/sessions/partial-session/filesystem/file",
+            params={"path": "/notes.txt"},
+            json={"content": "saved\n"},
+        )
+        assert retry.status_code == 200
+        assert asyncio.run(service.publish_external_changes("turn-2")).file_count == 1
