@@ -278,8 +278,7 @@ _BUILD_INSTRUCTIONS = (
     "slides, you MUST call 'build_presentation'; never answer with slide content in the chat instead. "
     "Build directly: write the plan — one entry per slide with its takeaway, its content, then optionally its kind — and "
     "call the tool in this answer, choosing the audience and length yourself when the user does not say. "
-    "Ask the user to validate an outline first only when they asked for it, or when the request does not "
-    "say what the presentation is about. Ground the content in "
+    "{outline} Ground the content in "
     "the documents when the agent has document tools and the request refers to them. Keep every text "
     "SLIDE-READABLE: short titles, a few short bullets, never paragraphs, within the catalogue's room. "
     "Tell a story: decide the deck's main message, then each content slide's "
@@ -303,9 +302,21 @@ _BUILD_INSTRUCTIONS = (
 )
 
 
-def build_instructions(builtin: bool) -> str:
+# With the plan gate the tool shows the outline: one written in the chat
+# would be validated twice.
+_OUTLINE = {
+    False: "Ask the user to validate an outline first only when they asked for it, or when the "
+    "request does not say what the presentation is about.",
+    True: "Ask first only when the request does not say what the presentation is about; never "
+    "write an outline in the chat: the tool shows one to the user before the first deck.",
+}
+
+
+def build_instructions(builtin: bool, validate_plan: bool = False) -> str:
     """The working rules overlaid on the system prompt, naming the template."""
-    return _BUILD_INSTRUCTIONS.format(template=_TEMPLATES[builtin])
+    return _BUILD_INSTRUCTIONS.format(
+        template=_TEMPLATES[builtin], outline=_OUTLINE[validate_plan]
+    )
 
 
 def _plain(value: Any) -> Any:
@@ -327,7 +338,9 @@ class _PptBuilderMiddleware(AgentMiddleware):
     def __init__(self, ctx: CapabilityContext[PptBuilderConfig, EmptyModel]) -> None:
         super().__init__()
         self._ctx = ctx
-        self._fragment = build_instructions(ctx.config.template_sha256 is None)
+        self._fragment = build_instructions(
+            ctx.config.template_sha256 is None, ctx.config.validate_plan
+        )
         self._resolved: Optional[List[BaseTool]] = None
         self._refusal = _ANALYSING_MESSAGE
         # The last model call's messages: the build tool reads whether a deck was delivered.

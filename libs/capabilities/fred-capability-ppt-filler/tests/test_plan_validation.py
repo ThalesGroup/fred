@@ -18,8 +18,12 @@ a skip needs the user's own words, a delivered deck's edits never wait."""
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fred_capability_ppt_filler.builder import capability as capability_mod
+from fred_capability_ppt_filler.builder import tools
+from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.plan import DeckPlan
 from fred_capability_ppt_filler.fill import PptPreviewPart
 from langchain_core.messages import HumanMessage
@@ -156,19 +160,29 @@ async def test_a_plan_with_problems_gets_a_revision_not_the_outline(monkeypatch)
     assert '"status": "needs_revision"' in text and "no takeaway" in text
 
 
+def test_the_plan_gate_is_visible_to_the_model_only_when_it_is_on():
+    """Gate on, an outline written in the chat was validated twice; gate off,
+    `skip_plan` was still in every schema."""
+    gated = capability_mod.build_instructions(True, validate_plan=True)
+    direct = capability_mod.build_instructions(True)
+    assert "never write an outline in the chat" in gated
+    assert "never write an outline" not in direct
+    assert "validate an outline first only when they asked" in direct
+    for rules in (gated, direct):
+        assert "plan_proposed" not in rules and "skip_plan" not in rules
+    inventory = builtin_template()[1]
+    schema = json.dumps(tools._args_schema(inventory).model_json_schema())
+    assert "skip_plan" not in schema
+    gate = tools._args_schema(inventory, True).model_json_schema()
+    assert "skip_plan" in gate["properties"]
+
+
 def test_a_refused_call_is_resent_as_its_result_says():
     """The rules said `changes` for the listed slides, while a refused
     `changes` call must be resent whole: the result owns the remedy."""
     rules = capability_mod.build_instructions(False)
     assert "for the listed slides" not in rules
     assert "with the fixes applied as its result says" in rules
-
-
-def test_the_working_rules_do_not_depend_on_the_setting():
-    """The gate's instructions travel in its result, only when it applies."""
-    rules = capability_mod._BUILD_INSTRUCTIONS
-    assert "takeaway" in rules
-    assert "plan_proposed" not in rules and "skip_plan" not in rules
 
 
 def test_the_working_rules_name_the_template_and_keep_revisions_truthful():

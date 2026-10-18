@@ -313,10 +313,12 @@ def catalogue(inventory: TemplateInventory) -> str:
     )
 
 
-def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
+def _args_schema(
+    inventory: TemplateInventory, plan_gate: bool = False
+) -> type[BaseModel]:
     """The deck plan, with the kinds this template offers as the `kind` enum
     and each text field's room in its description (JSON schema only:
-    validation accepts anything and coerces it)."""
+    validation accepts anything and coerces it); `skip_plan` only with the gate."""
     return _schema_for(
         tuple(offered_kinds(inventory)),
         field_hints(assignable(inventory)),
@@ -324,6 +326,7 @@ def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
         multi_chart(inventory),
         trend_figures(inventory),
         takeaway_zones(inventory),
+        plan_gate,
     )
 
 
@@ -367,6 +370,7 @@ def _schema_for(
     several: bool = False,
     trends: bool = False,
     takeaways: bool = False,
+    plan_gate: bool = False,
 ) -> type[BaseModel]:
     rooms = dict(hints)
     # Offered only where an item shows a figure: the arrow leads it.
@@ -493,12 +497,16 @@ def _schema_for(
             ),
         ),
         skip_plan=(
-            Optional[str],
-            Field(
-                default=None,
-                description="Only when the user's latest message explicitly asks to build "
-                "without a plan first: quote their words.",
-            ),
+            (
+                Optional[str],
+                Field(
+                    default=None,
+                    description="Only when the user's latest message explicitly asks to "
+                    "build without a plan first: quote their words.",
+                ),
+            )
+            if plan_gate
+            else (SkipJsonSchema[Optional[str]], None)
         ),
         show_takeaways=(
             (Optional[bool], Field(default=None, description=_SHOW_TAKEAWAYS))
@@ -1365,7 +1373,8 @@ def build_builder_tools(
     """
     services = ctx.services
     identity = ctx.identity
-    args_schema = _args_schema(inventory)
+    validate_plan = ctx.config.validate_plan
+    args_schema = _args_schema(inventory, validate_plan)
     previous_problems: _Previous = {}
     # Variety is asked on the turn's first evaluated plan (one tool instance)
     # only: a call refused before evaluation does not use the ask up.
@@ -1388,7 +1397,6 @@ def build_builder_tools(
     # answered without a rebuild (same turn only, so the template is the same).
     turn_delivered: List[Tuple[DeckPlan, str]] = []
     plans = _BasePlans(identity.session_id, identity.agent_instance_id)
-    validate_plan = ctx.config.validate_plan
     # Storytelling refusals given once this turn: the same slide resent is built.
     soft_refused: set[str] = set()
     # The conversation as read for the last history seen: one scan per model call.
