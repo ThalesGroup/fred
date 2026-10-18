@@ -551,12 +551,11 @@ version = "4.5.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
-    { name = "fred-core" },
+    { name = "fred-core", extra = ["docx"] },
     { name = "fred-sdk", extra = ["agents"] },
     { name = "langchain" },
     { name = "langchain-core" },
     { name = "pydantic" },
-    { name = "python-docx" },
     { name = "sqlalchemy" },
 ]
 
@@ -591,7 +590,7 @@ requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", specifier = ">=0.110" },
-    { name = "fred-core", editable = "../../fred-core" },
+    { name = "fred-core", extras = ["docx"], editable = "../../fred-core" },
     { name = "fred-sdk", extras = ["agents"], editable = "../../fred-sdk" },
     { name = "langchain", specifier = ">=0.3.0" },
     { name = "langchain-core", specifier = ">=0.3.0" },
@@ -600,7 +599,6 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
-    { name = "python-docx", specifier = ">=1.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "sqlalchemy", specifier = ">=2.0" },
 ]
@@ -660,6 +658,11 @@ dependencies = [
     { name = "uv" },
 ]
 
+[package.optional-dependencies]
+docx = [
+    { name = "python-docx" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22.1" },
@@ -698,6 +701,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
+    { name = "python-docx", marker = "extra == 'docx'", specifier = ">=1.1" },
     { name = "python-dotenv", specifier = ">=1.0.1,<2.0.0" },
     { name = "python-keycloak", specifier = ">=5.8.1" },
     { name = "python-pptx", marker = "extra == 'dev'", specifier = ">=1.0.2" },
@@ -711,7 +715,7 @@ requires-dist = [
     { name = "temporalio", specifier = ">=1.30.0,<2.0.0" },
     { name = "uv", specifier = ">=0.12.23" },
 ]
-provides-extras = ["mcp", "migration", "dev"]
+provides-extras = ["docx", "mcp", "migration", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -794,6 +798,7 @@ requires-dist = [
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", marker = "extra == 'app'", specifier = ">=0.139.0" },
     { name = "fred-core", editable = "../../fred-core" },
+    { name = "fred-core", extras = ["docx"], marker = "extra == 'app'", editable = "../../fred-core" },
     { name = "fred-runtime", extras = ["app"], marker = "extra == 'dev'" },
     { name = "fred-sdk", extras = ["agents"], editable = "../../fred-sdk" },
     { name = "httpcore", marker = "extra == 'app'", specifier = ">=1.0.9,<2" },

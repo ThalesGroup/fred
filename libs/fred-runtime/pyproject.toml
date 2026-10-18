@@ -47,6 +47,7 @@ fred-agents-cli = "fred_runtime.client:main"
 [project.optional-dependencies]
 # Install fred-runtime[app] when building an agent pod with a FastAPI HTTP server.
 app = [
+  "fred-core[docx]>=4.5.3",
   "fastapi>=0.139.0",
   "starlette>=0.48.0",  # HTTP_422_UNPROCESSABLE_CONTENT
   # Native web research engine, imported only when web_research is enabled.

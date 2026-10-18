@@ -181,6 +181,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem`, method: "DELETE" }),
     }),
+    exportConversationFile: build.query<ExportConversationFileApiResponse, ExportConversationFileApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem/export`,
+        params: {
+          path: queryArg.path,
+          format: queryArg.format,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     readConversationFile: build.query<ReadConversationFileApiResponse, ReadConversationFileApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem/file`,
@@ -404,6 +414,13 @@ export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteA
   /** status 200 Successful Response */ ConversationFilesystemPurgeResponse;
 export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg = {
   sessionId: string;
+};
+export type ExportConversationFileApiResponse = /** status 200 Successful Response */ Blob;
+export type ExportConversationFileApiArg = {
+  sessionId: string;
+  path: string;
+  format?: "md" | "docx";
+  teamId?: string | null;
 };
 export type ReadConversationFileApiResponse = /** status 200 Successful Response */ ConversationFileResponse;
 export type ReadConversationFileApiArg = {
@@ -1474,6 +1491,8 @@ export const {
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
+  useExportConversationFileQuery,
+  useLazyExportConversationFileQuery,
   useReadConversationFileQuery,
   useLazyReadConversationFileQuery,
   useSaveConversationFileMutation,

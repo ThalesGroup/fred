@@ -7216,6 +7216,7 @@ def test_conversation_file_save_rejects_forged_policy(
         assert saved.status_code == status
 
 
+@pytest.mark.parametrize("endpoint", ["file", "export"])
 @pytest.mark.parametrize(
     ("path", "expected"),
     [
@@ -7223,11 +7224,12 @@ def test_conversation_file_save_rejects_forged_policy(
         ("/folder/../notes.txt", 422),
         ("/missing.txt", 404),
         ("/binary.dat", 415),
-        ("/.deep/result.txt", 200),
+        ("/.deep/result.md", 200),
+        ("/notes.txt", 200),
     ],
 )
 def test_conversation_file_read_path_and_content_policy(
-    monkeypatch, tmp_path, path, expected
+    monkeypatch, tmp_path, path, expected, endpoint
 ) -> None:
     from fred_core.history.history_schema import make_user_text
 
@@ -7252,21 +7254,24 @@ def test_conversation_file_read_path_and_content_policy(
         asyncio.run(service.scratchpad().write_text("binary.dat", "binary\x00text"))
         asyncio.run(
             service.namespace(".deep", max_bytes=1000, max_files=10).write_text(
-                "result.txt", "runtime result"
+                "result.md", "runtime result"
             )
         )
+        asyncio.run(service.scratchpad().write_text("notes.txt", "plain text"))
         result = client.get(
-            "/pod/v1/agents/sessions/policy-session/filesystem/file",
-            params={"path": path},
+            f"/pod/v1/agents/sessions/policy-session/filesystem/{endpoint}",
+            params={"path": path, "format": "md"},
         )
-        assert result.status_code == expected
-        if path == "/.deep/result.txt":
+        assert result.status_code == (
+            415 if endpoint == "export" and path == "/notes.txt" else expected
+        )
+        if path == "/.deep/result.md" and endpoint == "file":
             assert result.json()["editable"] is False
             assert result.json()["content"] == "runtime result"
 
 
 @pytest.mark.parametrize("session_id", ["foreign-session", "unknown-session"])
-@pytest.mark.parametrize("method", ["GET", "PUT"])
+@pytest.mark.parametrize("method", ["GET", "PUT", "EXPORT"])
 def test_conversation_file_read_rejects_forged_reference(
     monkeypatch, tmp_path, session_id, method
 ) -> None:
@@ -7294,8 +7299,9 @@ def test_conversation_file_read_rejects_forged_reference(
             )
         )
         result = client.request(
-            method,
-            f"/pod/v1/agents/sessions/{session_id}/filesystem/file",
+            "GET" if method == "EXPORT" else method,
+            f"/pod/v1/agents/sessions/{session_id}/filesystem/"
+            + ("export" if method == "EXPORT" else "file"),
             params={"path": "/notes.txt", "team_id": "team-1", "editable": True},
             **({"json": {"content": "forged"}} if method == "PUT" else {}),
         )
@@ -7303,7 +7309,7 @@ def test_conversation_file_read_rejects_forged_reference(
         assert result.json() == {"detail": "Access denied."}
 
 
-@pytest.mark.parametrize("method", ["GET", "PUT"])
+@pytest.mark.parametrize("method", ["GET", "PUT", "EXPORT"])
 @pytest.mark.parametrize(
     ("admission_status", "expected"), [(200, 200), (403, 403), (404, 403), (503, 503)]
 )
@@ -7352,7 +7358,7 @@ def test_conversation_file_read_uses_owned_team_history_route(
         config = get_runtime_context().config
         service = ConversationFilesystemService(config.filesystem, "historical-session")
         asyncio.run(
-            service.scratchpad().write_text("notes.txt", "Historical current file")
+            service.scratchpad().write_text("notes.md", "Historical current file")
         )
         asyncio.run(
             config.history_store.save(
@@ -7363,9 +7369,10 @@ def test_conversation_file_read_uses_owned_team_history_route(
             )
         )
         result = client.request(
-            method,
-            "/pod/v1/agents/sessions/historical-session/filesystem/file",
-            params={"path": "/notes.txt", "team_id": "team-1"},
+            "GET" if method == "EXPORT" else method,
+            "/pod/v1/agents/sessions/historical-session/filesystem/"
+            + ("export" if method == "EXPORT" else "file"),
+            params={"path": "/notes.md", "team_id": "team-1", "format": "md"},
             headers={"Authorization": "Bearer browser-token"},
             **(
                 {"json": {"content": "Historical current file"}}
@@ -7375,7 +7382,9 @@ def test_conversation_file_read_uses_owned_team_history_route(
         )
         assert result.status_code == expected
         if expected == 200:
-            assert result.json()["content"] == "Historical current file"
+            assert (
+                result.text if method == "EXPORT" else result.json()["content"]
+            ) == "Historical current file"
     asyncio.run(http_client.aclose())
 
 
@@ -7530,7 +7539,7 @@ def test_deep_parent_and_child_open_stream_and_history(monkeypatch, tmp_path) ->
         )
 
 
-@pytest.mark.parametrize("method", ["GET", "PUT"])
+@pytest.mark.parametrize("method", ["GET", "PUT", "EXPORT"])
 def test_conversation_file_read_requires_authentication(
     monkeypatch, tmp_path, _pod_inbound_security, method
 ) -> None:
@@ -7543,8 +7552,9 @@ def test_conversation_file_read_requires_authentication(
     )
     with TestClient(app) as client:
         response = client.request(
-            method,
-            "/pod/v1/agents/sessions/session-1/filesystem/file",
+            "GET" if method == "EXPORT" else method,
+            "/pod/v1/agents/sessions/session-1/filesystem/"
+            + ("export" if method == "EXPORT" else "file"),
             params={"path": "/notes.txt", "team_id": "team-1"},
         )
         assert response.status_code == 401
@@ -7614,3 +7624,61 @@ def test_conversation_file_partial_save_reports_changed_content_and_can_retry(
         )
         assert retry.status_code == 200
         assert asyncio.run(service.publish_external_changes("turn-2")).file_count == 1
+
+
+@pytest.mark.parametrize("format", ["md", "docx"])
+def test_conversation_file_export_uses_latest_saved_markdown(
+    monkeypatch, tmp_path, format
+) -> None:
+    import io
+    from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
+
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        service = ConversationFilesystemService(config.filesystem, "export-session")
+        asyncio.run(service.scratchpad().write_text("report.md", "# Original\n"))
+        asyncio.run(
+            config.history_store.save(
+                "export-session",
+                [make_user_text("export-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        saved = client.put(
+            "/pod/v1/agents/sessions/export-session/filesystem/file",
+            params={"path": "/report.md"},
+            json={"content": "# Reviewed report\n\nThe **approved** result.\n"},
+        )
+        assert saved.status_code == 200
+        exported = client.get(
+            "/pod/v1/agents/sessions/export-session/filesystem/export",
+            params={"path": "/report.md", "format": format},
+        )
+        assert exported.status_code == 200
+        assert "report." + format in exported.headers["content-disposition"]
+        if format == "md":
+            assert exported.text == "# Reviewed report\n\nThe **approved** result.\n"
+        else:
+            with ZipFile(io.BytesIO(exported.content)) as archive:
+                document = ET.fromstring(archive.read("word/document.xml"))
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            paragraphs = document.findall(".//w:p", ns)
+            texts = ["".join(p.itertext()) for p in paragraphs]
+            assert "Reviewed report" in texts
+            paragraph = paragraphs[texts.index("The approved result.")]
+            assert any(
+                r.find("w:rPr/w:b", ns) is not None
+                and "".join(r.itertext()) == "approved"
+                for r in paragraph.findall("w:r", ns)
+            )

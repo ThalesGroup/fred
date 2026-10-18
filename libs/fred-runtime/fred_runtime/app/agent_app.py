@@ -56,7 +56,7 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 import httpx
@@ -5897,6 +5897,56 @@ def _build_agent_router(
                 503, "Conversation filesystem storage is unavailable."
             ) from exc
         return ConversationFileResponse(**reference.model_dump(), content=content)
+
+    @router.get(
+        "/sessions/{session_id}/filesystem/export",
+        operation_id="exportConversationFile",
+        response_class=StreamingResponse,
+        responses={
+            200: {
+                "content": {
+                    "application/octet-stream": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                }
+            }
+        },
+    )
+    async def export_conversation_file(
+        session_id: str,
+        path: str,
+        http_request: Request,
+        format: Literal["md", "docx"] = "docx",
+        team_id: str | None = None,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> StreamingResponse:
+        """Export freshly authorized saved Markdown without a document record."""
+        from fred_core.documents.docx_export import markdown_to_docx_bytes
+
+        file = await read_conversation_file(
+            session_id, path, http_request, team_id, caller, container
+        )
+        if file.viewer != "markdown":
+            raise HTTPException(415, "Only Markdown files can be exported.")
+        title = file.path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if format == "md":
+            data = file.content.encode("utf-8")
+            media_type = "text/markdown"
+        else:
+            data = await asyncio.to_thread(
+                markdown_to_docx_bytes, file.content, title=title
+            )
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        filename = re.sub(r"[^a-zA-Z0-9_.-]", "_", title) or "document"
+        return StreamingResponse(
+            iter([data]),
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}.{format}"',
+                "Cache-Control": "no-store",
+            },
+        )
 
     @router.put(
         "/sessions/{session_id}/filesystem/file",

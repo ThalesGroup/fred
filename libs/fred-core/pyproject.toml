@@ -88,6 +88,7 @@ dev = [
 ]
 
 [project.optional-dependencies]
+docx = ["python-docx>=1.1"]
 # Only the tool-mount subclass needs this; services that mount no tools do not.
 mcp = [
     "fastapi-mcp==0.4.0",
