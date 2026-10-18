@@ -44,7 +44,12 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
     ZoneRole,
 )
-from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanChart, read_number
+from fred_capability_ppt_filler.builder.plan import (
+    DeckPlan,
+    PlanChart,
+    SlidePlan,
+    read_number,
+)
 from fred_capability_ppt_filler.builder.render import RenderResult, render_deck
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
@@ -1473,3 +1478,15 @@ def test_the_tool_guides_the_model_to_the_new_types(builtin):
     kinds = schema["$defs"]["PlanChart"]["properties"]["type"]
     assert kinds["enum"][-4:] == ["stacked_bar", "radar", "scatter", "bubble"]
     assert "radar (3-8 criteria compared for 1-3 items)" in kinds["description"]
+
+
+def test_the_designs_line_says_a_chart_built_as_another_type(builtin):
+    """A bar slide turned into a pie keeps its template name ("Grouped bar chart"):
+    the delivered line says what was built, so the model does not resend it."""
+    _, inventory = builtin
+    column = inventory.pattern("slide:284")
+    pie = SlidePlan.model_validate({"title": "Rates", "chart": {**PIE, "unit": "%"}})
+    bars = SlidePlan.model_validate({"title": "Rates", "chart": REVENUE})
+    line = tools._designs_line(inventory, [pie, bars], [column, column])
+    assert "1 'Charts stay native and edit…', built as a pie chart · " in line
+    assert "2 'Charts stay native and edit…'." in line

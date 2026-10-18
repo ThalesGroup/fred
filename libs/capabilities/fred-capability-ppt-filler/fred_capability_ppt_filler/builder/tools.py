@@ -114,6 +114,7 @@ from fred_capability_ppt_filler.builder.plan import (
     as_flag,
     field_hints,
     has_content,
+    shown_charts,
     without_hidden,
     zone_summary,
 )
@@ -701,13 +702,23 @@ def _design_names(inventory: TemplateInventory) -> Dict[str, str]:
     return names
 
 
-def _designs_line(inventory: TemplateInventory, patterns: Sequence[Any]) -> str:
+def _redrawn(slide: SlidePlan, pattern: Any) -> str:
+    """ ", built as a pie chart" when a chart replaced the template slide's own
+    type: its name ("Grouped bar chart") no longer says what the slide shows."""
+    own = {z.chart_type for z in pattern.zones if z.chart_type}
+    built = [c.type for _, c in shown_charts(slide) if own and c.type not in own]
+    return f", built as a {' and a '.join(built)} chart" if built else ""
+
+
+def _designs_line(
+    inventory: TemplateInventory, slides: Sequence[SlidePlan], patterns: Sequence[Any]
+) -> str:
     """One line naming each file slide's template slide, so a request like
     "same layout as slide M" is answered with `like`, not by comparing kinds."""
     names = _design_names(inventory)
     listed = " · ".join(
-        f"{number} '{names.get(p.id) or p.label}'"
-        for number, p in enumerate(patterns, start=1)
+        f"{number} '{names.get(p.id) or p.label}'{_redrawn(slide, p)}"
+        for number, (slide, p) in enumerate(zip(slides, patterns), start=1)
         if p is not None
     )
     return (
@@ -1649,7 +1660,7 @@ def build_builder_tools(
             + assignment.notes
             + _cleared_lines(cleared, plan, numbers),
         )
-        notes = delta + _designs_line(inventory, patterns) + notes
+        notes = delta + _designs_line(inventory, deck.slides, patterns) + notes
 
         pdf_bytes = await convert_office_bytes_to_pdf(
             result.preview_pptx or result.pptx, suffix=".pptx"
