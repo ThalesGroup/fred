@@ -1267,7 +1267,7 @@ def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
     items = "items max 6 [heading ≤12 words (≈20 chars × 4 lines), text ≤12 words (≈20 chars × 4 lines)]"
     # One cards and one timeline variant; the one two_columns variant already
     # holds two slides: slides 9 and 10 get nothing left to suggest.
-    assert repeat.suggested == [
+    assert repeat.suggestions() == [
         f"slide 5 (parallel 'Label : text' points) → cards holds {items}",
         f"slide 7 (dated items) → timeline holds {items}",
     ]
@@ -1279,11 +1279,11 @@ def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
 def test_advice_names_only_kinds_the_template_can_hold():
     # No timeline nor cards slide in the showcase, and its two_columns slide is used.
     (repeat,) = assign(INVENTORY, _plan(*EVIDENCE_SLIDES), "kind").repeats
-    assert repeat.suggested == []
+    assert repeat.suggestions() == []
     # Three dated lines need a timeline of three items or more.
     small = with_item_slides(INVENTORY, kinds=("timeline",), count=2)
     (repeat,) = assign(small, _plan(*EVIDENCE_SLIDES), "kind").repeats
-    assert not any("timeline" in s for s in repeat.suggested)
+    assert not any("timeline" in s for s in repeat.suggestions())
 
 
 def test_advice_quotes_the_favoured_variant_and_the_size_to_shorten_to():
@@ -1307,7 +1307,7 @@ def test_advice_quotes_the_favoured_variant_and_the_size_to_shorten_to():
         }
         slides = [COVER, dated] + [_points(n) for n in range(3)]
         (repeat,) = assign(inventory, _plan(*slides), "kind").repeats
-        return repeat.suggested
+        return repeat.suggestions()
 
     lead = "slide 2 (dated items) → timeline holds items max 6 ["
     # The example slide when the entries fit it.
@@ -1468,8 +1468,8 @@ def test_a_kind_is_suggested_no_more_than_the_template_has_variants():
     )
     slides = [COVER] + [_figure_lines(n) for n in range(1, 5)]
     (repeat,) = assign(single, _plan(*slides), "kind").repeats
-    assert sum("→ figures" in s for s in repeat.suggested) == 1
-    assert len(repeat.suggested[0].split("(")[0].split(",")) == 1  # one slide
+    assert sum("→ figures" in s for s in repeat.suggestions()) == 1
+    assert len(repeat.suggestions()[0].split("(")[0].split(",")) == 1  # one slide
     # A figures slide already in the deck uses that variant: none left to suggest.
     figures = {"title": "KPI", "items": [{"number": "3", "label": "Sites"}] * 2}
     (repeat,) = assign(single, _plan(*slides, figures), "kind").repeats
@@ -1491,7 +1491,9 @@ def test_suggestions_spread_across_the_kinds_a_slide_suits():
         {"title": f"Pays {n}", "kind": "bullets", "bullets": groups} for n in range(3)
     ]
     (repeat,) = assign(inventory, _plan(*slides), "kind").repeats
-    kinds = {s.split("→ ")[1].split(" ")[0]: s.split(" (")[0] for s in repeat.suggested}
+    kinds = {
+        s.split("→ ")[1].split(" ")[0]: s.split(" (")[0] for s in repeat.suggestions()
+    }
     # Two variants each: two_columns, then cards, then two_columns again.
     assert kinds == {"two_columns": "slides 2, 4", "cards": "slide 3"}
 
@@ -1886,12 +1888,12 @@ def test_variety_never_offers_a_variant_needing_pictures_the_slides_lack():
     photo_cards = _framed_cards("slide:970", "Photo cards")
     inventory = _inventory(_bullets("slide:1", "A", source="slide"), photo_cards)
     (repeat,) = assign(inventory, _plan(*slides), "template_slide", 1).repeats
-    assert not any("cards" in s for s in repeat.suggested)
+    assert not any("cards" in s for s in repeat.suggestions())
     # A cards slide without pictures is offered and suggested instead.
     plain = with_item_slides(INVENTORY, kinds=("cards",)).patterns[-1]
     inventory = _inventory(_bullets("slide:1", "A", source="slide"), photo_cards, plain)
     (repeat,) = assign(inventory, _plan(*slides), "template_slide", 1).repeats
-    (advice,) = [s for s in repeat.suggested if "cards holds" in s]
+    (advice,) = [s for s in repeat.suggestions() if "cards holds" in s]
     assert "image" not in advice
 
 
@@ -1929,4 +1931,30 @@ def test_a_kind_fallback_note_states_the_fix_without_an_exit():
     (note,) = assignment.notes
     assert note.endswith(
         "To get the 'quote' slide, call again and merge bullets into at most 1 entry."
+    )
+
+
+def test_every_note_numbers_slides_as_its_outline_does():
+    """A split agenda shifts the file's numbers: delivered notes count on the file,
+    a plan proposal's on the plan, suggestions included."""
+    dated = SlidePlan(title="Dates", bullets=["2020 : a", "2021 : b", "2022 : c"])
+    plan = _plan(
+        SlidePlan(title="Intro", bullets=["a"]),
+        _sommaire(9),
+        _points(2),
+        dated,
+        _points(3),
+        dated.model_copy(update={"title": "D2"}),
+    )
+    assignment = assign(
+        with_item_slides(_agenda_inventory()), plan, "template_slide", 1
+    )
+    (repeat,) = [n for n in assignment.notes if n.startswith("Slides ")]
+    assert (
+        repeat.startswith("Slides 1, 4, 5, 6, 7 ") and "slide 5 (dated items)" in repeat
+    )
+    (planned,) = [n for n in assignment.plan_notes if n.startswith("Slides ")]
+    assert (
+        planned.startswith("Slides 1, 3, 4, 5, 6 ")
+        and "slide 4 (dated items)" in planned
     )

@@ -30,7 +30,16 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from fred_capability_ppt_filler.builder import charts, lexicon, table_intents
 from fred_capability_ppt_filler.builder.models import (
@@ -191,7 +200,8 @@ class Repeat:
     kind: str
     slides: List[int]  # 1-based positions in the plan
     labels: List[str]  # the template slides they use, distinct
-    suggested: List[str]  # "slides 9, 10 → cards holds … (why)"
+    # Per group of slides (plan positions): why their content suits it, and what.
+    suggested: List[Tuple[List[int], str, str]]
     structural: bool = False  # cover/section/agenda/closing slides: never asked
     at_most: int = _NOTE_USES - 1  # the slides this group may hold
     in_a_row: bool = False  # three identical slides or more in a row
@@ -199,6 +209,14 @@ class Repeat:
     @property
     def revisable(self) -> bool:
         return not self.structural and bool(self.suggested)
+
+    def suggestions(self, at: Optional[Dict[int, int]] = None) -> List[str]:
+        """``suggested`` as text, its slides numbered by ``at`` (default: the plan's)."""
+        return [
+            f"slide{'s' if len(group) > 1 else ''} "
+            f"{', '.join(str((at or {}).get(n, n)) for n in group)} ({why}) → {advice}"
+            for group, why, advice in self.suggested
+        ]
 
 
 @dataclass
@@ -208,6 +226,8 @@ class Assignment:
     problems: List[SlideProblem] = field(default_factory=list)
     # Substitutions and repetitions the agent should hear about.
     notes: List[str] = field(default_factory=list)
+    # The same notes numbered as the plan sent: what a plan proposal shows.
+    plan_notes: List[str] = field(default_factory=list)
     repeats: List[Repeat] = field(default_factory=list)
     # Per 1-based plan index of a split slide: its parts and their patterns.
     parts: Dict[int, List[Tuple[SlidePlan, Pattern]]] = field(default_factory=dict)
@@ -1621,10 +1641,11 @@ def _suggested(
     pool: List[Pattern],
     budget: Dict[str, int],
     given: Dict[str, int],
-) -> List[str]:
+) -> List[Tuple[List[int], str, str]]:
     """Per slide, one other kind its content suits, the least suggested so far,
     while the template has a variant of it left; slides with the same advice share a line."""
     found: Dict[Tuple[str, str], List[int]] = {}
+
     for slide in slides:
         # A chart's data has one natural form: never recast into another kind.
         shape = None if slide_charts(slide.plan) else content_shape(slide.plan)
@@ -1647,10 +1668,7 @@ def _suggested(
         budget[chosen] -= 1
         given[chosen] = given.get(chosen, 0) + 1
         found.setdefault((shape.why, advice), []).append(slide.index)
-    return [
-        f"slide{'s' if len(at) > 1 else ''} {', '.join(map(str, at))} ({why}) → {advice}"
-        for (why, advice), at in found.items()
-    ]
+    return [(at, why, advice) for (why, advice), at in found.items()]
 
 
 def _wanted(slide: _Slide) -> Optional[str]:
@@ -1785,7 +1803,7 @@ def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
             + ")."
         )
     if repeat.suggested:
-        note += " Their content suits: " + "; ".join(repeat.suggested) + "."
+        note += " Their content suits: " + "; ".join(repeat.suggestions(at)) + "."
         return note + " To vary them, recast one as above; otherwise nothing to do."
     return (
         note + " No other slide of this template suits them: to vary them, use fewer "
@@ -1948,39 +1966,51 @@ def assign(
                 pattern,
             )
         )
-    # The deck's own numbers: a split list's parts are slides of their own.
-    at: Dict[int, int] = {}
-    for number, slide in enumerate(slides, start=1):
-        at.setdefault(slide.index, number)
-    notes = [
-        note
-        for number, (slide, pattern) in enumerate(zip(slides, chosen), start=1)
-        if (note := _substitution(slide, pattern, offered, number))
-    ]
-    # With a limit, a run is a repeat and noted as one.
-    notes += [
-        f"Slides {i - 1} to {i + 1} use the same template slide: "
-        "no other one holds their content. Nothing to do, unless they must look different: "
-        "then give one of them another content shape."
-        for i in range(2, len(chosen))
-        if caps is None
-        and chosen[i].design_key == chosen[i - 1].design_key == chosen[i - 2].design_key
-        and slides[i].part == slides[i - 1].part == 1
-        and not _exempt(slides[i])
-    ]
     repeated = {
         slide.index: chosen[k].design_key == chosen[k - 1].design_key
         for k, slide in enumerate(slides)
         if k and slide.part == 1 and slide.plan.repeat_layout
     }
-    notes += [_repeated_note(at[n], kept) for n, kept in repeated.items()]
-    notes += [_split_note(split, at) for split in splits.values()]
     found = {s.index: p for s, p in zip(slides, chosen) if s.part == 1}
     repeats = _repeats(slides, found, pool, by_kind, caps, sections)
-    notes += [_repeat_note(r, at) for r in repeats]
+
+    def noted(at: Dict[int, int], deck: bool) -> List[str]:
+        """Every note, its slides numbered by ``at``; a split list's parts
+        count apart on the ``deck``."""
+
+        def number(k: int) -> int:
+            return at[slides[k].index] + (slides[k].part - 1 if deck else 0)
+
+        notes = [
+            _substitution(slide, pattern, offered, number(k))
+            for k, (slide, pattern) in enumerate(zip(slides, chosen))
+        ]
+        # With a limit, a run is a repeat and noted as one.
+        notes += [
+            f"Slides {number(i - 2)} to {number(i)} use the same template slide: no other "
+            "one holds their content. Nothing to do, unless they must look different: "
+            "then give one of them another content shape."
+            for i in range(2, len(chosen))
+            if caps is None
+            and chosen[i].design_key
+            == chosen[i - 1].design_key
+            == chosen[i - 2].design_key
+            and slides[i].part == slides[i - 1].part == 1
+            and not _exempt(slides[i])
+        ]
+        notes += [_repeated_note(at[n], kept) for n, kept in repeated.items()]
+        notes += [_split_note(split, at) for split in splits.values()]
+        notes += [_repeat_note(r, at) for r in repeats]
+        return list(dict.fromkeys(n for n in notes if n))
+
+    # The deck's own numbers: a split list's parts are slides of their own.
+    on_deck: Dict[int, int] = {}
+    for number, slide in enumerate(slides, start=1):
+        on_deck.setdefault(slide.index, number)
     return Assignment(
         patterns=patterns,
-        notes=notes,
+        notes=noted(on_deck, True),
+        plan_notes=noted({s.index: s.index for s in slides}, False),
         repeats=repeats,
         parts=parts,
         starts=[s.start for s in slides],

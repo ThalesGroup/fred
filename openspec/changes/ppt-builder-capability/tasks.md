@@ -671,3 +671,4 @@ Owns: `assign.py` (`_sections`, `SECTION_RULE`, `Repeat.suggested`, `_suggested`
 
 - [x] 61.1 Only `section` slides start a section; agenda matching deleted. Tests: `test_assign.py::test_an_agenda_never_splits_the_deck_into_sections`, `test_assign.py::test_three_identical_slides_in_a_row_are_revised_under_the_cap`
 - [x] 61.5 A content kind with one design says `1 look` on its catalogue line. Tests: `test_builder_render.py::test_catalogue_says_a_content_kind_with_one_design_has_one_look`, `test_build_tool.py::test_the_tool_tells_the_agent_one_call_builds_the_whole_deck` (updated)
+- [x] 61.2 Every note numbers slides as the outline of its result does (delivery: the file; proposal and revision: the plan), suggestions included. Test: `test_assign.py::test_every_note_numbers_slides_as_its_outline_does`

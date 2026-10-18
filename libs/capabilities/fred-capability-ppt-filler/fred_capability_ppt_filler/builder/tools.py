@@ -927,7 +927,7 @@ def _variety(repeats: List[Repeat]) -> List[Dict[str, Any]]:
             "kind": r.kind,
             "at_most": r.at_most,
             **({"in_a_row": True} if r.in_a_row else {}),
-            "suggested": r.suggested,
+            "suggested": r.suggestions(),
         }
         for r in repeats
     ]
@@ -1610,7 +1610,7 @@ def build_builder_tools(
             return _proposal(
                 plan,
                 assignment,
-                unloadable + assignment.notes + _cleared_lines(cleared, plan),
+                unloadable + assignment.plan_notes + _cleared_lines(cleared, plan),
             )
 
         # Stored as delivered: a split list's parts become slides of their own,
