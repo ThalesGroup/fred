@@ -319,3 +319,33 @@ async def test_backend_download_overwrite_and_quota_preserve_existing_file() -> 
     assert downloads[1].error == "file_not_found"
     assert await port.exists("/note.txt", origin="agent")
     assert not await port.exists("/missing.txt", origin="agent")
+
+
+@pytest.mark.asyncio
+async def test_mutations_carry_server_source_independent_of_permission_origin() -> None:
+    from fred_runtime.conversation_filesystem import current_mutation_source
+
+    class AttributedStorage(_MemoryFilesystem):
+        sources: list[str] = []
+
+        async def write(self, path: str, data: bytes | str) -> None:
+            self.sources.append(current_mutation_source())
+            await super().write(path, data)
+
+    storage = AttributedStorage()
+    agent = ConversationFilesystemService(
+        storage, "source-session", mutation_source="agent"
+    )
+    user = ConversationFilesystemService(
+        storage, "source-session", mutation_source="user"
+    )
+    system = ConversationFilesystemService(storage, "source-session")
+    backend, permissions = build_conversation_filesystem(agent)
+    port = DeepConversationFilesystemPort(backend, permissions)
+    # Native full replacement and exact-text editing share attribution with helpers.
+    assert (await backend.awrite("/notes.txt", "Agent first")).error is None
+    await user.scratchpad().write_text("notes.txt", "Human revision")
+    await port.edit_text("/notes.txt", "Human", "Agent", origin="system")
+    await system.scratchpad().write_text("notes.txt", "Background revision")
+    assert storage.sources == ["agent", "user", "agent", "independent_system"]
+    assert await port.read_text("/notes.txt", origin="agent") == "Background revision"

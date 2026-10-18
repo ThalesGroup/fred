@@ -190,6 +190,17 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    saveConversationFile: build.mutation<SaveConversationFileApiResponse, SaveConversationFileApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem/file`,
+        method: "PUT",
+        body: queryArg.conversationFileSaveRequest,
+        params: {
+          path: queryArg.path,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     getSessionMessagesPodV1AgentsSessionsSessionIdMessagesGet: build.query<
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse,
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg
@@ -399,6 +410,13 @@ export type ReadConversationFileApiArg = {
   sessionId: string;
   path: string;
   teamId?: string | null;
+};
+export type SaveConversationFileApiResponse = /** status 200 Successful Response */ ConversationFileResponse;
+export type SaveConversationFileApiArg = {
+  sessionId: string;
+  path: string;
+  teamId?: string | null;
+  conversationFileSaveRequest: ConversationFileSaveRequest;
 };
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse =
   /** status 200 Successful Response */ ChatMessage[];
@@ -1062,6 +1080,9 @@ export type ConversationFileResponse = {
   type?: "conversation_file";
   viewer: "markdown" | "html" | "text";
 };
+export type ConversationFileSaveRequest = {
+  content: string;
+};
 export type Channel =
   | "final"
   | "plan"
@@ -1455,6 +1476,7 @@ export const {
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useReadConversationFileQuery,
   useLazyReadConversationFileQuery,
+  useSaveConversationFileMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useGetRuntimeInstanceSkillsQuery,

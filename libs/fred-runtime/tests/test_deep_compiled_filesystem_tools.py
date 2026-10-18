@@ -194,8 +194,18 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
 async def test_native_child_can_concatenate_shared_parts_for_parent(
     tmp_path: Any,
 ) -> None:
+    from fred_runtime.conversation_filesystem import current_mutation_source
+
+    class AttributedStorage(LocalFilesystem):
+        mutations: list[tuple[str, str]] = []
+
+        async def write(self, path: str, data: bytes | str) -> None:
+            self.mutations.append((path, current_mutation_source()))
+            await super().write(path, data)
+
+    storage = AttributedStorage(str(tmp_path))
     filesystem = ConversationFilesystemService(
-        LocalFilesystem(str(tmp_path)), "conversation-a"
+        storage, "conversation-a", mutation_source="agent"
     )
     backend, permissions = build_conversation_filesystem(filesystem)
     workspace = DeepConversationFilesystemPort(backend, permissions)
@@ -293,6 +303,7 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
 
     updates = await _drive(agent)
 
+    assert [source for _path, source in storage.mutations] == ["agent"] * 5
     assert await workspace.read_text("/report.md", origin="system") == "one\ntwo"
     assert await workspace.read_text("/final.md", origin="system") == "one\ntwo\nend"
     messages = [

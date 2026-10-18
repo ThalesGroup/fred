@@ -21,9 +21,10 @@ import logging
 import string
 import threading
 import weakref
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
@@ -41,6 +42,17 @@ from fred_sdk.contracts.runtime import (
 
 if TYPE_CHECKING:
     from fred_core.kpi import BaseKPIWriter
+
+MutationSource = Literal["agent", "user", "independent_system"]
+_MUTATION_SOURCE: ContextVar[MutationSource] = ContextVar(
+    "conversation_mutation_source", default="independent_system"
+)
+
+
+def current_mutation_source() -> MutationSource:
+    """Trusted attribution at storage writes, unrelated to permission origin."""
+    return _MUTATION_SOURCE.get()
+
 
 _SAFE_SESSION_ID_FIRST_CHARACTERS = frozenset(string.ascii_letters + string.digits)
 _SAFE_SESSION_ID_CHARACTERS = _SAFE_SESSION_ID_FIRST_CHARACTERS | frozenset("._:@+-")
@@ -171,6 +183,7 @@ class ConversationFilesystemService:
         *,
         quotas: ConversationFilesystemQuotaSettings = _DEFAULT_QUOTAS,
         kpi: BaseKPIWriter | None = None,
+        mutation_source: MutationSource = "independent_system",
     ) -> None:
         if not _is_safe_session_id(session_id):
             raise ConversationScratchpadInvalidPathError(
@@ -180,6 +193,7 @@ class ConversationFilesystemService:
         self._session_id = session_id
         self._quotas = quotas
         self._kpi = kpi
+        self._mutation_source = mutation_source
 
     def scratchpad(self) -> ConversationTextNamespacePort:
         """Return the trusted physical default namespace for runtime maintenance."""
@@ -199,6 +213,7 @@ class ConversationFilesystemService:
             namespace_id,
             quota=_NamespaceQuota(max_bytes, max_files),
             kpi=self._kpi,
+            mutation_source=self._mutation_source,
         )
 
     @property
@@ -218,11 +233,13 @@ class _ConversationTextNamespace:
         *,
         quota: _NamespaceQuota,
         kpi: BaseKPIWriter | None,
+        mutation_source: MutationSource,
     ) -> None:
         if not _is_safe_namespace_id(namespace):
             raise ConversationScratchpadInvalidPathError(
                 "Namespace identifier must be one safe path segment"
             )
+        self.mutation_source = mutation_source
         self._filesystem = filesystem
         self._conversation_id = session_id
         self._namespace = namespace
@@ -271,11 +288,14 @@ class _ConversationTextNamespace:
         self, relative_path: str, encoded: bytes, *, operation: str
     ) -> None:
         physical_path = self._physical_path(relative_path)
+        token = _MUTATION_SOURCE.set(self.mutation_source)
         try:
             await self._filesystem.mkdir(str(PurePosixPath(physical_path).parent))
             await self._filesystem.write(physical_path, encoded)
         except Exception as exc:
             raise self._storage_error(operation, exc) from exc
+        finally:
+            _MUTATION_SOURCE.reset(token)
 
     async def edit_text(
         self,
@@ -348,6 +368,7 @@ class _ConversationTextNamespace:
         relative_path = _normalize_path(path)
         async with self._lock:
             await self._ensure_accounting()
+            token = _MUTATION_SOURCE.set(self.mutation_source)
             try:
                 await self._filesystem.delete(self._physical_path(relative_path))
             except FileNotFoundError:
@@ -355,6 +376,8 @@ class _ConversationTextNamespace:
                 return
             except Exception as exc:
                 raise self._storage_error("delete", exc) from exc
+            finally:
+                _MUTATION_SOURCE.reset(token)
             self._forget_path(relative_path)
 
     async def purge(self) -> None:

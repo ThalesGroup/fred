@@ -124,6 +124,7 @@ from fred_sdk.contracts.context import (
     AgentInvocationResult,
     BoundRuntimeContext,
     ConversationFileResponse,
+    ConversationFileSaveRequest,
     ConversationTurn,
     ModelBinding,
     PortableContext,
@@ -1163,6 +1164,7 @@ def _build_conversation_filesystem(
             else ConversationFilesystemQuotaConfig()
         ),
         kpi=runtime_config.kpi_writer,
+        mutation_source="agent",
     )
 
 
@@ -5789,23 +5791,15 @@ def _build_agent_router(
         )
         return {"deleted": count}
 
-    @router.get(
-        "/sessions/{session_id}/filesystem/file",
-        response_model=ConversationFileResponse,
-        operation_id="readConversationFile",
-    )
-    async def read_conversation_file(
+    async def conversation_file_port(
         session_id: str,
-        path: str,
         http_request: Request,
-        team_id: str | None = None,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
-        container: PodApplicationContext = Depends(get_pod_container),
-    ) -> ConversationFileResponse:
-        """Read an existing owned conversation without preparing execution."""
+        team_id: str | None,
+        caller: KeycloakUser | None,
+        container: PodApplicationContext,
+    ) -> DeepConversationFilesystemPort:
+        """Shared browser authorization; never admits unknown sessions or system origin."""
         from urllib.parse import quote
-
-        from fred_runtime.deep.open_file import ensure_presentable, file_reference
 
         _refuse_reserved_session_id(session_id)
         config = get_runtime_context().config
@@ -5845,19 +5839,40 @@ def _build_agent_router(
                 raise HTTPException(503, "Conversation authorization is unavailable.")
         if config.filesystem is None:
             raise HTTPException(503, "Conversation filesystem storage is unavailable.")
+        service = ConversationFilesystemService(
+            config.filesystem,
+            session_id,
+            quotas=config.conversation_filesystem_quotas
+            or ConversationFilesystemQuotaConfig(),
+            kpi=config.kpi_writer,
+            mutation_source="user",
+        )
+        backend, permissions = build_conversation_filesystem(
+            service, skills=config.skills
+        )
+        return DeepConversationFilesystemPort(backend, permissions)
+
+    @router.get(
+        "/sessions/{session_id}/filesystem/file",
+        response_model=ConversationFileResponse,
+        operation_id="readConversationFile",
+    )
+    async def read_conversation_file(
+        session_id: str,
+        path: str,
+        http_request: Request,
+        team_id: str | None = None,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> ConversationFileResponse:
+        """Read an existing owned conversation without preparing execution."""
+        from fred_runtime.deep.open_file import ensure_presentable, file_reference
+
+        port = await conversation_file_port(
+            session_id, http_request, team_id, caller, container
+        )
         try:
             reference = file_reference(session_id, path, editable=False)
-            service = ConversationFilesystemService(
-                config.filesystem,
-                session_id,
-                quotas=config.conversation_filesystem_quotas
-                or ConversationFilesystemQuotaConfig(),
-                kpi=config.kpi_writer,
-            )
-            backend, permissions = build_conversation_filesystem(
-                service, skills=config.skills
-            )
-            port = DeepConversationFilesystemPort(backend, permissions)
             reference = reference.model_copy(
                 update={"editable": port.is_editable(reference.path)}
             )
@@ -5878,6 +5893,50 @@ def _build_agent_router(
                 503, "Conversation filesystem storage is unavailable."
             ) from exc
         return ConversationFileResponse(**reference.model_dump(), content=content)
+
+    @router.put(
+        "/sessions/{session_id}/filesystem/file",
+        response_model=ConversationFileResponse,
+        operation_id="saveConversationFile",
+    )
+    async def save_conversation_file(
+        session_id: str,
+        path: str,
+        body: ConversationFileSaveRequest,
+        http_request: Request,
+        team_id: str | None = None,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> ConversationFileResponse:
+        """Replace current text using server policy, without a read-before-write guard."""
+        from fred_runtime.deep.open_file import ensure_presentable, file_reference
+        from fred_sdk.contracts.runtime import ConversationFilesystemQuotaError
+
+        port = await conversation_file_port(
+            session_id, http_request, team_id, caller, container
+        )
+        try:
+            reference = file_reference(session_id, path, editable=False)
+            if not port.is_editable(reference.path):
+                raise ConversationFilesystemPermissionError("File is read-only")
+            ensure_presentable(body.content)
+            await port.write_text(reference.path, body.content, origin="agent")
+        except (ConversationScratchpadInvalidPathError, ValueError) as exc:
+            raise HTTPException(422, "Use a safe absolute virtual file path.") from exc
+        except ConversationFilesystemPermissionError as exc:
+            raise HTTPException(403, "Access denied.") from exc
+        except ConversationScratchpadUnsupportedContentError as exc:
+            raise HTTPException(415, "Only UTF-8 text files can be saved.") from exc
+        except ConversationFilesystemQuotaError as exc:
+            raise HTTPException(413, "Conversation filesystem quota exceeded.") from exc
+        except ConversationScratchpadStorageError as exc:
+            raise HTTPException(
+                503, "Conversation filesystem storage is unavailable."
+            ) from exc
+        return ConversationFileResponse(
+            **reference.model_copy(update={"editable": True}).model_dump(),
+            content=body.content,
+        )
 
     @router.delete(
         "/sessions/{session_id}/filesystem",

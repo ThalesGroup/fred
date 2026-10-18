@@ -7072,6 +7072,84 @@ def test_read_conversation_file_without_execution(monkeypatch, tmp_path) -> None
         }
 
 
+def test_conversation_file_save_is_readable_without_execution(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        asyncio.run(
+            config.history_store.save(
+                "edit-session",
+                [make_user_text("edit-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        service = ConversationFilesystemService(config.filesystem, "edit-session")
+        asyncio.run(service.scratchpad().write_text("notes.txt", "Before"))
+        saved = client.put(
+            "/pod/v1/agents/sessions/edit-session/filesystem/file",
+            params={"path": "/notes.txt"},
+            json={"content": "Human revision\n"},
+        )
+        assert saved.status_code == 200
+        assert saved.json()["content"] == "Human revision\n"
+        assert (
+            asyncio.run(service.scratchpad().read_text("notes.txt"))
+            == "Human revision\n"
+        )
+        other = ConversationFilesystemService(config.filesystem, "other-session")
+        assert not asyncio.run(other.scratchpad().exists("notes.txt"))
+
+
+@pytest.mark.parametrize(
+    ("path", "body", "status"),
+    [
+        ("/.deep/notes.txt", {"content": "forged"}, 403),
+        ("/../notes.txt", {"content": "forged"}, 422),
+        ("/notes.txt", {"content": "forged", "origin": "system"}, 422),
+        ("/notes.txt", {"content": "forged", "editable": True}, 422),
+    ],
+)
+def test_conversation_file_save_rejects_forged_policy(
+    monkeypatch, tmp_path, path, body, status
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        asyncio.run(
+            config.history_store.save(
+                "edit-session",
+                [make_user_text("edit-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        saved = client.put(
+            "/pod/v1/agents/sessions/edit-session/filesystem/file",
+            params={"path": path},
+            json=body,
+        )
+        assert saved.status_code == status
+
+
 @pytest.mark.parametrize(
     ("path", "expected"),
     [
@@ -7122,8 +7200,9 @@ def test_conversation_file_read_path_and_content_policy(
 
 
 @pytest.mark.parametrize("session_id", ["foreign-session", "unknown-session"])
+@pytest.mark.parametrize("method", ["GET", "PUT"])
 def test_conversation_file_read_rejects_forged_reference(
-    monkeypatch, tmp_path, session_id
+    monkeypatch, tmp_path, session_id, method
 ) -> None:
     from fred_core.history.history_schema import make_user_text
 
@@ -7148,19 +7227,22 @@ def test_conversation_file_read_rejects_forged_reference(
                 "bob",
             )
         )
-        result = client.get(
+        result = client.request(
+            method,
             f"/pod/v1/agents/sessions/{session_id}/filesystem/file",
             params={"path": "/notes.txt", "team_id": "team-1", "editable": True},
+            **({"json": {"content": "forged"}} if method == "PUT" else {}),
         )
         assert result.status_code == 403
         assert result.json() == {"detail": "Access denied."}
 
 
+@pytest.mark.parametrize("method", ["GET", "PUT"])
 @pytest.mark.parametrize(
     ("admission_status", "expected"), [(200, 200), (403, 403), (404, 403), (503, 503)]
 )
 def test_conversation_file_read_uses_owned_team_history_route(
-    monkeypatch, tmp_path, admission_status, expected
+    monkeypatch, tmp_path, admission_status, expected, method
 ) -> None:
     from fred_core.history.history_schema import make_user_text
     from fred_runtime.app.context import PodApplicationContext
@@ -7214,10 +7296,16 @@ def test_conversation_file_read_uses_owned_team_history_route(
                 team_id="team-1",
             )
         )
-        result = client.get(
+        result = client.request(
+            method,
             "/pod/v1/agents/sessions/historical-session/filesystem/file",
             params={"path": "/notes.txt", "team_id": "team-1"},
             headers={"Authorization": "Bearer browser-token"},
+            **(
+                {"json": {"content": "Historical current file"}}
+                if method == "PUT"
+                else {}
+            ),
         )
         assert result.status_code == expected
         if expected == 200:
@@ -7314,8 +7402,9 @@ def test_deep_parent_and_child_open_stream_and_history(monkeypatch, tmp_path) ->
         assert current.json()["content"] == "CHILD PRIVATE BODY"
 
 
+@pytest.mark.parametrize("method", ["GET", "PUT"])
 def test_conversation_file_read_requires_authentication(
-    monkeypatch, tmp_path, _pod_inbound_security
+    monkeypatch, tmp_path, _pod_inbound_security, method
 ) -> None:
     app, _ = _secured_pod(
         monkeypatch,
@@ -7325,7 +7414,8 @@ def test_conversation_file_read_requires_authentication(
         accept_delegated_calls=False,
     )
     with TestClient(app) as client:
-        response = client.get(
+        response = client.request(
+            method,
             "/pod/v1/agents/sessions/session-1/filesystem/file",
             params={"path": "/notes.txt", "team_id": "team-1"},
         )
