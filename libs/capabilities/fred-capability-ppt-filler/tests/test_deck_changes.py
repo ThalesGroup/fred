@@ -1107,8 +1107,24 @@ async def test_a_picture_design_asked_for_a_slide_without_picture_is_refused(
     )
     (problem,) = _payload(text)["slides"]
     assert "its picture area would stay empty" in problem["problem"]
-    assert "give a picture from list_images_in_folder" in problem["options"]
+    assert any(
+        "give a picture from list_images_in_folder" in o for o in problem["options"]
+    )
     assert len(workspace.writes) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_picture_kind_without_picture_never_gets_an_empty_picture_area(
+    monkeypatch, deck_plan_store
+):
+    """Seen in the eval: kind `image_text` and no picture was built on a design
+    whose picture half then stayed empty; now a close kind, and said why."""
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    slide = {"title": "Site", "kind": "image_text", "bullets": ["Lyon", "Nantes"]}
+    text, result = await turn.build(slides=[COVER, slide, _bullets(3)])
+    assert text.startswith(tools_mod._DELIVERED), text
+    assert "built as 'bullets' instead of 'image_text'" in text
+    assert "picture area would stay empty" in text
 
 
 @pytest.mark.asyncio

@@ -241,7 +241,12 @@ def test_an_image_pattern_is_not_chosen_for_a_plan_without_images():
         title="Method", bullets=["Frame", "Build", "Measure"], kind="bullets"
     )
     assert _labels(inventory, slide) == ["Plain"]
-    assert _labels(inventory, slide.model_copy(update={"image": "doc-1"})) == ["Photos"]
+    four = slide.model_copy(update={"images": [f"doc-{i}" for i in range(4)]})
+    assert _labels(inventory, four) == ["Photos"]
+    # One picture for four zones leaves three holes: refused, never built so.
+    one = slide.model_copy(update={"image": "doc-1"})
+    (problem,) = assign(inventory, _plan(one)).problems
+    assert "picture area would stay empty" in problem.problem
 
 
 def test_a_pattern_that_would_truncate_is_not_a_candidate():
@@ -1432,7 +1437,7 @@ def test_suggestions_spread_across_the_kinds_a_slide_suits():
     assert kinds == {"two_columns": "slides 2, 4", "cards": "slide 3"}
 
 
-def test_empty_item_pictures_cost_like_empty_slide_pictures():
+def test_empty_item_pictures_are_a_misfit_like_empty_slide_pictures():
     inventory = _cards_inventory()
     text = inventory.patterns[0]
     imaged = text.model_copy(
@@ -1461,7 +1466,7 @@ def test_empty_item_pictures_cost_like_empty_slide_pictures():
     )
     plain = SlidePlan(title="Axes", items=[PlanItem(text="Close")] * 3)
     size = (inventory.slide_width, inventory.slide_height)
-    assert misfit(imaged, plain, size)[1] > misfit(text, plain, size)[1]
+    assert misfit(imaged, plain, size)[0] and not misfit(text, plain, size)[0]
     pictured = SlidePlan(title="Axes", items=[PlanItem(text="Close", image="d")] * 3)
     assert misfit(imaged, pictured, size)[1] == misfit(text, plain, size)[1]
     # Without pictures, the icon-like text cards win over the image cards.
@@ -1496,7 +1501,7 @@ def test_a_framed_picture_is_chosen_only_with_a_picture():
     two = pictured.model_copy(update={"items": pictured.items[:2]})
     assert _labels(_inventory(framed, steps), two) == ["Image cards"]
     (problem,) = assign(_inventory(framed), _plan(plain)).problems
-    assert "images: this slide's picture area shows a frame" in problem.problem
+    assert "picture area would stay empty" in problem.problem
     assert "image (required)" in zone_summary(framed)
 
 

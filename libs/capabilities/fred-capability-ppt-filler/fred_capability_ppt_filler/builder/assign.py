@@ -66,7 +66,6 @@ from fred_capability_ppt_filler.builder.render import (
     _Line,
     _lines_from_bullets,
     _only_names_the_slide,
-    _reading_order,
     _takeaway_zone,
     _unused_item_fields,
     chart_hosts,
@@ -80,7 +79,6 @@ from fred_capability_ppt_filler.builder.render import (
 # more than any plainness of fit, so content shape decides first.
 _KIND_STEP = 10.0
 _LAYOUT = 5.0  # an example slide the designer built outranks a bare layout
-_IMAGE_HOLE = 4.0  # an empty picture zone is removed, leaving a gap
 _EMPTY_ZONE = 1.5  # an unfilled text zone is swept away
 _UNUSED_ITEM = 0.5
 _SHRUNK = 1.0
@@ -610,9 +608,8 @@ def _weigh(
         )
     reasons[:0] = [_no_place(what, pattern) for what in lost if what not in held]
 
-    # A framed picture left empty shows its layout's frame.
-    empty = _reading_order([z for z in pattern.zones if z.role == "image"])
-    framed = any(z.framed for z in empty[len(images) :])
+    # A picture zone left empty shows its frame or leaves a hole: it needs a picture.
+    unpictured = image_zones > len(images)
     zones = {z.key: z for z in pattern.zones}
     for key, lines in text.items():
         zone = zones[key]
@@ -623,8 +620,8 @@ def _weigh(
         group_text, pictures, used = _assign_group(
             group, slide, size, figures=pattern.kind == "figures"
         )
-        framed |= any(
-            z.framed and not pictures.get(z.key)
+        unpictured |= any(
+            z.role == "image" and not pictures.get(z.key)
             for item in group.items[:used]
             for z in item
         )
@@ -641,10 +638,11 @@ def _weigh(
         # One line per item field: six cards too long are one fix, not six.
         for what, found in long_items.items():
             reasons.append(found[0] if len(found) == 1 else _many(found))
-    if framed:
+    if unpictured:
         reasons.append(
             Misfit(
-                "images: this slide's picture area shows a frame when left empty",
+                "images: this design shows a picture the slide does not have, so its "
+                "picture area would stay empty",
                 "give a picture from list_images_in_folder for each, or use another kind",
             )
         )
@@ -653,11 +651,8 @@ def _weigh(
 
     empty = 0
     for zone in pattern.zones:
-        if zone.role == "image":
-            empty += 0 if images else 1
-            cost += 0.0 if images else _IMAGE_HOLE
-        elif (
-            zone.role not in ("keep", "table")
+        if (
+            zone.role not in ("keep", "table", "image")
             and zone.key not in text
             and zone not in hosts
         ):
@@ -672,10 +667,6 @@ def _weigh(
             holes = sum(len(zones) for zones in group.items)
             empty += holes
             cost += _EMPTY_ZONE * holes
-        for item, zones in zip(slide.items, group.items):
-            holes = 0 if item.image else sum(1 for z in zones if z.role == "image")
-            empty += holes
-            cost += _IMAGE_HOLE * holes
     cost += _UNUSED_ITEM * max(0, capacity - len(slide.items)) if slide.items else 0.0
     if pattern.source == "layout":
         cost += _LAYOUT
@@ -870,18 +861,6 @@ def _asked(slide: _Slide, has_cover: bool) -> Optional[SlideProblem]:
         )
     pattern, reasons, cost = found
     named = f"{whose} (template slide '{pattern.label}', a '{pattern.kind}' slide)"
-    # Chosen by the tool, a design with an empty picture area loses to one
-    # without; asked for, it would show that area empty (framed: `_weigh`).
-    if not (plan.image or plan.images) and any(
-        z.role == "image" and not z.framed for z in pattern.zones
-    ):
-        reasons = reasons + [
-            Misfit(
-                "images: this design shows a picture and the slide has none, so its "
-                "picture area would stay empty",
-                "give a picture from list_images_in_folder",
-            )
-        ]
     if plan.kind and plan.kind != pattern.kind:
         return SlideProblem(
             slide.index,
@@ -1524,12 +1503,12 @@ def _sections(slides: List[_Slide]) -> Dict[int, int]:
 
 
 def _wants_picture(pattern: Pattern, plans: Sequence[SlidePlan]) -> bool:
-    """The pattern needs a picture (a framed zone) none of ``plans`` has: never
-    offered to recast them, as the model cannot invent one."""
+    """The pattern needs a picture none of ``plans`` has: never offered to
+    recast them, as the model cannot invent one."""
     zones = pattern.zones + [
         z for g in pattern.groups for item in g.items for z in item
     ]
-    return any(z.framed for z in zones) and not any(
+    return any(z.role == "image" for z in zones) and not any(
         p.image or p.images or any(i.image for i in p.items) for p in plans
     )
 

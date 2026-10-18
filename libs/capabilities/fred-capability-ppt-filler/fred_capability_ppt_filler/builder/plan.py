@@ -1318,8 +1318,8 @@ def _limit(zones: Sequence[Zone], listed: bool = False) -> str:
 
 
 def _required(zones: Sequence[Zone]) -> str:
-    """A framed picture shows its frame when left empty: it needs a picture."""
-    return " (required)" if any(z.framed for z in zones) else ""
+    """A picture zone left empty shows its frame or a hole: it needs a picture."""
+    return " (required)" if zones else ""
 
 
 def table_summary(zone: Zone) -> str:
