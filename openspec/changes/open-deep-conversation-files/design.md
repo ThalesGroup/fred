@@ -36,6 +36,14 @@ Every operation must authenticate and establish session ownership/access before 
 
 Start with the existing text mounts; do not add corpus, attachment, PDF, or binary adapters. A readable file on a non-editable mount can use the text viewer in read-only mode. A returned editable flag is a UI hint, never the server's authorization decision.
 
+Slice 1 settles the shared read/presentation interfaces as follows:
+
+- SDK `ConversationFilePart` uses `type="conversation_file"`, trusted `session_id`, validated absolute `path`, `viewer` (`markdown`, `html`, `text`), and `editable`; `ConversationFileResponse` adds current UTF-8 `content`. Paths are limited to 4,096 characters and session IDs to 256. Viewer selection uses `.md`/`.markdown`, `.html`/`.htm`, then plain text.
+- `ConversationFilesystemPort.is_editable(path)` is a non-mutating policy query, conservatively false for unknown adapters. The Deep adapter uses the same ordered write rules and mounted skills restriction as mutation calls; deny and approval-required rules both mean read-only. Browser access recomputes its own policy, independent of a posted reference.
+- `GET /agents/sessions/{session_id}/filesystem/file?path=...&team_id=...` rejects unknown/foreign runtime history before storage access. Authenticated calls also read the existing Control Plane team/session-details route with the browser bearer, reusing team admission, owner checks and historical-session behavior without preparing execution. Missing authorization/storage returns 503; denied access 403; unsafe paths 422; missing files 404; unsupported UTF-8/NUL content 415.
+- `open` is present even when storage is unconfigured, returning an actionable typed error then. Its model-visible result quotes path/viewer/editability as bounded JSON metadata. Native-child updates expose only built-in file references through runtime tool-result events and the existing final UI-part/history pipeline; child answer/thought chunks stay private.
+- The frontend routes generated read queries through the session's captured `messages_url` prefix. Query identity includes session/path/team, and the reference selector deduplicates files by session/path. Each live tool-result presentation requests selection in event order; history cards reopen current content explicitly. The built-in panel shares the exclusive push-drawer slot and starts with a reusable, read-only CodeMirror source surface. Markdown/HTML-specific views and editing remain with their later slices.
+
 ### 3. Reuse viewers and conversion without their legacy storage coupling
 
 - **Markdown:** extract/reuse the existing editor surface and conversion helper with a file-backed adapter. Keep the legacy adapter intact. Export reads the latest saved Markdown directly; downloading/exporting first flushes that editor's pending save.

@@ -8,9 +8,9 @@ Use TDD within each slice: one meaningful failing behavior test, then the minimu
 
 Blocked by: none. Delivers a complete read-only plain-text presentation path, including history and reopening. Seams: standard Deep tool execution, authenticated runtime file API, serialized UI parts/history, and rendered chat panel.
 
-- [ ] 1.1 Add the built-in typed conversation-file UI part and minimal read response models; verify serialization/history round trips, OpenAPI exposure, and consistent path/viewer/editability metadata without a presentation capability.
-- [ ] 1.2 Add conversation-bound read access beside the runtime filesystem route; verify authenticated ownership, team/historical-session routing, unknown/foreign sessions, traversal, forged references, and read-only mount policy without starting an agent execution.
-- [ ] 1.3 Register standard `open(path)` for parents and native children and propagate child artifacts through stream/history; verify both reach the panel with bounded metadata, no document-body injection, no execution pause, and no claim of browser acknowledgment.
+- [x] 1.1 Add the built-in typed conversation-file UI part and minimal read response models; verify serialization/history round trips, OpenAPI exposure, and consistent path/viewer/editability metadata without a presentation capability.
+- [x] 1.2 Add conversation-bound read access beside the runtime filesystem route; verify authenticated ownership, team/historical-session routing, unknown/foreign sessions, traversal, forged references, and read-only mount policy without starting an agent execution.
+- [x] 1.3 Register standard `open(path)` for parents and native children and propagate child artifacts through stream/history; verify both reach the panel with bounded metadata, no document-body injection, no execution pause, and no claim of browser acknowledgment.
 - [ ] 1.4 Regenerate runtime OpenAPI and frontend clients and add session/path-keyed dispatch with the reusable CodeMirror plain-text surface; verify deduplication, current-content reopening after reload, stale navigation responses, and actionable missing/denied/unsupported or unavailable-runtime states.
 - [ ] 1.5 Apply localization, theme tokens, accessible labels, and keyboard opening to this path; verify rendered loading/error/read-only states and an end-to-end parent/child open demonstration.
 

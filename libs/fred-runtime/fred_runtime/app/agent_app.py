@@ -123,6 +123,7 @@ from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
     BoundRuntimeContext,
+    ConversationFileResponse,
     ConversationTurn,
     ModelBinding,
     PortableContext,
@@ -150,8 +151,11 @@ from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
+    ConversationFilesystemPermissionError,
+    ConversationScratchpadFileNotFoundError,
     ConversationScratchpadInvalidPathError,
     ConversationScratchpadStorageError,
+    ConversationScratchpadUnsupportedContentError,
     ExecutionConfig,
     FinalRuntimeEvent,
     HistoryStorePort,
@@ -5784,6 +5788,96 @@ def _build_agent_router(
             session_id=session_id, user_id=caller_uid
         )
         return {"deleted": count}
+
+    @router.get(
+        "/sessions/{session_id}/filesystem/file",
+        response_model=ConversationFileResponse,
+        operation_id="readConversationFile",
+    )
+    async def read_conversation_file(
+        session_id: str,
+        path: str,
+        http_request: Request,
+        team_id: str | None = None,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> ConversationFileResponse:
+        """Read an existing owned conversation without preparing execution."""
+        from urllib.parse import quote
+
+        from fred_runtime.deep.open_file import ensure_presentable, file_reference
+
+        _refuse_reserved_session_id(session_id)
+        config = get_runtime_context().config
+        history = config.history_store
+        if history is None:
+            raise HTTPException(503, "Conversation ownership checks are unavailable.")
+        # Unlike run admission, an unknown session never creates an owner here.
+        owned = (
+            await history.session_belongs_to_user(session_id, caller.uid)
+            if caller is not None
+            else bool(await history.get(session_id))
+        )
+        if not owned:
+            raise HTTPException(403, "Access denied.")
+        if caller is not None:
+            if not config.control_plane_url or not team_id:
+                raise HTTPException(503, "Conversation team routing is unavailable.")
+            url = (
+                f"{config.control_plane_url.rstrip('/')}/teams/{quote(team_id, safe='')}"
+                f"/sessions/{quote(session_id, safe='')}"
+            )
+            try:
+                response = await container.get_control_plane_http_client().get(
+                    url,
+                    headers={
+                        "Authorization": http_request.headers.get("Authorization", "")
+                    },
+                    follow_redirects=False,
+                )
+            except httpx.HTTPError as exc:
+                raise HTTPException(
+                    503, "Conversation authorization is unavailable."
+                ) from exc
+            if response.status_code in {401, 403, 404}:
+                raise HTTPException(403, "Access denied.")
+            if response.status_code != 200:
+                raise HTTPException(503, "Conversation authorization is unavailable.")
+        if config.filesystem is None:
+            raise HTTPException(503, "Conversation filesystem storage is unavailable.")
+        try:
+            reference = file_reference(session_id, path, editable=False)
+            service = ConversationFilesystemService(
+                config.filesystem,
+                session_id,
+                quotas=config.conversation_filesystem_quotas
+                or ConversationFilesystemQuotaConfig(),
+                kpi=config.kpi_writer,
+            )
+            backend, permissions = build_conversation_filesystem(
+                service, skills=config.skills
+            )
+            port = DeepConversationFilesystemPort(backend, permissions)
+            reference = reference.model_copy(
+                update={"editable": port.is_editable(reference.path)}
+            )
+            content = await port.read_text(reference.path, origin="agent")
+            ensure_presentable(content)
+        except (ConversationScratchpadInvalidPathError, ValueError) as exc:
+            raise HTTPException(422, "Use a safe absolute virtual file path.") from exc
+        except ConversationFilesystemPermissionError as exc:
+            raise HTTPException(403, "Access denied.") from exc
+        except ConversationScratchpadFileNotFoundError as exc:
+            raise HTTPException(
+                404, "File no longer exists. Ask the agent to recreate it."
+            ) from exc
+        except ConversationScratchpadUnsupportedContentError as exc:
+            raise HTTPException(415, "Only UTF-8 text files can be opened.") from exc
+        except ConversationScratchpadStorageError as exc:
+            raise HTTPException(
+                503, "Conversation filesystem storage is unavailable."
+            ) from exc
+        return ConversationFileResponse(**reference.model_dump(), content=content)
 
     @router.delete(
         "/sessions/{session_id}/filesystem",

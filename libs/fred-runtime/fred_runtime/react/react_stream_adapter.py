@@ -115,9 +115,11 @@ def split_stream_event_mode(raw_event: object) -> tuple[str, object]:
 
     if isinstance(raw_event, tuple) and len(raw_event) == 3:
         namespace, mode, payload = raw_event
-        # Only compact platform progress crosses the child boundary. Child
-        # answer/thought chunks are private to its parent's task tool result.
-        return ("subgraph" if namespace and mode != "custom" else str(mode)), payload
+        # Keep child modes distinct so callers can expose approved progress and
+        # file presentations while keeping child answer/thought chunks private.
+        return (
+            f"subgraph_{mode}" if namespace and mode != "custom" else str(mode)
+        ), payload
     if (
         isinstance(raw_event, tuple)
         and len(raw_event) == 2

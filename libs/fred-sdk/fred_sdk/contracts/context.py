@@ -100,6 +100,22 @@ class GeoPart(BaseModel):
     # e.g. {"weight":2,"opacity":0.8,"fillOpacity":0.1}
 
 
+class ConversationFilePart(BaseModel):
+    """A reference to a live conversation file, never a content snapshot."""
+
+    type: Literal["conversation_file"] = "conversation_file"
+    session_id: str = Field(min_length=1, max_length=256)
+    path: str = Field(min_length=2, max_length=4096)
+    viewer: Literal["markdown", "html", "text"]
+    editable: bool
+
+
+class ConversationFileResponse(ConversationFilePart):
+    """Authorized UTF-8 content with the same presentation identity as open()."""
+
+    content: str
+
+
 class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
 
@@ -757,13 +773,15 @@ class ToolContentBlock(FrozenModel):
     data: dict[str, object] | None = None
 
 
-# The frozen base union is link | geo. Capability chat parts extend it at
+# The built-in union includes links, maps and conversation files. Capabilities extend it at
 # registration time via `contracts.ui_part_union.rebuild_ui_part_union`
 # (#1977, RFC AGENT-CAPABILITY-RFC §3.6/§4) — never by hand-editing this
 # literal. Code building validators after registration must resolve the union
 # lazily (`ui_part_union.current_ui_part_union()`), not freeze this name at
 # import time.
-UiPart = Annotated[LinkPart | GeoPart, Field(discriminator="type")]
+UiPart = Annotated[
+    LinkPart | GeoPart | ConversationFilePart, Field(discriminator="type")
+]
 
 
 class ToolInvocationResult(FrozenModel):

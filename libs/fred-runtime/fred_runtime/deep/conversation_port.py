@@ -87,8 +87,16 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
                     )
                 return
 
+    def is_editable(self, path: str) -> bool:
+        path = normalize_virtual_path(path)
+        try:
+            self._check(path, "write", "agent")
+        except ConversationFilesystemPermissionError:
+            return False
+        return True
+
     async def read_text(self, path: str, *, origin: Origin) -> str:
-        path = _virtual_path(path)
+        path = normalize_virtual_path(path)
         self._check(path, "read", origin)
         responses = await self._backend.adownload_files([path])
         response = responses[0]
@@ -108,7 +116,7 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
             ) from exc
 
     async def write_text(self, path: str, content: str, *, origin: Origin) -> None:
-        path = _virtual_path(path)
+        path = normalize_virtual_path(path)
         self._check(path, "write", origin)
         result = await self._backend.awrite(path, content)
         if result.error is not None:
@@ -125,7 +133,7 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         origin: Origin,
         replace_all: bool = False,
     ) -> int:
-        path = _virtual_path(path)
+        path = normalize_virtual_path(path)
         self._check(path, "write", origin)
         result = await self._backend.aedit(path, old_text, new_text, replace_all)
         if result.error is not None:
@@ -135,7 +143,7 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         return result.occurrences or 0
 
     async def list(self, path: str = "/", *, origin: Origin) -> tuple[str, ...]:
-        path = _virtual_path(path, allow_root=True)
+        path = normalize_virtual_path(path, allow_root=True)
         self._check(path, "read", origin)
         result = await self._backend.aglob("**", path=path)
         if result.error is not None:
@@ -151,7 +159,7 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         return tuple(sorted(paths))
 
     async def exists(self, path: str, *, origin: Origin) -> bool:
-        path = _virtual_path(path)
+        path = normalize_virtual_path(path)
         self._check(path, "read", origin)
         location = PurePosixPath(path)
         result = await self._backend.aglob(location.name, path=str(location.parent))
@@ -162,7 +170,7 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         return any(info["path"] == path for info in result.matches or [])
 
 
-def _virtual_path(path: str, *, allow_root: bool = False) -> str:
+def normalize_virtual_path(path: str, *, allow_root: bool = False) -> str:
     if not isinstance(path, str) or not path.startswith("/"):
         raise ConversationScratchpadInvalidPathError("Filesystem path must be absolute")
     if path == "/" and allow_root:

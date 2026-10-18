@@ -309,3 +309,266 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
     )
     assert len(model.bound_tool_names) >= 2
     assert all("concat_files" in names for names in model.bound_tool_names)
+
+
+@pytest.mark.asyncio
+async def test_standard_deep_open_presents_bounded_reference(tmp_path: Any) -> None:
+    service = ConversationFilesystemService(
+        LocalFilesystem(str(tmp_path)), "session-open"
+    )
+    await service.scratchpad().write_text("notes.txt", "PRIVATE BODY" * 10000)
+    backend, permissions = build_conversation_filesystem(service)
+    port = DeepConversationFilesystemPort(backend, permissions)
+    binding = _binding().model_copy(
+        update={"runtime_context": RuntimeContext(session_id="session-open")}
+    )
+    model = _ScriptedModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("open", {"path": "/notes.txt"}, "open-notes")],
+            ),
+            AIMessage(content="Review requested"),
+        ]
+    )
+    middleware = _build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=binding,
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names={*_SAFE_FILESYSTEM_TOOLS, "open"},
+        filesystem=port,
+    )
+    agent = _create_compiled_deep_agent(
+        model=model,
+        tools=[],
+        system_prompt="Review files",
+        checkpointer=InMemorySaver(),
+        middleware=middleware,
+        subagent_middleware=middleware,
+        backend=backend,
+        permissions=permissions,
+    )
+    updates = await _drive(agent)
+    messages = [
+        message
+        for update in updates
+        for value in update.values()
+        if isinstance(value, dict)
+        for message in value.get("messages", [])
+        if isinstance(message, ToolMessage)
+    ]
+    result = next(
+        message for message in messages if message.tool_call_id == "open-notes"
+    )
+    assert result.artifact.ui_parts[0].model_dump() == {
+        "type": "conversation_file",
+        "session_id": "session-open",
+        "path": "/notes.txt",
+        "viewer": "text",
+        "editable": True,
+    }
+    assert (
+        result.content
+        == 'File presentation requested: {"path": "/notes.txt", "viewer": "text", "editable": true}'
+    )
+    assert len(result.artifact.model_dump_json()) < 1024
+
+
+@pytest.mark.asyncio
+async def test_native_child_open_streams_reference_without_child_prose(
+    tmp_path: Any,
+) -> None:
+    from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
+    from fred_sdk.contracts.react_contract import (
+        ReActInput,
+        ReActMessage,
+        ReActMessageRole,
+    )
+    from fred_sdk.contracts.runtime import (
+        ExecutionConfig,
+        FinalRuntimeEvent,
+        RuntimeServices,
+        ToolResultRuntimeEvent,
+    )
+
+    service = ConversationFilesystemService(
+        LocalFilesystem(str(tmp_path)), "session-open"
+    )
+    await service.scratchpad().write_text("child.txt", "PRIVATE FILE BODY")
+    backend, permissions = build_conversation_filesystem(service)
+    port = DeepConversationFilesystemPort(backend, permissions)
+    binding = _binding().model_copy(
+        update={"runtime_context": RuntimeContext(session_id="session-open")}
+    )
+    model = _ScriptedModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "task",
+                        {
+                            "description": "open child.txt",
+                            "subagent_type": "general-purpose",
+                        },
+                        "delegate",
+                    )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("open", {"path": "/child.txt"}, "child-open")],
+            ),
+            AIMessage(content="CHILD PRIVATE PROSE"),
+            AIMessage(content="Ready for review"),
+        ]
+    )
+
+    def middleware(child: bool = False) -> list[Any]:
+        return _build_deepagent_runtime_middleware(
+            tracer=None,
+            kpi=None,
+            binding=binding,
+            approval_policy=ToolApprovalPolicy(),
+            available_tool_names={*_SAFE_FILESYSTEM_TOOLS, "open"},
+            filesystem=port,
+            child=child,
+        )
+
+    agent = _create_compiled_deep_agent(
+        model=model,
+        tools=[],
+        system_prompt="Review files",
+        checkpointer=InMemorySaver(),
+        middleware=middleware(),
+        subagent_middleware=middleware(True),
+        backend=backend,
+        permissions=permissions,
+    )
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=agent,
+        binding=binding,
+        services=RuntimeServices(),
+        runtime_class_name="DeepAgentRuntime",
+        available_tool_names={*_SAFE_FILESYSTEM_TOOLS, "open", "task"},
+    )
+    events = [
+        event
+        async for event in executor.stream(
+            ReActInput(
+                messages=(ReActMessage(role=ReActMessageRole.USER, content="review"),)
+            ),
+            ExecutionConfig(session_id="session-open"),
+        )
+    ]
+    presented = [
+        event
+        for event in events
+        if isinstance(event, ToolResultRuntimeEvent) and event.ui_parts
+    ]
+    assert [event.ui_parts[0].path for event in presented] == ["/child.txt"]
+    final = next(event for event in events if isinstance(event, FinalRuntimeEvent))
+    assert final.ui_parts[0].session_id == "session-open"
+    assert final.content == "Ready for review"
+    assert all("PRIVATE FILE BODY" not in event.model_dump_json() for event in events)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["deny", "interrupt"])
+async def test_open_respects_effective_read_only_policy(
+    tmp_path: Any, mode: Any
+) -> None:
+    from deepagents.middleware.filesystem import FilesystemPermission
+
+    service = ConversationFilesystemService(
+        LocalFilesystem(str(tmp_path)), "policy-session"
+    )
+    await service.scratchpad().write_text("notes.txt", "readable file")
+    backend, permissions = build_conversation_filesystem(service)
+    permissions.insert(
+        0, FilesystemPermission(operations=["write"], paths=["/notes.txt"], mode=mode)
+    )
+    port = DeepConversationFilesystemPort(backend, permissions)
+    model = _ScriptedModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("open", {"path": "/notes.txt"}, "open")],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+    middleware = _build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names={*_SAFE_FILESYSTEM_TOOLS, "open"},
+        filesystem=port,
+    )
+    agent = _create_compiled_deep_agent(
+        model=model,
+        tools=[],
+        system_prompt="Review",
+        checkpointer=InMemorySaver(),
+        middleware=middleware,
+        subagent_middleware=middleware,
+        backend=backend,
+        permissions=permissions,
+    )
+    updates = await _drive(agent)
+    results = [
+        message
+        for update in updates
+        for value in update.values()
+        if isinstance(value, dict)
+        for message in value.get("messages", [])
+        if isinstance(message, ToolMessage)
+    ]
+    assert results[0].artifact.ui_parts[0].editable is False
+
+
+@pytest.mark.asyncio
+async def test_standard_open_reports_unconfigured_storage(tmp_path: Any) -> None:
+    service = ConversationFilesystemService(
+        LocalFilesystem(str(tmp_path)), "session-open"
+    )
+    backend, permissions = build_conversation_filesystem(service)
+    model = _ScriptedModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("open", {"path": "/notes.txt"}, "open")],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+    middleware = _build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names={*_SAFE_FILESYSTEM_TOOLS, "open"},
+    )
+    agent = _create_compiled_deep_agent(
+        model=model,
+        tools=[],
+        system_prompt="Review",
+        checkpointer=InMemorySaver(),
+        middleware=middleware,
+        subagent_middleware=middleware,
+        backend=backend,
+        permissions=permissions,
+    )
+    updates = await _drive(agent)
+    results = [
+        message
+        for update in updates
+        for value in update.values()
+        if isinstance(value, dict)
+        for message in value.get("messages", [])
+        if isinstance(message, ToolMessage)
+    ]
+    assert results[0].content == "Conversation file storage is unavailable."
+    assert results[0].artifact.is_error is True

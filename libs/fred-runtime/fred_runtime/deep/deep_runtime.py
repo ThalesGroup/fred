@@ -58,6 +58,7 @@ from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
+from fred_runtime.deep.open_file import OpenFileMiddleware
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     DeepChildHitlMiddleware,
@@ -126,9 +127,9 @@ _CONVERSATION_FILESYSTEM_PROMPT = (
     "# Conversation filesystem\n\n"
     "- `/` is the shared workspace for collaboration between the "
     "parent agent and its sub-agents in this conversation.\n"
-    "- It is also the designated future location for files the agent creates "
-    "for users. Do not claim that those files are user-accessible unless a "
-    "delivery mechanism is available.\n"
+    "- Use `open(path)` to request presentation of an existing text file for "
+    "human review. It returns path/viewer/editability metadata, never the file "
+    "body, and does not pause execution or confirm browser receipt.\n"
     "- Use absolute paths when creating or editing shared files, for example "
     "`/notes.md`.\n"
     "- `/.deep/` is reserved for runtime artifacts. Do not write or edit files "
@@ -232,6 +233,7 @@ class DeepAgentRuntime(ReActRuntime):
             (
                 *(bound_tool.runtime_name for bound_tool in bound_tools),
                 *sorted(_SAFE_FILESYSTEM_TOOL_NAMES),
+                "open",
                 *(("concat_files",) if filesystem is not None else ()),
             ),
             capability_block,
@@ -543,6 +545,12 @@ def _build_deepagent_runtime_middleware(
         cast(AgentMiddleware, TodoListMiddleware()),
         *(capability_block.middleware if capability_block is not None else ()),
         *((ConcatFilesMiddleware(filesystem),) if filesystem is not None else ()),
+        OpenFileMiddleware(
+            filesystem,
+            binding.runtime_context.session_id
+            or binding.portable_context.session_id
+            or binding.portable_context.request_id,
+        ),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         ToolCallTextRecoveryMiddleware(kpi=kpi),
         TracingKpiMiddleware(

@@ -119,6 +119,7 @@ def test_middleware_keeps_recovery_outside_model_observability() -> None:
     assert [type(m) for m in middleware] == [
         CheckpointHygieneMiddleware,
         TodoListMiddleware,
+        deep_mod.OpenFileMiddleware,
         RateLimitRetryMiddleware,
         ToolCallTextRecoveryMiddleware,
         TracingKpiMiddleware,
@@ -141,15 +142,16 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
     )
     assert type(middleware[0]) is CheckpointHygieneMiddleware
     assert type(middleware[1]) is TodoListMiddleware
-    assert type(middleware[2]) is RateLimitRetryMiddleware
-    assert type(middleware[3]) is ToolCallTextRecoveryMiddleware
-    assert type(middleware[4]) is TracingKpiMiddleware
-    assert type(middleware[5]) is ToolObservabilityMiddleware
-    assert type(middleware[6]) is FredHitlMiddleware
-    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[7:])
+    assert type(middleware[2]) is deep_mod.OpenFileMiddleware
+    assert type(middleware[3]) is RateLimitRetryMiddleware
+    assert type(middleware[4]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[5]) is TracingKpiMiddleware
+    assert type(middleware[6]) is ToolObservabilityMiddleware
+    assert type(middleware[7]) is FredHitlMiddleware
+    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[8:])
     # One guard per disabled filesystem tool name (ls/read_file/write_file/
     # edit_file/glob/grep/execute).
-    assert len(middleware) == 6 + 7 + 1
+    assert len(middleware) == 6 + 7 + 2
 
 
 @pytest.mark.parametrize("child", [False, True])
@@ -187,9 +189,9 @@ def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
         "# Conversation filesystem\n\n"
         "- `/` is the shared workspace for collaboration between "
         "the parent agent and its sub-agents in this conversation.\n"
-        "- It is also the designated future location for files the agent "
-        "creates for users. Do not claim that those files are user-accessible "
-        "unless a delivery mechanism is available.\n"
+        "- Use `open(path)` to request presentation of an existing text file for "
+        "human review. It returns path/viewer/editability metadata, never the file "
+        "body, and does not pause execution or confirm browser receipt.\n"
         "- Use absolute paths when creating or editing shared files, for "
         "example `/notes.md`.\n"
         "- `/.deep/` is reserved for runtime artifacts. Do not write or edit "
@@ -266,11 +268,12 @@ def test_middleware_places_capability_middleware_before_observability() -> None:
     assert type(middleware[0]) is CheckpointHygieneMiddleware
     assert type(middleware[1]) is TodoListMiddleware
     assert middleware[2] is marker
-    assert type(middleware[3]) is RateLimitRetryMiddleware
-    assert type(middleware[4]) is ToolCallTextRecoveryMiddleware
-    assert type(middleware[5]) is TracingKpiMiddleware
-    assert type(middleware[6]) is ToolObservabilityMiddleware
-    assert type(middleware[7]) is FredHitlMiddleware
+    assert type(middleware[3]) is deep_mod.OpenFileMiddleware
+    assert type(middleware[4]) is RateLimitRetryMiddleware
+    assert type(middleware[5]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[6]) is TracingKpiMiddleware
+    assert type(middleware[7]) is ToolObservabilityMiddleware
+    assert type(middleware[8]) is FredHitlMiddleware
 
 
 def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
@@ -394,10 +397,11 @@ async def test_deep_build_executor_wires_observability_middleware(
     wired = captured["middleware"]
     assert type(wired[0]) is CheckpointHygieneMiddleware
     assert type(wired[1]) is TodoListMiddleware
-    assert type(wired[2]) is RateLimitRetryMiddleware
-    assert type(wired[3]) is ToolCallTextRecoveryMiddleware
-    assert type(wired[4]) is TracingKpiMiddleware
-    assert type(wired[5]) is ToolObservabilityMiddleware
+    assert type(wired[2]) is deep_mod.OpenFileMiddleware
+    assert type(wired[3]) is RateLimitRetryMiddleware
+    assert type(wired[4]) is ToolCallTextRecoveryMiddleware
+    assert type(wired[5]) is TracingKpiMiddleware
+    assert type(wired[6]) is ToolObservabilityMiddleware
 
 
 @pytest.mark.asyncio

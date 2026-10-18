@@ -7031,3 +7031,302 @@ async def test_web_activity_endpoints_restrict_readers_and_erasers(
     assert result == (
         [] if endpoint_name == "list_web_research_activity" else {"deleted": 0}
     )
+
+
+def test_read_conversation_file_without_execution(monkeypatch, tmp_path) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        service = ConversationFilesystemService(config.filesystem, "read-session")
+        asyncio.run(service.scratchpad().write_text("notes.txt", "Current notes\n"))
+        asyncio.run(
+            config.history_store.save(
+                "read-session",
+                [make_user_text("read-session", "turn-1", 0, "review")],
+                "alice",
+                team_id="team-1",
+            )
+        )
+        result = client.get(
+            "/pod/v1/agents/sessions/read-session/filesystem/file",
+            params={"path": "/notes.txt", "team_id": "team-1"},
+        )
+        assert result.status_code == 200
+        assert result.json() == {
+            "type": "conversation_file",
+            "session_id": "read-session",
+            "path": "/notes.txt",
+            "viewer": "text",
+            "editable": True,
+            "content": "Current notes\n",
+        }
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/../secret.txt", 422),
+        ("/folder/../notes.txt", 422),
+        ("/missing.txt", 404),
+        ("/binary.dat", 415),
+        ("/.deep/result.txt", 200),
+    ],
+)
+def test_conversation_file_read_path_and_content_policy(
+    monkeypatch, tmp_path, path, expected
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        service = ConversationFilesystemService(config.filesystem, "policy-session")
+        asyncio.run(
+            config.history_store.save(
+                "policy-session",
+                [make_user_text("policy-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        asyncio.run(service.scratchpad().write_text("binary.dat", "binary\x00text"))
+        asyncio.run(
+            service.namespace(".deep", max_bytes=1000, max_files=10).write_text(
+                "result.txt", "runtime result"
+            )
+        )
+        result = client.get(
+            "/pod/v1/agents/sessions/policy-session/filesystem/file",
+            params={"path": path},
+        )
+        assert result.status_code == expected
+        if path == "/.deep/result.txt":
+            assert result.json()["editable"] is False
+            assert result.json()["content"] == "runtime result"
+
+
+@pytest.mark.parametrize("session_id", ["foreign-session", "unknown-session"])
+def test_conversation_file_read_rejects_forged_reference(
+    monkeypatch, tmp_path, session_id
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    caller = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
+    monkeypatch.setattr(
+        agent_app_module, "_make_user_dependency", lambda _fn, _enabled: lambda: caller
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        asyncio.run(
+            config.history_store.save(
+                "foreign-session",
+                [make_user_text("foreign-session", "turn-1", 0, "private")],
+                "bob",
+            )
+        )
+        result = client.get(
+            f"/pod/v1/agents/sessions/{session_id}/filesystem/file",
+            params={"path": "/notes.txt", "team_id": "team-1", "editable": True},
+        )
+        assert result.status_code == 403
+        assert result.json() == {"detail": "Access denied."}
+
+
+@pytest.mark.parametrize(
+    ("admission_status", "expected"), [(200, 200), (403, 403), (404, 403), (503, 503)]
+)
+def test_conversation_file_read_uses_owned_team_history_route(
+    monkeypatch, tmp_path, admission_status, expected
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+    from fred_runtime.app.context import PodApplicationContext
+
+    caller = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
+    monkeypatch.setattr(
+        agent_app_module, "_make_user_dependency", lambda _fn, _enabled: lambda: caller
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+
+    def admission(request: httpx.Request) -> httpx.Response:
+        assert (
+            str(request.url)
+            == "http://control.test/v1/teams/team-1/sessions/historical-session"
+        )
+        assert request.headers["Authorization"] == "Bearer browser-token"
+        return httpx.Response(
+            admission_status,
+            json={
+                "session_id": "historical-session",
+                "team_id": "team-1",
+                "agent_deleted": True,
+            },
+        )
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(admission))
+    monkeypatch.setattr(
+        PodApplicationContext, "get_control_plane_http_client", lambda self: http_client
+    )
+    app = create_agent_app(
+        registry={},
+        config=_build_test_config(tmp_path, control_plane_url="http://control.test/v1"),
+    )
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        service = ConversationFilesystemService(config.filesystem, "historical-session")
+        asyncio.run(
+            service.scratchpad().write_text("notes.txt", "Historical current file")
+        )
+        asyncio.run(
+            config.history_store.save(
+                "historical-session",
+                [make_user_text("historical-session", "turn-1", 0, "review")],
+                "alice",
+                team_id="team-1",
+            )
+        )
+        result = client.get(
+            "/pod/v1/agents/sessions/historical-session/filesystem/file",
+            params={"path": "/notes.txt", "team_id": "team-1"},
+            headers={"Authorization": "Bearer browser-token"},
+        )
+        assert result.status_code == expected
+        if expected == 200:
+            assert result.json()["content"] == "Historical current file"
+    asyncio.run(http_client.aclose())
+
+
+def test_deep_parent_and_child_open_stream_and_history(monkeypatch, tmp_path) -> None:
+    from fred_sdk.contracts.models import DeepAgentDefinition, ReActPolicy
+
+    class FileReviewAgent(DeepAgentDefinition):
+        agent_id: str = "test.file-review"
+        role: str = "Review files"
+        description: str = "Review existing conversation files"
+
+        def policy(self) -> ReActPolicy:
+            return ReActPolicy(system_prompt_template="Open files for human review")
+
+    def call(name: str, arguments: dict[str, Any], call_id: str) -> AIMessage:
+        return AIMessage(
+            content="", tool_calls=[{"name": name, "args": arguments, "id": call_id}]
+        )
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            call("open", {"path": "/parent.txt"}, "parent-open"),
+            call(
+                "task",
+                {"description": "Open child.txt", "subagent_type": "general-purpose"},
+                "delegate",
+            ),
+            call("open", {"path": "/child.txt"}, "child-open"),
+            AIMessage(content="Child finished"),
+            AIMessage(content="Ready for human review"),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    agent = FileReviewAgent()
+    app = create_agent_app(
+        registry={agent.agent_id: agent}, config=_build_test_config(tmp_path)
+    )
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        service = ConversationFilesystemService(config.filesystem, "review-session")
+        asyncio.run(
+            service.scratchpad().write_text("parent.txt", "PARENT PRIVATE BODY")
+        )
+        asyncio.run(service.scratchpad().write_text("child.txt", "CHILD PRIVATE BODY"))
+        result = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": agent.agent_id,
+                "input": "review",
+                "session_id": "review-session",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert result.status_code == 200
+        events = [
+            json.loads(line[6:])
+            for line in result.text.splitlines()
+            if line.startswith("data: ") and line != "data: [DONE]"
+        ]
+        presentations = [
+            part
+            for event in events
+            if event.get("kind") == "tool_result"
+            for part in event.get("ui_parts", [])
+        ]
+        assert [part["path"] for part in presentations] == ["/parent.txt", "/child.txt"]
+        assert "PRIVATE BODY" not in result.text
+        import time
+
+        deadline = time.monotonic() + 2
+        history = client.get("/pod/v1/agents/sessions/review-session/messages")
+        while not history.json() and time.monotonic() < deadline:
+            time.sleep(0.01)
+            history = client.get("/pod/v1/agents/sessions/review-session/messages")
+        assert history.status_code == 200
+        files = [
+            part
+            for message in history.json()
+            for part in message["metadata"].get("ui_parts", [])
+        ]
+        assert [part["path"] for part in files] == ["/parent.txt", "/child.txt"]
+        current = client.get(
+            "/pod/v1/agents/sessions/review-session/filesystem/file",
+            params={"path": "/child.txt"},
+        )
+        assert current.json()["content"] == "CHILD PRIVATE BODY"
+
+
+def test_conversation_file_read_requires_authentication(
+    monkeypatch, tmp_path, _pod_inbound_security
+) -> None:
+    app, _ = _secured_pod(
+        monkeypatch,
+        tmp_path,
+        caller_client_id="browser",
+        requires_active_accounts=True,
+        accept_delegated_calls=False,
+    )
+    with TestClient(app) as client:
+        response = client.get(
+            "/pod/v1/agents/sessions/session-1/filesystem/file",
+            params={"path": "/notes.txt", "team_id": "team-1"},
+        )
+        assert response.status_code == 401

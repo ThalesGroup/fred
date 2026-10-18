@@ -54,10 +54,10 @@ from typing import Annotated, Any, Union, get_args, get_origin
 from pydantic import BaseModel, Field
 
 from . import context as _context
-from .context import GeoPart, LinkPart
+from .context import ConversationFilePart, GeoPart, LinkPart
 
-BASE_UI_PARTS: tuple[type[BaseModel], ...] = (LinkPart, GeoPart)
-"""The frozen union members every pod ships (RFC §3.6): link, geo."""
+BASE_UI_PARTS: tuple[type[BaseModel], ...] = (LinkPart, GeoPart, ConversationFilePart)
+"""The built-in union members every pod ships."""
 
 _current_members: tuple[type[BaseModel], ...] = BASE_UI_PARTS
 
