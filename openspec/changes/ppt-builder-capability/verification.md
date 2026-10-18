@@ -1657,3 +1657,10 @@ Not proven: the live Thales inventory (vision labels) was not replayed; the harn
 - Prompt size (cl100k, built-in template): working rules 587 → 584 tokens (591 with `validate_plan`), args schema 4373 → 4316 (`skip_plan` gone when the gate is off; 4373 with it), catalogue 1921 → 1924 (one more `(required)`).
 - Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 941 passed, 5 skipped; `openspec validate --strict`.
 - Not proven: the model's behaviour with the new wording (fred-agents not restarted, 56.7); the live Thales inventory (vision labels) was not replayed: on the rules-only analysis, 'Chapitre avec image' and '6 cartes avec image et message clé' now need their pictures.
+
+## WP57 (2026-10-18): no forced cover (judgement moves to the LLM)
+
+- Tests: `test_assign.py::test_a_deck_may_open_without_a_cover` (items first, a one-slide `bullets` deck; refused before), `test_a_later_cover_is_built_from_its_content_and_the_swap_is_named` (the note names the move back), `test_build_tool.py::test_a_deck_without_a_cover_is_built_as_sent` (refused before with "add a cover slide"), `test_deck_changes.py::test_an_insert_at_the_start_opens_the_deck`.
+- Offline replay of default r14 (`runs/default-r14-20261017-190720`, calls made under the old "0 = first, after the cover" wording): the Sommaire inserted with `after` 0 now opens the deck and the old cover is built as a section, with "To make it the cover, move it to the start"; before, it went behind the cover. A model reading the new description ("0 = at the start") sends `after` 1 for that.
+- Prompt size and commands: see `ppt-builder-storytelling` verification, task group 5.
+- Not proven: model behaviour (fred-agents not restarted, 57.4).

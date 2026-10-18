@@ -365,10 +365,11 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** a pattern lacks a slot for a non-empty field, holds fewer items than the slide carries, or cannot hold the text above the shrink floor
 - **THEN** that pattern is not a candidate for the slide
 
-#### Scenario: Cover exactly once, first
+#### Scenario: The cover opens the deck, never forced
 
 - **WHEN** a deck is assigned on a template holding a cover pattern
-- **THEN** the first slide uses the cover and no other slide does
+- **THEN** only the first slide may use the cover; a first slide with no `kind` holding only a title and subtitle uses it
+- **AND** a first slide with another `kind` or another content shape keeps it, so a deck without a cover (a single summary slide, "no cover", slide 1 removed) is built as sent
 
 #### Scenario: Closing at most once, last
 
@@ -938,13 +939,6 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **WHEN** the model sends the identical call again (same arguments, same base plan) before any deck is delivered
 - **THEN** it is not evaluated again: the result says it is the same call as one already refused, restates the problems briefly, and suggests sending each listed slide whole with `replace` or dropping the change (leaving the slide out for a `slides` call)
 
-#### Scenario: A fragment sent after a delivered deck
-
-- **GIVEN** a deck delivered in this conversation
-- **WHEN** a `slides` call starts with a slide that fits no cover
-- **THEN** nothing is built and that slide's only option is to add these slides to the delivered deck with `changes` (`insert` after N, or `replace`), a new deck going in ONE call with every slide, cover first
-- **AND** without a delivered deck the options still include adding a cover slide before it
-
 #### Scenario: A refused plan is never the next turn's base
 
 - **GIVEN** a delivered deck
@@ -956,11 +950,11 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **WHEN** the user says a slide should be another kind of slide
 - **THEN** the agent rebuilds the deck with that slide's `kind` changed, and the stored analysis and overrides are unchanged
 
-#### Scenario: An insert before the cover
+#### Scenario: An insert at the start
 
 - **GIVEN** a delivered deck that opens on the template's cover
-- **WHEN** a `changes` call inserts non-cover slides, or moves a slide other than the cover, with `after` 0
-- **THEN** they go after the cover (as `after` 1), the deck is built, and the result says so
+- **WHEN** a `changes` call inserts slides, or moves a slide, with `after` 0
+- **THEN** they open the deck as sent, never moved behind the cover
 
 #### Scenario: The result names what changed
 
@@ -976,7 +970,7 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 - **GIVEN** a delivered deck
 - **WHEN** a `changes` call sends `{"op": "move", "slide": 2, "after": 3}`
-- **THEN** slide 2, with any edit the same call makes to it, goes after slide 3 (after the cover for `after` 0), a slide moved after another moved slide follows it, and the deck is built
+- **THEN** slide 2, with any edit the same call makes to it, goes after slide 3 (first for `after` 0), a slide moved after another moved slide follows it, and the deck is built
 - **AND** a move without `after`, after the slide itself, of a slide the same call removes, a second move of one slide, or moves forming a loop build nothing, with what, why and the remedy
 
 #### Scenario: Slides and changes sent together

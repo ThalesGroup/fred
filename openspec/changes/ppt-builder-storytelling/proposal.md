@@ -16,6 +16,7 @@ The builder's rule stays: the model writes content and intent, the code picks th
 - **One option: "Validate the plan before building" (default off).** When on, the first build of a conversation's first deck returns a code-generated outline (audience, main message, one line per slide: kind, title, takeaway, source) instead of a deck; the agent shows it and waits. The next build, after the user's reply, builds. The plan is skipped only when the user's latest message explicitly asks (`skip_plan`, checked against a fr/en lexicon). Edits of a delivered deck never wait. When off: today's behaviour.
 - **Deck fields** `audience` and `main_message` (optional), shown in the outline.
 - **Summary notes** `illustrative_data`, `figures_unverified`, `wide_range_chart`.
+- **2026-10-18 (owner decision: judgement moves to the LLM, design D7).** Every check above except a chart's written units is deleted, with the three word lists and the two notes `figures_unverified` and `wide_range_chart`; `takeaway` and `source` stay fields written to the notes, asked for by the working rules.
 
 ## Capabilities
 

@@ -64,17 +64,12 @@ has none.
   that many frames, filled in reading order; a free text box right above a
   frame shows that chart's title.
 
-- **Storytelling** (`story.py`, `notes.py`): before the assignment, every
-  content slide needs a `takeaway` (what the audience concludes, as a
-  sentence; written as the first line of the speaker notes, never on the
-  slide), a title or subtitle holding three figures or more is refused for a
-  figures slide, a chart holds one measure (two written units refused; a 100×
-  spread without `unit` refused once), and a slide with figures states its
-  `source` (`illustrative` only when the user asked). A lenient spot-check
-  relates one figure per slide to a number of the user's messages or tool
-  results; nothing found is refused once, then built with a
-  `figures_unverified` note. The `validate_plan` setting turns a
-  conversation's first build into an outline the user answers first.
+- **Storytelling** (`story.py`, `notes.py`): the working rules ask for a
+  `takeaway` per content slide (the first line of the speaker notes, never on
+  the slide) and a `source` for figures; the builder enforces only that a
+  chart holds one measure (two written units refused) and writes the notes.
+  The `validate_plan` setting turns a conversation's first build into an
+  outline the user answers first.
 
 - **Intents** (meaning, never style): `chart.highlight` / `sort` /
   `stacked_as`, `table.total_row` (the table style's own total row, else bold)

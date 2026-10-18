@@ -17,7 +17,7 @@ One cross-cutting rule, then eight optional fields in three phases (a fourth, th
   - `table.highlight_row` / `table.highlight_column`: an index or the row's first-cell / the column's header text; bold and a tint of the table style's accent, stronger than its row bands.
   - `items[i].trend: up | down | flat`: a ▲ ▼ ► glyph before the figure, in the figure's own text style; no colour.
 - **Phase C — slide takeaway** (re-analysis):
-  - the slide's `takeaway` (field owned by `ppt-builder-storytelling`) placed in the template's takeaway zone (shape name or vision purpose) only when the user explicitly asked to show key messages (`show_takeaways`, checked against the user's words) and it fits; by default the zone is filled from the slide's content as before and the takeaway stays in the speaker notes only (owner, 2026-10-15).
+  - the slide's `takeaway` (field owned by `ppt-builder-storytelling`) placed in the template's takeaway zone (shape name or vision purpose) only when the user explicitly asked to show key messages (`show_takeaways`) and it fits; by default the zone is filled from the slide's content as before and the takeaway stays in the speaker notes only (owner, 2026-10-15).
   - `Zone.takeaway` flag; `ANALYSIS_VERSION` 16 → 17 (the version had moved on since the draft).
 - **Phase D — chart target: dropped** (owner, 2026-10-16). A target line would be a combo chart, refused for the chart types change; python-pptx has no direct support for it, and it mixes measures against the storytelling one-measure-per-chart rule.
 - **Edits** through the existing `changes` paths (`chart.highlight`, `table.total_row`, `items[2].trend`…; `takeaway` through `ppt-builder-storytelling`).

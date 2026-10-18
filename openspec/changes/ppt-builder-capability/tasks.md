@@ -444,7 +444,7 @@ Owns: `changes.py` (`CLEARABLE`, kind-edit clearing), `assign.py` (`unplaced`), 
 Owns: `capability.py` (`awrap_tool_call`), `tools.py` (`round_refusal`, unchanged resend, `_DUPLICATE` and the argument-keyed guard deleted), `assign.py` (`continuing` remedy), `design.md` D26 and the message rule, delta spec, tests, `verification.md`.
 
 - [x] 40.1 Several `build_presentation` calls in one assistant message: the middleware runs the first in the message's order and refuses the others before the tool, naming the first and pointing to one call or `changes`. Tests: three different fragments gathered, one run and delivered, two exact refusals; an identical copy refused, a single call run, a call absent from the state untouched
-- [x] 40.2 A `slides` plan without a cover after a delivered deck (this turn or the history) gets the `changes` remedy as its only option. Test: the same fragment before and after a delivery, both option lists
+- [x] 40.2 A `slides` plan without a cover after a delivered deck (this turn or the history) gets the `changes` remedy as its only option. Test: the same fragment before and after a delivery, both option lists (deleted by WP57: no cover is forced)
 - [x] 40.3 A `slides` call equal to the deck delivered this turn is answered "unchanged, deck already delivered as '<file>'" with no render, upload or preview. Tests: render counter unchanged, one write; another file name or content renders; the WP27 parallel-copy test now expects the copy answered as unchanged
 - [x] 40.4 Package `make test`, `ruff check`, `ruff check --select I`, `ruff format --check`, basedpyright with baseline; `verification.md`; `openspec validate --strict`
 - Not covered: a live re-run of the session
@@ -563,7 +563,7 @@ Owns: `plan.py` (`single_columns`), `changes.py` (`_not_a_list`, one edit per fi
 
 - [x] 52.1 `columns` sent as one object is refused with the list form; an edit of a list of objects with one object, and two edits of one field of one slide, are refused. Tests: `test_columns_sent_as_one_object_are_a_problem_not_one_column`, `test_an_edit_of_a_whole_list_with_one_object_is_refused`, `test_two_edits_of_one_field_on_one_slide_are_refused`
 - [x] 52.2 Bullets on a two-column slide split at a top-level point; one point with sub-points is a misfit there. Test: `test_bullets_over_two_columns_keep_each_point_with_its_sub_points`
-- [x] 52.3 An insert at `after` 0 of a deck opening on its cover goes after the cover, with a note. Test: `test_an_insert_at_the_start_goes_after_the_cover`
+- [x] 52.3 An insert at `after` 0 of a deck opening on its cover goes after the cover, with a note. Test: `test_an_insert_at_the_start_goes_after_the_cover` (deleted by WP57: `after` 0 means first)
 - [x] 52.4 Wingdings 3 bullets drawn as `►` in the preview copy only. Test: `test_preview_copy_draws_wingdings_3_bullets_the_delivered_deck_keeps`
 - [x] 52.5 A closing's lone body holds its bullets; a closing on a section slide is unnumbered. Test: `test_a_closing_holds_its_bullets_and_on_a_section_slide_takes_no_number`
 - [x] 52.6 A key figure's label reads under its heading when the card has no label zone. Test: `test_a_figures_label_reads_under_its_heading_without_a_label_zone`
@@ -618,3 +618,12 @@ Owns: `changes.py` (`_overlap`, `_on_the_base`), `plan.py` (`read_number`, `_dec
 - Not changed: L16 (one number reader for story, plan and lexicon: story already reads U+2212 and both readings, a merge is its own change); M29 (any reply to a proposed outline counts as approval); M22/M23 (refused plan dies with the turn; recoverable mistakes returned as tool errors)
 - [ ] 56.7 Live re-evaluation once fred-agents runs this code (not restarted by this change)
 
+## WP57. Judgement leaves the builder: the cover (owner decision 2026-10-18: judgement moves to the LLM, design D35)
+
+Owns: `assign.py` (`_allowed`, `_tiers`, `_problem`, `_asked`, `_substitution`, `_CONTINUE_DELIVERED` deleted, `has_cover`/`continuing` parameters deleted), `changes.py` (`after_the_cover`, `AFTER_THE_COVER` deleted, `after` description), `render.py` (cover substitution exemption), `tools.py` (cover rule and `after` 0 wording, `continuing`), tests, delta spec, `verification.md`. Storytelling deletions of the same lot: `ppt-builder-storytelling` task group 5.
+
+- [x] 57.1 (H16) No forced cover: the cover may only be slide 1; a kind-less slide 1 holding only a title and subtitle takes it; any other first slide keeps its kind or content shape. The fragment-after-delivery refusal and the "add a cover slide" option are deleted. Tests: `test_assign.py::test_a_deck_may_open_without_a_cover`, `test_build_tool.py::test_a_deck_without_a_cover_is_built_as_sent`
+- [x] 57.2 (H16, M2) `after` 0 means first; `after_the_cover` and its note are deleted. Tests: `test_deck_changes.py::test_an_insert_at_the_start_opens_the_deck`, `test_build_tool.py::test_the_tool_tells_the_agent_one_call_builds_the_whole_deck`
+- [x] 57.3 Package checks; `openspec validate --strict`
+- Not changed: a cover pattern still serves slide 1 only, and a closing pattern the last slide only (position rules of the kinds themselves)
+- [ ] 57.4 Live re-evaluation once fred-agents runs this code (not restarted by this change)

@@ -161,9 +161,8 @@ to prove it. That sentence is not on the slide: it opens the speaker notes, and
 the title stays short. Figures come from your documents or from what you wrote
 in the conversation, and the notes say where they come from. The agent only
 makes figures up when you ask for sample or made-up data; the chart then says
-so ("illustrative"). A figure it could not find in the documents read, or a
-chart that mixes very different values, is flagged in **What was built**: check
-it before presenting.
+so ("illustrative"). The agent does not check the figures: check them before
+presenting.
 
 **Validate the plan before building** — off by default. When on, the agent
 first shows its plan for the first presentation of a conversation: the

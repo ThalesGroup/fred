@@ -174,9 +174,8 @@ ouvre les notes de l'orateur, et le titre reste court. Les chiffres viennent de
 vos documents ou de ce que vous avez écrit dans la conversation, et les notes
 disent d'où ils viennent. L'agent n'invente des chiffres que si vous demandez
 des données d'exemple ou fictives ; le graphique l'indique alors
-(« illustratif »). Un chiffre qu'il n'a pas retrouvé dans les documents lus, ou
-un graphique qui mélange des valeurs très différentes, est signalé dans **Ce
-qui a été construit** : vérifiez-le avant de présenter.
+(« illustratif »). L'agent ne vérifie pas les chiffres : vérifiez-les avant de
+présenter.
 
 **Valider le plan avant de construire** — désactivé par défaut. Activé, l'agent
 montre d'abord son plan pour la première présentation d'une conversation : le

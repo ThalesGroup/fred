@@ -34,8 +34,17 @@ Date: 2026-10-15, branch `feat/ppt-builder-capability`.
 - Written units are taken from the call itself in `_sent` (they are not dumped), never carried through storage, so an edit never inherits stale units.
 - Figures-slide options are worded template-neutrally ("one item per figure"): the built-in figures slide has no `label`.
 
+## Task group 5 (2026-10-18): judgement moves to the LLM (design D7)
+
+- Regression tests assert the new behaviour and failed on the code before (each case was a refusal there; the audit probed H9, H10, H12 offline): `test_story_checks.py::test_dates_versions_and_standards_stay_in_a_title`, `test_the_takeaway_is_never_refused` (incl. a CJK sentence), `test_figures_need_no_source_nor_a_match_in_the_conversation` (roadmap table, figures found nowhere, illustrative without allowance), `test_a_wide_range_and_untitled_charts_are_built_as_sent`; `test_story_render.py::test_figures_and_a_wide_range_are_built_as_sent`, `test_illustrative_figures_are_said_in_caption_notes_and_summary` (German request); `test_takeaway.py::test_the_flag_is_applied_whatever_the_user_s_language`; `test_plan_validation.py::test_skip_plan_is_the_model_s_call_in_any_language`; `test_multi_chart_slides.py::test_each_chart_shows_one_measure_and_may_go_untitled`. Kept: units refused on every send, per scatter axis, on touched slides only. Frontend `DeckSummaryButton.test.tsx` (8 passed), `tsc --noEmit` clean.
+- Eval history (`~/fred-tmp/revision-evals/runs/`, 164 runs): 71 of 170 distinct `needs_revision` results, in 58 runs, were refused only by checks this group or `ppt-builder-capability` WP57 deleted (mostly a missing `source` or `takeaway`).
+- Offline build on the built-in template, one slide `kind: bullets` titled "Comité du 18/10 : 3 décisions" with "Release 2.1 vs 3.0 vs 4.0", "ISO 27001", "Phase 2", no cover, no takeaway, no source: delivered on the first call (before: refused for the cover, the title's figures and the takeaway); LibreOffice render `~/fred-tmp/revision-evals/fixes/audit/lot3/one-slide/`, PNG looked at.
+- Lines (package and frontend sources, commits 22a1041d1..22492297f): +113 / −833; tests +125 / −432. Prompt size (cl100k, built-in): working rules 584 → 584 (591 gated), tool description 3214 → 3215, args schema 4316 → 4314 (4373 → 4371 gated). No rule or description line added: each deleted check's ask was already in the working rules or a field description.
+- Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 916 passed, 5 skipped (941 before: the deleted checks' tests went with them); `openspec validate --strict`.
+- Not proven: model behaviour without the refusals (fred-agents not restarted). Takeaways, sources and real figures now rest on the working rules alone.
+
 ## Not verified
 
-- Every figure, that the named document holds them, numbers in bullets (design D4).
+- Any figure (design D7: the spot-check is deleted).
 - Model behaviour: tasks 4.1 metrics (prompts added to `eval/prompts.py`, metrics not added) and 4.2 evidence with `mistral-medium` need a real LLM run; not done here.
 - The plan's language is guessed from its words (fr/en only).

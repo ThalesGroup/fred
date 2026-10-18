@@ -35,3 +35,13 @@
 - [x] 4.5 Package `make test`, `ruff check` (incl. `--select I`), `ruff format --check`, basedpyright with its baseline; `fred-performance-reviewer` on the spot-check (per-call history scan); `openspec validate ppt-builder-storytelling --strict`
 - [x] 4.6 Align `ppt-builder-intent-fields` phase C on this change's `takeaway` (2026-10-15): one field, zone placement only, no on-slide fallback; zone filled with the takeaway only when the user asks for key messages to be shown (O17)
 - Verification: `verification.md` with test counts, eval numbers and PDFs, and what stays unverified (design D4)
+
+## 5. Judgement moves to the LLM (owner decision 2026-10-18, design D7)
+
+- [x] 5.1 (H9, H10, H11, M17, M3, §4 takeaway, spread and multi-chart titles) `story.py` keeps only the chart-unit check and the outline: takeaway checks, crammed title, spread, multi-chart titles, required source, illustrative allowance, spot-check, soft refusals and `Conversation` deleted; `tools.py` reads only whether a proposal was answered (`plan_answered`). Tests: `test_story_checks.py` (rewritten: dates/versions/standards in titles, any takeaway, figures without source or match, wide-range and untitled charts pass; units still refused), `test_story_render.py::test_figures_and_a_wide_range_are_built_as_sent`, `test_multi_chart_slides.py::test_each_chart_shows_one_measure_and_may_go_untitled`
+- [x] 5.2 `figures_unverified`, `wide_range_chart`, `SlidePlan.story_notes`, the unverified notes line and delivery line deleted (backend, `DeckSummaryButton.tsx`, locales; `illustrative_data` no longer says "as you asked"). Tests: `DeckSummaryButton.test.tsx`
+- [x] 5.3 (H12) The three word lists deleted: `show_takeaways` and `skip_plan` honoured as the model sends them, `illustrative` never refused; `_NOT_ASKED` and the skip-refused line deleted. Tests: `test_takeaway.py::test_the_flag_is_applied_whatever_the_user_s_language`, `test_plan_validation.py::test_skip_plan_is_the_model_s_call_in_any_language`, `test_story_render.py::test_illustrative_figures_are_said_in_caption_notes_and_summary` (German request)
+- [x] 5.4 The `storytelling` test marker and its fixture deleted (every test runs the remaining check); README, Help Center `features/capabilities.md` (fr + en)
+- [x] 5.5 Package checks; `openspec validate --strict`
+- Not changed: L13 (the `source` value read as an exact phrase for the illustrative caption), M14 (chart readability caps), M20 (title words as a kind hint), M27, L10, L12: other rules, not this lot
+
