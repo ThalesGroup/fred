@@ -587,3 +587,20 @@ Owns: `analysis.py` (`FrameMetrics.vertical`, `_frame_metrics`, `estimate_capaci
 
 - [x] 54.1 A text box whose `bodyPr` (own or inherited) sets `vert` other than `horz` swaps width and height in its capacity, so the built-in matrix's vertical axis is ≈54 chars × 1 line, not ≈1 char × 19 lines. Test: `test_builtin_template.py::test_vertical_text_is_measured_along_its_height`
 - [x] 54.2 Built-in inventory regenerated (`make builtin-inventory`, matrix zone only); a matrix slide rendered before/after by LibreOffice (`~/fred-tmp/revision-evals/fixes/matrix/`), PNG looked at; package checks; `openspec validate --strict`
+
+## WP55. Revision fixes, round 3 (owner decision 2026-10-18: universal builder rules only, design D33)
+
+Owns: `changes.py` (`apply_changes` origins and `move`, `deck_delta` pairing, render compare, notes-only, moves, fewer points), `tools.py` (turn base, refusal numbering, both-modes refusal, render hashes), `pptx_archive.py` (`slide_fingerprints`), `plan.py` (`rendered`), `render.py` (`RenderResult.fingerprints`), `assign.py` (`_asked` empty picture area), tests, delta spec, `verification.md`.
+
+- [x] 55.1 A refused `changes` call leaves no trace: the next call applies to the deck the refused one applied to, of any shape; refused slides numbered on that deck. Tests: `test_a_refused_changes_call_leaves_no_trace`, `test_numbers_in_a_revision_are_the_deck_the_changes_apply_to`, updated `test_a_corrected_resend_of_refused_changes_replaces_them`, `test_the_same_changes_resent_are_never_applied_twice`, `test_a_call_identical_to_a_refused_one_is_not_evaluated_again`
+- [x] 55.2 The delta pairs a run of differing slides by shared words, in order. Test: `test_the_delta_names_the_slide_a_resend_dropped`
+- [x] 55.3 The delta compares rendered slides (per-slide hash of the delivered file). Tests: `test_the_delta_compares_what_the_slides_render`, `test_a_slide_moved_by_a_removal_renders_unchanged`
+- [x] 55.4 `like` onto a design with a picture area for a slide with no picture is refused. Test: `test_a_picture_design_asked_for_a_slide_without_picture_is_refused`
+- [x] 55.5 A change that reached only the speaker notes is listed as such. Test: `test_a_change_only_the_speaker_notes_show_is_said_so`
+- [x] 55.6 A changed slide on another design with fewer points is listed with both counts. Test: `test_the_delta_counts_the_points_a_recast_slide_lost`
+- [x] 55.7 A layout change through `changes` is no longer pinned to a refused `like` (consequence of 55.1). Test: `test_a_refused_like_never_pins_a_later_edit`
+- [x] 55.8 `slides` and `changes` together: one line naming the one to send. Test: `test_no_base_both_modes_and_bad_changes_build_nothing`
+- [x] 55.9 `move` op in `changes`; the delta lists moved slides. Tests: `test_move_puts_a_slide_after_another`, `test_a_moved_slide_is_built_and_listed_as_moved`, `test_every_bad_change_is_reported_with_its_remedy`
+- [x] 55.10 Eval calls replayed offline; LibreOffice render for the visual items (`~/fred-tmp/revision-evals/fixes/r3/`), PNG looked at; package checks; `openspec validate --strict`
+- Not changed (not universal, D33): a process `number` too long for its banner (a growing zone, no capacity); content the agent itself wrote in `notes` on a slide that also changed visibly (default r10)
+- [ ] 55.11 Live re-evaluation once fred-agents runs this code (not restarted by this change)

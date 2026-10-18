@@ -352,6 +352,17 @@ The LLM-behaviour faults of the same evals (D31 took the builder ones) are addre
 - **Facts.** See `ppt-builder-storytelling` D6. Tone requests on a deck without addressing (tu/vous) fall under "say so when a request needed no change".
 - Not done: no code check of the reply against the result (the reply is free text); live effect unmeasured until the re-evaluation (WP53.5).
 
+### D33. Revision fixes, round 3 (owner decision 2026-10-18: universal builder rules only)
+
+Only logic that holds in every case goes into the builder; what depends on judgement or on what the user meant (made-up figures, which slide, a shorter deck) stays with the agent.
+
+- **A refused call leaves no trace.** A refused `changes` call became the base of the next call unless that call had the same shape, so an edit sent once (items emptied) reached a later delivery that never sent it, and a refused `like` kept pinning the slide. The shape match is deleted: `changes` apply to the delivered deck, or to a refused or proposed `slides` plan (whose refusal asks for `changes` on it), never to a refused `changes` plan. Refused slides are numbered on that deck, as the resend numbers them.
+- **The change list is what the file shows.** Each delivered slide keeps a hash of its XML and the charts, pictures and notes it uses (workbooks and the template's layouts by name), so an edit that renders the same is no change, and a change that reached only the notes is said to be invisible on the slide. A slide found at another place is moved, never removed and added. Within a run of differing slides, pairs follow shared words, so the removed slide is the one that went. A slide moved to another design with fewer points says so with both counts, a split list counted whole; whether it lost anything is for the agent to check.
+- **A picture design without a picture.** The tool's own choice already prefers a design without an empty picture area; a `like` forces the design, so a picture area with nothing for it is now a revision, as a framed one was.
+- **Slides and changes together.** The refusal names the one to send by whether a deck was delivered, in one line.
+- **`move`.** `{"op": "move", "slide": N, "after": M}`; moves chain, loops are refused.
+- Not done: a process step `number` is a growing zone whose only capacity is the designer's sample, so a long label there has no universal limit to refuse on; notes the agent wrote itself on a slide that also changed visibly are its own choice, not a builder placement.
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.

@@ -879,6 +879,7 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **THEN** slide 7 is rebuilt on the template slide slide 5 has in the delivered file (read from the stored deck, whatever the same call changes on slide 5), counted for nobody's variety ask, and the stored deck pins it there as any slide
 - **AND** content that does not fit that template slide, or a kind it does not hold, builds nothing and `needs_revision` names slide 5's design, what does not fit (or the kind it holds) and the remedy (shorten, reshape, set that kind, or drop the `like`)
 - **AND** a `like` with no slide number, a number out of range, the slide itself, a slide removed by the same call, a second `like` on one slide, or a slide not yet in a delivered deck builds nothing, with what, why and the remedy
+- **AND** a design with a picture area asked for a slide with no picture builds nothing: `needs_revision` says the picture area would stay empty, with the remedies (a picture from `list_images_in_folder`, or drop the `like`)
 - **AND** the tool description tells the model to use `like` when the user wants the layout or design of another slide
 
 #### Scenario: The delivery names each slide's design
@@ -910,10 +911,11 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **WHEN** a `changes` call arrives in a conversation where the tool has delivered no deck and this turn has evaluated no plan
 - **THEN** nothing is built and the result says there is no previous deck to change and to send the whole deck in `slides`
 
-#### Scenario: Corrected resend of refused changes
+#### Scenario: A refused changes call leaves no trace
 
-- **WHEN** a `changes` call is refused with `needs_revision` and the model resends changes of the same shape (same operations on the same slide numbers and fields), corrected, in the same turn (for example the inserted slide fixed, sent again as an insert, or a resend after a variety ask that says a resend is built as is)
-- **THEN** they are applied to the plan the refused changes were applied to, so nothing is inserted, removed or edited twice
+- **WHEN** a `changes` call is refused (`needs_revision`, a variety ask, or a bad change) and the model sends another `changes` call in the same turn, of any shape (the refused changes corrected, or other changes)
+- **THEN** it applies to the deck the refused call applied to (the delivered deck, or a refused or proposed `slides` plan), never to the refused plan, so nothing is inserted, removed or edited twice and no edit of the refused call reaches the deck unless sent again
+- **AND** the refused slides are numbered on that deck, as the corrected call numbers them; a slide the refused changes sent (an insert) is pointed to its change (`new, sent in changes[0]: fix it there`)
 - **AND** once a deck is delivered, changes of the same shape sent again are a new change to that deck (a second insert after slide 2 adds a slide beside the first)
 
 #### Scenario: A kind edit clears what the new kind cannot hold
@@ -927,7 +929,7 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 #### Scenario: A drop option gives its exact change
 
 - **WHEN** a `changes` call is refused and an option asks to drop a whole slide field (`drop bullets`)
-- **THEN** the option carries the change that does it, numbered as listed (`drop bullets: {"op": "edit", "slide": 10, "field": "bullets", "value": []}`), and that change clears the field
+- **THEN** the option carries the change that does it, numbered on the deck the changes apply to (`drop bullets: {"op": "edit", "slide": 10, "field": "bullets", "value": []}`), and that change clears the field; a slide the changes replace or add keeps its options in words
 - **AND** a refused `slides` call keeps the option in words
 
 #### Scenario: A call identical to one already refused
@@ -957,13 +959,28 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 #### Scenario: An insert before the cover
 
 - **GIVEN** a delivered deck that opens on the template's cover
-- **WHEN** a `changes` call inserts non-cover slides with `after` 0
+- **WHEN** a `changes` call inserts non-cover slides, or moves a slide other than the cover, with `after` 0
 - **THEN** they go after the cover (as `after` 1), the deck is built, and the result says so
 
 #### Scenario: The result names what changed
 
 - **GIVEN** a deck delivered earlier in the conversation
 - **WHEN** a new deck is delivered (by `changes` or a `slides` resend)
-- **THEN** the result lists the slides of the new file that changed (content or design) or were added, the previous deck's slides removed, and how many stayed unchanged
+- **THEN** the result lists the slides of the new file that changed or were added, the previous deck's slides removed, the slides found at another place (`moved: 3 (was 2)`), and how many stayed unchanged
+- **AND** slides are compared by what the delivered files show (each slide's XML with the charts and pictures it uses), so an edit that renders the same (a chart setting already in place, a replacement with the same content) is no change; a slide whose speaker notes alone differ is listed as changed in the speaker notes only, the slide itself looking the same
+- **AND** inside a run of differing slides, a before and an after slide are paired by the words they share, in order, so a resend that drops one slide and edits the next names the slide that went
+- **AND** a changed slide on another design holding fewer points (bullets, column bullets, items, table rows; a list continued on the next slides counted whole) is listed with both counts (`fewer points where the design changed: slide 8 (7 → 6)`)
 - **AND** when no slide differs, the result says so and to tell the user the deck is the same; when a `slides` resend changed, added or removed at most two slides and kept more, the result adds that such an edit is sent as `changes`
+
+#### Scenario: Move a slide
+
+- **GIVEN** a delivered deck
+- **WHEN** a `changes` call sends `{"op": "move", "slide": 2, "after": 3}`
+- **THEN** slide 2, with any edit the same call makes to it, goes after slide 3 (after the cover for `after` 0), a slide moved after another moved slide follows it, and the deck is built
+- **AND** a move without `after`, after the slide itself, of a slide the same call removes, a second move of one slide, or moves forming a loop build nothing, with what, why and the remedy
+
+#### Scenario: Slides and changes sent together
+
+- **WHEN** a call sends both `slides` and `changes`
+- **THEN** nothing is built and the one-line result names the one to send: only `slides`, every slide of the deck in order (the slides `changes` added included), while no deck was delivered; only `changes` once the user has a deck
 
