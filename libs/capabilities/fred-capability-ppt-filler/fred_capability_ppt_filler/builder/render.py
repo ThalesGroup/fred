@@ -81,6 +81,7 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanTable,
     SlidePlan,
     chart_headings,
+    takeaway_aside,
     has_content,
     shown_charts,
     slide_charts,
@@ -1178,7 +1179,12 @@ def _column_order(zones: Sequence[Zone]) -> List[Zone]:
 class _ZoneMap:
     def __init__(self, pattern: Pattern, taken: Collection[str] = ()) -> None:
         titled = {z.key for z in chart_headings(pattern).values()} | set(taken)
-        zones = [z for z in pattern.zones if z.role != "keep" and z.key not in titled]
+        aside = takeaway_aside(pattern)
+        zones = [
+            z
+            for z in pattern.zones
+            if z.role != "keep" and z.key not in titled and z not in aside
+        ]
         self.titles = [z for z in zones if z.role == "title"]
         self.subtitles = [z for z in zones if z.role == "subtitle"]
         self.headings = _column_order([z for z in zones if z.role == "heading"])
@@ -1241,20 +1247,6 @@ def _assign_text(
         if box is not None and chart.title:
             out[box.key] = _lines_from_bullets([chart.title], f"{at}.title")
     return out
-
-
-def column_split(lines: Sequence[_Line]) -> Optional[int]:
-    """Where a list goes over two columns: at the point nearest its middle, so
-    a point keeps its sub-points; None when it is one point (with its own)."""
-    starts = [
-        i
-        for i in range(1, len(lines))
-        if lines[i].level == 0 and not lines[i - 1].heading
-    ]
-    if not starts:
-        return None
-    half = math.ceil(len(lines) / 2)
-    return min(starts, key=lambda i: (abs(i - half), i))
 
 
 def _place_text(
@@ -1366,12 +1358,9 @@ def _place_text(
     if not bodies:
         lost.append("bullets")
         return out
-    at = column_split(bullets)
-    if len(bodies) > 1 and pattern.kind in ("two_columns", "comparison") and at:
-        put(bodies[0], bullets[:at], "bullets")
-        put(bodies[1], bullets[at:], "bullets")
-    else:
-        put(bodies[0], bullets, "bullets")
+    # Two columns are reached through `columns` only, as the catalogue says.
+    columned = len(zmap.bodies) > 1 and pattern.kind in ("two_columns", "comparison")
+    put(None if columned else bodies[0], bullets, "bullets")
     return out
 
 

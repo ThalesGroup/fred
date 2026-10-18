@@ -57,6 +57,7 @@ from fred_capability_ppt_filler.builder.plan import (
     named_charts,
     shown_charts,
     slide_charts,
+    takeaway_aside,
     zone_summary,
 )
 from fred_capability_ppt_filler.builder.render import (
@@ -64,12 +65,10 @@ from fred_capability_ppt_filler.builder.render import (
     _assign_text,
     _fit,
     _Line,
-    _lines_from_bullets,
     _only_names_the_slide,
     _takeaway_zone,
     _unused_item_fields,
     chart_hosts,
-    column_split,
     fit_table,
     floor_lines,
     zone_capacity,
@@ -439,15 +438,23 @@ def _check_zone(
 
 
 _NO_PLACE = ": this slide has no place for it"
+_TWO_COLUMNS = ("two_columns", "comparison")
 
 
-def _no_place(what: str, pattern: Pattern) -> Misfit:
+def _no_place(what: str, pattern: Pattern, columns: int = 0) -> Misfit:
+    """``columns``: the columns a two-column design takes, when none were sent."""
     option = f"drop {what}"
     if what == "chart":
         option = "give the chart a slide of its own (title and chart)"
     elif what == "charts":
         option = "give the charts a slide of their own (title and charts)"
-    if what == "bullets" and pattern.groups:
+    elif what == "title":
+        option = "use another kind: this design shows no title"
+    if what == "bullets" and columns:
+        option = (
+            f"give the points as `columns` [{{heading, bullets}}], at most {columns}"
+        )
+    elif what == "bullets" and pattern.groups:
         most = max(g.count for g in pattern.groups)
         option = f"give the bullets as items (at most {most})"
     elif what == "items" and any(z.role in ("body", "caption") for z in pattern.zones):
@@ -485,18 +492,6 @@ def misfit(
     return reasons, cost
 
 
-def _one_point_over_columns(pattern: Pattern, slide: SlidePlan) -> bool:
-    """Bullets on a two-column slide go over both columns at a point: a single
-    point (its sub-points under it) would leave one column empty."""
-    return (
-        pattern.kind in ("two_columns", "comparison")
-        and bool(slide.bullets)
-        and not slide.columns
-        and sum(z.role == "body" for z in pattern.zones) > 1
-        and column_split(_lines_from_bullets(slide.bullets)) is None
-    )
-
-
 def _weigh(
     pattern: Pattern, slide: SlidePlan, size: Tuple[int, int]
 ) -> Tuple[List[Misfit], float, int]:
@@ -517,14 +512,6 @@ def _weigh(
     reasons: List[Misfit] = []
     lost: List[str] = []
     text = _assign_text(pattern, slide, lost, size)
-    if _one_point_over_columns(pattern, slide):
-        reasons.append(
-            Misfit(
-                "bullets: one point with its sub-points cannot be split over this "
-                "slide's two columns",
-                "use kind 'bullets', or give `columns` [{heading, bullets}], one per column",
-            )
-        )
     images = list(dict.fromkeys(([slide.image] if slide.image else []) + slide.images))
     image_zones = sum(1 for z in pattern.zones if z.role == "image")
     if len(images) > image_zones:
@@ -606,7 +593,12 @@ def _weigh(
                 "give the content as `chart`, or another kind",
             )
         )
-    reasons[:0] = [_no_place(what, pattern) for what in lost if what not in held]
+    aside = takeaway_aside(pattern)
+    bodies = sum(z.role == "body" and z not in aside for z in pattern.zones)
+    columns = 0 if slide.columns or pattern.kind not in _TWO_COLUMNS else bodies
+    reasons[:0] = [
+        _no_place(what, pattern, columns) for what in lost if what not in held
+    ]
 
     # A picture zone left empty shows its frame or leaves a hole: it needs a picture.
     unpictured = image_zones > len(images)

@@ -1436,19 +1436,41 @@ def zone_summary(pattern: Pattern) -> str:
     return "; ".join(parts) or "no editable zone"
 
 
+def takeaway_aside(pattern: Pattern) -> List[Zone]:
+    """Takeaway zones beside another text body: they show the takeaway alone,
+    never a column of the slide's content. A slide's only body holds its bullets."""
+    takeaways = [z for z in pattern.zones if z.takeaway]
+    others = any(
+        z.role in ("body", "caption") and not z.takeaway for z in pattern.zones
+    )
+    return takeaways if others else []
+
+
 def _slide_fields(pattern: Pattern) -> List[Tuple[str, List[Zone]]]:
     """The slide fields one pattern's own zones are filled from, as the renderer
     fills them, each with its zones."""
     found: List[Tuple[str, List[Zone]]] = []
     seen: set[str] = set()
     titled = {z.key for z in chart_headings(pattern).values()}
+    aside = takeaway_aside(pattern)
+    # Captions hold the bullets only on a slide without a body (`body_like`).
+    bodies = sum(z.role == "body" and z not in aside for z in pattern.zones)
     field_of = {
-        z.key: None if z.key in titled else SLIDE_FIELDS.get(z.role)
+        z.key: None
+        if z.key in titled or z in aside or (bodies and z.role == "caption")
+        else SLIDE_FIELDS.get(z.role)
         for z in pattern.zones
     }
     headings = [z for z in pattern.zones if z.role == "heading" and z.key not in titled]
-    if headings and "title" not in field_of.values():
-        # The renderer writes the title into the leftmost heading (`_assign_text`).
+    columned = bodies > 1 and pattern.kind not in (
+        "cover",
+        "section",
+        "quote",
+        "closing",
+    )
+    if headings and "title" not in field_of.values() and not columned:
+        # The renderer writes the title into the leftmost heading, `columns` aside
+        # (`_place_text`).
         first = min(headings, key=lambda z: (z.box.x // 150, z.box.y))
         field_of[first.key] = "title"
     fields_of = set(field_of.values())

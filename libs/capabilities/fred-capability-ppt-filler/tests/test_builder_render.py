@@ -302,7 +302,7 @@ def test_columns_fill_two_content_and_comparison_headings():
         _on(
             _pattern("Two Content"),
             title="Options",
-            bullets=["a", "b", "c", "d"],
+            columns=[PlanColumn(bullets=["a", "b"]), PlanColumn(bullets=["c", "d"])],
         ),
     )
     comparison, two = deck.slides
@@ -1162,7 +1162,7 @@ def test_an_unfilled_text_box_is_removed_with_its_own_fill():
     assert inventory is not None
     pattern = next(p for p in inventory.patterns if p.source == "slide")
     _, deck = _render(
-        _on(pattern, title="Panel slide", bullets=["Only this"]),
+        _on(pattern, title="Panel slide", columns=[PlanColumn(bullets=["Only this"])]),
         template=template,
         inventory=inventory,
     )

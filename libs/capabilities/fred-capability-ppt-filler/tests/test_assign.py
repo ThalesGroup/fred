@@ -774,7 +774,8 @@ def test_an_agenda_written_as_bullets_goes_to_a_bullets_slide():
 
 
 def test_a_requested_kind_that_fits_is_kept():
-    slide = SlidePlan(title="Points", bullets=["a", "b"], kind="two_columns")
+    columns = [PlanColumn(bullets=["a"]), PlanColumn(bullets=["b"])]
+    slide = SlidePlan(title="Points", columns=columns, kind="two_columns")
     assignment = assign(INVENTORY, _plan(COVER, slide))
     assert assignment.patterns[1] and assignment.patterns[1].kind == "two_columns"
     assert not assignment.notes
@@ -877,32 +878,84 @@ def test_too_many_column_entries_name_the_column_list():
     ]
 
 
-def test_bullets_over_two_columns_keep_each_point_with_its_sub_points():
-    """The eval slide: one lead and four sub-points were cut by count, its
-    sub-points spread over both columns."""
+def test_a_flat_list_is_never_split_over_a_two_column_design():
+    """Thales r02: five pairs cut 3 + 2 over two panels read as two groups. The
+    catalogue says two bodies take `columns`: a flat list is refused there."""
     two = _list_pattern("two_columns", 60, 8, bodies=2)
-    nested = [
-        "Valider le budget",
-        "- Cadrage",
-        "- Intégrateur",
-        "- Formation",
-        "- Comité",
-    ]
-    slide = SlidePlan(title="Prochaines étapes", bullets=nested)
+    slide = SlidePlan(title="Risques", bullets=["A : a", "B : b", "C : c"])
     (reason,), _ = misfit(two, slide, _SIZE)
-    assert reason.text.startswith("bullets: one point with its sub-points")
+    assert reason.text == "bullets: this slide has no place for it"
+    assert reason.option.startswith("give the points as `columns`")
     assert not misfit(_list_pattern("bullets", 60, 8), slide, _SIZE)[0]
-    grouped = SlidePlan(title="Axes", bullets=["A", "- a1", "B", "- b1", "- b2"])
-    assert not misfit(two, grouped, _SIZE)[0]
-    placed = _assign_text(two, grouped)
+    columns = [PlanColumn(bullets=["A", "- a1"]), PlanColumn(bullets=["B"])]
+    placed = _assign_text(two, SlidePlan(title="Axes", columns=columns))
     assert [line.text for line in placed["ph:1"]] == ["A", "a1"]
-    assert [line.text for line in placed["ph:2"]] == ["B", "b1", "b2"]
-    # A flat list still splits in half, the first column the longer.
-    flat = _assign_text(two, SlidePlan(title="T", bullets=list("abcde")))
-    assert ([x.text for x in flat["ph:1"]], [x.text for x in flat["ph:2"]]) == (
-        ["a", "b", "c"],
-        ["d", "e"],
+    assert [line.text for line in placed["ph:2"]] == ["B"]
+
+
+def _panel(key: str, x: int, role: str, y: int = 200, lines: int = 8) -> Zone:
+    return Zone(
+        key=key,
+        role=role,  # type: ignore[arg-type]
+        box=Box(x=x, y=y, w=400, h=60 * lines),
+        font_pt=18.0,
+        chars_per_line=40,
+        max_lines=lines,
     )
+
+
+def test_a_title_less_two_panel_design_never_advertises_a_title():
+    """Thales 'Bullet Points': two headed panels, no title. The title went into
+    the first heading only without `columns`, which this design needs."""
+    panels = Pattern(
+        id="slide:9",
+        source="slide",
+        source_index=9,
+        name="Panels",
+        label="Panels",
+        kind="comparison",
+        zones=[
+            _panel("ph:1", 0, "heading", 50, 1),
+            _panel("ph:2", 500, "heading", 50, 1),
+            _panel("ph:3", 0, "body"),
+            _panel("ph:4", 500, "body"),
+        ],
+    )
+    summary = zone_summary(panels)
+    assert "title" not in summary and "columns.heading×2" in summary
+    columns = [
+        PlanColumn(heading="A", bullets=["a"]),
+        PlanColumn(heading="B", bullets=["b"]),
+    ]
+    reasons, _ = misfit(panels, SlidePlan(title="Risques", columns=columns), _SIZE)
+    assert [(r.text, r.option) for r in reasons] == [
+        (
+            "title: this slide has no place for it",
+            "use another kind: this design shows no title",
+        )
+    ]
+    assert not misfit(panels, SlidePlan(columns=columns), _SIZE)[0]
+
+
+def test_a_takeaway_zone_beside_a_body_is_never_a_column():
+    """Thales 'Texte et message clé': the key-message card was counted as a
+    second column, so the body was quoted at the card's narrow room."""
+    body = _panel("ph:1", 0, "body").model_copy(update={"chars_per_line": 54})
+    card = _panel("ph:2", 650, "body").model_copy(
+        update={"takeaway": True, "chars_per_line": 18, "max_lines": 9}
+    )
+    pattern = _list_pattern("bullets", 54, 8).model_copy(
+        update={"zones": [_title_zone(), body, card]}
+    )
+    summary = zone_summary(pattern)
+    assert (
+        "columns" not in summary and "bullets ≤56 words (≈54 chars × 8 lines" in summary
+    )
+    slide = SlidePlan(title="T", bullets=["a", "b"], takeaway="Le message")
+    assert set(_assign_text(pattern, slide)) == {"ph:0", "ph:1"}
+    # A slide's only body holds its bullets, takeaway zone or not.
+    alone = pattern.model_copy(update={"zones": [_title_zone(), card]})
+    assert set(_assign_text(alone, slide)) == {"ph:0", "ph:2"}
 
 
 def test_entries_few_enough_but_too_long_get_a_length_message():
