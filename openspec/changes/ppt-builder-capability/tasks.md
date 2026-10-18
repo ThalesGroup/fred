@@ -644,12 +644,12 @@ Owns: `render.py` (`column_split` deleted, `_ZoneMap`, `_place_text`), `plan.py`
 
 ## WP59. Revision fixes, round 3 live evals (owner decision 2026-10-18: universal builder rules only, design D37)
 
-Owns: `charts.py` (`pie_show`), `render.py` (hidden-unit note, takeaway designs named), `tools.py` (`_redrawn`, `_hoisted`, `_shown_takeaways`, pie and takeaway wording), `changes.py` (takeaway edit flag, `repinned`), `plan.py` (`takeaway_asked`, `show` description), Help Center fr+en (key messages), tests, delta specs (also `ppt-builder-charts`), `verification.md`.
+Owns: `charts.py` (`pie_show`), `render.py` (hidden-unit note), `tools.py` (`_redrawn`, `_hoisted`, pie wording), `plan.py` (`takeaway` and `show` descriptions), Help Center fr+en (key messages), tests, delta specs (also `ppt-builder-charts`), `verification.md`.
 
 - [x] 59.1 Pie/doughnut labels default to values when the chart has a `unit`. Test: `test_chart_slides.py::test_a_pie_of_data_with_a_unit_shows_its_values_unless_asked`
 - [x] 59.2 Designs line names a chart built as another type. Test: `test_chart_slides.py::test_the_designs_line_says_a_chart_built_as_another_type`
 - [x] 59.3 Deck fields inside `changes` hoisted, debris dropped, conflict refused in one line. Test: `test_build_tool.py::test_deck_fields_written_inside_changes_are_taken_to_the_top_level`
-- [x] 59.4 An edited takeaway goes on a design of its kind that shows it, else the designs that do are named. Tests: `test_takeaway.py::test_an_edited_takeaway_goes_on_a_design_of_its_kind_that_shows_it`, `test_an_edited_takeaway_no_design_of_its_kind_shows_names_those_that_do`
+- [x] 59.4 ~~An edited takeaway goes on a design of its kind that shows it~~ reverted (owner decision 2026-10-18, D37): a key message is delivered through the slide's content, shown only via `show_takeaways`; the `takeaway` description says so. Test: `test_takeaway.py::test_an_edited_takeaway_never_switches_design_nor_shows`
 - [x] 59.5 Package checks; `openspec validate --strict`
 - Not changed: mixed units in one series without written units (D37)
 - [ ] 59.6 Live re-evaluation once fred-agents runs this code (not restarted by this change)

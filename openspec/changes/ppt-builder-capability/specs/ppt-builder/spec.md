@@ -913,12 +913,12 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **THEN** each field is read as the call's own and the debris dropped, and the changes are applied
 - **AND** a field also given at the top level with another value builds nothing, with one line naming both values
 
-#### Scenario: An edited takeaway goes on its slide when a design can show it
+#### Scenario: An edited takeaway is delivered through content, not displayed
 
 - **GIVEN** a delivered deck built without `show_takeaways`
-- **WHEN** a `changes` call edits slide N's `takeaway`
-- **THEN** slide N is built, while its content fits, on a design of its kind with a key-message zone that holds it, and keeps it on later builds
-- **AND** when no design of its kind shows it, the delivery says the takeaway is only in the speaker notes and names the template slides that show one (label and kind), or says none does
+- **WHEN** a `changes` call edits only slide N's `takeaway`
+- **THEN** slide N keeps its design and its visible content, the new takeaway goes in its speaker notes, and the delivery says slide N changed in the speaker notes only
+- **AND** the `takeaway` field description tells the model that changing a key message means rewriting the slide's visible content, the message itself being shown only when the user explicitly asks (`show_takeaways`)
 
 #### Scenario: Changes that change nothing
 

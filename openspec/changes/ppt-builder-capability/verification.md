@@ -1682,3 +1682,10 @@ Not proven: the live Thales inventory (vision labels) was not replayed; the harn
 - Prompt size (cl100k): built-in description 3215 → 3235, schema 4491 → 4488; Thales v2-final description 3248 → 3268, schema 4446 → 4443.
 - Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 926 passed, 5 skipped; `openspec validate --strict`.
 - Not proven: model behaviour (fred-agents not restarted, 59.6); the live Thales inventory (vision labels) was not replayed.
+
+### WP59.4 reversal (2026-10-18, owner decision: key message delivered through content, not displayed)
+
+- Reverted `60ffe4a33` (flag, persistence, design switch, designs line) and the Help Center wording of `c32344a80`; pie labels, built chart type and hoisted deck fields untouched.
+- Test: `test_takeaway.py::test_an_edited_takeaway_never_switches_design_nor_shows` fails on the previous sources (`'Fred Chart' == 'Fred Chart Full'`: the edit moved the slide to the card design) and passes now.
+- Prompt size (cl100k): `takeaway` field description +14 (schema); the takeaway rule in the tool description −15 (templates with a key-message zone).
+- Commands: ruff, `ruff check --select I`, ruff format, `make type-check` (0 errors, the baseline warning); `make test`: 925 passed, 5 skipped; `openspec validate --strict`.
