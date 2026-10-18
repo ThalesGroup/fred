@@ -59,8 +59,8 @@ from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
-from fred_runtime.deep.open_file import OpenFileMiddleware
 from fred_runtime.deep.external_changes import ExternalChangesMiddleware
+from fred_runtime.deep.open_file import OpenFileMiddleware
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     DeepChildHitlMiddleware,

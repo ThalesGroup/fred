@@ -22,7 +22,6 @@ from typing import Literal
 from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware.filesystem import FilesystemPermission
-from fred_runtime.conversation_changes import ConversationFilesystemPartialSaveError
 from fred_sdk.contracts.runtime import (
     ConversationFilesystemInterruptError,
     ConversationFilesystemPermissionError,
@@ -35,6 +34,8 @@ from fred_sdk.contracts.runtime import (
     ConversationScratchpadUnsupportedContentError,
 )
 from wcmatch import glob as wcglob
+
+from fred_runtime.conversation_changes import ConversationFilesystemPartialSaveError
 
 Origin = Literal["agent", "system"]
 _MATCH_FLAGS = wcglob.BRACE | wcglob.GLOBSTAR

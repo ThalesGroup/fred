@@ -20,10 +20,10 @@ import asyncio
 import difflib
 import hashlib
 import json
-from urllib.parse import quote
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Literal
+from urllib.parse import quote
 
 from fred_sdk.contracts.runtime import (
     ConversationScratchpadError,

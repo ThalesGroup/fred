@@ -5913,8 +5913,9 @@ def _build_agent_router(
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> ConversationFileResponse:
         """Replace current text using server policy, without a read-before-write guard."""
-        from fred_runtime.deep.open_file import ensure_presentable, file_reference
         from fred_sdk.contracts.runtime import ConversationFilesystemQuotaError
+
+        from fred_runtime.deep.open_file import ensure_presentable, file_reference
 
         port = await conversation_file_port(
             session_id, http_request, team_id, caller, container

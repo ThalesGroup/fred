@@ -448,25 +448,29 @@ class _ConversationTextNamespace:
                     )
                 else:
                     await self._changes.recover(self.read_optional_text)
-                    descendants = await self.list_metadata(relative_path)
-                    if descendants:
-                        semaphore = asyncio.Semaphore(16)
-
-                        async def read_deleted(path: str) -> tuple[str, str]:
-                            async with semaphore:
-                                return path, await self.read_text(path)
-
-                        files = dict(
-                            await asyncio.gather(
-                                *(read_deleted(entry.path) for entry in descendants)
-                            )
+                    # Object stores may hold both the exact key and descendants.
+                    # Listing their parent distinguishes files from local directories.
+                    parent = str(PurePosixPath(relative_path).parent)
+                    targets = [
+                        entry
+                        for entry in await self.list_metadata(
+                            "" if parent == "." else parent
                         )
-                        recording = await self._changes.prepare_deletions(files)
-                    else:
-                        before = await self.read_optional_text(relative_path)
-                        recording = await self._changes.prepare(
-                            relative_path, before, None
+                        if entry.path == relative_path
+                        or entry.path.startswith(relative_path + "/")
+                    ]
+                    semaphore = asyncio.Semaphore(16)
+
+                    async def read_deleted(path: str) -> tuple[str, str]:
+                        async with semaphore:
+                            return path, await self.read_text(path)
+
+                    files = dict(
+                        await asyncio.gather(
+                            *(read_deleted(entry.path) for entry in targets)
                         )
+                    )
+                    recording = await self._changes.prepare_deletions(files)
             token = _MUTATION_SOURCE.set(self.mutation_source)
             try:
                 await self._filesystem.delete(self._physical_path(relative_path))

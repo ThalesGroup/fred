@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
 import pytest
+from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
@@ -750,14 +752,41 @@ async def test_unterminated_text_and_empty_file_creation_have_complete_diffs() -
 
 
 @pytest.mark.asyncio
-async def test_deleting_a_directory_records_each_removed_text_file() -> None:
-    storage = _MemoryFilesystem()
+@pytest.mark.parametrize(
+    ("local", "exact_object"), [(False, False), (False, True), (True, False)]
+)
+async def test_deleting_a_directory_records_each_removed_text_file(
+    tmp_path: Path, local: bool, exact_object: bool
+) -> None:
+    storage = LocalFilesystem(str(tmp_path)) if local else _MemoryFilesystem()
     agent = ConversationFilesystemService(storage, "c", mutation_source="agent")
     user = ConversationFilesystemService(storage, "c", mutation_source="user")
     await agent.scratchpad().write_text("sections/one.md", "one\n")
     await agent.scratchpad().write_text("sections/two.md", "two\n")
+    await agent.scratchpad().write_text("sections-other.md", "untouched\n")
+    if exact_object:
+        await agent.scratchpad().write_text("sections", "root text\n")
     await user.scratchpad().delete("sections")
-    assert (await user.publish_external_changes("turn")).file_count == 2
+    publication = await user.publish_external_changes("turn")
+    expected = {
+        "/.deep/changes/turn/sections%2Fone.md.diff",
+        "/.deep/changes/turn/sections%2Ftwo.md.diff",
+    }
+    if exact_object:
+        expected.add("/.deep/changes/turn/sections.diff")
+    assert publication.file_count == (3 if exact_object else 2)
+    assert set(publication.paths) == expected
+    assert await user.scratchpad().list() == ("sections-other.md",)
+    deep = user.namespace(".deep", max_bytes=1000000, max_files=100)
+    assert (
+        await deep.read_text("changes/turn/sections%2Fone.md.diff")
+        == "--- /sections/one.md\n+++ /dev/null\n@@ -1 +0,0 @@\n-one\n"
+    )
+    if exact_object:
+        assert (
+            await deep.read_text("changes/turn/sections.diff")
+            == "--- /sections\n+++ /dev/null\n@@ -1 +0,0 @@\n-root text\n"
+        )
 
 
 @pytest.mark.asyncio
