@@ -2311,7 +2311,8 @@ re-measurements).
 ordinary assistant text (prefixed `RECALLED_REASONING_PREFIX`), for any
 message still inside the current open tool loop; it is dropped only once
 the turn closes (`final` reached) — closed-turn reasoning is never replayed
-into a later turn's context. There is no protocol-level channel that marks
+into a later turn's context. (Mistral since 2026-10-19: every turn's reasoning is
+replayed as native `thinking` chunks, see §8.117.) There is no protocol-level channel that marks
 re-homed reasoning as privileged — it is ordinary `content`, the same field
 a user-facing reply is written into, so any consumer reading a checkpointed
 transcript must not assume a stronger separation than a text prefix
@@ -7113,4 +7114,14 @@ but ends in a registered tool name (a model looping its output into the name, an
 model) is renamed to that tool; other unknown names keep the tool node's "not a
 valid tool" error, clipped to 256 characters, and an oversized string bound in a
 log scope is shortened instead of failing the turn.
+Mistral reasoning is replayed natively (2026-10-19, superseding §8.37 for
+Mistral only). A plain `ChatOpenAI` serving a Mistral model is built as
+`MistralReasoningReplayChatOpenAI` (`support/reasoning_replay.py`), whose payload
+sends each assistant message's reasoning back as one `thinking` chunk before its
+text, and `CheckpointHygieneMiddleware` keeps that reasoning in every turn
+(`keep_native_reasoning`) instead of re-homing the open turn's as text. The
+history size budget counts thinking text. Other models, Azure clients included,
+are unchanged. Leak-study A/B on `mistral-medium`, `reasoning_effort: high`,
+12 runs per arm: text-written tool calls 26/146 → 0/188, decks 7/12 → 12/12,
+runaway hangs 3 → 0; median call 17.8 s → 23.8 s from the larger input.
 Migration note: `docs/swift/ops/migrations/3110-recover-streamed-mistral-tool-calls.md`.

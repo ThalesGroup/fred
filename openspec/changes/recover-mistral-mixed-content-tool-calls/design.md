@@ -50,6 +50,12 @@ Mistral can also keep writing after the call it leaked: over-closed JSON, `{} {}
 
 Seven of those leaks also carried a native call, so text recovery now runs on messages with native calls too: text calls first (they precede the native delta in the stream), an exact `(name, args)` duplicate of a native call dropped, native IDs kept. One leak ended a sentence on the next call's name (`...landscape.read_document`), so at the reference anchor a `.` before the name is a valid boundary; the longest registered name still wins, and native-call name repair keeps the strict boundary.
 
+### Replay Mistral reasoning natively (leak study, 2026-10-19)
+
+Fred dropped reasoning blocks from replayed history (`langchain_openai` removes `thinking` blocks; the open turn got its reasoning back only as prefixed text). Mistral's docs ask for the reasoning chunks back. With them replayed (variant B) against the unchanged runtime (variant A), 12 runs each on `mistral-medium` with `reasoning_effort: high`: leaked calls 26/146 → 0/188, decks 7/12 → 12/12, hangs 3 → 0, execution errors 2 → 0; median call 17.8 s → 23.8 s (bigger input), run time comparable or shorter. One evening, arms run sequentially.
+
+`with_mistral_reasoning_replay` (applied in `RoutedChatModelFactory.build_for_chat`) gives a plain `ChatOpenAI` with a Mistral model name a subclass whose payload puts the reasoning back as one `thinking` chunk; `CheckpointHygieneMiddleware` then keeps every turn's reasoning (`keep_native_reasoning`), as measured. Scope is Mistral only: OpenAI-compatible reasoning models do not accept the chunk back, and Azure clients and other providers keep the previous handling. Not measured: replaying only the open turn's reasoning, which would cost less context on long conversations.
+
 ### Reproduce from a redacted checkpoint shape
 
 Add minimal fixtures preserving the important boundaries from both checkpoints: a tool name split between a text block and a string, the exact typed sentinel, JSON split between a text block and a string, and a second call in the trailing string. Use fake table names and document IDs. Test recovery directly and through both runtime stream routes. Add rejection cases for non-Mistral, malformed mixed content, non-empty references, native calls, and ordinary text. Confirm recovered calls still meet approval and tool-result pairing checks.

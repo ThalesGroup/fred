@@ -90,3 +90,18 @@ The runtime SHALL keep the marker and recoverable call syntax out of assistant a
 - **WHEN** a Mistral response containing the sentinel is not recovered
 - **THEN** its text fragments remain visible in order, without a rendering of the sentinel block
 - **AND** an unknown typed block in the same response remains visible
+
+### Requirement: Mistral reasoning is replayed natively
+
+When the chat model is a Mistral model served through the OpenAI-compatible client, the runtime SHALL replay each assistant message's reasoning, in every turn of the history, as one native `thinking` chunk followed by its answer text, instead of dropping it or re-homing it as plain text. The size budget SHALL count that reasoning. Every other model SHALL keep the existing handling: reasoning of the open turn re-homed as text, closed-turn reasoning dropped, and no reasoning block in the payload.
+
+#### Scenario: Mistral history carries reasoning
+
+- **WHEN** a Mistral model call replays earlier assistant messages that streamed reasoning
+- **THEN** each of those messages reaches the provider with its reasoning as one `thinking` chunk, and its tool calls and IDs unchanged
+
+#### Scenario: Other model history is unchanged
+
+- **WHEN** a non-Mistral model call replays the same history
+- **THEN** no `thinking` chunk is sent, and the open turn's reasoning is carried as prefixed text as before
+

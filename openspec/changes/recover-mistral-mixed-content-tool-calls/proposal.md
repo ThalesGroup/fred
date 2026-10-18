@@ -10,6 +10,7 @@ A live Deep turn using Mistral Medium 3.5 ended with two intended `read_query` i
 - Accept repeated exact markers only when each one follows a registered tool name and all calls validate together. When a response already has native calls, withhold pending marked syntax from its streamed answer and Planning preamble while preserving those calls.
 - Add redacted regression fixtures based on the captured checkpoints, with ReAct and Deep checks for execution, UI output, and existing tool gates.
 - Follow-up [#3110](https://github.com/ThalesGroup/fred/issues/3110): a streamed reasoning response holds one content block per delta, so the 256-block cap rejected every long Mistral turn before parsing. Bound recovery by text size and call count only, stop rendering the sentinel and tool-call blocks as their Python repr in answers, history and replayed context (unknown blocks stay visible, refusals render as text), and drop a closing-bracket residue after recovered calls.
+- Leak-study follow-up (2026-10-19): replay Mistral's reasoning in the history as native `thinking` chunks, as Mistral's docs ask, instead of dropping it. In a live A/B on `mistral-medium` with `reasoning_effort: high` (12 runs per arm) it took text-written tool calls from 26/146 calls to 0/188, delivered decks from 7/12 to 12/12, and runaway hangs from 3 to 0.
 
 ## Capabilities
 
