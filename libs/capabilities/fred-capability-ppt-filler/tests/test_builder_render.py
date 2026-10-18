@@ -905,7 +905,7 @@ def test_catalogue_names_columns_when_a_pattern_has_several_bodies():
     line = catalogue(
         TemplateInventory(slide_width=1, slide_height=1, patterns=[columns, contact])
     )
-    assert "two_columns: Contact: columns.bullets×2" in line
+    assert "two_columns (two groups of points): Contact: columns.bullets×2" in line
     assert "closing: Contact: bullets, one per line,×2" in line
 
 

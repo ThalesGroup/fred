@@ -356,7 +356,7 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
     await middleware.awrap_model_call(_Request(), _handler)
     (update,) = seen
     shown = next(t for t in update["tools"] if t.name == BUILD_TOOL_NAME)
-    assert "- process:" in shown.description
+    assert "- process (" in shown.description
     assert "optionally its kind" in update["system_message"].content
     assert "Build directly" in update["system_message"].content
     # After a revision the turn must go on with the fixed call, not end on prose.
@@ -385,7 +385,7 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
     analysis_job.set_store_provider(lambda: (_ for _ in ()).throw(AssertionError()))
     again = _middleware(_turn_ctx(stored, FakeAssets()))
     built = next(t for t in again.tools if t.name == BUILD_TOOL_NAME)
-    assert "- process:" in built.description
+    assert "- process (" in built.description
 
 
 @pytest.mark.asyncio

@@ -106,19 +106,20 @@ SECTION_RULE = (
     "next): a later section may reuse an earlier one's slides, in any order. Never three "
     "identical slides in a row, unless the user explicitly asked for it (`repeat_layout`)."
 )
-# What each kind suits, in the order alternatives are offered.
+# What each content kind is for, on its catalogue line.
 SHAPE_HINTS: Dict[str, str] = {
-    "figures": "a few key numbers, each a value + a short label",
-    "timeline": "dated items or milestones",
-    "cards": "parallel items",
-    "process": "ordered steps",
-    "table": "a comparison across criteria",
-    "comparison": "two options side by side",
+    "bullets": "short points with no other shape",
     "two_columns": "two groups of points",
-    "image_text": "a point with a picture",
-    "quote": "one key statement",
-    "bullets": "a short list",
+    "comparison": "two options side by side",
+    "cards": "parallel items, each 'heading: explanation'",
+    "figures": "a few big numbers, each with a short label",
+    "process": "ordered steps or a causal chain",
+    "timeline": "a dated sequence",
     "team": "people",
+    "quote": "one strong sentence",
+    "image_text": "a point with its picture",
+    "table": "a comparison across criteria, not restated as columns",
+    "chart": "numbers compared across categories or over time",
 }
 # Kinds a requested kind may be built as when none of its slides fits, closest
 # first: a list stays a list, a title slide a title slide. A kind absent here

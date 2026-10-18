@@ -826,7 +826,9 @@ def test_reference_template_offers_every_cards_variant_and_icon_cards_win():
     names = {p.name for p in inventory.patterns if p.source == "layout"}
     assert not names & {"Images + 3 colonnes de texte", "3 images + message clé"}
     cards = next(
-        line for line in catalogue(inventory).splitlines() if "- cards:" in line
+        line
+        for line in catalogue(inventory).splitlines()
+        if line.startswith("- cards (")
     )
     assert "3 icônes + texte" in cards and "6 icônes + texte" in cards
     assert cards.count(" | ") >= 4

@@ -149,7 +149,7 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
     assert "slide:" not in description and "layout:" not in description
     assert "Hidden cover" not in description
     process = next(
-        line for line in description.splitlines() if line.startswith("- process: ")
+        line for line in description.splitlines() if line.startswith("- process (")
     )
     assert ": title" in process  # variant label first, then its zones
     assert "items max 3 [number, heading, text" in description
@@ -214,12 +214,12 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
     )
     assert "Never split a deck across several calls" in description
     assert "A first slide of only a title and subtitle is the cover." in description
-    # The choice guide names only kinds this template offers.
+    # Each offered kind says what it is for, on its own catalogue line only.
     assert (
-        "key numbers, each a value + a short label → figures" in description
-        and "ordered steps → process" in description
+        "- figures (a few big numbers, each with a short label): " in description
+        and "- process (ordered steps or a causal chain): " in description
     )
-    assert "→ timeline" not in description
+    assert "timeline" not in description
     assert "Use any variant below at most 2 times." in description
 
 

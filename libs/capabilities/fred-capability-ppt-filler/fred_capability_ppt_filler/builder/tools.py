@@ -308,7 +308,7 @@ def catalogue(inventory: TemplateInventory) -> str:
             summary += "; or a chart in place of the bullets"
         variants.setdefault(pattern.kind, {}).setdefault(summary, pattern.label)
     return "\n".join(
-        f"- {kind}: "
+        f"- {kind}{f' ({SHAPE_HINTS[kind]})' if kind in SHAPE_HINTS else ''}: "
         + " | ".join(f"{label}: {summary}" for summary, label in variants[kind].items())
         for kind in offered_kinds(inventory)
     )
@@ -1224,22 +1224,15 @@ def build_list_images_tool(
     )
 
 
-_GUIDE_KINDS = ("figures", "timeline", "cards", "process", "table")
-
-
 def _guide(
-    kinds: List[SlideKind],
     variety: VarietyCheck,
     max_uses: int,
     charts: str = "",
     several: bool = False,
 ) -> str:
-    """Which content suits which offered kind, and the author's max."""
-    pairs = [f"{SHAPE_HINTS[k]} → {k}" for k in _GUIDE_KINDS if k in kinds]
-    if "table" in kinds:
-        pairs[-1] += ", not restated as columns before it"
+    """Choosing kinds by what they are for, the chart forms, and the author's max."""
+    pairs = []
     if charts:
-        pairs.append("numbers that compare across categories or over time → chart")
         pairs.append("two measures per item → chart scatter (bubble for a third)")
         pairs.append("items scored on several criteria → chart radar")
     if several:
@@ -1248,10 +1241,8 @@ def _guide(
             "`charts` (only the counts the catalogue lists)"
         )
     lead = (
-        f" Shape the content, within the fields and items max each variant lists below: "
-        f"{'; '.join(pairs)}."
-        if pairs
-        else ""
+        " Choose each slide's kind by its content's shape, as each kind below says"
+        + (f"; {'; '.join(pairs)}." if pairs else ".")
     )
     if variety == "off":
         return lead
@@ -1355,7 +1346,7 @@ def _description(
         "a document. If a slide fits no slide of the template, nothing is built and the result lists, per "
         "slide, what to change: apply it with `changes`. The result is shown to the user automatically; "
         "never write a download link. Each call's deck replaces the previous one.\n"
-        + _guide(kinds, variety, max_uses, charts, several)
+        + _guide(variety, max_uses, charts, several)
         + "\n"
         "Slide kinds of this template, with each variant's name and what each zone holds at full "
         "size (words, then ≈chars per line × lines; items max N; variants separated by |). Write to "
