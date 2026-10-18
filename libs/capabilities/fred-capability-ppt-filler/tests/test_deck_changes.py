@@ -746,7 +746,7 @@ async def test_no_base_both_modes_and_bad_changes_build_nothing(
     text, result = await turn.build(changes=[{"op": "remove", "slide": 9}])
     assert result.is_error and text == (
         "No deck was built: some changes cannot be applied to the previous deck (nothing "
-        "was changed). Fix them and call again:\nchanges[0] (remove): slide 9 does not "
+        "was changed). Fix them and send all the changes again:\nchanges[0] (remove): slide 9 does not "
         "exist; the previous deck has 2 slides. Use a number from 1 to 2."
     )
     assert deck_plan_store.plans == stored and len(workspace.writes) == 1

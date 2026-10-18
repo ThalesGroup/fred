@@ -156,6 +156,14 @@ async def test_a_plan_with_problems_gets_a_revision_not_the_outline(monkeypatch)
     assert '"status": "needs_revision"' in text and "no takeaway" in text
 
 
+def test_a_refused_call_is_resent_as_its_result_says():
+    """The rules said `changes` for the listed slides, while a refused
+    `changes` call must be resent whole: the result owns the remedy."""
+    rules = capability_mod.build_instructions(False)
+    assert "for the listed slides" not in rules
+    assert "with the fixes applied as its result says" in rules
+
+
 def test_the_working_rules_do_not_depend_on_the_setting():
     """The gate's instructions travel in its result, only when it applies."""
     rules = capability_mod._BUILD_INSTRUCTIONS

@@ -856,7 +856,7 @@ The system SHALL write the generated deck to the conversation's agent workspace,
 
 ### Requirement: Chat-time corrections are per conversation
 
-The system SHALL let the user correct a deck in chat by regenerating from an amended plan, and SHALL NOT change the agent configuration from a conversation. `build_presentation` SHALL accept either the whole deck (`slides`) or `changes` (replace, insert after, remove, edit one field) numbered on the last deck it delivered in this conversation, stored per conversation and agent so any replica and any later turn reads it (within a turn, on the plan it last refused with `needs_revision`, never stored), and SHALL always render the whole resulting deck through the normal path.
+The system SHALL let the user correct a deck in chat by regenerating from an amended plan, and SHALL NOT change the agent configuration from a conversation. `build_presentation` SHALL accept either the whole deck (`slides`) or `changes` (replace, insert after, remove, move, edit one field) numbered on the last deck it delivered or plan it proposed in this conversation, stored per conversation and agent so any replica and any later turn reads it (within a turn, on the `slides` plan it last refused with `needs_revision`, never stored; a refused `changes` call leaves that base as it was, so its corrected resend carries every change again), and SHALL always render the whole resulting deck through the normal path.
 
 #### Scenario: Later-turn edit keeps untouched slides
 

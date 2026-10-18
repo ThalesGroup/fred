@@ -228,7 +228,11 @@ _NEXT_CALL = (
 def _same_call(problems: str, from_changes: bool) -> str:
     """A call identical to one refused this turn gets the same answer: say so,
     and offer what breaks the loop rather than evaluate it again."""
-    other = "drop the change that causes it" if from_changes else "leave that slide out"
+    other = (
+        "drop the change that causes it, resending every other change: this one changed nothing"
+        if from_changes
+        else "leave that slide out"
+    )
     return (
         "No deck was built: this call is identical to one already refused in this answer, so "
         f"it is refused again ({problems}). Do not resend it: apply one of the options given "
@@ -1374,8 +1378,8 @@ def build_builder_tools(
     build_lock = asyncio.Lock()
     # What this turn's `changes` apply to: the deck delivered, or a refused or
     # proposed `slides` plan. A refused `changes` call leaves it as it was, so
-    # a later call never builds on changes it did not send. Only a delivered
-    # deck is stored for later turns.
+    # a later call never builds on changes it did not send. A delivered deck or
+    # a proposed plan is stored for later turns, a refused one never.
     turn_base: List[DeckPlan] = []
     # Calls refused this turn, keyed with the plan they applied to: the same
     # call on the same base is refused again without a new evaluation.
@@ -1470,7 +1474,7 @@ def build_builder_tools(
             except ChangeError as exc:
                 return _error(
                     "No deck was built: some changes cannot be applied to the previous "
-                    "deck (nothing was changed). Fix them and call again:\n"
+                    "deck (nothing was changed). Fix them and send all the changes again:\n"
                     + "\n".join(exc.problems)
                 )
             show = getattr(validated, "show_takeaways", None)
