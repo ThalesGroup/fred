@@ -526,17 +526,23 @@ def deck_delta(
 ) -> str:
     """Which slides of ``after`` differ from the delivered ``before`` (content
     or design), as a line the agent can describe its edit from truthfully;
-    ``resent``: the whole deck came in `slides`."""
+    ``resent``: the whole deck came in `slides`. Rendered slides compare by
+    what the file shows: an edit that renders the same is no change."""
     a = [
         json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in before.slides
     ]
     b = [
         json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in after.slides
     ]
+    both = before.slides + after.slides
+    keys_a, keys_b = a, b
+    if all(s.rendered for s in both):
+        keys_a = [s.rendered or "" for s in before.slides]
+        keys_b = [s.rendered or "" for s in after.slides]
     changed: List[int] = []
     added: List[int] = []
     removed: List[int] = []
-    matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    matcher = difflib.SequenceMatcher(a=keys_a, b=keys_b, autojunk=False)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
             continue

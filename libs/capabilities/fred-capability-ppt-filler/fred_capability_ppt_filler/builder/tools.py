@@ -134,6 +134,7 @@ from fred_capability_ppt_filler.fill import (
     cast_ui_part,
 )
 from fred_capability_ppt_filler.images import NotAnImageError, prepare_picture
+from fred_capability_ppt_filler.pptx_archive import slide_fingerprints
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from fred_capability_ppt_filler.builder.capability import PptBuilderConfig
@@ -1091,9 +1092,11 @@ def _prepare_and_render(
             images[document_id] = prepare_picture(raw)  # type: ignore[arg-type]
         except NotAnImageError:
             continue
-    return render_deck(
+    result = render_deck(
         template_bytes, inventory, plan, patterns, images, numbers, starts
     )
+    result.fingerprints = slide_fingerprints(result.pptx)
+    return result
 
 
 # --- the base of a `changes` call ----------------------------------------------------------
@@ -1670,6 +1673,16 @@ def build_builder_tools(
             return _error(
                 "The deck was built but could not be saved to the conversation files, so the "
                 "user cannot get it. Tell the user and suggest trying again in a moment."
+            )
+        prints = result.fingerprints
+        if len(prints) == len(deck.slides):
+            deck = deck.model_copy(
+                update={
+                    "slides": [
+                        s.model_copy(update={"rendered": f})
+                        for s, f in zip(deck.slides, prints)
+                    ]
+                }
             )
         previous = await previous_deck(base)
         delta = (

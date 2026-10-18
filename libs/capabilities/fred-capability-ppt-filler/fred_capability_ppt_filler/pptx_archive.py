@@ -18,9 +18,13 @@ declared sizes are checked first (zipfile never inflates past them)."""
 
 from __future__ import annotations
 
+import hashlib
 import io
+import posixpath
 import zipfile
+from typing import List, Tuple
 
+from lxml import etree  # pyright: ignore[reportAttributeAccessIssue]
 from pptx import Presentation
 from pptx.presentation import Presentation as PresentationType
 
@@ -62,3 +66,52 @@ def open_presentation(content: bytes) -> PresentationType:
     """``Presentation`` of user bytes, the archive checked first (CPU-bound)."""
     check_archive(content)
     return Presentation(io.BytesIO(content))
+
+
+_REL_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+_R_ID = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+# Hashed by name: the template's shared parts. Never hashed: an embedded
+# workbook carries its own creation time.
+_BY_NAME = ("/slideLayout", "/notesMaster")
+_SKIPPED = ("/package", "/oleObject")
+
+
+def _rels(archive: zipfile.ZipFile, part: str) -> List[Tuple[str, str, str]]:
+    """(id, type, resolved target) of a part's internal relationships."""
+    folder, name = posixpath.split(part)
+    path = posixpath.join(folder, "_rels", name + ".rels")
+    if path not in archive.namelist():
+        return []
+    root = etree.fromstring(archive.read(path))
+    return sorted(
+        (
+            rel.get("Id", ""),
+            rel.get("Type", ""),
+            posixpath.normpath(posixpath.join(folder, rel.get("Target", ""))),
+        )
+        for rel in root.iter(f"{_REL_NS}Relationship")
+        if rel.get("TargetMode") != "External"
+    )
+
+
+def slide_fingerprints(content: bytes) -> List[str]:
+    """One hash per slide, in deck order, of what it shows: its XML and the
+    parts it uses (charts, pictures, notes). Two renders that look the same
+    hash the same, wherever the slide sits in the deck."""
+    archive = zipfile.ZipFile(io.BytesIO(content))
+    order = etree.fromstring(archive.read("ppt/presentation.xml"))
+    targets = {rid: target for rid, _, target in _rels(archive, "ppt/presentation.xml")}
+    prints: List[str] = []
+    for slide_id in order.iter("{*}sldId"):
+        part = targets.get(slide_id.get(_R_ID, ""), "")
+        digest = hashlib.sha256(archive.read(part))
+        for rid, kind, target in _rels(archive, part):
+            digest.update(f"\n{rid} {kind.rsplit('/', 1)[-1]} ".encode())
+            if any(kind.endswith(k) for k in _BY_NAME):
+                digest.update(target.encode())
+            elif not any(kind.endswith(k) for k in _SKIPPED):
+                digest.update(
+                    archive.read(target) if target in archive.namelist() else b""
+                )
+        prints.append(digest.hexdigest())
+    return prints

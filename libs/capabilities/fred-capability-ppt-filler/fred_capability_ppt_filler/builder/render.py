@@ -121,6 +121,8 @@ class RenderResult:
     preview_pptx: bytes = b""
     # The same findings per slide, for a structured result message.
     report: checks.DeckReport = field(default_factory=checks.DeckReport)
+    # Per slide, what it shows (`slide_fingerprints`); set by the build tool.
+    fingerprints: List[str] = field(default_factory=list)
 
 
 _FILLS = ("a:solidFill", "a:gradFill", "a:pattFill", "a:blipFill")

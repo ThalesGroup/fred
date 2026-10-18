@@ -1113,6 +1113,8 @@ class SlidePlan(BaseModel):
     # design it is (file numbering); cleared once the deck is delivered.
     asked_design: SkipJsonSchema[Optional[str]] = None
     asked_from: SkipJsonSchema[Optional[int]] = None
+    # The delivered file slide's hash (`slide_fingerprints`): what it shows.
+    rendered: SkipJsonSchema[Optional[str]] = None
     # Summary notes a storytelling check accepted the slide with
     # (`figures_unverified`, `wide_range_chart`): set by the tool only.
     story_notes: SkipJsonSchema[List[str]] = Field(default_factory=list)
@@ -1183,6 +1185,7 @@ HIDDEN_FIELDS = (
     "built_on",
     "asked_design",
     "asked_from",
+    "rendered",
     "story_notes",
     "takeaway_shown",
 )

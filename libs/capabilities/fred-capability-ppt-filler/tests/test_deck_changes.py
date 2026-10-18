@@ -273,7 +273,8 @@ def _payload(text: str) -> dict:
 
 
 def _dumps(plan: DeckPlan) -> List[str]:
-    return [s.model_dump_json() for s in plan.slides]
+    # `rendered` is the delivered file's hash, set once a deck is delivered.
+    return [s.model_dump_json(exclude={"rendered"}) for s in plan.slides]
 
 
 @pytest.mark.asyncio
@@ -494,6 +495,42 @@ def test_the_delta_names_the_slide_a_resend_dropped():
     )
     line = deck_delta(before, after, {})
     assert "changed: 2, 3; removed: 2 of the previous deck; 2 unchanged." in line
+
+
+def test_the_delta_compares_what_the_slides_render():
+    """Seen in the eval: chart.show set to what the chart already showed read
+    'changed: 9' on an identical file."""
+    shown = [
+        s.model_copy(update={"rendered": f"h{n}"}) for n, s in enumerate(BASE.slides)
+    ]
+    before = BASE.model_copy(update={"slides": shown})
+    after = before.model_copy(
+        update={
+            "slides": [*shown[:2], shown[2].model_copy(update={"title": "F"}), shown[3]]
+        }
+    )
+    assert "none changed: tell the user the deck is the same" in deck_delta(
+        before, after, {}
+    )
+    redrawn = after.model_copy(
+        update={
+            "slides": [
+                *shown[:2],
+                after.slides[2].model_copy(update={"rendered": "x"}),
+                shown[3],
+            ]
+        }
+    )
+    assert "changed: 3; 3 unchanged." in deck_delta(before, redrawn, {})
+
+
+@pytest.mark.asyncio
+async def test_a_slide_moved_by_a_removal_renders_unchanged(monkeypatch):
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    deck = [COVER, *({"title": f"Part {n}", "bullets": [f"b{n}"]} for n in range(1, 4))]
+    await turn.build(slides=deck)
+    text, _ = await turn.build(changes=[{"op": "remove", "slide": 2}])
+    assert "slides of this file removed: 2 of the previous deck; 3 unchanged." in text
 
 
 def test_a_whole_deck_resent_for_a_small_edit_is_pointed_to_changes():
