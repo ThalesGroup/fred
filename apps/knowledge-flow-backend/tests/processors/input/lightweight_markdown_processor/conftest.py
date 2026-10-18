@@ -14,9 +14,13 @@
 
 """Shared fixtures for the lite PDF processors' fitz.Document lifecycle regression tests."""
 
-from pathlib import Path
+from __future__ import annotations
 
-import fitz
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import fitz
 import pytest
 
 
@@ -31,6 +35,7 @@ class FitzOpenSpy:
     binding) works because every `import fitz` shares the same module object."""
 
     def __init__(self) -> None:
+        fitz = pytest.importorskip("fitz")
         self.opened: list[fitz.Document] = []
         self._real_open = fitz.open
 
@@ -42,6 +47,7 @@ class FitzOpenSpy:
 
 @pytest.fixture
 def fitz_open_spy(monkeypatch: pytest.MonkeyPatch) -> FitzOpenSpy:
+    fitz = pytest.importorskip("fitz")
     spy = FitzOpenSpy()
     monkeypatch.setattr(fitz, "open", spy)
     return spy

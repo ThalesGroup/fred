@@ -35,7 +35,7 @@
 
 x-fast-input-processors: &fast-input-processors
   - suffix: ".pdf"
-    class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.LitePdfMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
   - suffix: ".docx"
     class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - suffix: ".doc"
@@ -1852,7 +1852,7 @@ applications:
       - name: knowledge-flow-worker-extraction-fast-env-vol
         secret:
           secretName: knowledge-flow-backend-env
-    # pypdfium2, no OCR: 4 concurrent extractions on 2 CPU, none of them threaded.
+    # pypdf, no OCR: 4 concurrent extractions on 2 CPU, none of them threaded.
     resources:
       requests:
         cpu: "2"

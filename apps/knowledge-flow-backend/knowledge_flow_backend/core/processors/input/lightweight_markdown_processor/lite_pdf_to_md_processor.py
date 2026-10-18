@@ -15,12 +15,11 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from pathlib import Path
 from typing import List, Tuple
 
-import fitz
 from markitdown import MarkItDown
+from pypdf import PdfReader
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
@@ -30,13 +29,14 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
     LitePageMarkdown,
     collapse_whitespace,
     enforce_max_chars,
+    strip_surrogates,
 )
 
 # Core idea:
 # - Prefer MarkItDown for whole-PDF conversion (good quality, less code).
 # - If callers ask for page-level control (page_range, per-page output, page headings),
-#   switch to a page-wise path using PyMuPDF (fitz), which ships with markitdown.
-# - Fall back gracefully if markitdown or fitz are unavailable.
+#   switch to a page-wise path using pypdf.
+# - Keep page-aware failures explicit rather than discard page structure.
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +50,13 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
 
     Fred rationale:
     - Use `markitdown` for "good-enough" Markdown with minimal maintenance.
-    - Preserve Fred's page-oriented UX when needed via PyMuPDF page scans.
+    - Preserve Fred's page-oriented UX when needed via pypdf page scans.
     - Keep token budgets predictable via normalization + max_chars cap.
     """
 
     description = "Fast PDF-to-Markdown converter optimized for lightweight, page-aware extraction."
 
     def __init__(self) -> None:
-        warnings.warn(
-            "lite_pdf_to_md_processor.py is deprecated and has been replaced by lite2_pdf_to_md_processor.py. This module will be removed in a future release.", DeprecationWarning, stacklevel=2
-        )
         self._md = MarkItDown() if MarkItDown else None
 
     # ---- helpers -------------------------------------------------------------
@@ -69,6 +66,7 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
         return bool(opts.page_range or opts.return_per_page or opts.add_page_headings)
 
     def _normalize(self, s: str, opts: LiteMarkdownOptions) -> str:
+        s = strip_surrogates(s)
         return collapse_whitespace(s) if opts.normalize_whitespace else s
 
     def _safe_page_range(self, page_count: int, page_range: Tuple[int, int] | None) -> Tuple[int, int]:
@@ -88,20 +86,20 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
 
         return (start_p, end_p)
 
-    # ---- page-wise extraction (PyMuPDF) -------------------------------------
+    # ---- page-wise extraction (pypdf) -------------------------------------
 
-    def _extract_pages_with_fitz(self, file_path: Path, opts: LiteMarkdownOptions) -> LiteMarkdownResult:
-        doc = fitz.open(str(file_path))
-        try:
-            page_count = doc.page_count
+    def _extract_pages_with_pypdf(self, file_path: Path, opts: LiteMarkdownOptions) -> LiteMarkdownResult:
+        with file_path.open("rb") as stream:
+            doc = PdfReader(stream)
+            page_count = len(doc.pages)
 
             start_p, end_p = self._safe_page_range(page_count, opts.page_range)
             pages_md: List[LitePageMarkdown] = []
 
             for pno in range(start_p, end_p + 1):
-                page = doc.load_page(pno - 1)
+                page = doc.pages[pno - 1]
                 # Plain text is enough for the lightweight path; keeps speed & determinism.
-                raw_text = page.get_text("text")
+                raw_text = page.extract_text() or ""
                 text: str = raw_text if isinstance(raw_text, str) else str(raw_text)
                 text = self._normalize(text, opts).strip()
 
@@ -114,10 +112,9 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
                     body = text
 
                 pages_md.append(LitePageMarkdown(page_no=pno, markdown=body, char_count=len(body)))
-        finally:
-            doc.close()
 
         combined = "\n\n".join(p.markdown for p in pages_md)
+        retained_length = len(combined[: opts.max_chars].rstrip()) if opts.max_chars and opts.max_chars > 0 else len(combined)
         combined, truncated = enforce_max_chars(combined, opts.max_chars)
 
         # If truncated and per-page requested, keep only fully contained pages
@@ -127,7 +124,7 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
             for idx, p in enumerate(pages_md):
                 # account for the "\n\n" separators between pages
                 sep = 2 if idx > 0 else 0
-                if acc + sep + len(p.markdown) > len(combined):
+                if acc + sep + len(p.markdown) > retained_length:
                     break
                 acc += sep + len(p.markdown)
                 kept.append(p)
@@ -140,7 +137,7 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
             truncated=truncated,
             markdown=combined,
             pages=pages_md if opts.return_per_page else [],
-            extras={"engine": "pymupdf-pagewise"},
+            extras={"engine": "pypdf-pagewise"},
         )
 
     # ---- whole-document extraction (markitdown) ------------------------------
@@ -150,8 +147,7 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
             raise RuntimeError("markitdown not available for PDF conversion")
 
         converted = self._md.convert(str(file_path))
-        # Pylance sometimes flags `.text`; guard with getattr for static peace of mind.
-        md = getattr(converted, "text", "") or ""
+        md = converted.markdown or ""
         md = self._normalize(md, opts)
 
         md, truncated = enforce_max_chars(md, opts.max_chars)
@@ -169,78 +165,17 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
     # ---- public API ----------------------------------------------------------
 
     def extract(self, file_path: Path, options: LiteMarkdownOptions | None = None) -> LiteMarkdownResult:
-        """
-        Strategy:
-        - If caller wants page control: use PyMuPDF (fast, deterministic).
-        - Else prefer markitdown (best quality/maintenance for whole-doc).
-        - On failures, log and fall back to the other path when possible.
-        """
+        """Preserve page requests; use MarkItDown only for whole-document conversion."""
         opts = options or LiteMarkdownOptions()
-
-        # Page-wise needs trump markitdown (which doesn't expose page slicing)
         if self._needs_page_wise(opts):
-            try:
-                result = self._extract_pages_with_fitz(file_path, opts)
-                logger.info(
-                    "[LITE_PDF][IMPLEM] fitz page-wise extraction | file=%s pages=%s chars=%s truncated=%s",
-                    file_path.name,
-                    result.page_count,
-                    result.total_chars,
-                    result.truncated,
-                )
-                return result
-            except Exception as e:
-                logger.warning(f"Page-wise PDF extraction failed, trying markitdown: {e}")
-
-            # Fall back to whole-doc if page-wise failed
-            result = self._extract_with_markitdown(file_path, opts)
-            logger.info(
-                "[LITE_PDF][IMPLEM] fallback markitdown extraction | file=%s pages=%s chars=%s truncated=%s",
-                file_path.name,
-                result.page_count,
-                result.total_chars,
-                result.truncated,
-            )
-            return result
-
-        # Whole-document path first (simpler, better formatting when available)
+            return self._extract_pages_with_pypdf(file_path, opts)
         try:
             result = self._extract_with_markitdown(file_path, opts)
-            logger.info(
-                "[LITE_PDF][IMPLEM] markitdown extraction | file=%s pages=%s chars=%s truncated=%s",
-                file_path.name,
-                result.page_count,
-                result.total_chars,
-                result.truncated,
-            )
-            # If markitdown produced nothing, fall back to page-wise extraction.
-            if result.total_chars == 0:
-                logger.warning(
-                    "[PROCESSOR][LITE_MD][PDF][MARKITDOWN_EMPTY] file=%s — attempting fitz fallback",
-                    file_path.name,
-                )
-                result = self._extract_pages_with_fitz(file_path, opts)
-                logger.info(
-                    "[LITE_PDF][IMPLEM] fallback fitz after empty markitdown | file=%s pages=%s chars=%s truncated=%s",
-                    file_path.name,
-                    result.page_count,
-                    result.total_chars,
-                    result.truncated,
-                )
-            return result
-        except Exception as e:
-            logger.warning(f"markitdown PDF conversion failed, trying page-wise fallback: {e}")
-
-        # Fall back to page-wise text if markitdown fails
-        result = self._extract_pages_with_fitz(file_path, opts)
-        logger.info(
-            "[LITE_PDF][IMPLEM] fallback fitz extraction | file=%s pages=%s chars=%s truncated=%s",
-            file_path.name,
-            result.page_count,
-            result.total_chars,
-            result.truncated,
-        )
-        return result
+            if result.total_chars:
+                return result
+        except Exception:
+            logger.warning("MarkItDown PDF conversion failed; trying pypdf", exc_info=True)
+        return self._extract_pages_with_pypdf(file_path, opts)
 
 
 class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
@@ -261,48 +196,33 @@ class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
         self._lite = LitePdfToMdProcessor()
 
     def check_file_validity(self, file_path: Path) -> bool:
-        """
-        Basic validity check using PyMuPDF: the file must be a readable
-        PDF with at least one page.
-        """
+        """Accept a readable PDF with at least one page."""
         try:
-            doc = fitz.open(str(file_path))
-            try:
-                if doc.page_count <= 0:
-                    logger.warning("LitePdfMarkdownProcessor: PDF %s has no pages.", file_path)
-                    return False
-                return True
-            finally:
-                doc.close()
-        except Exception as e:
-            logger.error("LitePdfMarkdownProcessor: invalid PDF %s: %s", file_path, e)
+            with file_path.open("rb") as stream:
+                return len(PdfReader(stream).pages) > 0
+        except Exception:
+            logger.warning("Invalid PDF: %s", file_path, exc_info=True)
             return False
 
     def extract_file_metadata(self, file_path: Path) -> dict:
-        """
-        Lightweight metadata extraction based on PyMuPDF.
-        Returns only fields that are cheap to compute.
-        """
         try:
-            doc = fitz.open(str(file_path))
-            try:
+            with file_path.open("rb") as stream:
+                doc = PdfReader(stream)
                 info = doc.metadata or {}
                 return {
-                    "title": info.get("title") or None,
-                    "author": info.get("author") or None,
+                    "title": info.get("/Title") or None,
+                    "author": info.get("/Author") or None,
                     "document_name": file_path.name,
-                    "page_count": doc.page_count,
+                    "page_count": len(doc.pages),
                     "extras": {
-                        "pdf.subject": info.get("subject") or None,
-                        "pdf.producer": info.get("producer") or None,
-                        "pdf.creator": info.get("creator") or None,
+                        "pdf.subject": info.get("/Subject") or None,
+                        "pdf.producer": info.get("/Producer") or None,
+                        "pdf.creator": info.get("/Creator") or None,
                     },
                 }
-            finally:
-                doc.close()
-        except Exception as e:
-            logger.error("LitePdfMarkdownProcessor: error extracting metadata from %s: %s", file_path, e)
-            return {"document_name": file_path.name, "error": str(e)}
+        except Exception as exc:
+            logger.warning("Cannot read PDF metadata: %s", file_path, exc_info=True)
+            return {"document_name": file_path.name, "error": str(exc)}
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         """
