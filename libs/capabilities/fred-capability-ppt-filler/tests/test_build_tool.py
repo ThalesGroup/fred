@@ -35,6 +35,7 @@ from fred_capability_ppt_filler.builder.capability import (
     PPT_BUILDER_TEMPLATE_KEY,
     PptBuilderCapability,
     PptBuilderConfig,
+    build_instructions,
 )
 from fred_capability_ppt_filler.builder.checks import SlideReport
 from fred_capability_ppt_filler.builder.models import PatternOverride
@@ -172,6 +173,18 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
     assert "process" in kinds and "cover" not in kinds and "cards" not in kinds
 
 
+def test_a_title_states_the_conclusion_and_the_takeaway_stays_in_the_notes():
+    """'title (short)' after the takeaway gave topical titles ("Chronologie clé")."""
+    inventory = analyze_template(TEMPLATE).inventory
+    assert inventory is not None
+    rules = build_instructions(False)
+    for text in (tools_mod._description(inventory, "template_slide", 2), rules):
+        assert "a claim, not a topic" in text
+        assert "title (short)" not in text and "not the takeaway itself" not in text
+    takeaway = SlidePlan.model_fields["takeaway"].description or ""
+    assert "shown itself only when the user explicitly asks" in takeaway
+
+
 def test_each_text_field_states_its_room_where_the_model_writes_it():
     """The cover subtitle and figure labels failed most first calls while their
     sizes sat only in the catalogue."""
@@ -183,7 +196,8 @@ def test_each_text_field_states_its_room_where_the_model_writes_it():
     # The most common room, then each kind that differs; a single kind is named.
     title = slide["title"]["description"]
     assert title.startswith(
-        "Short title, a few words pointing to the takeaway. Room: ≤4 words (≈33 chars); "
+        "On a content slide, its conclusion as a short sentence (a claim, not a topic). "
+        "Room: ≤4 words (≈33 chars); "
         "cover ≤8 words (≈29 chars × 2 lines)"
     )
     assert (

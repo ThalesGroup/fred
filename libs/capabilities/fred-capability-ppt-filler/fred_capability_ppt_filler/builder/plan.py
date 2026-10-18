@@ -1045,13 +1045,13 @@ class SlidePlan(BaseModel):
         default=None,
         description="What the audience concludes when looking at this slide, as a full "
         "sentence ('Italy weighs twice Spain in headcount, so hiring should start "
-        "there'). Not the title: the slide's visible content delivers it, so changing it "
-        "means rewriting that content; it is shown itself only when the user explicitly "
-        "asks. Not needed on cover, agenda, section, closing and quote slides.",
+        "there'). The title states it short and the visible content proves it, so "
+        "changing it means rewriting both; it is shown itself only when the user "
+        "explicitly asks. Not needed on cover, agenda, section, closing and quote slides.",
     )
     title: Optional[str] = Field(
         default=None,
-        description="Short title, a few words pointing to the takeaway.",
+        description="On a content slide, its conclusion as a short sentence (a claim, not a topic).",
     )
     subtitle: Optional[str] = None
     number: Optional[str] = Field(

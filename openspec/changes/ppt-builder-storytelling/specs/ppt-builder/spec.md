@@ -2,12 +2,12 @@
 
 ### Requirement: Every content slide has a takeaway
 
-The system SHALL accept a `takeaway` on every plan slide: the conclusion the audience draws from the slide, as a sentence, asked for by the working rules on every slide whose kind is not `cover`, `agenda`, `section`, `closing` or `quote`. The system SHALL NOT refuse a slide for its takeaway (missing, short, a question, equal to the title) nor for numbers in its title or subtitle: judging them is the agent's. The system SHALL NOT write the takeaway on the slide unless the user explicitly asked for key messages to be shown (`ppt-builder-intent-fields`, requirement "Slide takeaway"). The system SHALL NOT derive the slide's title from the takeaway: it SHALL use the `title` the model sent, and leave the title unfilled when none is sent. The system MUST write the takeaway as the first line of the slide's speaker notes.
+The system SHALL accept a `takeaway` on every plan slide: the conclusion the audience draws from the slide, as a sentence, asked for by the working rules on every slide whose kind is not `cover`, `agenda`, `section`, `closing` or `quote`; the working rules and the field descriptions ask for the content slide's title as that conclusion in a short sentence (a claim, not a topic). The system SHALL NOT refuse a slide for its takeaway (missing, short, a question, equal to the title) nor for numbers in its title or subtitle: judging them is the agent's. The system SHALL NOT write the takeaway on the slide unless the user explicitly asked for key messages to be shown (`ppt-builder-intent-fields`, requirement "Slide takeaway"). The system SHALL NOT derive the slide's title from the takeaway: it SHALL use the `title` the model sent, and leave the title unfilled when none is sent. The system MUST write the takeaway as the first line of the slide's speaker notes.
 
-#### Scenario: Takeaway shapes the slide, title stays short
+#### Scenario: Takeaway shapes the slide, title states it short
 
-- **WHEN** the model sends a chart slide with `title: "Effectifs par pays"` and `takeaway: "L'Italie pèse deux fois l'Espagne en effectifs, le plan de recrutement doit commencer là"`
-- **THEN** the slide's title reads "Effectifs par pays" and its speaker notes start with the takeaway
+- **WHEN** the model sends a chart slide with `title: "L'Italie pèse deux fois l'Espagne"` and `takeaway: "L'Italie pèse deux fois l'Espagne en effectifs, le plan de recrutement doit commencer là"`
+- **THEN** the slide's title reads "L'Italie pèse deux fois l'Espagne" and its speaker notes start with the takeaway
 
 #### Scenario: User asked for no titles
 

@@ -285,7 +285,7 @@ _BUILD_INSTRUCTIONS = (
     "`takeaway` (what the audience concludes, as a sentence) before its content. Let the takeaway design "
     "the slide: the kind that shows it (a comparison → a chart; one striking number → a figures slide; a "
     "trend → a line), only the content that supports it, and the emphasis that proves it (chart.highlight, "
-    "chart.sort). Then write a short title, a few words pointing to the takeaway, not the takeaway itself; "
+    "chart.sort). Then write its title: that conclusion as a short sentence (a claim, not a topic); "
     "leave titles out only when the user asked. Take every figure, name and date from the documents or the "
     "user, keep them exact when rewording, and say where in `source` ('user' only for what the user wrote). "
     "Never invent one: when the user asks for concrete figures they did not give, ask for them, unless they "

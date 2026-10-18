@@ -1313,7 +1313,7 @@ def _description(
         '"repeat_layout", "value": true}. '
         "For each slide write first its `takeaway` (what the audience concludes, as a sentence; "
         "not on cover, agenda, section, closing and quote slides), then its content: title "
-        "(short), subtitle, bullets (telegraphic, "
+        "(that conclusion as a short sentence: a claim, not a topic), subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image"
         + (", trend (up, down or flat: an arrow before the number)" if trends else "")
