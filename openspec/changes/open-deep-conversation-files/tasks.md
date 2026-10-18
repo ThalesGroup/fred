@@ -1,6 +1,6 @@
 # Tasks
 
-Planning artifacts only are complete. All implementation tasks remain unchecked intentionally. The approved execution order is slices 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7, followed by integration close-out. This serial schedule is a quality/cost choice; the narrower technical blockers below do not authorize parallel implementation. See [design.md](design.md#implementation-sequencing-and-ownership) for shared contracts, ownership, and handoffs.
+Slice 1 is implemented and verified below; later implementation tasks remain unchecked. The approved execution order is slices 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7, followed by integration close-out. This serial schedule is a quality/cost choice; the narrower technical blockers below do not authorize parallel implementation. See [design.md](design.md#implementation-sequencing-and-ownership) for shared contracts, ownership, and handoffs.
 
 Use TDD within each slice: one meaningful failing behavior test, then the minimum implementation to pass it. Test through the public seams listed below, using independent expected outcomes from the acceptance scenarios. Avoid tautological assertions, private implementation coupling, and tests that only repeat type-system guarantees. Run the affected tests for red/green feedback; defer broad suites and quality checks to final validation or verified CI coverage at the integrated revision. Reuse valid results when their inputs have not changed.
 
@@ -11,8 +11,8 @@ Blocked by: none. Delivers a complete read-only plain-text presentation path, in
 - [x] 1.1 Add the built-in typed conversation-file UI part and minimal read response models; verify serialization/history round trips, OpenAPI exposure, and consistent path/viewer/editability metadata without a presentation capability.
 - [x] 1.2 Add conversation-bound read access beside the runtime filesystem route; verify authenticated ownership, team/historical-session routing, unknown/foreign sessions, traversal, forged references, and read-only mount policy without starting an agent execution.
 - [x] 1.3 Register standard `open(path)` for parents and native children and propagate child artifacts through stream/history; verify both reach the panel with bounded metadata, no document-body injection, no execution pause, and no claim of browser acknowledgment.
-- [ ] 1.4 Regenerate runtime OpenAPI and frontend clients and add session/path-keyed dispatch with the reusable CodeMirror plain-text surface; verify deduplication, current-content reopening after reload, stale navigation responses, and actionable missing/denied/unsupported or unavailable-runtime states.
-- [ ] 1.5 Apply localization, theme tokens, accessible labels, and keyboard opening to this path; verify rendered loading/error/read-only states and an end-to-end parent/child open demonstration.
+- [x] 1.4 Regenerate runtime OpenAPI and frontend clients and add session/path-keyed dispatch with the reusable CodeMirror plain-text surface; verify deduplication, current-content reopening after reload, stale navigation responses, and actionable missing/denied/unsupported or unavailable-runtime states.
+- [x] 1.5 Apply localization, theme tokens, accessible labels, and keyboard opening to this path; verify rendered loading/error/read-only states and an end-to-end parent/child open demonstration.
 
 ## 2. Edit a file and immediately continue the conversation
 

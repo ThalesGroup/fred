@@ -4212,5 +4212,19 @@
     "error": "Erreur",
     "info": "Info",
     "updated": "Mis à jour"
+  },
+  "conversationFiles": {
+    "title": "Fichiers de la conversation",
+    "files": "Fichiers ouverts",
+    "open": "Ouvrir",
+    "openPath": "Ouvrir {{path}}",
+    "source": "Source du fichier : {{path}}",
+    "readOnly": "Aperçu en lecture seule",
+    "loading": "Chargement du fichier actuel...",
+    "retry": "Réessayer",
+    "missing": "Ce fichier n'existe plus. Demandez à l'agent de le recréer.",
+    "denied": "Vous n'avez plus accès à ce fichier de conversation.",
+    "unsupported": "Ce fichier ne peut pas être ouvert. Seuls les fichiers texte UTF-8 sont pris en charge.",
+    "unavailable": "Le moteur de la conversation est indisponible. Réessayez après sa reconnexion."
   }
 }

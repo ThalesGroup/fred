@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { ConversationFilePanel } from "@shared/organisms/ConversationFilePanel/ConversationFilePanel";
+import { FILE_PANEL_KEY } from "../../../features/conversationFiles/conversationFileSlice";
+
 import { DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -1026,6 +1029,13 @@ export default function ManagedChatPage() {
 
           {/* Capability side-panel slot — full-height sibling of the left stack:
             its push drawer reflows the header and the conversation together. */}
+          <ConversationFilePanel
+            sessionId={chat.sessionId ?? ""}
+            teamId={teamId}
+            messagesUrl={chat.sessionMessagesUrl}
+            open={activeCapabilityKey === FILE_PANEL_KEY}
+            onClose={() => handleCapabilityPanelChange(null)}
+          />
           <CapabilitySidePanelHost
             capabilityIds={chat.capabilityIds}
             activeKey={activeCapabilityKey}

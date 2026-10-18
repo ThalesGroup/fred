@@ -13,6 +13,9 @@ import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { openConversationFile } from "../../features/conversationFiles/conversationFileSlice";
+import { requestSidePanelOpen } from "../../features/capabilities/sidePanelOpenRequestSlice";
+
 import { runtimeExecuteStreamPath } from "../utils/runtimeExecutionUrl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
@@ -559,6 +562,16 @@ export function useChatSse(
         }
 
         case "tool_result": {
+          for (const part of event.ui_parts ?? []) {
+            if (
+              part.type === "conversation_file" &&
+              part.session_id === sessionId &&
+              isTurnCurrent?.(sessionId) !== false
+            ) {
+              dispatch(openConversationFile(part));
+              dispatch(requestSidePanelOpen({ capabilityId: "runtime", widget: "conversation-files" }));
+            }
+          }
           console.debug(`[useChatSse] tool_result call_id=${event.call_id} ok=${!event.is_error}`);
           const toolResultParts: ChatMessage["parts"] = [
             {
@@ -829,7 +842,17 @@ export function useChatSse(
           break;
       }
     },
-    [onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onTurnRejected, onError, dropOptimisticTurn, i18n],
+    [
+      onAwaitingHuman,
+      onBindDraftAgentToSessionId,
+      onTurnPersisted,
+      onTurnRejected,
+      onError,
+      dropOptimisticTurn,
+      i18n,
+      dispatch,
+      isTurnCurrent,
+    ],
   );
 
   const streamToMessages = useCallback(

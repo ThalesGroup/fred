@@ -4212,5 +4212,19 @@
     "error": "Error",
     "info": "Info",
     "updated": "Updated"
+  },
+  "conversationFiles": {
+    "title": "Conversation files",
+    "files": "Opened files",
+    "open": "Open",
+    "openPath": "Open {{path}}",
+    "source": "File source: {{path}}",
+    "readOnly": "Read-only preview",
+    "loading": "Loading current file...",
+    "retry": "Try again",
+    "missing": "This file no longer exists. Ask the agent to recreate it.",
+    "denied": "You no longer have access to this conversation file.",
+    "unsupported": "This file cannot be opened. Only UTF-8 text files are supported.",
+    "unavailable": "The conversation runtime is unavailable. Try again when it is connected."
   }
 }

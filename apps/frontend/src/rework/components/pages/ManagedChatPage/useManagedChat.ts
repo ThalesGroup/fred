@@ -1297,6 +1297,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     capabilityIds,
     chatControls,
     input,
+    sessionMessagesUrl: sessionData?.messages_url,
     setInput: setComposerInput,
     inputCharacterCount,
     inputTooLong,

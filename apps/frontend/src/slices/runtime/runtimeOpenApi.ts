@@ -181,6 +181,15 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem`, method: "DELETE" }),
     }),
+    readConversationFile: build.query<ReadConversationFileApiResponse, ReadConversationFileApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem/file`,
+        params: {
+          path: queryArg.path,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     getSessionMessagesPodV1AgentsSessionsSessionIdMessagesGet: build.query<
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse,
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg
@@ -384,6 +393,12 @@ export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteA
   /** status 200 Successful Response */ ConversationFilesystemPurgeResponse;
 export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg = {
   sessionId: string;
+};
+export type ReadConversationFileApiResponse = /** status 200 Successful Response */ ConversationFileResponse;
+export type ReadConversationFileApiArg = {
+  sessionId: string;
+  path: string;
+  teamId?: string | null;
 };
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse =
   /** status 200 Successful Response */ ChatMessage[];
@@ -812,6 +827,13 @@ export type VectorSearchHit = {
   vector_index?: string | null;
   viewer_fragment?: string | null;
 };
+export type ConversationFilePart = {
+  editable: boolean;
+  path: string;
+  session_id: string;
+  type?: "conversation_file";
+  viewer: "markdown" | "html" | "text";
+};
 export type GeoPart = {
   fit_bounds?: boolean;
   geojson: {
@@ -847,6 +869,9 @@ export type AwaitingHumanRuntimeEvent = {
   } | null;
   ui_parts?: (
     | ({
+        type: "conversation_file";
+      } & ConversationFilePart)
+    | ({
         type: "geo";
       } & GeoPart)
     | ({
@@ -880,6 +905,9 @@ export type FinalRuntimeEvent = {
     [key: string]: number;
   } | null;
   ui_parts?: (
+    | ({
+        type: "conversation_file";
+      } & ConversationFilePart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -952,6 +980,9 @@ export type ToolResultRuntimeEvent = {
   tool_name?: string | null;
   ui_parts?: (
     | ({
+        type: "conversation_file";
+      } & ConversationFilePart)
+    | ({
         type: "geo";
       } & GeoPart)
     | ({
@@ -1022,6 +1053,14 @@ export type PlatformPromptFileResponse = {
 };
 export type ConversationFilesystemPurgeResponse = {
   purged: boolean;
+};
+export type ConversationFileResponse = {
+  content: string;
+  editable: boolean;
+  path: string;
+  session_id: string;
+  type?: "conversation_file";
+  viewer: "markdown" | "html" | "text";
 };
 export type Channel =
   | "final"
@@ -1414,6 +1453,8 @@ export const {
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
+  useReadConversationFileQuery,
+  useLazyReadConversationFileQuery,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useGetRuntimeInstanceSkillsQuery,

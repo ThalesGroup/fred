@@ -1,0 +1,48 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  height: 100%;
+  min-height: 0;
+}
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+.tab {
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-s);
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  overflow-wrap: anywhere;
+}
+.tab[aria-selected="true"] {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--primary);
+}
+.status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-s);
+  padding: var(--spacing-m);
+  color: var(--on-surface);
+}
+.caption {
+  color: var(--on-surface-variant);
+  font: var(--font-body-small);
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}

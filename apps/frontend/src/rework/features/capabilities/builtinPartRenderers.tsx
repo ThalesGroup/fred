@@ -15,6 +15,7 @@
 // Renderers for the frozen base `UiPart` kinds (link, geo) — the builtin half
 // of the part-renderer registry (#1977). Capability kinds come from plugins.
 
+import { ConversationFileCard } from "@shared/molecules/ConversationFileCard/ConversationFileCard";
 import { useTranslation } from "react-i18next";
 import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -52,4 +53,5 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
 export const builtinPartRenderers: Record<string, UiPartRenderer> = {
   link: LinkPartRenderer,
   geo: GeoPartRenderer,
+  conversation_file: ConversationFileCard,
 };
