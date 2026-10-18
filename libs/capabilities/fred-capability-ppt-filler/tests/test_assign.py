@@ -1341,8 +1341,10 @@ def test_advice_prefers_room_for_the_entries_over_an_unmeasured_field():
         SlidePlan(title="T", bullets=["Coût : élevé et durable", "Délai : court"])
     )
     assert shape is not None
-    advice = _advice([tight, pictured], "cards", shape)
-    assert advice is not None and advice.startswith("cards holds items max 6 [heading")
+    found = _advice([tight, pictured], "cards", shape)
+    assert found is not None and found[1].id == "slide:952"
+    advice = found[0]
+    assert advice.startswith("cards holds items max 6 [heading")
     assert "image" in advice and "shorten" not in advice
 
 
@@ -1932,6 +1934,45 @@ def test_a_kind_fallback_note_states_the_fix_without_an_exit():
     assert note.endswith(
         "To get the 'quote' slide, call again and merge bullets into at most 1 entry."
     )
+
+
+def test_a_suggestion_never_names_a_template_slide_already_at_its_cap():
+    """Two cards slides, the roomier one already used by a cards slide with a cap
+    of 1: the advice goes to the other one, and to one slide only."""
+    base = with_item_slides(INVENTORY, kinds=("cards",)).patterns[-1]
+    roomy = base.model_copy(deep=True, update={"id": "slide:20", "label": "Roomy"})
+    tight = base.model_copy(deep=True, update={"id": "slide:21", "label": "Tight"})
+    for pattern, room in ((roomy, (40, 3)), (tight, (16, 2))):
+        for item in pattern.groups[0].items:
+            for zone in item:
+                zone.chars_per_line, zone.max_lines = room
+    teams = [
+        _items_pattern(f"slide:{30 + n}", "team", 4, ["heading", "label"])
+        for n in range(2)
+    ]
+    inventory = _inventory(
+        _bullets("slide:1", "A", source="slide"), roomy, tight, *teams
+    )
+    cards = SlidePlan(
+        title="C",
+        kind="cards",
+        items=[
+            PlanItem(heading="Un", text="deux trois"),
+            PlanItem(heading="Quatre", text="cinq six"),
+        ],
+    )
+    labelled = SlidePlan(title="L", bullets=["Coût : élevé", "Délai : court"])
+    plan = _plan(
+        cards, labelled, _points(1), labelled.model_copy(update={"title": "L2"})
+    )
+    assignment = assign(inventory, plan, "template_slide", 1)
+    assert (
+        assignment.patterns[0] is not None and assignment.patterns[0].id == "slide:20"
+    )
+    (repeat,) = assignment.repeats
+    assert repeat.slides == [2, 3, 4] and repeat.at_most == 1
+    (advice,) = repeat.suggestions()
+    assert advice.startswith("slide 2 (") and "≈16 chars × 2 lines" in advice
 
 
 def test_every_note_numbers_slides_as_its_outline_does():

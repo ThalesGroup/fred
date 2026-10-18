@@ -32,6 +32,7 @@ import re
 from dataclasses import dataclass, field
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Literal,
@@ -1615,24 +1616,31 @@ def _holding(pattern: Pattern, entries: int) -> Optional[_Variant]:
     return _Variant(holes, pattern.source == "layout", hint, room)
 
 
-def _advice(pool: List[Pattern], kind: str, shape: Shape) -> Optional[str]:
+def _advice(
+    pool: List[Pattern], kind: str, shape: Shape
+) -> Optional[Tuple[str, Pattern]]:
     """``kind`` and what its favoured slide holds for this content, with the
-    size to shorten to when the longest entry would not fit; None if none can.
-    Favoured as the assigner would: room, no empty picture, an example slide."""
-    found = [v for p in pool if p.kind == kind and (v := _holding(p, shape.entries))]
+    size to shorten to when the longest entry would not fit, and that slide;
+    None if none can. Favoured as the assigner would: room, no empty picture,
+    an example slide."""
+    found = [
+        (v, p) for p in pool if p.kind == kind and (v := _holding(p, shape.entries))
+    ]
     if not found:
         return None
 
     def short(v: _Variant) -> bool:
         return v.room is not None and v.room < shape.longest
 
-    best = min(found, key=lambda v: (short(v), v.holes, v.layout, -(v.room or 0)))
+    best, pattern = min(
+        found, key=lambda f: (short(f[0]), f[0].holes, f[0].layout, -(f[0].room or 0))
+    )
     shorten = (
         f", shorten each entry to {capacity_text(best.room or 1, 1)}"
         if short(best)
         else ""
     )
-    return f"{kind} holds {best.hint}{shorten}"
+    return f"{kind} holds {best.hint}{shorten}", pattern
 
 
 def _suggested(
@@ -1641,10 +1649,18 @@ def _suggested(
     pool: List[Pattern],
     budget: Dict[str, int],
     given: Dict[str, int],
+    uses: Dict[str, int],
+    cap: Callable[[Pattern], Tuple[str, int]],
 ) -> List[Tuple[List[int], str, str]]:
     """Per slide, one other kind its content suits, the least suggested so far,
-    while the template has a variant of it left; slides with the same advice share a line."""
+    while the template has a variant of it left and never on a slide already at
+    its cap (``uses``, counted on by each suggestion); slides with the same advice
+    share a line."""
     found: Dict[Tuple[str, str], List[int]] = {}
+
+    def free(p: Pattern) -> bool:
+        key, most = cap(p)
+        return uses.get(key, 0) < most
 
     for slide in slides:
         # A chart's data has one natural form: never recast into another kind.
@@ -1655,7 +1671,7 @@ def _suggested(
         holds = [
             p
             for p in pool
-            if p.id not in blocked and not _wants_picture(p, [slide.plan])
+            if p.id not in blocked and not _wants_picture(p, [slide.plan]) and free(p)
         ]
         options = [
             (k, a)
@@ -1664,9 +1680,11 @@ def _suggested(
         ]
         if not options:
             continue
-        chosen, advice = min(options, key=lambda o: given.get(o[0], 0))
+        chosen, (advice, pattern) = min(options, key=lambda o: given.get(o[0], 0))
         budget[chosen] -= 1
         given[chosen] = given.get(chosen, 0) + 1
+        key = cap(pattern)[0]
+        uses[key] = uses.get(key, 0) + 1
         found.setdefault((shape.why, advice), []).append(slide.index)
     return [(at, why, advice) for (why, advice), at in found.items()]
 
@@ -1708,6 +1726,21 @@ def _budget(
     return budget
 
 
+def _uses(
+    slides: List[_Slide],
+    chosen: Dict[int, Pattern],
+    cap: Callable[[Pattern], Tuple[str, int]],
+) -> Dict[str, int]:
+    """Per template slide (or kind), the content slides of ``slides`` built on it."""
+    uses: Dict[str, int] = {}
+    for slide in slides:
+        pattern = chosen.get(slide.index)
+        if pattern is not None and _content(slide, pattern) and not _exempt(slide):
+            key = cap(pattern)[0]
+            uses[key] = uses.get(key, 0) + 1
+    return uses
+
+
 def _repeats(
     slides: List[_Slide],
     chosen: Dict[int, Pattern],
@@ -1742,7 +1775,13 @@ def _repeats(
     found = [(key[0] == "structural", False, g) for key, g in groups.items()]
     if caps is not None:
         found += [(False, True, run) for run in _runs(slides, chosen)]
-    budgets: Dict[frozenset, Dict[str, int]] = {}
+    budgets: Dict[frozenset, Tuple[Dict[str, int], Dict[str, int]]] = {}
+
+    def cap(p: Pattern) -> Tuple[str, int]:
+        """What one use counts on, and how many it may have."""
+        most = (caps.kind if by_kind else caps.slide) if caps else _NOTE_USES - 1
+        return (p.kind if by_kind else p.design_key), most
+
     given: Dict[str, int] = {}
     repeats: List[Repeat] = []
     # A run already listed as over its cap is asked once.
@@ -1766,12 +1805,12 @@ def _repeats(
             for s in slides
             if s.part == 1 and (structural or at.get(s.index, 0) in scope)
         ]
-        budget = budgets.setdefault(
+        budget, uses = budgets.setdefault(
             frozenset(at.get(s.index, 0) for s in within),
-            _budget(within, chosen, variants),
+            (_budget(within, chosen, variants), _uses(within, chosen, cap)),
         )
         suggested = (
-            _suggested([s for s, _ in group], kind, pool, budget, given)
+            _suggested([s for s, _ in group], kind, pool, budget, given, uses, cap)
             if recast
             else []
         )
