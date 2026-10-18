@@ -588,13 +588,14 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     [replaceAllMessages, replacePendingHitls, replaceStagedHitlAnswers],
   );
 
+  const sessionMessagesUrl = sessionData ? (sessionData.messages_url ?? null) : sessionUnavailable ? null : undefined;
   const {
     isLoading: isLoadingHistory,
     isSettled: isHistorySettled,
     isUnavailable: historyUnavailable,
   } = useSessionHistory({
     sessionId: locallyCreatingSession && !sessionData ? null : sessionId,
-    messagesUrl: sessionData ? (sessionData.messages_url ?? null) : sessionUnavailable ? null : undefined,
+    messagesUrl: sessionMessagesUrl,
     onLoaded: handleHistoryLoaded,
     isTurnActive,
   });
@@ -1307,7 +1308,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     capabilityIds,
     chatControls,
     input,
-    sessionMessagesUrl: sessionData?.messages_url,
+    sessionMessagesUrl,
     setInput: setComposerInput,
     inputCharacterCount,
     inputTooLong,

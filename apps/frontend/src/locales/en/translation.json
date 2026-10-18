@@ -4214,6 +4214,8 @@
     "updated": "Updated"
   },
   "conversationFiles": {
+    "close": "Close panel",
+    "resize": "Resize panel",
     "saveFailedSummary": "File could not be saved",
     "saving": "Saving...",
     "unsaved": "Unsaved changes",

@@ -4214,6 +4214,8 @@
     "updated": "Mis à jour"
   },
   "conversationFiles": {
+    "close": "Fermer le panneau",
+    "resize": "Redimensionner le panneau",
     "saveFailedSummary": "Le fichier n'a pas pu être enregistré",
     "saving": "Enregistrement...",
     "unsaved": "Modifications non enregistrées",

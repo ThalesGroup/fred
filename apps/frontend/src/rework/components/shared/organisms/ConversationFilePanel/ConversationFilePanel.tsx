@@ -139,9 +139,10 @@ export function ConversationFilePanel({ sessionId, teamId, messagesUrl, open, on
       open={open}
       onClose={onClose}
       title={t("conversationFiles.title")}
+      closeLabel={t("conversationFiles.close")}
       layout="push"
       floating
-      resizable={{ persistKey: "capability-side-panel" }}
+      resizable={{ persistKey: "capability-side-panel", resizeLabel: t("conversationFiles.resize") }}
     >
       {open && (
         <div className={styles.panel}>

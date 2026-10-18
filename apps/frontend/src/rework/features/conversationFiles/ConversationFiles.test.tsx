@@ -25,8 +25,9 @@ import { sidePanelOpenRequestSlice } from "../capabilities/sidePanelOpenRequestS
 import { UiParts } from "@shared/molecules/UiParts/UiParts";
 import { ConversationFilePanel } from "@shared/organisms/ConversationFilePanel/ConversationFilePanel";
 
+const locale = vi.hoisted(() => ({ language: "en", t: (key: string) => key }));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en", t: (key: string) => key } }),
+  useTranslation: () => ({ t: locale.t, i18n: { language: locale.language, t: locale.t } }),
 }));
 vi.mock("../../../security/KeycloakService", () => ({
   KeyCloakService: {
@@ -41,6 +42,8 @@ const mounted: (() => void)[] = [];
 afterEach(() => {
   mounted.splice(0).forEach((cleanup) => cleanup());
   vi.unstubAllGlobals();
+  locale.language = "en";
+  locale.t = (key: string) => key;
 });
 
 it.each(["s1", "constructor"])(
@@ -635,4 +638,18 @@ it("lets a slow initial read finish when the visible poll fires", async () => {
     visible.mockRestore();
     vi.useRealTimers();
   }
+});
+
+it("names the real file panel close and resize controls in French", async () => {
+  const { createInstance } = await import("i18next");
+  const french = (await import("../../../locales/fr/translation.json")).default;
+  const i18n = createInstance();
+  await i18n.init({ lng: "fr", resources: { fr: { translation: french } }, interpolation: { escapeValue: false } });
+  locale.language = "fr";
+  locale.t = (key: string) => String(i18n.t(key));
+  vi.stubGlobal("fetch", async () => fileResponse("Notes enregistrées"));
+  const { host } = await panelHarness();
+  await settle();
+  expect.soft(host.querySelector('button[aria-label="Fermer le panneau"]')).not.toBeNull();
+  expect.soft(host.querySelector('[role="separator"]')?.getAttribute("aria-label")).toBe("Redimensionner le panneau");
 });

@@ -32,6 +32,11 @@
 //   actually clears composer input/attachments, so a later prepare-execution
 //   failure can never wipe text/attachments the user still needs to retry.
 
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { runtimeApi } from "../../../../slices/runtime/runtimeOpenApi";
+import { conversationFileSlice } from "../../../features/conversationFiles/conversationFileSlice";
+import { ConversationFilePanel } from "@shared/organisms/ConversationFilePanel/ConversationFilePanel";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -219,9 +224,11 @@ let sessionData:
       agent_deleted?: boolean;
       agent_display_name?: string | null;
       agent_instance_id?: string;
+      messages_url?: string | null;
     }
   | undefined;
 let sessionQueryUnresolved = false;
+let sessionQueryFailed = false;
 const refetchSessionMock = vi.fn();
 // True only for the regression test below modeling RTK Query's data/
 // currentData divergence during a session switch (`data` reuses the last
@@ -264,7 +271,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
         ? undefined
         : { agent_instance_id: "agent-1", agent_deleted: false, messages_url: "/runtime/messages", ...sessionData },
     refetch: refetchSessionMock,
-    isError: false,
+    isError: sessionQueryFailed,
   }),
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation: () => [
     (args: unknown) => {
@@ -286,10 +293,24 @@ import { useManagedChat } from "./useManagedChat";
 import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHistoryCache";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
-function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useManagedChat>) => void }) {
+function TestHost({
+  onRender,
+  showFiles = false,
+}: {
+  onRender: (hook: ReturnType<typeof useManagedChat>) => void;
+  showFiles?: boolean;
+}) {
   const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1", effectiveChatModel: hostEffectiveModel });
   onRender(hook);
-  return null;
+  return showFiles && hook.sessionId ? (
+    <ConversationFilePanel
+      sessionId={hook.sessionId}
+      teamId="team-1"
+      messagesUrl={hook.sessionMessagesUrl}
+      open
+      onClose={() => undefined}
+    />
+  ) : null;
 }
 
 describe("useManagedChat — session write reliability", () => {
@@ -347,6 +368,7 @@ describe("useManagedChat — session write reliability", () => {
     patchSessionCalls.length = 0;
     sessionData = undefined;
     sessionQueryUnresolved = false;
+    sessionQueryFailed = false;
     refetchSessionMock.mockClear();
     sessionDataIsStaleForCurrentArgs = false;
     // `mockReset`, not `mockClear`: `mockClear` empties the call history and
@@ -393,6 +415,62 @@ describe("useManagedChat — session write reliability", () => {
     });
     container.remove();
   });
+
+  it.each(["missing runtime", "metadata failure"])(
+    "shows unavailable files after historical %s settles",
+    async (outcome) => {
+      sessionQueryUnresolved = true;
+      const store = configureStore({
+        reducer: {
+          conversationFiles: conversationFileSlice.reducer,
+          [runtimeApi.reducerPath]: runtimeApi.reducer,
+        },
+        middleware: (getDefault) => getDefault().concat(runtimeApi.middleware),
+      });
+      store.dispatch(
+        conversationFileSlice.actions.openConversationFile({
+          type: "conversation_file",
+          session_id: "historical",
+          path: "/notes.txt",
+          viewer: "text",
+          editable: true,
+        }),
+      );
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      container = document.createElement("div");
+      document.body.appendChild(container);
+      root = createRoot(container);
+      const render = () =>
+        root.render(
+          <Provider store={store}>
+            <TestHost showFiles onRender={(h) => (latest = h)} />
+          </Provider>,
+        );
+      try {
+        await act(async () => {
+          render();
+        });
+        await act(async () => capturedSetSearchParams?.(new URLSearchParams("session=historical")));
+        expect(container.textContent).toContain("conversationFiles.loading");
+        if (outcome === "missing runtime") {
+          sessionData = { agent_deleted: true, messages_url: undefined };
+          sessionQueryUnresolved = false;
+        } else {
+          sessionQueryFailed = true;
+        }
+        await act(async () => {
+          render();
+        });
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain("conversationFiles.unavailable");
+        expect(container.textContent).not.toContain("conversationFiles.loading");
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+        store.dispatch(runtimeApi.util.resetApiState());
+      }
+    },
+  );
 
   it.each([false, true])(
     "saves pending files before continuation, with failure retry or navigation cancellation (%s)",
