@@ -7102,9 +7102,13 @@ the `reference` sentinel or tool-call blocks (`tool_use`, `tool_call`,
 appears in an answer, the stored history, or the context replayed to the model.
 A `refusal` block renders as its refusal text. Unknown block types and non-dict
 objects keep the visible `str()` fallback; text blocks, plain strings and
-reasoning handling are unchanged. Text made only of closing brackets or braces
-between or after recovered calls (Mistral over-closing its JSON) is dropped
-from the recovered message content. A native call whose name is not registered
+reasoning handling are unchanged. Superseding §8.92 for Mistral, text after the
+first recovered call is dropped (only its length is logged): in every recorded
+leak it was runaway output, never an answer; text before it stays the content.
+Text calls are also recovered when the message already has native calls: they
+come first, and one equal in name and arguments to a native call is dropped,
+native IDs kept. At the reference anchor a `.` may precede the tool name
+(`...landscape.read_document`); the longest registered name still wins. A native call whose name is not registered
 but ends in a registered tool name (a model looping its output into the name, any
 model) is renamed to that tool; other unknown names keep the tool node's "not a
 valid tool" error, clipped to 256 characters, and an oversized string bound in a

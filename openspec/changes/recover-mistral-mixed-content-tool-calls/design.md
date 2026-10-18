@@ -46,7 +46,9 @@ The parser first rejected lists longer than 256 blocks. A streamed response is a
 
 Alternative: normalise the list (drop thinking, merge adjacent text) before applying the block cap. Same result with more code; no remaining bound depends on the block count.
 
-Mistral can also over-close the JSON it writes as text (the incident had a stray `}` after the first call). Text made only of closing brackets or braces, with optional whitespace, between or after recovered calls is dropped instead of being kept as the message content; any other text is retained as before.
+Mistral can also keep writing after the call it leaked: over-closed JSON, `{} {}`, diff headers, looping prose, a half-written second call. In all 27 leaks recorded on 2026-10-13 that text was garbage, never an answer, so all text after the first recovered call is dropped (its length is logged) and only the preamble stays. Risk: a genuine trailing sentence is lost; the turn continues with the tool result and the model speaks again. This replaces the earlier closer-only residue rule.
+
+Seven of those leaks also carried a native call, so text recovery now runs on messages with native calls too: text calls first (they precede the native delta in the stream), an exact `(name, args)` duplicate of a native call dropped, native IDs kept. One leak ended a sentence on the next call's name (`...landscape.read_document`), so at the reference anchor a `.` before the name is a valid boundary; the longest registered name still wins, and native-call name repair keeps the strict boundary.
 
 ### Reproduce from a redacted checkpoint shape
 

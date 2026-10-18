@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-With a Mistral model and reasoning enabled, run a long agent turn that ends in a tool call. The tool runs instead of its JSON being printed as the answer, and no `{'type': 'reference', ...}` text appears in the chat. When recovery happens, the `agent.tool_call_text_recovered_total` counter increases.
+With a Mistral model and reasoning enabled, run a long agent turn that ends in a tool call. The tool runs instead of its JSON being printed as the answer, and no `{'type': 'reference', ...}` text or runaway text after the call appears in the chat. When recovery happens, the `agent.tool_call_text_recovered_total` counter increases.
 
 ## Rollback
 

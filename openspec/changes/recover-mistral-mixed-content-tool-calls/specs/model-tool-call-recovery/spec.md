@@ -36,9 +36,20 @@ The runtime SHALL convert a completed Mistral assistant response into native too
 
 #### Scenario: Existing native call
 
-- **WHEN** a response already carries native tool calls and mixed content containing the exact sentinel
-- **THEN** the runtime preserves those calls and their IDs without reconstructing duplicates
+- **WHEN** a Mistral response already carries native tool calls and mixed content containing the exact sentinel and valid calls
+- **THEN** the runtime emits the text calls first, then the native calls with their IDs
+- **AND** a text call equal in name and arguments to a native call is dropped
 - **AND** pending encoded call text does not appear in assistant or Planning events
+
+#### Scenario: Sentence ends on the tool name
+
+- **WHEN** the text before an exact sentinel ends with a `.` directly followed by a registered tool name
+- **THEN** that tool name anchors the call, and a longer registered dotted name ending the same way wins
+
+#### Scenario: Runaway text after a recovered call
+
+- **WHEN** valid recovered calls are followed or separated by other text
+- **THEN** that text is dropped from the message content and only the text before the first call remains
 
 ### Requirement: Ambiguous content does not gain tool authority
 
@@ -61,7 +72,7 @@ The runtime MUST leave ordinary prose or quoted examples without the exact typed
 
 ### Requirement: Stream and execute recovered calls through normal controls
 
-The runtime SHALL keep the marker and recoverable call syntax out of assistant answer and reasoning events while the completed Mistral response is being resolved. A recovered call MUST pass the same access, human approval, budget, tracing, observability, and result-pairing controls as a native call. Text that is not part of a recovered call SHALL remain visible through the existing assistant or thought routing. Rendering into assistant text, conversation history, or replayed model context SHALL omit the sentinel and other known non-text call blocks (`reference`, `tool_use`, `tool_call`, `input_json_delta`), SHALL render a `refusal` block as its refusal text, and SHALL keep rendering any other block or non-dict object visibly. A residue made only of closing brackets or braces between or after recovered calls SHALL NOT remain as message content.
+The runtime SHALL keep the marker and recoverable call syntax out of assistant answer and reasoning events while the completed Mistral response is being resolved. A recovered call MUST pass the same access, human approval, budget, tracing, observability, and result-pairing controls as a native call. Text before the first recovered call SHALL remain visible through the existing assistant or thought routing; text after it SHALL be dropped, logging only its length. Rendering into assistant text, conversation history, or replayed model context SHALL omit the sentinel and other known non-text call blocks (`reference`, `tool_use`, `tool_call`, `input_json_delta`), SHALL render a `refusal` block as its refusal text, and SHALL keep rendering any other block or non-dict object visibly.
 
 #### Scenario: Recovered call completes
 
