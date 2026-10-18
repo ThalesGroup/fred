@@ -378,7 +378,11 @@ def test_repetition_is_allowed_and_reported_on_a_one_archetype_template():
     assert [p.label for p in assignment.patterns if p] == ["Only"] * 4
     (note,) = assignment.notes
     assert note.startswith("Slides 1, 2, 3, 4 use the template slide 'Only' in a row.")
-    assert "Nothing to do: no other slide of this template suits them" in note
+    assert note.endswith(
+        "No other slide of this template suits them: to vary them, use fewer "
+        "'bullets' slides."
+    )
+    assert "nothing to do" not in note.lower()
     # With the check off, the passive note of three in a row is kept.
     off = assign(
         inventory,
@@ -563,8 +567,8 @@ def test_an_agenda_one_entry_too_long_continues_on_a_second_agenda_slide():
     assert numbers == [1, 2, 2, 3]
     assert assignment.notes == [
         "Slide 2: its 9 items continue on a second 'agenda' slide (5 + 4, titles marked "
-        "(1/2) and (2/2)): the largest 'agenda' slide holds 8. Nothing to do; to keep "
-        "one slide, send at most 8 items."
+        "(1/2) and (2/2)): the largest 'agenda' slide holds 8. To keep one slide, "
+        "send at most 8 items."
     ]
     # The model's plan itself is untouched.
     assert plan.slides[1].title == "Sommaire" and len(plan.slides[1].items) == 9
@@ -1237,8 +1241,8 @@ def test_a_slide_used_three_times_is_reported_without_designs_that_cannot_hold_i
     ]
     (note,) = [n for n in assign(inventory, _plan(*slides)).notes if "all use" in n]
     assert note == (
-        "Slides 1, 3, 5 all use the template slide 'A'. Nothing to do: no other "
-        "slide of this template suits them."
+        "Slides 1, 3, 5 all use the template slide 'A'. No other slide of this "
+        "template suits them: to vary them, use fewer 'bullets' slides."
     )
     # By kind, the two template slides make one repeat.
     assignment = assign(inventory, _plan(*slides), "kind")

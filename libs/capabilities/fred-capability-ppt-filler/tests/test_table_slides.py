@@ -272,7 +272,7 @@ def test_a_table_too_tall_continues_on_a_second_table_slide_with_its_header(
     assert assignment.notes == [
         "Slide 2: its 22 rows continue on a second 'table' slide (11 + 11, header "
         "repeated, titles marked (1/2) and (2/2)): they do not fit one 'table' slide. "
-        "Nothing to do; to keep one slide, send fewer rows or shorter cells."
+        "To keep one slide, send fewer rows or shorter cells."
     ]
     result = render_deck(template, inventory, deck, patterns, None, numbers)
     shown = Presentation(io.BytesIO(result.pptx)).slides

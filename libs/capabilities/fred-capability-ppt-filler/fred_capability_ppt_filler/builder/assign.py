@@ -1102,8 +1102,8 @@ def _split_note(split: _Split, at: Dict[int, int]) -> str:
         remedy = "send fewer rows or shorter cells"
     return (
         f"Slide {at[first.index]}: its {split.entries} {split.what} continue on {more} "
-        f"'{split.kind}' slide ({sizes}{header}{marked}): {why}. Nothing to do; to "
-        f"keep one slide, {remedy}."
+        f"'{split.kind}' slide ({sizes}{header}{marked}): {why}. To keep one "
+        f"slide, {remedy}."
     )
 
 
@@ -1805,7 +1805,10 @@ def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
     if repeat.suggested:
         note += " Their content suits: " + "; ".join(repeat.suggested) + "."
         return note + " To vary them, recast one as above; otherwise nothing to do."
-    return note + " Nothing to do: no other slide of this template suits them."
+    return (
+        note + " No other slide of this template suits them: to vary them, use fewer "
+        f"'{repeat.kind}' slides."
+    )
 
 
 def _repeated_note(number: int, kept: bool) -> str:
