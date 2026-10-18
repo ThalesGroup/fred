@@ -81,10 +81,10 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanTable,
     SlidePlan,
     chart_headings,
-    takeaway_aside,
     has_content,
     shown_charts,
     slide_charts,
+    takeaway_aside,
 )
 from fred_capability_ppt_filler.fill import BuildNoteCode, BuiltSlide
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
