@@ -1,3 +1,30 @@
+**v3.7.0** - 2026-10-18
+
+- **Summary**
+
+  Agents can find spreadsheets in both your conversation attachments and team documents. Administrators can refresh platform access without losing recorded removals. Standard installations include fewer optional dependencies while retaining PDF and presentation processing.
+
+- **Features**
+
+  - Refresh platform access from your directory, with a choice to preserve recorded removals or include people again (#3140)
+  - Request local Keycloak login with a dedicated entry link when your organization allows it (#3133)
+
+- **Improvements**
+
+  - Discover and query spreadsheets from conversations and team documents while respecting the agent's selected document sources (#3007, #3151)
+
+- **Security**
+
+  - Refresh application dependencies and make Chroma and the optional PDF engine explicit installation choices (#3155, #3157, #3159)
+
+- **Bug Fixes**
+
+  - User searches with accented names work again on affected SQLite installations (#3086)
+
+- **Deployment note**
+
+  Apply the control-plane database migration before upgrading services. Review your storage and PDF processing choices, then deploy matching images and settings. Follow the operator guide; existing documents do not require re-ingestion.
+
 **v3.6.1** - 2026-10-16
 
 - **Summary**
