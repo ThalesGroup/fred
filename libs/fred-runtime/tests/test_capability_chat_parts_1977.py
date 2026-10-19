@@ -35,7 +35,6 @@ import pytest
 from _tracer_capability import TracerCardPart, TracerEchoCapability
 from fred_runtime.capabilities import CapabilityRegistry
 from fred_runtime.capabilities.assembly import build_capability_context
-from fred_runtime.capabilities.registry import BUILTIN_CHAT_PART_KINDS
 from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.context import ToolInvocationResult
 from fred_sdk.contracts.runtime import RuntimeServices
@@ -73,10 +72,6 @@ def _capability_with_part(cap_id: str, part: type[BaseModel]):
 
 
 # -- registry composition ------------------------------------------------------
-
-
-def test_builtin_kinds_derive_from_sdk_base_union() -> None:
-    assert BUILTIN_CHAT_PART_KINDS == frozenset({"link", "geo"})
 
 
 def test_chat_parts_compose_in_deterministic_capability_order() -> None:

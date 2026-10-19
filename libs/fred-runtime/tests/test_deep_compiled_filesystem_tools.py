@@ -29,6 +29,7 @@ from fred_runtime.deep.deep_runtime import (
 )
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    ConversationFilePart,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -502,9 +503,15 @@ async def test_native_child_open_streams_reference_without_child_prose(
         for event in events
         if isinstance(event, ToolResultRuntimeEvent) and event.ui_parts
     ]
-    assert [event.ui_parts[0].path for event in presented] == ["/child.txt"]
+    parts = [event.ui_parts[0] for event in presented]
+    for part in parts:
+        assert isinstance(part, ConversationFilePart)
+        assert part.path == "/child.txt"
+    assert len(parts) == 1
     final = next(event for event in events if isinstance(event, FinalRuntimeEvent))
-    assert final.ui_parts[0].session_id == "session-open"
+    final_part = final.ui_parts[0]
+    assert isinstance(final_part, ConversationFilePart)
+    assert final_part.session_id == "session-open"
     assert final.content == "Ready for review"
     assert all("PRIVATE FILE BODY" not in event.model_dump_json() for event in events)
 

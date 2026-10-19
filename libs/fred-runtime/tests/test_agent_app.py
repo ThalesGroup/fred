@@ -7058,10 +7058,14 @@ def test_read_conversation_file_without_execution(monkeypatch, tmp_path) -> None
     app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
     with TestClient(app) as client:
         config = get_runtime_context().config
-        service = ConversationFilesystemService(config.filesystem, "read-session")
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        service = ConversationFilesystemService(filesystem, "read-session")
         asyncio.run(service.scratchpad().write_text("notes.txt", "Current notes\n"))
         asyncio.run(
-            config.history_store.save(
+            history_store.save(
                 "read-session",
                 [make_user_text("read-session", "turn-1", 0, "review")],
                 "alice",
@@ -7099,6 +7103,7 @@ def test_conversation_file_rejects_unsafe_owned_session_id(
     app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
     with TestClient(app) as client:
         history = get_runtime_context().config.history_store
+        assert history is not None
         asyncio.run(
             history.save(
                 "unsafe~session",
@@ -7110,7 +7115,7 @@ def test_conversation_file_rejects_unsafe_owned_session_id(
             method,
             "/pod/v1/agents/sessions/unsafe~session/filesystem/file",
             params={"path": "/notes.txt"},
-            **({"json": {"content": "forged"}} if method == "PUT" else {}),
+            json={"content": "forged"} if method == "PUT" else None,
         )
         assert result.status_code == 422
 
@@ -7130,17 +7135,21 @@ def test_conversation_file_save_is_readable_without_execution(
     app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
     with TestClient(app) as client:
         config = get_runtime_context().config
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
         asyncio.run(
-            config.history_store.save(
+            history_store.save(
                 "edit-session",
                 [make_user_text("edit-session", "turn-1", 0, "review")],
                 "alice",
             )
         )
-        service = ConversationFilesystemService(config.filesystem, "edit-session")
+        service = ConversationFilesystemService(filesystem, "edit-session")
         asyncio.run(service.scratchpad().write_text("notes.txt", "Before"))
         sources: list[str] = []
-        write = config.filesystem.write
+        write = filesystem.write
 
         async def attributed_write(path: str, data: bytes | str) -> None:
             from fred_runtime.conversation_filesystem import current_mutation_source
@@ -7149,7 +7158,7 @@ def test_conversation_file_save_is_readable_without_execution(
                 sources.append(current_mutation_source())
             await write(path, data)
 
-        monkeypatch.setattr(config.filesystem, "write", attributed_write)
+        monkeypatch.setattr(filesystem, "write", attributed_write)
         saved = client.put(
             "/pod/v1/agents/sessions/edit-session/filesystem/file",
             params={"path": "/notes.txt"},
@@ -7162,7 +7171,7 @@ def test_conversation_file_save_is_readable_without_execution(
             asyncio.run(service.scratchpad().read_text("notes.txt"))
             == "Human revision\n"
         )
-        other = ConversationFilesystemService(config.filesystem, "other-session")
+        other = ConversationFilesystemService(filesystem, "other-session")
         assert not asyncio.run(other.scratchpad().exists("notes.txt"))
 
 
@@ -7201,8 +7210,10 @@ def test_conversation_file_save_rejects_forged_policy(
     app = create_agent_app(registry={}, config=pod_config)
     with TestClient(app) as client:
         config = get_runtime_context().config
+        history_store = config.history_store
+        assert history_store is not None
         asyncio.run(
-            config.history_store.save(
+            history_store.save(
                 "edit-session",
                 [make_user_text("edit-session", "turn-1", 0, "review")],
                 "alice",
@@ -7243,9 +7254,13 @@ def test_conversation_file_read_path_and_content_policy(
     app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
     with TestClient(app) as client:
         config = get_runtime_context().config
-        service = ConversationFilesystemService(config.filesystem, "policy-session")
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        service = ConversationFilesystemService(filesystem, "policy-session")
         asyncio.run(
-            config.history_store.save(
+            history_store.save(
                 "policy-session",
                 [make_user_text("policy-session", "turn-1", 0, "review")],
                 "alice",
@@ -7291,8 +7306,10 @@ def test_conversation_file_read_rejects_forged_reference(
     app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
     with TestClient(app) as client:
         config = get_runtime_context().config
+        history_store = config.history_store
+        assert history_store is not None
         asyncio.run(
-            config.history_store.save(
+            history_store.save(
                 "foreign-session",
                 [make_user_text("foreign-session", "turn-1", 0, "private")],
                 "bob",
@@ -7303,7 +7320,7 @@ def test_conversation_file_read_rejects_forged_reference(
             f"/pod/v1/agents/sessions/{session_id}/filesystem/"
             + ("export" if method == "EXPORT" else "file"),
             params={"path": "/notes.txt", "team_id": "team-1", "editable": True},
-            **({"json": {"content": "forged"}} if method == "PUT" else {}),
+            json={"content": "forged"} if method == "PUT" else None,
         )
         assert result.status_code == 403
         assert result.json() == {"detail": "Access denied."}
@@ -7356,12 +7373,16 @@ def test_conversation_file_read_uses_owned_team_history_route(
     )
     with TestClient(app) as client:
         config = get_runtime_context().config
-        service = ConversationFilesystemService(config.filesystem, "historical-session")
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        service = ConversationFilesystemService(filesystem, "historical-session")
         asyncio.run(
             service.scratchpad().write_text("notes.md", "Historical current file")
         )
         asyncio.run(
-            config.history_store.save(
+            history_store.save(
                 "historical-session",
                 [make_user_text("historical-session", "turn-1", 0, "review")],
                 "alice",
@@ -7374,11 +7395,7 @@ def test_conversation_file_read_uses_owned_team_history_route(
             + ("export" if method == "EXPORT" else "file"),
             params={"path": "/notes.md", "team_id": "team-1", "format": "md"},
             headers={"Authorization": "Bearer browser-token"},
-            **(
-                {"json": {"content": "Historical current file"}}
-                if method == "PUT"
-                else {}
-            ),
+            json={"content": "Historical current file"} if method == "PUT" else None,
         )
         assert result.status_code == expected
         if expected == 200:
@@ -7462,7 +7479,9 @@ def test_deep_parent_and_child_open_stream_and_history(monkeypatch, tmp_path) ->
     )
     with TestClient(app) as client:
         config = get_runtime_context().config
-        service = ConversationFilesystemService(config.filesystem, "review-session")
+        filesystem = config.filesystem
+        assert filesystem is not None
+        service = ConversationFilesystemService(filesystem, "review-session")
         asyncio.run(
             service.scratchpad().write_text("parent.txt", "PARENT PRIVATE BODY")
         )
@@ -7575,24 +7594,28 @@ def test_conversation_file_partial_save_reports_changed_content_and_can_retry(
     app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
     with TestClient(app) as client:
         config = get_runtime_context().config
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
         asyncio.run(
-            config.history_store.save(
+            history_store.save(
                 "partial-session",
                 [make_user_text("partial-session", "turn-1", 0, "review")],
                 "alice",
             )
         )
         service = ConversationFilesystemService(
-            config.filesystem, "partial-session", mutation_source="agent"
+            filesystem, "partial-session", mutation_source="agent"
         )
         asyncio.run(service.scratchpad().write_text("notes.txt", "before\n"))
-        original_write = config.filesystem.write
+        original_write = filesystem.write
         failed = False
 
         async def fail_bookkeeping_after_save(path: str, data: bytes | str) -> None:
             nonlocal failed
             if path.endswith("/.changes/state.json") and not failed:
-                current = await config.filesystem.read(
+                current = await filesystem.read(
                     "conversations/partial-session/scratchpad/notes.txt"
                 )
                 if current == b"saved\n":
@@ -7600,7 +7623,7 @@ def test_conversation_file_partial_save_reports_changed_content_and_can_retry(
                     raise OSError("private provider detail")
             await original_write(path, data)
 
-        monkeypatch.setattr(config.filesystem, "write", fail_bookkeeping_after_save)
+        monkeypatch.setattr(filesystem, "write", fail_bookkeeping_after_save)
         response = client.put(
             "/pod/v1/agents/sessions/partial-session/filesystem/file",
             params={"path": "/notes.txt"},
@@ -7646,10 +7669,14 @@ def test_conversation_file_export_uses_latest_saved_markdown(
     app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
     with TestClient(app) as client:
         config = get_runtime_context().config
-        service = ConversationFilesystemService(config.filesystem, "export-session")
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        service = ConversationFilesystemService(filesystem, "export-session")
         asyncio.run(service.scratchpad().write_text("report.md", "# Original\n"))
         asyncio.run(
-            config.history_store.save(
+            history_store.save(
                 "export-session",
                 [make_user_text("export-session", "turn-1", 0, "review")],
                 "alice",

@@ -101,6 +101,10 @@ class _LinkCollidingPart(BaseModel):
     type: Literal["link"] = "link"
 
 
+class _ConversationFileCollidingPart(BaseModel):
+    type: Literal["conversation_file"] = "conversation_file"
+
+
 class _RequiredTeamSettings(BaseModel):
     api_budget: int  # required — no default
 
@@ -133,10 +137,19 @@ def test_duplicate_chat_part_kind_across_capabilities_fails_boot() -> None:
         registry.validate(env={})
 
 
-def test_chat_part_kind_colliding_with_builtin_uipart_fails_boot() -> None:
+@pytest.mark.parametrize(
+    ("part", "kind"),
+    [
+        (_LinkCollidingPart, "link"),
+        (_ConversationFileCollidingPart, "conversation_file"),
+    ],
+)
+def test_chat_part_kind_colliding_with_builtin_uipart_fails_boot(
+    part: type[BaseModel], kind: str
+) -> None:
     registry = CapabilityRegistry()
-    registry.register(_capability("cap_a", chat_parts=[_LinkCollidingPart]))
-    with pytest.raises(DuplicateChatPartKindError, match="link"):
+    registry.register(_capability("cap_a", chat_parts=[part]))
+    with pytest.raises(DuplicateChatPartKindError, match=kind):
         registry.validate(env={})
 
 
