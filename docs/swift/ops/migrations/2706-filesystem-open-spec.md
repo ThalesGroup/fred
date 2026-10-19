@@ -68,3 +68,8 @@ semantics, with no automatic merge or stronger cross-replica transaction.
 History consumes the existing internal quota and is retained until normal
 conversation erasure; storage/quota failures are explicit. Binary/CSV/PDF viewers,
 code execution and interactive HTML dashboards are outside this feature.
+
+Quota-scale files can delay other requests during request/journal JSON processing
+and contiguous text decoding. Bounded response encoding reduces some stalls;
+thread offload alone does not isolate GIL-heavy work. Local diagnostic timings
+do not establish deployment latency or capacity limits.

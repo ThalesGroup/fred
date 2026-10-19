@@ -7119,6 +7119,12 @@ outcome. Export reuses `fred_core.documents` without creating a legacy document;
 DOCX conversion runs off the event loop. Generated runtime clients expose the
 same request/response shapes and a binary `Blob` export response.
 
+File JSON responses and Markdown export encode bounded text pieces in worker
+iterators. This limits response-encoding work per piece, not whole-request
+latency: quota-scale request/journal JSON processing and contiguous text decoding
+can still hold the Python GIL and delay other requests, including when dispatched
+to a thread. No maximum event-loop gap or throughput guarantee is established.
+
 Server-bound mutation source is separate from permission origin. At the next
 trusted user-exchange start, the runtime publishes consolidated non-agent changes
 as flat diffs under `/.deep/changes/<exchange-id>/`, splitting external groups
