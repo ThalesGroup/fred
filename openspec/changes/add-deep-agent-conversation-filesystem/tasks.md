@@ -2,7 +2,7 @@
 
 ## 1. Conversation filesystem contracts and storage service
 
-- [x] 1.1 Add the typed `ConversationScratchpadPort` contract and append it to `RuntimeServices`; verify contract tests cover text read, write/replace, expected-text edit, list, exists, and delete without exposing storage or `.deep` selection.
+- [x] 1.1 Add the typed `ConversationFilesystemPort` contract and append it to `RuntimeServices`; verify contract tests cover absolute-path text read, write/replace, expected-text edit, list and exists with explicit agent/system origin, without exposing storage keys or caller-selected conversation. The SDK port has no delete operation.
 - [x] 1.2 Implement the conversation-bound filesystem service over `BaseFilesystem`, including safe `session_id` prefixing, virtual-path normalization, UTF-8 scratchpad validation, namespace scoping, and stable domain errors; verify focused tests reject traversal, cross-conversation access, binary scratchpad writes, and partial mutations.
 - [x] 1.3 Implement create, full replacement, latest-text edit, listing, existence, deletion, and idempotent prefix purge semantics; verify tests prove stale edits preserve current content and explicit replacements use last-successful-write-wins behavior.
 - [x] 1.4 Implement independent 100 MiB/1,000-file scratchpad and 1 GiB/10,000-file `.deep` quota defaults, with four independently overridable values in one grouped runtime setting, per-conversation in-process locking, initial recount, replacement deltas, and content-free metrics/logging; verify tests cover defaults, partial and complete configuration overrides, byte and count rejection, one-file use of the remaining budget, recount, and serialized same-process mutations.
@@ -11,12 +11,12 @@
 
 - [x] 2.1 Add one Fred Runtime object-store/bucket configuration and a pod-lifetime `BaseFilesystem` factory using the deployment's provider credentials or workload identity; verify configuration tests cover local development plus supported MinIO/S3-compatible and GCS selections without feature-specific prefix settings.
 - [x] 2.2 Make only the backward-compatible `BaseFilesystem` fixes required by the service, including safe recursive prefix deletion, consistent list/stat metadata, and non-blocking handling of synchronous cloud SDK operations; verify the shared filesystem contract suite passes for local and the available MinIO/GCS test fixtures.
-- [x] 2.3 Bind a `ConversationScratchpadPort` to each turn's trusted `session_id` and inject it through `RuntimeServices`; verify two different conversation bindings cannot observe each other's files and two fresh bindings for one conversation observe the same stored data.
+- [x] 2.3 Bind a `ConversationFilesystemPort` to each turn's trusted `session_id` and inject it through `RuntimeServices`; verify two different conversation bindings cannot observe each other's files and two fresh bindings for one conversation observe the same stored data.
 
 ## 3. Deep Agents composite backend
 
-- [x] 3.1 Implement one generic Deep `BackendProtocol` adapter over a configured conversation-filesystem namespace and a rejecting default backend; verify backend contract tests cover read/write/edit/list/glob/grep results and unsupported paths without duplicating scratchpad and `.deep` logic.
-- [x] 3.2 Construct the per-conversation composite backend with `/scratchpad/`, `/.deep/`, and `artifacts_root=/.deep`, then pass the same scope to the parent and native subagents; verify a compiled deterministic Deep graph proves live child-to-parent and sibling visibility before child-state merge.
+- [x] 3.1 Implement one generic Deep `BackendProtocol` adapter over a configured conversation-filesystem namespace, using the working namespace as the root default backend; verify backend contract tests cover read/write/edit/list/glob/grep results and unsafe paths without duplicating scratchpad and `.deep` logic.
+- [x] 3.2 Construct the per-conversation composite backend with `/`, `/.deep/`, and `artifacts_root=/.deep`, then pass the same scope to the parent and native subagents; verify a compiled deterministic Deep graph proves live child-to-parent and sibling visibility before child-state merge.
 - [x] 3.3 Enable the standard safe filesystem tool names for every Deep agent while keeping `execute` blocked, and enforce model-read-only access to `/.deep/` without blocking trusted Deep middleware writes; verify compiled-runtime tests cover an agent without optional filesystem capability, rejected model writes to `.deep`, readable internal artifacts, and persistent large-tool-result storage.
 - [x] 3.4 Verify a later turn built with a fresh runtime/backend instance reads the prior turn's scratchpad through shared storage and that storage failure returns an explicit tool error without creating checkpoint or local fallback data.
 
@@ -44,3 +44,8 @@
 - Ruff over every changed Python file, targeted `py_compile`, `git diff --check`, and strict validation of this change plus `deep-agent-runtime-baseline` passed.
 - Scope review against #2738, #2751, #2752, and this change found no corpus, attachment, or skill mounts; UI editor or public scratchpad API; binary scratchpad support; distributed quota transaction; sandbox execution; or broader storage-abstraction consolidation. The PR references #2751 without closing it because its corpus and attachment work remains deferred.
 - The repository-wide test suite and required quality checks are intentionally delegated to draft-PR CI per developer instruction.
+
+
+## Current-contract reconciliation (2026-10-19)
+
+Before foundation-first sync/archive for the file-editor follow-on, the artifacts were reconciled to the implemented default `/` mount and `RuntimeServices.conversation_filesystem: ConversationFilesystemPort`. SDK operations take safe absolute paths and explicit agent/system origin; deletion remains a lower-level runtime service operation. The physical `conversations/<session_id>/scratchpad/` prefix is unchanged. This corrects stale planning wording and does not relocate files or change code. The original focused test record above remains historical evidence; final integrated validation is recorded in `open-deep-conversation-files/tasks.md`. `openspec validate add-deep-agent-conversation-filesystem --strict`, `openspec validate deep-agent-runtime-baseline --strict` and `git diff --check` passed on this documentation tree over `833de7bf711b301d090ee092a47ae1e8b5ae4476`. No runtime behavior changed or new tests ran. Sync/archive remains with the integrating developer.

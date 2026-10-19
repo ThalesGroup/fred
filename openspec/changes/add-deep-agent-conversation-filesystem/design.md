@@ -4,7 +4,7 @@
 
 See `proposal.md` for motivation and `specs/deep-agent-conversation-filesystem/spec.md` for the behavioral contract.
 
-Deep Agents 0.6.12 currently receives no explicit backend, so its filesystem middleware uses state held in the LangGraph checkpoint. Fred's SQL checkpointer makes that state available across turns, but it is not an independently addressable filesystem for capability code and parallel children only exchange file changes when their state is merged. Fred Runtime already depends on `fred-core`, whose `BaseFilesystem` protocol has local, MinIO/S3-compatible, and GCS implementations. The cloud implementations expose async methods but currently perform synchronous SDK calls inside some of them.
+Before this change, Deep Agents used checkpoint-held filesystem state without an explicit backend. That state persisted across turns through Fred's SQL checkpointer, but capability code could not address it independently and parallel children exchanged file changes only when their state was merged. Fred Runtime already depends on `fred-core`, whose `BaseFilesystem` protocol has local, MinIO/S3-compatible, and GCS implementations. This change offloads synchronous cloud SDK work from async request paths.
 
 `deep-agent-runtime-baseline` is a related in-flight OpenSpec change. It intentionally left `backend=` and `CompositeBackend` out of scope and guards Deep's built-in filesystem tool names unless Fred binds them. This change follows that baseline: the runtime-provided conversation filesystem becomes the standard binding for the safe filesystem operations, while `execute` remains disabled.
 
@@ -62,21 +62,20 @@ A conversation-bound service above `BaseFilesystem` owns:
 
 Two thin outward adapters use that service:
 
-1. `ConversationScratchpadPort`, added to `RuntimeServices`, exposes conversation-bound text operations to trusted runtime and capability code. Its contract covers read, write/replace, expected-text edit, list, exists, and delete. Paths are scratchpad-relative; callers cannot select a bucket, conversation, or `.deep` namespace.
-2. One generic Deep `BackendProtocol` implementation adapts a configured namespace of the service to the Deep Agents filesystem contract. It is instantiated for both `/scratchpad/` and `/.deep/` instead of duplicating backend code.
+1. `RuntimeServices.conversation_filesystem` carries `ConversationFilesystemPort`, bound to the trusted conversation. It exposes `read_text`, `write_text` (create/full replacement), `edit_text` (expected-text replacement, returning its match count), `list` and `exists` at absolute virtual paths such as `/notes.md`. Every async operation requires `origin="agent"` or `origin="system"`; agent origin applies the effective ordered filesystem rules, while system origin is reserved for trusted runtime work. The port also reports effective editor write policy through `is_editable`; unknown adapters default to read-only. It exposes no delete operation, storage keys, credentials or caller-selected conversation. Deletion and prefix purge remain lower-level runtime service operations.
+2. One generic Deep `BackendProtocol` implementation adapts a configured namespace of the service to the Deep Agents filesystem contract. The default backend mounts working files at `/`, while a separate route mounts internal artifacts at `/.deep/`.
 
 The port belongs at the SDK/runtime-service seam because capability authors need a stable product operation, not Fred's storage interface. `BaseFilesystem` remains an internal implementation seam and is not exposed through capability contexts.
 
 Alternative rejected: make `BaseFilesystem` the capability contract. That would leak bytes, physical-storage behavior, and namespace selection into capability code and make future storage consolidation harder.
 
-### D3 — Composite routing exposes two mounts and rejects everything else
+### D3 - Composite routing exposes root working files and internal artifacts
 
 Deep Runtime constructs one composite backend per conversation:
 
 ```text
-default: reject
-/scratchpad/ -> conversation scratchpad backend
-/.deep/      -> Deep internal backend
+default / -> conversation scratchpad backend
+/.deep/   -> Deep internal backend
 artifacts_root: /.deep
 ```
 
@@ -84,7 +83,7 @@ The same composite backend and conversation service are supplied to the parent a
 
 The standard model-visible surface enables `ls`, `read_file`, `write_file`, `edit_file`, `glob`, and `grep`; `execute` stays guarded. Runtime filesystem-tool guards regard these standard safe operations as bound even when no optional capability is selected.
 
-The `.deep` backend must be writable by trusted Deep middleware because it stores `large_tool_results/` and `conversation_history/`. The model-facing validation layer rejects `write_file` and `edit_file` paths under `/.deep/`, while allowing its read-only browsing operations. Capability code receives only `ConversationScratchpadPort`, so it has no route to `.deep`.
+The `.deep` backend must be writable by trusted Deep middleware because it stores `large_tool_results/` and `conversation_history/`. The model-facing validation layer rejects `write_file` and `edit_file` paths under `/.deep/`, while allowing its read-only browsing operations. Capability code uses the same `ConversationFilesystemPort` with explicit origin and effective rules; an agent-origin call can read `/.deep/` but cannot write it. Capability-port paths must be safe and absolute. The physical `scratchpad/` prefix stays unchanged: mounting it at `/` neither relocates stored objects nor adds a second namespace.
 
 Alternative rejected: a physically read-only `.deep` backend. Deep middleware and the model use the same backend contract, so making the backend itself read-only would also prevent the framework from persisting its artifacts.
 
@@ -100,7 +99,7 @@ Alternative rejected: introduce the future generic `ObjectStore` abstraction now
 
 `edit_file` and the port's edit operation read the latest stored text and apply only when the requested old text matches with the Deep Agents edit semantics. A stale edit therefore fails without overwriting newer content. Creating an absent path succeeds. A full write is an explicit replacement and uses last-successful-write-wins behavior.
 
-This is intentionally better than today's unconditional document overwrite without introducing ETags, draft reconciliation, merge UI, or a requirement that every code caller retain a read token. A future human editor can add conditional writes without changing the basic scratchpad scope.
+This foundation adds no ETags, draft reconciliation, merge UI, or requirement that callers retain a read token. The follow-on file editor preserves the same full-replacement and expected-text edit semantics.
 
 Alternative rejected: mandatory ETags for every mutation. They add state and UI/API complexity before a human editor exists and do not match the current Deep tool contract.
 
@@ -110,7 +109,7 @@ Default safety limits are:
 
 | Namespace | Total bytes | Files | Per-file limit |
 |---|---:|---:|---:|
-| `/scratchpad/` | 100 MiB | 1,000 | none |
+| `/` | 100 MiB | 1,000 | none |
 | `/.deep/` | 1 GiB | 10,000 | none |
 
 These four values are code defaults in one grouped conversation-filesystem runtime setting. Each value can be overridden independently through the runtime's normal settings/environment mechanism, so an operator can adjust a limit without rebuilding the image. This change does not add quota values to checked-in configuration files or Helm charts; deployments that need an override supply it through their existing runtime-configuration mechanism, while all others inherit the defaults.
