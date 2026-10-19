@@ -8,11 +8,9 @@ MCP (Model Composition and Prompting) endpoints to serve structured knowledge to
 
 ---
 
-> [!WARNING]
-> **PyMuPDF (fitz) is being removed from this project.**
-> PyMuPDF is licensed under AGPL-3.0, which is incompatible with the Apache 2.0 license of this project.
-> A permissively-licensed replacement will ship in a future release.
-> Until then, if license compliance is a concern for your deployment, disable PDF ingestion or audit your PyMuPDF usage carefully.
+> PDF/PPTX ingestion works with the standard dependency set. PyMuPDF is an
+> explicit optional extra and image variant; see [optional processing](#optional-pymupdf-processing)
+> for installation, configuration and the licenses of the complete dependency family.
 
 ---
 
@@ -210,3 +208,55 @@ Pick the storage flavour that matches your platform constraints; both are suppor
 ## License
 
 Apache 2.0 — © Thales 2025
+
+## Optional PyMuPDF processing
+
+The standard installation uses pypdf for fast PDF extraction and attachments,
+Docling for advanced PDF/OCR, and pypdfium2/PDFium for PPTX slide rendering.
+No PyMuPDF family package is installed by ordinary `uv sync` or `make dev`.
+Installing an extra never changes the configured processor automatically.
+
+To enable PyMuPDF locally, from this directory:
+
+```sh
+uv sync --extra dev --extra pymupdf
+```
+
+To build the optional production image, from the repository root:
+
+```sh
+docker build -f apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod \
+  --build-arg INSTALL_PYMUPDF=true -t knowledge-flow-backend-pymupdf:local .
+```
+
+Release CI builds `knowledge-flow-backend` and `knowledge-flow-backend-pymupdf`
+under `ghcr.io/thalesgroup/fred-agent/`, with the same release tag (or `swift-dev`).
+`INSTALL_CHROMA=true` is independent and can be combined with `INSTALL_PYMUPDF=true`
+when building a custom image. Both flags default to false. No source recompilation
+or package installation inside a running container is needed when using a published
+variant; deploy the chosen image and restart the pods.
+
+Then select the optional processor explicitly in the deployment's configuration:
+
+- Fast PDF: in `processing.profiles.fast.input_processors`, replace only the `.pdf`
+  entry's class path with
+  `knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.LitePdfMarkdownProcessor`.
+- Advanced PDF: retain `PdfMarkdownProcessor` and set
+  `processing.profiles.medium.pdf.extractor: pymupdf` and/or the equivalent rich key.
+- Standard fast PDF uses `lite_pdf_to_md_processor.LitePdfMarkdownProcessor`;
+  advanced PDF defaults to `docling`. PPTX always uses PDFium.
+
+With Helm, supply the selected repository/tag under
+`applications.knowledge-flow-backend.image` and
+`applications.knowledge-flow-worker.image`. The extraction deployments inherit
+from the worker; update any explicit image overrides on those deployments too.
+Set processing overrides under both applications' `configuration.processing`.
+Helm replaces processor lists, so preserve the other suffix entries when
+replacing `input_processors`. All selectable profiles are validated at startup,
+even when they are not the current default. An optional selection without its
+extra fails with the installation/build remedy before ingestion starts.
+
+The extra includes `pymupdf`, `pymupdf4llm` and `pymupdf-layout`. Their terms differ;
+see the [license inventory](../../docs/swift/COPYLEFT-DEPENDENCIES.md#license-01---optional-pymupdf-family).
+See the [migration note](../../docs/swift/ops/migrations/3159-optional-pymupdf.md)
+for draining workers, rollback and re-ingestion effects.

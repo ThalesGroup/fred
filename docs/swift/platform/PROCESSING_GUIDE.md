@@ -44,7 +44,7 @@ Current production and worker templates define:
 
 ### Fast
 
-- PDF: `LitePdfMarkdownProcessor` (lightweight path)
+- PDF: `lite_pdf_to_md_processor.LitePdfMarkdownProcessor` (pypdf, no OCR)
 - DOCX: `DocxMarkdownProcessor`
 - PPTX: `PptxMarkdownProcessor`
 - Plus CSV/TXT/MD/XLSM/JSONL processors
@@ -256,3 +256,10 @@ Action:
 1. Check profile flags (`do_ocr`, `do_table_structure`, `process_images`).
 2. Check model providers (chat/embedding/vision).
 3. Ensure cross-encoder is configured for offline local path.
+
+### Optional PDF engine
+
+The advanced PDF extractor defaults to Docling. Fast PDF and attachment
+extraction use pypdf; PPTX slide rendering uses PDFium in a separate process
+per deck. Selecting PyMuPDF requires both the optional package/image and an
+explicit processor configuration. See the [installation guide](../../../apps/knowledge-flow-backend/README.md#optional-pymupdf-processing).

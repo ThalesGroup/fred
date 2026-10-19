@@ -41,16 +41,10 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
 )
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.base_pdf_extractor import BasePdfExtractor
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.docling_processor import DoclingPdfExtractor
-from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor import PyMuPdfExtractor
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import ImageTranscription
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.images_feature_extraction import calcul_canny, calcul_pourcentage_area
 
 logger = logging.getLogger(__name__)
-
-_EXTRACTORS: dict[str, type[BasePdfExtractor]] = {
-    "docling": DoclingPdfExtractor,
-    "pymupdf": PyMuPdfExtractor,
-}
 
 
 class PdfMarkdownProcessor(BaseMarkdownProcessor):
@@ -58,8 +52,8 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     PDF → Markdown processor with optional image transcription.
 
     Text extraction engine is selected via `processing.profiles.<profile>.pdf.extractor`:
-    - 'pymupdf'  — fast, page-oriented, deterministic (default).
-    - 'docling'  — layout-aware, table-structure, OCR-capable.
+    - 'pymupdf' - optional fast, page-oriented extraction.
+    - 'docling' - layout-aware, table-structure, OCR-capable (default).
 
     Image transcription (when enabled by processing profile):
     - PaddleOCR detects text regions in images.
@@ -156,13 +150,15 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             raise RuntimeError(f"[PDF][PROCESSOR] Failed to use image describer : {get_configuration().vision_model}") from e
 
     def _build_extractor(self, extractor_name: str, docling_num_threads: int = 4) -> BasePdfExtractor:
-        extractor_cls = _EXTRACTORS.get(extractor_name)
-        if extractor_cls is None:
-            logger.warning("[PROCESSOR][PDF] Unknown extractor '%s', falling back to 'pymupdf'", extractor_name)
-            extractor_cls = PyMuPdfExtractor
-        if extractor_cls is DoclingPdfExtractor:
+        if extractor_name == "docling":
             return DoclingPdfExtractor(num_threads=docling_num_threads)
-        return extractor_cls()
+        if extractor_name == "pymupdf":
+            from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.optional_pymupdf import require_pymupdf
+            from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor import PyMuPdfExtractor
+
+            require_pymupdf("pdf.extractor=pymupdf")
+            return PyMuPdfExtractor()
+        raise ValueError(f"Unknown PDF extractor: {extractor_name!r}")
 
     def _get_extractor(self, extractor_name: str, docling_num_threads: int) -> BasePdfExtractor:
         """Build the extractor once per (name, num_threads) and reuse it.
@@ -257,6 +253,8 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         extract_start = time.perf_counter()
         try:
             md_text, images_transcription = extractor.extract(file_path, work_dir)
+        except ImportError:
+            raise
         except Exception as e:
             raise RuntimeError(f"PDF extraction failed with extractor '{extractor_name}'") from e
         logger.info(
@@ -348,6 +346,8 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 "md_file": str(output_markdown_path),
                 "message": "Conversion to markdown succeeded.",
             }
+        except ImportError:
+            raise
         except Exception as e:
             logger.warning(f"PDF extraction failed, trying markitdown: {e}", exc_info=True)
         finally:

@@ -346,6 +346,16 @@ jobs:
           uv run --no-sync python -c 'import importlib.util; assert importlib.util.find_spec("chromadb") is None; import knowledge_flow_backend.main; import knowledge_flow_backend.main_worker'
           uv run --no-sync pytest -m 'not integration' --disable-socket --allow-unix-socket --ignore=tests/stores/test_chromadb_vector_store.py
 
+      - name: Verify default PDF inventory and optional PDF tests
+        if: matrix.name == 'knowledge-flow-backend'
+        working-directory: ${{ matrix.directory }}
+        run: |
+          uv run --no-sync python -m unittest discover -s ../../scripts/tests -p test_pdf_dependency_profile.py
+          uv run --no-sync python ../../scripts/check_pdf_dependencies.py > /tmp/pdf-default-inventory.json
+          uv sync --locked --no-default-groups --extra dev --extra pymupdf
+          uv run --no-sync python ../../scripts/check_pdf_dependencies.py --pymupdf > /tmp/pdf-optional-inventory.json
+          uv run --no-sync pytest tests/processors/input/lightweight_markdown_processor tests/processors/input/pdf_markdown_processor tests/processors/input/test_pptx_slide_renderer.py tests/core/test_optional_pdf_dependencies.py -m 'not integration' --disable-socket --allow-unix-socket
+
       # fred-core only: ReBAC rules are only really covered against a live OpenFGA,
       # which the target starts and stops via docker compose.
       - name: Run integration tests

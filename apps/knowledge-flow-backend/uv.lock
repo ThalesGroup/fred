@@ -2063,12 +2063,11 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "pymupdf" },
-    { name = "pymupdf4llm" },
     { name = "pymysql" },
     { name = "pypandoc" },
     { name = "pypandoc-binary" },
     { name = "pypdf" },
+    { name = "pypdfium2" },
     { name = "python-docx" },
     { name = "python-keycloak" },
     { name = "python-magic" },
@@ -2106,6 +2105,10 @@ dev = [
     { name = "reportlab" },
     { name = "ruff" },
     { name = "tox" },
+]
+pymupdf = [
+    { name = "pymupdf" },
+    { name = "pymupdf4llm" },
 ]
 
 [package.dev-dependencies]
@@ -2163,12 +2166,13 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.14.2,<3.0.0" },
-    { name = "pymupdf", specifier = ">=1.27.2.3" },
-    { name = "pymupdf4llm", specifier = ">=1.27.2.3" },
+    { name = "pymupdf", marker = "extra == 'pymupdf'", specifier = ">=1.27.2.3" },
+    { name = "pymupdf4llm", marker = "extra == 'pymupdf'", specifier = ">=1.27.2.3" },
     { name = "pymysql", specifier = ">=1.1.1" },
     { name = "pypandoc", specifier = "==1.15" },
     { name = "pypandoc-binary", specifier = "==1.15" },
     { name = "pypdf", specifier = "==6.19.0" },
+    { name = "pypdfium2", specifier = ">=5.10.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.0.3" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = "==1.4.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==6.1.1" },
@@ -2197,7 +2201,7 @@ requires-dist = [
     { name = "uv" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35,<0.36" },
 ]
-provides-extras = ["chroma", "dev"]
+provides-extras = ["pymupdf", "chroma", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
