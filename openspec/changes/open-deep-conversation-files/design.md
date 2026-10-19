@@ -2,13 +2,13 @@
 
 ## Context
 
-See [proposal.md](proposal.md) for motivation and [the delta spec](specs/managed-conversations/spec.md) for observable requirements. The design was checked against `swift` at `13029601f`.
+See [proposal.md](proposal.md) for motivation and [the delta spec](specs/managed-conversations/spec.md) for observable requirements. The approved design was checked against `swift` at `13029601f`; implemented contracts and focused evidence are reconciled below and in [tasks.md](tasks.md).
 
 - `libs/fred-runtime/fred_runtime/conversation_filesystem.py` already persists conversation files in the configured shared storage. Deep mounts the working namespace at `/` and internal artifacts at `/.deep/`. Parent and native children share that backend.
 - `deep/conversation_backend.py` implements native reads, full writes, and exact-text edits. `deep/conversation_port.py` exposes the filesystem to capabilities; `deep/concat_files.py` supports explicit output replacement. No read-before-write enforcement is present or added here.
-- `OpenWritableDocumentCapability` copies a file into legacy writable-document storage. The legacy editor and export router are useful reusable components; its copied document identity is not the identity for this feature.
+- The retired `OpenWritableDocumentCapability` copied a file into legacy writable-document storage. The legacy editor and export router are useful reusable components; its copied document identity is not the identity for this feature.
 - The frontend already has typed UI-part dispatch, native side panels, MDXEditor, CodeMirror consumers, and a static HTML viewer with sanitization, sandboxing, and CSP. No iframe extension host is needed for this delivery.
-- The existing `add-deep-agent-conversation-filesystem` change is implementation-complete but unarchived and still describes older `/scratchpad/` naming. This follow-on uses the actual `/` mount and does not reopen its completed storage work. Before this change is synced or archived, reconcile the older delta to the implemented root namespace, validate it, and sync/archive it first (task 8.4). Do not implement a second mount or migrate paths here.
+- The existing `add-deep-agent-conversation-filesystem` change is implementation-complete and its artifacts now match the implemented `/` mount and SDK port. It remains unarchived. Task 8.4 still requires validation and foundation-first sync/archive before this follow-on; no second mount or path migration is introduced.
 
 ## Goals / Non-Goals
 
@@ -175,13 +175,13 @@ The dependency graph permits slices 3, 5 and 6 after slice 2, but implementation
 - **Large files and many groups consume internal quota:** consolidate autosaves, diff only touched files off the model context path, honor existing quotas, and surface failures. Do not add hidden retention eviction or an unbounded notification.
 - **Refresh can race navigation or user typing:** key all state by session/path, serialize local saves, preserve dirty buffers, and test stale responses explicitly.
 - **Permission drift or forged UI parts:** reauthorize file operations on the server. Neither a stored editable flag nor system-origin access is sufficient authority.
-- **Old filesystem planning text is stale:** task 8.4 blocks sync/archive of this change until the older delta agrees with the implemented root namespace and is synced/archived first. Strict validation of this delta alone cannot establish cross-change consistency.
+- **Foundation archive order:** its stale root/SDK wording has been reconciled, but task 8.4 still blocks this change's sync/archive until the foundation is validated and synced/archived first. Strict validation of this delta alone cannot establish cross-change consistency.
 
 ## Migration Plan
 
-This planning change performs no deployment or migration. Implementation adds compatible typed runtime APIs/UI parts and the native viewer client together, retires the demo selection with the narrowly scoped compatibility behavior above, and leaves legacy records untouched. Regenerate clients and provide the normal operator migration note when shipping implementation; it must explicitly say no document migration is required.
+The implementation adds typed runtime APIs/UI parts and the native viewer client together, retires the demo selection with the narrowly scoped compatibility behavior above, and leaves legacy records untouched. Generated runtime clients are included. No document migration is required. The [operator note](../../../docs/swift/ops/migrations/2706-filesystem-open-spec.md) records the paired release and Control Plane-first order for independently rolling services, existing storage/quota prerequisites, validation and rollback limits; no new configuration is required.
 
-For rollback, retain both legacy rows and conversation files. An older frontend may not render the new file-reference UI part, but must not lose or reinterpret stored file content. Do not convert files into legacy rows during rollback. No migration script is required in this change.
+For rollback, retain both legacy rows and conversation files. An older frontend may not render the new file-reference UI part, but must not lose or reinterpret stored file content. Do not convert files into legacy rows during rollback. No migration script is required in this change. Keep Control Plane/runtime/frontend versions compatible during rollback so an older availability sweep does not suspend retired selections.
 
 ## Future Ideas
 

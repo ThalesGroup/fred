@@ -7086,3 +7086,59 @@ establish identity. The existing tool names, table aliases and schema-before-SQL
 flow are retained. Unscoped listing excludes attachments; direct explicit-UID API
 access retains uploader authorization. Legacy text-only attachments remain on the
 text path. See the `tabular-chat-attachments` capability specification.
+
+
+### 8.117 Open and edit live Deep conversation files (2026-10-19)
+
+Deep parents and native subagents receive standard `open(path)` alongside the
+safe filesystem tools. A successful call requests presentation through a built-in
+`ConversationFilePart` (`type="conversation_file"`, trusted `session_id`, absolute
+`path`, `viewer`, `editable`), carried through tool events and persisted history.
+It returns bounded path/viewer metadata without the file body, execution pause or
+browser-acknowledgment claim. Markdown (`.md`, `.markdown`), HTML (`.html`, `.htm`)
+and other UTF-8 text select native viewers; reopening reads current saved content.
+
+The runtime owns the following authenticated session routes beneath its configured
+pod prefix. Browser requests use the session's captured `messages_url` routing;
+Control Plane authorizes session/team access and does not proxy file content.
+
+| Route | Contract |
+| --- | --- |
+| `GET /agents/sessions/{session_id}/filesystem/file?path=...&team_id=...` | `ConversationFileResponse`: file-reference fields plus current `content`. |
+| `PUT /agents/sessions/{session_id}/filesystem/file?path=...&team_id=...` | `ConversationFileSaveRequest {content}`; returns the saved content/reference. Extra request fields are forbidden. |
+| `GET /agents/sessions/{session_id}/filesystem/export?path=...&format=docx&team_id=...` | Current saved Markdown or Word attachment (`md`/`docx`, default `docx`), with `Cache-Control: no-store`. |
+
+Each request checks existing runtime history ownership and the Control Plane
+team/session route before storage access; unknown sessions cannot acquire an
+owner through these APIs. Paths are safe absolute virtual paths. The server
+recomputes write policy: UI-part metadata is a hint, and browser writes cannot
+request privileged `origin="system"`. `/.deep/` and read-only mounts cannot be
+edited. Denied, missing, unsafe, unsupported-content, quota and storage failures
+are explicit. A bookkeeping failure after a file mutation reports that partial
+outcome. Export reuses `fred_core.documents` without creating a legacy document;
+DOCX conversion runs off the event loop. Generated runtime clients expose the
+same request/response shapes and a binary `Blob` export response.
+
+Server-bound mutation source is separate from permission origin. At the next
+trusted user-exchange start, the runtime publishes consolidated non-agent changes
+as flat diffs under `/.deep/changes/<exchange-id>/`, splitting external groups
+around agent writes and omitting net-zero groups, including edits made during
+the preceding execution. Agent helpers and native children
+do not advance that boundary. A transient parent-model notification contains only
+a changed-file count and bounded diff paths, with directory discovery when
+truncated. Full contents remain in storage; retries reuse the exchange's sealed
+interval. Pending state and diffs share existing `.deep` quotas and erasure, with
+explicit failures and no local fallback or new cross-replica merge guarantee.
+
+`open_writable_document` is retired with one shared inactive-ID rule in runtime
+and Control Plane selection consumers. Saved retired selection alone cannot
+suspend an agent after reconciliation or block preparation/execution; unrelated
+missing or invalid capabilities retain their existing validation/suspension.
+The main `writable_document` and `html_artifact` capabilities, legacy rows/tables,
+routes/exports and historical UI parts remain usable. No document migration or
+copy into legacy storage is required. Full writes and explicit concatenation
+replacement retain their existing semantics.
+
+Viewer/editor ownership is documented in [COMPONENT-UX](../ux/COMPONENT-UX.md#conversation-files-and-shared-editors-2026-10-19).
+Behavioral acceptance belongs to [managed-conversations](../../../openspec/specs/managed-conversations/spec.md).
+Rollout/rollback is in the [operator note](../ops/migrations/2706-filesystem-open-spec.md).

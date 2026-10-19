@@ -30,4 +30,4 @@ None. This is a follow-on to the completed implementation tracked by `add-deep-a
 - `fred-runtime`: standard Deep tool/middleware assembly, conversation-bound file access, change recording, turn-start publication, and reuse of existing storage and erasure.
 - Frontend: native file viewers, authenticated runtime API integration, child-tool UI-part propagation, save/refresh coordination, and locally served CodeMirror language chunks.
 - Writable-document package and runtime registration: remove the bridge while reusing Markdown export and preserving the ReAct path. Deep agents no longer need document/HTML capability selection for these outputs.
-- No implementation is included in this planning change. The confirmed interview supersedes the issue's older proposals to migrate/delete legacy documents, inject inline diffs, and enforce read-before-overwrite. Those are not acceptance criteria for this delivery.
+- The implementation follows the confirmed scope, which supersedes the issue's older proposals to migrate/delete legacy documents, inject inline diffs, and enforce read-before-overwrite. Those are not acceptance criteria for this delivery.
