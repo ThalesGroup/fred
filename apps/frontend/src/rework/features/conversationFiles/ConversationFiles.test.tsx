@@ -25,7 +25,10 @@ import { sidePanelOpenRequestSlice } from "../capabilities/sidePanelOpenRequestS
 import { UiParts } from "@shared/molecules/UiParts/UiParts";
 import { ConversationFilePanel } from "@shared/organisms/ConversationFilePanel/ConversationFilePanel";
 
-const locale = vi.hoisted(() => ({ language: "en", t: (key: string) => key }));
+const locale = vi.hoisted(() => ({
+  language: "en",
+  t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: locale.t, i18n: { language: locale.language, t: locale.t } }),
 }));
@@ -43,7 +46,7 @@ afterEach(() => {
   mounted.splice(0).forEach((cleanup) => cleanup());
   vi.unstubAllGlobals();
   locale.language = "en";
-  locale.t = (key: string) => key;
+  locale.t = (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key;
 });
 
 it.each(["s1", "constructor"])(
@@ -1059,4 +1062,20 @@ it("labels read-only HTML Preview/Source controls in French using the current se
   expect(document.activeElement?.textContent).toBe("Aperçu");
   expect(host.querySelector('[role="tabpanel"][aria-labelledby] iframe')).not.toBeNull();
   expect(fetch.mock.calls.every(([request]) => (request as Request).method === "GET")).toBe(true);
+});
+
+it("names the real Markdown formatting, link and code controls in French", async () => {
+  const { createInstance } = await import("i18next");
+  const french = (await import("../../../locales/fr/translation.json")).default;
+  const i18n = createInstance();
+  await i18n.init({ lng: "fr", resources: { fr: { translation: french } }, interpolation: { escapeValue: false } });
+  locale.language = "fr";
+  locale.t = (key: string) => String(i18n.t(key));
+  vi.stubGlobal("fetch", async () => markdownResponse("# Rapport\n\nTexte à réviser."));
+  const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/report.md"]);
+  await settle();
+  expect(host.querySelector('button[aria-label="Gras"]')).not.toBeNull();
+  expect(host.querySelector('button[aria-label="Insérer un bloc de code"]')).not.toBeNull();
+  const link = host.querySelector<HTMLButtonElement>('button[aria-label="Créer un lien"]');
+  expect(link).not.toBeNull();
 });

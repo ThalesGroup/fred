@@ -59,6 +59,9 @@ export function MarkdownEditor({
         ref={editor}
         markdown={initial}
         readOnly={readOnly}
+        translation={(key, defaultValue, interpolations) =>
+          t(`markdownEditor.${key}`, { defaultValue, ...interpolations })
+        }
         onChange={(markdown, initialNormalize) => {
           if (!initialNormalize && !readOnly) {
             latest.current = markdown;

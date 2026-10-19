@@ -4209,6 +4209,95 @@
     "info": "Info",
     "updated": "Mis à jour"
   },
+  "markdownEditor": {
+    "toolbar": {
+      "undo": "Annuler {{shortcut}}",
+      "redo": "Rétablir {{shortcut}}",
+      "bold": "Gras",
+      "removeBold": "Retirer le gras",
+      "italic": "Italique",
+      "removeItalic": "Retirer l'italique",
+      "underline": "Souligner",
+      "removeUnderline": "Retirer le soulignement",
+      "blockTypes": {
+        "paragraph": "Paragraphe",
+        "quote": "Citation",
+        "heading": "Titre {{level}}"
+      },
+      "blockTypeSelect": {
+        "selectBlockTypeTooltip": "Choisir le type de bloc",
+        "placeholder": "Type de bloc"
+      },
+      "bulletedList": "Liste à puces",
+      "numberedList": "Liste numérotée",
+      "checkList": "Liste de tâches",
+      "link": "Créer un lien",
+      "table": "Insérer un tableau",
+      "codeBlock": "Insérer un bloc de code",
+      "toggleGroup": "Groupe de mise en forme"
+    },
+    "codeBlock": {
+      "language": "Langage du bloc de code",
+      "selectLanguage": "Choisir le langage du bloc de code",
+      "inlineLanguage": "Langage"
+    },
+    "createLink": {
+      "url": "URL",
+      "urlPlaceholder": "Sélectionner ou coller une URL",
+      "textTooltip": "Texte affiché pour le lien",
+      "text": "Texte du lien",
+      "titleTooltip": "Titre du lien affiché au survol",
+      "title": "Titre du lien",
+      "saveTooltip": "Définir l'URL",
+      "cancelTooltip": "Annuler la modification"
+    },
+    "dialogControls": {
+      "save": "Enregistrer",
+      "cancel": "Annuler"
+    },
+    "linkPreview": {
+      "open": "Ouvrir {{url}} dans une nouvelle fenêtre",
+      "edit": "Modifier l'URL du lien",
+      "copyToClipboard": "Copier dans le presse-papiers",
+      "copied": "Copié !",
+      "remove": "Supprimer le lien"
+    },
+    "imageEditor": {
+      "deleteImage": "Supprimer l'image",
+      "editImage": "Modifier l'image"
+    },
+    "uploadImage": {
+      "dialogTitle": "Ajouter une image",
+      "dialogDescription": "Insérer une image depuis une URL ou votre appareil.",
+      "dialogDescriptionNoUpload": "Insérer une image depuis une URL.",
+      "uploadInstructions": "Ajouter une image depuis votre appareil :",
+      "addViaUrlInstructions": "Ou ajouter une image depuis une URL :",
+      "addViaUrlInstructionsNoUpload": "Ajouter une image depuis une URL :",
+      "autoCompletePlaceholder": "Sélectionner ou coller l'URL d'une image",
+      "alt": "Texte alternatif :",
+      "title": "Titre :",
+      "width": "Largeur :",
+      "height": "Hauteur :"
+    },
+    "codeblock": {
+      "delete": "Supprimer le bloc de code"
+    },
+    "table": {
+      "deleteTable": "Supprimer le tableau",
+      "columnMenu": "Menu de colonne",
+      "textAlignment": "Alignement du texte",
+      "alignLeft": "Aligner à gauche",
+      "alignCenter": "Centrer",
+      "alignRight": "Aligner à droite",
+      "insertColumnLeft": "Insérer une colonne à gauche",
+      "insertColumnRight": "Insérer une colonne à droite",
+      "deleteColumn": "Supprimer cette colonne",
+      "rowMenu": "Menu de ligne",
+      "insertRowAbove": "Insérer une ligne au-dessus",
+      "insertRowBelow": "Insérer une ligne en dessous",
+      "deleteRow": "Supprimer cette ligne"
+    }
+  },
   "conversationFiles": {
     "htmlView": "Vue HTML",
     "previewView": "Aperçu",
