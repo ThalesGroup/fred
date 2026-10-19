@@ -140,6 +140,11 @@ Remove `OpenWritableDocumentCapability`, its registration, optional selection, i
 
 The main `writable_document` and `html_artifact` capabilities, tables, APIs, and historical UI parts remain. Deep users can use the built-in file workflow without those selections; do not require a new "open capability" checkbox. Do not migrate existing documents or delete the main capabilities as part of this delivery.
 
+Slice 7 compatibility decisions:
+- `fred_sdk.contracts.models.active_capability_ids` is the shared selection normalizer. It removes only `open_writable_document`, preserving ordering and every unrelated unknown ID. Runtime contexts/defaults/no-registry resolution and Control Plane health, reconciliation, save/preparation, enablement, settings and copy consumers use it.
+- Existing persisted selections/config envelopes are not migrated. A normal agent save persists only active selections and validated active envelopes. Availability reconciliation can clear an old availability suspension; config-health also clears a config-invalid suspension when retirement leaves no active selection. Existing config-invalid suspensions with active capabilities still require a successful save, and invalid/missing active capabilities retain their existing failures.
+- Only the importer module, entry point, importer tests and obsolete prompt/catalog labels were removed. Legacy document storage, conversion/import shims, routes, exports and historical UI parts remain; shared MarkdownEditor/HtmlPreview and both legacy adapters are unchanged. New Deep Markdown/HTML presentation uses standard `open` with no selected presentation capability.
+
 ## Implementation sequencing and ownership
 
 Implement the seven vertical slices in [tasks.md](tasks.md) sequentially, with one active implementation owner and one integrated working tree. Quality and token economy take precedence over throughput. Each slice owns a narrow observable workflow across every affected layer and its focused tests; intermediate checkpoints do not claim the complete feature is shippable. Do not divide ownership into independent backend/frontend/test projects.
