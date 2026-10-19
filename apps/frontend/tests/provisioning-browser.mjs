@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import JSZip from "jszip";
+import { assertAccountAtBottom } from "./assert-app-layout.mjs";
 
 const manager = process.env.FRED_MANAGER_BROWSER_URL;
 const realm = process.env.FRED_MANAGER_BROWSER_REALM;
@@ -161,6 +162,7 @@ async function assertAccountPages({ page, context, bearer }, owner) {
   page.on("request", trackConsent);
   const viewport = page.viewportSize();
   await page.setViewportSize({ width: 1280, height: 900 });
+  await assertAccountAtBottom(page);
   const trigger = page.getByRole("button", { name: /'s account$/ });
   await trigger.focus();
   await page.keyboard.press("Enter");
@@ -430,6 +432,7 @@ try {
   assert.equal(bobOpen.status(), 403);
 
   const priya = await login("priya", "Azerty123_", "/home");
+  await assertAccountAtBottom(priya.page);
   const beforePersonal = await get(priya.context, priya.bearer, "/me/spaces");
   assert.equal(beforePersonal.filter((space) => space.personal_owner).length, 0);
   const personalEntry = priya.page.getByRole("button", { name: "Personal space", exact: true });

@@ -100,7 +100,7 @@ function FredUiContent() {
     >
       <AuthProvider>
         <div className={styles.appShell}>
-          <div className={styles.routedContent}>
+          <div className={styles.appContent}>
             <ConfirmationDialogProvider>
               <ToastProvider
                 onCopy={async (text) => {

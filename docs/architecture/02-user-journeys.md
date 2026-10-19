@@ -12,6 +12,8 @@ After manager consent/bootstrap, ordinary organization users reach the complete
 existing Fred business UI. Platform owners reach the organization administration
 area. Manager owns onboarding, governance and membership/personal navigation. Other
 business pages retain their existing service calls and ordinary failure states.
+The shared navigation fills the available window height, with the account menu
+at its bottom; announcement banners occupy space above the business pages.
 
 | Step | What the person sees or does | Architectural effect |
 | --- | --- | --- |
