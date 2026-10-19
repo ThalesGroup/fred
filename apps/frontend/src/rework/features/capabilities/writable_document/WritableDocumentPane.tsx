@@ -23,40 +23,16 @@
 // autosave (debounced PUT) via useWritableDocuments. The session id comes from the
 // URL (`?session=`, the rework convention — there is no redux session selector).
 
-import {
-  ChangeCodeMirrorLanguage,
-  codeBlockPlugin,
-  codeMirrorPlugin,
-  ConditionalContents,
-  imagePlugin,
-  InsertCodeBlock,
-  markdownShortcutPlugin,
-  MDXEditor,
-  type MDXEditorProps,
-  Separator,
-  toolbarPlugin,
-} from "@mdxeditor/editor";
-import "@mdxeditor/editor/style.css";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
+import { MarkdownEditor } from "@shared/molecules/MarkdownEditor/MarkdownEditor";
 import type { CapabilitySidePanelProps } from "../types";
 import { useWritableDocuments } from "./useWritableDocuments";
-import { sanitizeEditorMarkdown } from "./sanitizeEditorMarkdown";
 import WritableDocumentDownloadButton from "./WritableDocumentDownloadButton";
 import styles from "./WritableDocumentPane.module.css";
-
-const isDarkTheme = () =>
-  typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
-
-function WritableDocumentEditor(props: MDXEditorProps) {
-  // MDX imports once per document/version; optimistic edits keep this mount.
-  const [markdown] = useState(() => sanitizeEditorMarkdown(props.markdown));
-  return <MDXEditor {...props} markdown={markdown} />;
-}
 
 export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
@@ -93,7 +69,7 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
           variant="icon"
           size="small"
           icon={{ category: "outlined", type: "close" }}
-          aria-label="Close panel"
+          aria-label={t("capability.writable_document.close")}
           // Blur first: closing flips aria-hidden on the drawer, which the browser
           // blocks while a descendant still holds focus (InlineDrawer does the same).
           onClick={(e) => {
@@ -124,62 +100,12 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
       )}
 
       {selected && (
-        <div className={styles.editorArea}>
-          <WritableDocumentEditor
-            key={`${selected.document_id}:${selected.updated_at ?? ""}`}
-            markdown={selected.content_md}
-            onChange={(md, initialMarkdownNormalize) => {
-              if (!initialMarkdownNormalize) onEditDocument(selected.document_id, md);
-            }}
-            className={isDarkTheme() ? "dark-theme dark-editor" : undefined}
-            contentEditableClassName="fred-writable-document"
-            plugins={[
-              ...proseMdxPlugins(),
-              imagePlugin(),
-              codeBlockPlugin({ defaultCodeBlockLanguage: "" }),
-              codeMirrorPlugin({
-                codeBlockLanguages: {
-                  "": t("capability.writable_document.code.plainText"),
-                  bash: "Bash",
-                  css: "CSS",
-                  html: "HTML",
-                  java: "Java",
-                  js: "JavaScript",
-                  json: "JSON",
-                  jsx: "JSX",
-                  markdown: "Markdown",
-                  python: "Python",
-                  sql: "SQL",
-                  ts: "TypeScript",
-                  tsx: "TSX",
-                  yaml: "YAML",
-                },
-              }),
-              markdownShortcutPlugin(),
-              toolbarPlugin({
-                toolbarContents: () => (
-                  <ConditionalContents
-                    options={[
-                      {
-                        when: (editor) => editor?.editorType === "codeblock",
-                        contents: () => <ChangeCodeMirrorLanguage />,
-                      },
-                      {
-                        fallback: () => (
-                          <>
-                            <ProseToolbarButtons />
-                            <Separator />
-                            <InsertCodeBlock />
-                          </>
-                        ),
-                      },
-                    ]}
-                  />
-                ),
-              }),
-            ]}
-          />
-        </div>
+        <MarkdownEditor
+          key={`${selected.document_id}:${selected.updated_at ?? ""}`}
+          value={selected.content_md}
+          label={selected.title || untitled}
+          onChange={(markdown) => onEditDocument(selected.document_id, markdown)}
+        />
       )}
     </div>
   );

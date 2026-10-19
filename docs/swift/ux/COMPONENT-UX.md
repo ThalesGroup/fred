@@ -3732,13 +3732,70 @@ _(none yet)_
 
 ---
 
+## Conversation files and shared editors (2026-10-19)
+
+`ConversationFileCard` renders the built-in `conversation_file` UI part; live
+parent/native-child opens select the referenced file in event order. History
+cards reopen current content explicitly. `ConversationFilePanel`, under
+`components/shared/organisms`, occupies the existing exclusive push-drawer slot
+and deduplicates references by session/path. File tabs support arrow/Home/End
+navigation. The captured session runtime route is required, including for a
+historical conversation; the panel never routes a file through another runtime
+while that route is loading.
+
+The panel's native viewers share presentation code with legacy capabilities:
+
+- `MarkdownEditor` (`components/shared/molecules/MarkdownEditor`) owns the MDX
+  plugins, import preparation, theme and localized toolbar/popover controls.
+  Both the file adapter and `WritableDocumentPane` use it. External clean content
+  updates through `setMarkdown`; typing keeps the editor mounted, and initial
+  Markdown normalization does not create a save. File-backed Markdown/Word
+  download flushes that file first and exports its current saved content.
+- `HtmlPreview` (`components/shared/molecules/HtmlPreview`) owns the same static
+  sanitizer/CSP and double-buffered opaque `sandbox=""` frames used by
+  `HtmlArtifactPane`. The file adapter defaults to Preview and offers editable
+  Source through `SourceEditor`; arrow/Home/End keys switch these tabs. Preview
+  sanitizes a derived document while the source file remains unchanged. Scripts,
+  external resources, sibling assets and dashboard loading stay blocked. The
+  paper canvas remains readable in light/dark themes. Legacy download/new-tab
+  actions still use the shared restricted-document helpers; the file adapter
+  adds no HTML download/new-tab action.
+- `SourceEditor` uses CodeMirror for other text and HTML source. Filename and
+  extension select the standard locally bundled language catalog, including
+  basename matches such as Dockerfile. Unknown files or failed language loads
+  stay plain text. Literal dynamic imports become Fred-hosted build chunks;
+  highlighting does not contact a public CDN. This is basic text editing without
+  IDE services or code execution.
+
+`conversationEditorsFor(store)` owns drafts by `[sessionId, teamId, path]`;
+`useConversationFileEditor` owns authorized reads and refresh. All three viewers
+use that common lifecycle: 600 ms debounced, serialized full saves acknowledge
+only the content actually sent. New typing during a save stays dirty. Drafts
+survive file switches, drawer close and conversation navigation for that store's
+lifetime, but do not survive browser reload. Only clean, unchanged buffers accept
+refreshes. Tool/run completion, successful save, focus/visibility return and a
+5 second visible-only poll trigger refresh; close/navigation aborts reads and
+ignores stale results. This is bounded refresh, not a synchronization guarantee.
+
+Before sending a new user message, the managed composer flushes all editors in
+that conversation, including switched/closed files. Failure preserves both drafts
+and blocks execution; navigation invalidates a pending send. Export flushes only
+the exporting file. Loading, denied, missing, unsupported, unavailable, read-only,
+saving and retry states are localized and accessible; server write policy remains
+authoritative. There is no read-before-overwrite guard or automatic merge.
+
+The legacy document and HTML adapters, historical parts, and helper re-exports
+remain supported. Deep files need no presentation capability selection and are
+not copied into the legacy document store. Runtime/API and change-notification
+contracts are in [RUNTIME-EXECUTION-CONTRACT](../design/RUNTIME-EXECUTION-CONTRACT.md#8117-open-and-edit-live-deep-conversation-files-2026-10-19).
+
 ### `WritableDocumentPane` (writable_document capability)
 
 **Location:** `src/rework/features/capabilities/writable_document/WritableDocumentPane.tsx`
 **Status:** `Functional`
 
 The right-column side panel of the `writable_document` capability (#1905, Kea port):
-a Markdown WYSIWYG editor (`@mdxeditor/editor`) where the user and the agent co-write
+the shared `MarkdownEditor` (MDXEditor) where the user and the agent co-write
 documents. Tab strip when the session has several documents; editor remounts on agent
 writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
 debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).

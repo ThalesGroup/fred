@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { runtimeApi } from "../slices/runtime/runtimeApi";
+import { conversationFileSlice } from "../rework/features/conversationFiles/conversationFileSlice";
+
 import { platformAccessDenied } from "./platformAccess";
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
@@ -58,6 +61,8 @@ const combinedReducer = combineReducers({
   [pptFillerCapabilityApi.reducerPath]: pptFillerCapabilityApi.reducer,
   pptPreview: pptPreviewReducer,
   htmlArtifact: htmlArtifactReducer,
+  conversationFiles: conversationFileSlice.reducer,
+  [runtimeApi.reducerPath]: runtimeApi.reducer,
   capabilitySidePanelOpenRequest: sidePanelOpenRequestSlice.reducer,
 });
 
@@ -68,6 +73,7 @@ export const store = configureStore({
     getDefaultMiddleware().concat(
       knowledgeFlowApi.middleware,
       controlPlaneApi.middleware,
+      runtimeApi.middleware,
       writableDocumentCapabilityApi.middleware,
       pptFillerCapabilityApi.middleware,
       loggingMiddleware,

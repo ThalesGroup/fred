@@ -696,6 +696,10 @@ class ConversationFilesystemQuotaError(ConversationScratchpadError):
 class ConversationFilesystemPort(ABC):
     """Conversation-bound text files at absolute virtual workspace paths."""
 
+    def is_editable(self, path: str) -> bool:
+        """Report effective editor policy without a write; unknown adapters fail closed."""
+        return False
+
     @abstractmethod
     async def read_text(self, path: str, *, origin: Literal["agent", "system"]) -> str:
         """Read one UTF-8 text file."""

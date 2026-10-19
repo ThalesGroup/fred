@@ -43,6 +43,7 @@ from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    ConversationFilePart,
     ConversationTurn,
     ToolInvocationResult,
     UiPart,
@@ -695,7 +696,10 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1
-            if self._services.skills is None:
+            if (
+                self._services.skills is None
+                and self._runtime_class_name != "DeepAgentRuntime"
+            ):
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
                     config=_to_runnable_config(config),
@@ -828,6 +832,31 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         assistant_event = _assistant_delta(buffered)
                         if assistant_event is not None:
                             yield assistant_event
+                    continue
+
+                if mode == "subgraph_updates":
+                    # Child prose stays private. Only built-in file presentations
+                    # cross into this conversation's stream and final history.
+                    for message in _extract_messages_from_update(update):
+                        if not isinstance(message, ToolMessage):
+                            continue
+                        artifact = _normalize_tool_artifact(message.artifact)
+                        parts = tuple(
+                            part
+                            for part in (artifact.ui_parts if artifact else ())
+                            if isinstance(part, ConversationFilePart)
+                        )
+                        if not parts:
+                            continue
+                        collected_ui_parts = _merge_ui_parts(collected_ui_parts, parts)
+                        yield ToolResultRuntimeEvent(
+                            sequence=sequence,
+                            call_id=message.tool_call_id,
+                            tool_name=message.name,
+                            content="File presentation requested.",
+                            ui_parts=parts,
+                        )
+                        sequence += 1
                     continue
 
                 if mode != "updates":

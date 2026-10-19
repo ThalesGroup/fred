@@ -328,3 +328,17 @@ def test_contexts_feed_the_agent_block() -> None:
     assert len(block.middleware) == 1
     tool_names = [tool.name for tool in block.middleware[0].tools]
     assert tool_names == ["tracer_echo"]
+
+
+def test_retired_bridge_selection_contributes_no_runtime_tools() -> None:
+    registry = _registry(TracerEchoCapability())
+    contexts = build_capability_contexts(
+        registry,
+        selected_capability_ids=["open_writable_document", "tracer_echo"],
+        capability_config={"open_writable_document": {"obsolete": True}},
+        identity=_identity(),
+        services=RuntimeServices(),
+    )
+    block = build_capability_agent_block(registry, contexts)
+    assert set(contexts) == {"tracer_echo"}
+    assert [tool.name for tool in block.tools] == ["tracer_echo"]

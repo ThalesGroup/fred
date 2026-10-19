@@ -133,10 +133,8 @@ _WRITE_INSTRUCTIONS = (
     "WRITABLE DOCUMENT: when the user asks — in any wording or language — to "
     "write, create, draft, or produce a document, report, email, memo, "
     "meeting notes, or any other textual deliverable, you MUST open it in the "
-    "editor; never write the deliverable itself in the chat. If the finished "
-    "Markdown already exists in the conversation workspace and the "
-    "open_writable_document tool is available, call it with the file path. "
-    "Otherwise call the write_document tool with the full content. "
+    "editor; never write the deliverable itself in the chat. Call the "
+    "write_document tool with the full content. "
     "The tool opens the document in a side-by-side editor where the user can "
     "review, edit, and export it. In the chat, reply only with a short "
     "summary of what you put in the document."
@@ -150,14 +148,13 @@ async def save_writable_document(
     title: str,
     content_markdown: str,
     document_id: str | None = None,
-    tool_ref: str = _TOOL_REF,
 ) -> tuple[str, ToolInvocationResult]:
     """Persist and publish one document through the existing editor contract."""
 
     if not session_id:
         return (
             "Cannot save the document: no active session.",
-            ToolInvocationResult(tool_ref=tool_ref, is_error=True),
+            ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
         )
 
     store = get_writable_document_store()
@@ -205,7 +202,7 @@ async def save_writable_document(
         len(content_markdown),
     )
     artifact = ToolInvocationResult(
-        tool_ref=tool_ref,
+        tool_ref=_TOOL_REF,
         ui_parts=(cast(UiPart, part),),
     )
     return f"Document '{title}' saved (id={doc_id}).", artifact

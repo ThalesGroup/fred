@@ -46,6 +46,7 @@ from fred_sdk.contracts.capability.manifest import (
     MODEL_CAPABILITY_NAMESPACE_PREFIX,
     TeamScopePolicy,
 )
+from fred_sdk.contracts.models import active_capability_ids
 
 from control_plane_backend.app.feature_flags import is_feature_enabled
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
@@ -715,7 +716,8 @@ async def set_default_on(
         team_ids = {
             instance.team_id
             for instance in await agent_instance_store.list_all()
-            if capability_id in (instance.tuning.selected_capability_ids or [])
+            if capability_id
+            in active_capability_ids(instance.tuning.selected_capability_ids)
             or is_template_capability_instance(instance, capability_id)
         }
         for team_id in team_ids:
@@ -887,7 +889,8 @@ async def _revive_personal_after_grant(
         if instance.is_suspended
         and is_personal_team_id(str(instance.team_id))
         and (
-            capability_id in (instance.tuning.selected_capability_ids or [])
+            capability_id
+            in active_capability_ids(instance.tuning.selected_capability_ids)
             or is_template_capability_instance(instance, capability_id)
         )
     }

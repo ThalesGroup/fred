@@ -35,6 +35,7 @@ from fred_sdk.contracts.runtime import (
     ConversationFilesystemInterruptError,
     ConversationFilesystemPermissionError,
     ConversationScratchpadInvalidPathError,
+    ConversationScratchpadUnsupportedContentError,
 )
 
 
@@ -81,6 +82,8 @@ class _ConcurrentReadFilesystem(_MemoryFilesystem):
         self._overlap = asyncio.Event()
 
     async def read(self, path: str) -> bytes:
+        if "/scratchpad/" not in path:
+            return await super().read(path)
         self.in_flight += 1
         self.max_in_flight = max(self.max_in_flight, self.in_flight)
         if self.in_flight >= 2:
@@ -114,7 +117,9 @@ def _backend(service: ConversationFilesystemService) -> ConversationNamespaceBac
 @pytest.mark.asyncio
 async def test_backend_round_trips_and_lists_conversation_text() -> None:
     backend = _backend(
-        ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
+        ConversationFilesystemService(
+            _MemoryFilesystem(), "conversation-a", mutation_source="agent"
+        )
     )
 
     write = await backend.awrite("/research/notes.md", "first\nsecond")
@@ -134,9 +139,21 @@ async def test_backend_round_trips_and_lists_conversation_text() -> None:
 @pytest.mark.asyncio
 async def test_fresh_backends_share_one_conversation_and_isolate_another() -> None:
     storage = _MemoryFilesystem()
-    first = _backend(ConversationFilesystemService(storage, "conversation-a"))
-    fresh = _backend(ConversationFilesystemService(storage, "conversation-a"))
-    isolated = _backend(ConversationFilesystemService(storage, "conversation-b"))
+    first = _backend(
+        ConversationFilesystemService(
+            storage, "conversation-a", mutation_source="agent"
+        )
+    )
+    fresh = _backend(
+        ConversationFilesystemService(
+            storage, "conversation-a", mutation_source="agent"
+        )
+    )
+    isolated = _backend(
+        ConversationFilesystemService(
+            storage, "conversation-b", mutation_source="agent"
+        )
+    )
 
     assert (await first.awrite("/notes.md", "durable")).error is None
 
@@ -151,7 +168,9 @@ async def test_fresh_backends_share_one_conversation_and_isolate_another() -> No
 
 @pytest.mark.asyncio
 async def test_backend_edits_globs_and_greps_with_deep_results() -> None:
-    service = ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
+    service = ConversationFilesystemService(
+        _MemoryFilesystem(), "conversation-a", mutation_source="agent"
+    )
     namespace = service.scratchpad()
     backend = _backend(service)
     await namespace.write_text("research/one.md", "needle and needle")
@@ -187,11 +206,14 @@ async def test_backend_edits_globs_and_greps_with_deep_results() -> None:
 @pytest.mark.asyncio
 async def test_backend_lists_and_globs_from_storage_metadata_without_reads() -> None:
     storage = _ReadCountingFilesystem()
-    service = ConversationFilesystemService(storage, "conversation-a")
+    service = ConversationFilesystemService(
+        storage, "conversation-a", mutation_source="agent"
+    )
     namespace = service.scratchpad()
     backend = _backend(service)
     await namespace.write_text("research/notes.md", "café")
     await namespace.write_text("research/raw.txt", "ignored")
+    storage.read_count = 0  # Measure discovery, excluding mutation bookkeeping.
 
     listing = await backend.als("/research")
     globbed = await backend.aglob("**/*.md", path="/")
@@ -209,7 +231,9 @@ async def test_backend_lists_and_globs_from_storage_metadata_without_reads() -> 
 @pytest.mark.asyncio
 async def test_backend_grep_bounds_parallel_reads() -> None:
     storage = _ConcurrentReadFilesystem()
-    service = ConversationFilesystemService(storage, "conversation-a")
+    service = ConversationFilesystemService(
+        storage, "conversation-a", mutation_source="agent"
+    )
     namespace = service.scratchpad()
     backend = _backend(service)
     for index in range(40):
@@ -232,7 +256,11 @@ async def test_backend_translates_storage_failures() -> None:
 
     storage = _FailingFilesystem()
     storage.files["conversations/conversation-a/scratchpad/notes.md"] = b"unreadable"
-    backend = _backend(ConversationFilesystemService(storage, "conversation-a"))
+    backend = _backend(
+        ConversationFilesystemService(
+            storage, "conversation-a", mutation_source="agent"
+        )
+    )
     failed_read = await backend.aread("/notes.md")
 
     assert failed_read.error == "Shared scratchpad storage failed"
@@ -241,10 +269,12 @@ async def test_backend_translates_storage_failures() -> None:
 @pytest.mark.asyncio
 async def test_virtual_port_and_backend_share_mounts_and_exact_text() -> None:
     storage = _MemoryFilesystem()
-    service = ConversationFilesystemService(storage, "conversation-a")
+    service = ConversationFilesystemService(
+        storage, "conversation-a", mutation_source="agent"
+    )
     backend, permissions = build_conversation_filesystem(service)
     port = DeepConversationFilesystemPort(backend, permissions)
-    content = "first\r\nsecond\rthird  \n" + "x" * 20000
+    content = "first\r\nsecond\rthird  \n" + "x" * 65535 + "é😀" + "z" * 65535
 
     assert (await backend.awrite("/notes.txt", content)).error is None
     assert await port.read_text("/notes.txt", origin="agent") == content
@@ -272,7 +302,9 @@ async def test_virtual_port_and_backend_share_mounts_and_exact_text() -> None:
 
 @pytest.mark.asyncio
 async def test_virtual_port_rule_order_interrupt_and_invalid_path() -> None:
-    service = ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
+    service = ConversationFilesystemService(
+        _MemoryFilesystem(), "conversation-a", mutation_source="agent"
+    )
     backend, _ = build_conversation_filesystem(service)
     port = DeepConversationFilesystemPort(
         backend,
@@ -307,7 +339,10 @@ async def test_backend_download_overwrite_and_quota_preserve_existing_file() -> 
         deep_max_files = 1
 
     service = ConversationFilesystemService(
-        _MemoryFilesystem(), "conversation-a", quotas=_SmallQuotas()
+        _MemoryFilesystem(),
+        "conversation-a",
+        quotas=_SmallQuotas(),
+        mutation_source="agent",
     )
     backend, permissions = build_conversation_filesystem(service)
     port = DeepConversationFilesystemPort(backend, permissions)
@@ -319,3 +354,53 @@ async def test_backend_download_overwrite_and_quota_preserve_existing_file() -> 
     assert downloads[1].error == "file_not_found"
     assert await port.exists("/note.txt", origin="agent")
     assert not await port.exists("/missing.txt", origin="agent")
+
+
+@pytest.mark.asyncio
+async def test_mutations_carry_server_source_independent_of_permission_origin() -> None:
+    from fred_runtime.conversation_filesystem import current_mutation_source
+
+    class AttributedStorage(_MemoryFilesystem):
+        sources: list[str] = []
+
+        async def write(self, path: str, data: bytes | str) -> None:
+            if "/scratchpad/" in path:
+                self.sources.append(current_mutation_source())
+            await super().write(path, data)
+
+    storage = AttributedStorage()
+    agent = ConversationFilesystemService(
+        storage, "source-session", mutation_source="agent"
+    )
+    user = ConversationFilesystemService(
+        storage, "source-session", mutation_source="user"
+    )
+    system = ConversationFilesystemService(storage, "source-session")
+    backend, permissions = build_conversation_filesystem(agent)
+    port = DeepConversationFilesystemPort(backend, permissions)
+    # Native full replacement and exact-text editing share attribution with helpers.
+    assert (await backend.awrite("/notes.txt", "Agent first")).error is None
+    await user.scratchpad().write_text("notes.txt", "Human revision")
+    await port.edit_text("/notes.txt", "Human", "Agent", origin="system")
+    await system.scratchpad().write_text("notes.txt", "Background revision")
+    assert storage.sources == ["agent", "user", "agent", "independent_system"]
+    assert await port.read_text("/notes.txt", origin="agent") == "Background revision"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix_bytes", [0, 65536])
+async def test_virtual_port_rejects_invalid_utf8_without_replacement(
+    prefix_bytes: int,
+) -> None:
+    storage = _MemoryFilesystem()
+    await storage.write(
+        "conversations/conversation-a/scratchpad/notes.txt",
+        b"x" * prefix_bytes + b"\xff",
+    )
+    service = ConversationFilesystemService(
+        storage, "conversation-a", mutation_source="agent"
+    )
+    backend, permissions = build_conversation_filesystem(service)
+    port = DeepConversationFilesystemPort(backend, permissions)
+    with pytest.raises(ConversationScratchpadUnsupportedContentError):
+        await port.read_text("/notes.txt", origin="agent")

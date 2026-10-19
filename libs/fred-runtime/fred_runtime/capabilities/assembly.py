@@ -57,7 +57,7 @@ from fred_sdk.contracts.capability import (
     ToolCarrierMiddleware,
 )
 from fred_sdk.contracts.capability.mcp import McpCapability, McpPromptGroup
-from fred_sdk.contracts.models import DocumentScopeControlParams
+from fred_sdk.contracts.models import DocumentScopeControlParams, active_capability_ids
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool
@@ -282,7 +282,7 @@ def build_capability_contexts(
 
     Selection semantics mirror the tuning contract: `None` means template
     default (no template declares default capabilities yet, so none), `[]`
-    means none, a non-empty list means exactly that set. Unknown ids raise
+    means none, a non-empty list activates that set minus retired IDs. Unknown ids raise
     `UnknownCapabilityError`; a selected capability without a persisted slice
     gets its `StoredConfigModel` defaults.
 
@@ -296,7 +296,7 @@ def build_capability_contexts(
     contexts: dict[str, CapabilityContext[Any, Any]] = {}
     options = turn_options or {}
     settings = team_settings or {}
-    for cap_id in selected_capability_ids or []:
+    for cap_id in active_capability_ids(selected_capability_ids):
         capability = registry.capability(cap_id)
         slice_ = capability_config.get(cap_id)
         if slice_ is None:

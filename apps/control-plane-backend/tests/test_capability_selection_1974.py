@@ -1404,3 +1404,23 @@ async def test_grant_existing_teams_served_templates_migration_dry_run(
 
     assert summary.grants_written == 1
     assert rebac.enabled_writes == []  # dry_run never calls enable_capability_for_team
+
+
+@pytest.mark.asyncio
+async def test_save_retires_bridge_selection_without_losing_live_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _record_with_selection()
+    record.tuning.selected_capability_ids = ["open_writable_document", "demo_echo"]
+    app, _ = _setup(monkeypatch, records=[record])
+    _fake_pod_validate(monkeypatch)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"capability_ids": ["open_writable_document", "demo_echo"]},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["selected_capability_ids"] == ["demo_echo"]
+    assert list(response.json()["capability_config"]) == ["demo_echo"]

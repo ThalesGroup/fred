@@ -1,0 +1,58 @@
+.host {
+  flex: 1;
+  background: var(--surface-main);
+  min-height: 0;
+  overflow: auto;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+.host :global(.cm-editor) {
+  height: 100%;
+}
+.host :global(.cm-scroller) {
+  overflow: auto;
+  font-family: var(--font-family-mono);
+}
+.host :global(.cm-content) {
+  caret-color: var(--on-surface);
+}
+.host :global(.cm-gutters) {
+  border-color: var(--outline-variant);
+  background: var(--surface-container);
+  color: var(--on-surface-retreat);
+}
+.host :global(.cm-selectionBackground),
+.host :global(.cm-content ::selection) {
+  background: var(--state-primary-selected);
+  color: var(--on-surface);
+}
+.host :global(.cm-cursor) {
+  border-left-color: var(--on-surface);
+}
+
+.host :global(.cm-focused) {
+  outline: 2px solid var(--primary);
+}
+
+.keyword {
+  color: var(--primary);
+}
+.string {
+  color: var(--tertiary);
+}
+.literal {
+  color: var(--secondary);
+}
+.type {
+  color: var(--primary);
+}
+.property {
+  color: var(--secondary);
+}
+.comment {
+  color: var(--on-surface-retreat);
+  font-style: italic;
+}
+.invalid {
+  color: var(--error);
+}

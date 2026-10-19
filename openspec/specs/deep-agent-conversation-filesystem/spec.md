@@ -1,35 +1,35 @@
-# Spec Delta
+# Deep conversation filesystem Specification
 
 ## Purpose
 
 Defines the conversation-scoped filesystem that lets a Deep agent, its native subagents, and trusted runtime capabilities exchange durable working files without exposing data from another conversation.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Every Deep conversation has a standard scratchpad
 
-The runtime SHALL provide every Deep agent conversation with a text-only `/scratchpad/` namespace without requiring the operator to select or configure a filesystem capability. The model SHALL have `ls`, `read_file`, `write_file`, `edit_file`, `glob`, and `grep` operations for that namespace. The filesystem SHALL NOT make code execution available.
+The runtime SHALL provide every Deep agent conversation with a text-only `/` namespace without requiring the operator to select or configure a filesystem capability. The model SHALL have `ls`, `read_file`, `write_file`, `edit_file`, `glob`, and `grep` operations for that namespace. The filesystem SHALL NOT make code execution available.
 
 #### Scenario: Deep agent uses the scratchpad without an optional capability
 
 - **GIVEN** a Deep agent with no filesystem capability selected
-- **WHEN** the agent writes text to `/scratchpad/notes.md` and reads it back
+- **WHEN** the agent writes text to `/notes.md` and reads it back
 - **THEN** the write and read succeed
 - **AND** the `execute` operation remains unavailable
 
 #### Scenario: Binary scratchpad content is rejected
 
-- **WHEN** a caller attempts to store binary content in `/scratchpad/`
+- **WHEN** a caller attempts to store binary content in `/`
 - **THEN** the operation fails with an explicit unsupported-content error
 - **AND** no partial file is stored
 
 ### Requirement: Parent and native subagents share live scratchpad state
 
-The parent Deep agent and every native subagent in the same conversation SHALL access the same `/scratchpad/` namespace. A successful mutation SHALL be visible to subsequent operations without waiting for child completion or state merging.
+The parent Deep agent and every native subagent in the same conversation SHALL access the same `/` namespace. A successful mutation SHALL be visible to subsequent operations without waiting for child completion or state merging.
 
 #### Scenario: Parent reads a child file while work continues
 
-- **GIVEN** a native subagent successfully writes `/scratchpad/research.md`
+- **GIVEN** a native subagent successfully writes `/research.md`
 - **WHEN** the parent reads that path after the write completes
 - **THEN** the parent receives the stored content even if the child task has not otherwise completed
 
@@ -62,7 +62,7 @@ The runtime SHALL scope stored files by the globally unique conversation identif
 
 #### Scenario: Same path exists in two conversations
 
-- **GIVEN** two conversations each contain `/scratchpad/notes.md` with different content
+- **GIVEN** two conversations each contain `/notes.md` with different content
 - **WHEN** each conversation reads that virtual path
 - **THEN** each receives only its own content
 
@@ -73,7 +73,7 @@ The runtime SHALL scope stored files by the globally unique conversation identif
 
 ### Requirement: Virtual namespaces have distinct permissions
 
-The composite filesystem SHALL route `/scratchpad/` and `/.deep/` to separately scoped areas of the same conversation storage and SHALL reject paths outside registered mounts. Model-originated operations SHALL be permitted to read, list, glob, and grep `/.deep/` but SHALL NOT write or edit it. Trusted Deep runtime internals SHALL be able to write their own `/.deep/` artifacts. Ordinary capabilities SHALL NOT receive access to `/.deep/`.
+The composite filesystem SHALL route `/` and `/.deep/` to separately scoped areas of the same conversation storage with `/` as the default working namespace. Unsafe paths SHALL be rejected before storage access. Model-originated operations SHALL be permitted to read, list, glob, and grep `/.deep/` but SHALL NOT write or edit it. Trusted Deep runtime internals SHALL be able to write their own `/.deep/` artifacts. Capability callers using agent origin SHALL obey the same effective read/write rules as model tools; system origin SHALL be reserved for trusted runtime operations.
 
 #### Scenario: Model attempts to modify a Deep internal artifact
 
@@ -86,25 +86,26 @@ The composite filesystem SHALL route `/scratchpad/` and `/.deep/` to separately 
 - **WHEN** trusted Deep runtime middleware persists a large tool result or conversation-history artifact under `/.deep/`
 - **THEN** the artifact is stored in the current conversation's internal namespace
 
-#### Scenario: Unmounted path is requested
+### Requirement: Trusted capabilities use the conversation filesystem port
 
-- **WHEN** any agent filesystem operation targets a path outside `/scratchpad/` and `/.deep/`
-- **THEN** the operation is rejected
-
-### Requirement: Trusted capabilities use a scoped scratchpad service
-
-Trusted runtime and capability code SHALL receive a typed, conversation-bound scratchpad service that supports text read, write, edit, listing, existence checks, and deletion without exposing object-store credentials, physical object keys, or the Deep internal namespace.
+Trusted runtime and capability code SHALL receive `RuntimeServices.conversation_filesystem` as a typed, conversation-bound `ConversationFilesystemPort`. Its async operations SHALL support text read, create/full replacement, expected-text edit, listing and existence checks at safe absolute virtual paths, with explicit `origin="agent"` or `origin="system"`. Agent origin SHALL enforce effective filesystem rules; system origin SHALL be reserved for trusted runtime work. `is_editable(path)` SHALL report effective agent write policy without mutation and SHALL default to false for unknown adapters. The SDK port SHALL NOT expose deletion, credentials, physical storage keys or caller-selected conversation identity. Lower-level runtime deletion and erasure remain available through their owning service.
 
 #### Scenario: Capability writes a file for the agent
 
 - **GIVEN** trusted capability code executing for a conversation
-- **WHEN** it writes a text file through the conversation scratchpad service
-- **THEN** the file becomes visible at the corresponding `/scratchpad/` path to the parent and native subagents
+- **WHEN** it writes `/notes.md` through the conversation filesystem port with agent origin
+- **THEN** the file becomes visible at `/notes.md` to the parent and native subagents
 
-#### Scenario: Capability attempts to escape scratchpad scope
+#### Scenario: Capability uses agent permissions for internal artifacts
 
-- **WHEN** capability code supplies an absolute, traversing, or internal-namespace path to the scratchpad service
-- **THEN** the service rejects the operation
+- **WHEN** capability code attempts to write `/.deep/history.md` with agent origin
+- **THEN** the service rejects the write
+- **AND** permitted reads of internal artifacts remain available
+
+#### Scenario: Capability supplies an unsafe path
+
+- **WHEN** capability code supplies a relative or traversing virtual path
+- **THEN** the service rejects the operation before accessing storage
 
 ### Requirement: Mutations have explicit conflict semantics
 
@@ -126,7 +127,7 @@ Creating a file at an absent path SHALL succeed. An edit SHALL apply to the late
 
 ### Requirement: Each namespace has a soft safety quota
 
-The runtime SHALL enforce independent total-byte and file-count safety quotas for `/scratchpad/` and `/.deep/`. It SHALL provide safe defaults for all four limits and SHALL allow a deployment to override those defaults through runtime configuration without rebuilding the runtime image. A mutation observed to exceed its namespace quota SHALL fail before storing content. There SHALL be no separate per-file quota. The quota model SHALL permit temporary overshoot during concurrent mutations from multiple runtime replicas, SHALL serialize mutations within one runtime process, and SHALL converge from the actual stored totals when a replica establishes its accounting state.
+The runtime SHALL enforce independent total-byte and file-count safety quotas for `/` and `/.deep/`. It SHALL provide safe defaults for all four limits and SHALL allow a deployment to override those defaults through runtime configuration without rebuilding the runtime image. A mutation observed to exceed its namespace quota SHALL fail before storing content. There SHALL be no separate per-file quota. The quota model SHALL permit temporary overshoot during concurrent mutations from multiple runtime replicas, SHALL serialize mutations within one runtime process, and SHALL converge from the actual stored totals when a replica establishes its accounting state.
 
 #### Scenario: Deployment uses default quotas
 

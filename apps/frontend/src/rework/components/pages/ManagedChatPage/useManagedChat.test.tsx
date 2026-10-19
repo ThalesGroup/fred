@@ -32,6 +32,11 @@
 //   actually clears composer input/attachments, so a later prepare-execution
 //   failure can never wipe text/attachments the user still needs to retry.
 
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { runtimeApi } from "../../../../slices/runtime/runtimeOpenApi";
+import { conversationFileSlice } from "../../../features/conversationFiles/conversationFileSlice";
+import { ConversationFilePanel } from "@shared/organisms/ConversationFilePanel/ConversationFilePanel";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,7 +50,12 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("../../../../security/KeycloakService", () => ({
-  KeyCloakService: { GetUserId: () => "alice" },
+  KeyCloakService: {
+    GetUserId: () => "alice",
+    ensureFreshToken: async () => true,
+    GetToken: () => "test",
+    GetTokenSecondsLeft: () => 3600,
+  },
 }));
 
 const translate = vi.hoisted(() => (key: string) => key);
@@ -214,9 +224,11 @@ let sessionData:
       agent_deleted?: boolean;
       agent_display_name?: string | null;
       agent_instance_id?: string;
+      messages_url?: string | null;
     }
   | undefined;
 let sessionQueryUnresolved = false;
+let sessionQueryFailed = false;
 const refetchSessionMock = vi.fn();
 // True only for the regression test below modeling RTK Query's data/
 // currentData divergence during a session switch (`data` reuses the last
@@ -259,7 +271,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
         ? undefined
         : { agent_instance_id: "agent-1", agent_deleted: false, messages_url: "/runtime/messages", ...sessionData },
     refetch: refetchSessionMock,
-    isError: false,
+    isError: sessionQueryFailed,
   }),
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation: () => [
     (args: unknown) => {
@@ -281,10 +293,24 @@ import { useManagedChat } from "./useManagedChat";
 import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHistoryCache";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
-function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useManagedChat>) => void }) {
+function TestHost({
+  onRender,
+  showFiles = false,
+}: {
+  onRender: (hook: ReturnType<typeof useManagedChat>) => void;
+  showFiles?: boolean;
+}) {
   const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1", effectiveChatModel: hostEffectiveModel });
   onRender(hook);
-  return null;
+  return showFiles && hook.sessionId ? (
+    <ConversationFilePanel
+      sessionId={hook.sessionId}
+      teamId="team-1"
+      messagesUrl={hook.sessionMessagesUrl}
+      open
+      onClose={() => undefined}
+    />
+  ) : null;
 }
 
 describe("useManagedChat — session write reliability", () => {
@@ -342,6 +368,7 @@ describe("useManagedChat — session write reliability", () => {
     patchSessionCalls.length = 0;
     sessionData = undefined;
     sessionQueryUnresolved = false;
+    sessionQueryFailed = false;
     refetchSessionMock.mockClear();
     sessionDataIsStaleForCurrentArgs = false;
     // `mockReset`, not `mockClear`: `mockClear` empties the call history and
@@ -388,6 +415,164 @@ describe("useManagedChat — session write reliability", () => {
     });
     container.remove();
   });
+
+  it.each(["missing runtime", "metadata failure"])(
+    "shows unavailable files after historical %s settles",
+    async (outcome) => {
+      sessionQueryUnresolved = true;
+      const store = configureStore({
+        reducer: {
+          conversationFiles: conversationFileSlice.reducer,
+          [runtimeApi.reducerPath]: runtimeApi.reducer,
+        },
+        middleware: (getDefault) => getDefault().concat(runtimeApi.middleware),
+      });
+      store.dispatch(
+        conversationFileSlice.actions.openConversationFile({
+          type: "conversation_file",
+          session_id: "historical",
+          path: "/notes.txt",
+          viewer: "text",
+          editable: true,
+        }),
+      );
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      container = document.createElement("div");
+      document.body.appendChild(container);
+      root = createRoot(container);
+      const render = () =>
+        root.render(
+          <Provider store={store}>
+            <TestHost showFiles onRender={(h) => (latest = h)} />
+          </Provider>,
+        );
+      try {
+        await act(async () => {
+          render();
+        });
+        await act(async () => capturedSetSearchParams?.(new URLSearchParams("session=historical")));
+        expect(container.textContent).toContain("conversationFiles.loading");
+        if (outcome === "missing runtime") {
+          sessionData = { agent_deleted: true, messages_url: undefined };
+          sessionQueryUnresolved = false;
+        } else {
+          sessionQueryFailed = true;
+        }
+        await act(async () => {
+          render();
+        });
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain("conversationFiles.unavailable");
+        expect(container.textContent).not.toContain("conversationFiles.loading");
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+        store.dispatch(runtimeApi.util.resetApiState());
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "saves pending files before continuation, with failure retry or navigation cancellation (%s)",
+    async (navigate) => {
+      const { configureStore } = await import("@reduxjs/toolkit");
+      const { runtimeApi } = await import("../../../../slices/runtime/runtimeOpenApi");
+      const { conversationFileSlice, setConversationFileRoute } = await import(
+        "../../../features/conversationFiles/conversationFileSlice"
+      );
+      const { conversationEditorsFor, registerConversationEditors } = await import(
+        "../../../features/conversationFiles/conversationEditors"
+      );
+      const store = configureStore({
+        reducer: {
+          conversationFiles: conversationFileSlice.reducer,
+          [runtimeApi.reducerPath]: runtimeApi.reducer,
+        },
+        middleware: (getDefault) => getDefault().concat(runtimeApi.middleware),
+      });
+      const coordinator = conversationEditorsFor(store);
+      const unregister = registerConversationEditors(coordinator);
+      const identity = { sessionId: "edit-session", teamId: "team-1", path: "/notes.txt" };
+      store.dispatch(setConversationFileRoute({ sessionId: "edit-session", baseUrl: "http://runtime.test/pod/v1" }));
+      coordinator.accept(identity, {
+        type: "conversation_file",
+        session_id: "edit-session",
+        path: "/notes.txt",
+        viewer: "text",
+        editable: true,
+        content: "Original",
+      });
+      coordinator.change(identity, "Human revision");
+      let finish!: (response: Response) => void;
+      vi.stubGlobal(
+        "fetch",
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      try {
+        mount();
+        act(() => capturedSetSearchParams?.(new URLSearchParams("session=edit-session")));
+        act(() => latest.setInput("  continue  "));
+        let attempt!: Promise<void>;
+        await act(async () => {
+          attempt = latest.handleSend();
+          await Promise.resolve();
+        });
+        expect(sendMock).not.toHaveBeenCalled();
+        await act(async () => latest.handleSend());
+        if (navigate) {
+          act(() => capturedSetSearchParams?.(new URLSearchParams("session=other-session")));
+          act(() => capturedSetSearchParams?.(new URLSearchParams("session=edit-session")));
+          await act(async () => {
+            finish(
+              new Response(JSON.stringify({ content: "Human revision" }), {
+                headers: { "Content-Type": "application/json" },
+              }),
+            );
+            await attempt;
+          });
+          expect(sendMock).not.toHaveBeenCalled();
+          expect(coordinator.get(identity)?.content).toBe("Human revision");
+          return;
+        }
+
+        await act(async () => {
+          finish(
+            new Response(JSON.stringify({ detail: "Storage unavailable" }), {
+              status: 503,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+          await attempt;
+        });
+        expect(sendMock).not.toHaveBeenCalled();
+        expect(latest.input).toBe("  continue  ");
+        expect(coordinator.get(identity)?.content).toBe("Human revision");
+        expect(showErrorMock).toHaveBeenCalledWith(expect.objectContaining({ detail: "conversationFiles.saveFailed" }));
+        await act(async () => {
+          attempt = latest.handleSend();
+          await Promise.resolve();
+        });
+        expect(sendMock).not.toHaveBeenCalled();
+        await act(async () => {
+          finish(
+            new Response(JSON.stringify({ content: "Human revision" }), {
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+          await attempt;
+        });
+        expect(sendMock).toHaveBeenCalledOnce();
+        expect(sendMock.mock.calls[0].slice(0, 2)).toEqual(["continue", "edit-session"]);
+      } finally {
+        unregister();
+        store.dispatch(runtimeApi.util.resetApiState());
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 
   // #2221: ConversationThread is React.memo'd to stop it re-rendering (and
   // re-parsing every historical message's markdown) on every composer

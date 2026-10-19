@@ -82,7 +82,7 @@ None.
   public file exchange requires a separate design; see #2328.
 - A public, user-visible Workspace. The follow-on
   `add-deep-agent-conversation-filesystem` change supplies a runtime-owned `CompositeBackend` for
-  `/scratchpad/` and `/.deep/`; it does not add a public file API or Workspace product surface.
+  working files at `/` and internal artifacts at `/.deep/`; it does not add a public file API or Workspace product surface.
 - The multi-document tender scenario, its rubric, and any deliverable-publication proof —
   separate future work, not evidence for this change.
 - Advanced planning, sub-agent orchestration, and `GraphRuntime` HITL — out of scope; see `design.md`

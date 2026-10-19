@@ -62,7 +62,7 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
 )
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
-from fred_sdk.contracts.models import FieldSpec
+from fred_sdk.contracts.models import FieldSpec, active_capability_ids
 
 from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
@@ -734,7 +734,7 @@ async def _suspend_instance_for_revoked_capability(
         )
         return True
 
-    selected = set(instance.tuning.selected_capability_ids or [])
+    selected = set(active_capability_ids(instance.tuning.selected_capability_ids))
     if capability_id not in selected:
         return False
     reason = await reconcile_instance_suspension(
@@ -843,7 +843,7 @@ async def revive_dependent_instances(
             revived += 1
             continue
 
-        selected = set(instance.tuning.selected_capability_ids or [])
+        selected = set(active_capability_ids(instance.tuning.selected_capability_ids))
         # Only instances that selected the granted capability can be revived by
         # this grant; an unrelated suspension is never touched.
         if capability_id not in selected:

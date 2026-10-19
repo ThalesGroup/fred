@@ -230,10 +230,6 @@
         }
       }
     },
-    "open_writable_document": {
-      "name": "Open a workspace document",
-      "description": "Demo: copy a Markdown file from a Deep agent's conversation workspace into the editable document panel. Enable Writable Documents too."
-    },
     "writable_document": {
       "name": "Generate a text document (Word)",
       "description": "Ability to edit and generate a downloadable text document.",
@@ -4212,5 +4208,120 @@
     "error": "Error",
     "info": "Info",
     "updated": "Updated"
+  },
+  "markdownEditor": {
+    "toolbar": {
+      "undo": "Undo {{shortcut}}",
+      "redo": "Redo {{shortcut}}",
+      "bold": "Bold",
+      "removeBold": "Remove bold",
+      "italic": "Italic",
+      "removeItalic": "Remove italic",
+      "underline": "Underline",
+      "removeUnderline": "Remove underline",
+      "blockTypes": {
+        "paragraph": "Paragraph",
+        "quote": "Quote",
+        "heading": "Heading {{level}}"
+      },
+      "blockTypeSelect": {
+        "selectBlockTypeTooltip": "Select block type",
+        "placeholder": "Block type"
+      },
+      "bulletedList": "Bulleted list",
+      "numberedList": "Numbered list",
+      "checkList": "Check list",
+      "link": "Create link",
+      "table": "Insert Table",
+      "codeBlock": "Insert Code Block",
+      "toggleGroup": "toggle group"
+    },
+    "codeBlock": {
+      "language": "Code block language",
+      "selectLanguage": "Select code block language",
+      "inlineLanguage": "Language"
+    },
+    "createLink": {
+      "url": "URL",
+      "urlPlaceholder": "Select or paste an URL",
+      "textTooltip": "The text to be displayed for the link",
+      "text": "Anchor text",
+      "titleTooltip": "The link's title attribute, shown on hover",
+      "title": "Link title",
+      "saveTooltip": "Set URL",
+      "cancelTooltip": "Cancel change"
+    },
+    "dialogControls": {
+      "save": "Save",
+      "cancel": "Cancel"
+    },
+    "linkPreview": {
+      "open": "Open {{url}} in new window",
+      "edit": "Edit link URL",
+      "copyToClipboard": "Copy to clipboard",
+      "copied": "Copied!",
+      "remove": "Remove link"
+    },
+    "imageEditor": {
+      "deleteImage": "Delete image",
+      "editImage": "Edit image"
+    },
+    "uploadImage": {
+      "dialogTitle": "Upload an image",
+      "dialogDescription": "Insert an image from a URL or upload one from your device.",
+      "dialogDescriptionNoUpload": "Insert an image from a URL.",
+      "uploadInstructions": "Upload an image from your device:",
+      "addViaUrlInstructions": "Or add an image from an URL:",
+      "addViaUrlInstructionsNoUpload": "Add an image from an URL:",
+      "autoCompletePlaceholder": "Select or paste an image src",
+      "alt": "Alt:",
+      "title": "Title:",
+      "width": "Width:",
+      "height": "Height:"
+    },
+    "codeblock": {
+      "delete": "Delete code block"
+    },
+    "table": {
+      "deleteTable": "Delete table",
+      "columnMenu": "Column menu",
+      "textAlignment": "Text alignment",
+      "alignLeft": "Align left",
+      "alignCenter": "Align center",
+      "alignRight": "Align right",
+      "insertColumnLeft": "Insert a column to the left of this one",
+      "insertColumnRight": "Insert a column to the right of this one",
+      "deleteColumn": "Delete this column",
+      "rowMenu": "Row menu",
+      "insertRowAbove": "Insert a row above this one",
+      "insertRowBelow": "Insert a row below this one",
+      "deleteRow": "Delete this row"
+    }
+  },
+  "conversationFiles": {
+    "htmlView": "HTML view",
+    "previewView": "Preview",
+    "sourceView": "Source",
+    "preview": "Preview of {{path}}",
+    "exportFailed": "Could not export this file. Your edits are preserved. Try again.",
+    "close": "Close panel",
+    "resize": "Resize panel",
+    "saveFailedSummary": "File could not be saved",
+    "saving": "Saving...",
+    "unsaved": "Unsaved changes",
+    "saved": "All changes saved",
+    "saveFailed": "Could not save this file. Your edits are preserved. Try again before continuing.",
+    "title": "Conversation files",
+    "files": "Opened files",
+    "open": "Open",
+    "openPath": "Open {{path}}",
+    "source": "File source: {{path}}",
+    "readOnly": "Read-only preview",
+    "loading": "Loading current file...",
+    "retry": "Try again",
+    "missing": "This file no longer exists. Ask the agent to recreate it.",
+    "denied": "You no longer have access to this conversation file.",
+    "unsupported": "This file cannot be opened. Only UTF-8 text files are supported.",
+    "unavailable": "The conversation runtime is unavailable. Try again when it is connected."
   }
 }

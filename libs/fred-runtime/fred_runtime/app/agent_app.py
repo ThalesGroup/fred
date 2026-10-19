@@ -56,7 +56,7 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 import httpx
@@ -123,6 +123,8 @@ from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
     BoundRuntimeContext,
+    ConversationFileResponse,
+    ConversationFileSaveRequest,
     ConversationTurn,
     ModelBinding,
     PortableContext,
@@ -144,14 +146,18 @@ from fred_sdk.contracts.models import (
     MCPServerRef,
     ReActAgentDefinition,
     TuningValue,
+    active_capability_ids,
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
+    ConversationFilesystemPermissionError,
+    ConversationScratchpadFileNotFoundError,
     ConversationScratchpadInvalidPathError,
     ConversationScratchpadStorageError,
+    ConversationScratchpadUnsupportedContentError,
     ExecutionConfig,
     FinalRuntimeEvent,
     HistoryStorePort,
@@ -174,6 +180,10 @@ from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
+from fred_runtime.app.conversation_file_http import (
+    conversation_file_json_response,
+    utf8_text_chunks,
+)
 from fred_runtime.app.execution_diagnostics import report_execution_error
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
@@ -211,6 +221,7 @@ from fred_runtime.common.outbound_credentials import (
     set_delegation_runtime,
     static_person_provider,
 )
+from fred_runtime.conversation_changes import ConversationFilesystemPartialSaveError
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
@@ -1159,6 +1170,7 @@ def _build_conversation_filesystem(
             else ConversationFilesystemQuotaConfig()
         ),
         kpi=runtime_config.kpi_writer,
+        mutation_source="agent",
     )
 
 
@@ -3924,8 +3936,9 @@ def _effective_capability_ids(
         selected = None
     if selected is None:
         selected = [ref.id for ref in definition.default_mcp_servers]
+    selected = active_capability_ids(selected)
     if capability_registry is None:
-        return list(selected)
+        return selected
     mcp_config = get_runtime_context().config.mcp_configuration
     # `get_server()` filters on `enabled`, so it cannot tell a known-but-disabled
     # catalog entry apart from one absent entirely — both would otherwise be kept
@@ -4067,6 +4080,7 @@ def _build_capability_block(
         raw = selected
         if raw is None:
             raw = [ref.id for ref in definition.default_mcp_servers]
+        raw = active_capability_ids(raw)
         if not raw:
             return None
         raise CapabilityError(
@@ -5784,6 +5798,225 @@ def _build_agent_router(
             session_id=session_id, user_id=caller_uid
         )
         return {"deleted": count}
+
+    async def conversation_file_port(
+        session_id: str,
+        http_request: Request,
+        team_id: str | None,
+        caller: KeycloakUser | None,
+        container: PodApplicationContext,
+    ) -> DeepConversationFilesystemPort:
+        """Shared browser authorization; never admits unknown sessions or system origin."""
+        from urllib.parse import quote
+
+        _refuse_reserved_session_id(session_id)
+        config = get_runtime_context().config
+        history = config.history_store
+        if history is None:
+            raise HTTPException(503, "Conversation ownership checks are unavailable.")
+        # Unlike run admission, an unknown session never creates an owner here.
+        owned = (
+            await history.session_belongs_to_user(session_id, caller.uid)
+            if caller is not None
+            else bool(await history.get(session_id))
+        )
+        if not owned:
+            raise HTTPException(403, "Access denied.")
+        if caller is not None:
+            if not config.control_plane_url or not team_id:
+                raise HTTPException(503, "Conversation team routing is unavailable.")
+            url = (
+                f"{config.control_plane_url.rstrip('/')}/teams/{quote(team_id, safe='')}"
+                f"/sessions/{quote(session_id, safe='')}"
+            )
+            try:
+                response = await container.get_control_plane_http_client().get(
+                    url,
+                    headers={
+                        "Authorization": http_request.headers.get("Authorization", "")
+                    },
+                    follow_redirects=False,
+                )
+            except httpx.HTTPError as exc:
+                raise HTTPException(
+                    503, "Conversation authorization is unavailable."
+                ) from exc
+            if response.status_code in {401, 403, 404}:
+                raise HTTPException(403, "Access denied.")
+            if response.status_code != 200:
+                raise HTTPException(503, "Conversation authorization is unavailable.")
+        if config.filesystem is None:
+            raise HTTPException(503, "Conversation filesystem storage is unavailable.")
+        try:
+            service = ConversationFilesystemService(
+                config.filesystem,
+                session_id,
+                quotas=config.conversation_filesystem_quotas
+                or ConversationFilesystemQuotaConfig(),
+                kpi=config.kpi_writer,
+                mutation_source="user",
+            )
+        except ConversationScratchpadInvalidPathError as exc:
+            raise HTTPException(422, "Use a safe conversation identifier.") from exc
+        backend, permissions = build_conversation_filesystem(
+            service, skills=config.skills
+        )
+        return DeepConversationFilesystemPort(backend, permissions)
+
+    async def authorized_conversation_file(
+        session_id: str,
+        path: str,
+        http_request: Request,
+        team_id: str | None,
+        caller: KeycloakUser | None,
+        container: PodApplicationContext,
+    ) -> ConversationFileResponse:
+        """Read an existing owned conversation without preparing execution."""
+        from fred_runtime.deep.open_file import ensure_presentable, file_reference
+
+        port = await conversation_file_port(
+            session_id, http_request, team_id, caller, container
+        )
+        try:
+            reference = file_reference(session_id, path, editable=False)
+            reference = reference.model_copy(
+                update={"editable": port.is_editable(reference.path)}
+            )
+            content = await port.read_text(reference.path, origin="agent")
+            ensure_presentable(content)
+        except (ConversationScratchpadInvalidPathError, ValueError) as exc:
+            raise HTTPException(422, "Use a safe absolute virtual file path.") from exc
+        except ConversationFilesystemPermissionError as exc:
+            raise HTTPException(403, "Access denied.") from exc
+        except ConversationScratchpadFileNotFoundError as exc:
+            raise HTTPException(
+                404, "File no longer exists. Ask the agent to recreate it."
+            ) from exc
+        except ConversationScratchpadUnsupportedContentError as exc:
+            raise HTTPException(415, "Only UTF-8 text files can be opened.") from exc
+        except ConversationScratchpadStorageError as exc:
+            raise HTTPException(
+                503, "Conversation filesystem storage is unavailable."
+            ) from exc
+        return ConversationFileResponse(**reference.model_dump(), content=content)
+
+    @router.get(
+        "/sessions/{session_id}/filesystem/file",
+        response_model=ConversationFileResponse,
+        operation_id="readConversationFile",
+    )
+    async def read_conversation_file(
+        session_id: str,
+        path: str,
+        http_request: Request,
+        team_id: str | None = None,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> StreamingResponse:
+        """Read an existing owned conversation without preparing execution."""
+        file = await authorized_conversation_file(
+            session_id, path, http_request, team_id, caller, container
+        )
+        return conversation_file_json_response(file)
+
+    @router.get(
+        "/sessions/{session_id}/filesystem/export",
+        operation_id="exportConversationFile",
+        response_class=StreamingResponse,
+        responses={
+            200: {
+                "content": {
+                    "application/octet-stream": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                }
+            }
+        },
+    )
+    async def export_conversation_file(
+        session_id: str,
+        path: str,
+        http_request: Request,
+        format: Literal["md", "docx"] = "docx",
+        team_id: str | None = None,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> StreamingResponse:
+        """Export freshly authorized saved Markdown without a document record."""
+        from fred_core.documents.docx_export import markdown_to_docx_bytes
+
+        file = await authorized_conversation_file(
+            session_id, path, http_request, team_id, caller, container
+        )
+        if file.viewer != "markdown":
+            raise HTTPException(415, "Only Markdown files can be exported.")
+        title = file.path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if format == "md":
+            data = utf8_text_chunks(file.content)
+            media_type = "text/markdown"
+        else:
+            document = await asyncio.to_thread(
+                markdown_to_docx_bytes, file.content, title=title
+            )
+            data = iter([document])
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        filename = re.sub(r"[^a-zA-Z0-9_.-]", "_", title) or "document"
+        return StreamingResponse(
+            data,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}.{format}"',
+                "Cache-Control": "no-store",
+            },
+        )
+
+    @router.put(
+        "/sessions/{session_id}/filesystem/file",
+        response_model=ConversationFileResponse,
+        operation_id="saveConversationFile",
+    )
+    async def save_conversation_file(
+        session_id: str,
+        path: str,
+        body: ConversationFileSaveRequest,
+        http_request: Request,
+        team_id: str | None = None,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> StreamingResponse:
+        """Replace current text using server policy, without a read-before-write guard."""
+        from fred_sdk.contracts.runtime import ConversationFilesystemQuotaError
+
+        from fred_runtime.deep.open_file import ensure_presentable, file_reference
+
+        port = await conversation_file_port(
+            session_id, http_request, team_id, caller, container
+        )
+        try:
+            reference = file_reference(session_id, path, editable=False)
+            if not port.is_editable(reference.path):
+                raise ConversationFilesystemPermissionError("File is read-only")
+            ensure_presentable(body.content)
+            await port.write_text(reference.path, body.content, origin="agent")
+        except (ConversationScratchpadInvalidPathError, ValueError) as exc:
+            raise HTTPException(422, "Use a safe absolute virtual file path.") from exc
+        except ConversationFilesystemPermissionError as exc:
+            raise HTTPException(403, "Access denied.") from exc
+        except ConversationScratchpadUnsupportedContentError as exc:
+            raise HTTPException(415, "Only UTF-8 text files can be saved.") from exc
+        except ConversationFilesystemQuotaError as exc:
+            raise HTTPException(413, "Conversation filesystem quota exceeded.") from exc
+        except ConversationFilesystemPartialSaveError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        except ConversationScratchpadStorageError as exc:
+            raise HTTPException(
+                503, "Conversation filesystem storage is unavailable."
+            ) from exc
+        file = ConversationFileResponse(
+            **reference.model_copy(update={"editable": True}).model_dump(),
+            content=body.content,
+        )
+        return conversation_file_json_response(file)
 
     @router.delete(
         "/sessions/{session_id}/filesystem",

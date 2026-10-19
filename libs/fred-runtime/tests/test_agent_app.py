@@ -1098,6 +1098,8 @@ def test_delete_session_filesystem_purges_both_runtime_namespaces(
         assert filesystem is not None
         service = ConversationFilesystemService(filesystem, "session-filesystem")
         asyncio.run(service.scratchpad().write_text("notes.md", "scratchpad"))
+        asyncio.run(service.publish_external_changes("turn-1"))
+        asyncio.run(service.scratchpad().write_text("notes.md", "pending change"))
         asyncio.run(
             service.namespace(
                 ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
@@ -1110,6 +1112,15 @@ def test_delete_session_filesystem_purges_both_runtime_namespaces(
 
         assert response.status_code == 200
         assert response.json() == {"purged": True}
+        assert asyncio.run(service.scratchpad().list()) == ()
+        assert (
+            asyncio.run(
+                service.namespace(
+                    ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+                ).list()
+            )
+            == ()
+        )
         assert asyncio.run(service.scratchpad().exists("notes.md")) is False
         assert (
             asyncio.run(
@@ -7031,3 +7042,768 @@ async def test_web_activity_endpoints_restrict_readers_and_erasers(
     assert result == (
         [] if endpoint_name == "list_web_research_activity" else {"deleted": 0}
     )
+
+
+def test_read_conversation_file_without_execution(monkeypatch, tmp_path) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        service = ConversationFilesystemService(filesystem, "read-session")
+        asyncio.run(service.scratchpad().write_text("notes.txt", "Current notes\n"))
+        asyncio.run(
+            history_store.save(
+                "read-session",
+                [make_user_text("read-session", "turn-1", 0, "review")],
+                "alice",
+                team_id="team-1",
+            )
+        )
+        result = client.get(
+            "/pod/v1/agents/sessions/read-session/filesystem/file",
+            params={"path": "/notes.txt", "team_id": "team-1"},
+        )
+        assert result.status_code == 200
+        assert result.json() == {
+            "type": "conversation_file",
+            "session_id": "read-session",
+            "path": "/notes.txt",
+            "viewer": "text",
+            "editable": True,
+            "content": "Current notes\n",
+        }
+
+
+@pytest.mark.parametrize("method", ["GET", "PUT"])
+def test_conversation_file_rejects_unsafe_owned_session_id(
+    monkeypatch, tmp_path, method
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        history = get_runtime_context().config.history_store
+        assert history is not None
+        asyncio.run(
+            history.save(
+                "unsafe~session",
+                [make_user_text("unsafe~session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        result = client.request(
+            method,
+            "/pod/v1/agents/sessions/unsafe~session/filesystem/file",
+            params={"path": "/notes.txt"},
+            json={"content": "forged"} if method == "PUT" else None,
+        )
+        assert result.status_code == 422
+
+
+def test_conversation_file_save_is_readable_without_execution(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        asyncio.run(
+            history_store.save(
+                "edit-session",
+                [make_user_text("edit-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        service = ConversationFilesystemService(filesystem, "edit-session")
+        asyncio.run(service.scratchpad().write_text("notes.txt", "Before"))
+        sources: list[str] = []
+        write = filesystem.write
+
+        async def attributed_write(path: str, data: bytes | str) -> None:
+            from fred_runtime.conversation_filesystem import current_mutation_source
+
+            if "/scratchpad/" in path:
+                sources.append(current_mutation_source())
+            await write(path, data)
+
+        monkeypatch.setattr(filesystem, "write", attributed_write)
+        saved = client.put(
+            "/pod/v1/agents/sessions/edit-session/filesystem/file",
+            params={"path": "/notes.txt"},
+            json={"content": "Human revision\n"},
+        )
+        assert saved.status_code == 200
+        assert sources == ["user"]
+        assert saved.json()["content"] == "Human revision\n"
+        assert (
+            asyncio.run(service.scratchpad().read_text("notes.txt"))
+            == "Human revision\n"
+        )
+        other = ConversationFilesystemService(filesystem, "other-session")
+        assert not asyncio.run(other.scratchpad().exists("notes.txt"))
+
+
+@pytest.mark.parametrize(
+    ("path", "body", "status"),
+    [
+        ("/.deep/notes.txt", {"content": "forged"}, 403),
+        ("/skills/example/SKILL.md", {"content": "forged"}, 403),
+        ("/../notes.txt", {"content": "forged"}, 422),
+        ("/notes.txt", {"content": "forged", "origin": "system"}, 422),
+        ("/notes.txt", {"content": "forged", "editable": True}, 422),
+        ("/notes.txt", {"content": 123}, 422),
+        ("/notes.txt", {"content": None}, 422),
+        ("/notes.txt", {"content": []}, 422),
+        ("/notes.txt", b'{"content":', 422),
+    ],
+)
+def test_conversation_file_save_rejects_forged_policy(
+    monkeypatch, tmp_path, path, body, status
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    from fred_runtime.app.config import PodSkillsConfig
+
+    skills_directory = tmp_path / "skills" / "example"
+    skills_directory.mkdir(parents=True)
+    (skills_directory / "SKILL.md").write_text(
+        "---\nname: example\ndescription: Example skill\n---\nTrusted skill\n"
+    )
+    pod_config = _build_test_config(tmp_path).model_copy(
+        update={"skills": PodSkillsConfig(directory=str(skills_directory.parent))}
+    )
+    app = create_agent_app(registry={}, config=pod_config)
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        history_store = config.history_store
+        assert history_store is not None
+        asyncio.run(
+            history_store.save(
+                "edit-session",
+                [make_user_text("edit-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        saved = client.put(
+            "/pod/v1/agents/sessions/edit-session/filesystem/file",
+            params={"path": path},
+            content=body if isinstance(body, bytes) else json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        assert saved.status_code == status
+
+
+@pytest.mark.parametrize("endpoint", ["file", "export"])
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/../secret.txt", 422),
+        ("/folder/../notes.txt", 422),
+        ("/missing.txt", 404),
+        ("/binary.dat", 415),
+        ("/.deep/result.md", 200),
+        ("/notes.txt", 200),
+    ],
+)
+def test_conversation_file_read_path_and_content_policy(
+    monkeypatch, tmp_path, path, expected, endpoint
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        service = ConversationFilesystemService(filesystem, "policy-session")
+        asyncio.run(
+            history_store.save(
+                "policy-session",
+                [make_user_text("policy-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        asyncio.run(service.scratchpad().write_text("binary.dat", "binary\x00text"))
+        asyncio.run(
+            service.namespace(".deep", max_bytes=1000, max_files=10).write_text(
+                "result.md", "runtime result"
+            )
+        )
+        asyncio.run(service.scratchpad().write_text("notes.txt", "plain text"))
+        result = client.get(
+            f"/pod/v1/agents/sessions/policy-session/filesystem/{endpoint}",
+            params={"path": path, "format": "md"},
+        )
+        assert result.status_code == (
+            415 if endpoint == "export" and path == "/notes.txt" else expected
+        )
+        if path == "/.deep/result.md" and endpoint == "file":
+            assert result.json()["editable"] is False
+            assert result.json()["content"] == "runtime result"
+
+
+@pytest.mark.parametrize("session_id", ["foreign-session", "unknown-session"])
+@pytest.mark.parametrize("method", ["GET", "PUT", "EXPORT"])
+def test_conversation_file_read_rejects_forged_reference(
+    monkeypatch, tmp_path, session_id, method
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    caller = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
+    monkeypatch.setattr(
+        agent_app_module, "_make_user_dependency", lambda _fn, _enabled: lambda: caller
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        history_store = config.history_store
+        assert history_store is not None
+        asyncio.run(
+            history_store.save(
+                "foreign-session",
+                [make_user_text("foreign-session", "turn-1", 0, "private")],
+                "bob",
+            )
+        )
+        result = client.request(
+            "GET" if method == "EXPORT" else method,
+            f"/pod/v1/agents/sessions/{session_id}/filesystem/"
+            + ("export" if method == "EXPORT" else "file"),
+            params={"path": "/notes.txt", "team_id": "team-1", "editable": True},
+            json={"content": "forged"} if method == "PUT" else None,
+        )
+        assert result.status_code == 403
+        assert result.json() == {"detail": "Access denied."}
+
+
+@pytest.mark.parametrize("method", ["GET", "PUT", "EXPORT"])
+@pytest.mark.parametrize(
+    ("admission_status", "expected"), [(200, 200), (403, 403), (404, 403), (503, 503)]
+)
+def test_conversation_file_read_uses_owned_team_history_route(
+    monkeypatch, tmp_path, admission_status, expected, method
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+    from fred_runtime.app.context import PodApplicationContext
+
+    caller = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
+    monkeypatch.setattr(
+        agent_app_module, "_make_user_dependency", lambda _fn, _enabled: lambda: caller
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+
+    def admission(request: httpx.Request) -> httpx.Response:
+        assert (
+            str(request.url)
+            == "http://control.test/v1/teams/team-1/sessions/historical-session"
+        )
+        assert request.headers["Authorization"] == "Bearer browser-token"
+        return httpx.Response(
+            admission_status,
+            json={
+                "session_id": "historical-session",
+                "team_id": "team-1",
+                "agent_deleted": True,
+            },
+        )
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(admission))
+    monkeypatch.setattr(
+        PodApplicationContext, "get_control_plane_http_client", lambda self: http_client
+    )
+    app = create_agent_app(
+        registry={},
+        config=_build_test_config(tmp_path, control_plane_url="http://control.test/v1"),
+    )
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        service = ConversationFilesystemService(filesystem, "historical-session")
+        asyncio.run(
+            service.scratchpad().write_text("notes.md", "Historical current file")
+        )
+        asyncio.run(
+            history_store.save(
+                "historical-session",
+                [make_user_text("historical-session", "turn-1", 0, "review")],
+                "alice",
+                team_id="team-1",
+            )
+        )
+        result = client.request(
+            "GET" if method == "EXPORT" else method,
+            "/pod/v1/agents/sessions/historical-session/filesystem/"
+            + ("export" if method == "EXPORT" else "file"),
+            params={"path": "/notes.md", "team_id": "team-1", "format": "md"},
+            headers={"Authorization": "Bearer browser-token"},
+            json={"content": "Historical current file"} if method == "PUT" else None,
+        )
+        assert result.status_code == expected
+        if expected == 200:
+            assert (
+                result.text if method == "EXPORT" else result.json()["content"]
+            ) == "Historical current file"
+    asyncio.run(http_client.aclose())
+
+
+def test_deep_parent_and_child_open_stream_and_history(monkeypatch, tmp_path) -> None:
+    from fred_sdk.contracts.models import DeepAgentDefinition, ReActPolicy
+
+    class FileReviewAgent(DeepAgentDefinition):
+        agent_id: str = "test.file-review"
+        role: str = "Review files"
+        description: str = "Review existing conversation files"
+
+        def policy(self) -> ReActPolicy:
+            return ReActPolicy(system_prompt_template="Open files for human review")
+
+    def call(name: str, arguments: dict[str, Any], call_id: str) -> AIMessage:
+        return AIMessage(
+            content="", tool_calls=[{"name": name, "args": arguments, "id": call_id}]
+        )
+
+    from langchain_core.messages import BaseMessage, ToolMessage
+    from langchain_core.outputs import ChatResult
+
+    class ReviewingModel(ToolFriendlyFakeChatModel):
+        child_read: str | None = None
+
+        async def _agenerate(
+            self,
+            messages: list[BaseMessage],
+            stop: list[str] | None = None,
+            run_manager: Any = None,
+            **kwargs: Any,
+        ) -> ChatResult:
+            for message in messages:
+                if (
+                    isinstance(message, ToolMessage)
+                    and message.tool_call_id == "child-read-saved"
+                ):
+                    self.child_read = str(message.content)
+            return await super()._agenerate(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+
+    model = ReviewingModel(
+        responses=[
+            call("open", {"path": "/parent.txt"}, "parent-open"),
+            call(
+                "task",
+                {"description": "Open child.txt", "subagent_type": "general-purpose"},
+                "delegate",
+            ),
+            call("open", {"path": "/child.txt"}, "child-open"),
+            AIMessage(content="Child finished"),
+            AIMessage(content="Ready for human review"),
+            call(
+                "task",
+                {
+                    "description": "Read the saved child.txt and continue",
+                    "subagent_type": "general-purpose",
+                },
+                "continue-child",
+            ),
+            call("read_file", {"file_path": "/child.txt"}, "child-read-saved"),
+            AIMessage(content="Child continued"),
+            AIMessage(content="Continuation finished"),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    agent = FileReviewAgent()
+    app = create_agent_app(
+        registry={agent.agent_id: agent}, config=_build_test_config(tmp_path)
+    )
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        filesystem = config.filesystem
+        assert filesystem is not None
+        service = ConversationFilesystemService(filesystem, "review-session")
+        asyncio.run(
+            service.scratchpad().write_text("parent.txt", "PARENT PRIVATE BODY")
+        )
+        asyncio.run(service.scratchpad().write_text("child.txt", "CHILD PRIVATE BODY"))
+        result = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": agent.agent_id,
+                "input": "review",
+                "session_id": "review-session",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert result.status_code == 200
+        events = [
+            json.loads(line[6:])
+            for line in result.text.splitlines()
+            if line.startswith("data: ") and line != "data: [DONE]"
+        ]
+        presentations = [
+            part
+            for event in events
+            if event.get("kind") == "tool_result"
+            for part in event.get("ui_parts", [])
+        ]
+        assert [part["path"] for part in presentations] == ["/parent.txt", "/child.txt"]
+        assert "PRIVATE BODY" not in result.text
+        import time
+
+        deadline = time.monotonic() + 2
+        history = client.get("/pod/v1/agents/sessions/review-session/messages")
+        while not history.json() and time.monotonic() < deadline:
+            time.sleep(0.01)
+            history = client.get("/pod/v1/agents/sessions/review-session/messages")
+        assert history.status_code == 200
+        files = [
+            part
+            for message in history.json()
+            for part in message["metadata"].get("ui_parts", [])
+        ]
+        assert [part["path"] for part in files] == ["/parent.txt", "/child.txt"]
+        current = client.get(
+            "/pod/v1/agents/sessions/review-session/filesystem/file",
+            params={"path": "/child.txt"},
+        )
+        assert current.json()["content"] == "CHILD PRIVATE BODY"
+
+        saved = client.put(
+            "/pod/v1/agents/sessions/review-session/filesystem/file",
+            params={"path": "/child.txt"},
+            json={"content": "Human reviewed content for the next native child"},
+        )
+        assert saved.status_code == 200
+        continuation = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": agent.agent_id,
+                "input": "continue",
+                "session_id": "review-session",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert continuation.status_code == 200
+        events = [
+            json.loads(line[6:])
+            for line in continuation.text.splitlines()
+            if line.startswith("data: ") and line != "data: [DONE]"
+        ]
+        assert model.child_read is not None
+        assert "Human reviewed content for the next native child" in model.child_read
+        assert not any(
+            event.get("kind") == "tool_call" and event.get("tool_name") == "read_file"
+            for event in events
+        )
+
+
+@pytest.mark.parametrize("method", ["GET", "PUT", "EXPORT"])
+def test_conversation_file_read_requires_authentication(
+    monkeypatch, tmp_path, _pod_inbound_security, method
+) -> None:
+    app, _ = _secured_pod(
+        monkeypatch,
+        tmp_path,
+        caller_client_id="browser",
+        requires_active_accounts=True,
+        accept_delegated_calls=False,
+    )
+    with TestClient(app) as client:
+        response = client.request(
+            "GET" if method == "EXPORT" else method,
+            "/pod/v1/agents/sessions/session-1/filesystem/"
+            + ("export" if method == "EXPORT" else "file"),
+            params={"path": "/notes.txt", "team_id": "team-1"},
+        )
+        assert response.status_code == 401
+
+
+def test_conversation_file_partial_save_reports_changed_content_and_can_retry(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        asyncio.run(
+            history_store.save(
+                "partial-session",
+                [make_user_text("partial-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        service = ConversationFilesystemService(
+            filesystem, "partial-session", mutation_source="agent"
+        )
+        asyncio.run(service.scratchpad().write_text("notes.txt", "before\n"))
+        original_write = filesystem.write
+        failed = False
+
+        async def fail_bookkeeping_after_save(path: str, data: bytes | str) -> None:
+            nonlocal failed
+            if path.endswith("/.changes/state.json") and not failed:
+                current = await filesystem.read(
+                    "conversations/partial-session/scratchpad/notes.txt"
+                )
+                if current == b"saved\n":
+                    failed = True
+                    raise OSError("private provider detail")
+            await original_write(path, data)
+
+        monkeypatch.setattr(filesystem, "write", fail_bookkeeping_after_save)
+        response = client.put(
+            "/pod/v1/agents/sessions/partial-session/filesystem/file",
+            params={"path": "/notes.txt"},
+            json={"content": "saved\n"},
+        )
+        assert response.status_code == 503
+        assert response.json() == {
+            "detail": "The file changed, but change history bookkeeping failed; retry to recover"
+        }
+        assert (
+            client.get(
+                "/pod/v1/agents/sessions/partial-session/filesystem/file",
+                params={"path": "/notes.txt"},
+            ).json()["content"]
+            == "saved\n"
+        )
+        retry = client.put(
+            "/pod/v1/agents/sessions/partial-session/filesystem/file",
+            params={"path": "/notes.txt"},
+            json={"content": "saved\n"},
+        )
+        assert retry.status_code == 200
+        assert asyncio.run(service.publish_external_changes("turn-2")).file_count == 1
+
+
+@pytest.mark.parametrize("format", ["md", "docx"])
+def test_conversation_file_export_uses_latest_saved_markdown(
+    monkeypatch, tmp_path, format
+) -> None:
+    import io
+    from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
+
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        filesystem = config.filesystem
+        history_store = config.history_store
+        assert filesystem is not None
+        assert history_store is not None
+        service = ConversationFilesystemService(filesystem, "export-session")
+        asyncio.run(service.scratchpad().write_text("report.md", "# Original\n"))
+        asyncio.run(
+            history_store.save(
+                "export-session",
+                [make_user_text("export-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        saved = client.put(
+            "/pod/v1/agents/sessions/export-session/filesystem/file",
+            params={"path": "/report.md"},
+            json={"content": "# Reviewed report\n\nThe **approved** result.\n"},
+        )
+        assert saved.status_code == 200
+        exported = client.get(
+            "/pod/v1/agents/sessions/export-session/filesystem/export",
+            params={"path": "/report.md", "format": format},
+        )
+        assert exported.status_code == 200
+        assert "report." + format in exported.headers["content-disposition"]
+        if format == "md":
+            assert exported.text == "# Reviewed report\n\nThe **approved** result.\n"
+        else:
+            with ZipFile(io.BytesIO(exported.content)) as archive:
+                document = ET.fromstring(archive.read("word/document.xml"))
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            paragraphs = document.findall(".//w:p", ns)
+            texts = ["".join(p.itertext()) for p in paragraphs]
+            assert "Reviewed report" in texts
+            paragraph = paragraphs[texts.index("The approved result.")]
+            assert any(
+                r.find("w:rPr/w:b", ns) is not None
+                and "".join(r.itertext()) == "approved"
+                for r in paragraph.findall("w:r", ns)
+            )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "",
+        'quote " slash \\ controls\r\n\t\b\f\x01 accents é emoji 😀',
+        "x" * 1048575 + 'é😀"\\\r\n' + "y" * 1048575 + "終",
+    ],
+)
+def test_conversation_file_json_and_markdown_preserve_full_text(
+    monkeypatch, tmp_path, content
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        history = config.history_store
+        assert history is not None
+        asyncio.run(
+            history.save(
+                "codec-session",
+                [make_user_text("codec-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        url = "/pod/v1/agents/sessions/codec-session/filesystem/"
+        saved = client.put(
+            url + "file", params={"path": "/report.md"}, json={"content": content}
+        )
+        assert saved.status_code == 200
+        expected = {
+            "type": "conversation_file",
+            "session_id": "codec-session",
+            "path": "/report.md",
+            "viewer": "markdown",
+            "editable": True,
+            "content": content,
+        }
+        assert saved.json() == expected
+        current = client.get(url + "file", params={"path": "/report.md"})
+        assert current.status_code == 200
+        assert current.json() == expected
+        exported = client.get(
+            url + "export", params={"path": "/report.md", "format": "md"}
+        )
+        assert exported.status_code == 200
+        assert exported.content == content.encode("utf-8")
+
+
+def test_conversation_file_save_preserves_the_existing_byte_quota(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    config = _build_test_config(tmp_path)
+    config.storage.conversation_filesystem.scratchpad_max_bytes = 8
+    app = create_agent_app(registry={}, config=config)
+    with TestClient(app) as client:
+        history = get_runtime_context().config.history_store
+        assert history is not None
+        asyncio.run(
+            history.save(
+                "quota-session",
+                [make_user_text("quota-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        url = "/pod/v1/agents/sessions/quota-session/filesystem/file"
+        saved = client.put(url, params={"path": "/notes.txt"}, json={"content": "éééé"})
+        assert saved.status_code == 200
+        rejected = client.put(
+            url, params={"path": "/notes.txt"}, json={"content": "ééééx"}
+        )
+        assert rejected.status_code == 413
+        assert (
+            client.get(url, params={"path": "/notes.txt"}).json()["content"] == "éééé"
+        )

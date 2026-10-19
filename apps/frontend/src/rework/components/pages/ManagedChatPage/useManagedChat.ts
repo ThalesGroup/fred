@@ -22,6 +22,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useChatSse } from "@hooks/useChatSse";
 import type { HitlBatchAnswer, InterruptedRunChoice, RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
+import { flushConversationEditors } from "@rework/features/conversationFiles/conversationEditors";
 import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
@@ -587,13 +588,14 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     [replaceAllMessages, replacePendingHitls, replaceStagedHitlAnswers],
   );
 
+  const sessionMessagesUrl = sessionData ? (sessionData.messages_url ?? null) : sessionUnavailable ? null : undefined;
   const {
     isLoading: isLoadingHistory,
     isSettled: isHistorySettled,
     isUnavailable: historyUnavailable,
   } = useSessionHistory({
     sessionId: locallyCreatingSession && !sessionData ? null : sessionId,
-    messagesUrl: sessionData ? (sessionData.messages_url ?? null) : sessionUnavailable ? null : undefined,
+    messagesUrl: sessionMessagesUrl,
     onLoaded: handleHistoryLoaded,
     isTurnActive,
   });
@@ -839,6 +841,15 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
           console.debug("[useManagedChat] sendTurn() ABORTED — a pending session write failed");
           return false;
         }
+
+        try {
+          await flushConversationEditors(sid);
+        } catch {
+          if (!attempt.cancelled && activeSessionIdRef.current === sid)
+            showError({ summary: t("conversationFiles.saveFailedSummary"), detail: t("conversationFiles.saveFailed") });
+          return false;
+        }
+        if (executionDisabledRef.current || attempt.cancelled || activeSessionIdRef.current !== sid) return false;
 
         // Input/attachments stay untouched here too — cleared only from
         // onTurnStarted, once prepare-execution inside send() has actually
@@ -1297,6 +1308,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     capabilityIds,
     chatControls,
     input,
+    sessionMessagesUrl,
     setInput: setComposerInput,
     inputCharacterCount,
     inputTooLong,

@@ -35,6 +35,9 @@ from fred_sdk.contracts.runtime import (
 )
 from wcmatch import glob as wcglob
 
+from fred_runtime.conversation_changes import ConversationFilesystemPartialSaveError
+from fred_runtime.conversation_filesystem import decode_utf8_text
+
 Origin = Literal["agent", "system"]
 _MATCH_FLAGS = wcglob.BRACE | wcglob.GLOBSTAR
 
@@ -87,8 +90,16 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
                     )
                 return
 
+    def is_editable(self, path: str) -> bool:
+        path = normalize_virtual_path(path)
+        try:
+            self._check(path, "write", "agent")
+        except ConversationFilesystemPermissionError:
+            return False
+        return True
+
     async def read_text(self, path: str, *, origin: Origin) -> str:
-        path = _virtual_path(path)
+        path = normalize_virtual_path(path)
         self._check(path, "read", origin)
         responses = await self._backend.adownload_files([path])
         response = responses[0]
@@ -101,17 +112,19 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
                 "Conversation filesystem read failed"
             )
         try:
-            return response.content.decode("utf-8")
+            return await decode_utf8_text(response.content)
         except UnicodeDecodeError as exc:
             raise ConversationScratchpadUnsupportedContentError(
                 "Conversation filesystem supports UTF-8 text only"
             ) from exc
 
     async def write_text(self, path: str, content: str, *, origin: Origin) -> None:
-        path = _virtual_path(path)
+        path = normalize_virtual_path(path)
         self._check(path, "write", origin)
         result = await self._backend.awrite(path, content)
         if result.error is not None:
+            if result.error == ConversationFilesystemPartialSaveError.MESSAGE:
+                raise ConversationFilesystemPartialSaveError()
             if "quota exceeded" in result.error:
                 raise ConversationFilesystemQuotaError(result.error)
             raise ConversationScratchpadStorageError(result.error)
@@ -125,17 +138,19 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         origin: Origin,
         replace_all: bool = False,
     ) -> int:
-        path = _virtual_path(path)
+        path = normalize_virtual_path(path)
         self._check(path, "write", origin)
         result = await self._backend.aedit(path, old_text, new_text, replace_all)
         if result.error is not None:
+            if result.error == ConversationFilesystemPartialSaveError.MESSAGE:
+                raise ConversationFilesystemPartialSaveError()
             if "uniquely match" in result.error:
                 raise ConversationScratchpadEditConflictError(result.error)
             raise ConversationScratchpadStorageError(result.error)
         return result.occurrences or 0
 
     async def list(self, path: str = "/", *, origin: Origin) -> tuple[str, ...]:
-        path = _virtual_path(path, allow_root=True)
+        path = normalize_virtual_path(path, allow_root=True)
         self._check(path, "read", origin)
         result = await self._backend.aglob("**", path=path)
         if result.error is not None:
@@ -151,7 +166,7 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         return tuple(sorted(paths))
 
     async def exists(self, path: str, *, origin: Origin) -> bool:
-        path = _virtual_path(path)
+        path = normalize_virtual_path(path)
         self._check(path, "read", origin)
         location = PurePosixPath(path)
         result = await self._backend.aglob(location.name, path=str(location.parent))
@@ -162,7 +177,7 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
         return any(info["path"] == path for info in result.matches or [])
 
 
-def _virtual_path(path: str, *, allow_root: bool = False) -> str:
+def normalize_virtual_path(path: str, *, allow_root: bool = False) -> str:
     if not isinstance(path, str) or not path.startswith("/"):
         raise ConversationScratchpadInvalidPathError("Filesystem path must be absolute")
     if path == "/" and allow_root:

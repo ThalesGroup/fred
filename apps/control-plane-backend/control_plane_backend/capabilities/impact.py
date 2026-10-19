@@ -59,6 +59,7 @@ from fred_core.security.rebac.capability_authz import (
     CapabilityEnablementFacts,
     can_team_use_from_facts,
 )
+from fred_sdk.contracts.models import active_capability_ids
 
 from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
@@ -153,7 +154,7 @@ def _instance_dependency_ids(instance: AgentInstanceRecord) -> list[str]:
     selected, plus - unless gate-exempt - the `kind="agent"` template it is
     itself an instance of."""
 
-    dependency_ids = list(instance.tuning.selected_capability_ids or [])
+    dependency_ids = active_capability_ids(instance.tuning.selected_capability_ids)
     template_cap_id = _instance_template_capability_id(instance)
     if template_cap_id is not None:
         dependency_ids.append(template_cap_id)
@@ -184,7 +185,7 @@ def _dependency_is_broken(
     denied = facts_by_id is not None and not can_team_use_from_facts(
         str(instance.team_id), facts_by_id[cap_id]
     )
-    selected = cap_id in (instance.tuning.selected_capability_ids or [])
+    selected = cap_id in active_capability_ids(instance.tuning.selected_capability_ids)
     missing = selected and available_ids is not None and cap_id not in available_ids
     return denied or missing
 
@@ -347,7 +348,8 @@ async def preview_revoke_impact(
     instances = [
         instance
         for instance in instances
-        if capability_id in (instance.tuning.selected_capability_ids or [])
+        if capability_id
+        in active_capability_ids(instance.tuning.selected_capability_ids)
         or is_template_capability_instance(instance, capability_id)
     ]
     if not instances:

@@ -30,8 +30,8 @@ const state = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 
-vi.mock("./sanitizeEditorMarkdown", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./sanitizeEditorMarkdown")>();
+vi.mock("@shared/molecules/MarkdownEditor/sanitizeEditorMarkdown", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@shared/molecules/MarkdownEditor/sanitizeEditorMarkdown")>();
   return {
     sanitizeEditorMarkdown: (markdown: string) => {
       state.sanitize(markdown);

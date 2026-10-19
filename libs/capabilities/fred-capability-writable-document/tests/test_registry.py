@@ -61,3 +61,12 @@ def test_manifest_declares_react_only_execution_model():
     # express — must declare itself incompatible with Graph agents rather than
     # silently contributing zero tools if one selects it.
     assert WritableDocumentCapability.manifest.execution_models == ("react",)
+
+
+def test_discovery_keeps_legacy_editor_without_callable_bridge() -> None:
+    registry = CapabilityRegistry()
+    registry.discover()
+    registry.validate({})
+    assert "writable_document" in registry.ids()
+    assert "open_writable_document" not in registry.ids()
+    assert "writable_document" in dict(registry.routers())

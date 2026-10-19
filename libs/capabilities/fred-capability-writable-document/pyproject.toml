@@ -7,13 +7,12 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.5.3",
+  "fred-core[docx]>=4.5.3",
   "fred-sdk[agents]>=4.5.3",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=0.3.0",
   "fastapi>=0.110",
-  "python-docx>=1.1",
   "sqlalchemy>=2.0",
 ]
 classifiers = [
@@ -28,7 +27,6 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # the fred-agents pod auto-discovers the capability at boot via this entry point.
 [project.entry-points."fred.capabilities"]
 writable_document = "fred_capability_writable_document.capability:WritableDocumentCapability"
-open_writable_document = "fred_capability_writable_document.open_capability:OpenWritableDocumentCapability"
 
 [project.optional-dependencies]
 dev = [

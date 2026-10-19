@@ -285,6 +285,10 @@ vi.mock("@shared/molecules/TokenUsageBadge/TokenUsageBadge", () => ({ TokenUsage
 // Stands in for the real host on the one thing the page owns: which panel key
 // it is told to show. Rendering that back is what lets a test see the drawer
 // open (or stay shut) without mounting a capability's editor.
+vi.mock("@shared/organisms/ConversationFilePanel/ConversationFilePanel", () => ({
+  ConversationFilePanel: () => null,
+}));
+
 vi.mock("../../../features/capabilities/CapabilitySidePanelHost", () => ({
   CapabilitySidePanelHost: ({ activeKey }: { activeKey: string | null }) =>
     activeKey ? <div data-testid="capability-panel" data-key={activeKey} /> : null,
