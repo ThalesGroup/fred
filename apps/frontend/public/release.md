@@ -1,3 +1,21 @@
+**v3.7.1** - 2026-10-19
+
+- **Summary**
+
+  Mistral agents complete complex tasks more reliably, including presentation creation. Fred's installation images include refreshed system components.
+
+- **Security**
+
+  - Refresh system components in Fred's installation images with Ubuntu LTS security updates (#3167)
+
+- **Bug Fixes**
+
+  - Mistral agents run their tools instead of displaying technical instructions in long conversations (#3110)
+
+- **Deployment note**
+
+  Standard deployments need no additional action. Custom images based on Fred images require a package compatibility check; see the operator guide.
+
 **v3.7.0** - 2026-10-18
 
 - **Summary**
