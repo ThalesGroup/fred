@@ -3,7 +3,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-for tool in jq docker trivy; do
+trivy_mode=${TRIVY_MODE:-native}
+case "$trivy_mode" in
+  native) required_tools=(jq docker trivy) ;;
+  docker) required_tools=(jq docker) ;;
+  *) echo "ERROR: TRIVY_MODE must be native or docker." >&2; exit 1 ;;
+esac
+
+for tool in "${required_tools[@]}"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "ERROR: $tool is required to generate image SBOMs." >&2
     exit 1
@@ -38,6 +45,20 @@ done <<< "$image_rows"
 
 output_dir=target/sbom
 mkdir -p "$output_dir"
+
+run_trivy() {
+  if [[ "$trivy_mode" == docker ]]; then
+    docker run --rm \
+      --volume /var/run/docker.sock:/var/run/docker.sock \
+      --volume "$PWD/$output_dir:/workspace/$output_dir" \
+      --volume fred-trivy-cache:/root/.cache/ \
+      --workdir /workspace \
+      aquasec/trivy:0.75.0 "$@"
+  else
+    trivy "$@"
+  fi
+}
+
 tmp=
 trap 'if [[ -n "$tmp" ]]; then rm -f -- "$tmp"; fi' EXIT
 
@@ -47,7 +68,7 @@ for i in "${!names[@]}"; do
   output="$output_dir/$name.cdx.json"
   tmp=$(mktemp "$output_dir/.$name.XXXXXX")
   echo "Generating $output from $reference"
-  trivy image --image-src docker --format cyclonedx --output "$tmp" "$reference"
+  run_trivy image --image-src docker --format cyclonedx --output "$tmp" "$reference"
   if ! jq -e '.bomFormat == "CycloneDX" and ((.components // []) | length > 0)' "$tmp" >/dev/null; then
     echo "ERROR: $reference produced no valid CycloneDX components." >&2
     exit 1

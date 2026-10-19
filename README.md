@@ -559,13 +559,37 @@ follow the token-retrieval instruction printed by `make k3d-app`: you become `pl
 
 ## Local image SBOMs
 
-Install [Trivy](https://trivy.dev/), then build the four production images and
-generate one CycloneDX JSON SBOM per image:
+Install Trivy 0.75.0 (the version used by CI) without sudo on Linux or macOS:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/v0.75.0/contrib/install.sh -o /tmp/install-trivy.sh
+sh /tmp/install-trivy.sh -b "$HOME/.local/bin" v0.75.0
+export PATH="$HOME/.local/bin:$PATH"
+trivy --version
+```
+
+Add the `export PATH` line to your shell configuration to keep it across sessions.
+Then build the four production images and generate their SBOMs:
 
 ```bash
 make docker-build
 make sbom
 ```
+
+Alternatively, use Trivy in Docker without installing the binary:
+
+```bash
+docker pull aquasec/trivy:0.75.0
+make docker-build
+make sbom TRIVY_MODE=docker
+```
+
+The Docker option uses the local socket at `/var/run/docker.sock` and keeps its
+cache in the `fred-trivy-cache` Docker volume. Both options require `jq` and
+access to the local Docker daemon. See the official
+[Trivy installation guide](https://trivy.dev/docs/v0.75/getting-started/installation/)
+for other installation methods.
 
 `make sbom` reads the published image list from `.github/docker-images.json` and
 the local image tags from the application Makefiles. It only inspects images
