@@ -9,8 +9,8 @@ import yaml
 CHART = Path(__file__).parent / "fred"
 
 
-def render(*settings, values=None):
-    command = ["helm", "template", "fred-app", str(CHART), "-n", "fred"]
+def render(*settings, values=None, namespace="fred"):
+    command = ["helm", "template", "fred-app", str(CHART), "-n", namespace]
     if values:
         command += ["-f", str(values)]
     for setting in settings:
@@ -23,6 +23,39 @@ def deployments(docs):
 
 
 class ManagerChartTests(unittest.TestCase):
+    def assert_manager_upstreams(self, apps, namespace):
+        env = apps["frontend"]["spec"]["template"]["spec"]["containers"][0]["env"]
+        for name in ("FRONTEND_FRED_MANAGER_UPSTREAM", "FRONTEND_CONTROL_PLANE_UPSTREAM"):
+            self.assertEqual([entry for entry in env if entry["name"] == name], [
+                {"name": name, "value": f"http://control-plane-backend.{namespace}.svc.cluster.local:8222"}
+            ])
+
+    def test_manager_upstreams_use_release_namespace_and_survive_env_replacement(self):
+        for namespace in ("fred", "another-namespace"):
+            with self.subTest(namespace=namespace):
+                self.assert_manager_upstreams(deployments(render(namespace=namespace)), namespace)
+                self.assert_manager_upstreams(deployments(render(
+                    "applications.frontend.env[0].name=INSTANCE_SETTING",
+                    "applications.frontend.env[0].value=instance-value",
+                    namespace=namespace,
+                )), namespace)
+
+    def test_explicit_manager_upstream_overrides_are_preserved_without_duplicates(self):
+        apps = deployments(render(
+            "applications.frontend.env[0].name=FRONTEND_FRED_MANAGER_UPSTREAM",
+            "applications.frontend.env[0].value=http://external-api.example:8222",
+            "applications.frontend.extraEnvVars[0].name=FRONTEND_CONTROL_PLANE_UPSTREAM",
+            "applications.frontend.extraEnvVars[0].valueFrom.configMapKeyRef.name=upstreams",
+            "applications.frontend.extraEnvVars[0].valueFrom.configMapKeyRef.key=control-plane",
+        ))
+        env = apps["frontend"]["spec"]["template"]["spec"]["containers"][0]["env"]
+        self.assertEqual([e for e in env if e["name"] == "FRONTEND_FRED_MANAGER_UPSTREAM"], [
+            {"name": "FRONTEND_FRED_MANAGER_UPSTREAM", "value": "http://external-api.example:8222"}
+        ])
+        self.assertEqual([e for e in env if e["name"] == "FRONTEND_CONTROL_PLANE_UPSTREAM"], [
+            {"name": "FRONTEND_CONTROL_PLANE_UPSTREAM", "valueFrom": {"configMapKeyRef": {"name": "upstreams", "key": "control-plane"}}}
+        ])
+
     def test_default_topology_and_images(self):
         docs = render()
         apps = deployments(docs)
@@ -59,6 +92,7 @@ class ManagerChartTests(unittest.TestCase):
             self.skipTest("sibling factory checkout is unavailable")
         docs = render(values=values)
         apps = deployments(docs)
+        self.assert_manager_upstreams(apps, "fred")
         self.assertEqual(set(apps), {"control-plane-backend", "control-plane-worker", "knowledge-flow-backend", "knowledge-flow-worker", "frontend"})
         job = next(d for d in docs if d["kind"] == "Job" and d["metadata"]["name"].startswith("control-plane-backend-migration"))
         container = job["spec"]["template"]["spec"]["containers"][0]

@@ -296,6 +296,11 @@ forwards `/fred-manager/` to `FRONTEND_FRED_MANAGER_UPSTREAM`, default
 `/control-plane/` calls reach the same API. Read/send timeouts are 3600 seconds;
 DNS resolves at request time. Local frontend `make docker-run` uses
 `http://host.docker.internal:8400` and prefix `/fred-manager` for a host manager.
+On Kubernetes, the chart supplies `control-plane-backend.<namespace>.svc.cluster.local:8222`
+for both manager and control-plane upstreams: nginx's request-time resolver does
+not apply the pod's DNS search domains. These defaults survive replacement of the
+frontend environment list by instance values. Explicit upstream entries in `env`
+or `extraEnvVars` override them, including for a custom cluster DNS domain.
 Access logs retain the bounded `fred-manager` route family without paths, tokens
 or upload contents. UI components and generated API paths are unchanged.
 

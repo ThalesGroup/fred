@@ -1048,8 +1048,10 @@ applications:
         value: "http://fred-agents"
       - name: FRONTEND_KNOWLEDGE_FLOW_UPSTREAM
         value: "http://knowledge-flow-backend:8000"
-      - name: FRONTEND_CONTROL_PLANE_UPSTREAM
-        value: "http://control-plane-backend:8222"
+      # Manager/control-plane upstreams default to the release namespace's full
+      # service DNS name in the Deployment template, even when env is replaced.
+      # Set FRONTEND_FRED_MANAGER_UPSTREAM / FRONTEND_CONTROL_PLANE_UPSTREAM here
+      # or in extraEnvVars to override them (for example with a custom DNS domain).
       # Applications this deployment serves, as seen by the frontend gateway.
       # These are the SERVER-SIDE addresses nginx proxies to; the browser only
       # ever sees /apps/<app_id>/ and /app-services/<app_id>/. Every app_id

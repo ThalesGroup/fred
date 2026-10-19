@@ -113,6 +113,19 @@ spec:
 {{ toYaml .app.extraEnvVars | nindent 12 }}
             {{- end }}
             {{- if $isFrontend }}
+            {{- /* Variable proxy_pass uses nginx DNS, without the pod's search domains.
+                  Supply chart defaults outside env: instance overlays replace that list. */}}
+            {{- $providedEnv := dict }}
+            {{- range concat (.app.env | default list) (.app.extraEnvVars | default list) }}
+              {{- $_ := set $providedEnv .name true }}
+            {{- end }}
+            {{- $managerUpstream := printf "http://control-plane-backend.%s.svc.cluster.local:8222" .root.Release.Namespace }}
+            {{- range $name := list "FRONTEND_FRED_MANAGER_UPSTREAM" "FRONTEND_CONTROL_PLANE_UPSTREAM" }}
+            {{- if not (hasKey $providedEnv $name) }}
+            - name: {{ $name }}
+              value: {{ $managerUpstream | quote }}
+            {{- end }}
+            {{- end }}
             - name: FRONTEND_ENABLE_APPLICATIONS
               value: {{ ternary "true" "false" $enableApplications | quote }}
             {{- end }}
