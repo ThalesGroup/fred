@@ -21,7 +21,7 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog.tsx";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   JoiningMode,
@@ -34,6 +34,14 @@ import {
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import TeamSettingsRetention from "@shared/organisms/TeamSettingsPanel/TeamSettingsRetention/TeamSettingsRetention.tsx";
+import TeamDescriptionReminder from "@shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import {
+  MAX_TEAM_NAME_LENGTH,
+  TEAM_DESCRIPTION_MAX_LENGTH,
+  TEAM_DESCRIPTION_MIN_LENGTH,
+  isValidTeamDescription,
+} from "@core/utils/teamFields.ts";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;
@@ -43,10 +51,6 @@ interface TeamSettingsParametersForm {
   name: string;
   description: string;
 }
-
-// Mirrors `UpdateTeamRequest.name` server-side, so the field cannot submit a
-// value the backend would reject on length alone.
-const MAX_TEAM_NAME_LENGTH = 180;
 
 // TEAM-09: order drives the button group's left-to-right layout and index
 // mapping — keep in sync with the labels below.
@@ -59,16 +63,24 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   const { defaultTeamAvatarFile } = useFrontendProperties();
   const { t } = useTranslation();
   const [updateTeam] = useUpdateTeamMutation();
+  const { showSuccess } = useToast();
   const [uploadAvatar, { isLoading: isUploadingAvatar }] = useUploadTeamAvatarMutation();
 
   // Set by a failed rename only; the field's own value is form state.
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
+  const savingDescription = useRef(false);
+  // A different value left while a save is in flight: sent once that save settles.
+  const descriptionQueued = useRef(false);
+  // The default description is not something the admin wrote: the field
+  // starts empty, so a leftover of that text can never be saved as theirs.
+  const storedDescription = team.description_is_placeholder ? "" : (team.description ?? "");
   const [isRenaming, setIsRenaming] = useState(false);
 
   const { register, getValues, watch, setValue } = useForm<TeamSettingsParametersForm>({
     defaultValues: {
       name: team.name,
-      description: team.description || "",
+      description: storedDescription,
     },
   });
 
@@ -76,8 +88,11 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   // saving the description refetches the whole team, and a reset would wipe a
   // rename the user had typed but not submitted yet.
   useEffect(() => {
-    setValue("description", team.description || "");
-  }, [team.description, setValue]);
+    // The refetch of an earlier save must not overwrite a newer value still being sent.
+    if (savingDescription.current) return;
+    setValue("description", storedDescription);
+    setDescriptionError(null);
+  }, [storedDescription, setValue]);
 
   useEffect(() => {
     setValue("name", team.name);
@@ -85,14 +100,43 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   }, [team.name, setValue]);
 
   const handleSaveDescription = () => {
-    const newDescription = getValues().description;
-    if (newDescription === team.description) {
+    const newDescription = getValues().description.trim();
+    if (newDescription === storedDescription.trim()) {
+      // Left empty on a team that still has the default description: nothing
+      // to send, but the field says it is still to be filled.
+      setDescriptionError(
+        team.description_is_placeholder
+          ? t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH })
+          : null,
+      );
       return;
     }
+    // An invalid value stays in the field with its error; nothing is sent.
+    if (!isValidTeamDescription(newDescription)) {
+      setDescriptionError(t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH }));
+      return;
+    }
+    // Never two writes at once: they could land out of order.
+    if (savingDescription.current) {
+      descriptionQueued.current = true;
+      return;
+    }
+    savingDescription.current = true;
+    setDescriptionError(null);
     updateTeam({
       teamId: team.id,
       updateTeamRequest: { description: newDescription },
-    });
+    })
+      .unwrap()
+      .then(() => showSuccess({ summary: t("rework.teamSettings.parameters.description.saved") }))
+      .catch(() => setDescriptionError(t("rework.teamSettings.parameters.description.saveError")))
+      .finally(() => {
+        savingDescription.current = false;
+        if (descriptionQueued.current) {
+          descriptionQueued.current = false;
+          handleSaveDescription();
+        }
+      });
   };
   const descriptionValue = watch("description");
 
@@ -216,12 +260,22 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           uploading={isUploadingAvatar}
         />
       </div>
-      <div className={styles["form-section"]}>
+      <div className={`${styles["form-section"]} ${styles["team-description-section"]}`}>
+        <TeamDescriptionReminder team={team} />
         <TextArea
           label={t("rework.teamSettings.parameters.description.label")}
           placeholder={t("rework.teamSettings.parameters.description.placeholder")}
-          maxLength={180}
+          description={t("rework.teamDescription.helper")}
+          error={descriptionError ?? undefined}
+          explanation={
+            (descriptionValue ?? "").length >= TEAM_DESCRIPTION_MAX_LENGTH
+              ? t("rework.teamDescription.maxReached", { max: TEAM_DESCRIPTION_MAX_LENGTH })
+              : undefined
+          }
+          maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
           value={descriptionValue}
+          rows={7}
+          required
           {...register("description", { onBlur: handleSaveDescription })}
         />
       </div>

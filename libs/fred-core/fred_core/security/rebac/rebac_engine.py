@@ -250,6 +250,8 @@ class OrganizationPermission(str, Enum):
     CAN_LIST_ALL_TEAMS = "can_list_all_teams"
     CAN_DELETE_TEAM = "can_delete_team"
     CAN_RESCUE_TEAM_ADMIN = "can_rescue_team_admin"
+    # Rename, describe and reassign admins of any team, audited per edit.
+    CAN_EDIT_TEAM_REGISTRY = "can_edit_team_registry"
 
     # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: platform_observer's own named
     # capability (platform_admin included via the platform_observer union) —

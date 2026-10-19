@@ -122,7 +122,9 @@ _(none)_
 **Status:** `Functional`
 
 The action-oriented Dialog primitive now owns initial focus, Tab containment,
-Escape/scrim dismissal, and focus restoration. `Dialog.tsx` remains a thin FRED
+Escape/scrim dismissal, and focus restoration. `dismissible={false}` (default
+`true`) ignores Escape and scrim clicks for a form that is costly to lose; the
+Cancel button still closes it. `Dialog.tsx` remains a thin FRED
 wrapper supplying its translated Cancel default; neutral callers supply their
 own labels. Consumer-root portals inherit light/dark theme; the application
 without `.fred-ui` retains its body portal. An open Select gets the first Escape
@@ -2170,6 +2172,13 @@ so enabling the charter keeps nominated contacts visible before acceptance.
 These avatars do not indicate administrator authority; the charter gate uses
 the accepted administrator roster from the per-team detail response.
 
+**Description.** The card always shows the team's description under the
+header, clamped to three lines, in "Your teams" as in the discover section
+(the `withDescription` prop is gone). A team still carrying the default
+description shows its translation (`rework.teamDescription.placeholderDisplay`)
+rather than the stored French text; a personal space has none and renders
+nothing there.
+
 Displays one team in the marketplace (`MarketplaceTeams`). Corner radius `radius-ms`, like `AgentCard` and `PromptCard`. The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
 the team's `joining_mode`, gated on `!team.is_member`:
@@ -2224,6 +2233,64 @@ prop (default 4, so its other consumer is unchanged) and the card drops to
 `.teamCardAdmins` clips as a last resort for an unusually long translation; the
 avatars run right-to-left, so the overflow falls off the left and the badge
 stays visible.
+
+---
+
+### Team description — create form, settings field, reminder
+
+**Location:** `AdminTeamsPage.tsx`, `TeamFormDialog.tsx`, `TeamSettingsParameters.tsx`,
+`src/rework/components/shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx`
+**Status:** `Functional`
+
+A team's description is required, 20 to 500 characters once trimmed. The
+bounds and the display helper live in `src/rework/core/utils/teamFields.ts`
+(with `MAX_TEAM_NAME_LENGTH`), shared by both forms.
+
+- **`AdminTeamsPage` team dialog (`TeamFormDialog`).** "Create team" in the
+  page header opens it for anyone allowed to create teams; platform admins
+  also get an Edit `IconButton` (`medium`, `on-surface-retreat`) at the end of
+  each row (a `4rem` track: the cell padding plus the 40px button, or the
+  flex cell squeezes it into an oval), opening it prefilled. The page column
+  is 1080px like the other admin table pages, and the row `Switch`es are
+  `small`. Built on the shared `Dialog` (560px, `dense`, fluid content,
+  fields `--spacing-s` apart, `small` name and admin-search inputs); confirm stays disabled while a field is invalid or, in edit,
+  nothing changed, and an edit sends only the changed fields and the admin
+  diff. A default description starts empty and may stay empty. Each row
+  shows the description on one ellipsed line under the name.
+  Admins still awaiting the charter carry a "Pending" secondary line on their
+  dialog chip, and the row shows "N pending" (`on-surface-retreat`,
+  body-small, names in its tooltip) after the avatars. The search field and
+  the admin chips sit `--spacing-s` apart, the gap the default-teams section
+  uses. Refusals carrying a `code` (name taken, last active admin, sole
+  replacement pending the charter) toast our localized message instead of
+  the server's English `detail`; any other error keeps `useApiErrorToast`.
+  The description field is six rows tall. Escape and scrim clicks do not close
+  the dialog (`dismissible={false}`) so a draft is not lost by accident. The admin
+  search opens from 2 characters, with localized "searching" and "no match"
+  messages, and its menu is portaled so the dialog body never clips it.
+- **Description field.** A required `TextArea` under the team name:
+  `x / 500` counter, a sentence on the team's objectives regarding AI between
+  the label and the field (`TextArea` `description`, tied to the field with
+  `aria-describedby` with the error, which also sets `aria-invalid` — a full sentence never goes in the one-line `explanation`
+  under the field, which cuts it off), and the minimum-length error once the
+  field has been left. The request sends it trimmed. At 500 characters the
+  `explanation` line reads "500 characters maximum", so the stop is never
+  silent (dialog and team settings alike).
+- **`TeamSettingsParameters`.** Same counter and description, seven rows tall.
+  For a team that still has the default description the field starts empty
+  (the default text is not a value the admin wrote), and leaving it empty
+  shows the minimum-length error without sending anything. The field saves on blur: an unchanged value does nothing, an invalid one shows the
+  error on the field and sends nothing, a valid one is sent trimmed and confirmed
+  by a success toast (a failed save shows an error on the field instead).
+- **`TeamDescriptionReminder`.** A `ServiceNotice` in its `color="info"`
+  variant (`info-container` / `on-info-container`; the default stays the
+  neutral surface) shown to team admins (`canUpdateInfo`) while
+  `description_is_placeholder` is true. At the top of `TeamAgentsPage` (the
+  team's home) it spans the full width and carries a filled `info` button to
+  the team settings in the notice's `action` slot, at its end. In
+  `TeamSettingsParameters` it sits inside the description card, above the
+  field and without the button, so it points at the field to fill. It
+  renders nothing for other members, described teams and personal spaces.
 
 ---
 
@@ -2486,8 +2553,9 @@ worth of height, which (a) misaligned the input's visual center against the
 title/`LeaveTeamButton` row and (b) pushed `Autocomplete`'s `menu-popover`
 (`top: 100%` of the input's own wrapper) below the input with a large gap.
 Both now resolve automatically since the wrapper's rendered height matches
-the input exactly; the popover's only remaining offset is the deliberate
-`margin-top: var(--spacing-3xs)` in `Autocomplete.module.scss`.
+the input exactly. Since 2026-10-16 the menu renders in a portal with fixed
+positioning computed from the input (flipping above it when less than 240px
+remain below), like `Select`, so a dialog body's overflow no longer clips it.
 
 #### Open UX issues
 
@@ -2639,9 +2707,8 @@ generic `Dialog` primitive exists yet):
     overall height doesn't jump between the empty and one-candidate states.
 
   **No `overflow: hidden` at the dialog level** — everything is inset by
-  the dialog's own padding, and clipping would also cut off the
-  `Autocomplete` menu popover in the search row above the list (same class
-  of bug just fixed on the old inline field, see above).
+  the dialog's own padding. (The `Autocomplete` menu is portaled since
+  2026-10-16, so clipping no longer threatens it.)
 
 - **Actions:** `Annuler` (`outlined`/`on-surface`) / `Ajouter`
   (`filled`/`primary`, disabled while the list is empty or a submit is in
@@ -2776,8 +2843,7 @@ menu. Replaced with a derived value: `isOpen = isFocused && !dismissed &&
 queryValue.trim().length >= minQueryLength`, where `dismissed` is a
 one-shot flag set by Escape or a selection and cleared on the next
 focus/keystroke. New optional prop `minQueryLength` (default `0`, opens
-immediately on focus — e.g. `AdminTeamsPage`'s browsable full-user-list
-field) lets a consumer whose menu is backed by a server search that itself
+immediately on focus) lets a consumer whose menu is backed by a server search that itself
 only queries past a minimum length (this dialog, `minQueryLength={2}`)
 avoid flashing an empty "no options" state below that threshold. Affects
 every `Autocomplete` consumer, not just this dialog.
@@ -4805,8 +4871,8 @@ is stored; a failed read is shown explicitly and leaves that value unchanged.
 **Status:** `Functional`
 
 Admin-sidebar entry "Platform roles" (`admin_panel_settings` icon), gated
-`Protected requires="admin"`. Layout mirrors `AdminTeamsPage` (760px column,
-uppercase section titles): a holders table then a grant form. (A dedicated
+`Protected requires="admin"`. Layout: a 760px column and
+uppercase section titles: a holders table then a grant form. (A dedicated
 root card above the table was tried on 2026-08-21 and removed the same day
 — the pinned first row with its badge is prominence enough.)
 

@@ -25,8 +25,7 @@
 }
 
 // No `overflow: hidden` here — every child is inset by the dialog's own
-// padding (nothing touches the rounded edge directly), and clipping would
-// also cut off the Autocomplete's menu popover in `.searchRow` below.
+// padding (nothing touches the rounded edge directly).
 .dialog {
   display: flex;
   flex-direction: column;

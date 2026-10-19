@@ -21,8 +21,9 @@ import Switch from "@shared/atoms/Switch/Switch";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import Chip from "@shared/atoms/Chip/Chip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { teamDescriptionText } from "@core/utils/teamFields.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
@@ -32,44 +33,30 @@ import { getConfig } from "../../../../../common/config";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import PlatformAccessLinkManager from "../PlatformAccessPage/PlatformAccessLinkManager";
 import {
-  useCreateTeamMutation,
   useDefaultTeamsForNewUsersQuery,
   useListAllTeamsQuery,
-  useSearchCandidateTeamAdminsQuery,
   useSetDefaultTeamsForNewUsersMutation,
   usePlatformAccessStateQuery,
   usePlatformAccessTeamsQuery,
   useSetPlatformTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { Team, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import TeamFormDialog from "./TeamFormDialog";
 import styles from "./AdminTeamsPage.module.css";
 
-// AUTHZ-05 (RFC §28): team creation is a one-shot bootstrap action — there is
-// no other way to give a freshly created team its first team_admin.
-// Platform admission actions remain separately gated on platform-admin rights.
+// Team managers create teams; only platform admins edit them, set default
+// teams and admission (REBAC.md "Team registry governance").
 export default function AdminTeamsPage() {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
 
-  const [name, setName] = useState("");
-  const [selectedAdmins, setSelectedAdmins] = useState<UserSummary[]>([]);
-  const [adminQuery, setAdminQuery] = useState("");
-
-  // Server-side search, not the org-wide `GET /users` listing: that one is
-  // gated on `can_administer_users` (platform_admin only), so a team_manager
-  // reached this page and found the admin picker permanently empty.
-  const trimmedAdminQuery = adminQuery.trim();
-  const { data: candidateAdmins } = useSearchCandidateTeamAdminsQuery(
-    { query: trimmedAdminQuery },
-    { skip: trimmedAdminQuery.length < 2 },
-  );
+  // `null`: closed; `"create"`: a new team; a team: that team's edit.
+  const [teamForm, setTeamForm] = useState<Team | "create" | null>(null);
   // The admins column needs each team's roster.
   const { data: allTeams } = useListAllTeamsQuery({ includeMembership: true });
-  const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
 
-  // Choosing where new users land is platform_admin-only, unlike the rest of this page.
   const { canAdmin } = useUserCapabilities();
   const admissionEnabled = canAdmin && (getConfig()?.platform_access_enabled ?? false);
   const admission = usePlatformAccessStateQuery(undefined, { skip: !admissionEnabled });
@@ -123,18 +110,44 @@ export default function AdminTeamsPage() {
       {
         label: t("rework.adminTeams.existingTeams.table.name"),
         size: "2fr",
-        cellRenderer: (team) => <span>{team.name}</span>,
+        cellRenderer: (team) => {
+          const description = teamDescriptionText(team, t);
+          return (
+            <div className={styles.teamNameCell}>
+              <span className={styles.teamName}>{team.name}</span>
+              {description && (
+                <span className={styles.teamDescription} title={description}>
+                  {description}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
         label: t("rework.adminTeams.existingTeams.table.admins"),
-        cellRenderer: (team) => (
-          <AvatarGroup
-            avatars={(team.admins ?? []).map((admin) => ({
-              name: `${admin.first_name} ${admin.last_name}`,
-              imageUrl: admin.avatar_image_url,
-            }))}
-          />
-        ),
+        cellRenderer: (team) => {
+          const admins = (team.admins ?? []).map((admin) => ({
+            id: admin.id,
+            name: `${admin.first_name} ${admin.last_name}`,
+            imageUrl: admin.avatar_image_url,
+          }));
+          const pendingIds = new Set(team.pending_admin_ids ?? []);
+          const pending = admins.filter((admin) => pendingIds.has(admin.id));
+          return (
+            <div className={styles.adminsCell}>
+              <AvatarGroup avatars={admins.map(({ name, imageUrl }) => ({ name, imageUrl }))} />
+              {pending.length > 0 && (
+                <span
+                  className={styles.pendingAdmins}
+                  title={pending.map(({ name }) => t("rework.adminTeams.pendingAdminHint", { name })).join("\n")}
+                >
+                  {t("rework.adminTeams.existingTeams.pendingCount", { count: pending.length })}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       ...(admissionEnabled
         ? [
@@ -145,6 +158,7 @@ export default function AdminTeamsPage() {
                 const access = accessTeams.get(team.id);
                 return (
                   <Switch
+                    size="small"
                     aria-label={`${t("rework.platformAccess.free")} ${team.name}`}
                     checked={access?.free ?? false}
                     disabled={admissionLocked || !access}
@@ -187,56 +201,45 @@ export default function AdminTeamsPage() {
             },
           ]
         : []),
+      ...(canAdmin
+        ? [
+            {
+              label: "",
+              // Cell padding plus the 40px medium button: narrower squeezes it into an oval.
+              size: "4rem",
+              cellRenderer: (team: Team) => (
+                <IconButton
+                  variant="icon"
+                  size="medium"
+                  color="on-surface-retreat"
+                  icon={{ category: "outlined", type: "edit" }}
+                  aria-label={t("rework.adminTeams.editTeam.openAria", { name: team.name })}
+                  onClick={() => setTeamForm(team)}
+                />
+              ),
+            },
+          ]
+        : []),
     ],
-    [t, admissionEnabled, admissionLocked, accessTeams, runMutationAction, setAdmissionTeam, showError],
+    [t, canAdmin, admissionEnabled, admissionLocked, accessTeams, runMutationAction, setAdmissionTeam, showError],
   );
-
-  const suggestions = useMemo(() => {
-    if (!candidateAdmins) return [];
-    const selectedIds = new Set(selectedAdmins.map((u) => u.id));
-    return candidateAdmins.filter((u) => !selectedIds.has(u.id));
-  }, [candidateAdmins, selectedAdmins]);
-
-  const handleSelectAdmin = (user: UserSummary) => {
-    setSelectedAdmins((prev) => [...prev, user]);
-    setAdminQuery("");
-  };
-
-  const handleRemoveAdmin = (userId: string) => {
-    setSelectedAdmins((prev) => prev.filter((u) => u.id !== userId));
-  };
-
-  const canSubmit = name.trim().length > 0 && selectedAdmins.length > 0 && !isCreating;
-
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
-    await runMutationAction({
-      action: () =>
-        createTeam({
-          createTeamRequest: {
-            name: name.trim(),
-            initial_team_admin_ids: selectedAdmins.map((u) => u.id),
-          },
-        }).unwrap(),
-      onSuccess: () => {
-        showSuccess({ summary: t("rework.adminTeams.createTeam.successSummary") });
-        setName("");
-        setSelectedAdmins([]);
-      },
-      onError: (error) =>
-        notifyApiError(error, {
-          summary: t("rework.adminTeams.createTeam.errors.summary"),
-          fallbackDetail: t("rework.adminTeams.createTeam.errors.fallbackDetail"),
-          forbiddenDetail: t("rework.adminTeams.createTeam.errors.forbiddenDetail"),
-          conflictDetail: t("rework.adminTeams.createTeam.errors.conflictDetail"),
-        }),
-    });
-  };
 
   return (
     <div className={styles.adminTeamsPage}>
-      <PageHeader title={t("rework.adminTeams.title")} />
-      {/* Actions first: the registry list grows long and pushed them out of reach. */}
+      <PageHeader
+        title={t("rework.adminTeams.title")}
+        actions={
+          <Button
+            color="primary"
+            variant="filled"
+            size="medium"
+            icon={{ category: "outlined", type: "add" }}
+            onClick={() => setTeamForm("create")}
+          >
+            {t("rework.adminTeams.createTeam.open")}
+          </Button>
+        }
+      />
       {canAdmin && (
         <>
           <section className={styles.defaultTeamSection}>
@@ -279,47 +282,6 @@ export default function AdminTeamsPage() {
           <Separator />
         </>
       )}
-      <section className={styles.createTeamSection}>
-        <h2 className={styles.sectionTitle}>{t("rework.adminTeams.createTeam.title")}</h2>
-        <TextInput
-          label={t("rework.adminTeams.createTeam.nameLabel")}
-          placeholder={t("rework.adminTeams.createTeam.namePlaceholder")}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <div className={styles.adminsField}>
-          <span className={styles.adminsLabel}>{t("rework.adminTeams.createTeam.adminsLabel")} *</span>
-          <Autocomplete<UserSummary>
-            textInput={{
-              placeholder: t("rework.adminTeams.createTeam.adminsPlaceholder"),
-              icon: { category: "outlined", type: "search" },
-            }}
-            onFieldValueChange={setAdminQuery}
-            options={suggestions.map((user) => ({
-              label: `${user.first_name} ${user.last_name} (${user.username})`,
-              value: user,
-              key: user.id,
-            }))}
-            onSelect={handleSelectAdmin}
-          />
-          {selectedAdmins.length > 0 && (
-            <ul className={styles.adminChipList}>
-              {selectedAdmins.map((user) => (
-                <li key={user.id}>
-                  <Chip label={`${user.first_name} ${user.last_name}`} onRemove={() => handleRemoveAdmin(user.id)} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className={styles.actions}>
-          <Button color="primary" variant="filled" size="medium" disabled={!canSubmit} onClick={handleSubmit}>
-            {t("rework.adminTeams.createTeam.submit")}
-          </Button>
-        </div>
-      </section>
-      <Separator />
       <section className={styles.existingTeamsSection}>
         <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
         {admissionEnabled && <p className={styles.sectionDescription}>{t("rework.platformAccess.freeHint")}</p>}
@@ -332,6 +294,9 @@ export default function AdminTeamsPage() {
           <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
         )}
       </section>
+      {teamForm && (
+        <TeamFormDialog team={teamForm === "create" ? undefined : teamForm} onClose={() => setTeamForm(null)} />
+      )}
       {admissionEnabled && selectedLinkTeam && (
         <PlatformAccessLinkManager team={selectedLinkTeam} onClose={() => setLinkTeam(undefined)} />
       )}

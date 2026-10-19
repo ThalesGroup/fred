@@ -18,20 +18,45 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--spacing-xl);
+  gap: var(--spacing-l);
   margin: 0 auto;
   padding: var(--spacing-xl);
   width: 100%;
-  max-width: 760px;
+  max-width: 1080px;
 }
 
 .existingTeamsSection,
-.defaultTeamSection,
-.createTeamSection {
+.defaultTeamSection {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-m);
+  gap: var(--spacing-s);
   width: 100%;
+}
+
+/* TeamFormDialog body: fluid, the Dialog sizes it. */
+.teamForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  width: 100%;
+}
+
+.teamNameCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.teamName,
+.teamDescription {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teamDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 .emptyTeamsMessage,
@@ -52,7 +77,27 @@
 .adminsField {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+/* Search field and chosen admins: the field-to-chips gap of the default-teams section. */
+.adminsPicker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.adminsCell {
+  display: flex;
+  align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.pendingAdmins {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  white-space: nowrap;
 }
 
 .adminsLabel {
@@ -67,9 +112,4 @@
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
 }

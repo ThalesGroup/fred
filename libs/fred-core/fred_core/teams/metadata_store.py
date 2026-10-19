@@ -19,8 +19,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from sqlalchemy import case, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -63,12 +64,50 @@ class TeamVisibility(str, Enum):
     PRIVATE = "private"
 
 
+# A team's description states its objectives regarding AI. The placeholder is
+# frozen: migrations and `Team.description_is_placeholder` compare against it.
+TEAM_DESCRIPTION_MIN_LENGTH = 20
+TEAM_DESCRIPTION_MAX_LENGTH = 500
+TEAM_DESCRIPTION_PLACEHOLDER = (
+    "Description à compléter par l'administrateur de l'équipe."
+)
+
+TeamDescription = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=TEAM_DESCRIPTION_MIN_LENGTH,
+        max_length=TEAM_DESCRIPTION_MAX_LENGTH,
+    ),
+]
+
+
+def team_description_or_placeholder(value: str | None) -> str:
+    """Normalise a description from an untrusted source (import, backfill):
+    missing or too short gives the placeholder, too long is cut."""
+    if not isinstance(value, str):
+        return TEAM_DESCRIPTION_PLACEHOLDER
+    # Cut first: the cut can leave trailing whitespace, hence a short value.
+    cleaned = value.strip()[:TEAM_DESCRIPTION_MAX_LENGTH].strip()
+    if len(cleaned) < TEAM_DESCRIPTION_MIN_LENGTH:
+        return TEAM_DESCRIPTION_PLACEHOLDER
+    return cleaned
+
+
+def reject_null_description(value: str | None) -> str | None:
+    """Pydantic validator body: the description can change but never be
+    cleared. Only runs on explicit values, so an unset field is untouched."""
+    if value is None:
+        raise ValueError("Team description cannot be cleared")
+    return value
+
+
 class TeamMetadataPatch(BaseModel):
     # A rename rides the same patch as every other mutable field. The unique
     # constraint on `teammetadata.name` is what actually rejects a collision -
     # callers map the resulting IntegrityError to their own 409.
     name: str | None = Field(default=None, min_length=1, max_length=180)
-    description: str | None = Field(default=None, max_length=180)
+    description: TeamDescription | None = None
     joining_mode: JoiningMode | None = None
     visibility: TeamVisibility | None = None
     banner_object_storage_key: str | None = Field(default=None, max_length=300)
@@ -79,6 +118,11 @@ class TeamMetadataPatch(BaseModel):
     team_delete_grace: str | None = None
     max_idle: str | None = None
     retention_updated_by: str | None = None
+
+    @field_validator("description")
+    @classmethod
+    def _reject_null_description(cls, value: str | None) -> str | None:
+        return reject_null_description(value)
 
     def to_store_values(self) -> dict[str, str | bool | None]:
         values: dict[str, str | bool | None] = {}
@@ -213,6 +257,7 @@ class TeamMetadataStore:
         self,
         team_id: TeamId,
         name: str,
+        description: str,
         session: AsyncSession | None = None,
     ) -> TeamMetadata:
         """Create one team's metadata row (AUTHZ-05 review item 9).
@@ -225,7 +270,7 @@ class TeamMetadataStore:
         overwriting an existing team.
         """
         async with use_session(self._sessions, session) as s:
-            s.add(TeamMetadataRow(id=str(team_id), name=name))
+            s.add(TeamMetadataRow(id=str(team_id), name=name, description=description))
 
         created = await self.get_by_team_id(team_id, session=session)
         if created is None:

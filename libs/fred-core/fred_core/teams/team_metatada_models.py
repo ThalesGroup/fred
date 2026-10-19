@@ -39,9 +39,15 @@ class TeamMetadataRow(Base):
     """ORM model for the ``teammetadata`` table."""
 
     __tablename__ = "teammetadata"
+    # Description bound: same as TEAM_DESCRIPTION_MIN_LENGTH; writers strip
+    # first, so this only backstops hand-written SQL.
     __table_args__ = (
         CheckConstraint(
             "agents_publish_quota >= 1", name="ck_teammetadata_agents_publish_quota"
+        ),
+        CheckConstraint(
+            "length(trim(description)) >= 20",
+            name="ck_teammetadata_description_min_length",
         ),
     )
 
@@ -60,7 +66,7 @@ class TeamMetadataRow(Base):
     # TOCTOU race allowing two concurrent creates to land the same name (see
     # migration a8b9c0d1e2f3's docstring for the full rationale).
     name: Mapped[str] = mapped_column(String(180), nullable=False, unique=True)
-    description: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
     # TEAM-09: replaces the former `is_private` bool. Values are `JoiningMode`
     # (fred_core.teams.metadata_store) `.value` strings — plain `String`
     # column, not a DB-level enum, matching every other enum-backed column in

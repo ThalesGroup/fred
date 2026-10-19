@@ -25,22 +25,23 @@ import { useFrontendBootstrap } from "src/hooks/useFrontendBootstrap";
 import Button from "@shared/atoms/Button/Button.tsx";
 import React from "react";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
+import { teamDescriptionText } from "@core/utils/teamFields.ts";
 
 export interface TeamCardProps {
   team: Team;
-  withDescription: boolean;
   /** Called after a successful self-service join (JoiningMode.OPEN) — lets the
    * page refresh anything derived outside this card's own team-list cache
    * (e.g. the bootstrap-driven team navbar). */
   onJoined?: () => void;
 }
 
-export default function TeamCard({ team, withDescription, onJoined }: TeamCardProps) {
+export default function TeamCard({ team, onJoined }: TeamCardProps) {
   const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();
   const { activeTeam } = useFrontendBootstrap();
   const { t } = useTranslation();
   const [joinTeam, { isLoading: isJoining }] = useJoinTeamMutation();
   const userFullName = KeyCloakService.GetUserFullName();
+  const description = teamDescriptionText(team, t);
 
   // A configured default avatar replaces initials; without one, the card keeps
   // the name-derived coloured initials. The personal space renders round, teams
@@ -111,7 +112,8 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
             </div>
           </div>
         </div>
-        {withDescription && <div className={styles.teamCardDescription}>{team.description}</div>}
+        {/* Personal spaces have no description: nothing to render. */}
+        {description && <div className={styles.teamCardDescription}>{description}</div>}
         <div className={styles.teamCardFooter}>
           <div className={styles.teamCardAdmins}>
             <AvatarGroup

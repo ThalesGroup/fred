@@ -35,6 +35,7 @@ from fred_core.documents.document_models import DocumentMetadataRow as MetadataR
 from fred_core.documents.tag_models import TagRow
 from fred_core.filesystem.structures import FilesystemResourceInfo
 from fred_core.sql.async_session import make_session_factory, use_session
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from sqlalchemy import select
@@ -267,7 +268,12 @@ async def update_database(session: AsyncSession, user_totals: dict[str, int], te
             # marketplace-listed loses that listing on the next `GET /teams`
             # (`_list_teams` revokes the ReBAC `public` relation for any
             # private team). Re-publishing it is a team_admin action.
-            team_row = TeamMetadataRow(id=team_id, name=team_id, current_resources_storage_size=total_size)
+            team_row = TeamMetadataRow(
+                id=team_id,
+                name=team_id,
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
+                current_resources_storage_size=total_size,
+            )
             session.add(team_row)
 
     await session.commit()
