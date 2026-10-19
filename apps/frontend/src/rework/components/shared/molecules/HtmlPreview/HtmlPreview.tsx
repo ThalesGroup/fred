@@ -30,21 +30,13 @@ export function HtmlPreview({
   title: string;
 }) {
   const composed = useMemo(() => composeHtmlDocument(html, css, zoom), [html, css, zoom]);
-  // Double-buffer the Preview so a zoom / markup change never flashes the iframe's
-  // blank white background: the newly composed document loads into the HIDDEN back
-  // buffer and is revealed only once it has painted (onLoad); the front buffer keeps
-  // the previous frame visible until then. Each iframe keeps a STABLE key, so only
-  // the back one ever reloads — an iframe cannot be re-zoomed without a reload
-  // (sandboxed, no allow-scripts), so this hides that reload instead of avoiding it.
+  // Keep the painted frame visible while the other sandboxed frame loads.
+  // Zoom requires a reload, so stable buffers avoid a blank preview flash.
   const [buffers, setBuffers] = useState<[string, string]>(["", ""]);
   const [front, setFront] = useState<0 | 1>(0);
-  // What each buffer has actually painted. Switching back to an already-seen
-  // document doesn't reload the iframe (same srcDoc), so no onLoad fires — we must
-  // recognise "already painted here" and flip to it directly, or the pane freezes.
+  // An unchanged srcdoc does not reload; remember painted documents to reuse them.
   const paintedRef = useRef<[string, string]>(["", ""]);
-  // On the very first open there is no prior frame to hold, so the empty front
-  // iframe would flash its white background before the artifact paints. Keep both
-  // frames hidden (the pane's own surface shows through) until that first paint.
+  // Hide both buffers until the first document has painted.
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
@@ -53,9 +45,7 @@ export function HtmlPreview({
       setFront(action.to);
       setRevealed(true);
     } else if (action.kind === "load") {
-      // This buffer is about to reload, so its previously-painted content is void:
-      // clear it now, or a quick switch back to that old doc would flip to this
-      // buffer mid-load (showing the new doc) instead of reloading the old one.
+      // A reloading buffer cannot be reused until the requested document paints.
       paintedRef.current[action.into] = "";
       setBuffers((b) => {
         const next: [string, string] = [b[0], b[1]];
@@ -67,8 +57,7 @@ export function HtmlPreview({
 
   const handleFrameLoad = (idx: 0 | 1) => {
     paintedRef.current[idx] = buffers[idx];
-    // Reveal the freshly loaded buffer only once the doc we asked it to load has
-    // painted AND it is still the current target (a fast switch may have moved on).
+    // A fast switch may have replaced the target while this frame was loading.
     if (buffers[idx] === composed && front !== idx) {
       setFront(idx);
       setRevealed(true);
