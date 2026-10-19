@@ -75,7 +75,8 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
   const [adminQuery, setAdminQuery] = useState("");
 
   const trimmedAdminQuery = adminQuery.trim();
-  const { data: candidateAdmins, isFetching: searchingAdmins } = useSearchCandidateTeamAdminsQuery(
+  // `currentData`, not `data`: results of a previous search must not stay selectable while a new one loads.
+  const { currentData: candidateAdmins, isFetching: searchingAdmins } = useSearchCandidateTeamAdminsQuery(
     { query: trimmedAdminQuery },
     { skip: trimmedAdminQuery.length < 2 },
   );

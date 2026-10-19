@@ -835,7 +835,7 @@ async def create_team(
       reassigning an existing team's admins
 
     Example:
-    - `team = await create_team(user, CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice-sub"]), deps)`
+    - `team = await create_team(user, CreateTeamRequest(name="swiftpost", description="Ships the Swiftpost parcel tracking service.", initial_team_admin_ids=["alice-sub"]), deps)`
     """
     rebac = deps.rebac
     await rebac.check_user_permission_or_raise(

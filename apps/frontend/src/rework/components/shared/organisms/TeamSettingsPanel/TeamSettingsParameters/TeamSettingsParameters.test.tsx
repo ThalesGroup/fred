@@ -445,6 +445,33 @@ describe("TeamSettingsParameters description", () => {
     expect(container.textContent).toContain("rework.teamSettings.parameters.description.saveError");
   });
 
+  it("sends a description left while an earlier save is in flight, and keeps it through that save's refetch", async () => {
+    let resolveFirst!: () => void;
+    let resolveSecond!: () => void;
+    h.updateTeam
+      .mockReturnValueOnce({ unwrap: () => new Promise<void>((resolve) => (resolveFirst = resolve)) })
+      .mockReturnValueOnce({ unwrap: () => new Promise<void>((resolve) => (resolveSecond = resolve)) });
+    render(<TeamSettingsParameters team={describedTeam()} />);
+
+    typeAndLeave("Draft and review procurement contracts.");
+    typeAndLeave("Negotiate and archive supplier agreements.");
+    expect(h.updateTeam).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolveFirst());
+    expect(h.updateTeam).toHaveBeenCalledTimes(2);
+    expect(h.updateTeam).toHaveBeenLastCalledWith({
+      teamId: "team-1",
+      updateTeamRequest: { description: "Negotiate and archive supplier agreements." },
+    });
+    act(() => {
+      root.render(
+        <TeamSettingsParameters team={describedTeam({ description: "Draft and review procurement contracts." })} />,
+      );
+    });
+    expect(field().value).toBe("Negotiate and archive supplier agreements.");
+    await act(async () => resolveSecond());
+  });
+
   it("says why typing stops once the description reaches 500 characters", () => {
     render(<TeamSettingsParameters team={describedTeam()} />);
     expect(container.textContent).not.toContain("rework.teamDescription.maxReached");

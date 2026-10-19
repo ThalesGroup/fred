@@ -58,6 +58,10 @@ const h = vi.hoisted(() => ({
   editTeam: vi.fn(),
   showError: vi.fn(),
   notifyApiError: vi.fn(),
+  candidateAdmins: {
+    ad: [{ id: "u-ada", first_name: "Ada", last_name: "Admin", username: "ada" }],
+  } as Record<string, { id: string; first_name: string; last_name: string; username: string }[]>,
+  loadingAdminQueries: new Set<string>(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -115,9 +119,15 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useDefaultTeamsForNewUsersQuery: (_arg: unknown, options?: { skip?: boolean }) => ({
     data: options?.skip ? undefined : h.defaultTeams,
   }),
-  useSearchCandidateTeamAdminsQuery: () => ({
-    data: [{ id: "u-ada", first_name: "Ada", last_name: "Admin", username: "ada" }],
-  }),
+  // Mirrors RTK Query: `currentData` is undefined while the search for a new query is in flight.
+  useSearchCandidateTeamAdminsQuery: ({ query }: { query: string }) => {
+    const loading = h.loadingAdminQueries.has(query);
+    return {
+      currentData: loading ? undefined : (h.candidateAdmins[query] ?? h.candidateAdmins.ad),
+      data: h.candidateAdmins.ad,
+      isFetching: loading,
+    };
+  },
   useCreateTeamMutation: () => [h.createTeam, { isLoading: false }],
   useEditTeamRegistryMutation: () => [h.editTeam, { isLoading: false }],
   useSetDefaultTeamsForNewUsersMutation: () => [h.setDefaultTeams, { isLoading: false }],
@@ -180,6 +190,7 @@ beforeEach(() => {
   h.editTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
   h.showError.mockReset();
   h.notifyApiError.mockReset();
+  h.loadingAdminQueries.clear();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -488,6 +499,23 @@ describe("AdminTeamsPage team edit", () => {
       teamId: "uid-alpha",
       editTeamRegistryRequest: { add_admin_ids: ["u-ada"], remove_admin_ids: ["u-zoe"] },
     });
+  });
+
+  it("does not offer the previous search's admins while a new search loads", async () => {
+    h.loadingAdminQueries.add("bo");
+    openAlpha();
+    const adminInput = dialog()!.querySelectorAll("input")[1];
+    act(() => adminInput.focus());
+    type(adminInput, "ad");
+    expect(document.body.textContent).toContain("Ada Admin");
+
+    type(adminInput, "bo");
+    expect(document.body.textContent).not.toContain("Ada Admin");
+    expect(document.body.textContent).toContain("rework.adminTeams.createTeam.adminsSearching");
+    await act(async () => {
+      adminInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    expect(dialog()!.querySelectorAll("ul li")).toHaveLength(1);
   });
 
   it("marks a pending admin's chip", () => {

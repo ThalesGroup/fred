@@ -70,6 +70,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   const [renameError, setRenameError] = useState<string | null>(null);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const savingDescription = useRef(false);
+  // A different value left while a save is in flight: sent once that save settles.
+  const descriptionQueued = useRef(false);
   // The default description is not something the admin wrote: the field
   // starts empty, so a leftover of that text can never be saved as theirs.
   const storedDescription = team.description_is_placeholder ? "" : (team.description ?? "");
@@ -86,6 +88,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   // saving the description refetches the whole team, and a reset would wipe a
   // rename the user had typed but not submitted yet.
   useEffect(() => {
+    // The refetch of an earlier save must not overwrite a newer value still being sent.
+    if (savingDescription.current) return;
     setValue("description", storedDescription);
     setDescriptionError(null);
   }, [storedDescription, setValue]);
@@ -112,8 +116,11 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
       setDescriptionError(t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH }));
       return;
     }
-    // A second blur while the save is in flight would send it twice.
-    if (savingDescription.current) return;
+    // Never two writes at once: they could land out of order.
+    if (savingDescription.current) {
+      descriptionQueued.current = true;
+      return;
+    }
     savingDescription.current = true;
     setDescriptionError(null);
     updateTeam({
@@ -125,6 +132,10 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
       .catch(() => setDescriptionError(t("rework.teamSettings.parameters.description.saveError")))
       .finally(() => {
         savingDescription.current = false;
+        if (descriptionQueued.current) {
+          descriptionQueued.current = false;
+          handleSaveDescription();
+        }
       });
   };
   const descriptionValue = watch("description");

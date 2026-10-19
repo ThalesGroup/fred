@@ -219,7 +219,7 @@ def test_platform_admin_cannot_rescue_a_team_that_still_has_an_admin(
     )
 
 
-@pytest.mark.parametrize("username", [u for u in NON_PLATFORM_ADMINS if u != "oscar"])
+@pytest.mark.parametrize("username", NON_PLATFORM_ADMINS)
 def test_non_platform_admin_cannot_edit_team_registry(username: str, disposable_team, cp) -> None:
     """A non-platform-admin cannot edit a team's registry entry, even oscar as its admin. [username={username}]"""
     resp = cp(username).patch(f"/teams/{disposable_team['id']}/registry", json={"name": f"deny-{uuid.uuid4().hex[:8]}"})
