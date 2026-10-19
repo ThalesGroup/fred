@@ -19,7 +19,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use fred_manager::{api, auth, config::Configuration as Config, fga::Fga, logging, spaces};
 
-const USAGE: &str = "usage: fred-manager [serve | worker | generate-openapi | generate-config-schema | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: fred-manager [serve | worker | migrate | generate-openapi | generate-config-schema | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -40,6 +40,25 @@ async fn main() -> Result<()> {
             "{}",
             serde_json::to_string_pretty(&fred_manager::config::schema())?
         );
+        return Ok(());
+    }
+    // Helm's pre-install Job has only DATABASE_URL; release config and identities do not exist yet.
+    if args == ["migrate"] {
+        let url = std::env::var("DATABASE_URL").context("DATABASE_URL is required")?;
+        let url = match url.strip_prefix("postgresql+asyncpg://") {
+            Some(rest) => format!("postgresql://{rest}"),
+            None => url,
+        };
+        let pool = PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .map_err(|_| anyhow::anyhow!("migration database connection failed"))?;
+        sqlx::migrate!()
+            .run(&pool)
+            .await
+            .map_err(|_| anyhow::anyhow!("manager SQL migration failed"))?;
+        println!("Manager SQL migrations completed");
         return Ok(());
     }
     // Same rule as fred-pod: ENV_FILE, default ./config/.env, never overriding the process.

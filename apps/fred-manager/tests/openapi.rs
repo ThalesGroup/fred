@@ -329,3 +329,31 @@ fn configuration_schema_is_generated_offline_and_matches_the_chart_input() {
         "PT10M"
     );
 }
+
+#[test]
+fn migration_command_requires_only_database_url_and_redacts_errors() {
+    for url in [None, Some("invalid://private-password@invalid")] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_fred-manager"));
+        command
+            .arg("migrate")
+            .env("CONFIG_FILE", "/nonexistent/manager-configuration")
+            .env("ENV_FILE", "/nonexistent/manager-env")
+            .env_remove("DATABASE_URL");
+        if let Some(url) = url {
+            command.env("DATABASE_URL", url);
+        }
+        let output = command.output().unwrap();
+        assert!(!output.status.success());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            error.contains(if url.is_none() {
+                "DATABASE_URL is required"
+            } else {
+                "migration database connection failed"
+            }),
+            "{error}"
+        );
+        assert!(!error.contains("private-password"));
+        assert!(!error.contains("/nonexistent"));
+    }
+}

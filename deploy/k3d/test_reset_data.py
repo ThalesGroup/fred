@@ -214,9 +214,10 @@ class ResetTests(unittest.TestCase):
     def test_real_manager_chart_configuration_accepts_typed_openfga(self):
         import yaml
         values = yaml.safe_load((Path(__file__).parents[1] / "charts/fred/values.yaml").read_text())
-        for name in reset.MANAGER_APPS:
+        names = {"control-plane-backend", "control-plane-worker"}
+        for name in names:
             values["applications"][name]["configuration"]["security"]["rebac"]["api_url"] = "http://openfga:9080"
-        reset.Reset().check_config(values, reset.MANAGER_APPS)
+        reset.Reset().check_config(values, names)
 
     def test_preview_resolves_installed_hooks_without_mutation(self):
         self.preflight()
@@ -240,6 +241,24 @@ class ResetTests(unittest.TestCase):
         self.assertTrue(reset.MANAGER_APPS <= self.r.state["replicas"].keys())
         self.assertFalse(retired & self.r.state["replicas"].keys())
         self.assert_read_only()
+
+    def test_rust_control_plane_uses_two_migrations_without_agents(self):
+        retired = reset.MANAGER_APPS | {"fred-agents"}
+        for kind in ("deployments", "replicasets", "pods"):
+            self.r.resources[kind]["items"] = [
+                item for item in self.r.resources[kind]["items"]
+                if not any(name in json.dumps(item) for name in retired)
+            ]
+        self.r.installed_jobs = [j for j in self.r.installed_jobs if not j["metadata"]["name"].startswith("fred-agents")]
+        for name in ("control-plane-backend", "control-plane-worker"):
+            self.r.configs[name]["configuration"] = configuration("fred-manager")
+        self.preflight()
+        self.assertEqual(len(self.r.jobs), 2)
+        self.assertEqual(set(self.r.state["replicas"]), (reset.APPS - retired) | {"temporal"})
+        self.assert_read_only()
+        self.r.configs["control-plane-backend"]["configuration"]["scheduler"]["temporal"] = {"host": "external:7233"}
+        with self.assertRaises(reset.Refused):
+            self.preflight()
 
     def test_manager_worker_is_stopped_restored_and_optional(self):
         self.preflight()

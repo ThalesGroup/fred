@@ -8,6 +8,6 @@ REGISTRY_URL        ?= ghcr.io
 REGISTRY_NAMESPACE  ?= thalesgroup/fred-agent
 DOCKERFILE_PATH     ?= ./dockerfiles/Dockerfile-prod
 DOCKER_CONTEXT      ?= .
-IMAGE_NAME          ?= fred-manager
+IMAGE_NAME          ?= control-plane-backend
 IMAGE_TAG           ?= $(VERSION)
 IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)

@@ -477,55 +477,11 @@ def _kf_worker_app(kf_config: dict, *, partial_configuration: bool = False) -> d
     }))
 
 
-def _cp_app(cp_config: dict) -> dict:
-    _policy_entry = _obj({
-        "mode": _STRING,
-        "retention": _STRING,
-        "cancel_on_rejoin": _BOOL,
-    }, additional=True)
-
-    _policy_rule = _obj({
-        "rule_id": _STRING,
-        "match": _obj({
-            "team_id": _STRING,
-            "trigger": _STRING,
-        }, additional=True),
-        "action": _obj({
-            "retention": _STRING,
-        }, additional=True),
-    }, additional=True)
-
-    _purge_policy = _obj({
-        "default": _policy_entry,
-        "rules": _arr(_policy_rule),
-    })
-
-    _conversation_policy_catalog = _obj({
-        "version": _STRING,
-        "conversation_policies": _obj({
-            "purge": _purge_policy,
-        }, additional=True),
-    })
-
-    return _obj(_base_app_props({
-        "configuration": cp_config,
-        "conversation_policy_catalog": _conversation_policy_catalog,
-        "dotenv": _obj({}, additional=True),
-    }))
-
-
 def _manager_app(config: dict) -> dict:
     # Catalog policy validation remains in manager; its shape is independent of SQL.
     return _obj(_base_app_props({
         "configuration": config,
         "lifecycle_policy_catalog": {"type": ["object", "null"]},
-        "dotenv": _obj({}, additional=True),
-    }))
-
-
-def _cp_worker_app(cp_config: dict) -> dict:
-    return _obj(_base_app_props({
-        "configuration": cp_config,
         "dotenv": _obj({}, additional=True),
     }))
 
@@ -555,7 +511,6 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path, mana
     manager_config = _inline_refs(_load(manager_schema_path))
     fa_config = _inline_refs(_load(fa_schema_path))
     kf_config = _inline_refs(_load(kf_schema_path))
-    cp_config = _inline_refs(_load(cp_schema_path))
 
     return {
         "$schema": "https://json-schema.org/draft-07/schema#",
@@ -569,8 +524,6 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path, mana
         "properties": {
             "global": _GLOBAL,
             "applications": _obj({
-                "fred-manager": _manager_app(manager_config),
-                "fred-manager-worker": _manager_app(manager_config),
                 "fred-agents": _fred_agents_app(fa_config),
                 "frontend": _frontend_app(),
                 "knowledge-flow-backend": _kf_app(kf_config),
@@ -582,8 +535,8 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path, mana
                 "knowledge-flow-worker-extraction-fast": _kf_worker_app(kf_config, partial_configuration=True),
                 "knowledge-flow-worker-extraction-medium": _kf_worker_app(kf_config, partial_configuration=True),
                 "knowledge-flow-worker-extraction-rich": _kf_worker_app(kf_config, partial_configuration=True),
-                "control-plane-backend": _cp_app(cp_config),
-                "control-plane-worker": _cp_worker_app(cp_config),
+                "control-plane-backend": _manager_app(manager_config),
+                "control-plane-worker": _manager_app(manager_config),
             }),
         },
     }

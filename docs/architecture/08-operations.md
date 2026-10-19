@@ -11,22 +11,26 @@ identity client and bootstrap secrets, while the worker needs SQL and OpenFGA ac
 
 ## Deployment topology and environments
 
-The default Fred release deploys manager API/worker, Knowledge Flow API/worker and
-frontend, using three images. Each API/worker pair uses the same image. The Knowledge
-Flow worker serves all configured ingestion roles in this composition. The legacy
-control-plane and agent runtime are disabled. Existing frontend pages and routes
-remain present; calls to absent services fail at request time without preventing
-frontend startup.
+The default Fred release has five deployments: `control-plane-backend` and
+`control-plane-worker` run the Rust manager, `knowledge-flow-backend` and
+`knowledge-flow-worker` run Knowledge Flow, and `frontend` serves the existing UI.
+Each API/worker pair shares its backend image. The Python control-plane and agent
+runtime do not run. Existing UI requests for unimplemented APIs fail at request time.
 
-On local k3d, the factory builds the Fred checkout, imports images, reconciles
-identities and synchronizes the single `fred-app` release. Its published legacy
-release uses its pinned composition. A recognized standalone manager release is
-retired only after validating ownership, stateless inventory and continuity of
-live data/identity/lifecycle configuration and credential sources. Protected
-manifest/values snapshots precede removal. Foreground removal waits for old
-producers to stop before the Fred sync. There is an interruption between releases;
-application rollout is not atomic. A failed sync is recovered by retrying the same
-checkout and factory command, retaining infrastructure and data.
+The unchanged deployment factory builds the Fred checkout and synchronizes its
+`fred-app` release. The chart retains the standard control-plane service name,
+port and identity client. Existing manager state remains in database `fred`,
+OpenFGA store `fred-manager` and lifecycle queue/prefix `fred-manager-lifecycle`.
+The frontend keeps the public `/fred-manager/v1` contract and forwards it to the
+control-plane API. The factory's common Temporal host/namespace configure lifecycle
+work; the lifecycle queue and workflow prefix remain manager-owned.
+
+A pre-install/pre-upgrade hook applies embedded Rust SQL migrations using only the
+database connection. API startup also verifies/applies those migrations. An upgrade
+replaces the former manager-named workloads within the same Fred release. The chart
+refuses a separately owned manager deployment; retiring that release is an explicit
+operator action. Application rollout is not atomic. A failed sync is retried with
+the same checkout and command, retaining infrastructure, credentials and data.
 
 ## Background work and scheduling
 

@@ -578,10 +578,11 @@ make k3d-app APP=fred DIR=<this checkout>   # build this checkout, deploy it; re
 Create the operator-owned `fred-model-credentials` Secret with key `OPENAI_API_KEY`
 first, as described by the factory. This checkout builds three images and deploys
 five processes in `fred-app`: manager API/worker, Knowledge Flow API/worker and frontend.
-Use the matching factory revision; it safely retires the old standalone manager
-release without resetting data. Control-plane and fred-agents are disabled.
-Fred is then on <http://localhost:8088>. The first time, register on its login page and
-follow the token-retrieval instruction printed by `make k3d-app`: on this branch, you become platform owner.
+The factory's ordinary `swift` branch is sufficient: Rust manager supplies the
+`control-plane-backend` image and runs under the standard control-plane deployment
+names. No manager-specific factory overlay is needed. Existing manager data and
+credentials are retained; a separately owned manager release must be retired
+explicitly before installing this composition.
 
 ## Production mode
 

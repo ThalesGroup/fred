@@ -1,73 +1,64 @@
 ---
 schema: 1
-title: "Deploy Fred Manager as part of the Fred application release"
+title: "Deploy Rust manager through the standard Fred control-plane role"
 impact: major
 configuration: production
-configuration_reason: "Fred chart defaults now deploy manager API/worker, Knowledge Flow API/worker and frontend; control-plane and fred-agents are disabled. Manager configuration is validated by the generated chart schema."
+configuration_reason: "The control-plane image and deployments run Rust manager; the default Fred composition has five processes and three images."
 ---
 
 ## Applicability
 
-The manager reconstruction checkout and matching fred-deployment-factory integration.
-The default composition has five Deployments using three images. This replaces the
-legacy default composition; it is not feature parity with every control-plane API.
-The factory's pinned published legacy release retains its own composition.
+The `chore/rust-rebac` checkout uses the ordinary fred-deployment-factory `swift`
+contract. It deploys Rust manager API/worker as `control-plane-backend` and
+`control-plane-worker`, Knowledge Flow API/worker and frontend. The Python
+control-plane and fred-agents do not run. This is not full legacy API parity.
 
-## Prerequisites
+## Configuration and continuity
 
-Retain PostgreSQL, OpenFGA, Keycloak, Temporal and content/search infrastructure.
-Use coordinated SQL/OpenFGA backups for operational rollback. Keep existing
-`fred-secrets` and the operator-created `fred-model-credentials` Secret. The factory
-must include the manager-aware Fred values, identity declaration and transition hook.
+Configure manager and its lifecycle catalog on `applications.control-plane-backend`;
+both processes share those inputs and restart when they change. Keep API/worker
+image tags equal. The image named `control-plane-backend` is built from manager.
+The existing `control-plane` Keycloak client and
+`fred-secrets/KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` supply directory access;
+`CONTROL_PLANE_BOOTSTRAP_TOKEN` remains the bootstrap Secret key.
 
-## Configuration
-
-Set manager configuration and lifecycle catalog on `applications.fred-manager`;
-the API and worker share these mounts and both roll when either changes. Set their
-image tags together. Reference existing SQL/OpenFGA Secrets for both processes,
-and identity-client/bootstrap Secrets for the API. The factory retains
-`CONTROL_PLANE_BOOTSTRAP_TOKEN` as the bootstrap Secret key. Lifecycle cleanup
-remains disabled by default. The single Knowledge Flow worker serves all ingestion
-roles; specialized workers remain opt-in. A direct Helm deployment requires its
-own addresses, ingress and credential references.
+Retain infrastructure, `fred-secrets` and `fred-model-credentials`. Manager keeps
+database `fred`, store `fred-manager` and lifecycle queue/prefix
+`fred-manager-lifecycle`. The common Temporal host/namespace configure lifecycle
+work without changing its queue. Cleanup remains disabled by default. The Rust
+migration hook uses only `DATABASE_URL` and applies embedded SQL migrations;
+it neither creates an FGA store nor bootstraps an identity.
 
 ## Upgrade
 
-For local k3d, run `make k3d-app APP=fred DIR=../fred` from the matching factory.
-It builds/imports manager, Knowledge Flow and frontend, then synchronizes `fred-app`.
-There is no separate manager deployment command.
+From the unchanged factory `swift` checkout, run:
 
-When `fred-manager` already exists as a standalone release, the factory checks its
-live ownership, known stateless inventory, storage/identity/lifecycle settings,
-policy catalog and environment sources before removal. Unrecognized resources,
-persistence, hooks or changed protected settings stop the transition. Reconcile
-those differences explicitly before retrying; do not bypass the checks.
-The hook saves protected manifest/values snapshots under the printed cache directory,
-removes the old release with foreground waiting, then the ordinary Fred sync
-creates the replacement. This causes a manager interruption; the sync is not atomic.
-No database, FGA store, account or foundation Secret is reset.
+```sh
+make k3d-app APP=fred DIR=../fred
+```
 
-## Validation
+The Fred build hook supplies three images and the factory synchronizes `fred-app`.
+The previous manager-named workloads in that same release are replaced by the
+control-plane-named workloads. A separately owned `fred-manager` deployment is
+refused: inspect and explicitly retire that application release while retaining
+infrastructure and data before retrying. No automatic standalone transition or
+data reset is performed.
 
-Verify five ready application Deployments, identical API/worker image references
-for each pair and no control-plane/fred-agents Deployment. Check frontend and manager
-health, existing accounts/consent/spaces and the paged Resources folder response.
-Rerun the command: it upgrades the existing Fred release without recreating the old
-manager release. A data reset is neither required nor part of this procedure.
+## Validation and recovery
 
-## Rollback
+Check the five ready application Deployments and matching API/worker image
+references. Verify existing accounts, consent, roles and folders through the UI.
+Both `/fred-manager/v1` and `/control-plane/v1` reach manager through the frontend.
+Repeat the command to verify an ordinary upgrade of the same release.
 
-After a failed sync, correct the cause and rerun the same command with the same
-Fred/factory revisions. Data and credentials remain in the infrastructure; the
-protected snapshots support inspection and are not a standalone rollback chart.
-Do not run old and integrated manager producers together. Returning to an older
-manager binary may require the coordinated pre-upgrade data backup because applied
-SQL migration compatibility still applies. Removing the entire `fred-app` release
-also removes Knowledge Flow and frontend; it is not a manager-only rollback.
+Rollout is not atomic. After a failed sync, correct its cause and repeat the same
+command. Keep coordinated SQL/OpenFGA backups before upgrades; returning to an
+older binary is subject to applied SQL migration compatibility. Do not run two
+separately owned manager releases against the same state. Removing `fred-app`
+also removes Knowledge Flow and frontend.
 
-## Limitations
+## Scope
 
-Application packaging does not migrate legacy content, roles or service APIs.
-Existing UI and legacy proxy routes remain; requests to stopped services return
-errors. Manager owns the reconstructed folder journey; document ingestion remains
-outside that journey. This lot does not change the Docker Compose development topology.
+UI components and generated manager paths are unchanged. Calls for APIs not yet
+reconstructed may fail. Packaging does not migrate Knowledge Flow content, legacy
+roles or document ingestion into manager. Docker Compose topology is unchanged.

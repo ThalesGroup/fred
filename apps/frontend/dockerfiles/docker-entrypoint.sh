@@ -44,7 +44,8 @@ set -eu
 # tune it. Layout and variables: apps/frontend/README.md, "Theme overlay".
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
-: "${FRONTEND_FRED_MANAGER_UPSTREAM:=http://fred-manager:8400}"
+: "${FRONTEND_FRED_MANAGER_UPSTREAM:=http://control-plane-backend:8222}"
+: "${FRONTEND_FRED_MANAGER_API_PREFIX:=/control-plane}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
 : "${FRONTEND_EVALUATION_UPSTREAM:=http://fred-evaluation-backend}"
 : "${FRONTEND_CLIENT_MAX_BODY_SIZE:=150m}"
@@ -239,8 +240,9 @@ server {
     }
 
     location /fred-manager/ {
-        # Optional service: defer DNS resolution so its absence does not stop nginx.
+        # Keep generated manager routes stable while the deployment uses control-plane.
         set \$fred_manager_upstream ${FRONTEND_FRED_MANAGER_UPSTREAM};
+        rewrite ^/fred-manager/(.*)$ ${FRONTEND_FRED_MANAGER_API_PREFIX}/\$1 break;
         proxy_pass \$fred_manager_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;

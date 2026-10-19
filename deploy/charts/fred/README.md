@@ -13,24 +13,23 @@ setting.
 
 | Application | Role | Enabled by default |
 | --- | --- | --- |
-| `fred-manager` | admission, governance, spaces, folders and authorization API | yes |
-| `fred-manager-worker` | manager lifecycle work | yes |
+| `control-plane-backend` | admission, governance, spaces, folders and authorization API | yes |
+| `control-plane-worker` | manager lifecycle work | yes |
 | `fred-agents` | legacy agent runtime | no |
 | `frontend` | web UI, behind your ingress | yes |
 | `knowledge-flow-backend` | document ingestion, search and storage API | yes |
 | `knowledge-flow-worker` | ingestion worker serving all roles | yes |
 | `knowledge-flow-worker-extraction-{fast,medium,rich}` | optional dedicated extraction workers | no |
-| `control-plane-backend` | legacy product API | no |
-| `control-plane-worker` | control-plane background work | no |
 
 Python applications can run database migrations as Helm hook Jobs
-(`applications.<name>.migration.enabled`). Manager applies its SQL migrations at API startup.
+(`applications.<name>.migration.enabled`). The control-plane hook runs `fred-manager migrate` using only `DATABASE_URL`;
+manager also applies its SQL migrations at API startup.
 
 ## Requirements
 
 - A Kubernetes cluster and [Helm](https://helm.sh/docs/intro/install/) 3 or 4.
 - The services Fred uses, reached by name from the cluster: PostgreSQL, OpenSearch,
-  Keycloak (a realm with `app`, `fred-manager` and Knowledge Flow clients,
+  Keycloak (a realm with `app`, `control-plane` and Knowledge Flow clients,
   plus clients required by any explicitly enabled legacy applications), OpenFGA, Temporal, and
   S3-compatible storage or Google Cloud Storage.
 
@@ -48,11 +47,11 @@ attached to its [GitHub release](https://github.com/ThalesGroup/fred/releases).
 ## Images
 
 The default chart runs three images, `ghcr.io/thalesgroup/fred-agent/<app>`:
-`fred-manager`, `knowledge-flow-backend` and `frontend`. Each API/worker pair uses
+`control-plane-backend`, `knowledge-flow-backend` and `frontend`. Each API/worker pair uses
 its backend's image. The tag defaults to the chart's `appVersion`; set matching
 `applications.<app>.image.tag` values for each pair when overriding it.
-`deploy/k3d/build` builds these three images from the same checkout. Legacy image
-publication remains available for deployments that explicitly enable those apps.
+`deploy/k3d/build` builds these three images from the same checkout. The control-plane image is built from `apps/fred-manager`; the Python
+control-plane image is not published by this checkout.
 
 ## Your values file
 
@@ -60,10 +59,9 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
 
 - **Anchors do not carry overrides.** `values.yaml` shares blocks between an API and its
   worker through YAML anchors, which Helm resolves when it reads the file. A setting shared
-  by `knowledge-flow-backend` and `knowledge-flow-worker` (or `control-plane-backend` and
-  `control-plane-worker`) must therefore be repeated for both in your file.
+  by `knowledge-flow-backend` and `knowledge-flow-worker` must therefore be repeated for both in your file.
 - **Manager configuration is shared.** Set configuration and `lifecycle_policy_catalog`
-  on `applications.fred-manager`: both manager processes mount these same ConfigMaps
+  on `applications.control-plane-backend`: both manager processes mount these same ConfigMaps
   and restart when either changes. Worker credentials remain separate.
 - **Credentials by reference.** Point each application's `extraEnvVars` at a Secret that
   exists before the release (`valueFrom.secretKeyRef`), and give each migration Job its
@@ -73,11 +71,12 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
 
 The local k3d example in fred-deployment-factory applies
 [`k3d-apps/fred/values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/values.yaml)
-first, then
-[`k3d-apps/fred/manager-values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/manager-values.yaml)
-for manager-aware checkouts, then built image tags and operator overrides. Both
-files are needed for this composition: manager addresses and Secret references
-are in the second overlay. The security profile (`c3`) is described in
+followed by built image tags and operator overrides. No manager-specific factory
+overlay or branch is required. The existing control-plane identity and Secret keys
+are reused; database `fred`, OpenFGA store `fred-manager` and lifecycle queue/prefix
+`fred-manager-lifecycle` remain unchanged. Common `scheduler.temporal.host` and
+`namespace` settings on the API feed its shared lifecycle connection.
+The security profile (`c3`) is described in
 [Security profiles & classification tiers](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#security-profiles--classification-tiers).
 To brand the frontend without rebuilding it, see
 [Theme overlay](https://github.com/ThalesGroup/fred/blob/swift/apps/frontend/README.md#theme-overlay-branding-assets-without-a-rebuild).

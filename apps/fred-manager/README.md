@@ -32,12 +32,13 @@ make run
 ```
 make k3d-app APP=fred DIR=../fred            # build, import, sync
 make k3d-app-validate APP=fred DIR=../fred   # lint and render only
-make k3d-logs SVC=fred-manager
+make k3d-logs SVC=control-plane-backend
 ```
 
 This command deploys manager API/worker, Knowledge Flow API/worker and frontend
-together. The factory includes the guarded transition from the former standalone
-manager release; use its matching integration revision. Open Fred, sign in with your own
+together using the unchanged factory `swift` contract. Rust runs in the
+`control-plane-backend` and `control-plane-worker` deployments; the Python
+control-plane does not run. Open Fred, sign in with your own
 Keycloak account, read and accept the CGU, then enter the deployment bootstrap
 secret in the UI. The local service uses `FRED_BOOTSTRAP_TOKEN` from `config/.env`.
 The k3d Fred values read the cluster secret `fred-secrets` key
@@ -103,9 +104,11 @@ non-personal space, and the last owner of an organization, cannot be revoked. Ca
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
 
 Platform grants, organization-owner grants and operator `create-org` require the manager's service client. The factory
-consumes its `k3d-apps/fred/identities.yaml` during `k3d-app`; copy its generated
-`KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` from `fred-secrets` to the host `.env` when
-running locally against that realm. `docker-up` alone does not provision this client.
+provisions the `control-plane` client and its directory grants. The cluster uses
+`KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` from `fred-secrets`. To reuse that identity
+on the host, set `security.m2m.client_id` to `control-plane`, set its
+`secret_env_var` to `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET`, and supply that secret
+in the host `.env`.
 The [deployment chapter](../../docs/architecture/A3-manager-operations.md) describes configuration.
 
 ## Import a provisioning bundle

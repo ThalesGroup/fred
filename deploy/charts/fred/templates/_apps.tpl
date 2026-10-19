@@ -20,3 +20,16 @@ Returns the resolved application as YAML; callers pipe it through `fromYaml`.
 {{- end -}}
 {{- mergeOverwrite (deepCopy $base) (deepCopy $app) | toYaml -}}
 {{- end -}}
+
+{{/* Share manager runtime configuration; factory's Temporal connection also serves lifecycle work. */}}
+{{- define "fred.managerConfiguration" -}}
+{{- $config := deepCopy (index .Values.applications "control-plane-backend").configuration -}}
+{{- $scheduler := $config.scheduler -}}
+{{- $connection := $scheduler.temporal | default dict -}}
+{{- range $key := list "host" "namespace" -}}
+  {{- if hasKey $connection $key -}}
+    {{- $_ := set $scheduler.lifecycle.temporal $key (index $connection $key) -}}
+  {{- end -}}
+{{- end -}}
+{{- $config | toYaml -}}
+{{- end -}}

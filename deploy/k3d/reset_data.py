@@ -52,6 +52,13 @@ INDEXES = {"vector-index-mistral", "app-logs-index"}
 RELEASE = "meta.helm.sh/release-name"
 
 
+def manager_configuration(name, config):
+    return name in MANAGER_APPS or (
+        name in {"control-plane-backend", "control-plane-worker"}
+        and config.get("security", {}).get("rebac", {}).get("store_name") == "fred-manager"
+    )
+
+
 class Refused(RuntimeError):
     pass
 
@@ -185,6 +192,9 @@ class Reset:
                 "autoscaling is unsupported",
             )
             c = app["configuration"]
+            manager = manager_configuration(name, c)
+            if manager and name == "control-plane-worker":
+                c = values["applications"]["control-plane-backend"]["configuration"]
             pg = c["storage"]["postgres"]
             require(
                 pg.get("host") == "postgres"
@@ -195,22 +205,28 @@ class Reset:
             )
             fga = c["security"]["rebac"]
             require(
-                (name in MANAGER_APPS or fga.get("type") == "openfga")
+                (manager or fga.get("type") == "openfga")
                 and fga.get("api_url") in ("http://openfga:9080", "http://openfga:9080/")
-                and fga.get("store_name", "fred") == ("fred-manager" if name in MANAGER_APPS else "fred")
+                and fga.get("store_name", "fred") == ("fred-manager" if manager else "fred")
                 and not fga.get("store_id")
                 and not fga.get("authorization_model_id")
                 and fga.get("create_store_if_needed", True)
                 and fga.get("sync_schema_on_init", True),
                 "custom OpenFGA storage is unsupported",
             )
-            if name not in MANAGER_APPS:
+            if not manager:
                 temporal = c.get("scheduler", {}).get("temporal", {})
                 require(
                     temporal.get("host") == "temporal:7233" and temporal.get("namespace", "default") == "default",
                     "custom Temporal storage is unsupported",
                 )
-            if name in MANAGER_APPS:
+            if manager:
+                connection = c.get("scheduler", {}).get("temporal", {})
+                require(
+                    connection.get("host", "temporal:7233") == "temporal:7233"
+                    and connection.get("namespace", "default") == "default",
+                    "custom lifecycle Temporal storage is unsupported",
+                )
                 lifecycle = c.get("scheduler", {}).get("lifecycle", {}).get("temporal", {})
                 require(
                     lifecycle.get("host", "temporal:7233") == "temporal:7233"
@@ -218,7 +234,7 @@ class Reset:
                     "custom lifecycle Temporal storage is unsupported",
                 )
             storage = c["storage"]
-            if name not in MANAGER_APPS:
+            if not manager:
                 require(
                     storage["opensearch"]["host"] == "https://opensearch:9200",
                     "custom OpenSearch host is unsupported",
@@ -249,7 +265,7 @@ class Reset:
                         and s["bucket_name"] == bucket,
                         f"custom {key} is unsupported",
                     )
-            elif name.startswith("control-plane"):
+            elif name.startswith("control-plane") and not manager:
                 s = storage["content_storage"]
                 require(
                     s["type"] == "minio"
@@ -356,9 +372,13 @@ class Reset:
             self.deployments[n]["metadata"]["annotations"][RELEASE] == "fred-app"
             for n in MANAGER_APPS & self.deployments.keys()
         )
+        rust_control_plane = manager_configuration(
+            "control-plane-backend",
+            self.values("fred-app").get("applications", {}).get("control-plane-backend", {}).get("configuration", {}),
+        )
         required_apps = (
             MANAGER_APPS | {"frontend", "knowledge-flow-backend", "knowledge-flow-worker"}
-            if integrated else APPS - MANAGER_APPS
+            if integrated else APPS - MANAGER_APPS - ({"fred-agents"} if rust_control_plane else set())
         )
         require(
             required_apps | INFRA <= self.deployments.keys(),

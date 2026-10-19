@@ -1,29 +1,22 @@
 ## Why
 
-Fred's frontend and manager can currently be deployed independently: the observed Resources crash followed a current frontend talking to the old standalone manager. One Fred deployment must build and run the agreed manager-based composition together.
+The developer needs one ordinary factory checkout on swift and the usual Fred deployment command. The factory-specific manager integration was withdrawn in favor of preserving the control-plane deployment contract.
 
 Tracking: https://github.com/ThalesGroup/fred/issues/3092
 
 ## What Changes
 
-- Make manager a normal Fred chart application and image build/publication entry.
-- **BREAKING**: the branch's Fred deployment runs manager API/worker, knowledge-flow API/worker and frontend: five application workloads sharing three images. Control-plane API/worker and fred-agents are disabled and are not built by the local Fred command.
-- Keep `make k3d-app APP=fred DIR=../fred` as the deployment command, including manager identity, configuration and bootstrap guidance. Retire the standalone manager deployment.
-- Migrate the existing standalone Helm release without resetting identities, data, roles or secrets; make reruns converge.
-- Preserve the complete UI. Requests for services not reconstructed remain explicit failures; their absence must not prevent frontend startup.
+- Build the Rust manager as the control-plane-backend image and run it as control-plane-backend/control-plane-worker in Fred's chart.
+- Keep five application workloads and three images: Rust API/worker, Knowledge Flow API/worker, frontend. Disable Python control-plane and fred-agents execution.
+- Consume unchanged factory swift instance values, identities and secrets. Keep UI calls and layout unchanged through gateway routing.
+- Preserve manager database, OpenFGA store, bootstrap, consent and lifecycle queue identities when upgrading the existing fred-app release.
 
 ## Capabilities
 
-### New Capabilities
-
-None.
-
 ### Modified Capabilities
 
-- `local-helm-deployment`: one coordinated Fred deployment includes manager and preserves an existing installation during composition changes.
+- `local-helm-deployment`: Fred owns implementation selection behind the stable control-plane deployment contract.
 
 ## Impact
 
-Fred chart/defaults/generated schema, local build mapping, image CI catalog, frontend proxy, deployment/reset consumers, manager README, arc42 operations and migration guide. Companion factory work covers its Fred instance values, identity declaration, hooks and guidance; preserve existing local edits and keep the generic engine application-neutral.
-
-The active `deploy-fred-with-helmfile` change establishes the generic mechanism and published-release workflow. This is a separate reconstruction outcome; its old four-image/six-workload assertions do not describe this branch's new composition. Unrelated validation tasks in that change are not closed by this lot. Docker Compose, deletion of Python source, document ingestion and completing missing product APIs are excluded.
+Fred chart/schema, Rust SQL migration entry point, image build/publication, frontend gateway, reset inventory and architecture/operations documentation. No factory edits or cluster mutation by the assistant. API reconstruction and document ingestion are excluded. The developer confirmed this revision on 2026-10-19.

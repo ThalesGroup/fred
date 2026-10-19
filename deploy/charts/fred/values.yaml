@@ -438,87 +438,6 @@ x-kf-filesystem: &kf-filesystem
   # prefix: ""                     # optional; lets several logical roots share one bucket
   # project_id: ""                 # optional; inferred from ADC when empty
 
-# ── Shared control-plane configuration (backend + worker) ────────────────────
-
-x-cp-security: &cp-security
-  # ── Classification posture (RUNTIME-07 rev. 2) ────────────────────────────────
-  # `profile: c3` makes the control-plane refuse to boot unless user + m2m + rebac
-  # are all enabled, and forces strict JWT issuer/audience validation (fail-closed).
-  # Enforced at startup by the control-plane backend; the control-plane-worker shares
-  # this block but does not serve auth'd requests, so the gate is a no-op there.
-  # Leave unset for C1/C2 (dev / baseline). See deploy/README.md.
-  # profile: c3
-  m2m:
-    enabled: true
-    client_id: "control-plane"
-    realm_url: "http://your.keycloak.host/realms/your-realm/app"
-    provider: keycloak
-    # scope: null
-    # token_url: null
-    secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
-  user:
-    enabled: true
-    client_id: "app"
-    realm_url: "http://your.keycloak.host/realms/your-realm/app"
-    provider: keycloak
-    # audience: null
-    # scope: null
-    # jwks_url: null
-    # token_url: null
-    # roles_claim: null
-    # claims:
-    #   uid: sub
-    #   username: preferred_username
-    #   email: email
-    #   given_name: given_name
-    #   family_name: family_name
-  user_directory: keycloak
-  authorized_origins:
-    - "http://your.host:80"
-  rebac:
-    enabled: true
-    type: openfga
-    api_url: "http://openfga:8080"
-    timeout_millisec: 5000
-  delegation:
-    # Delegation lets a program act for a person. The program (a "workload") signs
-    # in with its own service account: a Keycloak client identity that belongs to
-    # the program, not to anyone. With each call it names the person, run and
-    # agent the call is for. Each backend has one switch per direction.
-    #
-    # accept_delegated_calls (incoming) - this backend's switch. It believes the
-    # person a calling workload names, but only when that workload's token carries
-    # the role named by caller_role (default delegation_caller) on the client
-    # named by audience (default fred-delegation). The role is granted in Keycloak
-    # to the caller's service account; no list of callers is kept here.
-    #
-    # act_for_people (outgoing) - this backend never calls others for a person;
-    # leave it false.
-    #
-    # Both are off by default; turn on the matching switch on each side together.
-    act_for_people: false
-    accept_delegated_calls: false
-
-x-cp-scheduler: &cp-scheduler
-  enabled: true
-  backend: "temporal"
-  temporal:
-    host: "localhost:7233"
-    namespace: "default"
-    task_queue: "control-plane-lifecycle"
-    workflow_id_prefix: "control-plane"
-    connect_timeout_seconds: 5
-
-x-cp-storage: &cp-storage
-  postgres:
-    host: localhost
-    port: 5432
-    database: fred
-    username: fred
-  content_storage:
-    type: local
-    root_path: /home/fred-user/.fred/control-plane/content-storage
-
 # ════════════════════════════════════════════════════════════════════
 # ── 2. Global settings ──────────────────────────────────────────────
 global:
@@ -1980,514 +1899,10 @@ applications:
         temporal:
           ingestion_max_concurrent_activities: 1
 
-  # ── 3.5 Control Plane Backend ─────────────────────────────────────
+  # The control-plane deployment role is implemented by the Rust manager.
   control-plane-backend:
-    enabled: false
-    applicationName: control-plane-backend
-    deployment:
-      enabled: true
-    replicaCount: 1
-    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
-    autoscaling:
-      enabled: false
-      minReplicas: 1
-      maxReplicas: 3
-      metrics:
-        - type: Resource
-          resource:
-            name: cpu
-            target:
-              type: Utilization
-              averageUtilization: 70
-      behavior:
-        scaleUp:
-          stabilizationWindowSeconds: 0
-          policies:
-            - type: Pods
-              value: 1
-              periodSeconds: 60
-        scaleDown:
-          stabilizationWindowSeconds: 600
-          policies:
-            - type: Pods
-              value: 1
-              periodSeconds: 180
-    statefulset:
-      enabled: false
-    job:
-      enabled: false
-    migration:
-      # OFF by default, same reason as knowledge-flow's. This tree owns the
-      # users/teammetadata tables knowledge-flow reads at boot - upgrade it first.
-      enabled: false
-      scaleDown: true
-      backoffLimit: 3
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-    image:
-      repository: ghcr.io/thalesgroup/fred-agent/control-plane-backend
-      tag: ""
-      pullPolicy: IfNotPresent
-    command:
-      enabled: true
-      data:
-        - "uvicorn"
-        - "control_plane_backend.main:create_app"
-        - "--factory"
-        - "--host"
-        - "0.0.0.0"
-        - "--port"
-        - "8222"
-        - "--loop"
-        - "asyncio"
-    env:
-      - name: CONFIG_FILE
-        value: "/app/config/configuration.yaml"
-    # ── Root platform-admin bootstrap secret (AUTHZ-07 Part 8 §40-42) ───────
-    # Control Plane is the only pod that ever needs this token: it validates
-    # POST /control-plane/v1/bootstrap/platform-admin. This chart never
-    # creates the Secret, never carries a literal value, and never mounts a
-    # bootstrap_token_file inside Kubernetes — the instance overlay (a real
-    # deployment factory) supplies a reference to a Secret it already owns.
-    # `extraEnvVars` only reaches this application's Deployment, never the
-    # Alembic migration Job (`hook-migration.yaml` renders `.app.env` only) —
-    # the migration Job has no need for the bootstrap token:
-    #
-    #   extraEnvVars:
-    #     - name: FRED_BOOTSTRAP_TOKEN
-    #       valueFrom:
-    #         secretKeyRef:
-    #           name: <existing Secret name, owned by the instance's Foundation>
-    #           key: <bootstrap token key>
-    #           optional: false
-    #
-    # `configuration.app.bootstrap_token_env_var` below already names the
-    # variable Control Plane reads; leaving this list empty (the chart
-    # default) means no bootstrap secret is wired and the backend's own
-    # fail-closed logic (`bootstrap/service.py::_read_configured_token`)
-    # makes the endpoint explicitly unavailable rather than silently open.
-    # `optional: false` on a configured reference makes Kubernetes itself
-    # refuse to start the pod if the named Secret/key does not exist —
-    # fail-closed at the platform level too, not just the application level.
-    extraEnvVars: []
-    ports:
-      - name: http
-        containerPort: 8222
-      - name: metrics
-        containerPort: 9222
-    service:
-      annotations: {}
-      extraLabels: {}
-      type: ClusterIP
-      ports:
-        - name: http
-          port: 8222
-          targetPort: 8222
-    metricsService:
-      enabled: false
-      annotations: {}
-      extraLabels: {}
-      type: ClusterIP
-      port: 9222
-      targetPort: 9222
-      serviceMonitor:
-        enabled: false
-        annotations: {}
-        labels: {}
-        interval: 30s
-        scrapeTimeout: 10s
-        path: /metrics
-        scheme: http
-        honorLabels: false
-        relabelings: []
-        metricRelabelings: []
-        namespaceSelector: {}
-    ingress:
-      enabled: false
-      className: ""
-      hosts: []
-    httpRoute:
-      enabled: false
-      annotations: {}
-      parentRefs: []
-      hostnames: []
-      rules: []
-    volumeMounts:
-      - name: control-plane-backend-vol
-        mountPath: /app/config/configuration.yaml
-        subPath: configuration.yaml
-      - name: control-plane-backend-catalog-vol
-        mountPath: /app/config/conversation_policy_catalog.yaml
-        subPath: conversation_policy_catalog.yaml
-      - name: control-plane-backend-env-vol
-        mountPath: /app/config/.env
-        subPath: .env
-    volumes:
-      - name: control-plane-backend-vol
-        configMap:
-          name: control-plane-backend-back
-      - name: control-plane-backend-catalog-vol
-        configMap:
-          name: control-plane-backend-catalog
-      - name: control-plane-backend-env-vol
-        secret:
-          secretName: control-plane-backend-env
-    probes:
-      lifecycle:
-        enabled: false
-      livenessProbe:
-        enabled: true
-        data:
-          failureThreshold: 10
-          httpGet:
-            path: /control-plane/v1/healthz
-            port: 8222
-          periodSeconds: 10
-      readinessProbe:
-        enabled: true
-        data:
-          failureThreshold: 10
-          httpGet:
-            path: /control-plane/v1/ready
-            port: 8222
-          periodSeconds: 10
-      startupProbe:
-        enabled: false
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-          - "ALL"
-      runAsUser: 1000
-      runAsNonRoot: true
-      seccompProfile:
-        type: RuntimeDefault
-    serviceAccount:
-      annotations: {}
-      labels: {}
-      automountServiceAccountToken: true
-      rbac:
-        enabled: true
-        permissions: {}
-    kubeconfig:
-      enabled: false
-    configuration_type:
-      backend: true
-      frontend: false
-    configurationFileName: "configuration.yaml"
-    # ── Application configuration (rendered as ConfigMap) ───────────────
-    configuration:
-      app:
-        name: "Control Plane Backend"
-        base_url: "/control-plane/v1"
-        address: "127.0.0.1"
-        port: 8222
-        log_level: "info"
-        log_format: "json"
-        # Env var Control Plane reads the one-time root bootstrap secret from
-        # (AUTHZ-07 Part 8 §40-42). Just a variable name, never a secret value
-        # — see `extraEnvVars` above for how the instance overlay supplies the
-        # real value via a Kubernetes Secret reference. Never set
-        # `bootstrap_token_file` here: that path is local-dev only and is
-        # never rendered into a Kubernetes deployment by this chart.
-        bootstrap_token_env_var: "FRED_BOOTSTRAP_TOKEN"
-        # Terms of use (CGU) to accept before using Fred, e.g. "v1"; null turns the
-        # screen off. Users accept again whenever this version changes; the text is
-        # the frontend's legal "gcu" page (FORKING_GUIDE.md, "Legal pages").
-        gcu_version: null
-
-      observability:
-        kpi:
-          prometheus:
-            port: 9222
-
-      security:  *cp-security
-      scheduler: *cp-scheduler
-      storage:   *cp-storage
-      platform:
-        frontend:
-          feature_flags:
-            # Deployment-wide kill switch for the integrated Apps surface,
-            # catalog/API, and frontend application-service gateway.
-            enableApplications: false
-            enableInformationSystems: false
-          # Optional deployer-configured upload warning, shown on upload
-          # surfaces (document upload drawer, chat attachments). Omit to show
-          # nothing. Texts resolved from the user's locale, "en" fallback.
-          # Platform-wide announcement banners are NOT configured here — a
-          # platform admin authors them at runtime from the Announcements
-          # admin page.
-          # upload_warning:
-          #   severity: warning # info | warning | error | success
-          #   messages:
-          #     en: "Do not upload sensitive or classified documents."
-          #     fr: "Ne téléversez pas de documents sensibles ou classifiés."
-        knowledge_flow_base_url: *kf-url
-        runtime_catalog_sources:
-          - runtime_id: fred-agents
-            base_url: http://fred-agents/fred/agents/v2
-            enabled: true
-            ingress_prefix: /fred/agents/v2
-        # Applications this deployment serves. Expressed like
-        # runtime_catalog_sources above: a flat list an operator maintains, one
-        # entry per independently built and deployed component.
-        #
-        # ui_prefix is BROWSER-facing — it is what the application frame loads.
-        # While the UI is served from Fred's origin it must be exactly
-        # /apps/<app_id> (the gateway routes on that segment, so anything else
-        # 404s, and config load rejects it). Make it an absolute https URL the
-        # day the UI moves to its own origin. No other value has to change
-        # then, which is the point of naming it here rather than assuming it
-        # in the frontend.
-        #
-        # Proxy upstreams are NOT registered here. The frontend gateway owns
-        # them (FRONTEND_APPLICATIONS_JSON above), because nginx, not the
-        # control plane, does the proxying. app_id is the only key both halves
-        # carry.
-        #
-        # Registration grants no access; administrators manage team entitlements.
-        # Catalog entries resolve to typed application authorization resources.
-        #
-        # Worked example — the same application registered above:
-        # application_sources:
-        #   - app_id: acme-forecast
-        #     ui_prefix: /apps/acme-forecast
-        #     version: 1.0.0
-        #     icon: insights
-        #     display_name:
-        #       en: "Forecast"
-        #       fr: "Prévisions"
-        #     description:
-        #       en: "Demand forecasting for the selected team."
-        #       fr: "Prévision de la demande pour l'équipe sélectionnée."
-        #     enabled: true
-      # Knowledge Base clients allowed to publish their definitions, each with
-      # the one prefix it owns; client_id is the token's `azp`. Empty by
-      # default: nobody publishes. A prefix is registered once and may not
-      # cover another. A platform admin still enables each definition per team.
-      # knowledge_bases:
-      #   publishers:
-      #     - client_id: kb-acme
-      #       prefix: acme.kb
-      policies:
-        purge_catalog_path: /app/config/conversation_policy_catalog.yaml
-
-    # ── Conversation policy catalog (rendered as ConfigMap via configmap-catalog) ──
-    conversation_policy_catalog:
-      version: v1
-      conversation_policies:
-        purge:
-          # Platform-only PERSONAL-space delete grace (CTRLP-12 A5). Unset →
-          # personal deletes erase immediately. Uncomment to defer + keep for a
-          # bounded post-incident read.
-          # personal_delete_grace: P3D
-          default:
-            mode: deferred_delete
-            retention: PT30S
-            cancel_on_rejoin: true
-            # Platform retention CEILINGS for team space (CTRLP-12 B3): "platform
-            # caps, team may only tighten". MUST be present — without a cap the
-            # resolver rejects any team override.
-            team_delete_grace: P30D
-            max_idle: P365D
-          rules:
-            - rule_id: purge.team.swiftpost
-              match:
-                team_id: swiftpost
-                trigger: member_removed
-              action:
-                retention: PT60S
-            - rule_id: purge.team.northbridge
-              match:
-                team_id: northbridge
-                trigger: member_removed
-              action:
-                retention: PT120S
-
-    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
-    dotenv:
-      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: ""
-      OPENFGA_API_TOKEN: ""
-      MINIO_SECRET_KEY: ""
-      FRED_POSTGRES_PASSWORD: ""
-      OPENSEARCH_PASSWORD: ""
-
-  # ── 3.6 Control Plane Worker ──────────────────────────────────────
-  control-plane-worker:
-    enabled: false
-    applicationName: control-plane-worker
-    deployment:
-      enabled: false
-    replicaCount: 1
-    # CPU autoscaling example. Add CPU requests to deployment values before enabling.
-    autoscaling:
-      enabled: false
-      minReplicas: 1
-      maxReplicas: 3
-      metrics:
-        - type: Resource
-          resource:
-            name: cpu
-            target:
-              type: Utilization
-              averageUtilization: 70
-      behavior:
-        scaleUp:
-          stabilizationWindowSeconds: 0
-          policies:
-            - type: Pods
-              value: 1
-              periodSeconds: 60
-        scaleDown:
-          stabilizationWindowSeconds: 600
-          policies:
-            - type: Pods
-              value: 1
-              periodSeconds: 180
-    statefulset:
-      enabled: false
-    job:
-      enabled: false
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-    image:
-      repository: ghcr.io/thalesgroup/fred-agent/control-plane-backend
-      tag: ""
-      pullPolicy: IfNotPresent
-    command:
-      enabled: true
-      data:
-        - "python"
-        - "-m"
-        - "control_plane_backend.main_worker"
-    env:
-      - name: CONFIG_FILE
-        value: "/app/config/configuration.yaml"
-    ports:
-      - name: worker
-        containerPort: 8223
-    service:
-      enabled: false
-      annotations: {}
-      extraLabels: {}
-      type: ClusterIP
-      ports:
-        - name: worker
-          port: 8223
-          targetPort: 8223
-          protocol: TCP
-    metricsService:
-      enabled: false
-      annotations: {}
-      extraLabels: {}
-      type: ClusterIP
-      port: 9222
-      targetPort: 9222
-      serviceMonitor:
-        enabled: false
-        annotations: {}
-        labels: {}
-        interval: 30s
-        scrapeTimeout: 10s
-        path: /metrics
-        scheme: http
-        honorLabels: false
-        relabelings: []
-        metricRelabelings: []
-        namespaceSelector: {}
-    ingress:
-      enabled: false
-      className: ""
-      hosts: []
-    httpRoute:
-      enabled: false
-      annotations: {}
-      parentRefs: []
-      hostnames: []
-      rules: []
-    volumeMounts:
-      - name: control-plane-worker-vol
-        mountPath: /app/config/configuration.yaml
-        subPath: configuration.yaml
-      - name: control-plane-worker-env-vol
-        mountPath: /app/config/.env
-        subPath: .env
-    volumes:
-      - name: control-plane-worker-vol
-        configMap:
-          name: control-plane-worker-back
-      - name: control-plane-worker-env-vol
-        secret:
-          secretName: control-plane-backend-env
-    probes:
-      lifecycle:
-        enabled: false
-      livenessProbe:
-        enabled: false
-        data: {}
-      readinessProbe:
-        enabled: false
-        data: {}
-      startupProbe:
-        enabled: false
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-          - "ALL"
-      runAsUser: 1000
-      runAsNonRoot: true
-      seccompProfile:
-        type: RuntimeDefault
-    serviceAccount:
-      annotations: {}
-      labels: {}
-      automountServiceAccountToken: true
-      rbac:
-        enabled: true
-        permissions: {}
-    kubeconfig:
-      enabled: false
-    configuration_type:
-      backend: true
-      frontend: false
-    configurationFileName: "configuration.yaml"
-    # ── Application configuration (rendered as ConfigMap) ───────────────
-    configuration:
-      app:
-        name: "Control Plane Backend"
-        base_url: "/control-plane/v1"
-        address: "127.0.0.1"
-        port: 8223
-        log_level: "info"
-        log_format: "json"
-
-      observability:
-        kpi:
-          prometheus:
-            port: 9222
-
-      security:  *cp-security
-      scheduler: *cp-scheduler
-      storage:   *cp-storage
-
-      policies:
-        purge_catalog_path: /app/config/conversation_policy_catalog.yaml
-
-    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
-    dotenv:
-      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: ""
-      OPENFGA_API_TOKEN: ""
-      MINIO_SECRET_KEY: ""
-      FRED_POSTGRES_PASSWORD: ""
-      OPENSEARCH_PASSWORD: ""
-
-  # Manager owns governance and reconstructed product APIs.
-  fred-manager:
     enabled: true
-    applicationName: fred-manager
+    applicationName: control-plane-backend
     deployment: &manager-deployment
       enabled: true
     replicaCount: 1
@@ -2506,11 +1921,14 @@ applications:
       enabled: false
     migration: &manager-migration
       enabled: false
+      scaleDown: false
+      command: [fred-manager]
+      args: [migrate]
     rollingUpdate: &manager-rolling-update
       maxSurge: 1
       maxUnavailable: 0
     image: &manager-image
-      repository: ghcr.io/thalesgroup/fred-agent/fred-manager
+      repository: ghcr.io/thalesgroup/fred-agent/control-plane-backend
       tag: ''
       pullPolicy: IfNotPresent
     command:
@@ -2521,15 +1939,15 @@ applications:
     extraEnvVars: []
     ports: &manager-ports
     - name: http
-      containerPort: 8400
+      containerPort: 8222
     service:
       annotations: {}
       extraLabels: {}
       type: ClusterIP
       ports:
       - name: http
-        port: 8400
-        targetPort: 8400
+        port: 8222
+        targetPort: 8222
     metricsService: &manager-metrics-service
       enabled: false
     ingress:
@@ -2538,11 +1956,11 @@ applications:
       hosts:
       - host: your.host
         paths:
-        - path: /fred-manager
+        - path: /control-plane
           pathType: Prefix
           service:
-            name: fred-manager
-            port: 8400
+            name: control-plane-backend
+            port: 8222
       tls: []
     httpRoute: &manager-http-route
       enabled: false
@@ -2555,25 +1973,25 @@ applications:
             retention: P7D
           rules: []
     volumeMounts: &manager-volume-mounts
-    - name: fred-manager-catalog
+    - name: control-plane-backend-catalog
       mountPath: /app/config/lifecycle_policy_catalog.yaml
       subPath: lifecycle_policy_catalog.yaml
-    - name: fred-manager-vol
+    - name: control-plane-backend-vol
       mountPath: /app/config/configuration.yaml
       subPath: configuration.yaml
-    - name: fred-manager-env-vol
+    - name: control-plane-backend-env-vol
       mountPath: /app/config/.env
       subPath: .env
     volumes: &manager-volumes
-    - name: fred-manager-catalog
+    - name: control-plane-backend-catalog
       configMap:
-        name: fred-manager-catalog
-    - name: fred-manager-vol
+        name: control-plane-backend-catalog
+    - name: control-plane-backend-vol
       configMap:
-        name: fred-manager-back
-    - name: fred-manager-env-vol
+        name: control-plane-backend-back
+    - name: control-plane-backend-env-vol
       secret:
-        secretName: fred-manager-env
+        secretName: control-plane-backend-env
     probes:
       lifecycle:
         enabled: false
@@ -2582,16 +2000,16 @@ applications:
         data:
           failureThreshold: 10
           httpGet:
-            path: /fred-manager/v1/healthz
-            port: 8400
+            path: /control-plane/v1/healthz
+            port: 8222
           periodSeconds: 10
       readinessProbe:
         enabled: true
         data:
           failureThreshold: 10
           httpGet:
-            path: /fred-manager/v1/healthz
-            port: 8400
+            path: /control-plane/v1/healthz
+            port: 8222
           periodSeconds: 10
       startupProbe:
         enabled: false
@@ -2606,7 +2024,7 @@ applications:
         type: RuntimeDefault
     serviceAccount: &manager-service-account
       enabled: true
-      name: fred-manager
+      name: control-plane-backend
       annotations: {}
       labels: {}
       automountServiceAccountToken: false
@@ -2623,9 +2041,9 @@ applications:
     configuration: &manager-configuration
       app:
         gcu_version: v1
-        base_url: /fred-manager/v1
+        base_url: /control-plane/v1
         address: 0.0.0.0
-        port: 8400
+        port: 8222
         log_level: info
         log_format: json
         bootstrap_token_env_var: FRED_BOOTSTRAP_TOKEN
@@ -2634,8 +2052,8 @@ applications:
         m2m:
           realm_url: http://keycloak:8080/realms/app
           enabled: true
-          client_id: fred-manager
-          secret_env_var: KEYCLOAK_FRED_MANAGER_CLIENT_SECRET
+          client_id: control-plane
+          secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
         user:
           realm_url: http://keycloak:8080/realms/app
           client_id: app
@@ -2670,15 +2088,16 @@ applications:
         memory: 128Mi
       limits:
         memory: 512Mi
-  fred-manager-worker:
+  control-plane-worker:
     enabled: true
-    applicationName: fred-manager-worker
+    applicationName: control-plane-worker
     deployment: *manager-deployment
     replicaCount: 1
     autoscaling: *manager-autoscaling
     statefulset: *manager-statefulset
     job: *manager-job
-    migration: *manager-migration
+    migration:
+      enabled: false
     rollingUpdate: *manager-rolling-update
     image: *manager-image
     command:
@@ -2706,7 +2125,7 @@ applications:
         data:
           httpGet:
             path: /healthz
-            port: 8400
+            port: 8222
           periodSeconds: 10
           failureThreshold: 10
       readinessProbe:
@@ -2714,7 +2133,7 @@ applications:
         data:
           httpGet:
             path: /healthz
-            port: 8400
+            port: 8222
           periodSeconds: 10
           failureThreshold: 3
       startupProbe:
@@ -2722,7 +2141,7 @@ applications:
     securityContext: *manager-security-context
     serviceAccount:
       <<: *manager-service-account
-      name: fred-manager-worker
+      name: control-plane-worker
     kubeconfig: *manager-kubeconfig
     configuration_type:
       backend: false

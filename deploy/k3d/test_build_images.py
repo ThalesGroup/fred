@@ -25,7 +25,7 @@ class BuildImagesTests(unittest.TestCase):
             def capture(command: list[str], **kwargs: object) -> str:
                 if command[0] == "make":
                     app = Path(command[command.index("-C") + 1]).name
-                    return f"localhost:5000/fred/{app}:dev\n"
+                    return f"localhost:5000/fred/{'control-plane-backend' if app == 'fred-manager' else app}:dev\n"
                 return "sha256:" + "a" * 64
 
             with (
@@ -42,7 +42,7 @@ class BuildImagesTests(unittest.TestCase):
             self.assertEqual(before, (output / "images.yaml").read_text())
             applications = json.loads(before)["applications"]
             self.assertEqual(len(applications), 5)
-            for api, worker in (("knowledge-flow-backend", "knowledge-flow-worker"), ("fred-manager", "fred-manager-worker")):
+            for api, worker in (("knowledge-flow-backend", "knowledge-flow-worker"), ("control-plane-backend", "control-plane-worker")):
                 self.assertEqual(
                     applications[api], applications[worker]
                 )

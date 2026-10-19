@@ -34,6 +34,14 @@ class SelectionTest(unittest.TestCase):
         # The fred-agents pyproject builds with its README, so it is not documentation.
         self.assertEqual(built("apps/fred-agents/README.md"), ALL - {KF, "knowledge-flow-backend-pymupdf"})
 
+    def test_manager_publishes_the_control_plane_image(self):
+        manifest = json.loads((Path(__file__).resolve().parents[2] / ".github/docker-images.json").read_text())
+        images = {entry["name"]: entry for entry in manifest["images"]}
+        self.assertNotIn("fred-manager", images)
+        self.assertEqual(images["control-plane-backend"]["context"], "apps/fred-manager")
+        self.assertEqual(images["control-plane-backend"]["dockerfile"], "apps/fred-manager/dockerfiles/Dockerfile-prod")
+        self.assertIn("control-plane-backend", built("apps/fred-manager/src/main.rs"))
+
     def test_frontend_application_builds_only_frontend(self):
         self.assertEqual(built("apps/frontend/src/App.tsx", "apps/frontend/package-lock.json"), {"frontend"})
 

@@ -1,30 +1,26 @@
 ## ADDED Requirements
 
-### Requirement: Fred deploys manager as part of its application composition
-The reconstruction deployment SHALL build and deploy manager, knowledge-flow and frontend through the ordinary Fred command. It SHALL run exactly manager API/worker, knowledge-flow API/worker and frontend as application workloads, using one identical image reference per API/worker pair. It MUST NOT start control-plane, fred-agents or their migration workloads. Infrastructure services remain separate. Failed preparation SHALL stop deployment before removing an existing manager.
+### Requirement: Fred deploys Rust through the stable control-plane contract
+The reconstruction deployment SHALL work with the unchanged factory swift definition through `make k3d-app APP=fred DIR=../fred`. It SHALL build the control-plane-backend image from Rust manager and run exactly control-plane-backend, control-plane-worker, knowledge-flow-backend, knowledge-flow-worker and frontend. API/worker pairs SHALL share their image. It MUST NOT execute Python control-plane, Alembic from its image or fred-agents.
 
-#### Scenario: The developer rebuilds Fred
-- **WHEN** the developer runs `make k3d-app APP=fred DIR=../fred` with the reconstruction checkout
-- **THEN** its manager, knowledge-flow and frontend images are built and selected together
-- **AND** the five application workloads are managed by the Fred release without a separate manager command
+#### Scenario: The developer deploys an ordinary checkout
+- **WHEN** the unchanged factory builds and renders the reconstruction checkout
+- **THEN** three images serve the five application workloads
+- **AND** instance addresses, secrets and migration enablement work without a manager overlay or new Keycloak client
 
-#### Scenario: New installation has no legacy backends
-- **WHEN** Fred is installed without control-plane or fred-agents services
-- **THEN** the frontend, manager and knowledge-flow start successfully
-- **AND** the existing UI remains available while calls to absent services fail explicitly
+#### Scenario: Both entry points remain available
+- **WHEN** the UI calls the manager path and the factory calls the control-plane bootstrap path
+- **THEN** both reach the Rust implementation
+- **AND** the existing UI components and layout remain unchanged
 
-### Requirement: Integrating an existing manager preserves installation state
-The deployment SHALL retire the known standalone manager release without changing its canonical data, authorization, user identities, consent, bootstrap state or foundation/model credentials. It MUST preflight ownership and refuse unexpected persistent resources before removal. Reruns SHALL converge without duplicate manager producers. Failures MUST retain data and identify a recovery path; completion requires ready application workloads.
+### Requirement: Upgrading the Fred release preserves manager state
+The deployment SHALL preserve database/schema, OpenFGA store/model, identities, folders, roles, bootstrap, consent and lifecycle queue identities. It SHALL replace manager-named application resources under the same Fred release without resetting infrastructure. It MUST NOT automatically uninstall a separate release.
 
-#### Scenario: A provisioned installation is upgraded
-- **WHEN** the existing standalone manager and Fred releases are migrated
-- **THEN** existing organizations, memberships and folders remain accessible with the same IDs and grants
-- **AND** only the Fred release manages the manager API and worker
+#### Scenario: An integrated manager deployment is upgraded
+- **WHEN** the developer upgrades the existing fred-app release
+- **THEN** the same manager data and grants are used by the control-plane-named Rust workloads
+- **AND** a subsequent deployment converges on the same five workloads
 
-#### Scenario: The old release owns persistent resources
-- **WHEN** preflight finds a persistent volume claim or unexpected resource in the standalone release
-- **THEN** migration fails before removing that release or its resources
-
-#### Scenario: The deployment is repeated after migration
-- **WHEN** the same command is run after successful integration
-- **THEN** it upgrades the same five application workloads and does not recreate a standalone manager release
+#### Scenario: A standalone manager still exists
+- **WHEN** the live install detects a manager Deployment owned by another release
+- **THEN** it refuses coexistence and requires explicit operator retirement of that release

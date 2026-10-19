@@ -1,13 +1,6 @@
 {
   "images": [
     {
-      "name": "fred-manager",
-      "context": "apps/fred-manager",
-      "dockerfile": "apps/fred-manager/dockerfiles/Dockerfile-prod",
-      "build_args": "",
-      "publish": true
-    },
-    {
       "name": "fred-agents",
       "context": ".",
       "dockerfile": "apps/fred-agents/dockerfiles/Dockerfile-prod",
@@ -58,9 +51,9 @@
     },
     {
       "name": "control-plane-backend",
-      "context": ".",
-      "dockerfile": "apps/control-plane-backend/dockerfiles/Dockerfile-prod",
-      "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false",
+      "context": "apps/fred-manager",
+      "dockerfile": "apps/fred-manager/dockerfiles/Dockerfile-prod",
+      "build_args": "",
       "publish": true
     },
     {
@@ -82,17 +75,27 @@
   "pr_selection": {
     "rules": [
       {
-        "paths": ["docs/**", "openspec/**", "*.md"],
+        "paths": [
+          "docs/**",
+          "openspec/**",
+          "*.md"
+        ],
         "images": [],
         "reason": "Documentation only: no image copies docs/, openspec/ or root Markdown files. Markdown under apps/ or libs/ is code (a README can be package metadata)."
       },
       {
-        "paths": ["apps/frontend/**"],
-        "images": ["frontend"],
+        "paths": [
+          "apps/frontend/**"
+        ],
+        "images": [
+          "frontend"
+        ],
         "reason": "No other image copies the frontend application."
       },
       {
-        "paths": ["libs/frontend/**"],
+        "paths": [
+          "libs/frontend/**"
+        ],
         "images": [],
         "reason": "The npm package producer reads apps/frontend sources but no image copies it; Check pending request validates the packages."
       }
@@ -110,6 +113,10 @@
     {
       "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-dev",
       "reason": "Stale: puts scripts/ at /app/scripts and the project at /app/knowledge-flow-backend, so the Makefile include ../../scripts/makefiles/config/INFO-knowledge-flow.mk misses and make dev fails. It also lays fred-core out at /app/fred-core while pyproject.toml resolves it at ../../libs/fred-core. Delete or repair, then move it to images."
+    },
+    {
+      "dockerfile": "apps/control-plane-backend/dockerfiles/Dockerfile-prod",
+      "reason": "The reconstruction branch builds the control-plane-backend image from Rust fred-manager. Python source remains for reconstruction reference, but is not published under that image name."
     }
   ]
 }

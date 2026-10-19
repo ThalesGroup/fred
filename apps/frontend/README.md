@@ -32,8 +32,8 @@ The production container serves static assets with nginx and now proxies
 `/fred/agents/v2`, `/knowledge-flow`, `/control-plane` and `/fred-manager` to backend
 upstreams.
 The image defaults are cluster-friendly service DNS names
-(`fred-agents`, `knowledge-flow-backend:8000`, `control-plane-backend:8222`,
-`fred-manager:8400`).
+(`fred-agents`, `knowledge-flow-backend:8000`, and `control-plane-backend:8222`
+for both control-plane and manager routes).
 `make docker-run` overrides those upstreams for local use and points them to
 services running on the host through `host.docker.internal`.
 
@@ -45,7 +45,8 @@ make docker-run \
   FRONTEND_AGENTIC_UPSTREAM=http://fred-agents \
   FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://knowledge-flow-backend:8111 \
   FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222 \
-  FRONTEND_FRED_MANAGER_UPSTREAM=http://fred-manager:8400
+  FRONTEND_FRED_MANAGER_UPSTREAM=http://control-plane-backend:8222 \
+  FRONTEND_FRED_MANAGER_API_PREFIX=/control-plane
 ```
 
 Production nginx writes escaped JSON access events to stdout: event time, status-derived
@@ -560,9 +561,11 @@ Browser-test prerequisites and isolation are documented in the
 [manager README](../fred-manager/README.md#import-through-the-frontend).
 For interactive development, Vite proxies `/fred-manager` to `http://localhost:8400`;
 `VITE_BACKEND_URL_FRED_MANAGER` overrides this target. Production nginx uses
-`FRONTEND_FRED_MANAGER_UPSTREAM` and resolves that optional service at request time,
+`FRONTEND_FRED_MANAGER_UPSTREAM` (default `http://control-plane-backend:8222`)
+and rewrites the public prefix to `FRONTEND_FRED_MANAGER_API_PREFIX`
+(default `/control-plane`). It resolves that service at request time,
 so nginx can start before manager DNS is available. The application itself
 requires manager and shows an explicit reload action when startup configuration
 is unavailable. `make docker-run`
-uses `http://host.docker.internal:8400` by default. Both preserve the canonical
-`/fred-manager/v1` path and the bearer header.
+uses `http://host.docker.internal:8400` and prefix `/fred-manager` by default.
+Browser calls retain `/fred-manager/v1` and the bearer header in both cases.

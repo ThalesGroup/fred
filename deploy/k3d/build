@@ -16,7 +16,7 @@ def build(root: Path, output: Path) -> None:
     applications = {}
     images = []
     for app, consumers in {
-        "fred-manager": ["fred-manager", "fred-manager-worker"],
+        "fred-manager": ["control-plane-backend", "control-plane-worker"],
         "knowledge-flow-backend": ["knowledge-flow-backend", "knowledge-flow-worker"],
         "frontend": ["frontend"],
     }.items():

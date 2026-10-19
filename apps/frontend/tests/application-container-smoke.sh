@@ -205,12 +205,12 @@ docker rm -f "${disabled_frontend}" >/dev/null
 start_frontend "${frontend}" "$(registrations "http://${upstream}:8080")" 'true' "http://${upstream}:8080"
 frontend_port=$(wait_for_shell "${frontend}")
 
-# The manager leg preserves the canonical path, multipart body and bearer.
+# The public manager path reaches the Rust control-plane with query, multipart body and bearer.
 manager_status=$(curl -sS -D "${test_directory}/manager-headers" -o /dev/null -w '%{http_code}' \
     -H 'Authorization: Bearer smoke-manager' -F 'file=manager-zip-probe' \
-    "http://127.0.0.1:${frontend_port}/fred-manager/v1/import-export/import")
+    "http://127.0.0.1:${frontend_port}/fred-manager/v1/import-export/import?probe=a%20b")
 [ "${manager_status}" = "204" ]
-grep -i -F 'X-Smoke-Request-Uri: /fred-manager/v1/import-export/import' "${test_directory}/manager-headers" >/dev/null
+grep -i -F 'X-Smoke-Request-Uri: /control-plane/v1/import-export/import?probe=a%20b' "${test_directory}/manager-headers" >/dev/null
 grep -i -F 'X-Smoke-Method: POST' "${test_directory}/manager-headers" >/dev/null
 grep -i -F 'X-Smoke-Authorization: Bearer smoke-manager' "${test_directory}/manager-headers" >/dev/null
 grep -i -F 'X-Smoke-Manager-Body: 1' "${test_directory}/manager-headers" >/dev/null

@@ -89,7 +89,7 @@ secrets only and never overrides the process environment.
 | --- | --- |
 | `FRED_POSTGRES_PASSWORD` | process or `.env` |
 | `OPENFGA_API_TOKEN` | the variable `security.rebac.token_env_var` names |
-| `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` | the variable `security.m2m.secret_env_var` names |
+| `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` (host default), `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` (chart) | the variable `security.m2m.secret_env_var` names |
 | `FRED_BOOTSTRAP_TOKEN` | the variable `app.bootstrap_token_env_var` names |
 
 Local reference configuration:
@@ -212,20 +212,20 @@ flowchart LR
         tmp["Temporal :7233"]
     end
     subgraph cluster [k3d namespace fred]
-        pod["release fred-app<br/>ConfigMap fred-manager-back<br/>Secret fred-manager-env"]
+        pod["release fred-app<br/>ConfigMap control-plane-backend-back<br/>Secret control-plane-backend-env"]
         secrets[["fred-secrets"]]
         traefik["Traefik :8088<br/>/fred-manager"]
     end
     run --> pg & kc & fga
     worker --> pg & fga & tmp
     browser --> traefik --> pod
-    secrets -. "POSTGRES_FRED_PASSWORD,<br/>OPENFGA_API_TOKEN,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_FRED_MANAGER_CLIENT_SECRET" .-> pod
+    secrets -. "POSTGRES_FRED_PASSWORD,<br/>OPENFGA_API_TOKEN,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET" .-> pod
 ```
 
 | | Host run | k3d release |
 | --- | --- | --- |
 | Start | `make run` in `apps/fred-manager` | `make k3d-app APP=fred DIR=../fred` in the factory |
-| Configuration | `config/configuration.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `fred-manager-back`, `log_format: json` |
+| Configuration | `config/configuration.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `control-plane-backend-back`, `log_format: json` |
 | Secrets | `config/.env` | `fred-secrets`, as `extraEnvVars` |
 | Addresses | `localhost` ports | `postgres`, `openfga:9080`, `temporal:7233`, `keycloak:8080` |
 | Token issuer accepted | `http://localhost:8080/realms/app` | `http://keycloak:8080/realms/app` (hosts entry `127.0.0.1 keycloak`) |
@@ -243,14 +243,20 @@ The image (`dockerfiles/Dockerfile-prod`) builds the release binary with `protoc
 `libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations and the OpenFGA
 model are compiled into the binary.
 
-The factory's `k3d-apps/fred/identities.yaml` declares the `fred-manager` confidential service client and
-its `realm-management/query-users`, `view-users` and `manage-users` grants. The factory's
-`k3d-app` identity reconciliation populates `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` in
-`fred-secrets`; the release consumes it through `extraEnvVars`.
-For a host process using this realm, the same client secret goes in `config/.env`.
-`docker-up` alone does not consume the application's identity declaration: the directory
-requires a provisioned client with these grants, or `security.m2m.enabled: false` to
-run without directory-based role grants.
+The factory's standard `control-plane` confidential client has the
+`realm-management/query-users`, `view-users` and `manage-users` grants. The cluster
+configuration uses `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` from `fred-secrets`.
+A host process keeps its own `security.m2m.client_id` and `secret_env_var` settings;
+when reusing this client, configure both settings and supply its secret in `.env`.
+
+In the chart, manager runs as `control-plane-backend` and `control-plane-worker`
+using the `control-plane-backend` image built from `apps/fred-manager`. API port
+8222 serves `/control-plane/v1`. The migration hook invokes `fred-manager migrate`
+with `DATABASE_URL` alone; it accepts PostgreSQL URLs including the factory's
+`postgresql+asyncpg` scheme. It applies the same embedded migrations as API startup,
+without loading identity, authorization or runtime configuration. Both processes
+mount the API configuration/catalog. The factory's `scheduler.temporal` host and
+namespace feed the lifecycle connection without changing its queue or prefix.
 
 ## Running provisioning
 
@@ -284,12 +290,14 @@ import; replay after expiry uses a fresh operator token.
 The frontend uses same-origin `/fred-manager/v1` requests. Vite resolves the
 `/fred-manager` prefix before its broad `/fred` rule and proxies to
 `VITE_BACKEND_URL_FRED_MANAGER`, default `http://localhost:8400`. Production nginx
-proxies `/fred-manager/` to `FRONTEND_FRED_MANAGER_UPSTREAM`, default
-`http://fred-manager:8400`, with 3600-second read/send timeouts. It resolves this
-optional service at request time, so frontend startup does not require its DNS
-name to exist. Local frontend `make docker-run` supplies
-`http://host.docker.internal:8400`. Access logs use the bounded `fred-manager`
-route family without exposing paths, tokens or upload contents.
+forwards `/fred-manager/` to `FRONTEND_FRED_MANAGER_UPSTREAM`, default
+`http://control-plane-backend:8222`, replacing the prefix with
+`FRONTEND_FRED_MANAGER_API_PREFIX` (default `/control-plane`). Direct
+`/control-plane/` calls reach the same API. Read/send timeouts are 3600 seconds;
+DNS resolves at request time. Local frontend `make docker-run` uses
+`http://host.docker.internal:8400` and prefix `/fred-manager` for a host manager.
+Access logs retain the bounded `fred-manager` route family without paths, tokens
+or upload contents. UI components and generated API paths are unchanged.
 
 ## Authorization store publication
 
@@ -334,7 +342,7 @@ empty match lists and overflows fail validation. Accepted deadlines never change
 when a catalog is reloaded.
 
 `make run-worker` starts the separate process. Fred's chart deploys
-`fred-manager-worker` from the same image, with the API's config/catalog mounts,
+`control-plane-worker` from the same image, with the API's config/catalog mounts,
 SQL/FGA secrets and `/healthz` probes, without ingress or a Service. Local
 `k3d-app-reset` recognizes the integrated release and the earlier standalone manager,
 validates configurations, stops producers before erasure and restores their original replicas. Its logs use
