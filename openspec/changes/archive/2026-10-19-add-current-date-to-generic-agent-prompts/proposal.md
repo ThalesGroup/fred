@@ -7,6 +7,7 @@ Generic ReAct and Deep assistants can guess today's date because their shipped d
 - Add `{today}` to the English and French default system prompts of the generic ReAct and Deep assistants.
 - Tell these assistants to answer date requests with the date, without a time.
 - Keep the existing runtime token renderer and editable prompt override behavior.
+- Apply the new defaults to newly created instances and instances without a saved prompt value; stored prompts are not rewritten.
 
 ## Capabilities
 
