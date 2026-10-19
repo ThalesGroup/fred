@@ -557,6 +557,21 @@ once), or with `DIR` from `apps/fred-agents/config/.env` (`make setup-env` here,
 Fred is then on <http://localhost:8088>. The first time, register on its login page and
 follow the token-retrieval instruction printed by `make k3d-app`: you become `platform_admin`.
 
+## Local image SBOMs
+
+Install [Trivy](https://trivy.dev/), then build the four production images and
+generate one CycloneDX JSON SBOM per image:
+
+```bash
+make docker-build
+make sbom
+```
+
+`make sbom` reads the published image list from `.github/docker-images.json` and
+the local image tags from the application Makefiles. It only inspects images
+already present in Docker; it does not rebuild or pull them. The files are in
+`target/sbom/` (ignored by Git). If an image is missing, run `make docker-build`.
+
 ## Production mode
 
 > [!IMPORTANT]
