@@ -31,6 +31,13 @@ it neither creates an FGA store nor bootstraps an identity.
 
 ## Upgrade
 
+The factory validates the previous build's cached image values before building.
+When upgrading from manager-named applications, first move the active cache's
+`.cache/k3d-apps/fred-<id>/images.yaml` and `images.txt` to a backup directory.
+Otherwise the initial lint rejects the retired application names before reaching
+the build. The next command regenerates these manifests; Docker images and
+cluster data are unaffected.
+
 From the unchanged factory `swift` checkout, run:
 
 ```sh
