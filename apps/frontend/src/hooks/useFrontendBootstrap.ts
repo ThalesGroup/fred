@@ -27,6 +27,10 @@ export type FrontendBootstrapState = {
   refetch: () => void;
 };
 
+// Consumers use this list as an effect dependency, including Home's search.
+// A new [] on every loading/error render would restart their state updates forever.
+const EMPTY_TEAMS: Team[] = [];
+
 /**
  * Read the control-plane-owned frontend bootstrap in one place.
  *
@@ -74,7 +78,7 @@ export function useFrontendBootstrap(skip = false): FrontendBootstrapState {
   return {
     bootstrap: data,
     activeTeam: data?.active_team,
-    availableTeams: data?.available_teams ?? [],
+    availableTeams: data?.available_teams ?? EMPTY_TEAMS,
     isLoading: isLoading || (isFetching && !data),
     refetch,
   };
