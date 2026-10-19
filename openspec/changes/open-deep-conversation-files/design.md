@@ -8,7 +8,7 @@ See [proposal.md](proposal.md) for motivation and [the delta spec](specs/managed
 - `deep/conversation_backend.py` implements native reads, full writes, and exact-text edits. `deep/conversation_port.py` exposes the filesystem to capabilities; `deep/concat_files.py` supports explicit output replacement. No read-before-write enforcement is present or added here.
 - The retired `OpenWritableDocumentCapability` copied a file into legacy writable-document storage. The legacy editor and export router are useful reusable components; its copied document identity is not the identity for this feature.
 - The frontend already has typed UI-part dispatch, native side panels, MDXEditor, CodeMirror consumers, and a static HTML viewer with sanitization, sandboxing, and CSP. No iframe extension host is needed for this delivery.
-- The existing `add-deep-agent-conversation-filesystem` change is implementation-complete and its artifacts now match the implemented `/` mount and SDK port. It remains unarchived. Task 8.4 still requires validation and foundation-first sync/archive before this follow-on; no second mount or path migration is introduced.
+- The completed `add-deep-agent-conversation-filesystem` foundation was reconciled to the implemented `/` mount and SDK port, synced to the current capability spec, and archived as `2026-10-19-add-deep-agent-conversation-filesystem` before this follow-on. No second mount or path migration is introduced.
 
 ## Goals / Non-Goals
 
@@ -179,7 +179,7 @@ The dependency graph permits slices 3, 5 and 6 after slice 2, but implementation
 - **Large files and many groups consume internal quota:** consolidate autosaves, diff only touched files off the model context path, honor existing quotas, and surface failures. Do not add hidden retention eviction or an unbounded notification.
 - **Refresh can race navigation or user typing:** key all state by session/path, serialize local saves, preserve dirty buffers, and test stale responses explicitly.
 - **Permission drift or forged UI parts:** reauthorize file operations on the server. Neither a stored editable flag nor system-origin access is sufficient authority.
-- **Foundation archive order:** its stale root/SDK wording has been reconciled, but task 8.4 still blocks this change's sync/archive until the foundation is validated and synced/archived first. Strict validation of this delta alone cannot establish cross-change consistency.
+- **Foundation archive order:** task 8.4 is complete: the reconciled foundation was validated, synced and archived first. This follow-on remains subject to its own verification, review and performance disposition before sync/archive.
 
 ## Migration Plan
 

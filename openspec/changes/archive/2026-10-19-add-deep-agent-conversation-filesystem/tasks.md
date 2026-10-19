@@ -49,3 +49,8 @@
 ## Current-contract reconciliation (2026-10-19)
 
 Before foundation-first sync/archive for the file-editor follow-on, the artifacts were reconciled to the implemented default `/` mount and `RuntimeServices.conversation_filesystem: ConversationFilesystemPort`. SDK operations take safe absolute paths and explicit agent/system origin; deletion remains a lower-level runtime service operation. The physical `conversations/<session_id>/scratchpad/` prefix is unchanged. This corrects stale planning wording and does not relocate files or change code. The original focused test record above remains historical evidence; final integrated validation is recorded in `open-deep-conversation-files/tasks.md`. `openspec validate add-deep-agent-conversation-filesystem --strict`, `openspec validate deep-agent-runtime-baseline --strict` and `git diff --check` passed on this documentation tree over `833de7bf711b301d090ee092a47ae1e8b5ae4476`. No runtime behavior changed or new tests ran. Sync/archive remains with the integrating developer.
+
+
+## Foundation-first close-out (2026-10-19)
+
+The reconciled delta was synced to `openspec/specs/deep-agent-conversation-filesystem/spec.md` before the file-editor follow-on. Purpose and all nine requirement blocks/scenarios match the delta, with main-spec structural headings. `openspec validate --specs` passed all 32 current specs. Independent documentation review of `833de7bf7..97d5c2e36` found no actionable mismatch; the current contract and physical storage prefix remain unchanged. This completed foundation is archived before the follow-on; no historical archive was rewritten or data migrated.
