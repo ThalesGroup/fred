@@ -28,6 +28,7 @@ Deploy Fred normally; no additional operator or user action is required.
 With the published application images available locally, run `make sbom` or
 `make sbom TRIVY_MODE=docker` and check for non-empty CycloneDX reports in
 `target/sbom/`.
+Add `CVES=true` to include detected vulnerabilities in those reports.
 
 ## Rollback
 

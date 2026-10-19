@@ -589,6 +589,21 @@ docker pull aquasec/trivy:0.75.0
 make sbom TRIVY_MODE=docker
 ```
 
+To include detected CVEs in the CycloneDX reports, add `CVES=true`:
+
+```bash
+make sbom CVES=true
+# Or with Trivy running in Docker:
+make sbom TRIVY_MODE=docker CVES=true
+```
+
+By default, `CVES=false` generates the package inventory only. Enabling CVEs
+adds Trivy's `--scanners vuln` option and may download/update its vulnerability
+database, increasing run time. Findings appear in the reports' `vulnerabilities`
+section and do not fail the command solely because CVEs were found. Each run
+replaces the same `target/sbom/*.cdx.json` files, with or without CVEs.
+See [Trivy's SBOM documentation](https://trivy.dev/docs/v0.75/guide/supply-chain/sbom/).
+
 The Docker option uses the local socket at `/var/run/docker.sock` and keeps its
 cache in the `fred-trivy-cache` Docker volume. Both options require `jq` and
 access to the local Docker daemon. See the official
