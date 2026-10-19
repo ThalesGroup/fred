@@ -19,9 +19,9 @@ Why this module exists:
 - reasoning-capable models (Mistral with `reasoning_effort`, Claude extended
   thinking, DeepSeek/OpenAI-compatible gateways) interleave reasoning blocks with
   the answer inside `AIMessage(Chunk).content`
-- those blocks MUST NOT leak into the plain assistant transcript, the final answer
-  text, OR the assistant messages replayed to the model on the next tool-loop step
-  (raw reasoning content is rejected by Mistral with HTTP 422 and pollutes context)
+- those blocks MUST NOT leak into the plain assistant transcript or the final answer
+  text; when replayed to the model they are re-homed as text, except for Mistral,
+  which gets them back in its own chunk shape (`keep_native_reasoning`)
 - they belong on the `THOUGHT_*` stream as `source="model_native"`
 
 This lives in `support/` because both the ReAct stream/codec layer (`react/`) and
@@ -46,6 +46,8 @@ How to use:
   turn's reasoning as text. This is the #1780 reasoning-drift fix and it IS
   wired: `CheckpointHygieneMiddleware` calls it on every ReAct turn (the
   docstring said "not yet wired" long after it shipped).
+- `keep_native_reasoning(messages)` — the Mistral alternative: every assistant
+  message keeps its reasoning as one native `thinking` chunk
 """
 
 from __future__ import annotations
@@ -58,6 +60,21 @@ from langchain_core.messages import AIMessage, BaseMessage
 # `thinking` covers Anthropic extended thinking and Mistral `ThinkChunk`;
 # `reasoning` covers OpenAI-compatible reasoning blocks.
 THINKING_BLOCK_TYPES = frozenset({"thinking", "reasoning"})
+# Provider blocks that carry no answer text (Mistral's call `reference`, tool-call
+# blocks); rendering them would put their Python repr in the answer and history.
+_NON_TEXT_BLOCK_TYPES = frozenset(
+    {"reference", "tool_use", "tool_call", "input_json_delta"}
+)
+_PAYLOADLESS_KEYS = frozenset({"type", "index", "id"})
+
+
+def is_payloadless_block(item: object) -> bool:
+    """Recognize empty provider deltas without accepting malformed text or references."""
+    return (
+        isinstance(item, dict)
+        and item.get("type") not in ("text", "reference")
+        and item.keys() <= _PAYLOADLESS_KEYS
+    )
 
 
 def block_type(item: object) -> str | None:
@@ -173,9 +190,16 @@ def content_to_text(content: object, *, out_fragments: list[str] | None = None) 
                 if fragment:
                     out_fragments.append(fragment)
             continue
-        if isinstance(item, dict) and "text" in item:
+        if not isinstance(item, dict):
+            rendered_parts.append(str(item))
+        elif "text" in item:
             rendered_parts.append(str(item["text"]))
-        else:
+        elif item.get("type") == "refusal" and isinstance(item.get("refusal"), str):
+            rendered_parts.append(item["refusal"])
+        elif item.get("type") not in _NON_TEXT_BLOCK_TYPES and not is_payloadless_block(
+            item
+        ):
+            # Unknown blocks with payloads stay visible.
             rendered_parts.append(str(item))
     # Text blocks may split a token or Markdown fence; preserve their exact bytes.
     return "".join(rendered_parts)
@@ -255,6 +279,8 @@ def thread_reasoning_within_open_turn(
       `chat/completions` and `responses`, and the native `langchain_mistralai`
       client blanks assistant content entirely whenever tool calls are present.
       An ordinary `text` block is the only channel that survives either client
+      (Mistral through `MistralReasoningReplayChatOpenAI` uses
+      `keep_native_reasoning` instead)
     - reasoning from turns the user has already closed is NOT replayed: it costs
       context on every later request and its value expires with the question
 
@@ -286,3 +312,42 @@ def thread_reasoning_within_open_turn(
                 message.model_copy(update={"content": content_to_text(message.content)})
             )
     return threaded
+
+
+def native_reasoning_content(content: object) -> str | list[dict[str, object]]:
+    """
+    Render assistant content as Mistral's native shape: one reasoning chunk, then text.
+
+    Content without reasoning collapses to its plain text. Idempotent, so the
+    model client can apply it again to history the middleware already shaped.
+    """
+
+    fragments: list[str] = []
+    answer = content_to_text(content, out_fragments=fragments)
+    reasoning = "".join(fragments)
+    if not reasoning:
+        return answer
+    chunks: list[dict[str, object]] = [
+        {"type": "thinking", "thinking": [{"type": "text", "text": reasoning}]}
+    ]
+    if answer:
+        chunks.append({"type": "text", "text": answer})
+    return chunks
+
+
+def keep_native_reasoning(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
+    """
+    Keep every assistant message's reasoning, in every turn, as a native chunk.
+
+    For models that take their reasoning back natively (Mistral, see
+    `support/reasoning_replay.py`); others use `thread_reasoning_within_open_turn`.
+    """
+
+    return [
+        message.model_copy(
+            update={"content": native_reasoning_content(message.content)}
+        )
+        if isinstance(message, AIMessage) and isinstance(message.content, list)
+        else message
+        for message in messages
+    ]

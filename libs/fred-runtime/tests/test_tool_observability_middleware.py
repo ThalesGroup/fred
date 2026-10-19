@@ -251,6 +251,28 @@ async def test_awrap_tool_call_success_leaves_default_ok_status() -> None:
 
 
 @pytest.mark.asyncio
+async def test_oversized_unknown_tool_name_returns_the_tool_error_to_the_model() -> (
+    None
+):
+    _, kpi = _install_recording_kpi_writer()
+    middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
+    looped = "loop text " * 650 + ">>> read_document"
+    request = _request(name=looped, tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(
+            content=f"Error: {looped} is not a valid tool",
+            name=looped,
+            tool_call_id="call-1",
+            status="error",
+        )
+
+    result = await middleware.awrap_tool_call(request, handler)
+
+    assert isinstance(result, ToolMessage) and result.status == "error"
+
+
+@pytest.mark.asyncio
 async def test_awrap_tool_call_raised_exception_sets_error_status_failed_counter_and_reraises(
     caplog,
 ) -> None:

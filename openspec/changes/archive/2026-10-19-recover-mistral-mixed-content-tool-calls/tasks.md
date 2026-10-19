@@ -1,0 +1,41 @@
+## 1. Captured regression
+
+- [x] 1.1 Add a redacted mixed-fragment fixture matching the checkpoint boundaries in `test_tool_call_recovery.py`; verify the current middleware fails to recover its two calls before changing the parser.
+
+## 2. Runtime recovery
+
+- [x] 2.1 Accept plain string fragments around the exact sentinel in the bounded completed-message parser; verify the fixture produces two validated native calls and the existing rejection tests still pass.
+- [x] 2.2 Recognize the same mixed fragment shape in stream decoding and suffix buffering; verify the fixture's marker and call syntax never appear in assistant or thought deltas when recovery succeeds.
+- [x] 2.3 Exercise the recovered calls through ReAct and Deep, including tool-result pairing and the existing approval/budget path; verify targeted runtime tests pass.
+
+## 3. Close-out
+
+- [x] 3.1 Add targeted negative tests for a non-Mistral response, modified reference, invalid JSON/schema, ordinary text, and an existing native call; verify no accidental execution or duplicate call.
+- [x] 3.2 Reconcile the execution contract and this change with the final behavior, record the checkpoint evidence and trace limitation in the existing design/task artifacts, and verify `openspec validate recover-mistral-mixed-content-tool-calls --strict` passes.
+- [x] 3.3 Run the root `make code-quality` once for the completed series, then push and open a draft PR linked to #2746; verify its checks and reviewable diff.
+
+## 4. Follow-up captured regressions
+
+- [x] 4.1 Add redacted tests for repeated exact markers in one response and a native call carrying marked content; verify the current parser rejects the former and the current stream publishes the latter as Planning.
+- [x] 4.2 Accept only validated repeated markers in the bounded completed-message parser; verify all calls execute once, and adjacent, modified, unknown, or invalid later markers reconstruct no calls.
+- [x] 4.3 Withhold pending marked syntax when a completed response already has native calls, preserving safe prose and native IDs; verify neither assistant nor Planning events contain the encoded call.
+- [x] 4.4 Reconcile the execution contract and OpenSpec artifacts, run focused ReAct and Deep suites, strict OpenSpec validation, and the root quality gate; push the draft PR update and verify its checks.
+
+## 5. Streamed reasoning responses ([#3110](https://github.com/ThalesGroup/fred/issues/3110))
+
+- [x] 5.1 Add a regression fixture aggregated from one-block deltas (hundreds of thinking blocks, the sentinel between a split name and two calls) and a rendering test for a block without text; verify both fail on the current code.
+- [x] 5.2 Remove the content-block cap from the completed-message parser, keeping the character and call caps; verify the fixture recovers two calls and the remaining cap tests still reject.
+- [x] 5.3 Stop rendering the sentinel and tool-call blocks in `content_to_text`, render refusals as text, keep unknown blocks visible, and drop a closing-bracket residue after recovered calls; verify with renderer, residue and stream-bridge tests.
+- [x] 5.4 Add the dated execution-contract entry and a migration note; run the fred-runtime test and quality gates and strict OpenSpec validation.
+- [x] 5.5 Add regressions for empty or bare typed blocks streamed between deltas and for a plain answer containing a literal `{}`; skip content-less blocks in the parser. Verified: `tests/test_tool_call_recovery.py` 57 passed (the empty-blocks test failed before the parser change); fred-runtime `make test` 2145 passed, 11 skipped; ruff check, ruff `--select I`, ruff format and basedpyright clean (0 errors).
+- [x] 5.6 Session 0a5a5953: a native call named with 6523 chars of looped text ending in `read_document` failed the turn in log-scope validation. Rename such a call to its trailing registered tool, clip other unknown names for the tool node's error, and shorten oversized strings in `log_context`. Verified: fred-runtime `make test` 2160 passed, 11 skipped; fred-core `make test` 1259 passed, 1 skipped; both `make code-quality` (incl. basedpyright) and ruff `--select I` clean; the oversized-name observability test fails without the fred-core change.
+- [x] 5.7 Leak study of 27 recorded Mistral leaks (2026-10-18): recover text calls next to native calls (text first, exact duplicates dropped), accept a `.` before the tool name at the anchor, and drop all text after the first recovered call. Verified: offline replay of the 27 leaks through the middleware recovers 27/27 (10 replayed from raw content, 17 already recovered at run time and left untouched); `tests/test_tool_call_recovery.py` 70 passed.
+- [x] 5.8 Replay Mistral reasoning natively (leak study variants A/B, 2026-10-18): a plain `ChatOpenAI` serving a Mistral model gets a payload subclass that sends each assistant message's reasoning as one `thinking` chunk, and `CheckpointHygieneMiddleware` keeps every turn's reasoning for it (`keep_native_reasoning`); other models keep `thread_reasoning_within_open_turn`; the size budget counts thinking text. Evidence: A (current) 26/146 leaked calls, 7/12 decks, 3 hangs, 2 execution errors; B (replay) 0/188, 12/12, 0, 0; median call 17.8 s → 23.8 s. Verified: `tests/test_reasoning_replay.py` 6 passed; fred-runtime `make test` 2176 passed, 11 skipped; `make code-quality` (ruff, `--select I`, format, bandit, basedpyright 0 errors) clean.
+
+## 6. Review corrections
+
+- [x] 6.1 Share payloadless-block handling across recovery, rendering and stream marker detection; verify split and coalesced chunks cannot emit recovered syntax, while literal braces, unknown payloads and rejected calls keep their text.
+- [x] 6.2 Preserve reasoning when normalizing text calls, including native duplicates; verify the next request replays it and keeps tool-result pairing, and that a coalesced native-call chunk retains its safe Planning preamble.
+- [x] 6.3 Run runtime tests, root code quality and independent review; reconcile and validate the specifications, then sync and archive the completed change.
+
+Review evidence: the eight initial regression variants failed on `7743fa0df` before the corrections. Independent read-only review covered the corrective delta, all 256 partitions of the payloadless fixture, replay, rendering and hot paths. Its additional coalesced-preamble finding was reproduced, fixed with the reasoning-aware renderer, and re-reviewed with no remaining findings. Final full runtime suite at `e8598e834`: 2186 passed, 11 skipped (`fastapi_mcp` unavailable), 22 deselected; root `make code-quality`: passed, with final changed-file lint/format and runtime typing rechecked successfully. Strict change validation and all 32 current specifications passed; the completed capability was synchronized before archival. No live model or load test was run.

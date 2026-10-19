@@ -730,6 +730,24 @@ def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> No
             pass
 
 
+def test_context_clips_an_oversized_string_instead_of_failing_the_scope() -> None:
+    from fred_core.logs.context import (
+        MAX_VALUE_BYTES,
+        current_context,
+        log_context,
+        operation_log_scope,
+    )
+
+    looped = "é" * 4000 + " >>> read_document"
+    with operation_log_scope(tool_name=looped):
+        bound = current_context()["tool_name"]
+    assert isinstance(bound, str) and bound.endswith("...")
+    assert len(bound.encode("utf-8")) <= MAX_VALUE_BYTES
+    with pytest.raises(ValueError):
+        with log_context({"x" * 65: "value"}):
+            pass
+
+
 @pytest.mark.asyncio
 async def test_fastapi_unhandled_error_keeps_response_and_log_references(
     capsys: pytest.CaptureFixture[str],
