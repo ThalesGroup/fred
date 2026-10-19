@@ -19,7 +19,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use fred_manager::{api, auth, config::Configuration as Config, fga::Fga, logging, spaces};
 
-const USAGE: &str = "usage: fred-manager [serve | worker | generate-openapi | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: fred-manager [serve | worker | generate-openapi | generate-config-schema | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -33,6 +33,13 @@ async fn main() -> Result<()> {
     // Contract generation never loads secrets or initializes service dependencies.
     if args == ["generate-openapi"] {
         println!("{}", serde_json::to_string_pretty(&api::openapi())?);
+        return Ok(());
+    }
+    if args == ["generate-config-schema"] {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&fred_manager::config::schema())?
+        );
         return Ok(());
     }
     // Same rule as fred-pod: ENV_FILE, default ./config/.env, never overriding the process.

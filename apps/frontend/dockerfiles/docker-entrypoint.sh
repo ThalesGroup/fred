@@ -216,7 +216,8 @@ server {
     resolver ${FRONTEND_DNS_RESOLVER} valid=10s;
 
     location /fred/agents/v2 {
-        proxy_pass ${FRONTEND_AGENTIC_UPSTREAM};
+        set \$fred_agentic_upstream ${FRONTEND_AGENTIC_UPSTREAM};
+        proxy_pass \$fred_agentic_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -251,7 +252,8 @@ server {
     }
 
     location /control-plane/ {
-        proxy_pass ${FRONTEND_CONTROL_PLANE_UPSTREAM};
+        set \$fred_control_plane_upstream ${FRONTEND_CONTROL_PLANE_UPSTREAM};
+        proxy_pass \$fred_control_plane_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;

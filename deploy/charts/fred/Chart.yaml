@@ -2,7 +2,7 @@ apiVersion: v2
 name: fred
 description: >-
   Fred, an open-source platform for putting a team to work with AI agents on its own
-  documents: agent runtime, document ingestion and search, control plane and web UI.
+  documents: governance, document ingestion and search, background workers and web UI.
 type: application
 # Both are set from the release tag when the chart is published.
 version: 1.5.0-post

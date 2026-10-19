@@ -211,11 +211,35 @@ class ResetTests(unittest.TestCase):
         self.assertFalse(any(c[0] == "http" and c[-1] != "GET" for c in self.r.calls))
         self.assertFalse(any(c[0] == "sql" and not c[-1].startswith("SELECT") for c in self.r.calls))
 
+    def test_real_manager_chart_configuration_accepts_typed_openfga(self):
+        import yaml
+        values = yaml.safe_load((Path(__file__).parents[1] / "charts/fred/values.yaml").read_text())
+        for name in reset.MANAGER_APPS:
+            values["applications"][name]["configuration"]["security"]["rebac"]["api_url"] = "http://openfga:9080"
+        reset.Reset().check_config(values, reset.MANAGER_APPS)
+
     def test_preview_resolves_installed_hooks_without_mutation(self):
         self.preflight()
         self.assertEqual(len(self.r.jobs), 3)
         self.assert_read_only()
         self.assertFalse(self.r.state_file.exists())
+
+    def test_integrated_manager_composition_uses_one_python_migration(self):
+        retired = {"control-plane-backend", "control-plane-worker", "fred-agents"}
+        for kind in ("deployments", "replicasets", "pods"):
+            self.r.resources[kind]["items"] = [
+                item for item in self.r.resources[kind]["items"]
+                if not any(name in json.dumps(item) for name in retired)
+            ]
+        for deployment in self.r.resources["deployments"]["items"]:
+            if deployment["metadata"]["name"] in reset.MANAGER_APPS:
+                deployment["metadata"]["annotations"][reset.RELEASE] = "fred-app"
+        self.r.installed_jobs = [j for j in self.r.installed_jobs if j["metadata"]["name"].startswith("knowledge-flow")]
+        self.preflight()
+        self.assertEqual(len(self.r.jobs), 1)
+        self.assertTrue(reset.MANAGER_APPS <= self.r.state["replicas"].keys())
+        self.assertFalse(retired & self.r.state["replicas"].keys())
+        self.assert_read_only()
 
     def test_manager_worker_is_stopped_restored_and_optional(self):
         self.preflight()

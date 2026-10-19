@@ -306,3 +306,26 @@ fn folder_directory_contract_resolves_order_enum_and_metadata() {
         );
     }
 }
+
+#[test]
+fn configuration_schema_is_generated_offline_and_matches_the_chart_input() {
+    let output = Command::new(env!("CARGO_BIN_EXE_fred-manager"))
+        .arg("generate-config-schema")
+        .env("CONFIG_FILE", "/does/not/exist")
+        .env("ENV_FILE", "/does/not/exist")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let actual: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let committed: Value =
+        serde_json::from_str(include_str!("../config/schema/configuration.schema.json")).unwrap();
+    assert_eq!(actual, committed);
+    assert_eq!(
+        actual["$defs"]["LifecycleConfig"]["properties"]["sweep_interval"]["type"],
+        "string"
+    );
+    assert_eq!(
+        actual["$defs"]["LifecycleConfig"]["properties"]["sweep_interval"]["default"],
+        "PT10M"
+    );
+}

@@ -13,22 +13,25 @@ setting.
 
 | Application | Role | Enabled by default |
 | --- | --- | --- |
-| `fred-agents` | agent runtime: executes conversations and agents | yes |
+| `fred-manager` | admission, governance, spaces, folders and authorization API | yes |
+| `fred-manager-worker` | manager lifecycle work | yes |
+| `fred-agents` | legacy agent runtime | no |
 | `frontend` | web UI, behind your ingress | yes |
 | `knowledge-flow-backend` | document ingestion, search and storage API | yes |
-| `knowledge-flow-worker`, `knowledge-flow-worker-extraction-{fast,medium,rich}` | ingestion workers, one per queue | no |
-| `control-plane-backend` | teams, sessions, administration API | yes |
+| `knowledge-flow-worker` | ingestion worker serving all roles | yes |
+| `knowledge-flow-worker-extraction-{fast,medium,rich}` | optional dedicated extraction workers | no |
+| `control-plane-backend` | legacy product API | no |
 | `control-plane-worker` | control-plane background work | no |
 
-Each application can also run its database migration as a Helm hook Job
-(`applications.<name>.migration.enabled`).
+Python applications can run database migrations as Helm hook Jobs
+(`applications.<name>.migration.enabled`). Manager applies its SQL migrations at API startup.
 
 ## Requirements
 
 - A Kubernetes cluster and [Helm](https://helm.sh/docs/intro/install/) 3 or 4.
 - The services Fred uses, reached by name from the cluster: PostgreSQL, OpenSearch,
-  Keycloak (a realm with the `app`, `agentic`, `knowledge-flow` and `control-plane`
-  clients, plus `fred-delegation` when delegation is on), OpenFGA, Temporal, and
+  Keycloak (a realm with `app`, `fred-manager` and Knowledge Flow clients,
+  plus clients required by any explicitly enabled legacy applications), OpenFGA, Temporal, and
   S3-compatible storage or Google Cloud Storage.
 
 ## Install
@@ -44,11 +47,12 @@ attached to its [GitHub release](https://github.com/ThalesGroup/fred/releases).
 
 ## Images
 
-The chart runs four images, `ghcr.io/thalesgroup/fred-agent/<app>`: `fred-agents`,
-`knowledge-flow-backend`, `control-plane-backend` and `frontend`; the workers run their
-backend's image. The tag defaults to the chart's `appVersion`; set
-`applications.<app>.image.tag` to run another one. `make docker-build` at the root of the
-repository builds all four from source.
+The default chart runs three images, `ghcr.io/thalesgroup/fred-agent/<app>`:
+`fred-manager`, `knowledge-flow-backend` and `frontend`. Each API/worker pair uses
+its backend's image. The tag defaults to the chart's `appVersion`; set matching
+`applications.<app>.image.tag` values for each pair when overriding it.
+`deploy/k3d/build` builds these three images from the same checkout. Legacy image
+publication remains available for deployments that explicitly enable those apps.
 
 ## Your values file
 
@@ -58,16 +62,22 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
   worker through YAML anchors, which Helm resolves when it reads the file. A setting shared
   by `knowledge-flow-backend` and `knowledge-flow-worker` (or `control-plane-backend` and
   `control-plane-worker`) must therefore be repeated for both in your file.
+- **Manager configuration is shared.** Set configuration and `lifecycle_policy_catalog`
+  on `applications.fred-manager`: both manager processes mount these same ConfigMaps
+  and restart when either changes. Worker credentials remain separate.
 - **Credentials by reference.** Point each application's `extraEnvVars` at a Secret that
   exists before the release (`valueFrom.secretKeyRef`), and give each migration Job its
   database password through `migration.extraEnvVars`. The applications read these
   variables before the `.env` file that `dotenv` renders. The root bootstrap token has its
   own contract: [Root bootstrap secret contract](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#root-bootstrap-secret-contract-authz-07).
 
-A complete, working example is the values of the local k3d instance,
+The local k3d example in fred-deployment-factory applies
 [`k3d-apps/fred/values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/values.yaml)
-in fred-deployment-factory: every address, credential and choice a deployment has to make,
-each one commented. The security profile (`c3`) is described in
+first, then
+[`k3d-apps/fred/manager-values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/manager-values.yaml)
+for manager-aware checkouts, then built image tags and operator overrides. Both
+files are needed for this composition: manager addresses and Secret references
+are in the second overlay. The security profile (`c3`) is described in
 [Security profiles & classification tiers](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#security-profiles--classification-tiers).
 To brand the frontend without rebuilding it, see
 [Theme overlay](https://github.com/ThalesGroup/fred/blob/swift/apps/frontend/README.md#theme-overlay-branding-assets-without-a-rebuild).
@@ -92,10 +102,11 @@ application creates its indexes at startup.
 
 ## First login
 
-Fred never creates Keycloak accounts. Register in the realm, then make that account the
-platform's `platform_admin` with the root bootstrap ([Root bootstrap secret contract](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#root-bootstrap-secret-contract-authz-07));
-`apps/control-plane-backend`'s `make bootstrap-local` does it against any reachable
-control-plane.
+Register in the realm, accept the active terms in Fred and enter the bootstrap
+secret requested by the UI to become platform owner. The manager API reads the
+secret named by `app.bootstrap_token_env_var`; k3d keeps the existing
+`fred-secrets/CONTROL_PLANE_BOOTSTRAP_TOKEN` key. Registration/bootstrap does not
+create organization membership. See the [manager guide](../../../apps/fred-manager/README.md).
 
 ## Kubernetes tools in fred-agents
 
@@ -107,7 +118,7 @@ fred-agents can inspect the cluster it runs in. It reads a kubeconfig from
 
 [fred-deployment-factory](https://github.com/fred-agent/fred-deployment-factory) installs
 this chart on a local k3d cluster: `make k3d-app APP=fred` the published release,
-`DIR=<fred checkout>` added to build the four images from source (`deploy/k3d/build`)
+`DIR=<fred checkout>` added to build the three images from source (`deploy/k3d/build`)
 and deploy the checkout's chart with the same values.
 
 ## Pods built on Fred's libraries

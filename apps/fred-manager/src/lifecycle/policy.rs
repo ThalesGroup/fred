@@ -100,17 +100,18 @@ fn rpc_timeout() -> u64 {
     10
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, utoipa::ToSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct Policies {
     pub purge_catalog_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct LifecycleConfig {
     pub enabled: bool,
     pub temporal: TemporalConfig,
+    #[schema(value_type = String, default = "PT10M")]
     pub sweep_interval: Retention,
     pub batch_size: u32,
 }
@@ -124,7 +125,7 @@ impl Default for LifecycleConfig {
         }
     }
 }
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TemporalConfig {
     pub host: String,

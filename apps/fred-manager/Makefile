@@ -90,3 +90,11 @@ test-lifecycle-temporal: dev ## API/worker restart and history replay on disposa
 	done; test "$$ready" = true; \
 	FRED_MANAGER_IT_POSTGRES=postgres://postgres:it@$$pg_addr FRED_MANAGER_IT_OPENFGA=http://$$fga_addr FRED_MANAGER_IT_TEMPORAL=$$temporal_addr \
 	$(CARGO) test --test lifecycle_temporal -- --ignored
+
+.PHONY: generate-config-schema
+generate-config-schema: ## Generate the manager configuration schema without starting services
+	@mkdir -p config/schema
+	@set -e; tmp=$$(mktemp config/schema/configuration.schema.json.XXXXXX); \
+	trap 'rm -f "$$tmp"' EXIT; \
+	$(CARGO) run --quiet --locked -- generate-config-schema > "$$tmp"; \
+	mv "$$tmp" config/schema/configuration.schema.json

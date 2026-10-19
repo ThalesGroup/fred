@@ -2,8 +2,8 @@
 schema: 1
 title: "Add deferred space deletion and the fred-manager Temporal worker"
 impact: minor
-configuration: local
-configuration_reason: "The Rust PoC uses its dedicated apps/fred-manager/deploy/k3d overlay; lifecycle defaults off, adds a worker and a shared policy catalog. Existing Python production configuration is unchanged."
+configuration: production
+configuration_reason: "The integrated Fred chart deploys manager API/worker with a shared policy catalog; lifecycle defaults off. Existing Python lifecycle behavior is unchanged."
 ---
 ## Applicability
 
@@ -18,7 +18,7 @@ Python's store. Stop old provisioning/operator writers during the upgrade.
 
 ## Configuration
 
-`scheduler.lifecycle.enabled` defaults to false. The dedicated k3d overlay deploys
+`scheduler.lifecycle.enabled` defaults to false. The integrated Fred chart deploys
 API and worker from one image and mounts `policies.purge_catalog_path` from their
 shared catalog. Default retention is P7D, sweep PT10M, batch size 100. Worker queue
 and workflow prefix start with `fred-manager-` and differ from ingestion's queue.

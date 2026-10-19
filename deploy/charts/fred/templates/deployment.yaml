@@ -52,7 +52,11 @@ spec:
         prometheus.io/path: "/metrics"
         {{- end }}
         # BEGIN - Force refresh of the deployment when configmap is changed
-        {{- if .app.configuration }}
+        {{- if or (eq $applicationName "fred-manager") (eq $applicationName "fred-manager-worker") }}
+        {{- $manager := index .root.Values.applications "fred-manager" }}
+        configmap.configurations.checksum: {{ $manager.configuration | toJson | sha256sum | quote }}
+        configmap.catalog.checksum: {{ $manager.lifecycle_policy_catalog | toJson | sha256sum | quote }}
+        {{- else if .app.configuration }}
         configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
         {{- end }}
         {{- if .app.kubeconfig.enabled }}

@@ -30,16 +30,17 @@ make run
 **In the cluster, after `make k3d-up`**, from fred-deployment-factory:
 
 ```
-make k3d-app DIR=../fred/apps/fred-manager            # build, import, sync
-make k3d-app-validate DIR=../fred/apps/fred-manager   # lint and render only
+make k3d-app APP=fred DIR=../fred            # build, import, sync
+make k3d-app-validate APP=fred DIR=../fred   # lint and render only
 make k3d-logs SVC=fred-manager
-make k3d-app-uninstall DIR=../fred/apps/fred-manager
 ```
 
-Deploy the frontend from this branch as well. Open Fred, sign in with your own
+This command deploys manager API/worker, Knowledge Flow API/worker and frontend
+together. The factory includes the guarded transition from the former standalone
+manager release; use its matching integration revision. Open Fred, sign in with your own
 Keycloak account, read and accept the CGU, then enter the deployment bootstrap
 secret in the UI. The local service uses `FRED_BOOTSTRAP_TOKEN` from `config/.env`.
-The k3d manager overlay reads the cluster secret `fred-secrets` key
+The k3d Fred values read the cluster secret `fred-secrets` key
 `CONTROL_PLANE_BOOTSTRAP_TOKEN`; use the value supplied by your deployment.
 
 The root is platform owner and has no organization membership. Open
@@ -59,7 +60,7 @@ manager consent or bootstrap records.
 SQL and published its authorization model. It uses the same binary and configuration;
 use a distinct `app.port` if API and worker share a host. Lifecycle is disabled by
 default. See [activation and policy configuration](../../docs/architecture/A3-manager-operations.md#space-deletion-lifecycle)
-before enabling it. The k3d overlay deploys the worker with the manager API.
+before enabling it. Fred's chart deploys the worker with the manager API.
 
 ## Changing it
 
@@ -102,7 +103,7 @@ non-personal space, and the last owner of an organization, cannot be revoked. Ca
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
 
 Platform grants, organization-owner grants and operator `create-org` require the manager's service client. The factory
-consumes `deploy/k3d/identities.yaml` during `k3d-app`; copy its generated
+consumes its `k3d-apps/fred/identities.yaml` during `k3d-app`; copy its generated
 `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` from `fred-secrets` to the host `.env` when
 running locally against that realm. `docker-up` alone does not provision this client.
 The [deployment chapter](../../docs/architecture/A3-manager-operations.md) describes configuration.

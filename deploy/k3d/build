@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Fred's four images for the local k3d instance (fred-deployment-factory).
+"""Build Fred's three images for the local k3d instance (fred-deployment-factory).
 
 Writes $K3D_APP_OUT/images.txt, the content-tagged references to copy into the
 cluster, and $K3D_APP_OUT/images.yaml, the Helm values selecting them.
@@ -16,9 +16,8 @@ def build(root: Path, output: Path) -> None:
     applications = {}
     images = []
     for app, consumers in {
-        "fred-agents": ["fred-agents"],
+        "fred-manager": ["fred-manager", "fred-manager-worker"],
         "knowledge-flow-backend": ["knowledge-flow-backend", "knowledge-flow-worker"],
-        "control-plane-backend": ["control-plane-backend", "control-plane-worker"],
         "frontend": ["frontend"],
     }.items():
         make = ["make", "--no-print-directory", "-C", str(root / "apps" / app)]

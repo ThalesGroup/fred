@@ -22,13 +22,14 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use sqlx::postgres::PgConnectOptions;
+use utoipa::ToSchema;
 
 use crate::{
     auth::{Provider, SecuritySettings, UserClaims},
     logging::LogFormat,
 };
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct Configuration {
     pub app: AppConfig,
     pub security: SecurityConfig,
@@ -38,7 +39,7 @@ pub struct Configuration {
     pub policies: crate::lifecycle::policy::Policies,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct AppConfig {
     /// Active terms version; null disables consent gating.
     #[serde(default, deserialize_with = "terms_version")]
@@ -57,7 +58,7 @@ pub struct AppConfig {
     pub bootstrap_token_env_var: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct SecurityConfig {
     #[serde(default)]
     pub profile: Option<String>,
@@ -70,7 +71,7 @@ pub struct SecurityConfig {
 }
 
 /// Issuer plus optional outbound directory credentials; legacy issuer-only configs remain valid.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct M2mConfig {
     pub realm_url: String,
     #[serde(default)]
@@ -79,7 +80,7 @@ pub struct M2mConfig {
     pub secret_env_var: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct UserConfig {
     #[serde(default = "yes")]
     pub enabled: bool,
@@ -97,7 +98,7 @@ pub struct UserConfig {
     pub claims: ClaimsConfig,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 pub struct ClaimsConfig {
     pub uid: Option<String>,
     pub username: Option<String>,
@@ -106,7 +107,7 @@ pub struct ClaimsConfig {
     pub family_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct RebacConfig {
     pub api_url: String,
     /// Never fred's own store: syncing this model there would replace fred's.
@@ -122,12 +123,12 @@ pub struct RebacConfig {
     pub timeout_millisec: Option<u64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct StorageConfig {
     pub postgres: PostgresConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct PostgresConfig {
     pub host: String,
     #[serde(default = "default_pg_port")]
@@ -136,7 +137,7 @@ pub struct PostgresConfig {
     pub username: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct SchedulerConfig {
     #[serde(default)]
     pub lifecycle: crate::lifecycle::policy::LifecycleConfig,
@@ -306,4 +307,33 @@ mod tests {
         assert_eq!(config.app.base_url, "/fred-manager/v1");
         assert!(config.security().unwrap().profile_c3);
     }
+}
+
+/// Generate the chart's configuration contract without loading runtime dependencies.
+pub fn schema() -> serde_json::Value {
+    use utoipa::OpenApi;
+    #[derive(OpenApi)]
+    #[openapi(components(schemas(Configuration)))]
+    struct ConfigApi;
+    let mut schema = serde_json::json!({
+        "$schema": "https://json-schema.org/draft-07/schema#",
+        "$ref": "#/$defs/Configuration",
+        "$defs": ConfigApi::openapi().components.unwrap().schemas,
+    });
+    fn references(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if let Some(serde_json::Value::String(reference)) = map.get_mut("$ref") {
+                    *reference = reference.replace("#/components/schemas/", "#/$defs/");
+                }
+                for child in map.values_mut() {
+                    references(child);
+                }
+            }
+            serde_json::Value::Array(values) => values.iter_mut().for_each(references),
+            _ => {}
+        }
+    }
+    references(&mut schema);
+    schema
 }

@@ -103,7 +103,7 @@ const SENSITIVE: &[&str] = &[
     "signed_url",
 ];
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     Json,

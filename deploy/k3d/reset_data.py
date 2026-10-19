@@ -195,7 +195,7 @@ class Reset:
             )
             fga = c["security"]["rebac"]
             require(
-                fga.get("type") == "openfga"
+                (name in MANAGER_APPS or fga.get("type") == "openfga")
                 and fga.get("api_url") in ("http://openfga:9080", "http://openfga:9080/")
                 and fga.get("store_name", "fred") == ("fred-manager" if name in MANAGER_APPS else "fred")
                 and not fga.get("store_id")
@@ -344,16 +344,24 @@ class Reset:
                 )
                 continue
             name = meta["name"]
-            expected = "fred-manager" if name in MANAGER_APPS else "fred-app" if name in APPS else "fred-stack"
+            expected = {"fred-app", "fred-manager"} if name in MANAGER_APPS else {"fred-app"} if name in APPS else {"fred-stack"}
             require(
                 meta["namespace"] == self.namespace
                 and name in APPS | INFRA
-                and meta.get("annotations", {}).get(RELEASE) == expected,
+                and meta.get("annotations", {}).get(RELEASE) in expected,
                 "other applications or unknown deployments are present",
             )
             self.deployments[name] = d
+        integrated = any(
+            self.deployments[n]["metadata"]["annotations"][RELEASE] == "fred-app"
+            for n in MANAGER_APPS & self.deployments.keys()
+        )
+        required_apps = (
+            MANAGER_APPS | {"frontend", "knowledge-flow-backend", "knowledge-flow-worker"}
+            if integrated else APPS - MANAGER_APPS
+        )
         require(
-            (APPS - MANAGER_APPS) | INFRA <= self.deployments.keys(),
+            required_apps | INFRA <= self.deployments.keys(),
             "required local services are missing",
         )
         for kind in ("statefulsets", "cronjobs", "horizontalpodautoscalers"):
@@ -407,9 +415,9 @@ class Reset:
                 or (m["namespace"] == "kube-system" and m["name"].startswith("svclb-traefik-")),
                 "unknown daemonset",
             )
-        self.check_config(self.values("fred-app"), APPS - MANAGER_APPS)
-        if manager_apps := MANAGER_APPS & self.deployments.keys():
-            self.check_config(self.values("fred-manager"), manager_apps)
+        for release in {self.deployments[n]["metadata"]["annotations"][RELEASE] for n in APPS & self.deployments.keys()}:
+            names = {n for n in APPS & self.deployments.keys() if self.deployments[n]["metadata"]["annotations"][RELEASE] == release}
+            self.check_config(self.values(release), names)
         secret = self.get("secret", "fred-secrets")["data"]
 
         def decode(key):
@@ -459,7 +467,12 @@ class Reset:
                 j["metadata"]["name"],
             )
         ]
-        require(len(self.jobs) == 3, "expected three installed SQL migration Jobs")
+        expected_migrations = {n for n in ("control-plane-backend", "knowledge-flow-backend", "fred-agents") if n in self.deployments}
+        require(
+            len(self.jobs) == len(expected_migrations)
+            and {j["metadata"]["name"].rsplit("-migration-", 1)[0] for j in self.jobs} == expected_migrations,
+            "installed SQL migration Jobs do not match the deployed services",
+        )
         self.jobs.sort(key=lambda j: int(j["metadata"].get("annotations", {}).get("helm.sh/hook-weight", "0")))
         names = sorted(APPS & self.deployments.keys()) + ["temporal"]
         identity = {

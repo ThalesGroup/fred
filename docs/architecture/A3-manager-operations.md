@@ -212,7 +212,7 @@ flowchart LR
         tmp["Temporal :7233"]
     end
     subgraph cluster [k3d namespace fred]
-        pod["release fred-manager<br/>ConfigMap fred-manager-back<br/>Secret fred-manager-env"]
+        pod["release fred-app<br/>ConfigMap fred-manager-back<br/>Secret fred-manager-env"]
         secrets[["fred-secrets"]]
         traefik["Traefik :8088<br/>/fred-manager"]
     end
@@ -224,7 +224,7 @@ flowchart LR
 
 | | Host run | k3d release |
 | --- | --- | --- |
-| Start | `make run` in `apps/fred-manager` | `make k3d-app DIR=../fred/apps/fred-manager` in the factory |
+| Start | `make run` in `apps/fred-manager` | `make k3d-app APP=fred DIR=../fred` in the factory |
 | Configuration | `config/configuration.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `fred-manager-back`, `log_format: json` |
 | Secrets | `config/.env` | `fred-secrets`, as `extraEnvVars` |
 | Addresses | `localhost` ports | `postgres`, `openfga:9080`, `temporal:7233`, `keycloak:8080` |
@@ -232,17 +232,18 @@ flowchart LR
 | Public URL | `http://localhost:8400/fred-manager/v1` | `http://localhost:8088/fred-manager/v1` |
 | Bootstrap secret | `FRED_BOOTSTRAP_TOKEN` in `.env` | `CONTROL_PLANE_BOOTSTRAP_TOKEN` of `fred-secrets`, generated with the cluster |
 
-The release uses fred's own chart (`deploy/charts/fred`) with every other application
-disabled, through `apps/fred-manager/deploy/k3d/` (factory contract: `helmfile.yaml.gotmpl`,
-`values.yaml`, `build`). `deploy/k3d/chart` links to that chart without its
-`values.schema.json`, whose closed application list `helm lint` enforces even with
-`--skip-schema-validation`.
+Manager API and worker are ordinary applications in Fred's chart (`deploy/charts/fred`)
+and release `fred-app`, alongside Knowledge Flow API/worker and frontend. The chart
+validates manager configuration through its generated schema. `generate-config-schema`
+runs offline from the same Rust configuration types; `make generate-chart-schema`
+embeds that schema with the other application contracts. The manager API owns the
+shared configuration/catalog mounts and both manager rollout checksums cover them.
 
 The image (`dockerfiles/Dockerfile-prod`) builds the release binary with `protoc` and
 `libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations and the OpenFGA
 model are compiled into the binary.
 
-`deploy/k3d/identities.yaml` declares the `fred-manager` confidential service client and
+The factory's `k3d-apps/fred/identities.yaml` declares the `fred-manager` confidential service client and
 its `realm-management/query-users`, `view-users` and `manage-users` grants. The factory's
 `k3d-app` identity reconciliation populates `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` in
 `fred-secrets`; the release consumes it through `extraEnvVars`.
@@ -332,11 +333,11 @@ days, hours, minutes and seconds; unsupported fields, calendar/fractional durati
 empty match lists and overflows fail validation. Accepted deadlines never change
 when a catalog is reloaded.
 
-`make run-worker` starts the separate process. The k3d overlay deploys
+`make run-worker` starts the separate process. Fred's chart deploys
 `fred-manager-worker` from the same image, with the API's config/catalog mounts,
 SQL/FGA secrets and `/healthz` probes, without ingress or a Service. Local
-`k3d-app-reset` treats API and worker as optional manager workloads, validates both
-configurations, stops both before erasure and restores their original replicas. Its logs use
+`k3d-app-reset` recognizes the integrated release and the earlier standalone manager,
+validates configurations, stops producers before erasure and restores their original replicas. Its logs use
 `service_role: worker`. Acceptance and completion emit `space.deletion.accepted`
 and `space.deletion.completed` on `fred.security.audit` after SQL commit.
 

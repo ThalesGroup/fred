@@ -575,10 +575,13 @@ make k3d-app APP=fred                 # the published release, no checkout (RELE
 make k3d-app APP=fred DIR=<this checkout>   # build this checkout, deploy it; rerun after any change
 ```
 
-The model API key comes from the environment (`OPENAI_API_KEY=<key> make k3d-app ...`
-once), or with `DIR` from `apps/fred-agents/config/.env` (`make setup-env` here, once).
+Create the operator-owned `fred-model-credentials` Secret with key `OPENAI_API_KEY`
+first, as described by the factory. This checkout builds three images and deploys
+five processes in `fred-app`: manager API/worker, Knowledge Flow API/worker and frontend.
+Use the matching factory revision; it safely retires the old standalone manager
+release without resetting data. Control-plane and fred-agents are disabled.
 Fred is then on <http://localhost:8088>. The first time, register on its login page and
-follow the token-retrieval instruction printed by `make k3d-app`: you become `platform_admin`.
+follow the token-retrieval instruction printed by `make k3d-app`: on this branch, you become platform owner.
 
 ## Production mode
 

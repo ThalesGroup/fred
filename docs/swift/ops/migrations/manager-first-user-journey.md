@@ -2,8 +2,8 @@
 schema: 1
 title: "Move the experimental first-user journey to fred-manager"
 impact: major
-configuration: local
-configuration_reason: "The experimental manager reference and standalone k3d overlay enable app.gcu_version v1; the production Fred chart does not configure this experimental component. The branch frontend entry now requires manager instead of the control-plane shell."
+configuration: production
+configuration_reason: "The manager reference and integrated Fred chart enable app.gcu_version v1; the coordinated deployment is described in integrate-manager-fred-deployment.md. The branch frontend entry now requires manager instead of the control-plane shell."
 ---
 
 ## Applicability
@@ -22,7 +22,7 @@ backups before upgrading an existing experimental installation.
 
 ## Configuration
 
-The manager reference YAML and standalone k3d overlay set `app.gcu_version: v1`.
+The manager reference YAML and integrated Fred chart set `app.gcu_version: v1`.
 Deploy corresponding frontend legal markdown assets with the configured version.
 A version change requires renewed personal consent, including root. `null` disables
 the gate; an omitted setting remains disabled. No consent is imported from Python.

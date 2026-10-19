@@ -41,22 +41,22 @@ class BuildImagesTests(unittest.TestCase):
                 module.build(root, output)
             self.assertEqual(before, (output / "images.yaml").read_text())
             applications = json.loads(before)["applications"]
-            self.assertEqual(len(applications), 6)
-            for prefix in ("knowledge-flow", "control-plane"):
+            self.assertEqual(len(applications), 5)
+            for api, worker in (("knowledge-flow-backend", "knowledge-flow-worker"), ("fred-manager", "fred-manager-worker")):
                 self.assertEqual(
-                    applications[f"{prefix}-backend"], applications[f"{prefix}-worker"]
+                    applications[api], applications[worker]
                 )
             self.assertEqual(
                 applications["frontend"]["image"]["tag"], "k3d-aaaaaaaaaaaa"
             )
-            self.assertEqual(len((output / "images.txt").read_text().splitlines()), 4)
+            self.assertEqual(len((output / "images.txt").read_text().splitlines()), 3)
             builds = [
                 call.args[0]
                 for call in run.call_args_list
                 if "docker-build" in call.args[0]
             ]
-            self.assertEqual(len(builds), 8)
-            self.assertEqual(builds[0][3], str(root / "apps/fred-agents"))
+            self.assertEqual(len(builds), 6)
+            self.assertEqual(builds[0][3], str(root / "apps/fred-manager"))
 
     def test_failed_build_does_not_publish_partial_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

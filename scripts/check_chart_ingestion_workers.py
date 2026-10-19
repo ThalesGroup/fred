@@ -78,6 +78,7 @@ ALL_GROUPS_OVERRIDDEN = {
             "image": {"repository": OVERRIDES["repository"], "tag": OVERRIDES["tag"]},
             "configuration": {
                 "scheduler": {
+                    "worker_roles": ["common"],
                     "temporal": {
                         "host": OVERRIDES["host"],
                         "namespace": OVERRIDES["namespace"],
@@ -98,7 +99,7 @@ ALL_GROUPS_OVERRIDDEN = {
     }
 }
 
-HISTORICAL_WORKER_ONLY = {"applications": {"knowledge-flow-worker": dict(_ENABLE)}}
+HISTORICAL_WORKER_ONLY = {"applications": {"knowledge-flow-worker": {**_ENABLE, "configuration": {"scheduler": {"worker_roles": ["common"]}}}}}
 
 # A whole ingestion deployment retuned away from the chart defaults: the API and
 # the four worker groups. The API is a separate application and inherits nothing,
@@ -147,7 +148,7 @@ def _shared_ingestion_configuration() -> dict:
 FULL_DEPLOYMENT = {
     "applications": {
         API_GROUP: {"configuration": _shared_ingestion_configuration()},
-        "knowledge-flow-worker": {**_ENABLE, "configuration": _shared_ingestion_configuration()},
+        "knowledge-flow-worker": {**_ENABLE, "configuration": {**_shared_ingestion_configuration(), "scheduler": {**_SHARED_INGESTION_CONFIGURATION["scheduler"], "worker_roles": ["common"]}}},
         **{name: dict(_ENABLE) for name in WORKER_GROUPS if name != "knowledge-flow-worker"},
     }
 }

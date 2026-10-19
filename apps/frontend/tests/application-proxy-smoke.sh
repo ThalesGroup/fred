@@ -220,4 +220,9 @@ for logging_config in "${config}" "${disabled_config}"; do
     assert_not_contains "${logging_config}" '$args'
 done
 
+# Retired business services must resolve on requests, never on nginx startup.
+assert_contains "${config}" 'proxy_pass $fred_agentic_upstream;'
+assert_contains "${config}" 'proxy_pass $fred_control_plane_upstream;'
+assert_contains "${config}" 'location /fred/agents/v2 {'
+assert_contains "${config}" 'location /control-plane/ {'
 echo "Application proxy smoke checks passed"

@@ -1,6 +1,13 @@
 {
   "images": [
     {
+      "name": "fred-manager",
+      "context": "apps/fred-manager",
+      "dockerfile": "apps/fred-manager/dockerfiles/Dockerfile-prod",
+      "build_args": "",
+      "publish": true
+    },
+    {
       "name": "fred-agents",
       "context": ".",
       "dockerfile": "apps/fred-agents/dockerfiles/Dockerfile-prod",

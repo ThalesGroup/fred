@@ -14,6 +14,7 @@ on:
       - 'apps/control-plane-backend/**'
       - 'apps/knowledge-flow-backend/**'
       - 'apps/fred-agents/**'
+      - 'apps/fred-manager/**'
       - 'libs/fred-*/**'
       - 'libs/capabilities/**'
       - 'deploy/charts/**'
@@ -72,10 +73,22 @@ jobs:
         run: make check-config-files
         working-directory: ${{ matrix.dir }}
 
+  check-manager-config:
+    name: "fred-manager configuration schema"
+    runs-on: ubuntu-latest
+    container: rust:1.99.0-slim-trixie
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install protobuf compiler
+        run: apt-get update && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev
+      - name: Verify the configuration schema against the Rust types
+        working-directory: apps/fred-manager
+        run: cargo test --locked --test openapi configuration_schema_is_generated_offline_and_matches_the_chart_input
+
   check-chart-schema:
     name: "Helm chart values schema"
     runs-on: ubuntu-latest
-    needs: check-config
+    needs: [check-config, check-manager-config]
     steps:
       - uses: actions/checkout@v4
 
