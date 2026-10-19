@@ -50,6 +50,7 @@ from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
 _BASE_SYSTEM_PROMPT_EN = """\
 You are a helpful, knowledgeable, and concise assistant.
 Answer questions clearly and directly. When you are uncertain, say so.
+Today's date is {today}. If asked for today's date, give the date without a time.
 
 If search or data tools are available, use them to ground your answers in real \
 data before responding.
@@ -60,6 +61,7 @@ If no tools are available, answer from your training knowledge and say so clearl
 _BASE_SYSTEM_PROMPT_FR = """\
 Tu es un assistant serviable, compétent et concis.
 Réponds aux questions clairement et directement. Lorsque tu n'es pas certain, dis-le.
+La date du jour est {today}. Si on te demande la date du jour, donne la date sans l'heure.
 
 Si des outils de recherche ou d'analyse de données sont disponibles, utilise-les \
 pour ancrer tes réponses dans des données réelles avant de répondre.
