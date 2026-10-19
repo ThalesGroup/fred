@@ -42,6 +42,7 @@ from fred_core.common import TeamId
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.rebac.rebac_engine import RebacDisabledResult
 from fred_sdk.contracts.capability import CapabilityConfigCopyRequest
+from fred_sdk.contracts.models import active_capability_ids
 
 from control_plane_backend.agent_instances.names import (
     CopyLocale,
@@ -127,7 +128,7 @@ async def effective_capability_ids(
     """
     selected = record.tuning.selected_capability_ids
     if selected is not None and template.supports_capabilities:
-        return list(selected)
+        return active_capability_ids(selected)
     return await product_service.template_default_capability_ids(
         template.available_capabilities,
         template.default_capability_ids or [],

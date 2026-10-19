@@ -42,7 +42,7 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -402,6 +402,14 @@ class CapabilityConfigCopyResult(StoredCapabilityConfig):
     """
 
     notices: list[str] = Field(default_factory=list)
+
+
+def active_capability_ids(selected: Iterable[str] | None) -> list[str]:
+    """Drop the retired document importer from runtime and Control Plane selections.
+
+    Other unknown ids retain normal validation. Saved data is not rewritten.
+    """
+    return [cap_id for cap_id in selected or () if cap_id != "open_writable_document"]
 
 
 class AgentTuning(BaseModel):

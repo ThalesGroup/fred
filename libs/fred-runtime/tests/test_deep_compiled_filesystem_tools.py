@@ -333,11 +333,16 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
 
 
 @pytest.mark.asyncio
-async def test_standard_deep_open_presents_bounded_reference(tmp_path: Any) -> None:
+@pytest.mark.parametrize(
+    ("path", "viewer"),
+    [("/notes.txt", "text"), ("/report.md", "markdown"), ("/report.html", "html")],
+)
+async def test_standard_deep_open_presents_bounded_reference(
+    tmp_path: Any, path: str, viewer: str
+) -> None:
     service = ConversationFilesystemService(
         LocalFilesystem(str(tmp_path)), "session-open"
     )
-    await service.scratchpad().write_text("notes.txt", "PRIVATE BODY" * 10000)
     backend, permissions = build_conversation_filesystem(service)
     port = DeepConversationFilesystemPort(backend, permissions)
     binding = _binding().model_copy(
@@ -347,7 +352,17 @@ async def test_standard_deep_open_presents_bounded_reference(tmp_path: Any) -> N
         script=[
             AIMessage(
                 content="",
-                tool_calls=[_tool_call("open", {"path": "/notes.txt"}, "open-notes")],
+                tool_calls=[
+                    _tool_call(
+                        "write_file",
+                        {"file_path": path, "content": "PRIVATE BODY" * 10000},
+                        "write-presented-file",
+                    )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("open", {"path": path}, "open-notes")],
             ),
             AIMessage(content="Review requested"),
         ]
@@ -385,14 +400,13 @@ async def test_standard_deep_open_presents_bounded_reference(tmp_path: Any) -> N
     assert result.artifact.ui_parts[0].model_dump() == {
         "type": "conversation_file",
         "session_id": "session-open",
-        "path": "/notes.txt",
-        "viewer": "text",
+        "path": path,
+        "viewer": viewer,
         "editable": True,
     }
-    assert (
-        result.content
-        == 'File presentation requested: {"path": "/notes.txt", "viewer": "text", "editable": true}'
-    )
+    assert "PRIVATE BODY" not in result.content
+    assert len(result.content) < 256
+    assert "open_writable_document" not in set.union(*model.bound_tool_names)
     assert len(result.artifact.model_dump_json()) < 1024
 
 

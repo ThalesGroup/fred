@@ -165,3 +165,59 @@ def test_export_md_passthrough(app_client):
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/markdown")
     assert resp.text == "# Title\n\nBody"
+
+
+def test_legacy_react_document_can_be_created_edited_and_exported(app_client):
+    from fred_capability_writable_document.capability import WritableDocumentCapability
+    from fred_runtime.capabilities import (
+        CapabilityRegistry,
+        build_capability_agent_block,
+        build_capability_contexts,
+    )
+    from fred_sdk.contracts.capability import CapabilityIdentity
+    from fred_sdk.contracts.context import ToolInvocationResult
+    from fred_sdk.contracts.runtime import RuntimeServices
+
+    client, _, _ = app_client
+    registry = CapabilityRegistry()
+    registry.register(WritableDocumentCapability())
+    registry.validate({})
+    contexts = build_capability_contexts(
+        registry,
+        selected_capability_ids=["writable_document"],
+        capability_config={},
+        identity=CapabilityIdentity(user_id="u-1", session_id="s-1"),
+        services=RuntimeServices(),
+    )
+    block = build_capability_agent_block(registry, contexts)
+    writer = next(
+        tool
+        for middleware in block.middleware
+        for tool in middleware.tools
+        if tool.name == "write_document"
+    )
+    result = asyncio.run(
+        writer.ainvoke(
+            {
+                "type": "tool_call",
+                "id": "legacy-write",
+                "name": "write_document",
+                "args": {"title": "Report", "content_markdown": "# Agent draft"},
+            }
+        )
+    )
+    history_part = ToolInvocationResult.model_validate_json(
+        result.artifact.model_dump_json()
+    ).ui_parts[0]
+    assert history_part.type == "writable_document"
+    document_url = f"{_PREFIX}/sessions/s-1/documents/{history_part.document_id}"
+    assert client.get(document_url).json()["content_md"] == "# Agent draft"
+    response = client.put(document_url, json={"content_md": "# Human revision"})
+    assert response.status_code == 200
+    assert client.get(document_url).json()["content_md"] == "# Human revision"
+    markdown = client.get(f"{document_url}/export", params={"format": "md"})
+    assert markdown.status_code == 200
+    assert markdown.content == b"# Human revision"
+    word = client.get(f"{document_url}/export", params={"format": "docx"})
+    assert word.status_code == 200
+    assert word.content.startswith(b"PK")

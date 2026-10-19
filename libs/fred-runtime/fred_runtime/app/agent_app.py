@@ -146,6 +146,7 @@ from fred_sdk.contracts.models import (
     MCPServerRef,
     ReActAgentDefinition,
     TuningValue,
+    active_capability_ids,
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
@@ -3931,8 +3932,9 @@ def _effective_capability_ids(
         selected = None
     if selected is None:
         selected = [ref.id for ref in definition.default_mcp_servers]
+    selected = active_capability_ids(selected)
     if capability_registry is None:
-        return list(selected)
+        return selected
     mcp_config = get_runtime_context().config.mcp_configuration
     # `get_server()` filters on `enabled`, so it cannot tell a known-but-disabled
     # catalog entry apart from one absent entirely — both would otherwise be kept
@@ -4074,6 +4076,7 @@ def _build_capability_block(
         raw = selected
         if raw is None:
             raw = [ref.id for ref in definition.default_mcp_servers]
+        raw = active_capability_ids(raw)
         if not raw:
             return None
         raise CapabilityError(

@@ -883,3 +883,26 @@ def test_self_test_harness_templates_are_exempt_and_others_are_not() -> None:
     assert capability_gate_exempt("fred.github.self_test")
     assert capability_gate_exempt("fred.github.self_test_web")
     assert not capability_gate_exempt("fred.github.general_assistant")
+
+
+@pytest.mark.asyncio
+async def test_health_ignores_retired_bridge_but_reports_unrelated_missing_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id="i",
+                team_id="t",
+                selected=["open_writable_document", "gone"],
+            ),
+        ]
+    )
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": frozenset()},
+        usable_by_team={"t": {"open_writable_document", "gone"}},
+    )
+    result = await impact_mod.compute_capability_impact(_deps_with(store))
+    assert "open_writable_document" not in result
+    assert result["gone"].suspended_instances == 1

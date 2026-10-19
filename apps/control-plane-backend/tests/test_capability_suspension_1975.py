@@ -355,3 +355,71 @@ def _product_deps(app):
 
     container = get_application_container_from_app(app)
     return build_product_service_dependencies(container)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dry_run", [True, False])
+async def test_retired_bridge_does_not_suspend_saved_agent(
+    monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    record = _record_with_selection()
+    record.tuning.selected_capability_ids = ["open_writable_document"]
+    app, store = _setup(monkeypatch, records=[record])
+    _patch_available(monkeypatch, ids=set())
+    deps = _product_deps(app)
+
+    summary = await service.run_capability_reconciliation_sweep(deps, dry_run=dry_run)
+
+    assert summary.newly_suspended == 0
+    assert store._records[0].suspension_reason is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("other_id", [None, "demo_echo"])
+@pytest.mark.parametrize("already_invalid", [False, True])
+async def test_retired_bridge_config_is_inactive_but_other_invalid_config_suspends(
+    other_id: str | None,
+    already_invalid: bool,
+) -> None:
+    record = _record_with_selection()
+    if already_invalid:
+        record.suspension_reason = "capability_config_invalid"
+    record.tuning.selected_capability_ids = ["open_writable_document"] + (
+        [other_id] if other_id else []
+    )
+    store = _FakeAgentInstanceStore([record])
+
+    async def rejected_by_pod(_capability_id: str, _config: dict[str, object]) -> None:
+        raise SliceInvalid(_capability_id, "not installed or invalid")
+
+    reason = await reconcile_instance_config_health(
+        instance=record, store=store, validate_slice=rejected_by_pod
+    )
+
+    assert reason is (SuspensionReason.CAPABILITY_CONFIG_INVALID if other_id else None)
+    assert record.suspension_reason == (
+        "capability_config_invalid" if other_id else None
+    )
+
+
+@pytest.mark.asyncio
+async def test_saved_retired_bridge_prepares_after_availability_reconciliation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _suspended_record(SuspensionReason.CAPABILITY_UNAVAILABLE)
+    record.tuning.selected_capability_ids = ["open_writable_document"]
+    app, _ = _setup(monkeypatch, records=[record])
+    _patch_available(monkeypatch, ids=set())
+    await service.run_capability_reconciliation_sweep(_product_deps(app))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1/prepare-execution"
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["capability_base_urls"] == {}
+    assert [item["capability_id"] for item in response.json()["chat_controls"]] == [
+        "platform"
+    ]

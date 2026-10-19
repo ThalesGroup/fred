@@ -16,13 +16,9 @@ prompt), one owned table (`cap_writable_document_docs`), the contributed
 `writable_document` chat part, the editor side panel, and the list/get/put/export
 router.
 
-The package also registers a separately enabled, temporary
-`open_writable_document` capability for Deep Agent demos. Its sole tool copies
-an existing Markdown file from any readable mount in the current conversation
-workspace into the editor. Enable both capabilities on the demo agent:
-`writable_document` owns the editor and `open_writable_document` adds the import
-tool. The copied document can be edited, but those edits do not update the
-source workspace file.
+Deep agents use the standard conversation-filesystem `open(path)` tool and
+built-in viewers. They do not need this capability to present Markdown files.
+Existing ReAct documents remain in their original store; no migration is required.
 
 ## Registration
 
@@ -30,4 +26,3 @@ Installing this package *is* the registration: the fred-agents pod auto-discover
 the capability at boot via the `fred.capabilities` entry point declared in
 `pyproject.toml`
 (`writable_document = "fred_capability_writable_document.capability:WritableDocumentCapability"`).
-The second entry point registers `open_writable_document` independently.

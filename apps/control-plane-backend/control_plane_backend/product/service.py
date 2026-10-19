@@ -67,7 +67,7 @@ from fred_sdk.contracts.capability.manifest import (
     REASONING_EFFORT_LEVELS,
     ReasoningEffortLevel,
 )
-from fred_sdk.contracts.models import TeamScopePolicy
+from fred_sdk.contracts.models import TeamScopePolicy, active_capability_ids
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1090,7 +1090,7 @@ async def _resolve_chat_controls(
 
     versions = {entry.id: entry.version for entry in available_capabilities}
     catalog_order = [entry.id for entry in available_capabilities]
-    selected = set(tuning.selected_capability_ids or [])
+    selected = set(active_capability_ids(tuning.selected_capability_ids))
     ordered_ids = [cid for cid in catalog_order if cid in selected]
 
     per_capability: dict[str, list[ChatControlItem]] = {}
@@ -1266,9 +1266,10 @@ def _validate_capability_ids(
     Validate submitted capability IDs against the pod-advertised catalog
     (#1974, RFC AGENT-CAPABILITY §3.8 save-time availability check).
 
-    Unknown IDs raise EnrollmentError(422); known IDs are returned as-is.
-    An instance may never reference a capability its pod does not advertise.
+    Retired selections are inactive; other unknown IDs raise EnrollmentError(422).
+    Return the active IDs for save-time validation and persistence.
     """
+    submitted_ids = active_capability_ids(submitted_ids)
     unknown = [cid for cid in submitted_ids if cid not in available_ids]
     if unknown:
         raise EnrollmentError(
@@ -1483,7 +1484,7 @@ async def _apply_capability_selection(
     if not supports_capabilities:
         selected_ids = None
     if selected_ids is not None:
-        _validate_capability_ids(
+        selected_ids = _validate_capability_ids(
             submitted_ids=selected_ids,
             available_ids=frozenset(entry.id for entry in available),
             context_label=context_label,
@@ -1850,7 +1851,9 @@ async def run_capability_reconciliation_sweep(
             # A disabled catalog MCP server is tolerated, never "missing" (#1988).
             missing = [
                 cap_id
-                for cap_id in (record.tuning.selected_capability_ids or [])
+                for cap_id in active_capability_ids(
+                    record.tuning.selected_capability_ids
+                )
                 if cap_id not in available and cap_id not in tolerated_mcp
             ]
             if missing:
@@ -3470,7 +3473,9 @@ async def prepare_execution(
     # ingress-relative pattern the pod advertises on the template catalog
     # (`{prefix}/capabilities/{id}`), resolved here for the capabilities this
     # instance actually selected so the in-session UI calls them directly.
-    selected_capability_ids = instance.tuning.selected_capability_ids or []
+    selected_capability_ids = active_capability_ids(
+        instance.tuning.selected_capability_ids
+    )
     capability_base_urls = {
         cap_id: f"{prefix}/capabilities/{cap_id}" for cap_id in selected_capability_ids
     }
@@ -3689,7 +3694,7 @@ async def get_runtime_binding_for_team(
     )
     # Ship only the settings slices of the capabilities this instance selected
     # (CAPAB-01, RFC §8.2); the pod carries each to `CapabilityContext`.
-    selected = set(instance.tuning.selected_capability_ids or [])
+    selected = set(active_capability_ids(instance.tuning.selected_capability_ids))
     team_capability_settings = {
         cap_id: settings
         for cap_id, settings in all_team_settings.items()

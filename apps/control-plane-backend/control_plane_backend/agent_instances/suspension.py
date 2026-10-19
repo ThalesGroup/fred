@@ -55,6 +55,7 @@ from typing import Protocol
 from fred_core.common import TeamId
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_sdk.contracts.models import active_capability_ids
 
 from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
@@ -160,7 +161,7 @@ def unavailable_capabilities(
 
     available = set(available_capability_ids)
     tolerated = set(tolerated_ids)
-    selected = instance.tuning.selected_capability_ids or []
+    selected = active_capability_ids(instance.tuning.selected_capability_ids)
     return [
         cap_id
         for cap_id in selected
@@ -350,8 +351,18 @@ async def reconcile_instance_config_health(
     if instance.suspension_reason in _AVAILABILITY_REASON_VALUES:
         return None
 
+    selected = active_capability_ids(instance.tuning.selected_capability_ids)
+    if instance.tuning.selected_capability_ids and not selected:
+        # Retirement leaves no active config that could justify this suspension.
+        if (
+            instance.suspension_reason
+            == SuspensionReason.CAPABILITY_CONFIG_INVALID.value
+        ):
+            await clear_suspension(store, instance, kpi_writer=kpi_writer)
+        return None
+
     skip = set(skip_ids)
-    for cap_id in instance.tuning.selected_capability_ids or []:
+    for cap_id in selected:
         if cap_id in skip:
             continue
         stored = instance.tuning.capability_config.get(cap_id)
