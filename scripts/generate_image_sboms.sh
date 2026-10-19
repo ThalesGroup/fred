@@ -3,9 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-scan_args=()
+scan_args=(image --image-src docker --format cyclonedx)
 case "${CVES:-false}" in
-  true) scan_args=(--scanners vuln) ;;
+  true) scan_args+=(--scanners vuln) ;;
   false) ;;
   *) echo "ERROR: CVES must be true or false." >&2; exit 1 ;;
 esac
@@ -75,7 +75,7 @@ for i in "${!names[@]}"; do
   output="$output_dir/$name.cdx.json"
   tmp=$(mktemp "$output_dir/.$name.XXXXXX")
   echo "Generating $output from $reference"
-  run_trivy image --image-src docker --format cyclonedx "${scan_args[@]}" --output "$tmp" "$reference"
+  run_trivy "${scan_args[@]}" --output "$tmp" "$reference"
   if ! jq -e '.bomFormat == "CycloneDX" and ((.components // []) | length > 0)' "$tmp" >/dev/null; then
     echo "ERROR: $reference produced no valid CycloneDX components." >&2
     exit 1
