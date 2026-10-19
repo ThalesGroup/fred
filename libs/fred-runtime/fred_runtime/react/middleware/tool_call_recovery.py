@@ -32,6 +32,7 @@ from langchain_core.tools import BaseTool, InjectedToolCallId
 from pydantic import BaseModel, ValidationError
 
 from fred_runtime.support.reasoning_replay import is_mistral_model_name
+from fred_runtime.support.thinking import is_payloadless_block, is_thinking_block
 
 from ..react_model_adapter import (
     extract_model_name_from_model_response,
@@ -49,9 +50,6 @@ _TOOL_NAME_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
 )
 _FOLLOWUP_CALL = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,256})\s*(?=\{)")
-# Keys that carry no visible content: streaming leaves `{}` or bare typed
-# markers (e.g. `{"type": "signature"}`) between deltas.
-_PAYLOADLESS_KEYS = frozenset({"type", "index", "id"})
 
 
 class _DuplicateJsonKey(ValueError):
@@ -163,11 +161,7 @@ def _anchored_text(
             and marked_name is None
         ):
             continue
-        elif (
-            isinstance(block, dict)
-            and block.get("type") not in ("text", "reference")
-            and block.keys() <= _PAYLOADLESS_KEYS
-        ):
+        elif is_payloadless_block(block):
             continue
         elif is_tool_call_recovery_reference_block(block):
             if marked_name is None:
@@ -401,9 +395,16 @@ class ToolCallTextRecoveryMiddleware(AgentMiddleware):
                 )
             metadata = dict(message.response_metadata)
             metadata[RECOVERED_TOOL_CALL_TEXT_METADATA_KEY] = True
+            content: str | list[str | dict[Any, Any]] = preamble
+            if isinstance(message.content, list):
+                thinking = [
+                    block for block in message.content if is_thinking_block(block)
+                ]
+                if thinking:
+                    content = [*thinking, preamble] if preamble else thinking
             result[index] = message.model_copy(
                 update={
-                    "content": preamble,
+                    "content": content,
                     "tool_calls": [*text_calls, *native_calls],
                     "response_metadata": metadata,
                 }

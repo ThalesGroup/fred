@@ -54,6 +54,7 @@ from fred_sdk.contracts.runtime import (
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.messages.tool import ToolCall
 from langchain_core.tools import BaseTool, tool
 
 
@@ -437,6 +438,60 @@ async def test_call_after_hundreds_of_streamed_thinking_deltas_runs_unseen() -> 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("coalesced", [False, True])
+@pytest.mark.parametrize("valid", [False, True])
+async def test_payloadless_blocks_do_not_break_streamed_call_recovery(
+    coalesced: bool, valid: bool
+) -> None:
+    arguments = '{"path":"/"}' if valid else '{"path":'
+    blocks: list[str | dict[str, object]] = [
+        {"type": "thinking", "thinking": "inspect files"},
+        {"type": "text", "text": "l"},
+        {},
+        {"type": "text", "text": "s"},
+        {"type": "signature", "index": 0},
+        {"type": "reference", "reference_ids": []},
+        {"id": "empty-delta"},
+        {"type": "text", "text": arguments},
+    ]
+    completed = AIMessage(
+        content=blocks, response_metadata={"model_name": "mistral-medium-latest"}
+    )
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[completed])
+
+    recovered = (
+        await ToolCallTextRecoveryMiddleware().awrap_model_call(
+            ModelRequest(model=cast(BaseChatModel, None), messages=[], tools=[ls]),
+            handler,
+        )
+    ).result[0]
+    chunks = [blocks] if coalesced else [[block] for block in blocks]
+    events = [
+        *(("messages", (AIMessageChunk(content=chunk), {})) for chunk in chunks),
+        ("updates", {"agent": {"messages": [recovered]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    answer = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    )
+    assert answer == ("" if valid else f"ls{arguments}")
+    assert (
+        "".join(
+            event.delta for event in collected if isinstance(event, ThoughtDeltaEvent)
+        )
+        == "inspect files"
+    )
+    calls = [event for event in collected if isinstance(event, ToolCallRuntimeEvent)]
+    assert [event.tool_name for event in calls] == (["ls"] if valid else [])
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("content", "tool_name", "args"),
     [
@@ -591,6 +646,56 @@ async def test_native_call_with_marked_content_does_not_publish_call_syntax_as_p
         for event in collected
         if isinstance(event, ToolCallRuntimeEvent)
     ] == [("native-1", "list_tabular_documents")]
+
+
+@pytest.mark.asyncio
+async def test_recovered_native_duplicate_keeps_coalesced_preamble_as_planning() -> (
+    None
+):
+    thinking = {"type": "thinking", "thinking": "inspect files"}
+    preamble = "I will inspect the directory."
+    native_call: ToolCall = {"id": "native-1", "name": "ls", "args": {"path": "/"}}
+    call_blocks = [
+        {"type": "text", "text": f"{preamble}\n\nls"},
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": '{"path":"/"}'},
+    ]
+    completed = AIMessage(
+        content=[thinking, *call_blocks],
+        tool_calls=[native_call],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[completed])
+
+    recovered = (
+        await ToolCallTextRecoveryMiddleware().awrap_model_call(
+            ModelRequest(model=cast(BaseChatModel, None), messages=[], tools=[ls]),
+            handler,
+        )
+    ).result[0]
+    collected = await _run_stream(
+        [
+            ("messages", (AIMessageChunk(content=[thinking]), {})),
+            (
+                "messages",
+                (AIMessageChunk(content=call_blocks, tool_calls=[native_call]), {}),
+            ),
+            ("updates", {"agent": {"messages": [recovered]}}),
+        ]
+    )
+
+    assert not [e for e in collected if isinstance(e, AssistantDeltaRuntimeEvent)]
+    assert [e.delta for e in collected if isinstance(e, ThoughtDeltaEvent)] == [
+        "inspect files",
+        preamble,
+    ]
+    assert [
+        (e.call_id, e.tool_name)
+        for e in collected
+        if isinstance(e, ToolCallRuntimeEvent)
+    ] == [("native-1", "ls")]
 
 
 @pytest.mark.asyncio

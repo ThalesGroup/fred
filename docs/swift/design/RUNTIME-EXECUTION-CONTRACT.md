@@ -7096,19 +7096,24 @@ turn ends with hundreds of `thinking` blocks and the former 256-block cap
 rejected it before parsing. The 16k-character cap on recovered text and the
 16-call cap remain the bounds; thinking blocks before the tool name are skipped,
 as are blocks with no content (`{}` or a bare typed marker) anywhere in the message.
+The stream marker detector and renderer use the same payloadless-block rule,
+including blocks sharing a chunk with the sentinel or splitting a tool name.
 
 `content_to_text` (transcript, history and replay rendering) no longer renders
 the `reference` sentinel or tool-call blocks (`tool_use`, `tool_call`,
 `input_json_delta`) as their Python repr, so `{'type': 'reference', ...}` never
 appears in an answer, the stored history, or the context replayed to the model.
-A `refusal` block renders as its refusal text. Unknown block types and non-dict
-objects keep the visible `str()` fallback; text blocks, plain strings and
-reasoning handling are unchanged. Superseding §8.92 for Mistral, text after the
-first recovered call is dropped (only its length is logged): in every recorded
+A `refusal` block renders as its refusal text. Payloadless provider blocks are
+omitted; unknown blocks carrying data and non-dict objects keep the visible
+`str()` fallback. Literal braces in text remain unchanged. Superseding §8.92
+for Mistral, text after the first recovered call is dropped (only its length is logged): in every recorded
 leak it was runaway output, never an answer; text before it stays the content.
 Text calls are also recovered when the message already has native calls: they
 come first, and one equal in name and arguments to a native call is dropped,
-native IDs kept. At the reference anchor a `.` may precede the tool name
+native IDs kept. Recovery retains the original thinking blocks alongside the
+safe preamble, including for a duplicate native call, so the next request can
+replay that reasoning. Planning renders only the safe preamble from this mixed
+content, including when streamed together with a native call. At the reference anchor a `.` may precede the tool name
 (`...landscape.read_document`); the longest registered name still wins. A native call whose name is not registered
 but ends in a registered tool name (a model looping its output into the name, any
 model) is renamed to that tool; other unknown names keep the tool node's "not a

@@ -65,6 +65,16 @@ THINKING_BLOCK_TYPES = frozenset({"thinking", "reasoning"})
 _NON_TEXT_BLOCK_TYPES = frozenset(
     {"reference", "tool_use", "tool_call", "input_json_delta"}
 )
+_PAYLOADLESS_KEYS = frozenset({"type", "index", "id"})
+
+
+def is_payloadless_block(item: object) -> bool:
+    """Recognize empty provider deltas without accepting malformed text or references."""
+    return (
+        isinstance(item, dict)
+        and item.get("type") not in ("text", "reference")
+        and item.keys() <= _PAYLOADLESS_KEYS
+    )
 
 
 def block_type(item: object) -> str | None:
@@ -186,8 +196,10 @@ def content_to_text(content: object, *, out_fragments: list[str] | None = None) 
             rendered_parts.append(str(item["text"]))
         elif item.get("type") == "refusal" and isinstance(item.get("refusal"), str):
             rendered_parts.append(item["refusal"])
-        elif item.get("type") not in _NON_TEXT_BLOCK_TYPES:
-            # Unknown blocks stay visible rather than silently disappearing.
+        elif item.get("type") not in _NON_TEXT_BLOCK_TYPES and not is_payloadless_block(
+            item
+        ):
+            # Unknown blocks with payloads stay visible.
             rendered_parts.append(str(item))
     # Text blocks may split a token or Markdown fence; preserve their exact bytes.
     return "".join(rendered_parts)

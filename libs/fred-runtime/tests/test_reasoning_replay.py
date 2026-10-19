@@ -21,6 +21,9 @@ from unittest.mock import Mock
 
 import pytest
 from fred_runtime.react.middleware import CheckpointHygieneMiddleware
+from fred_runtime.react.middleware.tool_call_recovery import (
+    ToolCallTextRecoveryMiddleware,
+)
 from fred_runtime.support.reasoning_replay import (
     MistralReasoningReplayChatOpenAI,
     replays_native_reasoning,
@@ -41,6 +44,7 @@ from langchain_core.messages import (
     HumanMessage,
     ToolMessage,
 )
+from langchain_core.tools import tool
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 _CALL = {"name": "read_document", "args": {"uid": "doc-1"}, "id": "call-1"}
@@ -76,6 +80,73 @@ def _history() -> list[BaseMessage]:
 
 def _thinking(text: str) -> dict[str, object]:
     return {"type": "thinking", "thinking": [{"type": "text", "text": text}]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("native_duplicate", [False, True])
+@pytest.mark.parametrize("preamble", ["", "I will read the document.\n\n"])
+async def test_recovered_call_keeps_reasoning_in_the_next_request(
+    native_duplicate: bool, preamble: str
+) -> None:
+    @tool
+    def read_document(uid: str) -> str:
+        """Read a fake document."""
+        return "document text"
+
+    original = AIMessage(
+        content=[
+            *_streamed_reasoning("read ", "the doc"),
+            {"type": "text", "text": f"{preamble}read_document"},
+            {"type": "reference", "reference_ids": []},
+            {"type": "text", "text": '{"uid":"doc-1"} } runaway text'},
+        ],
+        tool_calls=[_CALL] if native_duplicate else [],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+    model = cast(
+        BaseChatModel, with_mistral_reasoning_replay(_chat("mistral-medium-latest"))
+    )
+
+    async def respond(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[original])
+
+    recovered = (
+        await ToolCallTextRecoveryMiddleware().awrap_model_call(
+            ModelRequest(model=model, messages=[], tools=[read_document]), respond
+        )
+    ).result[0]
+    assert isinstance(recovered, AIMessage)
+    assert len(recovered.tool_calls) == 1
+    call_id = recovered.tool_calls[0]["id"]
+    assert call_id is not None
+    if native_duplicate:
+        assert call_id == "call-1"
+    history: list[AnyMessage] = [
+        HumanMessage("Read the document"),
+        recovered,
+        ToolMessage("document text", tool_call_id=call_id),
+    ]
+    payloads: list[dict[str, Any]] = []
+
+    async def capture(request: ModelRequest) -> ModelResponse:
+        payloads.append(
+            cast(ChatOpenAI, request.model)._get_request_payload(request.messages)
+        )
+        return ModelResponse(result=[AIMessage("done")])
+
+    await CheckpointHygieneMiddleware(
+        max_history_messages=None,
+        binding=cast(BoundRuntimeContext, Mock()),
+        kpi=None,
+    ).awrap_model_call(ModelRequest(model=model, messages=history), capture)
+
+    wire = payloads[0]["messages"]
+    expected_content = [_thinking("read the doc")]
+    if preamble:
+        expected_content.append({"type": "text", "text": preamble.strip()})
+    assert wire[1]["content"] == expected_content
+    assert wire[1]["tool_calls"][0]["id"] == wire[2]["tool_call_id"] == call_id
+    assert original.content[0] == _thinking("read ")
 
 
 def test_only_plain_mistral_chat_openai_replays_reasoning() -> None:

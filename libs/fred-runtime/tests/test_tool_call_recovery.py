@@ -27,6 +27,7 @@ from fred_runtime.react.middleware.tool_call_recovery import (
     ToolCallTextRecoveryMiddleware,
 )
 from fred_runtime.runtime_support.ask_user import AskUserArgs
+from fred_runtime.support.thinking import content_to_text
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -686,7 +687,7 @@ async def test_reconstructed_incidents_recover_every_complete_call_once(
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == expected_content
+    assert content_to_text(recovered.content) == expected_content
     assert [(call["name"], call["args"]) for call in recovered.tool_calls] == (
         expected_calls
     )
@@ -760,7 +761,7 @@ async def test_mixed_checkpoint_fragments_recover_two_calls(
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == ""
+    assert content_to_text(recovered.content) == ""
     assert [
         (call["name"], call["args"]) for call in recovered.tool_calls
     ] == expected_calls
@@ -827,7 +828,7 @@ async def test_streamed_call_with_one_block_per_delta_is_recovered() -> None:
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
     # The over-closing brace after the first call is not shown as content.
-    assert recovered.content == ""
+    assert content_to_text(recovered.content) == ""
     assert [(call["name"], call["args"]) for call in recovered.tool_calls] == [
         ("build_presentation", json.loads(first_args)),
         (
@@ -920,7 +921,7 @@ async def test_repeated_exact_markers_recover_four_valid_calls() -> None:
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == ""
+    assert content_to_text(recovered.content) == ""
     assert [(call["name"], call["args"]) for call in recovered.tool_calls] == [
         ("read_query", item) for item in args
     ]
@@ -1228,7 +1229,7 @@ async def test_duplicate_text_and_native_call_keeps_one_call_and_clears_content(
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == ""
+    assert content_to_text(recovered.content) == ""
     assert recovered.tool_calls == [{**native, "type": "tool_call"}]
 
 
@@ -1248,7 +1249,7 @@ async def test_distinct_text_and_native_calls_are_both_kept_text_first() -> None
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == ""
+    assert content_to_text(recovered.content) == ""
     assert [(call["args"], call["id"]) for call in recovered.tool_calls] == [
         (_DECK_CHANGES, recovered.tool_calls[0]["id"]),
         (_DECK_SLIDES, "call-1"),
@@ -1288,7 +1289,7 @@ async def test_sentence_ending_in_dot_then_tool_name_anchors_next_call() -> None
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == ""
+    assert content_to_text(recovered.content) == ""
     assert [
         (call["name"], call["args"]["offset"]) for call in recovered.tool_calls
     ] == [
@@ -1315,7 +1316,7 @@ async def test_two_calls_back_to_back_after_one_reference() -> None:
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == ""
+    assert content_to_text(recovered.content) == ""
     assert [call["args"] for call in recovered.tool_calls] == [changes, _DECK_SLIDES]
 
 
@@ -1344,7 +1345,7 @@ async def test_runaway_text_after_recovered_call_is_dropped(runaway: str) -> Non
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == "Let me read it."
+    assert content_to_text(recovered.content) == "Let me read it."
     assert [call["args"] for call in recovered.tool_calls] == [
         {"document_uid": "fake-doc"}
     ]
@@ -1368,7 +1369,7 @@ async def test_registered_dotted_name_wins_over_its_suffix_at_the_anchor() -> No
 
     recovered = response.result[0]
     assert isinstance(recovered, AIMessage)
-    assert recovered.content == "Reading."
+    assert content_to_text(recovered.content) == "Reading."
     assert [call["name"] for call in recovered.tool_calls] == ["ns.read_document"]
 
 

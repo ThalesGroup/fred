@@ -23,6 +23,7 @@ The runtime SHALL convert a completed Mistral assistant response into native too
 
 - **WHEN** a streamed Mistral response interleaves blocks without any content (`{}`, or a bare typed marker such as `{"type": "signature"}`) with the text blocks forming a registered tool name, the exact empty sentinel, and valid arguments
 - **THEN** the runtime ignores the content-less blocks and emits the validated call once
+- **AND** neither assistant nor Planning deltas contain the blocks or encoded call, whether the blocks arrive separately or share a chunk with the sentinel
 
 #### Scenario: Plain answer containing literal braces
 
@@ -72,7 +73,7 @@ The runtime MUST leave ordinary prose or quoted examples without the exact typed
 
 ### Requirement: Stream and execute recovered calls through normal controls
 
-The runtime SHALL keep the marker and recoverable call syntax out of assistant answer and reasoning events while the completed Mistral response is being resolved. A recovered call MUST pass the same access, human approval, budget, tracing, observability, and result-pairing controls as a native call. Text before the first recovered call SHALL remain visible through the existing assistant or thought routing; text after it SHALL be dropped, logging only its length. Rendering into assistant text, conversation history, or replayed model context SHALL omit the sentinel and other known non-text call blocks (`reference`, `tool_use`, `tool_call`, `input_json_delta`), SHALL render a `refusal` block as its refusal text, and SHALL keep rendering any other block or non-dict object visibly.
+The runtime SHALL keep the marker and recoverable call syntax out of assistant answer and reasoning events while the completed Mistral response is being resolved. A recovered call MUST pass the same access, human approval, budget, tracing, observability, and result-pairing controls as a native call. Text before the first recovered call SHALL remain visible through the existing assistant or thought routing; text after it SHALL be dropped, logging only its length. Rendering into assistant text, conversation history, or replayed model context SHALL omit the sentinel and other known non-text call blocks (`reference`, `tool_use`, `tool_call`, `input_json_delta`), SHALL render a `refusal` block as its refusal text, and SHALL omit blocks containing only `type`, `index` and `id` metadata (except malformed `text` or `reference` blocks), and SHALL keep rendering unknown blocks with payloads and non-dict objects visibly.
 
 #### Scenario: Recovered call completes
 
@@ -105,3 +106,8 @@ When the chat model is a Mistral model served through the OpenAI-compatible clie
 - **WHEN** a non-Mistral model call replays the same history
 - **THEN** no `thinking` chunk is sent, and the open turn's reasoning is carried as prefixed text as before
 
+#### Scenario: Recovered response retains reasoning
+
+- **WHEN** a Mistral message contains reasoning and a valid encoded call, optionally duplicating a native call
+- **THEN** recovery preserves its reasoning and safe preamble while removing the encoded call
+- **AND** the next model request replays that reasoning with paired tool-call and tool-result IDs

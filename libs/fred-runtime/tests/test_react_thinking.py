@@ -163,6 +163,21 @@ def test_stringify_plain_text_unchanged() -> None:
     assert stringify_langchain_content([{"type": "text", "text": "a"}]) == "a"
 
 
+def test_payloadless_blocks_leave_literal_braces_and_unknown_payloads_visible() -> None:
+    unknown = {"type": "future_block", "value": "keep me"}
+    content = [
+        {"type": "text", "text": "Use {} to reset. "},
+        {},
+        {"type": "signature", "index": 0},
+        {"id": "empty-delta"},
+        "Literal {} stays. ",
+        unknown,
+    ]
+    expected = f"Use {{}} to reset. Literal {{}} stays. {unknown}"
+    assert content_to_text(content) == expected
+    assert stringify_langchain_content(content) == expected
+
+
 @pytest.mark.parametrize("split", [3, 10, 35])
 def test_text_fragments_preserve_mermaid_fence_in_history_and_replay(
     split: int,

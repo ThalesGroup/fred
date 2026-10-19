@@ -96,6 +96,7 @@ from fred_runtime.runtime_support.run_scope import (
 )
 from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
 from fred_runtime.skills.catalog import build_skills_middleware
+from fred_runtime.support.thinking import content_to_text
 
 from .middleware.tool_call_recovery import (
     MAX_TOOL_CALL_RECOVERY_CHARS,
@@ -947,8 +948,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # streamed syntax was transient answer text, so persist
                         # only the safe preamble retained on the normalized message.
                         preamble = (
-                            message.content
-                            if recovered_text_call and isinstance(message.content, str)
+                            content_to_text(message.content)
+                            if recovered_text_call
                             else "".join(round_preamble)
                         )
                         preamble_chars = (
