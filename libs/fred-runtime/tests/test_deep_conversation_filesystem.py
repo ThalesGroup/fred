@@ -35,6 +35,7 @@ from fred_sdk.contracts.runtime import (
     ConversationFilesystemInterruptError,
     ConversationFilesystemPermissionError,
     ConversationScratchpadInvalidPathError,
+    ConversationScratchpadUnsupportedContentError,
 )
 
 
@@ -273,7 +274,7 @@ async def test_virtual_port_and_backend_share_mounts_and_exact_text() -> None:
     )
     backend, permissions = build_conversation_filesystem(service)
     port = DeepConversationFilesystemPort(backend, permissions)
-    content = "first\r\nsecond\rthird  \n" + "x" * 20000
+    content = "first\r\nsecond\rthird  \n" + "x" * 65535 + "é😀" + "z" * 65535
 
     assert (await backend.awrite("/notes.txt", content)).error is None
     assert await port.read_text("/notes.txt", origin="agent") == content
@@ -384,3 +385,22 @@ async def test_mutations_carry_server_source_independent_of_permission_origin() 
     await system.scratchpad().write_text("notes.txt", "Background revision")
     assert storage.sources == ["agent", "user", "agent", "independent_system"]
     assert await port.read_text("/notes.txt", origin="agent") == "Background revision"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix_bytes", [0, 65536])
+async def test_virtual_port_rejects_invalid_utf8_without_replacement(
+    prefix_bytes: int,
+) -> None:
+    storage = _MemoryFilesystem()
+    await storage.write(
+        "conversations/conversation-a/scratchpad/notes.txt",
+        b"x" * prefix_bytes + b"\xff",
+    )
+    service = ConversationFilesystemService(
+        storage, "conversation-a", mutation_source="agent"
+    )
+    backend, permissions = build_conversation_filesystem(service)
+    port = DeepConversationFilesystemPort(backend, permissions)
+    with pytest.raises(ConversationScratchpadUnsupportedContentError):
+        await port.read_text("/notes.txt", origin="agent")

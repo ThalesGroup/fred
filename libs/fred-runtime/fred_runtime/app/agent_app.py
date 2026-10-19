@@ -180,6 +180,10 @@ from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
+from fred_runtime.app.conversation_file_http import (
+    conversation_file_json_response,
+    utf8_text_chunks,
+)
 from fred_runtime.app.execution_diagnostics import report_execution_error
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
@@ -5859,18 +5863,13 @@ def _build_agent_router(
         )
         return DeepConversationFilesystemPort(backend, permissions)
 
-    @router.get(
-        "/sessions/{session_id}/filesystem/file",
-        response_model=ConversationFileResponse,
-        operation_id="readConversationFile",
-    )
-    async def read_conversation_file(
+    async def authorized_conversation_file(
         session_id: str,
         path: str,
         http_request: Request,
-        team_id: str | None = None,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
-        container: PodApplicationContext = Depends(get_pod_container),
+        team_id: str | None,
+        caller: KeycloakUser | None,
+        container: PodApplicationContext,
     ) -> ConversationFileResponse:
         """Read an existing owned conversation without preparing execution."""
         from fred_runtime.deep.open_file import ensure_presentable, file_reference
@@ -5902,6 +5901,25 @@ def _build_agent_router(
         return ConversationFileResponse(**reference.model_dump(), content=content)
 
     @router.get(
+        "/sessions/{session_id}/filesystem/file",
+        response_model=ConversationFileResponse,
+        operation_id="readConversationFile",
+    )
+    async def read_conversation_file(
+        session_id: str,
+        path: str,
+        http_request: Request,
+        team_id: str | None = None,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> StreamingResponse:
+        """Read an existing owned conversation without preparing execution."""
+        file = await authorized_conversation_file(
+            session_id, path, http_request, team_id, caller, container
+        )
+        return conversation_file_json_response(file)
+
+    @router.get(
         "/sessions/{session_id}/filesystem/export",
         operation_id="exportConversationFile",
         response_class=StreamingResponse,
@@ -5927,23 +5945,24 @@ def _build_agent_router(
         """Export freshly authorized saved Markdown without a document record."""
         from fred_core.documents.docx_export import markdown_to_docx_bytes
 
-        file = await read_conversation_file(
+        file = await authorized_conversation_file(
             session_id, path, http_request, team_id, caller, container
         )
         if file.viewer != "markdown":
             raise HTTPException(415, "Only Markdown files can be exported.")
         title = file.path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
         if format == "md":
-            data = file.content.encode("utf-8")
+            data = utf8_text_chunks(file.content)
             media_type = "text/markdown"
         else:
-            data = await asyncio.to_thread(
+            document = await asyncio.to_thread(
                 markdown_to_docx_bytes, file.content, title=title
             )
+            data = iter([document])
             media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         filename = re.sub(r"[^a-zA-Z0-9_.-]", "_", title) or "document"
         return StreamingResponse(
-            iter([data]),
+            data,
             media_type=media_type,
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}.{format}"',
@@ -5964,7 +5983,7 @@ def _build_agent_router(
         team_id: str | None = None,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         container: PodApplicationContext = Depends(get_pod_container),
-    ) -> ConversationFileResponse:
+    ) -> StreamingResponse:
         """Replace current text using server policy, without a read-before-write guard."""
         from fred_sdk.contracts.runtime import ConversationFilesystemQuotaError
 
@@ -5993,10 +6012,11 @@ def _build_agent_router(
             raise HTTPException(
                 503, "Conversation filesystem storage is unavailable."
             ) from exc
-        return ConversationFileResponse(
+        file = ConversationFileResponse(
             **reference.model_copy(update={"editable": True}).model_dump(),
             content=body.content,
         )
+        return conversation_file_json_response(file)
 
     @router.delete(
         "/sessions/{session_id}/filesystem",

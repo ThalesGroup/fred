@@ -7183,6 +7183,10 @@ def test_conversation_file_save_is_readable_without_execution(
         ("/../notes.txt", {"content": "forged"}, 422),
         ("/notes.txt", {"content": "forged", "origin": "system"}, 422),
         ("/notes.txt", {"content": "forged", "editable": True}, 422),
+        ("/notes.txt", {"content": 123}, 422),
+        ("/notes.txt", {"content": None}, 422),
+        ("/notes.txt", {"content": []}, 422),
+        ("/notes.txt", b'{"content":', 422),
     ],
 )
 def test_conversation_file_save_rejects_forged_policy(
@@ -7222,7 +7226,8 @@ def test_conversation_file_save_rejects_forged_policy(
         saved = client.put(
             "/pod/v1/agents/sessions/edit-session/filesystem/file",
             params={"path": path},
-            json=body,
+            content=body if isinstance(body, bytes) else json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
         )
         assert saved.status_code == status
 
@@ -7709,3 +7714,96 @@ def test_conversation_file_export_uses_latest_saved_markdown(
                 and "".join(r.itertext()) == "approved"
                 for r in paragraph.findall("w:r", ns)
             )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "",
+        'quote " slash \\ controls\r\n\t\b\f\x01 accents é emoji 😀',
+        "x" * 1048575 + 'é😀"\\\r\n' + "y" * 1048575 + "終",
+    ],
+)
+def test_conversation_file_json_and_markdown_preserve_full_text(
+    monkeypatch, tmp_path, content
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        config = get_runtime_context().config
+        history = config.history_store
+        assert history is not None
+        asyncio.run(
+            history.save(
+                "codec-session",
+                [make_user_text("codec-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        url = "/pod/v1/agents/sessions/codec-session/filesystem/"
+        saved = client.put(
+            url + "file", params={"path": "/report.md"}, json={"content": content}
+        )
+        assert saved.status_code == 200
+        expected = {
+            "type": "conversation_file",
+            "session_id": "codec-session",
+            "path": "/report.md",
+            "viewer": "markdown",
+            "editable": True,
+            "content": content,
+        }
+        assert saved.json() == expected
+        current = client.get(url + "file", params={"path": "/report.md"})
+        assert current.status_code == 200
+        assert current.json() == expected
+        exported = client.get(
+            url + "export", params={"path": "/report.md", "format": "md"}
+        )
+        assert exported.status_code == 200
+        assert exported.content == content.encode("utf-8")
+
+
+def test_conversation_file_save_preserves_the_existing_byte_quota(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_core.history.history_schema import make_user_text
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    config = _build_test_config(tmp_path)
+    config.storage.conversation_filesystem.scratchpad_max_bytes = 8
+    app = create_agent_app(registry={}, config=config)
+    with TestClient(app) as client:
+        history = get_runtime_context().config.history_store
+        assert history is not None
+        asyncio.run(
+            history.save(
+                "quota-session",
+                [make_user_text("quota-session", "turn-1", 0, "review")],
+                "alice",
+            )
+        )
+        url = "/pod/v1/agents/sessions/quota-session/filesystem/file"
+        saved = client.put(url, params={"path": "/notes.txt"}, json={"content": "éééé"})
+        assert saved.status_code == 200
+        rejected = client.put(
+            url, params={"path": "/notes.txt"}, json={"content": "ééééx"}
+        )
+        assert rejected.status_code == 413
+        assert (
+            client.get(url, params={"path": "/notes.txt"}).json()["content"] == "éééé"
+        )

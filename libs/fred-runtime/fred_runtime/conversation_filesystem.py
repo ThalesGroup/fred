@@ -298,11 +298,7 @@ class _ConversationTextNamespace:
     async def _read_text(self, relative_path: str) -> str:
         content = await self.read_bytes(relative_path)
         try:
-            return (
-                await asyncio.to_thread(content.decode, "utf-8")
-                if len(content) > _TEXT_OFFLOAD_THRESHOLD
-                else content.decode("utf-8")
-            )
+            return await decode_utf8_text(content)
         except UnicodeDecodeError as exc:
             raise ConversationScratchpadUnsupportedContentError(
                 "Scratchpad supports UTF-8 text only"
@@ -630,6 +626,13 @@ def _normalize_path(path: str, *, allow_root: bool = False) -> str:
             "Scratchpad path contains an unsafe segment"
         )
     return str(PurePosixPath(*segments))
+
+
+async def decode_utf8_text(content: bytes) -> str:
+    """Reuse thresholded decode offload for namespace and SDK reads."""
+    if len(content) > _TEXT_OFFLOAD_THRESHOLD:
+        return await asyncio.to_thread(content.decode, "utf-8")
+    return content.decode("utf-8")
 
 
 def _encode_text(content: str) -> bytes:
