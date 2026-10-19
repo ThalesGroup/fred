@@ -34,7 +34,7 @@ use uuid::Uuid;
 use crate::{
     auth::{Authenticator, CurrentUser},
     bootstrap, db,
-    domain::{Document, Folder, Permission, Role, Space, SpaceKind, SpaceRow},
+    domain::{Folder, Permission, Role, Space, SpaceKind, SpaceRow},
     error::{ApiJson, AppError, AppResult},
     fga::Fga,
     keycloak::Directory,
@@ -324,7 +324,7 @@ struct MySpace {
         (status = 200, description = "Success", body = [MySpace]),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
+        (status = 409, description = "Ambiguous organization context, or a space role without its parent membership", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -447,7 +447,7 @@ async fn grant(
     Path((id, role, target)): Path<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
     let role = parse_role(&role)?;
-    if role == Role::Owner
+    if role == Role::OrganizationOwner
         && !s
             .directory
             .as_ref()
@@ -493,27 +493,6 @@ async fn revoke(
 }
 
 // ---------------------------------------------------------------- folders
-
-// Folder filters are not authority: validate them only after authorizing the space.
-async fn require_folder_in_space(
-    pool: &PgPool,
-    space: Uuid,
-    folder: Option<Uuid>,
-) -> AppResult<()> {
-    if let Some(id) = folder {
-        let exists = sqlx::query_scalar::<_, bool>(
-            "select exists(select 1 from folder where id = $1 and space_id = $2)",
-        )
-        .bind(id)
-        .bind(space)
-        .fetch_one(pool)
-        .await?;
-        if !exists {
-            return Err(AppError::NotFound);
-        }
-    }
-    Ok(())
-}
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct FolderDirectory {
@@ -660,75 +639,6 @@ async fn delete_folder(
 
 // ---------------------------------------------------------------- documents
 
-#[derive(Deserialize, utoipa::ToSchema)]
-struct DocumentQuery {
-    folder_id: Option<Uuid>,
-    /// Cursor: the `name` and `id` of the last document of the previous page.
-    after_name: Option<String>,
-    after_id: Option<Uuid>,
-    limit: Option<i64>,
-}
-
-#[utoipa::path(
-    get, path = "/spaces/{id}/documents",
-    params(("id" = Uuid, Path), ("folder_id" = Option<Uuid>, Query), ("after_name" = Option<String>, Query), ("after_id" = Option<Uuid>, Query), ("limit" = Option<i64>, Query, description = "Defaults to 50; clamped to 1..200. Both cursor fields must be supplied together.")),
-    responses(
-        (status = 200, description = "Success", body = [Document]),
-        (status = 422, description = "Invalid path or query", body = crate::error::ErrorBody),
-        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Unknown space or folder in this space", body = crate::error::ErrorBody),
-        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
-        (status = 503, description = "Dependency unavailable", body = crate::error::ErrorBody),
-    )
-)]
-async fn list_documents(
-    State(s): State<AppState>,
-    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    crate::documents::http::Id(space): crate::documents::http::Id,
-    crate::documents::http::Params(q): crate::documents::http::Params<DocumentQuery>,
-) -> AppResult<Json<Vec<Document>>> {
-    crate::documents::authorized(&s.pool, &s.fga, &user, space, Permission::Read).await?;
-    require_folder_in_space(&s.pool, space, q.folder_id).await?;
-    let limit = q.limit.unwrap_or(50).clamp(1, 200);
-    let after = match (q.after_name.as_deref(), q.after_id) {
-        (Some(name), Some(id)) => Some((name, id)),
-        (None, None) => None,
-        _ => {
-            return Err(AppError::Unprocessable(
-                "after_name and after_id go together".into(),
-            ));
-        }
-    };
-    Ok(Json(
-        db::documents(&s.pool, space, q.folder_id, after, limit).await?,
-    ))
-}
-
-#[utoipa::path(
-    get, path = "/documents/{id}",
-    params(("id" = Uuid, Path)),
-    responses(
-        (status = 200, description = "Success", body = Document),
-        (status = 422, description = "Invalid path or query", body = crate::error::ErrorBody),
-        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
-        (status = 503, description = "Dependency unavailable", body = crate::error::ErrorBody),
-    )
-)]
-async fn get_document(
-    State(s): State<AppState>,
-    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    crate::documents::http::Id(id): crate::documents::http::Id,
-) -> AppResult<Json<Document>> {
-    let document = db::document(&s.pool, id).await?;
-    crate::documents::authorized(&s.pool, &s.fga, &user, document.space_id, Permission::Read)
-        .await?;
-    Ok(Json(document))
-}
-
 // ---------------------------------------------------------------- authorization for agents
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -840,7 +750,7 @@ fn platform_role(name: &str) -> AppResult<PlatformRole> {
 }
 #[utoipa::path(
     put, path = "/users/{user}/platform-roles/{role}",
-    params(("user" = String, Path), ("role" = PlatformRole, Path, description = "Also accepts the owner and observer aliases.")),
+    params(("user" = String, Path), ("role" = PlatformRole, Path)),
     responses(
         (status = 204, description = "Success"),
         (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
@@ -881,7 +791,7 @@ async fn grant_platform_role(
 }
 #[utoipa::path(
     delete, path = "/users/{user}/platform-roles/{role}",
-    params(("user" = String, Path), ("role" = PlatformRole, Path, description = "Also accepts the owner and observer aliases.")),
+    params(("user" = String, Path), ("role" = PlatformRole, Path)),
     responses(
         (status = 204, description = "Success"),
         (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
@@ -1107,10 +1017,6 @@ fn governance_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(list_folders))
         .routes(routes!(create_folder))
         .routes(
-            routes!(list_documents)
-                .layer(axum::middleware::from_fn(crate::documents::http::no_store)),
-        )
-        .routes(
             routes!(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
                 crate::blueprint::MAX_ARCHIVE + 64 * 1024,
             )),
@@ -1130,10 +1036,6 @@ fn content_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))
-        .routes(
-            routes!(get_document)
-                .layer(axum::middleware::from_fn(crate::documents::http::no_store)),
-        )
         .routes(routes!(authorize_document))
         .routes(routes!(authorize_scope))
         .route_layer(axum::middleware::from_fn(logging::expose_route))

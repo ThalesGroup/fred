@@ -225,31 +225,22 @@ pub async fn memberships(pool: &PgPool, fga: &Fga, user: &str) -> AppResult<Vec<
         };
         target.extend(links.into_iter().filter_map(|(id, link)| Some((id, link?))));
     }
-    // Resolve missing project ancestors too, including inconsistent legacy grants.
+    // A direct project role implies a direct team content role, so every ancestor is a row.
     let mut context = None;
     for row in rows.values() {
-        let mut id = row.id;
         let org = if row.personal_owner.is_some() {
             *organization
-                .get(&id)
+                .get(&row.id)
                 .ok_or_else(|| anyhow::anyhow!("missing organization link"))?
         } else {
-            if row.kind != SpaceKind::Organization && !parent.contains_key(&id) {
-                return Err(anyhow::anyhow!("missing parent link").into());
+            let mut id = row.id;
+            while let Some(up) = parent.get(&id) {
+                id = *up;
             }
-            for _ in 0..2 {
-                if let Some(up) = parent.get(&id).copied() {
-                    id = up;
-                } else if row.kind == SpaceKind::Project && id != row.id {
-                    let up = fga
-                        .link_of(id, false)
-                        .await?
-                        .ok_or_else(|| anyhow::anyhow!("missing parent link"))?;
-                    parent.insert(id, up);
-                    id = up;
-                } else {
-                    break;
-                }
+            if rows.get(&id).map(|r| r.kind) != Some(SpaceKind::Organization) {
+                return Err(AppError::Conflict(
+                    "a space role lacks its parent membership".into(),
+                ));
             }
             id
         };
@@ -369,12 +360,14 @@ async fn holds_parent_content(fga: &Fga, user: &str, parent: Uuid) -> AppResult<
 /// admins, every other role by the space's admins.
 async fn may_change(fga: &Fga, caller: &str, space: &Space, role: Role) -> AppResult<()> {
     let allowed = match (role, space.kind) {
-        (Role::Owner, SpaceKind::Organization) => fga.is_platform_owner(caller).await?,
-        (Role::Owner, _) => return Err(AppError::Conflict(OWNER_ON_ORGANIZATIONS.into())),
+        (Role::OrganizationOwner, SpaceKind::Organization) => fga.is_platform_owner(caller).await?,
+        (Role::OrganizationOwner, _) => {
+            return Err(AppError::Conflict(OWNER_ON_ORGANIZATIONS.into()));
+        }
         (Role::Admin, SpaceKind::Organization) => {
             fga.check(caller, Permission::Manage, space.id).await?
                 || fga
-                    .check_space(caller, SpacePermission::Own, space.id)
+                    .check_space(caller, SpacePermission::OwnOrganization, space.id)
                     .await?
         }
         _ => fga.check(caller, Permission::Manage, space.id).await?,
@@ -476,7 +469,7 @@ pub async fn create_organization(
         &[
             (admin, Role::Admin),
             (admin, Role::Member),
-            (admin, Role::Owner),
+            (admin, Role::OrganizationOwner),
         ],
         None,
     )
@@ -528,7 +521,7 @@ pub async fn create_managed_organization(
         fga,
         name,
         &[
-            (owner.id.as_str(), Role::Owner),
+            (owner.id.as_str(), Role::OrganizationOwner),
             (admin.as_str(), Role::Admin),
         ],
         Some(caller),
@@ -721,11 +714,11 @@ pub async fn grant(
         return Err(AppError::Conflict(PERSONAL_FIXED.into()));
     }
     let (mut tx, mut guard) = lock_for(pool, fga, &space).await?;
-    if role != Role::Owner {
+    if role != Role::OrganizationOwner {
         require_context(&mut *tx, fga, caller, space.organization).await?;
     }
     may_change(fga, caller, &space, role).await?;
-    if role == Role::Owner {
+    if role == Role::OrganizationOwner {
         let directory = directory
             .ok_or_else(|| AppError::Unavailable("Keycloak directory is not configured".into()))?;
         if !directory.exists(target).await? {
@@ -784,7 +777,7 @@ pub async fn revoke(
 ) -> AppResult<()> {
     let space = load(pool, fga, space_id).await?;
     let (mut tx, mut guard) = lock_for(pool, fga, &space).await?;
-    if role != Role::Owner {
+    if role != Role::OrganizationOwner {
         require_context(&mut *tx, fga, caller, space.organization).await?;
     }
     if space.personal_owner.is_some() {
@@ -798,7 +791,7 @@ pub async fn revoke(
         .filter(|(s, _)| *s == space.id)
         .map(|(_, r)| *r)
         .collect();
-    if matches!(role, Role::Admin | Role::Owner)
+    if matches!(role, Role::Admin | Role::OrganizationOwner)
         && space.personal_owner.is_none()
         && on_space.contains(&role)
     {

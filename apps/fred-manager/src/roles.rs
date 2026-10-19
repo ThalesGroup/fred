@@ -36,16 +36,16 @@ impl PlatformRole {
     ];
     pub fn relation(self) -> &'static str {
         match self {
-            Self::PlatformOwner => "owner",
-            Self::PlatformObserver => "observer",
+            Self::PlatformOwner => "platform_owner",
+            Self::PlatformObserver => "platform_observer",
             Self::FeatureManager => "feature_manager",
             Self::PromptEditor => "prompt_editor",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "platform_owner" | "owner" => Some(Self::PlatformOwner),
-            "platform_observer" | "observer" => Some(Self::PlatformObserver),
+            "platform_owner" => Some(Self::PlatformOwner),
+            "platform_observer" => Some(Self::PlatformObserver),
             "feature_manager" => Some(Self::FeatureManager),
             "prompt_editor" => Some(Self::PromptEditor),
             _ => None,
@@ -107,7 +107,7 @@ pub enum SpacePermission {
     ManageEvaluationCorpus,
     ReadConversationsForEvaluation,
     /// Technical administration of an organization.
-    Own,
+    OwnOrganization,
     CreatePersonalSpace,
 }
 impl SpacePermission {
@@ -118,7 +118,7 @@ impl SpacePermission {
         Self::RunEvaluations,
         Self::ManageEvaluationCorpus,
         Self::ReadConversationsForEvaluation,
-        Self::Own,
+        Self::OwnOrganization,
         Self::CreatePersonalSpace,
     ];
     pub fn relation(self) -> &'static str {
@@ -129,7 +129,7 @@ impl SpacePermission {
             Self::RunEvaluations => "can_run_evaluations",
             Self::ManageEvaluationCorpus => "can_manage_evaluation_corpus",
             Self::ReadConversationsForEvaluation => "can_read_conversations_for_evaluation",
-            Self::Own => "can_own",
+            Self::OwnOrganization => "can_own_organization",
             Self::CreatePersonalSpace => "can_create_personal_space",
         }
     }

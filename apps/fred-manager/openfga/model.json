@@ -7,10 +7,10 @@
     {
       "type": "platform",
       "relations": {
-        "owner": {
+        "platform_owner": {
           "this": {}
         },
-        "observer": {
+        "platform_observer": {
           "union": {
             "child": [
               {
@@ -18,7 +18,7 @@
               },
               {
                 "computedUserset": {
-                  "relation": "owner"
+                  "relation": "platform_owner"
                 }
               }
             ]
@@ -32,7 +32,7 @@
               },
               {
                 "computedUserset": {
-                  "relation": "owner"
+                  "relation": "platform_owner"
                 }
               }
             ]
@@ -46,7 +46,7 @@
               },
               {
                 "computedUserset": {
-                  "relation": "owner"
+                  "relation": "platform_owner"
                 }
               }
             ]
@@ -59,37 +59,37 @@
         },
         "can_delete_team": {
           "computedUserset": {
-            "relation": "owner"
+            "relation": "platform_owner"
           }
         },
         "can_delete_space": {
           "computedUserset": {
-            "relation": "owner"
+            "relation": "platform_owner"
           }
         },
         "can_rescue_team_admin": {
           "computedUserset": {
-            "relation": "owner"
+            "relation": "platform_owner"
           }
         },
         "can_edit_agent_class_path": {
           "computedUserset": {
-            "relation": "owner"
+            "relation": "platform_owner"
           }
         },
         "can_observe_platform": {
           "computedUserset": {
-            "relation": "observer"
+            "relation": "platform_observer"
           }
         },
         "can_administer_users": {
           "computedUserset": {
-            "relation": "owner"
+            "relation": "platform_owner"
           }
         },
         "can_manage_platform": {
           "computedUserset": {
-            "relation": "owner"
+            "relation": "platform_owner"
           }
         },
         "can_manage_capabilities": {
@@ -105,14 +105,14 @@
       },
       "metadata": {
         "relations": {
-          "owner": {
+          "platform_owner": {
             "directly_related_user_types": [
               {
                 "type": "user"
               }
             ]
           },
-          "observer": {
+          "platform_observer": {
             "directly_related_user_types": [
               {
                 "type": "user"
@@ -157,7 +157,7 @@
         "analyst": {
           "this": {}
         },
-        "owner": {
+        "organization_owner": {
           "this": {}
         },
         "effective_editor": {
@@ -291,9 +291,9 @@
             "relation": "effective_analyst"
           }
         },
-        "can_own": {
+        "can_own_organization": {
           "computedUserset": {
-            "relation": "owner"
+            "relation": "organization_owner"
           }
         },
         "personal_space_creator": {
@@ -349,7 +349,7 @@
               }
             ]
           },
-          "owner": {
+          "organization_owner": {
             "directly_related_user_types": [
               {
                 "type": "user"

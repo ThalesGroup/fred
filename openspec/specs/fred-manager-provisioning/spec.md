@@ -10,7 +10,7 @@ Rust CLI and HTTP ZIP import, with the complete assignable role catalog and enfo
 ### Requirement: Complete scoped role model
 
 The system SHALL support cumulative space roles `member`, `editor`, `admin` and
-`analyst` on organizations, teams and projects, and `owner` on organizations.
+`analyst` on organizations, teams and projects, and `organization_owner` on organizations.
 Member, editor and analyst SHALL grant content read; only editor SHALL grant generic
 content write; only admin SHALL grant governance of spaces and their roles. Editor,
 admin and analyst SHALL also apply to every descendant space; member and owner SHALL
@@ -61,10 +61,10 @@ Unsupported versions or sections SHALL likewise be rejected, never ignored.
 
 Users SHALL declare unique nonempty usernames, optional identity fields `email`,
 `first_name`, `last_name`, `password`, and optional `platform_roles`. Platform
-roles SHALL use the current owner model; only `owner` and `observer` SHALL alias
-`platform_owner` and `platform_observer`. Removed role names SHALL be rejected. Every space SHALL
+roles SHALL be exactly `platform_owner`, `platform_observer`, `feature_manager` or
+`prompt_editor`, without aliases. Any other role name SHALL be rejected. Every space SHALL
 contain unique nonempty `ref`, nonempty `name` and a `roles` map from declared
-usernames to arrays of `member`, `editor`, `admin`, `analyst`, plus `owner` on organizations. Teams SHALL reference
+usernames to arrays of `member`, `editor`, `admin`, `analyst`, plus `organization_owner` on organizations. Teams SHALL reference
 an organization through `organization`; projects SHALL reference a team through
 `team`. All parents SHALL be declared in the bundle. At least one organization
 SHALL exist; an empty projects array SHALL be accepted.
@@ -213,7 +213,7 @@ SHALL be the input of the automated HTTP integration acceptance test.
 `POST /fred-manager/v1/import-export/import` SHALL accept one multipart `file`,
 requiring verified platform-owner authority before upload reading. It SHALL use the
 same identity and reconciliation behavior as the CLI. A new organization SHALL
-declare at least one owner and one admin, possibly the same person; `owner` SHALL be
+declare at least one owner and one admin, possibly the same person; `organization_owner` SHALL be
 refused on teams and projects. It SHALL return HTTP 200 with reconciliation counts
 only after successful completion, never a fabricated task ID or early success.
 Importer failures SHALL retain safe phase/count information. Early upload, parsing
@@ -579,12 +579,12 @@ timeout or revocation SHALL NOT be described as cancellation of remote effects.
 
 ### Requirement: Platform and organization owners
 The platform SHALL have one technical role, `platform_owner`, and each organization
-a technical `owner` role. An owner SHALL hold no content permission, and an
+a technical `organization_owner` role. An owner SHALL hold no content permission, and an
 organization owner's role SHALL NOT descend to teams or projects. Platform owners
 SHALL grant and revoke platform owners, the other platform roles and organization
 owners. Organization owners SHALL grant and revoke the organization's admins.
 Revoking the last platform owner, or the last owner of an organization, SHALL be
-refused, including under concurrent revocations. `owner` SHALL only be granted on
+refused, including under concurrent revocations. `organization_owner` SHALL only be granted on
 organizations.
 
 #### Scenario: Root names another platform owner
@@ -598,7 +598,7 @@ organizations.
 - **AND** Olga reads no content of TSN and cannot create a team in it
 
 #### Scenario: Owner on a team is refused
-- **WHEN** a caller grants `owner` on a team or project
+- **WHEN** a caller grants `organization_owner` on a team or project
 - **THEN** the request is refused without a role write
 
 ### Requirement: Owner-protected role administration
@@ -763,17 +763,15 @@ content membership, and the last such role SHALL not be removed while it remains
 - **THEN** opening a personal space is refused without writes
 - **AND** removing that role from a person with an existing readable personal space does not prevent reuse
 
-### Requirement: Personal eligibility model upgrades preserve existing data
+### Requirement: No backward compatibility before the first production release
 
-When schema synchronization is enabled, startup SHALL upgrade only the exact
-published predecessor model in the existing store and atomically publish its new
-SQL model pointer. Ordinary loads and imports SHALL not publish models. Unknown
-models SHALL be refused without resetting spaces or grants.
+Manager SHALL keep one baseline SQL migration and one OpenFGA model. Startup SHALL
+refuse a database or store created from an earlier baseline or model, without
+upgrading or resetting it; the operator resets the local installation.
 
-#### Scenario: Publication fails or overlaps
-- **WHEN** two initializers run or SQL publication fails after the model POST
-- **THEN** successful initializers converge on one pinned model
-- **AND** failure leaves the previous SQL pointer usable for retry and preserves tuples
+#### Scenario: An earlier local installation starts
+- **WHEN** the published model or applied schema differs from the binary's
+- **THEN** startup fails with an incompatibility error and writes nothing
 
 ### Requirement: Authorized resource browsing in the provisioned space journey
 
@@ -784,19 +782,14 @@ Fred SHALL retain its existing Resources route, full document workspace, navigat
 - **THEN** Fred mounts the original resource workspace for the selected identifier with manager folder data and current space write decisions
 - **AND** an unavailable non-migrated dependency retains its original error/loading behavior rather than a fabricated empty success
 
-#### Scenario: Document pagination
-- **WHEN** a caller pages through manager document metadata for an authorized folder
-- **THEN** the manager cursor traverses name/id pages without duplicates or omissions for unchanged data
-- **AND** an eventual UI binding SHALL preserve the existing pagination presentation without inventing totals or conflating folder identifiers with another service's identifiers
-
 #### Scenario: Refusal, failure and revalidation
-- **WHEN** a caller without current read authority requests a manager folder or document list
+- **WHEN** a caller without current read authority requests a manager directory
 - **THEN** manager refuses without returning content
 - **AND** a failed service request SHALL NOT become a fabricated successful UI response or grant
 
 ### Requirement: Folder filters belong to the authorized space
 
-Manager folder and document listing SHALL enforce current personal admission, unique organization context and space read permission. A supplied parent/folder identifier SHALL belong to the requested space; a missing or foreign folder SHALL return 404 rather than a successful empty list. Admin and organization owner roles alone SHALL NOT grant content access; local members and effective editors/analysts SHALL retain their existing read semantics.
+Manager directory listing SHALL enforce current personal admission, unique organization context and space read permission. A supplied parent/folder identifier SHALL belong to the requested space; a missing or foreign folder SHALL return 404 rather than a successful empty list. Admin and organization owner roles alone SHALL NOT grant content access; local members and effective editors/analysts SHALL retain their existing read semantics.
 
 #### Scenario: Filter outside the requested space
 - **WHEN** a reader supplies a nonexistent folder or a folder belonging to another space to either list endpoint
@@ -1018,11 +1011,11 @@ logs SHALL identify the worker service role and sanitize dependency failures.
 - **THEN** the completed receipt remains readable without resolving deleted hierarchy links
 
 ### Requirement: Document surface is read-only
-Manager SHALL expose document metadata reads and authorization probes, but SHALL NOT register document creation, rename, deletion or ingestion operations. OpenAPI and the generated frontend client SHALL expose the same surface. Existing metadata SHALL remain intact and subject to current organization, retirement and content authorization checks.
+Manager SHALL expose authorization probes but no document metadata routes, and SHALL NOT register document rename, deletion or ingestion operations; originals are created only through folder uploads. OpenAPI and the generated frontend client SHALL expose the same surface. Existing metadata SHALL remain intact and subject to current organization, retirement and content authorization checks.
 
 #### Scenario: Provisional mutations are unavailable
 - **WHEN** a caller requests POST `/documents`, PATCH or DELETE `/documents/{id}`, or POST `/documents/{id}/ingest`
-- **THEN** the API returns 404 for absent paths or 405 for unsupported methods on the retained GET path
+- **THEN** the API returns 404 because none of these paths exists
 - **AND** no document mutation or workflow submission occurs
 
 #### Scenario: Resources remains usable without Temporal

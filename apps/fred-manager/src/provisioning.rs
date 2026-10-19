@@ -234,7 +234,10 @@ impl Importer<'_> {
                         return Err(invalid("new space requires a declared admin"));
                     }
                     if declaration.kind == SpaceKind::Organization
-                        && !declaration.roles.values().any(|r| r.contains(&Role::Owner))
+                        && !declaration
+                            .roles
+                            .values()
+                            .any(|r| r.contains(&Role::OrganizationOwner))
                     {
                         return Err(invalid("new organization requires a declared owner"));
                     }
@@ -428,7 +431,7 @@ impl Importer<'_> {
             .spaces
             .iter()
             .flat_map(|s| &s.roles)
-            .filter(|(_, roles)| roles.contains(&Role::Owner))
+            .filter(|(_, roles)| roles.contains(&Role::OrganizationOwner))
             .map(|(username, _)| subjects[username].clone())
             .collect();
         let owners: Vec<_> = owners.into_iter().collect();

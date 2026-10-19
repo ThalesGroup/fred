@@ -41,7 +41,6 @@ contain at most 200, with folders first, name/date/size sorting and an identity
 tie-breaker. Folders have no aggregate size and use name order for size sorting.
 Search is a literal case-insensitive substring over the whole current directory.
 Separate requests are live views; concurrent changes can shift offset boundaries.
-Authorized metadata-only document pages also support paired name/UUID cursors.
 
 Folder creation/rename trims labels, accepts 1..255 Unicode scalar values and
 rejects separators and controls. Placement stays fixed. Deletion removes one

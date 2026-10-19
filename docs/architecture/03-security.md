@@ -116,7 +116,7 @@ before eligibility across batches. Creation requires eligibility and organizatio
 read; reuse requires current organization and personal read, with no role writes.
 
 Administration is business, ownership is technical. Each organization also has an
-`owner` role: it names and removes the organization's admins and holds no content,
+`organization_owner` role: it names and removes the organization's admins and holds no content,
 management or descending permission (I21). Platform owners name organization owners,
 and an organization always keeps one (I14). New owner grants verify the subject in
 the configured Keycloak realm; an unavailable directory prevents the grant. This
@@ -167,7 +167,7 @@ and [invariants](09-quality.md#invariants) give the mechanisms and proofs.
 
 ## Original-document boundary
 
-Document metadata, directory, receipts and downloads use private/no-store responses.
+Directory, receipts and downloads use private/no-store responses.
 A foreign organization or missing target returns 404; a known target in the caller's
 organization without the required permission returns 403. Provider and authorization
 dependency failures return a safe 503 rather than granting access.
@@ -213,7 +213,7 @@ This security boundary is distinct from organization membership and from CGU.
 
 ## Space retirement and cleanup authority
 
-`platform.can_delete_space` is computed from `owner` only. Request and receipt APIs
+`platform.can_delete_space` is computed from `platform_owner` only. Request and receipt APIs
 require real authentication and CGU admission, including for receipts whose target
 no longer exists. Deletion grants no content access. Organization ownership and
 space administration confer no implicit deletion power.

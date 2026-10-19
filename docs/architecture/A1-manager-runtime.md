@@ -208,7 +208,7 @@ sequenceDiagram
     participant KC as Keycloak
     participant PG as Postgres
     participant FGA as OpenFGA
-    C->>M: GET /documents/{id}, Bearer token
+    C->>M: GET /documents/{id}/content, Bearer token
     Note over M: request span: request_id, correlation_id
     opt unknown kid, at most once per 30 s
         M->>KC: GET realm certs
@@ -221,7 +221,7 @@ sequenceDiagram
     M->>FGA: read their placement, validate unique organization
     M->>FGA: check user can_read space:{document.space_id}
     alt allowed
-        M-->>C: 200 document
+        M-->>C: 200 original bytes
     else denied
         M-->>C: 403
     end
@@ -416,10 +416,10 @@ a Keycloak subject that exists in the configured directory; revoking a stale dir
 grant does not require the identity to still exist (I15).
 
 Platform roles use canonical names `platform_owner`, `platform_observer`,
-`feature_manager` and `prompt_editor`; mutation paths also accept `owner` and `observer`.
+`feature_manager` and `prompt_editor`; no other name is accepted.
 Deleting an absent direct grant returns 404, even when the role is effective through owner.
 
-An organization's `owner` is granted and revoked by platform owners, under the
+An organization's `organization_owner` is granted and revoked by platform owners, under the
 platform lock and guard as well as the organization's; owner on a team or project is
 refused with 409, as is revoking an organization's last owner (I14). Before granting,
 manager verifies the subject with its Keycloak service account in the same realm
@@ -553,7 +553,7 @@ held SQL connection. No workflow is dispatched by the API.
 | D15 | Import uses authenticated, read-only initialization and a distinct Keycloak service identity. | Service-client credentials must not substitute for Fred operator authority. | Bootstrap and compatible schema/model initialization precede import; Temporal is not involved. |
 | D16 | Provisioning is additive and replayable, with identity phases separate from the space transaction. | Keycloak, SQL and OpenFGA do not share a transaction. | Partial effects remain; replay preserves committed IDs and repairs grants. Rolled-back space IDs are not reused. |
 | D17 | Strict guard deletion and role changes share one OpenFGA Write. | A consumed revision rejects stale decisions without copying the role set. | One guard Read and two additional tuple operations per guarded scope; conflicting attempts reauthorize on replay. |
-| D18 | SQL pins store/model; synchronization permits an exact additive predecessor upgrade. | Preserve spaces and grants while refusing unknown model changes. | Upgrade keeps the store and commits its model pointer under the platform lock; ordinary loads stay read-only. |
+| D18 | SQL pins store/model; a different published model is refused. | The binary owns exactly one schema and one model. | Startup never upgrades a model; ordinary loads stay read-only. |
 | D19 | One version-2 ZIP with explicit organizations, teams, projects and direct roles serves CLI and HTTP. | Reconciliation needs unambiguous parent scope and complete preflight. | Legacy formats are explicitly unsupported; bundle-local references do not add persistent identity or imply content grants. |
 | D20 | The unique organization is derived from canonical direct roles and full placement of committed spaces. Workspace discovery uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
 | D21 | Personal creation requires explicit organization eligibility; opening reuses current authority. | Some people have no personal workspace; opening must not undo revocations. | First explicit open creates, repeats write nothing, and organization content remains a prerequisite. |

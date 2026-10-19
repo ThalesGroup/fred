@@ -9,6 +9,24 @@ erDiagram
 "document_upload" |o--o| "document" : "document_id"
 "document_upload" |o--o| "document_upload" : "retry_of"
 
+"space_deletion" {
+  uuid id
+  uuid target_id
+  space_kind target_kind
+  uuid target_parent_id
+  uuid organization_id
+  text actor_subject
+  timestamp_with_time_zone requested_at
+  timestamp_with_time_zone due_at
+  text mode
+  text rule_id
+  text status
+  timestamp_with_time_zone last_visit
+  timestamp_with_time_zone completed_at
+  text error_code
+  bigint folders_deleted
+  bigint spaces_deleted
+}
 "space" {
   uuid id
   space_kind kind
@@ -55,24 +73,6 @@ erDiagram
   text user_id
   text version
   timestamp_with_time_zone accepted_at
-}
-"space_deletion" {
-  uuid id
-  uuid target_id
-  space_kind target_kind
-  uuid target_parent_id
-  uuid organization_id
-  text actor_subject
-  timestamp_with_time_zone requested_at
-  timestamp_with_time_zone due_at
-  text mode
-  text rule_id
-  text status
-  timestamp_with_time_zone last_visit
-  timestamp_with_time_zone completed_at
-  text error_code
-  bigint folders_deleted
-  bigint spaces_deleted
 }
 "document_storage" {
   boolean singleton

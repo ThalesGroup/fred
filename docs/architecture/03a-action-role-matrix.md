@@ -33,7 +33,7 @@ The HTTP prefix below is `/fred-manager/v1`. Route registration is generated in
 | `editor` | Organization, team, project; personal at creation | That space and all non-personal descendants | Read and write |
 | `admin` | Organization, team, project | That space and all non-personal descendants | None |
 | `analyst` | Organization, team, project | That space and all non-personal descendants | Read |
-| `owner` | Organization only | That organization only | None |
+| `organization_owner` | Organization only | That organization only | None |
 | `personal_space_creator` | Organization only | Eligibility for that person's personal space in that organization | None |
 | `platform_owner` | Platform | Platform governance | None directly |
 | `platform_observer` | Platform | Platform observation permission | None |
@@ -44,12 +44,12 @@ An editor/admin/analyst on an organization applies to every team and project bel
 it. The same role on a team applies to its projects, not to its parent or siblings.
 A member never descends. A personal space has **no parent link**: its organization
 link identifies governance and supplies no inherited permission. Its SQL
-`personal_owner` is an identity, not the FGA `owner` role. Initial personal grants
-are `member` and `editor`, not `admin` or `owner`.
+`personal_owner` is an identity, not the FGA `organization_owner` role. Initial personal grants
+are `member` and `editor`, not `admin` or `organization_owner`.
 
 ## Content actions
 
-No platform role, organization `owner` or `personal_space_creator` grants any row
+No platform role, `organization_owner` or `personal_space_creator` grants any row
 in this table. Rights apply uniformly to the owning space: folders and documents
 have no separate ACL, sharing grant or role inheritance tree.
 
@@ -62,8 +62,6 @@ have no separate ACL, sharing grant or role inheritance tree.
 | Create original - `POST /folders/{id}/documents` | No | Yes | No | No | One file, request key, quota and unique name; current admission/write rechecked before publication |
 | Read/acknowledge upload receipts - `GET /spaces/{id}/document-uploads`, `GET /document-uploads/{id}`, `PUT /document-uploads/{id}/acknowledgment` | Yes, local | Yes | No | Yes | Initiating actor only; acknowledgment requires terminal state |
 | Download original - `GET /documents/{id}/content` | Yes, local | Yes | No | Yes | Current owning-space authority; private attachment |
-| List document metadata - `GET /spaces/{id}/documents` | Yes, local | Yes | No | Yes | Optional folder belongs to this space; cursor selects a page |
-| Read one document's metadata - `GET /documents/{id}` | Yes, local | Yes | No | Yes | Checks the document's owning space |
 | Create a folder - `POST /folders` | No | Yes | No | No | Same-space parent, valid name, depth <= 15, unique sibling name |
 | Rename a folder - `PATCH /folders/{id}` | No | Yes | No | No | Name changes; space, parent and path stay immutable |
 | Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | Atomic subtree removal; any published document or pending upload refuses the whole subtree |
@@ -85,7 +83,7 @@ their presentation with processing unavailable in this view.
 | Grant/revoke team/project `admin` - same role routes | No | No | Yes, on target | No | No | No | None |
 | Grant/revoke organization `admin` - same role routes | No | No | Yes, on organization | No | Yes | No | None |
 | Grant/revoke organization `personal_space_creator` - same role routes | No | No | Yes, on organization | No | No | No | None |
-| Grant/revoke organization `owner` - same role routes | No | No | No | No | No | No | `platform_owner` |
+| Grant/revoke `organization_owner` - same role routes | No | No | No | No | No | No | `platform_owner` |
 | First creation of own personal space - `POST /me/personal-space` | No alone | No alone | No | No alone | No | Yes, plus organization read | None |
 | Reuse existing own personal space - `POST /me/personal-space` | Conditional | Conditional | No alone | Conditional | No | No alone | None |
 | Add roles in a personal space - `PUT /spaces/{id}/roles/{role}/{user}` | No | No | No | No | No | No | None |
@@ -152,7 +150,7 @@ additive; its global authority is distinct from the ordinary space-role routes.
 | Accept own CGU - `POST /gcu` | Yes | Yes | Authenticated human, current version; cannot act for another person |
 | Claim initial platform ownership - `POST /bootstrap/platform-admin` | Yes | Yes | Real human authentication, CGU, deployment secret, unfinished bootstrap; failed reservation retry belongs to claimant |
 | Own platform-role metadata - `GET /me` | Yes | Yes | Authenticated and CGU; returns own effective platform roles |
-| Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct/inherited roles; empty allowed; contradictory organization attachment returns 409 |
+| Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct/inherited roles; empty allowed; contradictory organization attachment, or a space role without its parent membership, returns 409 |
 | Probe own platform permission - `POST /authorize/platform` | Yes | Yes | Authenticated and CGU; result may be false |
 | Probe own space permission - `POST /authorize/space` | Yes | Yes | Authenticated and CGU; known target; mismatched/no organization gives false; contradictory context gives 409 |
 | Probe own document permission - `POST /authorize/document` | Yes | Yes | Authenticated and CGU; known document; owning-space context and requested read/write/manage determine true/false |
@@ -171,7 +169,7 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 | `run_evaluations` | No | No | Yes | Yes | No | No |
 | `manage_evaluation_corpus` | No | No | Yes | Yes | No | No |
 | `read_conversations_for_evaluation` | No | No | No | Yes | No | No |
-| `own` | No | No | No | No | Yes, organization | No |
+| `own_organization` | No | No | No | No | Yes, organization | No |
 | `create_personal_space` | No | No | No | No | No | Yes, organization |
 
 | Platform permission queried | platform_owner | platform_observer | feature_manager | prompt_editor |

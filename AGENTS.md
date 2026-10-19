@@ -161,7 +161,9 @@ Each step is one clean, tested and documented commit on this branch. Do not
 push without the developer's explicit agreement. Obtain independent review,
 fix every actionable finding with a regression test, and have the corrections
 reviewed before closing the step. Tests proving an architecture invariant
-carry `// Proves: I<n>`. Never edit an applied migration; add a new migration.
+carry `// Proves: I<n>`. Until the first production release, manager keeps no backward
+compatibility: its SQL schema is one baseline migration edited in place, its OpenFGA
+model is replaced rather than upgraded, and an existing local installation is reset.
 
 After implementation and the review/correction passes, perform a dedicated
 documentation pass over the arc42 dossier in `docs/architecture/`. Every

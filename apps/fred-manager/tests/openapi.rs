@@ -81,11 +81,9 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "put /spaces/{id}/roles/{role}/{user}",
         "delete /spaces/{id}/roles/{role}/{user}",
         "get /spaces/{id}/folders",
-        "get /spaces/{id}/documents",
         "post /folders",
         "patch /folders/{id}",
         "delete /folders/{id}",
-        "get /documents/{id}",
         "post /folders/{id}/documents",
         "post /folders/{id}/documents/preflight",
         "get /spaces/{id}/entries",
@@ -134,7 +132,7 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
             Role::Editor,
             Role::Admin,
             Role::Analyst,
-            Role::Owner,
+            Role::OrganizationOwner,
             Role::PersonalSpaceCreator
         ])
     );
@@ -238,29 +236,49 @@ fn upload_and_empty_responses_match_the_http_contract() {
 }
 
 #[test]
-fn platform_role_alias_descriptions_match_the_parser() {
+fn role_names_are_exact_and_unaliased() {
     let schema = schema();
-    for method in ["put", "delete"] {
-        let parameters = schema["paths"]["/fred-manager/v1/users/{user}/platform-roles/{role}"]
-            [method]["parameters"]
+    assert_eq!(
+        schema["components"]["schemas"]["PlatformRole"]["enum"],
+        json!([
+            "platform_owner",
+            "platform_observer",
+            "feature_manager",
+            "prompt_editor"
+        ])
+    );
+    assert!(
+        schema["components"]["schemas"]["Role"]["enum"]
             .as_array()
-            .unwrap();
-        let role = parameters.iter().find(|p| p["name"] == "role").unwrap();
-        assert_eq!(
-            role["description"],
-            "Also accepts the owner and observer aliases."
-        );
+            .unwrap()
+            .contains(&json!("organization_owner"))
+    );
+    for name in [
+        "platform_owner",
+        "platform_observer",
+        "feature_manager",
+        "prompt_editor",
+    ] {
+        assert_eq!(PlatformRole::parse(name).unwrap().relation(), name);
     }
-    for accepted in ["owner", "observer"] {
-        assert!(PlatformRole::parse(accepted).is_some());
+    for refused in [
+        "owner",
+        "observer",
+        "admin",
+        "platform_admin",
+        "team_manager",
+    ] {
+        assert!(PlatformRole::parse(refused).is_none());
     }
-    for removed in ["admin", "platform_admin", "team_manager"] {
-        assert!(PlatformRole::parse(removed).is_none());
-    }
+    assert!(Role::parse("owner").is_none());
+    assert_eq!(
+        Role::parse("organization_owner").map(Role::as_str),
+        Some("organization_owner")
+    );
 }
 
 #[test]
-fn document_mutations_and_their_schemas_are_absent() {
+fn document_metadata_and_mutation_routes_are_absent() {
     let api = schema();
     let paths = &api["paths"];
     assert!(paths.get("/fred-manager/v1/documents").is_none());
@@ -269,10 +287,7 @@ fn document_mutations_and_their_schemas_are_absent() {
             .get("/fred-manager/v1/documents/{id}/ingest")
             .is_none()
     );
-    let document = &paths["/fred-manager/v1/documents/{id}"];
-    assert!(document.get("get").is_some());
-    assert!(document.get("patch").is_none());
-    assert!(document.get("delete").is_none());
+    assert!(paths.get("/fred-manager/v1/documents/{id}").is_none());
     for name in ["CreateDocument", "CreatedDocument", "IngestRequest"] {
         assert!(api["components"]["schemas"].get(name).is_none());
     }

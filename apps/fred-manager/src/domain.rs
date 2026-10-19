@@ -141,7 +141,8 @@ pub enum Role {
     Admin,
     Analyst,
     /// Technical role of an organization: names its admins, reads nothing.
-    Owner,
+    #[serde(rename = "organization_owner")]
+    OrganizationOwner,
     #[serde(rename = "personal_space_creator")]
     PersonalSpaceCreator,
 }
@@ -153,7 +154,7 @@ impl Role {
             Role::Editor => "editor",
             Role::Admin => "admin",
             Role::Analyst => "analyst",
-            Role::Owner => "owner",
+            Role::OrganizationOwner => "organization_owner",
             Role::PersonalSpaceCreator => "personal_space_creator",
         }
     }
@@ -164,7 +165,7 @@ impl Role {
             "editor" => Some(Role::Editor),
             "admin" => Some(Role::Admin),
             "analyst" => Some(Role::Analyst),
-            "owner" => Some(Role::Owner),
+            "organization_owner" => Some(Role::OrganizationOwner),
             "personal_space_creator" => Some(Role::PersonalSpaceCreator),
             _ => None,
         }

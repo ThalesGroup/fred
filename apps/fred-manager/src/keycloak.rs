@@ -412,9 +412,13 @@ mod tests {
     #[test]
     fn directory_configuration_and_urls_fail_closed() {
         assert!(Directory::configured(None).unwrap().is_none());
-        let legacy: M2mConfig =
-            serde_yaml_ng::from_str("realm_url: http://localhost/realms/app").unwrap();
-        assert!(Directory::configured(Some(&legacy)).unwrap().is_none());
+        assert!(
+            serde_yaml_ng::from_str::<M2mConfig>("realm_url: http://localhost/realms/app").is_err()
+        );
+        let disabled: M2mConfig =
+            serde_yaml_ng::from_str("realm_url: http://localhost/realms/app\nenabled: false")
+                .unwrap();
+        assert!(Directory::configured(Some(&disabled)).unwrap().is_none());
         for url in [
             "file:///realms/app",
             "http://user:secret@host/realms/app",

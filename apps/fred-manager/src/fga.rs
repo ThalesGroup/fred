@@ -207,7 +207,8 @@ impl Fga {
     }
 
     pub async fn is_platform_owner(&self, user: &str) -> Result<bool> {
-        self.check_object(user, "owner", PLATFORM).await
+        self.check_object(user, PlatformRole::PlatformOwner.relation(), PLATFORM)
+            .await
     }
 
     async fn check_object(&self, user: &str, relation: &str, object: &str) -> Result<bool> {

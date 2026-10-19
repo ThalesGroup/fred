@@ -25,8 +25,9 @@ The frontend keeps the public `/fred-manager/v1` contract and forwards it to the
 control-plane API. The factory's common Temporal host/namespace configure lifecycle
 work; the lifecycle queue and workflow prefix remain manager-owned.
 
-A pre-install/pre-upgrade hook applies embedded Rust SQL migrations using only the
-database connection. API startup also verifies/applies those migrations. An upgrade
+A pre-install/pre-upgrade hook applies the embedded baseline SQL schema using only the
+database connection. API startup also verifies/applies it, and refuses a schema or
+OpenFGA model that differs from the binary's. An upgrade
 replaces the former manager-named workloads within the same Fred release. The chart
 refuses a separately owned manager deployment; retiring that release is an explicit
 operator action. Application rollout is not atomic. A failed sync is retried with
@@ -52,11 +53,11 @@ defines provider validation, limits, secrets and restore ordering.
 
 ## Migration, backup and recovery
 
-Migration 0008 adds the original-storage registry and refuses existing metadata-only
-document rows before changing schema. It does not invent originals for them or
-migrate Knowledge Flow documents. SQL and the matching object namespace form one
+Manager does not migrate Knowledge Flow documents; data from an existing Fred
+installation is the concern of a separate migration application. SQL and the
+matching object namespace form one
 backup unit; restore suspends uploads and cleanup until both are consistent. The
-[migration note](../swift/ops/migrations/manager-document-storage.md) defines activation
+[migration note](../swift/ops/migrations/rust-fred-manager.md) defines activation
 and rollback constraints.
 
 On a dedicated local k3d, the factory's `make k3d-app-reset DIR=<fred checkout>`

@@ -456,7 +456,7 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
     let directory = identity.directory();
     let identity_auth = identity.auth().await;
     let token = identity.token("root");
-    let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"TSN","roles":{"alice":["admin","member","owner"]}}],"teams":[{"ref":"team","name":"BID","organization":"org","roles":{"alice":["admin"]}}],"projects":[]}"#).unwrap();
+    let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"TSN","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[{"ref":"team","name":"BID","organization":"org","roles":{"alice":["admin"]}}],"projects":[]}"#).unwrap();
     let gate = std::sync::Arc::new(support::Gate::default());
     proxy.fault.lock().await.gate = Some(gate.clone());
     let pool = e.pool.clone();
@@ -609,59 +609,6 @@ async fn lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates() {
         .await
         .unwrap();
     drain(&e, first.id).await;
-}
-
-// Proves: I24, I2
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn lifecycle_migration_preserves_existing_spaces_and_folders() {
-    let postgres = std::env::var("FRED_MANAGER_IT_POSTGRES").unwrap();
-    let admin = sqlx::PgPool::connect(&format!("{postgres}/postgres"))
-        .await
-        .unwrap();
-    let database = format!("upgrade_{}", Uuid::new_v4().simple());
-    sqlx::query(sqlx::AssertSqlSafe(format!("create database {database}")))
-        .execute(&admin)
-        .await
-        .unwrap();
-    let pool = sqlx::PgPool::connect(&format!("{postgres}/{database}"))
-        .await
-        .unwrap();
-    let migrations = sqlx::migrate!();
-    migrations.run_to(6, &pool).await.unwrap();
-    assert!(db::require_initialized(&pool).await.is_err());
-    let id = Uuid::new_v4();
-    let folder = Uuid::new_v4();
-    sqlx::query("insert into space (id,kind,name) values ($1,'organization','existing')")
-        .bind(id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("insert into folder (id,space_id,name,path) values ($1,$2,'existing','/')")
-        .bind(folder)
-        .bind(id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    migrations.run(&pool).await.unwrap();
-    db::require_initialized(&pool).await.unwrap();
-    store::require_active(&pool, id).await.unwrap();
-    assert_eq!(db::space(&pool, id).await.unwrap().name, "existing");
-    assert_eq!(
-        sqlx::query_scalar::<_, Uuid>("select space_id from folder where id=$1")
-            .bind(folder)
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
-        id
-    );
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("select count(*) from space_deletion")
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
-        0
-    );
 }
 
 // Proves: I24

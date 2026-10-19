@@ -123,7 +123,7 @@ owning space from deletion.
 
 Resources SHALL present folders and stored documents through one consistently
 filtered and sorted bounded page with a coherent total and stable tie-breaks.
-Metadata/detail/download SHALL authorize the current owning space. Original
+Directory listing and download SHALL authorize the current owning space. Original
 downloads SHALL stream from manager as safe attachments without a public storage
 URL or whole-file buffering on the server. The browser SHALL bound individual
 download size and concurrency; bulk and recursive downloads SHALL remain visibly

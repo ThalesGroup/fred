@@ -8,42 +8,6 @@ use std::time::Duration;
 use uuid::Uuid;
 
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL"]
-async fn document_upgrade_refuses_metadata_without_originals_before_changing_schema() {
-    let postgres = std::env::var("FRED_MANAGER_IT_POSTGRES").unwrap();
-    let admin = sqlx::PgPool::connect(&format!("{postgres}/postgres"))
-        .await
-        .unwrap();
-    let database = format!("upgrade_documents_{}", Uuid::new_v4().simple());
-    sqlx::query(sqlx::AssertSqlSafe(format!("create database {database}")))
-        .execute(&admin)
-        .await
-        .unwrap();
-    let pool = sqlx::PgPool::connect(&format!("{postgres}/{database}"))
-        .await
-        .unwrap();
-    let migrations = sqlx::migrate!();
-    migrations.run_to(7, &pool).await.unwrap();
-    let space = Uuid::new_v4();
-    sqlx::query("insert into space(id,kind,name) values($1,'organization','fixture')")
-        .bind(space)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("insert into document(id,space_id,name,mime,size,sha256,created_by) values($1,$2,'legacy','text/plain',1,$3,'fixture')").bind(Uuid::new_v4()).bind(space).bind("a".repeat(64)).execute(&pool).await.unwrap();
-    let error = migrations.run(&pool).await.unwrap_err().to_string();
-    assert!(error.contains("empty document registry"), "{error}");
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("select count(*) from document")
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
-        1
-    );
-    assert!(!sqlx::query_scalar::<_,bool>("select exists(select 1 from information_schema.tables where table_name='document_upload')").fetch_one(&pool).await.unwrap());
-}
-
-#[tokio::test]
 #[ignore = "needs disposable SeaweedFS: make test-integration"]
 async fn seaweed_original_contract() {
     let b = Bucket::start().await;
@@ -825,11 +789,6 @@ async fn document_creation_reads_conflicts_receipts_and_safe_download() {
         to_bytes(content.into_body(), 1024 * 1024).await.unwrap(),
         bytes
     );
-    let (status, detail) = d
-        .json("reader", "GET", &format!("/documents/{id}"), Value::Null)
-        .await;
-    assert_eq!(status, 200, "{detail}");
-    assert_eq!(detail["name"], "résumé.txt");
     for user in ["admin", "stranger"] {
         assert_eq!(
             d.json(

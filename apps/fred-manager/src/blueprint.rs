@@ -231,7 +231,7 @@ impl Bundle {
                 for (subject, grants) in &mut roles {
                     if !names.contains(subject)
                         || (kind != SpaceKind::Organization
-                            && (grants.contains(&Role::Owner)
+                            && (grants.contains(&Role::OrganizationOwner)
                                 || grants.contains(&Role::PersonalSpaceCreator)))
                     {
                         return Err(Invalid);
@@ -400,7 +400,7 @@ mod tests {
     fn files() -> BTreeMap<String, Vec<u8>> {
         [
             ("manifest.json", r#"{"format_version":2,"users_schema_version":2,"source_platform":"swift"}"#),
-            ("users.json", r#"[{"username":"alice","platform_roles":["owner","platform_owner","observer","platform_observer","feature_manager","prompt_editor"]}]"#),
+            ("users.json", r#"[{"username":"alice","platform_roles":["platform_owner","platform_observer","feature_manager","prompt_editor"]}]"#),
             ("organizations.json", r#"[{"ref":"org","name":"Org","roles":{"alice":["admin","member","member"]}}]"#),
             ("teams.json", r#"[{"ref":"team","name":"Team","organization":"org","roles":{"alice":["admin","analyst"]}}]"#),
             ("projects.json", r#"[{"ref":"project","name":"Project","team":"team","roles":{"alice":["admin"]}}]"#),
@@ -420,7 +420,7 @@ mod tests {
         writer.finish().unwrap().into_inner()
     }
     #[test]
-    fn explicit_hierarchy_roles_and_aliases_are_preserved() {
+    fn explicit_hierarchy_and_roles_are_preserved() {
         for method in [
             zip::CompressionMethod::Stored,
             zip::CompressionMethod::Deflated,
@@ -505,6 +505,14 @@ mod tests {
             ("users.json", r#"[{"username":"alice","teams":[]}]"#),
             (
                 "users.json",
+                r#"[{"username":"alice","platform_roles":["owner"]}]"#,
+            ),
+            (
+                "users.json",
+                r#"[{"username":"alice","platform_roles":["observer"]}]"#,
+            ),
+            (
+                "users.json",
                 r#"[{"username":"alice","platform_roles":["private-password"]}]"#,
             ),
             ("organizations.json", "[]"),
@@ -515,6 +523,10 @@ mod tests {
             (
                 "organizations.json",
                 r#"[{"ref":"org","name":"Org","roles":{"absent":["admin"]}}]"#,
+            ),
+            (
+                "organizations.json",
+                r#"[{"ref":"org","name":"Org","roles":{"alice":["owner"]}}]"#,
             ),
             (
                 "teams.json",

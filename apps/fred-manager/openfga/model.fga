@@ -3,22 +3,22 @@ model
 
 type user
 
-# One object, platform:root. Owner is the technical platform role; platform roles grant
+# One object, platform:root. Platform owner is the technical platform role; platform roles grant
 # no access to any space's content.
 type platform
   relations
-    define owner: [user]
-    define observer: [user] or owner
-    define feature_manager: [user] or owner
-    define prompt_editor: [user] or owner
+    define platform_owner: [user]
+    define platform_observer: [user] or platform_owner
+    define feature_manager: [user] or platform_owner
+    define prompt_editor: [user] or platform_owner
     define can_list_all_teams: feature_manager
-    define can_delete_team: owner
-    define can_delete_space: owner
-    define can_rescue_team_admin: owner
-    define can_edit_agent_class_path: owner
-    define can_observe_platform: observer
-    define can_administer_users: owner
-    define can_manage_platform: owner
+    define can_delete_team: platform_owner
+    define can_delete_space: platform_owner
+    define can_rescue_team_admin: platform_owner
+    define can_edit_agent_class_path: platform_owner
+    define can_observe_platform: platform_observer
+    define can_administer_users: platform_owner
+    define can_manage_platform: platform_owner
     define can_manage_capabilities: feature_manager
     define can_edit_platform_prompt: prompt_editor
 
@@ -34,7 +34,7 @@ type space
     define admin: [user]
     define analyst: [user]
     # Technical role of an organization: names its admins, reads nothing, never descends.
-    define owner: [user]
+    define organization_owner: [user]
     # Editor, admin and analyst reach every descendant; member stays local.
     define effective_editor: editor or effective_editor from parent
     define effective_admin: admin or effective_admin from parent
@@ -45,7 +45,7 @@ type space
     define can_run_evaluations: effective_analyst or effective_admin
     define can_manage_evaluation_corpus: effective_analyst or effective_admin
     define can_read_conversations_for_evaluation: effective_analyst
-    define can_own: owner
+    define can_own_organization: organization_owner
     # Explicit organization eligibility, without content access or inheritance.
     define personal_space_creator: [user]
     define can_create_personal_space: personal_space_creator

@@ -84,7 +84,7 @@ not bypass content or ordinary space-administration checks.
 
 Upgrade all manager role writers together; an old writer can still create conflicting
 data. There is no SQL/FGA schema migration for this rule. Deployment and rollback
-steps are in the [migration note](../swift/ops/migrations/manager-single-organization.md).
+steps are in the [migration note](../swift/ops/migrations/rust-fred-manager.md).
 
 ## Configuration
 
@@ -172,8 +172,8 @@ scheduler:
 ## Outbound Keycloak directory
 
 `security.m2m.enabled` enables the manager's own client-credentials identity, configured
-by `realm_url`, `client_id` and `secret_env_var`. An issuer-only legacy m2m section does
-not enable directory access. User bearer verification and service credentials remain
+by `realm_url`, `client_id` and `secret_env_var`. `enabled` is required; `false`
+disables directory access. User bearer verification and service credentials remain
 separate. Platform grants require Keycloak authentication with `claims.uid: sub` and
 the same normalized user/directory realm; revocations remain available for stale grants.
 
@@ -321,25 +321,16 @@ or upload contents. UI components and generated API paths are unchanged.
 
 ## Authorization store publication
 
-`sync_schema_on_init` allows empty initialization and the exact additive
-personal-eligibility and space-deletion upgrades. Existing bindings pin the model even when arbitrary
-newer models exist. Upgrade verifies the published predecessor, publishes in the
-same store and commits the model ID under the platform SQL lock. Spaces, tuples
-and guard revisions are preserved. Concurrent initializers converge. Failed SQL
-publication leaves the previous pointer usable for retry; an unused model grants nothing.
-
-Ordinary loads, CLI import and create-org never synchronize models. Unknown models,
-changed logical store names and existing data without publication are refused.
-Stop old writers, enable `security.rebac.sync_schema_on_init` on manager startup,
-then deploy matching API/CLI/frontend versions. Old binaries reject the upgraded
-pinned model. Rollback requires coordinated SQL/OpenFGA backup restoration with
-writers stopped, not a pointer edit or shared-data reset. See the
-[migration guide](../swift/ops/migrations/manager-personal-space.md).
+`sync_schema_on_init` allows initialization of an empty installation only. An
+existing binding pins its model; a published model that differs from the binary's
+model is refused.
+Concurrent initializers converge. Ordinary loads, CLI import and create-org never
+synchronize models; changed logical store names and existing data without
+publication are refused.
 
 ## First-user application entry
 
-Manager and frontend from this branch are deployed together. Migration 0005 adds
-personal consent storage at manager startup; existing migrations remain intact.
+Manager and frontend are deployed together; personal consent is stored by manager.
 The reference and k3d manager configurations require CGU version `v1`. Legal assets
 in the frontend match the configured version; a version change requires renewed
 personal acceptance. The frontend depends on manager public configuration before
@@ -393,13 +384,6 @@ backlog or failure delay. Descendant spaces add their own batches. A person's
 organization attachment persists while their direct roles on remaining retired
 rows exist; it can end before the whole operation completes. Names remain reserved
 until their corresponding SQL rows are removed.
-
-Deploy API/worker with lifecycle disabled; replace every API replica and operator
-producer with retirement-aware binaries, verify compatible schema/model and worker,
-then activate all affected processes. An old producer must never write retired
-state. Old binaries reject the new model publication even after draining requests;
-rollback requires coordinated pre-activation SQL/OpenFGA restoration with all
-producers stopped. Prefer a forward fix. See the [migration note](../swift/ops/migrations/manager-space-deletion.md).
 
 Cleanup also drains SQL-absent descendants left by aborted creations or imports
 when they remain linked to the retired space. It removes their grants and descendants
@@ -467,4 +451,4 @@ active with cleanup suspended. Re-enable after validating namespace and original
 Restoring only SQL can lose bytes; restoring only objects lets cleanup remove keys
 without matching metadata. The ordinary local reset does not migrate content.
 Migration and rollback constraints are in the
-[migration note](../swift/ops/migrations/manager-document-storage.md).
+[migration note](../swift/ops/migrations/rust-fred-manager.md).

@@ -70,11 +70,10 @@ pub struct SecurityConfig {
     pub rebac: RebacConfig,
 }
 
-/// Issuer plus optional outbound directory credentials; legacy issuer-only configs remain valid.
+/// Issuer plus outbound directory credentials, used only when `enabled`.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct M2mConfig {
     pub realm_url: String,
-    #[serde(default)]
     pub enabled: bool,
     pub client_id: Option<String>,
     pub secret_env_var: Option<String>,

@@ -302,7 +302,7 @@ async fn a_finished_bootstrap_stays_closed_after_its_admin_is_removed() {
     bootstrap::grant_root(&e.pool, &e.fga, "alice")
         .await
         .unwrap();
-    delete_tuple(&e, "alice", "owner", "platform:root").await;
+    delete_tuple(&e, "alice", "platform_owner", "platform:root").await;
     let again = bootstrap::grant_root(&e.pool, &e.fga, "alice").await;
     assert!(matches!(again, Err(AppError::Conflict(_))));
     assert!(!e.fga.is_platform_owner("alice").await.unwrap());
@@ -426,9 +426,6 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
             .await
             .is_err()
     );
-    db::rename_document(&e.pool, doc.id, "cdc-v2.pdf")
-        .await
-        .unwrap();
     db::rename_folder(&e.pool, folder.id, "AO").await.unwrap();
 }
 
@@ -469,34 +466,6 @@ async fn admin_roles_grant_no_content_access() {
     );
 }
 
-// Proves: I12
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn pagination_survives_deleting_the_cursor_row() {
-    let e = env().await;
-    let (org, _) = org_and_team(&e).await;
-    let mut docs = Vec::new();
-    for name in ["a", "b", "c"] {
-        let d = document(org.id, None, name);
-        crate::environment::insert_document(&e.pool, &d)
-            .await
-            .unwrap();
-        docs.push(d);
-    }
-    let names = |page: Vec<Document>| page.into_iter().map(|d| d.name).collect::<Vec<_>>();
-    let first = db::documents(&e.pool, org.id, None, None, 1).await.unwrap();
-    assert_eq!(names(first), ["a"]);
-    db::delete_document(&e.pool, docs[0].id).await.unwrap();
-    let next = db::documents(&e.pool, org.id, None, Some(("a", docs[0].id)), 2)
-        .await
-        .unwrap();
-    assert_eq!(names(next), ["b", "c"]);
-    let end = db::documents(&e.pool, org.id, None, Some(("c", docs[2].id)), 2)
-        .await
-        .unwrap();
-    assert!(end.is_empty());
-}
-
 // Proves: I8
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
@@ -514,7 +483,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
         Role::Editor,
         Role::Admin,
         Role::Analyst,
-        Role::Owner,
+        Role::OrganizationOwner,
         Role::PersonalSpaceCreator,
     ];
     for mask in 0..64 {
@@ -551,7 +520,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                     matches!(role, Role::Admin | Role::Analyst)
                 }
                 SP::ReadConversationsForEvaluation => *role == Role::Analyst,
-                SP::Own => *role == Role::Owner,
+                SP::OwnOrganization => *role == Role::OrganizationOwner,
                 SP::CreatePersonalSpace => *role == Role::PersonalSpaceCreator,
             });
             assert_eq!(
@@ -890,7 +859,16 @@ async fn revoked_platform_actor_cannot_complete_a_waiting_platform_or_owner_gran
         let (pool, fga) = (e.pool.clone(), e.fga.clone());
         let pending = tokio::spawn(async move {
             if owner_grant {
-                spaces::grant(&pool, &fga, None, "delegate", org.id, Role::Owner, "target").await
+                spaces::grant(
+                    &pool,
+                    &fga,
+                    None,
+                    "delegate",
+                    org.id,
+                    Role::OrganizationOwner,
+                    "target",
+                )
+                .await
             } else {
                 platform::grant(&pool, &fga, None, "delegate", "target", P::PromptEditor).await
             }
@@ -1164,7 +1142,7 @@ async fn durable_grants_are_audited_even_when_sql_commit_fails() {
 }
 
 fn provisioning_bundle() -> fred_manager::provisioning::Bundle {
-    parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password","first_name":"Alice","last_name":"Example"},{"username":"bob","password":"private-password","platform_roles":["observer","feature_manager","prompt_editor"]},{"username":"platform-only","password":"private-password","platform_roles":["platform_owner"]}],"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member","owner"],"bob":["member"]}}],"teams":[{"ref":"BID","name":"BID","organization":"org","roles":{"alice":["admin"],"bob":["member","editor","analyst"]}}],"projects":[]}"#).unwrap()
+    parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password","first_name":"Alice","last_name":"Example"},{"username":"bob","password":"private-password","platform_roles":["platform_observer","feature_manager","prompt_editor"]},{"username":"platform-only","password":"private-password","platform_roles":["platform_owner"]}],"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member","organization_owner"],"bob":["member"]}}],"teams":[{"ref":"BID","name":"BID","organization":"org","roles":{"alice":["admin"],"bob":["member","editor","analyst"]}}],"projects":[]}"#).unwrap()
 }
 
 // Proves: I4, I8, I17
@@ -1322,7 +1300,7 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
             serde_json::json!([{"ref":"bad","name":"uncreatable","organization":"org","roles":{"alice":["member"]}}]),
         ),
     ] {
-        let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member","owner"]}}],"users":users,"teams":teams,"projects":[]})).unwrap()).unwrap();
+        let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["admin","member","organization_owner"]}}],"users":users,"teams":teams,"projects":[]})).unwrap()).unwrap();
         let error = Importer {
             pool: &e.pool,
             fga: &e.fga,
@@ -1504,7 +1482,7 @@ async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
         let pool = e.pool.clone();
         let fga = e.fga.clone();
         let pending = tokio::spawn(async move {
-            let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"new","roles":{"alice":["admin","member","owner"]}}],"teams":[],"projects":[]}"#).unwrap();
+            let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"new","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[],"projects":[]}"#).unwrap();
             Importer {
                 pool: &pool,
                 fga: &fga,
@@ -1519,7 +1497,7 @@ async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
         if expired {
             tokio::time::sleep(Duration::from_secs(2)).await;
         } else {
-            delete_tuple(&e, "root", "owner", "platform:root").await;
+            delete_tuple(&e, "root", "platform_owner", "platform:root").await;
         }
         tx.commit().await.unwrap();
         assert!(pending.await.unwrap().is_err());
@@ -1556,7 +1534,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
     config["storage"]["postgres"]["username"] = "postgres".into();
     config["storage"]["postgres"]["database"] = database.into();
     let _: Configuration = serde_json::from_value(config.clone()).unwrap();
-    std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member","owner"]}}],"teams":[],"projects":[]}"#)).unwrap();
+    std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[],"projects":[]}"#)).unwrap();
     fred_manager::onboarding::accept(&e.pool, Some("v1"), "root", "v1")
         .await
         .unwrap();
@@ -1630,7 +1608,7 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
             std::fs::write(temp.join("bundle.json"), br#"{"private-password":true}"#).unwrap();
         }
         if case == "valid" {
-            std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member","owner"]}}],"teams":[],"projects":[]}"#)).unwrap();
+            std::fs::write(temp.join("bundle.json"), fixture_zip(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"CLI","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[],"projects":[]}"#)).unwrap();
         }
         if case == "bad-config" {
             std::fs::write(temp.join("configuration.yaml"), "private-secret: [bad").unwrap();
@@ -1780,7 +1758,10 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
                 .await
                 .unwrap();
             assert_eq!(
-                e.fga.space_holders(id, Role::Owner).await.unwrap(),
+                e.fga
+                    .space_holders(id, Role::OrganizationOwner)
+                    .await
+                    .unwrap(),
                 vec![alice]
             );
         }
@@ -1845,7 +1826,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
         org_roles.insert(
             name.clone(),
             if i == 0 {
-                serde_json::json!(["member", "admin", "owner"])
+                serde_json::json!(["member", "admin", "organization_owner"])
             } else {
                 serde_json::json!(["member"])
             },
@@ -1916,7 +1897,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
         .unwrap()
         .0;
     // A personal space is not a child: a team may share its name and stays distinct.
-    let homonym=parse_blueprint(br#"{"users":[{"username":"new","password":"private-password"}],"organizations":[{"ref":"org","name":"Many","roles":{"new":["admin","member","owner"]}}],"teams":[{"ref":"user-0","name":"user-0","organization":"org","roles":{"new":["admin"]}}],"projects":[]}"#).unwrap();
+    let homonym=parse_blueprint(br#"{"users":[{"username":"new","password":"private-password"}],"organizations":[{"ref":"org","name":"Many","roles":{"new":["admin","member","organization_owner"]}}],"teams":[{"ref":"user-0","name":"user-0","organization":"org","roles":{"new":["admin"]}}],"projects":[]}"#).unwrap();
     importer.run(&homonym).await.unwrap();
     let team = named_space(&e.pool, &e.fga, Some(org.id), "user-0")
         .await
@@ -2043,7 +2024,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         bearer: &token,
     };
     // Predictable identity failures cannot create even the first account in a bundle.
-    let declaration = serde_json::json!({"users":[{"username":"prefix","password":"private-password"},{"username":"tail","password":"private-password"}],"organizations":[{"ref":"o","name":"Preflight","roles":{"prefix":["owner","admin"]}}],"teams":[],"projects":[]});
+    let declaration = serde_json::json!({"users":[{"username":"prefix","password":"private-password"},{"username":"tail","password":"private-password"}],"organizations":[{"ref":"o","name":"Preflight","roles":{"prefix":["organization_owner","admin"]}}],"teams":[],"projects":[]});
     let users_before = kc.get("/admin/realms/app/users").await;
     for invalid in ["Alice", " alice", "alice ", "ALICE"] {
         let mut value = declaration.clone();
@@ -2578,7 +2559,7 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
     let auth = server.auth().await;
     let directory = server.directory();
     let token = server.token("delegate");
-    let bytes=br#"{"users":[{"username":"alice"},{"username":"bob","platform_roles":["observer"]}],"organizations":[{"ref":"org","name":"Existing","roles":{"alice":["admin","member","owner"],"bob":["member"]}}],"teams":[{"ref":"New","name":"New","organization":"org","roles":{"alice":["admin"],"bob":["analyst"]}}],"projects":[]}"#;
+    let bytes=br#"{"users":[{"username":"alice"},{"username":"bob","platform_roles":["platform_observer"]}],"organizations":[{"ref":"org","name":"Existing","roles":{"alice":["admin","member","organization_owner"],"bob":["member"]}}],"teams":[{"ref":"New","name":"New","organization":"org","roles":{"alice":["admin"],"bob":["analyst"]}}],"projects":[]}"#;
     let pending = tokio::spawn(async move {
         Importer {
             pool: &pool,
@@ -3369,7 +3350,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         content: None,
     });
     let token = server.token("root");
-    let mut value = serde_json::json!({"users":[{"username":"alice","password":"private-password"},{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"alice":["admin","member","owner"]}},{"ref":"b","name":"B","roles":{"bob":["admin","member","owner"]}}],"teams":[{"ref":"at","name":"Team","organization":"a","roles":{"alice":["admin","member"]}},{"ref":"bt","name":"Team","organization":"b","roles":{"bob":["admin","analyst"]}}],"projects":[{"ref":"ap","name":"Project","team":"at","roles":{"alice":["admin","editor"]}},{"ref":"bp","name":"Project","team":"bt","roles":{"bob":["admin"]}}]});
+    let mut value = serde_json::json!({"users":[{"username":"alice","password":"private-password"},{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"alice":["admin","member","organization_owner"]}},{"ref":"b","name":"B","roles":{"bob":["admin","member","organization_owner"]}}],"teams":[{"ref":"at","name":"Team","organization":"a","roles":{"alice":["admin","member"]}},{"ref":"bt","name":"Team","organization":"b","roles":{"bob":["admin","analyst"]}}],"projects":[{"ref":"ap","name":"Project","team":"at","roles":{"alice":["admin","editor"]}},{"ref":"bp","name":"Project","team":"bt","roles":{"bob":["admin"]}}]});
     // Malformed upload is never parsed for a caller lacking platform authority.
     for (bearer, status) in [("invalid".to_owned(), 401), (server.token("ordinary"), 403)] {
         let response = app
@@ -3443,7 +3424,8 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     );
     value["teams"][1]["roles"]["bob"] = serde_json::json!(["admin", "analyst"]);
     // Owner exists only on organizations; a team owner is rejected before identities.
-    value["teams"][0]["roles"]["alice"] = serde_json::json!(["admin", "member", "owner"]);
+    value["teams"][0]["roles"]["alice"] =
+        serde_json::json!(["admin", "member", "organization_owner"]);
     let (s, b) = http_import(
         &app,
         &token,
@@ -3463,7 +3445,8 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     .await;
     assert_eq!(s, 422, "{b}");
     assert!(server.users.lock().await.is_empty());
-    value["organizations"][0]["roles"]["alice"] = serde_json::json!(["admin", "member", "owner"]);
+    value["organizations"][0]["roles"]["alice"] =
+        serde_json::json!(["admin", "member", "organization_owner"]);
     server.control.lock().await.fail_create = true;
     let (s, b) = http_import(
         &app,
@@ -3514,7 +3497,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     assert_ne!(ids[0], ids[1]);
     // Internal SQL failures expose a phase and counters, never database diagnostics.
     sqlx::raw_sql("CREATE FUNCTION fail_import_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name = 'Internal failure' THEN RAISE EXCEPTION 'private-password'; END IF; RETURN NEW; END $$; CREATE TRIGGER fail_import_fixture BEFORE INSERT ON space FOR EACH ROW EXECUTE FUNCTION fail_import_fixture();").execute(&e.pool).await.unwrap();
-    let failing=fixture_zip(br#"{"users":[{"username":"failure-owner","password":"private-password"}],"organizations":[{"ref":"bad","name":"Internal failure","roles":{"failure-owner":["admin","owner"]}}],"teams":[],"projects":[]}"#);
+    let failing=fixture_zip(br#"{"users":[{"username":"failure-owner","password":"private-password"}],"organizations":[{"ref":"bad","name":"Internal failure","roles":{"failure-owner":["admin","organization_owner"]}}],"teams":[],"projects":[]}"#);
     let (status, body) = http_import(&app, &token, &failing).await;
     assert_eq!(status, 500, "{body}");
     assert!(body["detail"].as_str().unwrap().contains("roles/spaces"));
@@ -4332,7 +4315,16 @@ async fn organization_owners_name_admins_and_read_nothing() {
         .await
         .unwrap();
     // Only a platform owner names organization owners, and only on organizations.
-    let by_admin = spaces::grant(&e.pool, &e.fga, None, "alice", org.id, Role::Owner, "olga").await;
+    let by_admin = spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "alice",
+        org.id,
+        Role::OrganizationOwner,
+        "olga",
+    )
+    .await;
     assert!(matches!(by_admin, Err(AppError::Forbidden)));
     spaces::grant(
         &e.pool,
@@ -4340,12 +4332,21 @@ async fn organization_owners_name_admins_and_read_nothing() {
         Some(&directory),
         "root",
         org.id,
-        Role::Owner,
+        Role::OrganizationOwner,
         "olga",
     )
     .await
     .unwrap();
-    let on_team = spaces::grant(&e.pool, &e.fga, None, "root", team.id, Role::Owner, "olga").await;
+    let on_team = spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "root",
+        team.id,
+        Role::OrganizationOwner,
+        "olga",
+    )
+    .await;
     assert!(matches!(on_team, Err(AppError::Conflict(_))));
 
     // The owner names admins, whose role descends; the owner reads and manages nothing.
@@ -4382,13 +4383,31 @@ async fn organization_owners_name_admins_and_read_nothing() {
     assert!(matches!(created, Err(AppError::Forbidden)));
 
     // An organization keeps an owner.
-    spaces::revoke(&e.pool, &e.fga, "root", org.id, Role::Owner, "alice")
-        .await
-        .unwrap();
-    let last = spaces::revoke(&e.pool, &e.fga, "root", org.id, Role::Owner, "olga").await;
+    spaces::revoke(
+        &e.pool,
+        &e.fga,
+        "root",
+        org.id,
+        Role::OrganizationOwner,
+        "alice",
+    )
+    .await
+    .unwrap();
+    let last = spaces::revoke(
+        &e.pool,
+        &e.fga,
+        "root",
+        org.id,
+        Role::OrganizationOwner,
+        "olga",
+    )
+    .await;
     assert!(matches!(last, Err(AppError::Conflict(_))));
     assert_eq!(
-        e.fga.space_holders(org.id, Role::Owner).await.unwrap(),
+        e.fga
+            .space_holders(org.id, Role::OrganizationOwner)
+            .await
+            .unwrap(),
         vec!["olga".to_string()]
     );
 }
@@ -4476,21 +4495,28 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
         .await
         .unwrap();
     let token = identity.token("root");
-    let before = e.fga.space_holders(org.id, Role::Owner).await.unwrap();
+    let before = e
+        .fga
+        .space_holders(org.id, Role::OrganizationOwner)
+        .await
+        .unwrap();
     for (subject, expected) in [("missing", 404), ("unavailable", 500)] {
         assert_eq!(
             content_request(
                 app.clone(),
                 &token,
                 "PUT",
-                &format!("/spaces/{}/roles/owner/{subject}", org.id),
+                &format!("/spaces/{}/roles/organization_owner/{subject}", org.id),
                 ""
             )
             .await,
             expected
         );
         assert_eq!(
-            e.fga.space_holders(org.id, Role::Owner).await.unwrap(),
+            e.fga
+                .space_holders(org.id, Role::OrganizationOwner)
+                .await
+                .unwrap(),
             before
         );
     }
@@ -4501,7 +4527,7 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
             None,
             "root",
             org.id,
-            Role::Owner,
+            Role::OrganizationOwner,
             "missing"
         )
         .await,
@@ -4512,7 +4538,7 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
         .lock()
         .await
         .insert("olga".into(), "olga".into());
-    let path = format!("/spaces/{}/roles/owner/olga", org.id);
+    let path = format!("/spaces/{}/roles/organization_owner/olga", org.id);
     assert_eq!(
         content_request(app.clone(), &token, "PUT", &path, "").await,
         204
@@ -4527,7 +4553,7 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
             app,
             &token,
             "DELETE",
-            &format!("/spaces/{}/roles/owner/alice", org.id),
+            &format!("/spaces/{}/roles/organization_owner/alice", org.id),
             ""
         )
         .await,
@@ -4554,7 +4580,7 @@ async fn import_rechecks_owner_identity_before_publishing_spaces() {
     let directory = server.directory();
     let gate = Arc::new(support::Gate::default());
     server.control.lock().await.create_gate = Some(gate.clone());
-    let bundle = parse_blueprint(br#"{"users":[{"username":"alice"},{"username":"bob","password":"fixture-password"}],"organizations":[{"ref":"org","name":"Race","roles":{"alice":["owner","admin"]}}],"teams":[],"projects":[]}"#).unwrap();
+    let bundle = parse_blueprint(br#"{"users":[{"username":"alice"},{"username":"bob","password":"fixture-password"}],"organizations":[{"ref":"org","name":"Race","roles":{"alice":["organization_owner","admin"]}}],"teams":[],"projects":[]}"#).unwrap();
     let token = server.token("root");
     let pool = e.pool.clone();
     let fga = e.fga.clone();
@@ -4606,7 +4632,7 @@ async fn import_checks_distinct_owners_once_with_bounded_concurrency() {
         let name = format!("owner{i}");
         server.users.lock().await.insert(name.clone(), name.clone());
         users.push(serde_json::json!({"username":name}));
-        roles.insert(name, serde_json::json!(["owner", "admin"]));
+        roles.insert(name, serde_json::json!(["organization_owner", "admin"]));
     }
     server.control.lock().await.subject_delay = true;
     let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({
@@ -4751,7 +4777,7 @@ async fn a_late_attachment_cannot_publish_after_assignment_elsewhere() {
 // Proves: I23, I8
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn ambiguous_legacy_context_fails_closed_and_remains_repairable() {
+async fn ambiguous_context_fails_closed_and_remains_repairable() {
     use fred_manager::fga::Tuple;
     let e = env().await;
     let (a, _, project) = tree(&e).await;
@@ -4764,7 +4790,7 @@ async fn ambiguous_legacy_context_fails_closed_and_remains_repairable() {
         Some(a.id)
     );
     assert!(!reads(&e, "bob", a.id).await);
-    // Simulate pre-invariant data: direct orphan project role and another organization.
+    // A project role without its team membership is refused, not repaired.
     e.fga
         .write(
             &mut e.fga.guard(&[Scope::Organization(a.id)]).await.unwrap(),
@@ -4777,40 +4803,25 @@ async fn ambiguous_legacy_context_fails_closed_and_remains_repairable() {
         )
         .await
         .unwrap();
-    assert_eq!(
-        spaces::organization(&e.pool, &e.fga, "orphan")
-            .await
-            .unwrap(),
-        Some(a.id)
-    );
-    assert_eq!(
-        spaces::memberships(&e.pool, &e.fga, "orphan")
-            .await
-            .unwrap()[0]
-            .space
-            .organization,
-        a.id
-    );
+    assert!(matches!(
+        spaces::memberships(&e.pool, &e.fga, "orphan").await,
+        Err(AppError::Conflict(_))
+    ));
+    // Simulate a corrupt second organization attachment.
     e.fga
         .write(
             &mut e.fga.guard(&[Scope::Organization(b.id)]).await.unwrap(),
-            &[
-                Tuple {
-                    user: "bob",
-                    role: Role::Member,
-                    space: b.id,
-                },
-                Tuple {
-                    user: "orphan",
-                    role: Role::Member,
-                    space: b.id,
-                },
-            ],
+            &[Tuple {
+                user: "bob",
+                role: Role::Member,
+                space: b.id,
+            }],
             &[],
         )
         .await
         .unwrap();
-    for subject in ["bob", "orphan"] {
+    {
+        let subject = "bob";
         assert!(matches!(
             spaces::organization(&e.pool, &e.fga, subject).await,
             Err(AppError::Conflict(_))
@@ -4852,7 +4863,7 @@ async fn import_rejects_cross_organization_declarations_before_identity_writes()
         .await
         .unwrap();
     let token = server.token("root");
-    let value = serde_json::json!({"users":[{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"bob":["admin","owner","member"]}},{"ref":"b","name":"B","roles":{"bob":["admin","owner","member"]}}],"teams":[],"projects":[]});
+    let value = serde_json::json!({"users":[{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"bob":["admin","organization_owner","member"]}},{"ref":"b","name":"B","roles":{"bob":["admin","organization_owner","member"]}}],"teams":[],"projects":[]});
     let bundle = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();
     let importer = Importer {
         pool: &e.pool,
@@ -5015,25 +5026,12 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
             app.clone(),
             &token,
             "GET",
-            &format!("/documents/{}", doc.id),
+            &format!("/spaces/{}/folders", Uuid::new_v4()),
             ""
         )
         .await,
         404
     );
-    for suffix in ["folders", "documents"] {
-        assert_eq!(
-            content_request(
-                app.clone(),
-                &token,
-                "GET",
-                &format!("/spaces/{}/{suffix}", Uuid::new_v4()),
-                ""
-            )
-            .await,
-            404
-        );
-    }
     // A corrupt legacy second grant must not make either organization readable.
     e.fga
         .write(
@@ -5068,17 +5066,6 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
         content_request(app.clone(), &token, "GET", "/me/spaces", "").await,
         409
     );
-    assert_eq!(
-        content_request(
-            app.clone(),
-            &token,
-            "GET",
-            &format!("/documents/{}", doc.id),
-            ""
-        )
-        .await,
-        409
-    );
     // /me exposes platform-role metadata independently; no content or tenant choice.
     let response = app
         .oneshot(
@@ -5111,7 +5098,7 @@ async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
     let auth = server.auth().await;
     let directory = server.directory();
     let token = server.token("root");
-    let bundle = parse_blueprint(br#"{"users":[{"username":"carol","password":"private-password"},{"username":"bob"}],"organizations":[{"ref":"b","name":"B","roles":{"carol":["owner","admin"],"bob":["member"]}}],"teams":[],"projects":[]}"#).unwrap();
+    let bundle = parse_blueprint(br#"{"users":[{"username":"carol","password":"private-password"},{"username":"bob"}],"organizations":[{"ref":"b","name":"B","roles":{"carol":["organization_owner","admin"],"bob":["member"]}}],"teams":[],"projects":[]}"#).unwrap();
     let (pool, fga) = (e.pool.clone(), e.fga.clone());
     let import = tokio::spawn(async move {
         fred_manager::provisioning::Importer {
@@ -5376,100 +5363,6 @@ async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
     assert!(matches!(pending.await.unwrap(), Err(AppError::Forbidden)));
 }
 
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn additive_personal_model_publication_preserves_data_and_retries_sql_failure() {
-    for snapshot in [
-        include_str!("../openfga/model-before-personal-eligibility.json"),
-        include_str!("../openfga/model-before-space-deletion.json"),
-    ] {
-        let e = env().await;
-        let (org, _) = org_and_team(&e).await;
-        let previous: serde_json::Value = serde_json::from_str(snapshot).unwrap();
-        let reply: serde_json::Value = reqwest::Client::new()
-            .post(format!(
-                "{}/stores/{}/authorization-models",
-                e.openfga,
-                e.fga.store_id()
-            ))
-            .json(&previous)
-            .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
-        let old = reply["authorization_model_id"].as_str().unwrap();
-        sqlx::query("update authorization_store set model_id=$1")
-            .bind(old)
-            .execute(&e.pool)
-            .await
-            .unwrap();
-        let source = Fga::connect(
-            &e.openfga,
-            &e.store,
-            false,
-            false,
-            None,
-            Some(Duration::from_secs(5)),
-        )
-        .await
-        .unwrap();
-        assert!(source.clone().load(&e.pool).await.is_err());
-        sqlx::raw_sql("create function reject_model_update() returns trigger language plpgsql as $$ begin raise exception 'test publication failure'; end $$; create trigger reject_model_update before update on authorization_store for each row execute function reject_model_update()").execute(&e.pool).await.unwrap();
-        assert!(source.clone().initialize(&e.pool).await.is_err());
-        assert_eq!(
-            sqlx::query_scalar::<_, String>("select model_id from authorization_store")
-                .fetch_one(&e.pool)
-                .await
-                .unwrap(),
-            old
-        );
-        assert!(reads(&e, "alice", org.id).await);
-        sqlx::raw_sql("drop trigger reject_model_update on authorization_store; drop function reject_model_update()").execute(&e.pool).await.unwrap();
-        let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
-        let source = Fga::connect(
-            &proxy.base,
-            &e.store,
-            false,
-            false,
-            None,
-            Some(Duration::from_secs(5)),
-        )
-        .await
-        .unwrap();
-        let (a, b) = tokio::join!(
-            source.clone().initialize(&e.pool),
-            source.initialize(&e.pool)
-        );
-        let (a, b) = (a.unwrap(), b.unwrap());
-        assert_eq!(a.store_id(), e.fga.store_id());
-        assert_eq!(b.store_id(), a.store_id());
-        assert_eq!(
-            proxy.fault.lock().await.calls.get("authorization-models"),
-            Some(&1)
-        );
-        assert!(a.check("alice", Permission::Read, org.id).await.unwrap());
-        assert!(
-            Fga::connect(
-                &e.openfga,
-                &e.store,
-                false,
-                false,
-                None,
-                Some(Duration::from_secs(5))
-            )
-            .await
-            .unwrap()
-            .load(&e.pool)
-            .await
-            .is_ok()
-        );
-    }
-}
-
 // Proves: I4, I17, I18
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
@@ -5691,29 +5584,6 @@ async fn api_starts_without_temporal_and_keeps_storage_optional() {
     .await
     .unwrap();
     let token = identity.token("alice");
-    for suffix in [
-        format!("/spaces/{}/documents", org.id),
-        format!("/documents/{}", doc.id),
-    ] {
-        assert_eq!(
-            http.get(format!("{base}{suffix}"))
-                .bearer_auth(&token)
-                .send()
-                .await
-                .unwrap()
-                .status(),
-            200
-        );
-        assert_eq!(
-            http.get(format!("{base}{suffix}"))
-                .bearer_auth(identity.token("outsider"))
-                .send()
-                .await
-                .unwrap()
-                .status(),
-            404
-        );
-    }
     assert_eq!(
         http.get(format!("{base}/spaces/{}/entries", org.id))
             .bearer_auth(&token)
@@ -5746,12 +5616,12 @@ async fn api_starts_without_temporal_and_keeps_storage_optional() {
         (
             reqwest::Method::PATCH,
             format!("/documents/{}", doc.id),
-            405,
+            404,
         ),
         (
             reqwest::Method::DELETE,
             format!("/documents/{}", doc.id),
-            405,
+            404,
         ),
         (
             reqwest::Method::POST,

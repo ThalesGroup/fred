@@ -29403,7 +29403,7 @@
                     "m2m": {
                       "oneOf": [
                         {
-                          "description": "Issuer plus optional outbound directory credentials; legacy issuer-only configs remain valid.",
+                          "description": "Issuer plus outbound directory credentials, used only when `enabled`.",
                           "properties": {
                             "client_id": {
                               "type": [
@@ -29425,7 +29425,8 @@
                             }
                           },
                           "required": [
-                            "realm_url"
+                            "realm_url",
+                            "enabled"
                           ],
                           "type": "object"
                         },
@@ -30838,7 +30839,7 @@
                     "m2m": {
                       "oneOf": [
                         {
-                          "description": "Issuer plus optional outbound directory credentials; legacy issuer-only configs remain valid.",
+                          "description": "Issuer plus outbound directory credentials, used only when `enabled`.",
                           "properties": {
                             "client_id": {
                               "type": [
@@ -30860,7 +30861,8 @@
                             }
                           },
                           "required": [
-                            "realm_url"
+                            "realm_url",
+                            "enabled"
                           ],
                           "type": "object"
                         },

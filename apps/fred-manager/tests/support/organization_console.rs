@@ -147,7 +147,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
     let id = Uuid::parse_str(org["id"].as_str().unwrap()).unwrap();
     assert_eq!(
         e.fga.direct_roles_on("owner", id).await.unwrap(),
-        vec![Role::Owner]
+        vec![Role::OrganizationOwner]
     );
     assert_eq!(
         e.fga.direct_roles_on("admin", id).await.unwrap(),
@@ -215,7 +215,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
         .await
         .unwrap();
     assert_eq!(roles.len(), 2);
-    assert!(roles.contains(&Role::Owner));
+    assert!(roles.contains(&Role::OrganizationOwner));
     assert!(roles.contains(&Role::Admin));
     for after in [false, true] {
         *proxy.fault.lock().await = support::fga_proxy::Fault {
@@ -368,7 +368,7 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
         .await
     });
     wait_for_advisory_waiter(&e.pool).await;
-    delete_tuple(&e, "delegate", "owner", "platform:root").await;
+    delete_tuple(&e, "delegate", "platform_owner", "platform:root").await;
     tx.commit().await.unwrap();
     assert!(matches!(pending.await.unwrap(), Err(AppError::Forbidden)));
     assert!(

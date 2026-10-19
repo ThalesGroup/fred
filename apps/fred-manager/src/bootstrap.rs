@@ -84,7 +84,13 @@ pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppEr
         true,
     )
     .await?;
-    crate::logging::audit_relation(Some(uid), uid, "owner", "platform:root", true);
+    crate::logging::audit_relation(
+        Some(uid),
+        uid,
+        crate::roles::PlatformRole::PlatformOwner.relation(),
+        "platform:root",
+        true,
+    );
     sqlx::query("update platform_bootstrap set granted_at = now()")
         .execute(&mut *tx)
         .await?;

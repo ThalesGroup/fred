@@ -125,13 +125,19 @@ describe("generated fred-manager client", () => {
     store.dispatch(api.util.resetApiState());
   });
 
-  it("exposes metadata reads without provisional document mutations", () => {
-    for (const operation of ["createDocument", "renameDocument", "deleteDocument", "ingestDocument"]) {
+  it("exposes no document metadata routes or provisional document mutations", () => {
+    for (const operation of [
+      "createDocument",
+      "renameDocument",
+      "deleteDocument",
+      "ingestDocument",
+      "getDocument",
+      "listDocuments",
+    ]) {
       expect(api.endpoints).not.toHaveProperty(operation);
     }
     expect(managerApi).not.toHaveProperty("useIngestDocumentMutation");
-    expect(api.endpoints).toHaveProperty("getDocument");
-    expect(api.endpoints).toHaveProperty("listDocuments");
+    expect(api.endpoints).toHaveProperty("entries");
   });
 
   it("retains the standard token retry for ordinary queries", async () => {

@@ -60,9 +60,6 @@ const injectedRtkApi = api.injectEndpoints({
     acknowledge: build.mutation<AcknowledgeApiResponse, AcknowledgeApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/document-uploads/${queryArg.id}/acknowledgment`, method: "PUT" }),
     }),
-    getDocument: build.query<GetDocumentApiResponse, GetDocumentApiArg>({
-      query: (queryArg) => ({ url: `/fred-manager/v1/documents/${queryArg.id}` }),
-    }),
     content: build.query<ContentApiResponse, ContentApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/documents/${queryArg.id}/content` }),
     }),
@@ -139,17 +136,6 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           before: queryArg.before,
           before_key: queryArg.beforeKey,
-          limit: queryArg.limit,
-        },
-      }),
-    }),
-    listDocuments: build.query<ListDocumentsApiResponse, ListDocumentsApiArg>({
-      query: (queryArg) => ({
-        url: `/fred-manager/v1/spaces/${queryArg.id}/documents`,
-        params: {
-          folder_id: queryArg.folderId,
-          after_name: queryArg.afterName,
-          after_id: queryArg.afterId,
           limit: queryArg.limit,
         },
       }),
@@ -258,10 +244,6 @@ export type AcknowledgeApiResponse = unknown;
 export type AcknowledgeApiArg = {
   id: string;
 };
-export type GetDocumentApiResponse = /** status 200 Success */ Document;
-export type GetDocumentApiArg = {
-  id: string;
-};
 export type ContentApiResponse = /** status 200 undefined */ string;
 export type ContentApiArg = {
   id: string;
@@ -333,15 +315,6 @@ export type ReceiptsApiArg = {
   beforeKey?: string;
   limit?: number;
 };
-export type ListDocumentsApiResponse = /** status 200 Success */ Document[];
-export type ListDocumentsApiArg = {
-  id: string;
-  folderId?: string;
-  afterName?: string;
-  afterId?: string;
-  /** Defaults to 50; clamped to 1..200. Both cursor fields must be supplied together. */
-  limit?: number;
-};
 export type EntriesApiResponse = /** status 200 undefined */ Directory;
 export type EntriesApiArg = {
   id: string;
@@ -385,13 +358,11 @@ export type ListPlatformRolesApiArg = void;
 export type GrantPlatformRoleApiResponse = unknown;
 export type GrantPlatformRoleApiArg = {
   user: string;
-  /** Also accepts the owner and observer aliases. */
   role: PlatformRole;
 };
 export type RevokePlatformRoleApiResponse = unknown;
 export type RevokePlatformRoleApiArg = {
   user: string;
-  /** Also accepts the owner and observer aliases. */
   role: PlatformRole;
 };
 export type SpaceKind = "organization" | "team" | "project";
@@ -457,7 +428,7 @@ export type SpacePermission =
   | "run_evaluations"
   | "manage_evaluation_corpus"
   | "read_conversations_for_evaluation"
-  | "own"
+  | "own_organization"
   | "create_personal_space";
 export type SpaceCheck = {
   permission: SpacePermission;
@@ -504,17 +475,6 @@ export type UploadReceipt = {
   space_id: string;
   status: UploadStatus;
   successor_key?: string | null;
-};
-export type Document = {
-  created_at: string;
-  created_by: string;
-  folder_id: string | null;
-  id: string;
-  mime: string;
-  name: string;
-  sha256: string;
-  size: number;
-  space_id: string;
 };
 export type Folder = {
   created_at: string;
@@ -610,7 +570,7 @@ export type OnboardingStatus = {
 export type CreatePersonalSpace = {
   organization_id: string;
 };
-export type Role = "member" | "editor" | "admin" | "analyst" | "owner" | "personal_space_creator";
+export type Role = "member" | "editor" | "admin" | "analyst" | "organization_owner" | "personal_space_creator";
 export type MySpace = Space & {
   /** The subset of `roles` held only through an ancestor. */
   inherited_roles: Role[];
@@ -624,6 +584,17 @@ export type CreateSpace = {
   kind: SpaceKind;
   name: string;
   parent_id: string;
+};
+export type Document = {
+  created_at: string;
+  created_by: string;
+  folder_id: string | null;
+  id: string;
+  mime: string;
+  name: string;
+  sha256: string;
+  size: number;
+  space_id: string;
 };
 export type Entry =
   | {
@@ -676,8 +647,6 @@ export const {
   useReceiptQuery,
   useLazyReceiptQuery,
   useAcknowledgeMutation,
-  useGetDocumentQuery,
-  useLazyGetDocumentQuery,
   useContentQuery,
   useLazyContentQuery,
   useCreateFolderMutation,
@@ -702,8 +671,6 @@ export const {
   useDeleteSpaceMutation,
   useReceiptsQuery,
   useLazyReceiptsQuery,
-  useListDocumentsQuery,
-  useLazyListDocumentsQuery,
   useEntriesQuery,
   useLazyEntriesQuery,
   useListFoldersQuery,

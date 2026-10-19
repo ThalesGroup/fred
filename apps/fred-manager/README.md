@@ -66,8 +66,9 @@ before enabling it. Fred's chart deploys the worker with the manager API.
 ## Changing it
 
 A change described in the dossier updates its chapter in the same commit. A test that
-proves an invariant carries `// Proves: I<n>` above it. Applied migrations are never
-edited; add a new one.
+proves an invariant carries `// Proves: I<n>` above it. Until the first production
+release, schema changes edit the single baseline migration and local data is reset
+(see [Existing local state](#existing-local-state)).
 
 ## Generate the frontend contract
 
@@ -190,15 +191,13 @@ written under the frontend's ignored `target/` directory. The manager's
 `make test-browser` invokes the same journey and integration suite when frontend
 dependencies and Chromium are already installed.
 
-## Upgrade existing authorization
+## Existing local state
 
-Manager publishes a fresh OpenFGA store only for an empty installation. With
-`security.rebac.sync_schema_on_init`, it upgrades the exact predecessor model for
-personal eligibility in the same store, preserving existing data. Stop old writers
-and follow the [migration guide](../../docs/swift/ops/migrations/manager-personal-space.md).
-Unknown models are refused for operator reconciliation, without an automatic reset.
+Manager keeps no backward compatibility before its first production release. SQL is
+one baseline migration and the OpenFGA model is replaced, not upgraded: startup
+refuses a database or store created by an earlier baseline. Reset local Fred data.
 The [deployment chapter](../../docs/architecture/A3-manager-operations.md#authorization-store-publication)
-describes publication, retry and rollback rules.
+describes publication and retry rules.
 
 A role mutation that loses its authorization revision returns a conflict; replay
 rechecks current authority. Timeout is not rollback. Roles and permission evaluation

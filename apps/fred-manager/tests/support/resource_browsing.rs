@@ -33,7 +33,7 @@ async fn get(app: &axum::Router, token: &str, path: &str) -> (u16, Value) {
 // Proves: I1, I6, I8, I23
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
+async fn resource_reads_enforce_scope_and_role_semantics() {
     let e = env().await;
     let identity = support::IdentityServer::start().await;
     let (org, team) = org_and_team(&e).await;
@@ -68,7 +68,7 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
     for f in [&root, &child, &private] {
         db::insert_folder(&e.pool, f).await.unwrap();
     }
-    let mut expected = Vec::new();
+    let mut expected = vec![child.id];
     for i in 0..53 {
         let d = Document {
             id: Uuid::new_v4(),
@@ -84,9 +84,8 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
         crate::environment::insert_document(&e.pool, &d)
             .await
             .unwrap();
-        expected.push(d);
+        expected.push(d.id);
     }
-    expected.sort_by(|a, b| (&a.name, a.id).cmp(&(&b.name, b.id)));
     let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
     let observed = Fga::connect(
         &proxy.base,
@@ -112,81 +111,49 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
     });
     let reader = identity.token("reader");
     let base = format!("/spaces/{}", team.id);
-    for (suffix, expected_rows) in [("folders", 1), ("documents", 0)] {
+    for suffix in ["folders", "entries"] {
         let (status, body) = get(&app, &reader, &format!("{base}/{suffix}")).await;
         assert_eq!(status, 200, "{body}");
-        assert_eq!(
-            if suffix == "folders" {
-                &body["items"]
-            } else {
-                &body
-            }
-            .as_array()
-            .unwrap()
-            .len(),
-            expected_rows
-        );
+        assert_eq!(body["items"].as_array().unwrap().len(), 1);
     }
-    let docs = format!("{base}/documents?folder_id={}&limit=50", root.id);
+    let docs = format!("{base}/entries?parent_id={}&limit=50", root.id);
     let (status, first) = get(&app, &reader, &docs).await;
     assert_eq!(status, 200);
-    let first = first.as_array().unwrap();
-    assert_eq!(first.len(), 50);
-    let last = first.last().unwrap();
-    let (_, second) = get(
-        &app,
-        &reader,
-        &format!(
-            "{docs}&after_name={}&after_id={}",
-            last["name"].as_str().unwrap(),
-            last["id"].as_str().unwrap()
-        ),
-    )
-    .await;
-    let second = second.as_array().unwrap();
+    assert_eq!(first["total"], 54);
+    let (_, second) = get(&app, &reader, &format!("{docs}&offset=50")).await;
+    // Folders come first, then documents by name; two pages cover the directory once.
+    let ids: Vec<String> = [&first, &second]
+        .iter()
+        .flat_map(|page| page["items"].as_array().unwrap().iter())
+        .map(|item| item["data"]["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(first["items"].as_array().unwrap().len(), 50);
+    assert_eq!(second["items"].as_array().unwrap().len(), 4);
     assert_eq!(
-        first
-            .iter()
-            .chain(second.iter())
-            .map(|d| d["id"].as_str().unwrap().to_owned())
-            .collect::<Vec<_>>(),
-        expected
-            .iter()
-            .map(|d| d.id.to_string())
-            .collect::<Vec<_>>()
+        ids,
+        expected.iter().map(Uuid::to_string).collect::<Vec<_>>()
     );
-    assert_eq!(
-        get(&app, &reader, &format!("{docs}&after_name=partial"))
-            .await
-            .0,
-        422
-    );
-    for (suffix, param) in [("folders", "parent_id"), ("documents", "folder_id")] {
+    for suffix in ["folders", "entries"] {
         for invalid in [private.id, Uuid::new_v4()] {
             assert_eq!(
-                get(&app, &reader, &format!("{base}/{suffix}?{param}={invalid}"))
-                    .await
-                    .0,
+                get(
+                    &app,
+                    &reader,
+                    &format!("{base}/{suffix}?parent_id={invalid}")
+                )
+                .await
+                .0,
                 404
             );
         }
         let (status, body) = get(
             &app,
             &reader,
-            &format!("{base}/{suffix}?{param}={}", child.id),
+            &format!("{base}/{suffix}?parent_id={}", child.id),
         )
         .await;
         assert_eq!(status, 200);
-        assert!(
-            if suffix == "folders" {
-                &body["items"]
-            } else {
-                &body
-            }
-            .as_array()
-            .unwrap()
-            .is_empty()
-        );
+        assert!(body["items"].as_array().unwrap().is_empty());
         for user in ["reader", "editor", "analyst"] {
             assert_eq!(
                 get(&app, &identity.token(user), &format!("{base}/{suffix}"))
@@ -213,14 +180,15 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
         );
     }
     // Same read budget with 0 or 53 documents, concurrency 1. Force role paging.
-    for path in [format!("{base}/documents"), docs.clone()] {
+    for path in [format!("{base}/entries"), docs.clone()] {
         *proxy.fault.lock().await = support::fga_proxy::Fault {
             read_page_size: Some(1),
             ..Default::default()
         };
         assert_eq!(get(&app, &reader, &path).await.0, 200);
         let fault = proxy.fault.lock().await;
-        assert_eq!(fault.calls.get("check"), Some(&1));
+        // Read decision plus the directory's current write decision.
+        assert_eq!(fault.calls.get("check"), Some(&2));
         assert_eq!(fault.writes, 0);
         assert_eq!(fault.calls.len(), 2);
         // 5 direct-role pages + placement of team, team membership and personal.
@@ -240,7 +208,7 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
         .await
         .unwrap();
     assert_eq!(
-        get(&app, &reader, &format!("/spaces/{}/documents", other.id))
+        get(&app, &reader, &format!("/spaces/{}/entries", other.id))
             .await
             .0,
         404
