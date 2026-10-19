@@ -898,3 +898,165 @@ it("exports a clean Markdown report while another file retains a failed draft", 
     anchor.mockRestore();
   }
 });
+
+it("previews authorized HTML without sanitizing the saved source and switches to editable source by keyboard", async () => {
+  const original =
+    '<h1>Reviewed page</h1><script>alert(1)</script><img src="https://outside.test/pixel"><button onclick="alert(2)">Run</button>';
+  let content = original;
+  const writes: string[] = [];
+  vi.stubGlobal("fetch", async (request: Request) => {
+    if (request.method === "PUT") {
+      content = (await request.json()).content;
+      writes.push(content);
+    }
+    return new Response(
+      JSON.stringify({
+        type: "conversation_file",
+        session_id: "s1",
+        path: "/page.html",
+        viewer: "html",
+        editable: true,
+        content,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  });
+  const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/page.html"]);
+  await settle();
+  const preview = host.querySelector<HTMLIFrameElement>("iframe[srcdoc]");
+  expect(preview).not.toBeNull();
+  expect(preview!.getAttribute("sandbox")).toBe("");
+  expect(preview!.srcdoc).toContain("<h1>Reviewed page</h1>");
+  expect(preview!.srcdoc).not.toContain("<script");
+  expect(preview!.srcdoc).not.toContain("onclick");
+  expect(preview!.srcdoc).toContain("default-src 'none'");
+  expect(writes).toEqual([]);
+  const previewTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+    (tab) => tab.textContent === "conversationFiles.previewView",
+  );
+  expect(previewTab).not.toBeNull();
+  await act(async () => {
+    previewTab!.focus();
+    previewTab!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  });
+  const sourceTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+    (tab) => tab.textContent === "conversationFiles.sourceView",
+  );
+  expect(document.activeElement).toBe(sourceTab);
+  expect(sourceTab!.getAttribute("aria-selected")).toBe("true");
+  const { EditorView } = await import("@codemirror/view");
+  const editor = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+  expect(editor.state.doc.toString()).toBe(original);
+  const revised = original.replace("Reviewed page", "Saved review");
+  await act(async () => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: revised } }));
+  const { flushConversationEditors } = await import("./conversationEditors");
+  await act(async () => {
+    await flushConversationEditors("s1");
+  });
+  await settle();
+  await act(async () => previewTab!.click());
+  expect(content).toBe(revised);
+  expect(writes).toEqual([revised]);
+  expect(
+    [...host.querySelectorAll<HTMLIFrameElement>("iframe[srcdoc]")].some((frame) =>
+      frame.srcdoc.includes("<h1>Saved review</h1>"),
+    ),
+  ).toBe(true);
+  content = "<h1>Agent refreshed preview</h1>";
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await settle();
+  expect(
+    [...host.querySelectorAll<HTMLIFrameElement>("iframe[srcdoc]")].some((frame) =>
+      frame.srcdoc.includes("<h1>Agent refreshed preview</h1>"),
+    ),
+  ).toBe(true);
+});
+
+it("keeps failed HTML drafts across Preview/Source switches and retries the original source", async () => {
+  let content = "<h1>Original</h1>";
+  let failSave = true;
+  vi.stubGlobal("fetch", async (request: Request) => {
+    if (request.method === "PUT") {
+      if (failSave) return new Response("{}", { status: 503 });
+      content = (await request.json()).content;
+    }
+    return new Response(
+      JSON.stringify({
+        type: "conversation_file",
+        session_id: "s1",
+        path: "/page.html",
+        viewer: "html",
+        editable: true,
+        content,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  });
+  const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/page.html"]);
+  await settle();
+  const sourceTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+    (tab) => tab.textContent === "conversationFiles.sourceView",
+  )!;
+  await act(async () => sourceTab.click());
+  const { EditorView } = await import("@codemirror/view");
+  const editor = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+  const revised = "<h1>Human draft</h1><script>retainedInSource()</script>";
+  await act(async () => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: revised } }));
+  const { flushConversationEditors } = await import("./conversationEditors");
+  await act(async () => {
+    await expect(flushConversationEditors("s1")).rejects.toBeDefined();
+  });
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("conversationFiles.saveFailed");
+  expect(content).toBe("<h1>Original</h1>");
+  const previewTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+    (tab) => tab.textContent === "conversationFiles.previewView",
+  )!;
+  await act(async () => previewTab.click());
+  expect(host.querySelector<HTMLIFrameElement>("iframe[srcdoc]")?.srcdoc).toContain("<h1>Human draft</h1>");
+  expect(host.querySelector<HTMLIFrameElement>("iframe[srcdoc]")?.srcdoc).not.toContain("retainedInSource");
+  await act(async () => sourceTab.click());
+  expect(EditorView.findFromDOM(host.querySelector(".cm-editor")!)!.state.doc.toString()).toBe(revised);
+  failSave = false;
+  const retry = host.querySelector<HTMLButtonElement>('[role="alert"] button')!;
+  await act(async () => retry.click());
+  await settle();
+  expect(content).toBe(revised);
+  expect(host.textContent).toContain("conversationFiles.saved");
+});
+
+it("labels read-only HTML Preview/Source controls in French using the current server policy", async () => {
+  const { createInstance } = await import("i18next");
+  const french = (await import("../../../locales/fr/translation.json")).default;
+  const i18n = createInstance();
+  await i18n.init({ lng: "fr", resources: { fr: { translation: french } }, interpolation: { escapeValue: false } });
+  locale.language = "fr";
+  locale.t = (key: string) => String(i18n.t(key));
+  const fetch = vi.fn(
+    async (_request: Request) =>
+      new Response(
+        JSON.stringify({
+          type: "conversation_file",
+          session_id: "s1",
+          path: "/page.html",
+          viewer: "html",
+          editable: false,
+          content: "<h1>Lecture seule</h1>",
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/page.html"]);
+  await settle();
+  expect(host.querySelector('[role="tablist"][aria-label="Vue HTML"]')).not.toBeNull();
+  expect(host.textContent).toContain("Aperçu en lecture seule");
+  const sourceTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+    (tab) => tab.textContent === "Source",
+  )!;
+  await act(async () => sourceTab.click());
+  expect(host.querySelector('[role="textbox"]')?.getAttribute("aria-readonly")).toBe("true");
+  await act(async () => sourceTab.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+  expect(document.activeElement?.textContent).toBe("Aperçu");
+  expect(host.querySelector('[role="tabpanel"][aria-labelledby] iframe')).not.toBeNull();
+  expect(fetch.mock.calls.every(([request]) => (request as Request).method === "GET")).toBe(true);
+});

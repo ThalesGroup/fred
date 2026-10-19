@@ -1,6 +1,6 @@
 .host {
   flex: 1;
-  background: var(--surface);
+  background: var(--surface-main);
   min-height: 0;
   overflow: auto;
   color: var(--on-surface);
@@ -19,7 +19,7 @@
 .host :global(.cm-gutters) {
   border-color: var(--outline-variant);
   background: var(--surface-container);
-  color: var(--on-surface-variant);
+  color: var(--on-surface-retreat);
 }
 .host :global(.cm-selectionBackground),
 .host :global(.cm-content ::selection) {
@@ -32,4 +32,27 @@
 
 .host :global(.cm-focused) {
   outline: 2px solid var(--primary);
+}
+
+.keyword {
+  color: var(--primary);
+}
+.string {
+  color: var(--tertiary);
+}
+.literal {
+  color: var(--secondary);
+}
+.type {
+  color: var(--primary);
+}
+.property {
+  color: var(--secondary);
+}
+.comment {
+  color: var(--on-surface-retreat);
+  font-style: italic;
+}
+.invalid {
+  color: var(--error);
 }

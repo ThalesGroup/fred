@@ -36,7 +36,7 @@
   color: var(--on-surface);
 }
 .caption {
-  color: var(--on-surface-variant);
+  color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
 
@@ -50,4 +50,11 @@
 .exports {
   display: flex;
   gap: var(--spacing-xs);
+}
+
+.viewer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }

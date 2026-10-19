@@ -4214,6 +4214,10 @@
     "updated": "Mis à jour"
   },
   "conversationFiles": {
+    "htmlView": "Vue HTML",
+    "previewView": "Aperçu",
+    "sourceView": "Source",
+    "preview": "Aperçu de {{path}}",
     "exportFailed": "Impossible d'exporter ce fichier. Vos modifications sont conservées. Réessayez.",
     "close": "Fermer le panneau",
     "resize": "Redimensionner le panneau",

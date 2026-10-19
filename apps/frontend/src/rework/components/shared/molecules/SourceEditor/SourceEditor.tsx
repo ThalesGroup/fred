@@ -16,6 +16,9 @@ import { useEffect, useRef } from "react";
 import { EditorState, Compartment, Annotation } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, drawSelection } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
+import { languages } from "@codemirror/language-data";
+import { tags } from "@lezer/highlight";
 import type { Extension } from "@codemirror/state";
 import styles from "./SourceEditor.module.css";
 
@@ -25,10 +28,20 @@ interface SourceEditorProps {
   readOnly?: boolean;
   onChange?: (value: string) => void;
   language?: Extension;
+  filename?: string;
 }
 const PLAIN_TEXT: Extension = [];
+const sourceHighlighting = HighlightStyle.define([
+  { tag: [tags.keyword, tags.modifier], class: styles.keyword },
+  { tag: [tags.string, tags.attributeValue], class: styles.string },
+  { tag: [tags.number, tags.bool, tags.null], class: styles.literal },
+  { tag: [tags.typeName, tags.className, tags.tagName], class: styles.type },
+  { tag: [tags.propertyName, tags.attributeName], class: styles.property },
+  { tag: tags.comment, class: styles.comment },
+  { tag: tags.invalid, class: styles.invalid },
+]);
 const externalSync = Annotation.define<boolean>();
-export function SourceEditor({ value, label, readOnly = false, onChange, language = PLAIN_TEXT }: SourceEditorProps) {
+export function SourceEditor({ value, label, readOnly = false, onChange, language, filename }: SourceEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -45,6 +58,7 @@ export function SourceEditor({ value, label, readOnly = false, onChange, languag
           lineNumbers(),
           drawSelection(),
           history(),
+          syntaxHighlighting(sourceHighlighting),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           options.current.of([]),
           languageConfig.current.of([]),
@@ -78,8 +92,24 @@ export function SourceEditor({ value, label, readOnly = false, onChange, languag
     });
   }, [readOnly, label]);
   useEffect(() => {
-    view.current?.dispatch({ effects: languageConfig.current.reconfigure(language) });
-  }, [language]);
+    let current = true;
+    const apply = (extension: Extension) => {
+      if (current) view.current?.dispatch({ effects: languageConfig.current.reconfigure(extension) });
+    };
+    apply(language ?? PLAIN_TEXT);
+    if (!language && filename) {
+      // The catalog's literal dynamic imports become Fred-hosted build chunks.
+      // Match the basename as well as its extension (e.g. Dockerfile).
+      const description = LanguageDescription.matchFilename(languages, filename.split("/").pop()!);
+      description
+        ?.load()
+        .then(apply)
+        .catch(() => apply(PLAIN_TEXT));
+    }
+    return () => {
+      current = false;
+    };
+  }, [language, filename]);
   useEffect(() => {
     const editor = view.current;
     if (editor && editor.state.doc.toString() !== value)

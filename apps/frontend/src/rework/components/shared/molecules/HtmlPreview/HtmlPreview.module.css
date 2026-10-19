@@ -1,0 +1,35 @@
+.previewFrameWrap {
+  position: relative;
+  /* Shown while both frames are still hidden (first open, before paint), so the
+   * gap reads as the pane's surface rather than a white flash. */
+  background-color: var(--surface-container);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  color: var(--on-surface);
+}
+
+.previewFrame {
+  display: block;
+  position: absolute;
+  inset: 0;
+  border: none;
+  /* Preserve the paper canvas for the document's own colors in either theme. */
+  background-color: var(--surface-picture);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  color: var(--on-surface);
+}
+
+.frameFront {
+  opacity: 1;
+  z-index: 1;
+}
+
+.frameBack {
+  visibility: hidden;
+  opacity: 0;
+  z-index: 0;
+  pointer-events: none;
+}

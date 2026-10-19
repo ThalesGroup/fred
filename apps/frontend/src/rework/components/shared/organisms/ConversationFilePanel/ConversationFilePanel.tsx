@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { MarkdownEditor } from "@shared/molecules/MarkdownEditor/MarkdownEditor";
 import { SourceEditor } from "@shared/molecules/SourceEditor/SourceEditor";
+import { HtmlPreview } from "@shared/molecules/HtmlPreview/HtmlPreview";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import Button from "@shared/atoms/Button/Button";
 import {
@@ -68,6 +69,8 @@ function FileContent({
     refreshRevision,
   );
   const [exporting, setExporting] = useState(false);
+  const [htmlView, setHtmlView] = useState<"preview" | "source">("preview");
+  const viewId = useId();
   const [exportError, setExportError] = useState(false);
   const exportRequest = useRef<AbortController | null>(null);
   useEffect(() => () => exportRequest.current?.abort(), []);
@@ -156,21 +159,66 @@ function FileContent({
           </Button>
         )}
       </div>
-      {draft.viewer === "markdown" ? (
-        <MarkdownEditor
-          value={draft.content}
-          label={t("conversationFiles.source", { path })}
-          readOnly={!draft.editable}
-          onChange={change}
-        />
-      ) : (
-        <SourceEditor
-          value={draft.content}
-          label={t("conversationFiles.source", { path })}
-          readOnly={!draft.editable}
-          onChange={change}
-        />
+      {draft.viewer === "html" && (
+        <div className={styles.tabs} role="tablist" aria-label={t("conversationFiles.htmlView")}>
+          {(["preview", "source"] as const).map((view) => (
+            <button
+              type="button"
+              key={view}
+              role="tab"
+              id={`${viewId}-${view}`}
+              aria-controls={`${viewId}-content`}
+              aria-selected={htmlView === view}
+              tabIndex={htmlView === view ? 0 : -1}
+              className={styles.tab}
+              onClick={() => setHtmlView(view)}
+              onKeyDown={(event) => {
+                const next =
+                  event.key === "Home"
+                    ? "preview"
+                    : event.key === "End"
+                      ? "source"
+                      : event.key === "ArrowLeft" || event.key === "ArrowRight"
+                        ? view === "preview"
+                          ? "source"
+                          : "preview"
+                        : null;
+                if (!next) return;
+                event.preventDefault();
+                setHtmlView(next);
+                document.getElementById(`${viewId}-${next}`)?.focus();
+              }}
+            >
+              {t(`conversationFiles.${view}View`)}
+            </button>
+          ))}
+        </div>
       )}
+      <div
+        className={styles.viewer}
+        id={`${viewId}-content`}
+        role={draft.viewer === "html" ? "tabpanel" : undefined}
+        aria-labelledby={draft.viewer === "html" ? `${viewId}-${htmlView}` : undefined}
+      >
+        {draft.viewer === "markdown" ? (
+          <MarkdownEditor
+            value={draft.content}
+            label={t("conversationFiles.source", { path })}
+            readOnly={!draft.editable}
+            onChange={change}
+          />
+        ) : draft.viewer === "html" && htmlView === "preview" ? (
+          <HtmlPreview html={draft.content} title={t("conversationFiles.preview", { path })} />
+        ) : (
+          <SourceEditor
+            filename={path}
+            value={draft.content}
+            label={t("conversationFiles.source", { path })}
+            readOnly={!draft.editable}
+            onChange={change}
+          />
+        )}
+      </div>
     </>
   );
 }

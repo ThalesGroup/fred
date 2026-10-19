@@ -4214,6 +4214,10 @@
     "updated": "Updated"
   },
   "conversationFiles": {
+    "htmlView": "HTML view",
+    "previewView": "Preview",
+    "sourceView": "Source",
+    "preview": "Preview of {{path}}",
     "exportFailed": "Could not export this file. Your edits are preserved. Try again.",
     "close": "Close panel",
     "resize": "Resize panel",
