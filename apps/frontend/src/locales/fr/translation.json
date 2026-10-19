@@ -4214,6 +4214,7 @@
     "updated": "Mis à jour"
   },
   "conversationFiles": {
+    "exportFailed": "Impossible d'exporter ce fichier. Vos modifications sont conservées. Réessayez.",
     "close": "Fermer le panneau",
     "resize": "Redimensionner le panneau",
     "saveFailedSummary": "Le fichier n'a pas pu être enregistré",

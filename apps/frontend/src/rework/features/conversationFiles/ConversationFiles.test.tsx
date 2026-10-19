@@ -182,6 +182,18 @@ const fileResponse = (content: string, editable = true) =>
     }),
     { headers: { "Content-Type": "application/json" } },
   );
+const markdownResponse = (content: string, editable = true) =>
+  new Response(
+    JSON.stringify({
+      type: "conversation_file",
+      session_id: "s1",
+      path: "/report.md",
+      viewer: "markdown",
+      editable,
+      content,
+    }),
+    { headers: { "Content-Type": "application/json" } },
+  );
 async function settle() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -652,4 +664,237 @@ it("names the real file panel close and resize controls in French", async () => 
   await settle();
   expect.soft(host.querySelector('button[aria-label="Fermer le panneau"]')).not.toBeNull();
   expect.soft(host.querySelector('[role="separator"]')?.getAttribute("aria-label")).toBe("Redimensionner le panneau");
+});
+
+it("renders filesystem Markdown with the existing rich editor and respects server read-only policy", async () => {
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      new Response(
+        JSON.stringify({
+          type: "conversation_file",
+          session_id: "s1",
+          path: "/report.md",
+          viewer: "markdown",
+          editable: false,
+          content: "# Reviewed report\n\nThe **approved** result (<3ms).",
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+  );
+  const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/report.md"]);
+  await settle();
+  expect(host.querySelector("h1")?.textContent).toBe("Reviewed report");
+  expect(host.querySelector("strong")?.textContent).toBe("approved");
+  expect(host.textContent).toContain("result (<3ms).");
+  expect(host.querySelector('[contenteditable="true"]')).toBeNull();
+  expect(host.textContent).toContain("conversationFiles.readOnly");
+});
+
+it.each(["md", "docx"] as const)(
+  "flushes a rich Markdown edit before exporting %s from the saved file",
+  async (format) => {
+    let content = "# Reviewed report\n\nInitial result.";
+    let releaseSave!: () => void;
+    let downloaded: string | undefined;
+    vi.stubGlobal("fetch", async (input: Request | string, init?: RequestInit) => {
+      const request = typeof input === "string" ? new Request(input, init) : input;
+      if (new URL(request.url).pathname.endsWith("/export")) {
+        expect(request.headers.get("Authorization")).toBe("Bearer test");
+        expect(new URL(request.url).searchParams.get("path")).toBe("/report.md");
+        expect(new URL(request.url).searchParams.get("team_id")).toBe("t1");
+        expect(new URL(request.url).searchParams.get("format")).toBe(format);
+        downloaded = content;
+        return new Response(content);
+      }
+      if (request.method === "PUT") {
+        const next = (await request.json()).content;
+        await new Promise<void>((resolve) => {
+          releaseSave = resolve;
+        });
+        content = next;
+      }
+      return markdownResponse(content);
+    });
+    vi.stubGlobal(
+      "URL",
+      class extends URL {
+        static createObjectURL = () => "blob:test";
+        static revokeObjectURL = () => undefined;
+      },
+    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    try {
+      const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/report.md"]);
+      await settle();
+      const insertCode = host.querySelector<HTMLButtonElement>('button[aria-label="Insert Code Block"]');
+      expect(insertCode).not.toBeNull();
+      await act(async () => insertCode!.click());
+      const download = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+        b.textContent?.includes(`capability.writable_document.format.${format === "md" ? "markdown" : "word"}`),
+      );
+      expect(download).toBeDefined();
+      await act(async () => download!.click());
+      await settle();
+      expect(downloaded).toBeUndefined();
+      await act(async () => releaseSave());
+      await settle();
+      expect(downloaded).toContain("```");
+      expect(downloaded).toContain("# Reviewed report");
+      expect(click).toHaveBeenCalledOnce();
+    } finally {
+      click.mockRestore();
+    }
+  },
+);
+
+it("preserves rich Markdown drafts on failed export flush, refresh and retry", async () => {
+  let content = "# Original report\n\nInitial result.";
+  let failSave = true;
+  const downloads: string[] = [];
+  vi.stubGlobal("fetch", async (input: Request | string, init?: RequestInit) => {
+    const request = typeof input === "string" ? new Request(input, init) : input;
+    if (new URL(request.url).pathname.endsWith("/export")) {
+      downloads.push(content);
+      return new Response(content);
+    }
+    if (request.method === "PUT") {
+      if (failSave) return new Response("{}", { status: 503 });
+      content = (await request.json()).content;
+    }
+    return markdownResponse(content);
+  });
+  vi.stubGlobal(
+    "URL",
+    class extends URL {
+      static createObjectURL = () => "blob:test";
+      static revokeObjectURL = () => undefined;
+    },
+  );
+  const anchor = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+  try {
+    const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/report.md"]);
+    await settle();
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Insert Code Block"]')!.click());
+    const download = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes("capability.writable_document.format.word"),
+    )!;
+    await act(async () => download.click());
+    await settle();
+    expect(downloads).toEqual([]);
+    expect(host.textContent).toContain("conversationFiles.exportFailed");
+    expect(host.textContent).toContain("conversationFiles.saveFailed");
+    content = "# Agent changed the report";
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(host.querySelector("h1")?.textContent).toBe("Original report");
+    expect(host.querySelector(".cm-editor")).not.toBeNull();
+    failSave = false;
+    await act(async () => download.click());
+    await settle();
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0]).toContain("# Original report");
+    expect(downloads[0]).toContain("```");
+    expect(host.textContent).not.toContain("conversationFiles.exportFailed");
+  } finally {
+    anchor.mockRestore();
+  }
+});
+
+it("refreshes clean rendered Markdown without autosaving editor normalization", async () => {
+  let content = "# Before\n\nLatency <3ms.";
+  const writes: string[] = [];
+  vi.stubGlobal("fetch", async (request: Request) => {
+    if (request.method === "PUT") writes.push((await request.json()).content);
+    return markdownResponse(content);
+  });
+  const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/report.md"]);
+  await settle();
+  content = "# After agent write\n\nThe **current** report.";
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await settle();
+  expect(host.querySelector("h1")?.textContent).toBe("After agent write");
+  expect(host.querySelector("strong")?.textContent).toBe("current");
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 700)));
+  expect(writes).toEqual([]);
+});
+
+it("names export actions and reports denied downloads in French while preserving readable Markdown", async () => {
+  const { createInstance } = await import("i18next");
+  const french = (await import("../../../locales/fr/translation.json")).default;
+  const i18n = createInstance();
+  await i18n.init({ lng: "fr", resources: { fr: { translation: french } }, interpolation: { escapeValue: false } });
+  locale.language = "fr";
+  locale.t = (key: string) => String(i18n.t(key));
+  vi.stubGlobal("fetch", async (input: Request | string) => {
+    const url = typeof input === "string" ? input : input.url;
+    return url.includes("/export?")
+      ? new Response("{}", { status: 403 })
+      : markdownResponse("# Rapport conservé", false);
+  });
+  const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", ["/report.md"]);
+  await settle();
+  const download = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+    (b) => b.textContent === "Microsoft Word",
+  )!;
+  expect(download).toBeDefined();
+  expect(host.querySelector('[role="group"][aria-label="Télécharger"]')).not.toBeNull();
+  await act(async () => download.click());
+  await settle();
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+    "Impossible d'exporter ce fichier. Vos modifications sont conservées. Réessayez.",
+  );
+  expect(host.querySelector("h1")?.textContent).toBe("Rapport conservé");
+  expect(download.disabled).toBe(false);
+});
+
+it("exports a clean Markdown report while another file retains a failed draft", async () => {
+  const { EditorView } = await import("@codemirror/view");
+  let downloaded: string | undefined;
+  vi.stubGlobal("fetch", async (input: Request | string) => {
+    const request = typeof input === "string" ? new Request(input) : input;
+    if (new URL(request.url).pathname.endsWith("/export")) {
+      downloaded = "# Clean report";
+      return new Response(downloaded);
+    }
+    if (request.method === "PUT") return new Response("{}", { status: 503 });
+    return new URL(request.url).searchParams.get("path") === "/report.md"
+      ? markdownResponse("# Clean report")
+      : fileResponse("Original notes");
+  });
+  vi.stubGlobal(
+    "URL",
+    class extends URL {
+      static createObjectURL = () => "blob:test";
+      static revokeObjectURL = () => undefined;
+    },
+  );
+  const anchor = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+  try {
+    const { host } = await panelHarness("http://runtime.test/pod/v1/agents/sessions/s1/messages", [
+      "/report.md",
+      "/notes.txt",
+    ]);
+    await settle();
+    const view = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+    await act(async () =>
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "Failed notes draft" } }),
+    );
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 700)));
+    expect(host.textContent).toContain("conversationFiles.saveFailed");
+    await act(async () => host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[0].click());
+    await settle();
+    const download = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes("capability.writable_document.format.markdown"),
+    )!;
+    await act(async () => download.click());
+    await settle();
+    expect(downloaded).toBe("# Clean report");
+    await act(async () => host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1].click());
+    await settle();
+    expect(host.textContent).toContain("Failed notes draft");
+    expect(host.textContent).toContain("conversationFiles.saveFailed");
+  } finally {
+    anchor.mockRestore();
+  }
 });

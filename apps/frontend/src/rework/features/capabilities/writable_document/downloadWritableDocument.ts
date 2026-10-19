@@ -22,8 +22,7 @@
 // the ppt_filler `downloadAuthed` pattern. The FORMAT type is still imported from
 // the generated client; only the transport is hand-written.
 
-import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
-import { KeyCloakService } from "../../../../security/KeycloakService";
+import { downloadAuthed } from "../../../../common/downloadAuthed";
 import type { WritableDocumentExportFormat } from "./api/writableDocumentCapabilityOpenApi";
 import { sanitizeFilename } from "./writableDocumentUtils";
 
@@ -46,23 +45,5 @@ export async function downloadWritableDocument(params: {
     documentId,
   )}/export?format=${format}`;
 
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
-  });
-  await handlePlatformAccessResponse(res);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  const blob = await res.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = `${sanitizeFilename(title)}.${EXTENSION[format]}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+  await downloadAuthed(url, `${sanitizeFilename(title)}.${EXTENSION[format]}`);
 }

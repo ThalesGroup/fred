@@ -16,8 +16,8 @@
 
 This is the single source of truth for the inline-Markdown SUBSET the writable
 document's Word export understands: ``**bold**``, ``*italic*`` / ``_italic_``,
-``***both***`` and ``` `code` ``. It is pure (no docx import) so the grammar —
-which markers mean what, how strays are stripped — lives in one place; the docx
+``***both***`` and ``` `code` ``. It is pure (no docx import) so the grammar -
+which markers mean what, how strays are stripped - lives in one place; the docx
 writer only owns the thin step of turning the parsed :class:`Span` list into runs.
 
 Ported near-verbatim from Kea's ``core/markdown/inline.py`` (the module Kea shared
@@ -50,7 +50,7 @@ _INLINE_RE = re.compile(
 # Leftover emphasis markers we strip from text once the outer span is resolved.
 # We only do flat (non-recursive) inline parsing, so nested or mismatched markers
 # (e.g. `**_x_**`, `_a *b* c_`) would otherwise leak through as literal characters.
-# Stripping them keeps clean text — the formatting of the inner span is lost, but
+# Stripping them keeps clean text - the formatting of the inner span is lost, but
 # no stray `*`/`_` ever appears in the output.
 _STRAY_MARKER_RE = re.compile(r"\*\*|[*_]")
 
@@ -84,7 +84,7 @@ def parse_inline_markdown(text: str) -> List[Span]:
     from code spans).
 
     Always returns at least one span for non-empty input. Plain text with no markup
-    yields a single plain span, so a markup-free value is written as one run — the
+    yields a single plain span, so a markup-free value is written as one run - the
     backward-compatible path.
     """
     spans: List[Span] = []

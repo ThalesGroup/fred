@@ -15,7 +15,7 @@
 """Minimal Markdown -> Word (.docx) conversion for writable documents (#1905 port).
 
 Intentionally pragmatic (v1): supports the constructs an agent typically emits for
-a deliverable — headings, paragraphs, bold/italic, inline code, bullet/numbered
+a deliverable - headings, paragraphs, bold/italic, inline code, bullet/numbered
 lists, fenced code blocks and GFM tables. It is not a full CommonMark implementation.
 
 Ported near-verbatim from Kea's ``core/writable_documents/docx_export.py``; the inline
@@ -59,7 +59,7 @@ def _list_style(base: str, indent: str) -> str:
 
 # A table row contains at least one (unescaped) pipe. The separator line that
 # follows the header is made only of pipes, dashes, colons and whitespace, with
-# at least one dash — e.g. `|---|:--:|`. The separator is what distinguishes a
+# at least one dash - e.g. `|---|:--:|`. The separator is what distinguishes a
 # real table from a paragraph that happens to contain a literal `|`.
 _TABLE_ROW_RE = re.compile(r"^\s*\|?.*\|.*$")
 _TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")

@@ -46,3 +46,8 @@
   flex-direction: column;
   min-height: 0;
 }
+
+.exports {
+  display: flex;
+  gap: var(--spacing-xs);
+}

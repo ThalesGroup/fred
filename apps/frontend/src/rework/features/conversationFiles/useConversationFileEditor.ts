@@ -85,6 +85,6 @@ export function useConversationFileEditor(
     loading,
     refresh,
     change: (content: string) => coordinator.change(identity, content),
-    flush: () => coordinator.flush(sessionId),
+    flush: () => coordinator.flushFile(identity),
   };
 }

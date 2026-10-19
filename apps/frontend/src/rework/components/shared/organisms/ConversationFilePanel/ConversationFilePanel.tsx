@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
+import { MarkdownEditor } from "@shared/molecules/MarkdownEditor/MarkdownEditor";
 import { SourceEditor } from "@shared/molecules/SourceEditor/SourceEditor";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import Button from "@shared/atoms/Button/Button";
@@ -32,6 +33,8 @@ import {
   type ConversationEditors,
 } from "@rework/features/conversationFiles/conversationEditors";
 import { useConversationFileEditor } from "@rework/features/conversationFiles/useConversationFileEditor";
+import { downloadConversationFile } from "@rework/features/conversationFiles/downloadConversationFile";
+import type { ExportConversationFileApiArg } from "../../../../../slices/runtime/runtimeOpenApi";
 import styles from "./ConversationFilePanel.module.css";
 
 interface ConversationFilePanelProps {
@@ -47,12 +50,14 @@ function FileContent({
   path,
   coordinator,
   refreshRevision,
+  baseUrl,
 }: {
   sessionId: string;
   teamId: string;
   path: string;
   coordinator: ConversationEditors;
   refreshRevision: number;
+  baseUrl: string;
 }) {
   const { t } = useTranslation();
   const { draft, error, loading, refresh, change, flush } = useConversationFileEditor(
@@ -62,6 +67,25 @@ function FileContent({
     path,
     refreshRevision,
   );
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(false);
+  const exportRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => exportRequest.current?.abort(), []);
+  const exportFile = async (format: ExportConversationFileApiArg["format"]) => {
+    const controller = new AbortController();
+    exportRequest.current = controller;
+    setExporting(true);
+    setExportError(false);
+    try {
+      await flush();
+      controller.signal.throwIfAborted();
+      await downloadConversationFile(baseUrl, { sessionId, teamId, path, format }, controller.signal);
+    } catch {
+      if (!controller.signal.aborted) setExportError(true);
+    } finally {
+      if (!controller.signal.aborted) setExporting(false);
+    }
+  };
   if (loading && !draft)
     return (
       <div className={styles.status} role="status">
@@ -93,6 +117,29 @@ function FileContent({
   return (
     <>
       {readError}
+      {draft.viewer === "markdown" && (
+        <div
+          className={styles.exports}
+          role="group"
+          aria-label={t("capability.writable_document.download")}
+          aria-busy={exporting}
+        >
+          {(["md", "docx"] as const).map((format) => (
+            <Button
+              key={format}
+              type="button"
+              color="primary"
+              size="small"
+              variant="text"
+              disabled={exporting || !!error}
+              onClick={() => void exportFile(format)}
+            >
+              {t(`capability.writable_document.format.${format === "md" ? "markdown" : "word"}`)}
+            </Button>
+          ))}
+        </div>
+      )}
+      {exportError && <div role="alert">{t("conversationFiles.exportFailed")}</div>}
       <div className={styles.caption} role={draft.failed ? "alert" : "status"}>
         {t(
           `conversationFiles.${!draft.editable ? "readOnly" : draft.failed ? "saveFailed" : draft.saving ? "saving" : draft.content !== draft.savedContent ? "unsaved" : "saved"}`,
@@ -109,12 +156,21 @@ function FileContent({
           </Button>
         )}
       </div>
-      <SourceEditor
-        value={draft.content}
-        label={t("conversationFiles.source", { path })}
-        readOnly={!draft.editable}
-        onChange={change}
-      />
+      {draft.viewer === "markdown" ? (
+        <MarkdownEditor
+          value={draft.content}
+          label={t("conversationFiles.source", { path })}
+          readOnly={!draft.editable}
+          onChange={change}
+        />
+      ) : (
+        <SourceEditor
+          value={draft.content}
+          label={t("conversationFiles.source", { path })}
+          readOnly={!draft.editable}
+          onChange={change}
+        />
+      )}
     </>
   );
 }
@@ -197,6 +253,7 @@ export function ConversationFilePanel({ sessionId, teamId, messagesUrl, open, on
             ) : selected && routed === baseUrl ? (
               <FileContent
                 key={JSON.stringify([sessionId, teamId, selected.path, session?.revision])}
+                baseUrl={baseUrl}
                 coordinator={coordinator}
                 refreshRevision={session?.refreshRevision ?? 0}
                 sessionId={sessionId}

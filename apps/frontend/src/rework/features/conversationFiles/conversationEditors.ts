@@ -15,6 +15,7 @@ type EditorStore = Store<ConversationFileRootState> & {
 type FileIdentity = { sessionId: string; teamId: string; path: string };
 export interface FileDraft {
   content: string;
+  viewer: ConversationFileResponse["viewer"];
   savedContent: string;
   editable: boolean;
   saving: boolean;
@@ -57,6 +58,7 @@ export class ConversationEditors {
         ...identity,
         draft: {
           content: file.content,
+          viewer: file.viewer,
           savedContent: file.content,
           editable: file.editable,
           saving: false,
@@ -67,7 +69,12 @@ export class ConversationEditors {
       });
       this.listeners.forEach((listener) => listener());
     } else if (!this.dirty(entry) && !entry.pending) {
-      this.update(entry, { content: file.content, savedContent: file.content, editable: file.editable });
+      this.update(entry, {
+        content: file.content,
+        savedContent: file.content,
+        viewer: file.viewer,
+        editable: file.editable,
+      });
     } else if (entry.draft.editable !== file.editable) {
       this.update(entry, { editable: file.editable });
     }
@@ -120,6 +127,11 @@ export class ConversationEditors {
     })();
     return entry.pending;
   }
+  async flushFile(identity: FileIdentity): Promise<void> {
+    const entry = this.entries.get(keyOf(identity));
+    if (!entry) return;
+    while (this.dirty(entry) || entry.pending) await this.save(entry);
+  }
   async flush(sessionId: string): Promise<void> {
     // Repeat after awaiting: another editor or keystroke can become dirty in flight.
     while (true) {
@@ -127,7 +139,7 @@ export class ConversationEditors {
         (entry) => entry.sessionId === sessionId && (this.dirty(entry) || entry.pending),
       );
       if (!dirty.length) return;
-      await Promise.all(dirty.map((entry) => this.save(entry)));
+      await Promise.all(dirty.map((entry) => this.flushFile(entry)));
     }
   }
 }
