@@ -1,7 +1,40 @@
+ARG PYTHON_VERSION=3.12.15
+
+# -----------------------------------------------------------------------------
+# PYTHON BASE: Ubuntu LTS with CPython from uv's standalone builds, so the
+# interpreter version is pinned here rather than following the distribution.
+# -----------------------------------------------------------------------------
+FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
+
+FROM mirror.gcr.io/ubuntu:24.04 AS python-install
+ARG PYTHON_VERSION
+COPY --from=uv /uv /usr/local/bin/uv
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    UV_PYTHON_INSTALL_DIR=/opt/python uv python install ${PYTHON_VERSION}
+
+FROM mirror.gcr.io/ubuntu:24.04 AS python-base
+ARG PYTHON_VERSION
+ARG DEBIAN_FRONTEND=noninteractive
+# The packages python:slim provides. Ubuntu's own `ubuntu` user holds UID/GID
+# 1000, which fred-user keeps.
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends ca-certificates netbase tzdata && \
+    rm -rf /var/lib/apt/lists/* && \
+    userdel -r ubuntu
+COPY --from=python-install /opt/python /opt/python
+# Venvs record /usr/local/bin as their home; ensurepip bootstraps them, so the
+# interpreter's own pip is not needed.
+RUN ln -s /opt/python/cpython-${PYTHON_VERSION}-*/bin/python3.12 /usr/local/bin/python3 && \
+    ln -s python3 /usr/local/bin/python && \
+    python3 -m pip uninstall --yes --break-system-packages pip
+
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.15-slim-trixie AS builder
+FROM python-base AS builder
 
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
@@ -30,16 +63,12 @@ RUN make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-proje
 # -----------------------------------------------------------------------------
 # FINAL STAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.15-slim-trixie
+FROM python-base
 
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 ARG PRODUCTION_FASTAPI_DOCS_ENABLED=false
-
-RUN apt-get update && \
-    apt-get upgrade -y --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
@@ -64,8 +93,7 @@ RUN cd /workspace/apps/control-plane-backend && \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache
 
 # Runtime uses uv; pip and its vendored libraries are only needed during bootstrap.
-RUN /app/venv/bin/python -m pip uninstall --yes pip && \
-    /usr/local/bin/python -m pip uninstall --yes pip
+RUN /app/venv/bin/python -m pip uninstall --yes pip
 
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/. /app/
 
