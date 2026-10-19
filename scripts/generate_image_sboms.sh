@@ -31,11 +31,11 @@ while IFS=$'\t' read -r name app_dir; do
     exit 1
   fi
 
-  reference=$(make -s -C "$app_dir" \
+  reference=$(make -s -C "$app_dir" "IMAGE_NAME=$name" \
     --eval='sbom-image-reference:; @printf "%s\n" "$(IMAGE_FULL)"' \
     sbom-image-reference)
   if [[ -z "$reference" ]] || ! docker image inspect "$reference" >/dev/null 2>&1; then
-    echo "ERROR: local image $reference ($name) is missing. Run 'make docker-build' first." >&2
+    echo "ERROR: local image $reference ($name) is missing. Follow the image build commands in README.md under 'Local image SBOMs' (including variants)." >&2
     exit 1
   fi
 

@@ -570,10 +570,14 @@ trivy --version
 ```
 
 Add the `export PATH` line to your shell configuration to keep it across sessions.
-Then build the four production images and generate their SBOMs:
+Then build the standard production images and the published PyMuPDF variant,
+and generate their SBOMs:
 
 ```bash
 make docker-build
+docker build --build-arg INSTALL_PYMUPDF=true \
+  -f apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod \
+  -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend-pymupdf:0.2 .
 make sbom
 ```
 
@@ -581,7 +585,7 @@ Alternatively, use Trivy in Docker without installing the binary:
 
 ```bash
 docker pull aquasec/trivy:0.75.0
-make docker-build
+# Build the images with the commands above, then:
 make sbom TRIVY_MODE=docker
 ```
 
@@ -592,9 +596,11 @@ access to the local Docker daemon. See the official
 for other installation methods.
 
 `make sbom` reads the published image list from `.github/docker-images.json` and
-the local image tags from the application Makefiles. It only inspects images
+the local image tags from the application Makefiles, using each manifest entry's
+image name (including variants). It only inspects images
 already present in Docker; it does not rebuild or pull them. The files are in
-`target/sbom/` (ignored by Git). If an image is missing, run `make docker-build`.
+`target/sbom/` (ignored by Git). If an image is missing, use the build commands
+above, including the separate PyMuPDF variant build.
 
 ## Production mode
 
