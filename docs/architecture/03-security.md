@@ -165,6 +165,25 @@ revocation does not roll back already dispatched effects. A read-only permission
 check describes evaluation time, not a lease. The [runtime reference](A1-manager-runtime.md#role-and-space-mutations)
 and [invariants](09-quality.md#invariants) give the mechanisms and proofs.
 
+## Original-document boundary
+
+Document metadata, directory, receipts and downloads use private/no-store responses.
+A foreign organization or missing target returns 404; a known target in the caller's
+organization without the required permission returns 403. Provider and authorization
+dependency failures return a safe 503 rather than granting access.
+
+An upload checks space write permission before consuming its body, then checks
+current organization, permission, token expiry and CGU under the organization lock
+at reservation and publication. A revocation committed during object IO prevents
+publication. Receipts belong to the initiating actor and also require current space
+read authority; an administrator receives no implicit receipt access.
+
+Object keys contain opaque namespace/attempt identifiers, never user paths. Downloads
+use manager authentication and attachment/octet-stream/nosniff headers. MIME and
+filename metadata are not trusted for execution or rendering. The autonomous cleanup
+loop retains no user token: SQL journal and published rows constrain its deletions.
+The [document chapter](05-documents.md) describes that state machine.
+
 ## Service identities
 
 Manager resolves and creates provisioning identities with its own Keycloak client,

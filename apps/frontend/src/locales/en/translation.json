@@ -4250,6 +4250,21 @@
       "kind": "Type",
       "hierarchy": "Hierarchy",
       "roleLabel": "Roles"
+    },
+    "documentStorage": {
+      "batchLimit": "Select at most 200 files.",
+      "fileLimit": "Each original is limited to 100 MiB.",
+      "unavailable": "Document storage is temporarily unavailable.",
+      "nameConflict": "These names already exist: {{names}}. Remove them from the selection or rename the local files.",
+      "noProcessing": "Processing is unavailable for these originals.",
+      "storedHint": "Originals are stored and downloadable. They are not indexed for search.",
+      "queued": "Waiting to send",
+      "uploading": "Sending and storing",
+      "uncertain": "Result awaiting verification",
+      "failed": "Original could not be stored",
+      "stored": "Stored",
+      "wrongFile": "Select the original file with the same name and size.",
+      "retryFailed": "The result could not be verified. Try again before sending the file."
     }
   },
   "runtime": {

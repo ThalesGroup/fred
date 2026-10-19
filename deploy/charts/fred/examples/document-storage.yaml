@@ -1,0 +1,43 @@
+# Merge after the deployment's existing values. Provision the dedicated bucket
+# and Secret independently; this overlay contains references, never credentials.
+applications:
+  control-plane-backend:
+    extraEnvVars:
+    - name: FRED_CONTENT_ACCESS_KEY
+      valueFrom:
+        secretKeyRef: {name: manager-document-storage, key: access-key}
+    - name: FRED_CONTENT_SECRET_KEY
+      valueFrom:
+        secretKeyRef: {name: manager-document-storage, key: secret-key}
+    configuration:
+      storage:
+        content:
+          endpoint: https://s3.example.test
+          bucket: fred-manager-originals
+          region: us-east-1
+          prefix: fred-manager
+          access_key_env_var: FRED_CONTENT_ACCESS_KEY
+          secret_key_env_var: FRED_CONTENT_SECRET_KEY
+          temp_dir: /tmp/fred-manager-uploads
+          uploads_enabled: true
+          cleanup_enabled: true
+          limits:
+            file_bytes: 104857600
+            uploads: 8
+            downloads: 8
+            temp_bytes: 838860800
+            idle_seconds: 30
+            transfer_seconds: 300
+            s3_seconds: 120
+            personal_bytes: 5368709120
+            team_bytes: 5368709120
+            organization_bytes: 5368709120
+            cleanup_backlog_bytes: 1073741824
+            cleanup_interval_seconds: 30
+            cleanup_batch: 100
+            receipt_retention_days: 7
+    resources:
+      requests:
+        ephemeral-storage: 1Gi
+      limits:
+        ephemeral-storage: 2Gi

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
@@ -61,10 +61,13 @@ import {
   type ImportConflict,
   type UploadGroup,
 } from "./importConflicts";
+import { enhancedFredManagerApi as managerApi } from "../../../../../slices/fredManager/fredManagerApiEnhancements";
+import { runManagerImport, type ManagerDispatch } from "../../../../features/imports/managerImportRun";
 import styles from "./DocumentUploadDrawer.module.css";
 
 interface DocumentUploadDrawerProps {
   isOpen: boolean;
+  managerDestination?: { spaceId: string; folderId?: string };
   /** Keep the existing panel available while its destination cannot accept uploads. */
   unavailableReason?: string;
   onClose: () => void;
@@ -95,6 +98,7 @@ interface DocumentUploadDrawerProps {
 
 export function DocumentUploadDrawer({
   isOpen,
+  managerDestination,
   unavailableReason,
   onClose,
   onUploadComplete,
@@ -109,7 +113,7 @@ export function DocumentUploadDrawer({
   const { t } = useTranslation();
   const { showError, showInfo } = useToast();
 
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<ManagerDispatch>();
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
   const [profile, setProfile] = useState<IngestionProcessingProfile>("fast");
 
@@ -168,7 +172,10 @@ export function DocumentUploadDrawer({
   }, [isOpen, initialFiles, requireFolderPerFile, destinationPath]);
 
   const resolvedTeamId = teamId ?? "personal";
-  const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId }, { skip: !!unavailableReason });
+  const { data: team } = useGetTeamQuery(
+    { teamId: resolvedTeamId },
+    { skip: !!unavailableReason || !!managerDestination },
+  );
   const { canUpdateResources: canSelectProfile } = useTeamCapabilities(team);
 
   const newFilesSize = useMemo(() => files.reduce((acc, f) => acc + f.size, 0), [files]);
@@ -193,25 +200,35 @@ export function DocumentUploadDrawer({
   // Names the destination folder already holds. Asked once, on Save, before
   // any byte leaves: until every one has an answer, nothing is sent. Editing
   // the list drops the answers with it — they were about that selection.
+  const handingOffManagerFiles = useRef(false);
+  const [managerConflicts, setManagerConflicts] = useState<{ key: string; name: string; label: string }[]>([]);
   const [conflicts, setConflicts] = useState<ImportConflict[]>([]);
   const [decisions, setDecisions] = useState<Map<string, ConflictDecision>>(new Map());
   const [checkNames] = useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation();
   useEffect(() => {
+    if (handingOffManagerFiles.current) {
+      handingOffManagerFiles.current = false;
+      return;
+    }
     setConflicts([]);
+    setManagerConflicts([]);
     setDecisions(new Map());
   }, [files]);
 
-  const unansweredCount = conflicts.filter(
-    (conflict) => !decisions.has(conflictKey(conflict.tagId, conflict.name)),
-  ).length;
-
-  const decideOne = (conflict: ImportConflict, decision: ConflictDecision) =>
-    setDecisions((prev) => new Map(prev).set(conflictKey(conflict.tagId, conflict.name), decision));
-
+  const displayedConflicts = managerDestination
+    ? managerConflicts
+    : conflicts.map((conflict) => ({
+        key: conflictKey(conflict.tagId, conflict.name),
+        name: conflict.name,
+        label: conflict.label,
+      }));
+  const unansweredCount = displayedConflicts.filter((conflict) => !decisions.has(conflict.key)).length;
+  const decideOne = (key: string, decision: ConflictDecision) =>
+    setDecisions((prev) => new Map(prev).set(key, decision));
   const decideAll = (decision: ConflictDecision) =>
     setDecisions((prev) => {
       const next = new Map(prev);
-      for (const conflict of conflicts) next.set(conflictKey(conflict.tagId, conflict.name), decision);
+      for (const conflict of displayedConflicts) next.set(conflict.key, decision);
       return next;
     });
 
@@ -287,7 +304,86 @@ export function DocumentUploadDrawer({
     onClose();
   };
 
+  const saveOriginals = async () => {
+    if (!managerDestination || !files.length || isLoading) return;
+    setIsLoading(true);
+    try {
+      if (files.length > 200) throw new Error(t("rework.documentStorage.batchLimit"));
+      const destinations = new Map<string, { segments: string[]; files: File[] }>();
+      for (const file of files) {
+        if (file.size > 100 * 1024 * 1024) throw new Error(t("rework.documentStorage.fileLimit"));
+        const segments = relativeDirSegments(file);
+        const key = JSON.stringify(segments);
+        const group = destinations.get(key) ?? { segments, files: [] };
+        if (group.files.some((f) => leafFileName(f).normalize("NFC") === leafFileName(file).normalize("NFC")))
+          throw new Error(t("documentLibrary.sameNameTwice", { count: 1, names: leafFileName(file) }));
+        group.files.push(file);
+        destinations.set(key, group);
+      }
+      const selected: { file: File; folderId: string }[] = [];
+      const found: typeof managerConflicts = [];
+      let budget: { used: number; limit: number } | undefined;
+      for (const group of destinations.values()) {
+        const folderId =
+          group.segments.length && ensureFolderPath
+            ? await ensureFolderPath(group.segments)
+            : managerDestination.folderId;
+        if (!folderId) throw new Error(t("documentLibrary.folderRequired"));
+        const verdict = await dispatch(
+          managerApi.endpoints.preflight.initiate({
+            id: folderId,
+            preflight: { files: group.files.map((file) => ({ name: leafFileName(file), size: file.size })) },
+          }),
+        ).unwrap();
+        if (group.files.some((file) => file.size > verdict.storage.max_file_bytes))
+          throw new Error(t("rework.documentStorage.fileLimit"));
+        if (!verdict.storage.uploads_enabled) throw new Error(t("rework.documentStorage.unavailable"));
+        const taken = new Set(verdict.conflicts);
+        budget = {
+          used: verdict.storage.used_bytes + verdict.storage.reserved_bytes,
+          limit: verdict.storage.quota_bytes,
+        };
+        for (const file of group.files) {
+          const name = leafFileName(file).normalize("NFC");
+          const key = JSON.stringify([folderId, name]);
+          if (taken.has(name)) {
+            found.push({ key, name, label: displayPath(file) });
+            if (decisions.get(key) !== "skip") continue;
+          } else selected.push({ file, folderId });
+        }
+      }
+      setManagerConflicts(found);
+      const awaitingSkip = found.some((conflict) => decisions.get(conflict.key) !== "skip");
+      if (budget && selected.reduce((sum, { file }) => sum + file.size, 0) > budget.limit - budget.used) {
+        setQuotaDenial({ allowed: false, current: budget.used, limit: budget.limit });
+        return;
+      }
+      const completion = selected.length
+        ? runManagerImport(dispatch, managerDestination.spaceId, selected)
+        : Promise.resolve();
+      if (awaitingSkip) {
+        if (selected.length) {
+          handingOffManagerFiles.current = true;
+          const launched = new Set(selected.map(({ file }) => file));
+          setFiles(files.filter((file) => !launched.has(file)));
+        }
+      } else handleClose();
+      if (selected.length) dispatch(importPanelOpenRequested());
+      void completion
+        .catch(() => showError({ summary: t("rework.documentStorage.unavailable") }))
+        .finally(onUploadComplete);
+    } catch (error) {
+      showError({
+        summary: t("documentLibrary.uploadDrawerTitle"),
+        detail: error instanceof Error ? error.message : t("rework.documentStorage.unavailable"),
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSave = async () => {
+    if (managerDestination) return saveOriginals();
     if (unavailableReason) {
       showInfo({ summary: unavailableReason });
       return;
@@ -496,19 +592,28 @@ export function DocumentUploadDrawer({
                 {/* No error slot held open under a field that has no error
                     to report: neither of these can fail. */}
                 <Select<"upload" | "process">
-                  options={uploadModeOptions}
-                  value={uploadMode}
+                  options={
+                    managerDestination
+                      ? uploadModeOptions.map((option) => ({
+                          ...option,
+                          disabled: option.value === "process",
+                          tooltip: option.value === "process" ? t("rework.documentStorage.noProcessing") : undefined,
+                        }))
+                      : uploadModeOptions
+                  }
+                  value={managerDestination ? "upload" : uploadMode}
                   onChange={setUploadMode}
                   size="small"
                   compact
                 />
               </div>
 
-              {canSelectProfile && (
+              {(canSelectProfile || !!managerDestination) && (
                 <div className={styles.field}>
                   <label className={styles.label}>{t("documentLibrary.processingProfile")}</label>
                   <Select<IngestionProcessingProfile>
                     options={profileOptions}
+                    disabled={!!managerDestination}
                     value={profile}
                     onChange={setProfile}
                     size="small"
@@ -565,14 +670,26 @@ export function DocumentUploadDrawer({
 
             <p className={styles.formatsCaption}>{t("documentLibrary.supportedFormats")}</p>
 
-            {conflicts.length > 0 && (
+            {displayedConflicts.length > 0 && (
               <div className={styles.conflicts} role="group" aria-labelledby="upload-conflicts-title">
                 <strong id="upload-conflicts-title" className={styles.conflictsTitle}>
-                  {t("documentLibrary.conflictsTitle", { count: conflicts.length })}
+                  {t("documentLibrary.conflictsTitle", { count: displayedConflicts.length })}
                 </strong>
-                <p className={styles.conflictsMessage}>{t("documentLibrary.conflictsMessage")}</p>
+                <p className={styles.conflictsMessage}>
+                  {managerDestination
+                    ? t("rework.documentStorage.nameConflict", {
+                        names: displayedConflicts.map((conflict) => conflict.label).join(", "),
+                      })
+                    : t("documentLibrary.conflictsMessage")}
+                </p>
                 <div className={styles.conflictsBulk}>
-                  <Button color="on-surface" variant="outlined" size="small" onClick={() => decideAll("overwrite")}>
+                  <Button
+                    color="on-surface"
+                    variant="outlined"
+                    size="small"
+                    disabled={!!managerDestination}
+                    onClick={() => decideAll("overwrite")}
+                  >
                     {t("documentLibrary.conflictReplaceAll")}
                   </Button>
                   <Button color="on-surface" variant="outlined" size="small" onClick={() => decideAll("skip")}>
@@ -580,10 +697,10 @@ export function DocumentUploadDrawer({
                   </Button>
                 </div>
                 <ul className={styles.conflictList}>
-                  {conflicts.map((conflict) => {
-                    const decision = decisions.get(conflictKey(conflict.tagId, conflict.name));
+                  {displayedConflicts.map((conflict) => {
+                    const decision = decisions.get(conflict.key);
                     return (
-                      <li key={conflictKey(conflict.tagId, conflict.name)} className={styles.conflictRow}>
+                      <li key={conflict.key} className={styles.conflictRow}>
                         <span className={styles.fileName} title={conflict.label}>
                           {conflict.label}
                         </span>
@@ -599,9 +716,9 @@ export function DocumentUploadDrawer({
                           // The block behind it is already surface-container.
                           surface="surface-container-high"
                           selectedIndex={decision === "overwrite" ? 0 : decision === "skip" ? 1 : -1}
-                          onSelectedIndexChange={(index) => decideOne(conflict, index === 0 ? "overwrite" : "skip")}
+                          onSelectedIndexChange={(index) => decideOne(conflict.key, index === 0 ? "overwrite" : "skip")}
                           items={[
-                            { label: t("documentLibrary.conflictReplace") },
+                            { label: t("documentLibrary.conflictReplace"), disabled: !!managerDestination },
                             { label: t("documentLibrary.conflictSkip") },
                           ]}
                         />
@@ -612,6 +729,11 @@ export function DocumentUploadDrawer({
               </div>
             )}
 
+            {managerDestination && (
+              <div className={styles.quotaWarning} role="status">
+                {t("rework.documentStorage.storedHint")}
+              </div>
+            )}
             {unavailableReason && (
               <div className={styles.quotaWarning} role="status">
                 {unavailableReason}

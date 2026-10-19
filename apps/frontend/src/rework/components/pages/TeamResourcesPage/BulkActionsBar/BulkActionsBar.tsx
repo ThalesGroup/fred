@@ -19,6 +19,7 @@ import styles from "./BulkActionsBar.module.css";
 
 interface BulkActionsBarProps {
   selectedCount: number;
+  disabledReason?: { delete?: string; download?: string; processing?: string };
   /** Omit to hide the action, like `onDownload` — a workspace rooted at a
    *  machine-filled library offers reading only, and the backend refuses a
    *  person's delete there anyway. */
@@ -65,6 +66,7 @@ interface BulkActionsBarProps {
  */
 export default function BulkActionsBar({
   selectedCount,
+  disabledReason,
   onDelete,
   onClearSelection,
   searchToggle,
@@ -84,12 +86,13 @@ export default function BulkActionsBar({
         (() => {
           const label = t("rework.resources.bulkActions.relaunchIngestion", { count: relaunch.count });
           return (
-            <Tooltip text={label}>
+            <Tooltip text={disabledReason?.processing ?? label}>
               <IconButton
                 variant="outlined"
                 size="small"
                 icon={{ category: "outlined", type: "refresh" }}
                 aria-label={label}
+                disabled={!!disabledReason?.processing}
                 loading={relaunch.loading}
                 onClick={relaunch.onClick}
               />
@@ -103,12 +106,13 @@ export default function BulkActionsBar({
               ? "rework.resources.bulkActions.excludeFromSearch"
               : "rework.resources.bulkActions.includeInSearch";
           return (
-            <Tooltip text={t(key)}>
+            <Tooltip text={disabledReason?.processing ?? t(key)}>
               <IconButton
                 variant="outlined"
                 size="small"
                 icon={{ category: "outlined", type: searchToggle.mode === "exclude" ? "search_off" : "search" }}
                 aria-label={t(key)}
+                disabled={!!disabledReason?.processing}
                 loading={searchToggle.loading}
                 onClick={searchToggle.onClick}
               />
@@ -116,25 +120,27 @@ export default function BulkActionsBar({
           );
         })()}
       {onDownload && (
-        <Tooltip text={t("rework.resources.bulkActions.download")}>
+        <Tooltip text={disabledReason?.download ?? t("rework.resources.bulkActions.download")}>
           <IconButton
             variant="outlined"
             size="small"
             icon={{ category: "outlined", type: "download" }}
             aria-label={t("rework.resources.bulkActions.download")}
+            disabled={!!disabledReason?.download}
             loading={downloadLoading}
             onClick={onDownload}
           />
         </Tooltip>
       )}
       {onDelete && (
-        <Tooltip text={t("rework.resources.bulkActions.delete")}>
+        <Tooltip text={disabledReason?.delete ?? t("rework.resources.bulkActions.delete")}>
           <IconButton
             color="error"
             variant="outlined"
             size="small"
             icon={{ category: "outlined", type: "delete" }}
             aria-label={t("rework.resources.bulkActions.delete")}
+            disabled={!!disabledReason?.delete}
             loading={deleteLoading}
             onClick={onDelete}
           />

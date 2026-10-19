@@ -48,6 +48,21 @@ vi.mock("react-i18next", () => ({
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1" }) }));
 vi.mock("../../../../security/KeycloakService.ts", () => ({ KeyCloakService: { GetUserId: () => "u-1" } }));
 vi.mock("../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+  useSummaryQuery: () => ({
+    currentData:
+      probe.team?.max_resources_storage_size == null
+        ? undefined
+        : {
+            quota_bytes: probe.team.max_resources_storage_size,
+            used_bytes: probe.team.current_resources_storage_size,
+            reserved_bytes: 0,
+            types: [],
+          },
+    isLoading: false,
+    isError: false,
+    isUninitialized: probe.corpusStatsUninitialized,
+    refetch: probe.corpusStatsRefetch,
+  }),
   useMySpacesQuery: () => ({
     ...probe.managerProbe,
     currentData: [{ id: "team-1", personal_owner: probe.isPersonalTeam ? "admin" : null }],
@@ -192,11 +207,11 @@ describe("TeamResourcesPage onDocumentsChanged — refetch guard", () => {
 // entry. Deleting a document or a library therefore left the meter frozen on
 // its mount-time figure until a manual page reload.
 describe("TeamResourcesPage storage meter freshness", () => {
-  it("refetches the team so the quota meter follows corpus add/delete", () => {
+  it("refetches manager storage when documents change", () => {
     render();
 
     probe.onDocumentsChanged?.();
-    expect(probe.teamRefetch).toHaveBeenCalledOnce();
+    expect(probe.corpusStatsRefetch).toHaveBeenCalledOnce();
   });
 });
 
@@ -224,7 +239,7 @@ describe("TeamResourcesPage stats toggle", () => {
     expect(container.querySelector('[data-testid="stats-cards"]')).toBeNull();
   });
 
-  it("does not query the corpus stats until the cards are opened", () => {
+  it("never queries knowledge-flow statistics from the manager workspace", () => {
     // The endpoint walks every library the user can read and every document in
     // each of them; running it on mount scanned the whole corpus for a panel
     // nobody had opened.
@@ -232,7 +247,7 @@ describe("TeamResourcesPage stats toggle", () => {
     expect(probe.corpusStatsSkip).toBe(true);
 
     click(statsToggle());
-    expect(probe.corpusStatsSkip).toBe(false);
+    expect(probe.corpusStatsSkip).toBe(true);
 
     click(statsToggle());
     expect(probe.corpusStatsSkip).toBe(true);

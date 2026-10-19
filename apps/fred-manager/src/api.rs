@@ -53,6 +53,7 @@ pub struct AppState {
     pub onboarding: Onboarding,
     pub lifecycle: crate::lifecycle::Lifecycle,
     pub directory: Option<Directory>,
+    pub content: Option<Arc<crate::documents::Storage>>,
 }
 
 impl FromRef<AppState> for Arc<Authenticator> {
@@ -78,8 +79,15 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::HeaderName::from_static("idempotency-key"),
+        ])
         .expose_headers([
+            header::RETRY_AFTER,
+            header::CONTENT_DISPOSITION,
+            header::LOCATION,
             header::HeaderName::from_static("x-request-id"),
             header::HeaderName::from_static("x-correlation-id"),
         ]);
@@ -666,22 +674,21 @@ struct DocumentQuery {
     params(("id" = Uuid, Path), ("folder_id" = Option<Uuid>, Query), ("after_name" = Option<String>, Query), ("after_id" = Option<Uuid>, Query), ("limit" = Option<i64>, Query, description = "Defaults to 50; clamped to 1..200. Both cursor fields must be supplied together.")),
     responses(
         (status = 200, description = "Success", body = [Document]),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 422, description = "Invalid path or query", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 422, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Unknown space or folder in this space", body = crate::error::ErrorBody),
         (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
-        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "Dependency unavailable", body = crate::error::ErrorBody),
     )
 )]
 async fn list_documents(
     State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path(space): Path<Uuid>,
-    Query(q): Query<DocumentQuery>,
+    crate::documents::http::Id(space): crate::documents::http::Id,
+    crate::documents::http::Params(q): crate::documents::http::Params<DocumentQuery>,
 ) -> AppResult<Json<Vec<Document>>> {
-    require(&s.pool, &s.fga, &user, Permission::Read, space).await?;
+    crate::documents::authorized(&s.pool, &s.fga, &user, space, Permission::Read).await?;
     require_folder_in_space(&s.pool, space, q.folder_id).await?;
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let after = match (q.after_name.as_deref(), q.after_id) {
@@ -703,21 +710,22 @@ async fn list_documents(
     params(("id" = Uuid, Path)),
     responses(
         (status = 200, description = "Success", body = Document),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 422, description = "Invalid path or query", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
-        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "Dependency unavailable", body = crate::error::ErrorBody),
     )
 )]
 async fn get_document(
     State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path(id): Path<Uuid>,
+    crate::documents::http::Id(id): crate::documents::http::Id,
 ) -> AppResult<Json<Document>> {
     let document = db::document(&s.pool, id).await?;
-    require(&s.pool, &s.fga, &user, Permission::Read, document.space_id).await?;
+    crate::documents::authorized(&s.pool, &s.fga, &user, document.space_id, Permission::Read)
+        .await?;
     Ok(Json(document))
 }
 
@@ -1086,6 +1094,7 @@ pub fn governance_router(state: AppState) -> Router {
 
 fn governance_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .merge(crate::documents::http::routes())
         .routes(routes!(frontend_config))
         .routes(routes!(onboarding_status))
         .routes(routes!(accept_terms))
@@ -1097,7 +1106,10 @@ fn governance_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(create_personal_space))
         .routes(routes!(list_folders))
         .routes(routes!(create_folder))
-        .routes(routes!(list_documents))
+        .routes(
+            routes!(list_documents)
+                .layer(axum::middleware::from_fn(crate::documents::http::no_store)),
+        )
         .routes(
             routes!(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
                 crate::blueprint::MAX_ARCHIVE + 64 * 1024,
@@ -1118,7 +1130,10 @@ fn content_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))
-        .routes(routes!(get_document))
+        .routes(
+            routes!(get_document)
+                .layer(axum::middleware::from_fn(crate::documents::http::no_store)),
+        )
         .routes(routes!(authorize_document))
         .routes(routes!(authorize_scope))
         .route_layer(axum::middleware::from_fn(logging::expose_route))
@@ -1153,6 +1168,10 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     components.schemas.insert(
         "FolderOrder".into(),
         <crate::domain::FolderOrder as utoipa::PartialSchema>::schema(),
+    );
+    components.schemas.insert(
+        "EntryOrder".into(),
+        <crate::documents::models::EntryOrder as utoipa::PartialSchema>::schema(),
     );
     components.add_security_scheme(
         "bearer",

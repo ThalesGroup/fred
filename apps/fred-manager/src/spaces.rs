@@ -406,7 +406,17 @@ pub(crate) async fn lock_organization(
     tx: &mut Transaction<'_, Postgres>,
     space: &Space,
 ) -> AppResult<()> {
-    let org = space.organization.as_bytes();
+    lock_organization_id(tx, space.organization)
+        .await
+        .map_err(Into::into)
+}
+
+/// The durable cleanup journal retains the organization ID after retirement.
+pub(crate) async fn lock_organization_id(
+    tx: &mut Transaction<'_, Postgres>,
+    organization: Uuid,
+) -> sqlx::Result<()> {
+    let org = organization.as_bytes();
     let key = i64::from_be_bytes(org[..8].try_into().expect("a uuid has 16 bytes"));
     sqlx::query("select pg_advisory_xact_lock($1)")
         .bind(key)
@@ -847,6 +857,12 @@ pub async fn authorized_write(
 ) -> AppResult<Transaction<'static, Postgres>> {
     let space = load(pool, fga, space_id).await?;
     let mut tx = pool.begin().await?;
+    sqlx::query("set local lock_timeout = '5s'")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("set local statement_timeout = '15s'")
+        .execute(&mut *tx)
+        .await?;
     lock_organization(&mut tx, &space).await?;
     crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     let mut guard = fga

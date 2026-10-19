@@ -28,6 +28,10 @@ use fred_manager::{
 use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 
+#[path = "support/content_bucket.rs"]
+mod content_bucket;
+#[path = "support/document_storage.rs"]
+mod document_storage;
 #[path = "support/environment.rs"]
 mod environment;
 use environment::{Env, env, named_space};
@@ -364,8 +368,9 @@ fn document(space: Uuid, folder: Option<Uuid>, name: &str) -> Document {
         name: name.into(),
         mime: "text/plain".into(),
         size: 1,
-        sha256: "x".into(),
+        sha256: "a".repeat(64),
         created_by: "alice".into(),
+        created_at: chrono::Utc::now(),
     }
 }
 
@@ -386,7 +391,9 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
     };
     db::insert_folder(&e.pool, &folder).await.unwrap();
     let doc = document(team.id, Some(folder.id), "cdc.pdf");
-    db::insert_document(&e.pool, &doc).await.unwrap();
+    crate::environment::insert_document(&e.pool, &doc)
+        .await
+        .unwrap();
 
     let moves = [
         format!("update space set kind = 'project' where id = '{}'", team.id),
@@ -414,7 +421,11 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
         );
     }
     let elsewhere = document(org.id, Some(folder.id), "wrong-space.pdf");
-    assert!(db::insert_document(&e.pool, &elsewhere).await.is_err());
+    assert!(
+        crate::environment::insert_document(&e.pool, &elsewhere)
+            .await
+            .is_err()
+    );
     db::rename_document(&e.pool, doc.id, "cdc-v2.pdf")
         .await
         .unwrap();
@@ -467,7 +478,9 @@ async fn pagination_survives_deleting_the_cursor_row() {
     let mut docs = Vec::new();
     for name in ["a", "b", "c"] {
         let d = document(org.id, None, name);
-        db::insert_document(&e.pool, &d).await.unwrap();
+        crate::environment::insert_document(&e.pool, &d)
+            .await
+            .unwrap();
         docs.push(d);
     }
     let names = |page: Vec<Document>| page.into_iter().map(|d| d.name).collect::<Vec<_>>();
@@ -927,6 +940,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         pool: e.pool.clone(),
         fga: e.fga.clone(),
         directory: Some(server.directory()),
+        content: None,
     });
     let request = |method: &str, path: &str, actor: Option<&str>, body: &str| {
         let mut builder = Request::builder()
@@ -1042,6 +1056,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
             ),
             pool: e.pool.clone(),
             fga: e.fga.clone(),
+            content: None,
             directory: Some(if other_realm {
                 other.directory()
             } else {
@@ -2154,6 +2169,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         pool: e.pool.clone(),
         fga: observed_fga,
         directory: Some(directory.clone()),
+        content: None,
     });
     let (status, report) = http_import(&app, &token, &bytes).await;
     assert_eq!(status, 200, "{report}");
@@ -3350,6 +3366,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         pool: e.pool.clone(),
         fga: e.fga.clone(),
         directory: Some(directory.clone()),
+        content: None,
     });
     let token = server.token("root");
     let mut value = serde_json::json!({"users":[{"username":"alice","password":"private-password"},{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"alice":["admin","member","owner"]}},{"ref":"b","name":"B","roles":{"bob":["admin","member","owner"]}}],"teams":[{"ref":"at","name":"Team","organization":"a","roles":{"alice":["admin","member"]}},{"ref":"bt","name":"Team","organization":"b","roles":{"bob":["admin","analyst"]}}],"projects":[{"ref":"ap","name":"Project","team":"at","roles":{"alice":["admin","editor"]}},{"ref":"bp","name":"Project","team":"bt","roles":{"bob":["admin"]}}]});
@@ -3566,6 +3583,7 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         pool: e.pool.clone(),
         fga: e.fga.clone(),
         directory: Some(server.directory()),
+        content: None,
     });
     let token = server.token("root");
     let pending = tokio::spawn(async move {
@@ -3605,6 +3623,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         pool: e.pool.clone(),
         fga: e.fga.clone(),
         directory: None,
+        content: None,
         lifecycle: Default::default(),
         onboarding: Onboarding {
             gcu_version: Some("v1".into()),
@@ -4383,6 +4402,7 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
             onboarding: Default::default(),
             lifecycle: Default::default(),
             directory: Some(identity.directory()),
+            content: None,
         },
         "/fred-manager/v1",
         &[],
@@ -4986,7 +5006,9 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
     let identity = support::IdentityServer::start().await;
     let app = content_app(&e, &identity).await;
     let doc = document(b.id, None, "foreign.pdf");
-    db::insert_document(&e.pool, &doc).await.unwrap();
+    crate::environment::insert_document(&e.pool, &doc)
+        .await
+        .unwrap();
     let token = identity.token("bob");
     assert_eq!(
         content_request(
@@ -4997,7 +5019,7 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
             ""
         )
         .await,
-        403
+        404
     );
     for suffix in ["folders", "documents"] {
         assert_eq!(
@@ -5607,13 +5629,15 @@ mod space_deletion;
 
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn api_starts_without_temporal_and_exposes_only_document_reads() {
+async fn api_starts_without_temporal_and_keeps_storage_optional() {
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
     grant(&e, org.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let doc = document(org.id, None, "kept.pdf");
-    db::insert_document(&e.pool, &doc).await.unwrap();
+    crate::environment::insert_document(&e.pool, &doc)
+        .await
+        .unwrap();
     let unavailable_temporal = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let api_port = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = api_port.local_addr().unwrap().port();
@@ -5687,9 +5711,36 @@ async fn api_starts_without_temporal_and_exposes_only_document_reads() {
                 .await
                 .unwrap()
                 .status(),
-            403
+            404
         );
     }
+    assert_eq!(
+        http.get(format!("{base}/spaces/{}/entries", org.id))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        http.get(format!("{base}/spaces/{}/storage", org.id))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        503
+    );
+    assert_eq!(
+        http.get(format!("{base}/documents/{}/content", doc.id))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        503
+    );
     for (method, suffix, status) in [
         (reqwest::Method::POST, "/documents".into(), 404),
         (

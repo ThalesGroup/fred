@@ -6,8 +6,24 @@ import { fredManagerApi } from "./fredManagerOpenApi";
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedFredManagerApi = fredManagerApi.enhanceEndpoints({
-  addTagTypes: ["Folders"],
+  addTagTypes: ["Folders", "Documents", "DocumentUploads"],
   endpoints: {
+    entries: { providesTags: ["Folders", "Documents"] },
+    summary: { providesTags: ["Documents"] },
+    receipts: { providesTags: ["DocumentUploads"] },
+    receipt: { providesTags: ["DocumentUploads"] },
+    acknowledge: { invalidatesTags: ["DocumentUploads"], extraOptions: { retryUnauthorized: false } },
+    upload(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      endpoint.invalidatesTags = ["Documents", "DocumentUploads"];
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.fileUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 2_000_000 };
+      };
+    },
     createOrganization: { extraOptions: { retryUnauthorized: false } },
     listFolders: { providesTags: ["Folders"] },
     createFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
@@ -32,6 +48,11 @@ export const enhancedFredManagerApi = fredManagerApi.enhanceEndpoints({
 });
 
 export const {
+  useEntriesQuery,
+  useLazyEntriesQuery,
+  useSummaryQuery,
+  usePreflightMutation,
+  useLazyListFoldersQuery,
   useImportBlueprintMutation,
   useOrganizationRegistryQuery,
   useCreateOrganizationMutation,

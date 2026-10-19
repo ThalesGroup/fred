@@ -20,6 +20,7 @@ pub mod auth;
 pub mod bootstrap;
 pub mod config;
 pub mod db;
+pub mod documents;
 pub mod domain;
 pub mod error;
 pub mod fga;

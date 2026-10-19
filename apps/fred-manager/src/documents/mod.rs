@@ -1,0 +1,194 @@
+// Copyright Thales 2026
+// SPDX-License-Identifier: Apache-2.0
+
+//! Original document storage and upload recovery; no processing is scheduled here.
+mod cleanup;
+pub mod config;
+pub mod http;
+pub mod models;
+pub mod object_store;
+mod reads;
+mod upload;
+
+use crate::{
+    domain::{Permission, Space, SpaceKind},
+    error::{AppError, AppResult},
+    fga::Fga,
+    spaces,
+};
+use anyhow::{Context, Result, ensure};
+use axum::http::StatusCode;
+use config::ContentConfig;
+use object_store::ObjectStore;
+use sqlx::PgPool;
+use std::{sync::Arc, time::Duration};
+use tokio::sync::Semaphore;
+use uuid::Uuid;
+
+pub struct Storage {
+    pub(crate) pool: PgPool,
+    pub(crate) fga: Fga,
+    pub(crate) terms: Option<String>,
+    pub config: ContentConfig,
+    pub objects: ObjectStore,
+    pub(crate) prefix: String,
+    pub(crate) uploads: Arc<Semaphore>,
+    pub(crate) downloads: Arc<Semaphore>,
+    pub(crate) temp: tempfile::TempDir,
+    _temp_lock: std::fs::File,
+}
+
+impl Storage {
+    /// Initialize the namespace before serving; a fresh database never adopts old keys.
+    pub async fn start(
+        pool: &PgPool,
+        fga: &Fga,
+        terms: Option<String>,
+        config: ContentConfig,
+        access: String,
+        secret: String,
+    ) -> Result<Arc<Self>> {
+        config.validate()?;
+        let objects = ObjectStore::new(&config, access, secret)?;
+        objects.validate_bucket().await?;
+        sqlx::query("insert into document_storage(singleton,namespace,endpoint,bucket,prefix) values (true,$1,$2,$3,$4) on conflict do nothing")
+            .bind(Uuid::new_v4()).bind(&config.endpoint).bind(&config.bucket).bind(&config.prefix).execute(pool).await?;
+        let (namespace, endpoint, bucket, prefix): (Uuid, String, String, String) = sqlx::query_as(
+            "select namespace,endpoint,bucket,prefix from document_storage where singleton",
+        )
+        .fetch_one(pool)
+        .await?;
+        ensure!(
+            endpoint == config.endpoint && bucket == config.bucket && prefix == config.prefix,
+            "content storage configuration does not match the database namespace"
+        );
+        let temp_root = std::path::Path::new(&config.temp_dir).join("private");
+        let (temp, lock) = tokio::task::spawn_blocking(move || -> Result<_> {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::create_dir_all(&temp_root)?;
+            ensure!(
+                !std::fs::symlink_metadata(&temp_root)?
+                    .file_type()
+                    .is_symlink(),
+                "content temp directory cannot be a symlink"
+            );
+            std::fs::set_permissions(&temp_root, std::fs::Permissions::from_mode(0o700))?;
+            let setup = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .read(true)
+                .write(true)
+                .open(std::path::Path::new(&temp_root).join("startup.lock"))?;
+            setup.lock()?;
+            for entry in std::fs::read_dir(&temp_root)? {
+                let entry = entry?;
+                if !entry.file_name().to_string_lossy().starts_with("replica-")
+                    || !entry.file_type()?.is_dir()
+                {
+                    continue;
+                }
+                match std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(entry.path().join("lease"))
+                {
+                    Ok(file) if file.try_lock().is_ok() => std::fs::remove_dir_all(entry.path())?,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        std::fs::remove_dir_all(entry.path())?
+                    }
+                    Err(error) => return Err(error.into()),
+                    _ => {}
+                }
+            }
+            let dir = tempfile::Builder::new()
+                .prefix("replica-")
+                .tempdir_in(&temp_root)?;
+            let lock = std::fs::File::create(dir.path().join("lease"))?;
+            lock.lock()?;
+            Ok((dir, lock))
+        })
+        .await
+        .context("content spool initialization failed")??;
+        Ok(Arc::new(Self {
+            pool: pool.clone(),
+            fga: fga.clone(),
+            terms,
+            prefix: format!("{prefix}/{namespace}/"),
+            uploads: Arc::new(Semaphore::new(config.limits.uploads as usize)),
+            downloads: Arc::new(Semaphore::new(config.limits.downloads as usize)),
+            config,
+            objects,
+            temp,
+            _temp_lock: lock,
+        }))
+    }
+
+    pub(crate) fn quota(&self, space: &Space) -> AppResult<(Uuid, i64)> {
+        Ok(if space.personal_owner.is_some() {
+            (space.id, self.config.limits.personal_bytes)
+        } else {
+            match space.kind {
+                SpaceKind::Organization => (space.id, self.config.limits.organization_bytes),
+                SpaceKind::Team => (space.id, self.config.limits.team_bytes),
+                SpaceKind::Project => (
+                    space.parent_id.ok_or_else(unavailable)?,
+                    self.config.limits.team_bytes,
+                ),
+            }
+        })
+    }
+
+    pub(crate) fn idle(&self) -> Duration {
+        Duration::from_secs(self.config.limits.idle_seconds)
+    }
+    pub(crate) fn deadline(&self) -> Duration {
+        Duration::from_secs(self.config.limits.transfer_seconds)
+    }
+}
+
+pub(crate) async fn authorized(
+    pool: &PgPool,
+    fga: &Fga,
+    actor: &str,
+    id: Uuid,
+    permission: Permission,
+) -> AppResult<Space> {
+    let space = spaces::load(pool, fga, id)
+        .await
+        .map_err(dependency_error)?;
+    if !spaces::in_organization(pool, fga, actor, space.organization)
+        .await
+        .map_err(dependency_error)?
+    {
+        return Err(AppError::NotFound);
+    }
+    if !fga
+        .check(actor, permission, id)
+        .await
+        .map_err(|_| unavailable())?
+    {
+        return Err(AppError::Forbidden);
+    }
+    Ok(space)
+}
+
+pub(crate) fn unavailable() -> AppError {
+    AppError::problem(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "storage_unavailable",
+        "Document storage is temporarily unavailable",
+    )
+}
+pub(crate) fn conflict(code: &'static str, detail: &'static str) -> AppError {
+    AppError::problem(StatusCode::CONFLICT, code, detail)
+}
+pub(crate) fn invalid(detail: &'static str) -> AppError {
+    AppError::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_fields", detail)
+}
+
+pub(crate) fn dependency_error(error: AppError) -> AppError {
+    match error {
+        AppError::Internal(_) => unavailable(),
+        other => other,
+    }
+}

@@ -21,10 +21,9 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
-import { useGetTagCorpusTypeStatsQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
-import { useMySpacesQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements";
+import { managerTypeStats } from "../../../features/imports/managerDocuments";
+import { useMySpacesQuery, useSummaryQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
@@ -40,17 +39,9 @@ export default function TeamResourcesPage() {
   const memberships = useMySpacesQuery();
   const isPersonalTeam = Boolean(memberships.currentData?.find((space) => space.id === teamId)?.personal_owner);
   const fsTeamId = teamId;
-  // `refetch` as well as `data`: the storage-quota meter below reads this team
-  // row's `current_resources_storage_size`, but every write to it comes from
-  // the knowledge-flow API (upload charges it, delete releases it) — a
-  // different RTK Query instance, whose tag invalidations cannot reach this
-  // control-plane cache entry. Without a manual refetch on the workspace's own
-  // change signal the meter keeps showing the figure it had at mount.
-  const { data: team, refetch: refetchTeam, isUninitialized: teamUninitialized } = useGetTeamQuery({ teamId });
   const [statsOpen, setStatsOpen] = useState(false);
-  // The corpus query walks every readable library and document; fetch only
-  // when the usage panel is open.
-  const corpusStats = useGetTagCorpusTypeStatsQuery({ teamId: fsTeamId }, { skip: !statsOpen });
+  const corpusStats = useSummaryQuery({ id: teamId }, { refetchOnMountOrArgChange: true });
+  const summary = corpusStats.isError ? undefined : corpusStats.currentData;
 
   // Folder availability follows manager; content services do not gate classification.
   const { isError, isLoading, isFetching, isUninitialized } = memberships;
@@ -83,7 +74,7 @@ export default function TeamResourcesPage() {
     );
   }
 
-  const hasQuota = team?.max_resources_storage_size != null;
+  const hasQuota = summary !== undefined;
 
   return (
     <div className={styles.page}>
@@ -113,14 +104,13 @@ export default function TeamResourcesPage() {
               <div className={styles.quotaLabelRow}>
                 <span className={styles.quotaLabel}>{t("rework.resources.storageQuota")}</span>
                 <span className={styles.quotaValue}>
-                  {formatBytes(team!.current_resources_storage_size ?? 0)} /{" "}
-                  {formatBytes(team!.max_resources_storage_size!)}
+                  {formatBytes(summary!.used_bytes + summary!.reserved_bytes)} / {formatBytes(summary!.quota_bytes)}
                 </span>
               </div>
               <ProgressBar
                 theme="primary"
-                current={team!.current_resources_storage_size ?? 0}
-                max={team!.max_resources_storage_size!}
+                current={summary!.used_bytes + summary!.reserved_bytes}
+                max={summary!.quota_bytes}
               />
             </div>
           )}
@@ -129,7 +119,7 @@ export default function TeamResourcesPage() {
 
       {statsOpen && (
         <ResourceStatsCards
-          entries={corpusStats.data?.entries}
+          entries={managerTypeStats(summary)}
           isLoading={corpusStats.isLoading}
           isError={corpusStats.isError}
         />
@@ -145,18 +135,13 @@ export default function TeamResourcesPage() {
             isPersonalTeam={isPersonalTeam}
             onDocumentsChanged={() => {
               if (!corpusStats.isUninitialized) void corpusStats.refetch();
-              if (!teamUninitialized) void refetchTeam();
             }}
           />
         </div>
 
         {/* A rail beside the documents card until it is opened, when it
             widens in place into the panel itself. */}
-        <ImportPanel
-          key={`${userId}:${teamId}`}
-          teamId={fsTeamId}
-          unavailableReason={t("rework.resources.documentsUnavailable")}
-        />
+        <ImportPanel key={`${userId}:${teamId}`} teamId={fsTeamId} managerSpaceId={teamId} />
       </div>
     </div>
   );

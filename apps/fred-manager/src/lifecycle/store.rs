@@ -163,7 +163,7 @@ impl Lifecycle {
 async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> AppResult<()> {
     require_active(&mut **tx, id).await?;
     let has_documents: bool =
-        sqlx::query_scalar("select exists(select 1 from document where space_id = $1)")
+        sqlx::query_scalar("select exists(select 1 from document where space_id = $1) or exists(select 1 from document_upload where space_id = $1 and status = 'pending')")
             .bind(id)
             .fetch_one(&mut **tx)
             .await?;

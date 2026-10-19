@@ -55,6 +55,15 @@ import {
 import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import type { ConflictDecision } from "../DocumentUploadDrawer/importConflicts";
 import { ImportStepper } from "./ImportStepper";
+import { useManagerImports } from "../../../../features/imports/useManagerImports";
+import {
+  managerFileHeld,
+  canCancelManagerImport,
+  cancelManagerImport,
+  retryManagerImport,
+  dismissManagerImport,
+  type ManagerDispatch,
+} from "../../../../features/imports/managerImportRun";
 import styles from "./ImportPanel.module.css";
 
 /** A file the record still lists, drawn as what it is: an import that failed.
@@ -90,12 +99,22 @@ function cardForMissingFile(entry: UnfinishedFile): TaskViewModel {
 const SETTLED_CARD_LINGER_MS = 3000;
 
 /** @param teamId whose resources the page beside this panel shows. */
-export function ImportPanel({ teamId, unavailableReason }: { teamId: string | null; unavailableReason?: string }) {
+export function ImportPanel({
+  teamId,
+  unavailableReason,
+  managerSpaceId,
+}: {
+  teamId: string | null;
+  unavailableReason?: string;
+  managerSpaceId?: string;
+}) {
   const { t } = useTranslation();
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<ManagerDispatch>();
   const { showError } = useToast();
   const selectImports = useMemo(() => makeSelectImportTasks(teamId), [teamId]);
-  const allImports = useSelector(selectImports);
+  const legacyImports = useSelector(selectImports);
+  const manager = useManagerImports(managerSpaceId);
+  const allImports = managerSpaceId ? manager.tasks : legacyImports;
   const runningCount = allImports.filter((vm) => !TERMINAL_STATES.has(vm.state) && !vm.untracked).length;
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
   const [expanded, setExpanded] = useState(false);
@@ -126,11 +145,15 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
         task.taskId,
         window.setTimeout(() => {
           timers.delete(task.taskId);
-          setSettled((ids) => new Set(ids).add(task.taskId));
+          if (managerSpaceId)
+            void dismissManagerImport(dispatch, task.taskId)
+              .then(() => setSettled((ids) => new Set(ids).add(task.taskId)))
+              .catch(() => {});
+          else setSettled((ids) => new Set(ids).add(task.taskId));
         }, SETTLED_CARD_LINGER_MS),
       );
     }
-  }, [allImports, settled]);
+  }, [allImports, settled, managerSpaceId, dispatch]);
 
   // Ids of tasks the store has since dropped: keeping them would grow for the
   // life of the tab. Only rebuilt when it has actually drifted.
@@ -159,7 +182,7 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
 
   // What a previous visit left in the air. Read once: anything that happens
   // from here on is in the store, where the panel can follow it properly.
-  const [interrupted, setInterrupted] = useState<UnfinishedFile[]>(() => unfinishedImports());
+  const [interrupted, setInterrupted] = useState<UnfinishedFile[]>(() => (managerSpaceId ? [] : unfinishedImports()));
   // Except for whatever is already listed below — coming back to this page
   // re-reads the record, and a file the panel is still following is not a file
   // that failed to arrive.
@@ -167,14 +190,24 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
   // file whose card left after succeeding did arrive, and must not come back
   // three seconds later as one that never did.
   const listed = new Set(allImports.map((task) => task.target?.label));
-  const missing = interrupted.filter((entry) => entry.teamId === teamId && !listed.has(entry.filename));
+  const missing = (managerSpaceId ? [] : interrupted).filter(
+    (entry) => entry.teamId === teamId && !listed.has(entry.filename),
+  );
 
   const resumeInput = useRef<HTMLInputElement>(null);
   // Which entry the open picker is for. One card asks at a time, so what comes
   // back is offered to that entry alone — a name that matches another missing
   // file is not an answer for it.
   const resending = useRef<UnfinishedFile[]>([]);
+  const managerResending = useRef<string | null>(null);
   const onFilesPicked = (picked: File[]) => {
+    if (managerSpaceId && managerResending.current) {
+      if (picked[0])
+        void retryManagerImport(dispatch, managerResending.current, picked[0]).catch(() =>
+          showError({ summary: t("rework.documentStorage.wrongFile") }),
+        );
+      return;
+    }
     if (unavailableReason) {
       showError({ summary: unavailableReason });
       return;
@@ -213,6 +246,11 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
 
   const onResend = useCallback(
     (entryId: string) => {
+      if (managerSpaceId) {
+        managerResending.current = entryId;
+        resumeInput.current?.click();
+        return;
+      }
       if (unavailableReason) {
         showError({ summary: unavailableReason });
         return;
@@ -222,7 +260,7 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
       resending.current = [entry];
       resumeInput.current?.click();
     },
-    [interrupted, unavailableReason, showError],
+    [interrupted, unavailableReason, showError, managerSpaceId],
   );
 
   // Hoisted out of the list and keyed by task id: an arrow function built per
@@ -230,11 +268,13 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
   // and an import dispatches a great many of those.
   const failFast = (detail: string) => showError({ summary: t("rework.imports.panel.title"), detail });
   const onRetry = useCallback(
-    (taskId: string) =>
-      unavailableReason ? failFast(unavailableReason) : void retryImport(taskId, { dispatch, onError: failFast }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- failFast closes
-    // over showError and t, both stable for the life of the provider.
-    [dispatch, unavailableReason],
+    (taskId: string) => {
+      if (managerSpaceId) {
+        void retryManagerImport(dispatch, taskId).catch(() => failFast(t("rework.documentStorage.retryFailed")));
+      } else if (unavailableReason) failFast(unavailableReason);
+      else void retryImport(taskId, { dispatch, onError: failFast });
+    },
+    [dispatch, managerSpaceId, unavailableReason, t, showError],
   );
   const onDecide = useCallback(
     (taskId: string, decision: ConflictDecision) =>
@@ -250,15 +290,19 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
         failFast(unavailableReason);
         return;
       }
-      if (!cancelImport(taskId, dispatch)) {
+      if (!(managerSpaceId ? cancelManagerImport(taskId) : cancelImport(taskId, dispatch))) {
         showError({ summary: t("rework.imports.panel.title"), detail: t("rework.imports.cancel.tooLate") });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above.
-    [dispatch, unavailableReason],
+    [dispatch, unavailableReason, managerSpaceId],
   );
   const onDismiss = useCallback(
     (task: TaskViewModel) => {
+      if (managerSpaceId) {
+        void dismissManagerImport(dispatch, task.taskId).catch(() => failFast(t("rework.documentStorage.retryFailed")));
+        return;
+      }
       // Dismissed for good: stop holding the file open for a retry that is no
       // longer on offer, and stop expecting it — or it would be offered again
       // as "did not arrive" on every visit.
@@ -270,7 +314,7 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
       void acknowledge(task.taskId, task.kind, task.localOnly);
       dispatch(taskEvicted(task.taskId));
     },
-    [dispatch, acknowledge],
+    [dispatch, acknowledge, managerSpaceId, t, showError],
   );
 
   const toggleLabel = expanded ? t("rework.imports.panel.collapse") : t("rework.imports.panel.expand");
@@ -345,6 +389,11 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
               event.target.value = "";
             }}
           />
+          {managerSpaceId && manager.error && (
+            <p role="alert" className={styles.empty}>
+              {t("rework.documentStorage.unavailable")}
+            </p>
+          )}
           {imports.length === 0 && missing.length === 0 ? (
             <p className={styles.empty}>{t("rework.imports.panel.empty")}</p>
           ) : (
@@ -374,6 +423,9 @@ export function ImportPanel({ teamId, unavailableReason }: { teamId: string | nu
                   onCancel={onCancel}
                   onDismiss={onDismiss}
                   dismissing={isAcknowledging(task.taskId)}
+                  onResend={
+                    managerSpaceId && task.state === "failed" && !managerFileHeld(task.taskId) ? onResend : undefined
+                  }
                 />
               ))}
             </>
@@ -414,23 +466,34 @@ const ImportItem = memo(function ImportItem({
 }) {
   const { t } = useTranslation();
   const failed = task.state === "failed";
-  const failure = failed ? importFailure(task, t) : null;
+  const isManager = task.kind === "document_upload";
+  const failure = failed && !isManager ? importFailure(task, t) : null;
   const awaitingDecision = task.stage === "decision";
   // Sending the file again is the only way to replace or retry, and only the
   // browser has the file. After a reload it does not, and offering an action
   // that cannot work would be worse than saying so.
-  const stillHeld = heldImport(task.taskId) !== undefined;
+  const stillHeld = isManager ? managerFileHeld(task.taskId) : heldImport(task.taskId) !== undefined;
 
   // The single line the markers opposite are about: the phase in flight, or —
   // when something interrupted it — why it stopped, or the question holding it.
-  const statusText = task.untracked
-    ? t("rework.imports.untracked.summary")
-    : (failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : importPhaseLabel(task, t)));
+  const statusText = isManager
+    ? t(`rework.documentStorage.${task.step}`)
+    : task.untracked
+      ? t("rework.imports.untracked.summary")
+      : (failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : importPhaseLabel(task, t)));
   // What that line means, for a reader who has not imported before. The same
   // sentence the stepper's markers carry, on whichever phase the line names.
-  const statusDetail = task.untracked
-    ? t("rework.imports.untracked.detail")
-    : (failure?.detail ?? (awaitingDecision ? null : importPhaseHintFor(task, t)));
+  const statusDetail = isManager
+    ? task.error === "name_conflict"
+      ? t("rework.documentStorage.nameConflict", { names: task.target?.label })
+      : task.error === "quota_exceeded"
+        ? t("documentLibrary.storageQuotaExceededMessage")
+        : task.state === "failed"
+          ? t("rework.documentStorage.retryFailed")
+          : t("rework.documentStorage.storedHint")
+    : task.untracked
+      ? t("rework.imports.untracked.detail")
+      : (failure?.detail ?? (awaitingDecision ? null : importPhaseHintFor(task, t)));
   // Sending it again cannot change what the folder holds, and the transfer is
   // not what went wrong — only clearing the duplicate name will do.
   const retryable = failed && stillHeld && !failure?.hopeless;
@@ -480,7 +543,7 @@ const ImportItem = memo(function ImportItem({
                 onClick={() => onRetry(task.taskId)}
               />
             </Tooltip>
-          ) : canCancelImport(task.taskId) ? (
+          ) : (isManager ? canCancelManagerImport(task.taskId) : canCancelImport(task.taskId)) ? (
             // Only while its request has not left. A file already on the wire
             // is the server's, and offering to call it back would leave a
             // document behind that the panel said was cancelled.

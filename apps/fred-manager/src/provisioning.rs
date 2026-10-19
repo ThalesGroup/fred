@@ -55,6 +55,7 @@ impl Failure {
                 AppError::Conflict(_) | AppError::NotFound => S::CONFLICT,
                 AppError::Unavailable(_) => S::SERVICE_UNAVAILABLE,
                 AppError::Internal(_) => S::SERVICE_UNAVAILABLE,
+                AppError::Problem { status, .. } => *status,
             }
         } else if error.is::<Unauthorized>() {
             S::UNAUTHORIZED

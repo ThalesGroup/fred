@@ -8,6 +8,8 @@ import type { ImportBlueprintApiResponse, MeApiResponse, MySpacesApiResponse } f
 vi.mock("../../security/KeycloakService", () => ({
   KeyCloakService: {
     GetToken: () => "operator-token",
+    GetUserId: vi.fn(() => "operator" as string | null),
+    GetSessionIdentity: vi.fn(() => "fixture/operator"),
     ensureFreshToken: vi.fn().mockResolvedValue(true),
     CallLogout: vi.fn(),
   },
@@ -175,4 +177,31 @@ describe("generated fred-manager client", () => {
     query.unsubscribe();
     store.dispatch(api.util.resetApiState());
   });
+});
+
+it("allows same-account token refresh and refuses a late response after account change", async () => {
+  const { store, fetch } = setup({ user_id: "operator", username: "Operator", platform_roles: [] });
+  vi.mocked(KeyCloakService.GetUserId).mockReturnValueOnce(null);
+  const same = store.dispatch(api.endpoints.me.initiate(undefined, { subscribe: false, forceRefetch: true }));
+  expect((await same.unwrap()).user_id).toBe("operator");
+  expect(fetch).toHaveBeenCalledTimes(1);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  fetch.mockImplementationOnce(async () => {
+    await held;
+    return new Response(JSON.stringify({ user_id: "operator" }));
+  });
+  const late = store.dispatch(api.endpoints.me.initiate(undefined, { subscribe: false, forceRefetch: true }));
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  vi.mocked(KeyCloakService.GetSessionIdentity).mockReturnValue("fixture/other");
+  release();
+  expect((await late).error).toEqual({ status: "CUSTOM_ERROR", error: "Account changed during request" });
+  fetch.mockImplementationOnce(async () => new Response(JSON.stringify({ user_id: "other" })));
+  const other = await store.dispatch(api.endpoints.me.initiate(undefined, { subscribe: false })).unwrap();
+  expect(other.user_id).toBe("other");
+  expect(fetch).toHaveBeenCalledTimes(3);
+  vi.mocked(KeyCloakService.GetSessionIdentity).mockReturnValue("fixture/operator");
+  store.dispatch(api.util.resetApiState());
 });

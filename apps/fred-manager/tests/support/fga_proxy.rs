@@ -15,6 +15,7 @@ pub struct Fault {
     pub calls: std::collections::BTreeMap<String, usize>,
     pub acknowledged: Vec<u16>,
     pub fail_at: usize,
+    pub fail_read_at: usize,
     pub after: bool,
     pub gate: Option<Arc<Gate>>,
     /// Hold the request before forwarding it, to model a write arriving after timeout.
@@ -62,6 +63,12 @@ impl Proxy {
                         fault.active_reads += 1;
                         fault.peak_reads = fault.peak_reads.max(fault.active_reads);
                         fault.reads.push(value.clone());
+                        if fault.fail_read_at == fault.reads.len() {
+                            return Response::builder()
+                                .status(503)
+                                .body(Body::from("private-dependency-error"))
+                                .unwrap();
+                        }
                         body = serde_json::to_vec(&value).unwrap().into();
                     }
                     let delay = if reading {

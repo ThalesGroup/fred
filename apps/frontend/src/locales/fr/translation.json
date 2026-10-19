@@ -4250,6 +4250,21 @@
       "kind": "Type",
       "hierarchy": "Hiérarchie",
       "roleLabel": "Rôles"
+    },
+    "documentStorage": {
+      "batchLimit": "Sélectionnez au maximum 200 fichiers.",
+      "fileLimit": "Chaque original est limité à 100 Mio.",
+      "unavailable": "Le stockage documentaire est temporairement indisponible.",
+      "nameConflict": "Ces noms existent déjà : {{names}}. Retirez-les de la sélection ou renommez les fichiers locaux.",
+      "noProcessing": "Le traitement est indisponible pour ces originaux.",
+      "storedHint": "Les originaux sont stockés et téléchargeables. Ils ne sont pas indexés pour la recherche.",
+      "queued": "En attente d'envoi",
+      "uploading": "Envoi et stockage",
+      "uncertain": "Résultat à vérifier",
+      "failed": "L'original n'a pas pu être stocké",
+      "stored": "Stocké",
+      "wrongFile": "Sélectionnez le fichier original de même nom et de même taille.",
+      "retryFailed": "Le résultat n'a pas pu être vérifié. Réessayez avant de renvoyer le fichier."
     }
   },
   "runtime": {

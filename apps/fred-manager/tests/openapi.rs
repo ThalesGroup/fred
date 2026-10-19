@@ -86,6 +86,14 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "patch /folders/{id}",
         "delete /folders/{id}",
         "get /documents/{id}",
+        "post /folders/{id}/documents",
+        "post /folders/{id}/documents/preflight",
+        "get /spaces/{id}/entries",
+        "get /spaces/{id}/storage",
+        "get /spaces/{id}/document-uploads",
+        "get /document-uploads/{id}",
+        "put /document-uploads/{id}/acknowledgment",
+        "get /documents/{id}/content",
         "post /authorize/document",
         "post /authorize/scope",
         "get /users/platform-roles",
@@ -355,5 +363,51 @@ fn migration_command_requires_only_database_url_and_redacts_errors() {
         );
         assert!(!error.contains("private-password"));
         assert!(!error.contains("/nonexistent"));
+    }
+}
+
+#[test]
+fn document_receipts_and_lifecycle_receipts_have_distinct_generated_contracts() {
+    let api = schema();
+    for (path, method) in [
+        ("/folders/{id}/documents/preflight", "post"),
+        ("/spaces/{id}/entries", "get"),
+        ("/spaces/{id}/storage", "get"),
+        ("/spaces/{id}/document-uploads", "get"),
+        ("/document-uploads/{id}", "get"),
+        ("/documents/{id}/content", "get"),
+    ] {
+        // Ambiguous canonical organization context is an explicit conflict.
+        assert!(
+            api["paths"][format!("/fred-manager/v1{path}")][method]["responses"]
+                .get("409")
+                .is_some()
+        );
+    }
+    let upload = &api["paths"]["/fred-manager/v1/folders/{id}/documents"]["post"];
+    assert_eq!(
+        upload["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/UploadReceipt"
+    );
+    let schemas = &api["components"]["schemas"];
+    assert!(schemas["UploadReceipt"]["properties"]["request_key"].is_object());
+    assert!(schemas["Receipt"]["properties"]["target_id"].is_object());
+    assert_eq!(
+        schemas["FileUpload"]["properties"]["file"],
+        json!({"type":"string","format":"binary"})
+    );
+    assert!(
+        schemas["EntryOrder"]["enum"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("size_desc"))
+    );
+    for status in [
+        "400", "401", "403", "404", "408", "409", "413", "422", "429", "503",
+    ] {
+        assert_eq!(
+            upload["responses"][status]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ErrorBody"
+        );
     }
 }

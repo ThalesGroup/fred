@@ -29558,6 +29558,143 @@
                 },
                 "storage": {
                   "properties": {
+                    "content": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "access_key_env_var": {
+                              "type": "string"
+                            },
+                            "allow_insecure": {
+                              "type": "boolean"
+                            },
+                            "bucket": {
+                              "type": "string"
+                            },
+                            "cleanup_enabled": {
+                              "description": "Disable admission and cleanup while restoring a database/storage pair.",
+                              "type": "boolean"
+                            },
+                            "endpoint": {
+                              "type": "string"
+                            },
+                            "force_path_style": {
+                              "type": "boolean"
+                            },
+                            "limits": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "cleanup_backlog_bytes": {
+                                  "default": 1073741824,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "cleanup_batch": {
+                                  "default": 100,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "cleanup_interval_seconds": {
+                                  "default": 30,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "downloads": {
+                                  "default": 8,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "file_bytes": {
+                                  "default": 104857600,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "idle_seconds": {
+                                  "default": 30,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "organization_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "personal_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "receipt_retention_days": {
+                                  "default": 7,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "s3_seconds": {
+                                  "default": 120,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "team_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "temp_bytes": {
+                                  "default": 838860800,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "transfer_seconds": {
+                                  "default": 300,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "uploads": {
+                                  "default": 8,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "prefix": {
+                              "type": "string"
+                            },
+                            "region": {
+                              "type": "string"
+                            },
+                            "secret_key_env_var": {
+                              "type": "string"
+                            },
+                            "temp_dir": {
+                              "type": "string"
+                            },
+                            "uploads_enabled": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "endpoint",
+                            "bucket"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "postgres": {
                       "properties": {
                         "database": {
@@ -30856,6 +30993,143 @@
                 },
                 "storage": {
                   "properties": {
+                    "content": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "access_key_env_var": {
+                              "type": "string"
+                            },
+                            "allow_insecure": {
+                              "type": "boolean"
+                            },
+                            "bucket": {
+                              "type": "string"
+                            },
+                            "cleanup_enabled": {
+                              "description": "Disable admission and cleanup while restoring a database/storage pair.",
+                              "type": "boolean"
+                            },
+                            "endpoint": {
+                              "type": "string"
+                            },
+                            "force_path_style": {
+                              "type": "boolean"
+                            },
+                            "limits": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "cleanup_backlog_bytes": {
+                                  "default": 1073741824,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "cleanup_batch": {
+                                  "default": 100,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "cleanup_interval_seconds": {
+                                  "default": 30,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "downloads": {
+                                  "default": 8,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "file_bytes": {
+                                  "default": 104857600,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "idle_seconds": {
+                                  "default": 30,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "organization_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "personal_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "receipt_retention_days": {
+                                  "default": 7,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "s3_seconds": {
+                                  "default": 120,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "team_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "temp_bytes": {
+                                  "default": 838860800,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "transfer_seconds": {
+                                  "default": 300,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "uploads": {
+                                  "default": 8,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "prefix": {
+                              "type": "string"
+                            },
+                            "region": {
+                              "type": "string"
+                            },
+                            "secret_key_env_var": {
+                              "type": "string"
+                            },
+                            "temp_dir": {
+                              "type": "string"
+                            },
+                            "uploads_enabled": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "endpoint",
+                            "bucket"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "postgres": {
                       "properties": {
                         "database": {

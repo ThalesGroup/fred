@@ -31,6 +31,13 @@ security:
     store_name: fred-manager
 
 storage:
+  # Enable after provisioning a bucket without versioning, Object Lock or lifecycle.
+  # content:
+  #   endpoint: http://localhost:8333
+  #   allow_insecure: true
+  #   bucket: fred-manager-originals
+  #   access_key_env_var: FRED_CONTENT_ACCESS_KEY
+  #   secret_key_env_var: FRED_CONTENT_SECRET_KEY
   postgres:
     host: localhost
     port: 5432

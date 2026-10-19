@@ -62,10 +62,13 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
         name: "d".into(),
         mime: "text/plain".into(),
         size: 0,
-        sha256: "a".into(),
+        sha256: "a".repeat(64),
         created_by: "alice".into(),
+        created_at: chrono::Utc::now(),
     };
-    db::insert_document(&e.pool, &document).await.unwrap();
+    crate::environment::insert_document(&e.pool, &document)
+        .await
+        .unwrap();
     assert!(matches!(
         l.accept(&e.pool, &e.fga, "root", team.id).await,
         Err(AppError::Conflict(_))
@@ -584,10 +587,13 @@ async fn lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates() {
         name: "unexpected".into(),
         mime: "text/plain".into(),
         size: 0,
-        sha256: "a".into(),
+        sha256: "a".repeat(64),
         created_by: "fixture".into(),
+        created_at: chrono::Utc::now(),
     };
-    db::insert_document(&e.pool, &doc).await.unwrap();
+    crate::environment::insert_document(&e.pool, &doc)
+        .await
+        .unwrap();
     assert_eq!(cleanup::candidates(&e.pool, 1).await.unwrap(), [first.id]);
     cleanup::batch(&e.pool, &e.fga, first.id).await.unwrap();
     let blocked = store::status(&e.pool, &e.fga, "root", first.id)

@@ -31,7 +31,7 @@ pub fn router(pool: PgPool, fga: Fga, directory: Directory) -> axum::Router {
                     54 => (team,None,"Team root.txt".into()),
                     _ => (team,Some(folder.id),format!("Document {:02}.txt",i)),
                 };
-                db::insert_document(&pool,&Document {id:Uuid::new_v4(),space_id,folder_id,name,mime:"text/plain".into(),size:42,sha256:format!("{i:064x}"),created_by:priya.id.clone()}).await.unwrap();
+                crate::environment::insert_document(&pool,&Document {id:Uuid::new_v4(),space_id,folder_id,name,mime:"text/plain".into(),size:42,sha256:format!("{i:064x}"),created_by:priya.id.clone(),created_at:chrono::Utc::now()}).await.unwrap();
             }
             axum::Json(serde_json::json!({"team":team,"personal":personal,"folder":folder.id,"empty":empty.id}))
         }

@@ -39,7 +39,7 @@ Structured stdout, in the format shared by Fred's services.
 
 ## Errors
 
-Application error bodies use `{"detail": "<message>"}`, as FastAPI.
+Application error bodies use `{"code": "<stable code>", "detail": "<safe message>"}`.
 Unregistered paths and unsupported methods use the router's 404/405 responses.
 
 | Status | When |
@@ -54,6 +54,13 @@ Unregistered paths and unsupported methods use the router's 404/405 responses.
 | 422 | Invalid ZIP/declarations, `not_yet_supported` import format; invalid JSON body, short bootstrap token, half a cursor |
 | 503 | Bootstrap or platform-role administration with authentication disabled; grant with no directory or incompatible subject/realm mapping |
 | 500 | Anything else, logged, answered `internal error` |
+
+Original-storage handlers distinguish malformed JSON/multipart (400), invalid fields
+(422), idle/total upload timeout (408), actual byte limit (413), unavailable transfer
+capacity (429), and provider/dependency/backlog unavailability (503). Name, request
+binding and retry-state conflicts use distinct 409 codes. Pending upload conflicts
+include `Retry-After` and `Location`; successes include the receipt location.
+Streaming download errors after headers abort the body rather than append JSON.
 
 
 ## Organization conflict recovery
@@ -91,6 +98,7 @@ secrets only and never overrides the process environment.
 | `OPENFGA_API_TOKEN` | the variable `security.rebac.token_env_var` names |
 | `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` (host default), `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` (chart) | the variable `security.m2m.secret_env_var` names |
 | `FRED_BOOTSTRAP_TOKEN` | the variable `app.bootstrap_token_env_var` names |
+| `FRED_CONTENT_ACCESS_KEY`, `FRED_CONTENT_SECRET_KEY` | variables named by `storage.content.access_key_env_var` and `secret_key_env_var`, when content is configured |
 
 Local reference configuration:
 
@@ -129,6 +137,13 @@ security:
     store_name: fred-manager
 
 storage:
+  # Enable after provisioning a bucket without versioning, Object Lock or lifecycle.
+  # content:
+  #   endpoint: http://localhost:8333
+  #   allow_insecure: true
+  #   bucket: fred-manager-originals
+  #   access_key_env_var: FRED_CONTENT_ACCESS_KEY
+  #   secret_key_env_var: FRED_CONTENT_SECRET_KEY
   postgres:
     host: localhost
     port: 5432
@@ -400,3 +415,56 @@ reconciliation unless only final root removal remains. No content-store cleanup 
 claimed. `make test-lifecycle-temporal` verifies HTTP acceptance, a real worker restart,
 schedule reuse, history replay, SIGTERM during a SQL lock wait and exhausted-retry
 recovery against disposable services.
+
+## Original storage
+
+Optional `storage.content` enables original upload/download and housekeeping in the
+API process. Without it, combined folder browsing stays available and storage
+operations return 503. The [chart overlay](../../deploy/charts/fred/examples/document-storage.yaml)
+provides explicit endpoint/bucket, Secret references and bounded ephemeral storage.
+The API creates a private 0700 child under the mounted spool directory; it does
+not chmod the root-owned mount. Replica subdirectories are locked separately,
+so startup removes abandoned files without removing another active replica's files.
+
+Provision the bucket before startup. Required operations are PutObject, GetObject,
+DeleteObject, ListBucket and inspection of bucket versioning, Object Lock and
+lifecycle configuration. Startup refuses versioned (including suspended-versioning),
+Object-Locked or enabled-lifecycle buckets and unavailable inspection. The provisioner
+keeps those policies unchanged while manager runs. Never enable expiration of
+published originals. Production endpoints require HTTPS; `allow_insecure` explicitly
+permits a local HTTP service. SeaweedFS 4.29 is exercised by the disposable contract
+fixture; arbitrary S3-compatible services are not assumed equivalent.
+
+The database binds endpoint, bucket, prefix and a generated namespace UUID. Changed
+coordinates refuse startup; a fresh database uses a new namespace and never adopts
+old keys. The SDK uses one shared client, at most two attempts and finite connect,
+operation and streaming deadlines. It verifies complete content after conditional
+Put, including an ambiguous acknowledgment; provider errors expose no credentials.
+
+Defaults bound files to 100 MiB, eight uploads and eight downloads per replica,
+800 MiB temporary data, 30 s idle, 300 s transfer and 120 s per S3 operation. The
+file limit can decrease but cannot exceed 100 MiB. Temporary capacity must cover
+all admitted uploads; pod resources must also cover runtime, SDK and log overhead.
+Quota defaults are 5 GiB per personal space, team (projects included) or organization.
+Failed-object backlog admission stops at 1 GiB. Quotas count SQL ready bytes plus
+pending reservations, not provider-reported sizes.
+
+The API sweeps every 30 s with batches of 100 by default. Its upload lease is
+`2 * s3_seconds + transfer_seconds + 60` (600 s by default). A stalled process
+therefore leaves durable pending work until expiry; no stale token can publish it.
+Journal delete attempts back off exponentially up to one hour; inventory retries
+independently on periodic scans. Contended organization expiration is deferred 30 s. Inventory cursor, incomplete orphan bytes and last
+completion are durable in `document_storage`. The persisted journal and inventory
+row expose cleanup backlog for SQL inspection;
+journal Delete failures emit INFO with `outcome=retry`, inventory Delete failures
+accumulate `orphan_bytes`, and interrupted sweeps emit WARN before later retries.
+Failed, cleaned receipts expire after seven days by default; successful receipts
+preserve idempotency. Reconciliation uses no Temporal or ingestion service.
+
+Back up/restore SQL and its matching object namespace together. During restore,
+set both `uploads_enabled: false` and `cleanup_enabled: false`; uploads cannot be
+active with cleanup suspended. Re-enable after validating namespace and originals.
+Restoring only SQL can lose bytes; restoring only objects lets cleanup remove keys
+without matching metadata. The ordinary local reset does not migrate content.
+Migration and rollback constraints are in the
+[migration note](../swift/ops/migrations/manager-document-storage.md).

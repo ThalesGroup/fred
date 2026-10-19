@@ -3,8 +3,11 @@ erDiagram
 "space" }o--o| "space_deletion" : "deletion_id"
 "folder" }o--|| "space" : "space_id"
 "folder" }o--|| "folder" : "parent_id, space_id"
+"document" }o--|| "space" : "quota_owner"
 "document" }o--|| "space" : "space_id"
 "document" }o--|| "folder" : "folder_id, space_id"
+"document_upload" |o--o| "document" : "document_id"
+"document_upload" |o--o| "document_upload" : "retry_of"
 
 "space" {
   uuid id
@@ -32,6 +35,8 @@ erDiagram
   text sha256
   text created_by
   timestamp_with_time_zone created_at
+  text object_key
+  uuid quota_owner FK
 }
 "platform_bootstrap" {
   boolean singleton
@@ -68,4 +73,43 @@ erDiagram
   text error_code
   bigint folders_deleted
   bigint spaces_deleted
+}
+"document_storage" {
+  boolean singleton
+  uuid namespace
+  text endpoint
+  text bucket
+  text prefix
+  text inventory_cursor
+  bigint inventory_bytes
+  bigint orphan_bytes
+  timestamp_with_time_zone inventory_completed_at
+  uuid lease_owner
+  timestamp_with_time_zone lease_until
+}
+"document_upload" {
+  uuid id
+  uuid request_key
+  text actor
+  uuid organization_id
+  uuid space_id
+  uuid folder_id
+  uuid quota_owner
+  text name
+  text mime
+  bigint size
+  text sha256
+  text object_key
+  text status
+  uuid document_id FK
+  text error_code
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  timestamp_with_time_zone completed_at
+  timestamp_with_time_zone acknowledged_at
+  uuid retry_of FK
+  uuid successor_key
+  timestamp_with_time_zone cleanup_due_at
+  integer cleanup_attempts
+  timestamp_with_time_zone cleaned_at
 }

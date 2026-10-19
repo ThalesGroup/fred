@@ -24,13 +24,13 @@ import { writeRichClipboard } from "../../../../utils/clipboardUtils";
 import styles from "./StatusChip.module.css";
 
 /**
- * `DocStatus` plus the one state only a FOLDER row can be in (#2384): some
+ * `DocStatus`, manager original storage, and a FOLDER warning (#2384): some
  * documents underneath it failed while the folder itself is neither processing
  * nor broken. Deliberately not added to `DocStatus` — no document is ever
  * "warning", and widening the shared type would push a meaningless case onto
  * every `DocStatusBadge` consumer.
  */
-type ChipStatus = DocStatus | "warning";
+type ChipStatus = DocStatus | "warning" | "stored";
 
 /** How many failed documents the hover panel names before it summarizes the
  *  rest. The panel is portaled outside the chip, so moving the pointer toward
@@ -119,6 +119,14 @@ export function StatusChip({
           </span>
         )}
       </DetailPanel>
+    );
+  }
+  if (status === "stored") {
+    return (
+      <span className={styles.chip} data-variant="done">
+        <Icon category="outlined" type="check_circle" />
+        {t("rework.documentStorage.stored")}
+      </span>
     );
   }
   if (status === "ready") {

@@ -54,8 +54,17 @@ const injectedRtkApi = api.injectEndpoints({
     deletionStatus: build.query<DeletionStatusApiResponse, DeletionStatusApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/deletions/${queryArg.operationId}` }),
     }),
+    receipt: build.query<ReceiptApiResponse, ReceiptApiArg>({
+      query: (queryArg) => ({ url: `/fred-manager/v1/document-uploads/${queryArg.id}` }),
+    }),
+    acknowledge: build.mutation<AcknowledgeApiResponse, AcknowledgeApiArg>({
+      query: (queryArg) => ({ url: `/fred-manager/v1/document-uploads/${queryArg.id}/acknowledgment`, method: "PUT" }),
+    }),
     getDocument: build.query<GetDocumentApiResponse, GetDocumentApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/documents/${queryArg.id}` }),
+    }),
+    content: build.query<ContentApiResponse, ContentApiArg>({
+      query: (queryArg) => ({ url: `/fred-manager/v1/documents/${queryArg.id}/content` }),
     }),
     createFolder: build.mutation<CreateFolderApiResponse, CreateFolderApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/folders`, method: "POST", body: queryArg.createFolder }),
@@ -65,6 +74,26 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     renameFolder: build.mutation<RenameFolderApiResponse, RenameFolderApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/folders/${queryArg.id}`, method: "PATCH", body: queryArg.rename }),
+    }),
+    upload: build.mutation<UploadApiResponse, UploadApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/folders/${queryArg.id}/documents`,
+        method: "POST",
+        body: queryArg.fileUpload,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+        params: {
+          retry_of: queryArg.retryOf,
+        },
+      }),
+    }),
+    preflight: build.mutation<PreflightApiResponse, PreflightApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/folders/${queryArg.id}/documents/preflight`,
+        method: "POST",
+        body: queryArg.preflight,
+      }),
     }),
     frontendConfig: build.query<FrontendConfigApiResponse, FrontendConfigApiArg>({
       query: () => ({ url: `/fred-manager/v1/frontend/config` }),
@@ -104,6 +133,16 @@ const injectedRtkApi = api.injectEndpoints({
     deleteSpace: build.mutation<DeleteSpaceApiResponse, DeleteSpaceApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/spaces/${queryArg.id}`, method: "DELETE" }),
     }),
+    receipts: build.query<ReceiptsApiResponse, ReceiptsApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/spaces/${queryArg.id}/document-uploads`,
+        params: {
+          before: queryArg.before,
+          before_key: queryArg.beforeKey,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
     listDocuments: build.query<ListDocumentsApiResponse, ListDocumentsApiArg>({
       query: (queryArg) => ({
         url: `/fred-manager/v1/spaces/${queryArg.id}/documents`,
@@ -111,6 +150,18 @@ const injectedRtkApi = api.injectEndpoints({
           folder_id: queryArg.folderId,
           after_name: queryArg.afterName,
           after_id: queryArg.afterId,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    entries: build.query<EntriesApiResponse, EntriesApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/spaces/${queryArg.id}/entries`,
+        params: {
+          parent_id: queryArg.parentId,
+          search: queryArg.search,
+          order: queryArg.order,
+          offset: queryArg.offset,
           limit: queryArg.limit,
         },
       }),
@@ -138,6 +189,9 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/fred-manager/v1/spaces/${queryArg.id}/roles/${queryArg.role}/${queryArg.user}`,
         method: "DELETE",
       }),
+    }),
+    summary: build.query<SummaryApiResponse, SummaryApiArg>({
+      query: (queryArg) => ({ url: `/fred-manager/v1/spaces/${queryArg.id}/storage` }),
     }),
     listPlatformRoles: build.query<ListPlatformRolesApiResponse, ListPlatformRolesApiArg>({
       query: () => ({ url: `/fred-manager/v1/users/platform-roles` }),
@@ -196,8 +250,20 @@ export type DeletionStatusApiResponse = /** status 200 undefined */ Receipt;
 export type DeletionStatusApiArg = {
   operationId: string;
 };
+export type ReceiptApiResponse = /** status 200 undefined */ UploadReceipt;
+export type ReceiptApiArg = {
+  id: string;
+};
+export type AcknowledgeApiResponse = unknown;
+export type AcknowledgeApiArg = {
+  id: string;
+};
 export type GetDocumentApiResponse = /** status 200 Success */ Document;
 export type GetDocumentApiArg = {
+  id: string;
+};
+export type ContentApiResponse = /** status 200 undefined */ string;
+export type ContentApiArg = {
   id: string;
 };
 export type CreateFolderApiResponse = /** status 201 Success */ Folder;
@@ -212,6 +278,19 @@ export type RenameFolderApiResponse = unknown;
 export type RenameFolderApiArg = {
   id: string;
   rename: Rename;
+};
+export type UploadApiResponse = /** status 200 undefined */ UploadReceipt | /** status 201 undefined */ UploadReceipt;
+export type UploadApiArg = {
+  id: string;
+  /** Required request UUID */
+  "Idempotency-Key": string;
+  retryOf?: string;
+  fileUpload: FileUpload;
+};
+export type PreflightApiResponse = /** status 200 undefined */ PreflightResult;
+export type PreflightApiArg = {
+  id: string;
+  preflight: Preflight;
 };
 export type FrontendConfigApiResponse = /** status 200 undefined */ FrontendConfig;
 export type FrontendConfigApiArg = void;
@@ -247,6 +326,13 @@ export type DeleteSpaceApiResponse = /** status 200 Already completed */
 export type DeleteSpaceApiArg = {
   id: string;
 };
+export type ReceiptsApiResponse = /** status 200 undefined */ UploadReceipt[];
+export type ReceiptsApiArg = {
+  id: string;
+  before?: string;
+  beforeKey?: string;
+  limit?: number;
+};
 export type ListDocumentsApiResponse = /** status 200 Success */ Document[];
 export type ListDocumentsApiArg = {
   id: string;
@@ -254,6 +340,15 @@ export type ListDocumentsApiArg = {
   afterName?: string;
   afterId?: string;
   /** Defaults to 50; clamped to 1..200. Both cursor fields must be supplied together. */
+  limit?: number;
+};
+export type EntriesApiResponse = /** status 200 undefined */ Directory;
+export type EntriesApiArg = {
+  id: string;
+  parentId?: string;
+  search?: string;
+  order?: EntryOrder;
+  offset?: number;
   limit?: number;
 };
 export type ListFoldersApiResponse =
@@ -280,6 +375,10 @@ export type RevokeApiArg = {
   id: string;
   role: Role;
   user: string;
+};
+export type SummaryApiResponse = /** status 200 undefined */ StorageSummary;
+export type SummaryApiArg = {
+  id: string;
 };
 export type ListPlatformRolesApiResponse = /** status 200 Success */ Grant[];
 export type ListPlatformRolesApiArg = void;
@@ -310,6 +409,7 @@ export type OrganizationPage = {
   next_cursor?: string | null;
 };
 export type ErrorBody = {
+  code: string;
   detail: string;
 };
 export type CreateOrganization = {
@@ -388,7 +488,25 @@ export type Receipt = {
   target_kind: SpaceKind;
   target_parent_id?: string | null;
 };
+export type UploadStatus = "pending" | "stored" | "failed";
+export type UploadReceipt = {
+  acknowledged_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  document_id?: string | null;
+  error_code?: string | null;
+  folder_id: string;
+  mime: string;
+  name: string;
+  request_key: string;
+  sha256: string;
+  size: number;
+  space_id: string;
+  status: UploadStatus;
+  successor_key?: string | null;
+};
 export type Document = {
+  created_at: string;
   created_by: string;
   folder_id: string | null;
   id: string;
@@ -413,6 +531,35 @@ export type CreateFolder = {
 };
 export type Rename = {
   name: string;
+};
+export type FileUpload = {
+  file: Blob;
+};
+export type TypeUsage = {
+  bytes: number;
+  documents: number;
+  mime: string;
+};
+export type StorageSummary = {
+  bytes: number;
+  documents: number;
+  max_file_bytes: number;
+  quota_bytes: number;
+  reserved_bytes: number;
+  types: TypeUsage[];
+  uploads_enabled: boolean;
+  used_bytes: number;
+};
+export type PreflightResult = {
+  conflicts: string[];
+  storage: StorageSummary;
+};
+export type Candidate = {
+  name: string;
+  size: number;
+};
+export type Preflight = {
+  files: Candidate[];
 };
 export type PublicAuth = {
   client_id: string;
@@ -478,6 +625,24 @@ export type CreateSpace = {
   name: string;
   parent_id: string;
 };
+export type Entry =
+  | {
+      data: Folder;
+      kind: "folder";
+    }
+  | {
+      data: Document;
+      kind: "document";
+    };
+export type Directory = {
+  ancestors: Folder[];
+  can_write: boolean;
+  items: Entry[];
+  limit: number;
+  offset: number;
+  total: number;
+};
+export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
 export type FolderPage = {
   /** Root to current directory, excluding the synthetic corpus root. */
   ancestors: Folder[];
@@ -508,11 +673,18 @@ export const {
   useBootstrapPlatformAdminMutation,
   useDeletionStatusQuery,
   useLazyDeletionStatusQuery,
+  useReceiptQuery,
+  useLazyReceiptQuery,
+  useAcknowledgeMutation,
   useGetDocumentQuery,
   useLazyGetDocumentQuery,
+  useContentQuery,
+  useLazyContentQuery,
   useCreateFolderMutation,
   useDeleteFolderMutation,
   useRenameFolderMutation,
+  useUploadMutation,
+  usePreflightMutation,
   useFrontendConfigQuery,
   useLazyFrontendConfigQuery,
   useAcceptTermsMutation,
@@ -528,12 +700,18 @@ export const {
   useLazyMySpacesQuery,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
+  useReceiptsQuery,
+  useLazyReceiptsQuery,
   useListDocumentsQuery,
   useLazyListDocumentsQuery,
+  useEntriesQuery,
+  useLazyEntriesQuery,
   useListFoldersQuery,
   useLazyListFoldersQuery,
   useGrantMutation,
   useRevokeMutation,
+  useSummaryQuery,
+  useLazySummaryQuery,
   useListPlatformRolesQuery,
   useLazyListPlatformRolesQuery,
   useGrantPlatformRoleMutation,

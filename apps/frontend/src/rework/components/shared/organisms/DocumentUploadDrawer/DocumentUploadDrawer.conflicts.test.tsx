@@ -39,13 +39,18 @@ const probe = vi.hoisted(() => ({
   showInfo: vi.fn(),
   dispatched: [] as { type: string; payload?: unknown }[],
   quotaPrecheck: vi.fn(),
+  managerPreflight: vi.fn(),
+  managerRun: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("react-redux", () => ({
-  useDispatch: () => (action: { type: string; payload?: unknown }) => probe.dispatched.push(action),
+  useDispatch: () => (action: { type: string; payload?: unknown }) =>
+    action.type === "managerPreflight"
+      ? { unwrap: () => probe.managerPreflight(action.payload) }
+      : probe.dispatched.push(action),
 }));
 vi.mock("react-dropzone", () => ({
   useDropzone: () => ({ getRootProps: () => ({}), getInputProps: () => ({}), isDragActive: false }),
@@ -84,6 +89,13 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
 }));
+
+vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+  enhancedFredManagerApi: {
+    endpoints: { preflight: { initiate: (payload: unknown) => ({ type: "managerPreflight", payload }) } },
+  },
+}));
+vi.mock("../../../../features/imports/managerImportRun", () => ({ runManagerImport: probe.managerRun }));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 
@@ -348,4 +360,33 @@ describe("DocumentUploadDrawer name conflicts", () => {
     expect(sentNames()).toEqual(["a.pdf"]);
     expect(container.textContent).not.toContain("documentLibrary.conflictsTitle");
   });
+});
+
+it("manager sends clean originals once while conflicts stay visible with replacement disabled", async () => {
+  probe.managerRun.mockClear();
+  probe.managerPreflight.mockResolvedValue({
+    conflicts: ["existing.txt"],
+    storage: { uploads_enabled: true, max_file_bytes: 104857600, quota_bytes: 1000, used_bytes: 1, reserved_bytes: 0 },
+  });
+  act(() =>
+    root.render(
+      <DocumentUploadDrawer
+        isOpen
+        onClose={() => {}}
+        managerDestination={{ spaceId: "space", folderId: "folder" }}
+        initialFiles={[new File(["old"], "existing.txt"), new File(["new"], "new.txt")]}
+      />,
+    ),
+  );
+  await click(button("documentLibrary.importCount"));
+  expect(probe.managerRun).toHaveBeenCalledTimes(1);
+  expect(probe.managerRun.mock.calls[0][2].map((entry: { file: File }) => entry.file.name)).toEqual(["new.txt"]);
+  expect(button("documentLibrary.conflictReplaceAll").disabled).toBe(true);
+  expect(container.querySelector('[role="group"]')?.textContent).toContain("existing.txt");
+  await click(button("documentLibrary.conflictSkipAll"));
+  await click(button("documentLibrary.importCount"));
+  expect(probe.managerRun).toHaveBeenCalledTimes(1);
+  expect(probe.nameCheck).not.toHaveBeenCalled();
+  expect(probe.quotaPrecheck).not.toHaveBeenCalled();
+  expect(probe.sent).toEqual([]);
 });

@@ -152,6 +152,12 @@ spec:
           {{- end }}
 
           volumeMounts:
+          {{- if eq .app.applicationName "control-plane-backend" }}
+          {{- with .app.configuration.storage.content }}
+            - name: manager-document-spool
+              mountPath: {{ .temp_dir | default "/tmp/fred-manager-uploads" | quote }}
+          {{- end }}
+          {{- end }}
 {{ toYaml .app.volumeMounts| nindent 12 }}
           {{- if and .app.extraVolumeMounts (gt (len .app.extraVolumeMounts) 0) }}
 {{ toYaml .app.extraVolumeMounts| nindent 12 }}
@@ -179,6 +185,13 @@ spec:
       {{- end }}
 
       volumes:
+      {{- if eq .app.applicationName "control-plane-backend" }}
+      {{- with .app.configuration.storage.content }}
+        - name: manager-document-spool
+          emptyDir:
+            sizeLimit: {{ (get (.limits | default dict) "temp_bytes") | default 838860800 | int64 | printf "%d" | quote }}
+      {{- end }}
+      {{- end }}
 {{ toYaml .app.volumes | nindent 8 }}
       {{- if and .app.extraVolumes (gt (len .app.extraVolumes) 0) }}
 {{ toYaml .app.extraVolumes | nindent 8 }}

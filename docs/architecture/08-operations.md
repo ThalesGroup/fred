@@ -41,9 +41,23 @@ retains incomplete work for later sweeps. HTTP startup does not connect to Tempo
 [Manager operations](A3-manager-operations.md#space-deletion-lifecycle) defines
 configuration, activation, progress and recovery.
 
+Original-storage cleanup runs inside API processes, using SQL leases and bounded
+S3 inventory pages. It has no Temporal dependency. Optional `storage.content`
+configuration enables a dedicated bucket namespace and a bounded temporary volume
+on the API only. The default deployment leaves content storage unconfigured;
+folder browsing stays available. The [storage operations reference](A3-manager-operations.md#original-storage)
+defines provider validation, limits, secrets and restore ordering.
+
 ## Logs, audit, metrics and diagnostics
 
 ## Migration, backup and recovery
+
+Migration 0008 adds the original-storage registry and refuses existing metadata-only
+document rows before changing schema. It does not invent originals for them or
+migrate Knowledge Flow documents. SQL and the matching object namespace form one
+backup unit; restore suspends uploads and cleanup until both are consistent. The
+[migration note](../swift/ops/migrations/manager-document-storage.md) defines activation
+and rollback constraints.
 
 On a dedicated local k3d, the factory's `make k3d-app-reset DIR=<fred checkout>`
 previews a Fred data reset; `CONFIRM=reset` executes it. The product-owned

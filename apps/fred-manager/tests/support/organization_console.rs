@@ -43,6 +43,7 @@ async fn state(e: &Env, identity: &support::IdentityServer, fga: Fga) -> AppStat
         fga,
         auth: Arc::new(identity.auth().await),
         directory: Some(identity.directory()),
+        content: None,
         onboarding: Default::default(),
         lifecycle: Default::default(),
     }

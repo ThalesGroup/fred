@@ -75,7 +75,7 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
                 .await?,
         )?;
     }
-    let docs: bool = sqlx::query_scalar("select exists(select 1 from document where space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
+    let docs: bool = sqlx::query_scalar("select exists(select 1 from document where space_id in (select id from space where deletion_id = $1)) or exists(select 1 from document_upload where status = 'pending' and space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
     let refs = fga.references(space).await?;
     let manifest_count: i64 =
         sqlx::query_scalar("select count(*) from space where deletion_id = $1")

@@ -127,6 +127,7 @@ pub struct Document {
     pub size: i64,
     pub sha256: String,
     pub created_by: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Direct roles stored in OpenFGA.

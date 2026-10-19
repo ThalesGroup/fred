@@ -79,8 +79,11 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
             size: 1,
             sha256: format!("{i:064x}"),
             created_by: "editor".into(),
+            created_at: chrono::Utc::now(),
         };
-        db::insert_document(&e.pool, &d).await.unwrap();
+        crate::environment::insert_document(&e.pool, &d)
+            .await
+            .unwrap();
         expected.push(d);
     }
     expected.sort_by(|a, b| (&a.name, a.id).cmp(&(&b.name, b.id)));
@@ -105,6 +108,7 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
         pool: e.pool.clone(),
         fga: observed,
         directory: None,
+        content: None,
     });
     let reader = identity.token("reader");
     let base = format!("/spaces/{}", team.id);
@@ -239,7 +243,7 @@ async fn resource_reads_enforce_scope_and_preserve_cursor_and_role_semantics() {
         get(&app, &reader, &format!("/spaces/{}/documents", other.id))
             .await
             .0,
-        403
+        404
     );
 }
 
@@ -382,6 +386,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
         pool: e.pool.clone(),
         fga: observed,
         directory: None,
+        content: None,
     });
     let token = identity.token("writer");
     let (status, root) = create(&app, &token, team.id, None, "  Dossiers été  ").await;
@@ -760,7 +765,9 @@ async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
     assert_eq!(deep["ancestors"].as_array().unwrap().len(), 3);
     assert_eq!(deep["ancestors"][0]["name"], "renamed");
     let doc = document(team.id, Some(grandchild.id), "kept.txt");
-    db::insert_document(&e.pool, &doc).await.unwrap();
+    crate::environment::insert_document(&e.pool, &doc)
+        .await
+        .unwrap();
     assert_eq!(
         content_request(app.clone(), &token, "DELETE", &path, "").await,
         409

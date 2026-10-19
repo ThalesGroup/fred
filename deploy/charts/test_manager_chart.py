@@ -86,6 +86,20 @@ class ManagerChartTests(unittest.TestCase):
         self.assertEqual(temporal["namespace"], "custom")
         self.assertEqual(temporal["task_queue"], "fred-manager-lifecycle")
 
+    def test_document_storage_spool_is_bounded_and_credentials_stay_references(self):
+        docs = render(values=CHART / "examples/document-storage.yaml")
+        apps = deployments(docs)
+        pod = apps["control-plane-backend"]["spec"]["template"]["spec"]
+        spool = next(v for v in pod["volumes"] if v["name"] == "manager-document-spool")
+        self.assertEqual(spool["emptyDir"]["sizeLimit"], "838860800")
+        container = pod["containers"][0]
+        self.assertIn({"name": "manager-document-spool", "mountPath": "/tmp/fred-manager-uploads"}, container["volumeMounts"])
+        secret = next(e for e in container["env"] if e["name"] == "FRED_CONTENT_SECRET_KEY")
+        self.assertEqual(secret["valueFrom"]["secretKeyRef"]["name"], "manager-document-storage")
+        worker = apps["control-plane-worker"]["spec"]["template"]["spec"]
+        self.assertFalse(any(v["name"] == "manager-document-spool" for v in worker["volumes"]))
+        self.assert_manager_upstreams(apps, "fred")
+
     def test_unchanged_factory_values(self):
         values = CHART.resolve().parents[3] / "fred-deployment-factory/k3d-apps/fred/values.yaml"
         if not values.exists():

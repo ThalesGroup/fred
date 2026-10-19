@@ -126,6 +126,7 @@ pub struct RebacConfig {
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct StorageConfig {
     pub postgres: PostgresConfig,
+    pub content: Option<crate::documents::config::ContentConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
@@ -208,6 +209,9 @@ impl Configuration {
         let config: Self =
             serde_yaml_ng::from_str(&text).with_context(|| format!("invalid {path}"))?;
         config.scheduler.lifecycle.validate()?;
+        if let Some(content) = &config.storage.content {
+            content.validate()?;
+        }
         Ok((path, config))
     }
 
@@ -275,6 +279,35 @@ impl Configuration {
     }
 }
 
+/// Generate the chart's configuration contract without loading runtime dependencies.
+pub fn schema() -> serde_json::Value {
+    use utoipa::OpenApi;
+    #[derive(OpenApi)]
+    #[openapi(components(schemas(Configuration)))]
+    struct ConfigApi;
+    let mut schema = serde_json::json!({
+        "$schema": "https://json-schema.org/draft-07/schema#",
+        "$ref": "#/$defs/Configuration",
+        "$defs": ConfigApi::openapi().components.unwrap().schemas,
+    });
+    fn references(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if let Some(serde_json::Value::String(reference)) = map.get_mut("$ref") {
+                    *reference = reference.replace("#/components/schemas/", "#/$defs/");
+                }
+                for child in map.values_mut() {
+                    references(child);
+                }
+            }
+            serde_json::Value::Array(values) => values.iter_mut().for_each(references),
+            _ => {}
+        }
+    }
+    references(&mut schema);
+    schema
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,33 +340,4 @@ mod tests {
         assert_eq!(config.app.base_url, "/fred-manager/v1");
         assert!(config.security().unwrap().profile_c3);
     }
-}
-
-/// Generate the chart's configuration contract without loading runtime dependencies.
-pub fn schema() -> serde_json::Value {
-    use utoipa::OpenApi;
-    #[derive(OpenApi)]
-    #[openapi(components(schemas(Configuration)))]
-    struct ConfigApi;
-    let mut schema = serde_json::json!({
-        "$schema": "https://json-schema.org/draft-07/schema#",
-        "$ref": "#/$defs/Configuration",
-        "$defs": ConfigApi::openapi().components.unwrap().schemas,
-    });
-    fn references(value: &mut serde_json::Value) {
-        match value {
-            serde_json::Value::Object(map) => {
-                if let Some(serde_json::Value::String(reference)) = map.get_mut("$ref") {
-                    *reference = reference.replace("#/components/schemas/", "#/$defs/");
-                }
-                for child in map.values_mut() {
-                    references(child);
-                }
-            }
-            serde_json::Value::Array(values) => values.iter_mut().for_each(references),
-            _ => {}
-        }
-    }
-    references(&mut schema);
-    schema
 }

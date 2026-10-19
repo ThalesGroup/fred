@@ -149,7 +149,48 @@ async fn serve(config: Config) -> Result<()> {
     } else {
         fga(&config).await?.load(&pool).await?
     };
+    let content = if let Some(content) = config.storage.content.clone() {
+        let access =
+            std::env::var(&content.access_key_env_var).context("missing content access key")?;
+        let secret =
+            std::env::var(&content.secret_key_env_var).context("missing content secret key")?;
+        Some(
+            fred_manager::documents::Storage::start(
+                &pool,
+                &fga,
+                config
+                    .app
+                    .gcu_version
+                    .clone()
+                    .filter(|_| config.security.user.enabled),
+                content,
+                access,
+                secret,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    let cleanup = content.clone().map(|storage| {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+                storage.config.limits.cleanup_interval_seconds,
+            ));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                if storage.cleanup_tick().await.is_err() {
+                    tracing::warn!(
+                        outcome = "retry",
+                        "document cleanup interrupted; retrying on next interval"
+                    );
+                }
+            }
+        })
+    });
     let state = api::AppState {
+        content,
         directory: fred_manager::keycloak::Directory::configured(config.security.m2m.as_ref())?,
         auth: std::sync::Arc::new(auth::Authenticator::start(config.security()?).await?),
         pool,
@@ -170,7 +211,11 @@ async fn serve(config: Config) -> Result<()> {
         &config.app.base_url,
         &config.security.authorized_origins,
     );
-    axum::serve(listener, app).await?;
+    let result = axum::serve(listener, app).await;
+    if let Some(cleanup) = cleanup {
+        cleanup.abort();
+    }
+    result?;
     Ok(())
 }
 

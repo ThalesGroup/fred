@@ -66,7 +66,7 @@ def routes(path: str, base: str) -> str:
         r"#\[utoipa::path\((.*?)\)\]\s*async fn (\w+)", source, re.S
     ):
         method, route = re.search(
-            r'\b(get|post|put|patch|delete),\s*path = "([^\"]+)"', annotation
+            r'\b(get|post|put|patch|delete),\s*path\s*=\s*"([^\"]+)"', annotation
         ).groups()
         rows.append((route, method.upper(), handler))
     rows.sort()

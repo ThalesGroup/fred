@@ -12,6 +12,9 @@ mod environment;
 use environment::named_space;
 #[path = "support/browser_resources.rs"]
 mod browser_resources;
+#[allow(dead_code)]
+#[path = "support/content_bucket.rs"]
+mod content_bucket;
 #[path = "support/real_keycloak.rs"]
 mod real_keycloak;
 
@@ -42,23 +45,38 @@ async fn provisioning_browser_journey() {
     let directory = Directory::new(&realm, "fred-manager", "it-manager".into()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let manager_url = format!("http://{}", listener.local_addr().unwrap());
-    let app = axum::Router::new()
-        .nest(
-            "/fred-manager/v1",
-            api::governance_router(api::AppState {
-                onboarding: (&config).into(),
-                lifecycle: Default::default(),
-                auth,
-                pool: e.pool.clone(),
-                fga: e.fga.clone(),
-                directory: Some(directory.clone()),
-            }),
-        )
-        .merge(browser_resources::router(
-            e.pool.clone(),
-            e.fga.clone(),
-            directory.clone(),
-        ));
+    let bucket = content_bucket::Bucket::start().await;
+    let spool = tempfile::tempdir().unwrap();
+    let mut storage_config = bucket.config.clone();
+    storage_config.temp_dir = spool.path().to_str().unwrap().into();
+    let content = fred_manager::documents::Storage::start(
+        &e.pool,
+        &e.fga,
+        config.app.gcu_version.clone(),
+        storage_config,
+        "fixture-access".into(),
+        "fixture-secret".into(),
+    )
+    .await
+    .unwrap();
+    let app = api::router(
+        api::AppState {
+            onboarding: (&config).into(),
+            lifecycle: Default::default(),
+            auth,
+            pool: e.pool.clone(),
+            fga: e.fga.clone(),
+            directory: Some(directory.clone()),
+            content: Some(content),
+        },
+        "/fred-manager/v1",
+        &[],
+    )
+    .merge(browser_resources::router(
+        e.pool.clone(),
+        e.fga.clone(),
+        directory.clone(),
+    ));
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
@@ -86,7 +104,7 @@ async fn provisioning_browser_journey() {
             .success()
     );
     let output = tokio::time::timeout(
-        Duration::from_secs(300),
+        Duration::from_secs(480),
         tokio::process::Command::new("node")
             .arg("tests/provisioning-browser.mjs")
             .current_dir("../frontend")
@@ -98,9 +116,34 @@ async fn provisioning_browser_journey() {
             .output(),
     )
     .await
-    .expect("browser test exceeded five minutes")
+    .expect("browser test exceeded eight minutes")
     .unwrap();
     server.abort();
+    if !output.status.success() {
+        let uploads: Vec<(String, i64, Option<String>)> =
+            sqlx::query_as("select status, size, error_code from document_upload")
+                .fetch_all(&e.pool)
+                .await
+                .unwrap();
+        eprintln!("Browser fixture upload states: {uploads:?}");
+        let keys: Vec<String> = sqlx::query_scalar("select object_key from document_upload")
+            .fetch_all(&e.pool)
+            .await
+            .unwrap();
+        for key in keys {
+            let object = bucket
+                .client
+                .head_object()
+                .bucket("originals")
+                .key(key)
+                .send()
+                .await;
+            eprintln!(
+                "Browser fixture stored object length: {:?}",
+                object.ok().and_then(|o| o.content_length())
+            );
+        }
+    }
     // Script output contains assertions only; no tokens or browser storage are emitted.
     assert!(
         output.status.success(),
@@ -109,6 +152,16 @@ async fn provisioning_browser_journey() {
         String::from_utf8_lossy(&output.stderr)
     );
     println!("{}", String::from_utf8_lossy(&output.stdout));
+    if std::env::var("FRED_MANAGER_BROWSER_DOCUMENTS_ONLY").as_deref() == Ok("1") {
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("select count(*) from document")
+                .fetch_one(&e.pool)
+                .await
+                .unwrap(),
+            2
+        );
+        return;
+    }
     let org = named_space(&e.pool, &e.fga, None, "Demo")
         .await
         .unwrap()

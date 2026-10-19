@@ -58,7 +58,7 @@ export function ImportStepper({ task }: { task: TaskViewModel }) {
 
   return (
     <ol className={styles.stepper} aria-label={t("rework.imports.stepper.label")}>
-      {IMPORT_PHASES.map((phase, i) => (
+      {(task.kind === "document_upload" ? IMPORT_PHASES.slice(0, 1) : IMPORT_PHASES).map((phase, i) => (
         <Fragment key={phase}>
           {i > 0 && <li className={styles.link} data-state={links[i - 1]} aria-hidden />}
           <li
@@ -73,7 +73,11 @@ export function ImportStepper({ task }: { task: TaskViewModel }) {
               content={
                 <span className={styles.tip}>
                   <span className={styles.tipName}>{importPhaseName(phase, t)}</span>
-                  <span className={styles.tipHint}>{importPhaseHint(phase, t)}</span>
+                  <span className={styles.tipHint}>
+                    {task.kind === "document_upload"
+                      ? t("rework.documentStorage.storedHint")
+                      : importPhaseHint(phase, t)}
+                  </span>
                 </span>
               }
             >

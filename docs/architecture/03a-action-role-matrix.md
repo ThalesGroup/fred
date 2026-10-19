@@ -56,17 +56,24 @@ have no separate ACL, sharing grant or role inheritance tree.
 | Action and HTTP entry | member | editor | admin | analyst | Extra condition / effect |
 | --- | --- | --- | --- | --- | --- |
 | List immediate folders - `GET /spaces/{id}/folders` | Yes, local | Yes | No | Yes | Optional parent must belong to this space |
+| Browse mixed directory - `GET /spaces/{id}/entries` | Yes, local | Yes | No | Yes | Same-space parent; bounded page, total, ancestors and current write decision |
+| Read storage summary - `GET /spaces/{id}/storage` | Yes, local | Yes | No | Yes | Space statistics and shared quota usage; no other space's filenames |
+| Preflight original names/quota - `POST /folders/{id}/documents/preflight` | No | Yes | No | No | Advisory result, no reservation |
+| Create original - `POST /folders/{id}/documents` | No | Yes | No | No | One file, request key, quota and unique name; current admission/write rechecked before publication |
+| Read/acknowledge upload receipts - `GET /spaces/{id}/document-uploads`, `GET /document-uploads/{id}`, `PUT /document-uploads/{id}/acknowledgment` | Yes, local | Yes | No | Yes | Initiating actor only; acknowledgment requires terminal state |
+| Download original - `GET /documents/{id}/content` | Yes, local | Yes | No | Yes | Current owning-space authority; private attachment |
 | List document metadata - `GET /spaces/{id}/documents` | Yes, local | Yes | No | Yes | Optional folder belongs to this space; cursor selects a page |
 | Read one document's metadata - `GET /documents/{id}` | Yes, local | Yes | No | Yes | Checks the document's owning space |
 | Create a folder - `POST /folders` | No | Yes | No | No | Same-space parent, valid name, depth <= 15, unique sibling name |
 | Rename a folder - `PATCH /folders/{id}` | No | Yes | No | No | Name changes; space, parent and path stay immutable |
-| Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | Atomic subtree removal; any referenced document refuses the whole subtree |
+| Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | Atomic subtree removal; any published document or pending upload refuses the whole subtree |
 | Resolve search scope - `POST /authorize/scope` | Yes, local | Yes | No | Yes | Read on requested space; returns it and ancestors, never descendants; personal returns itself; optional levels only narrow |
 
 The original Resources UI binds listing, navigation, creation, rename and subtree
 deletion to manager. Its directory response supplies the current write decision;
 each mutation rechecks it. Names are display metadata; paths use immutable UUIDs.
-Document controls preserve their presentation with sending unavailable in this view.
+Original upload and individual download use manager; processing controls preserve
+their presentation with processing unavailable in this view.
 
 ## Space governance and personal-space actions
 
@@ -125,7 +132,7 @@ Space roles grant none of these operations.
 | Revoke platform role - `DELETE /users/{user}/platform-roles/{role}` | Yes | No | No | No | Includes root's owner grant; preserve at least one owner; real authentication required |
 | Grant/revoke organization owner - space role routes | Yes | No | No | No | Conditions above |
 | Import identities, organizations, teams, projects and roles - `POST /import-export/import` | Yes | No | No | No | Real authentication, CGU, compatible directory, valid bundle and parent dependencies |
-| Request project/team/organization deletion - `DELETE /spaces/{id}` | Yes | No | No | No | Real authentication and CGU; enabled lifecycle; no document rows; complete subtree; no standalone personal deletion |
+| Request project/team/organization deletion - `DELETE /spaces/{id}` | Yes | No | No | No | Real authentication and CGU; enabled lifecycle; no documents or pending uploads; complete subtree; no standalone personal deletion |
 | Read deletion receipt - `GET /deletions/{operation_id}` | Yes | No | No | No | Real authentication and CGU; remains available after cleanup and when lifecycle is disabled |
 | List global team registry - `GET /admin/teams` | Yes | No | Yes | No | Non-personal team metadata only; no content access |
 | Read or write space content directly | No | No | No | No | Requires an independently held space content role |
@@ -196,8 +203,8 @@ OpenFGA model; that implication is not a stored grant of every role.
 | `generate-openapi` | Offline schema generation, no service credentials needed. |
 | `--help` / `-h` | Local command help. |
 
-Document metadata has read/probe operations only. Folder operations make no Temporal
-call. The separate lifecycle worker owns the Temporal connection.
+Document storage and folder operations make no Temporal call. The separate space
+lifecycle worker owns the Temporal connection.
 
 ## Differences from the Python contract
 
@@ -221,12 +228,14 @@ platform-owner capability; local space roles confer no deletion authority.
 | Nested folder creation | Parent update authority can suffice without team-editor role | Write on the owning space is always required |
 | Personal folder creation | Personal tag branch has no personal-space entitlement check | Personal space is first created under explicit eligibility; its editor grant authorizes folders |
 | Synchronized folders | Child creation is refused in synchronized trees | Folder model carries no synchronization state |
+| Original import | Upload-only and upload/process flows, with replacement options and processing task contracts | Creation-only immutable original, actor-owned upload receipt and space quota; no ingestion dispatch |
 
 ## Evidence and maintenance
 
 The matrices are checked against [the model](../../apps/fred-manager/openfga/model.fga),
 [typed permissions](../../apps/fred-manager/src/roles.rs),
 [HTTP handlers](../../apps/fred-manager/src/api.rs),
+[original storage](../../apps/fred-manager/src/documents/http.rs),
 [space governance](../../apps/fred-manager/src/spaces.rs),
 [platform governance](../../apps/fred-manager/src/platform.rs), and
 [operator commands](../../apps/fred-manager/src/main.rs).

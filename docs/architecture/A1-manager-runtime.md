@@ -16,6 +16,7 @@ flowchart LR
     keycloak["Keycloak<br/>realm app"]
     openfga["OpenFGA<br/>store fred-manager"]
     postgres[("Postgres<br/>database fred")]
+    objects[("S3<br/>original document namespace")]
     temporal["Temporal<br/>manager lifecycle queue"]
     worker["fred-manager worker"]
 
@@ -26,6 +27,7 @@ flowchart LR
     manager -- "signing keys,<br/>service-account directory lookup/create" --> keycloak
     manager -- "context reads, checks,<br/>role writes" --> openfga
     manager -- "consent, spaces, folders, documents" --> postgres
+    manager -- "immutable originals, bounded inventory" --> objects
     worker --> temporal
     worker --> postgres & openfga
 ```
@@ -35,6 +37,7 @@ flowchart LR
 | Keycloak | Access tokens, signing keys (JWKS), user lookup/creation with its own service account | [security](03-security.md), Authentication |
 | OpenFGA | `check`, `write`, `read` on its own store | [model and contracts](A2-manager-contracts.md), OpenFGA model |
 | Postgres | Its tables in the `fred` database | [model and contracts](A2-manager-contracts.md), Schema |
+| S3 | Conditional Put, verified Get, Delete and paginated List | [original storage](#original-storage) |
 | Temporal | Manager-owned space-deletion scheduling/activities | [lifecycle](#space-deletion-lifecycle) |
 | Clients | Public configuration and health; authenticated onboarding and business routes | [HTTP surface](A2-manager-contracts.md#fred-manager-http-surface) and [authentication](03-security.md#authentication) |
 | Services acting for a user | `/authorize/document`, `/authorize/scope` | [runtime reference](A1-manager-runtime.md), Search scope |
@@ -63,6 +66,7 @@ flowchart TB
     bootstrap["bootstrap.rs<br/>root platform owner"]
     domain["domain.rs<br/>types, placement rules"]
     db["db.rs<br/>SQL"]
+    documents["documents<br/>originals, receipts, cleanup"]
     fga["fga.rs<br/>OpenFGA client"]
 
     main --> config & logging & api & provisioning & blueprint
@@ -70,6 +74,8 @@ flowchart TB
     provisioning --> blueprint
     provisioning --> auth & platform & directory & db & fga & spaces
     api --> auth & error & spaces & bootstrap & db & fga & logging
+    api --> documents
+    documents --> spaces & db & fga
     spaces --> domain & db & fga
     api --> platform & roles & directory & onboarding
     onboarding --> auth & db
@@ -89,9 +95,10 @@ flowchart TB
 | `bootstrap` | the one-time root grant | two steps under the bootstrap lock (I9) |
 | `domain` | `Space`, `Folder`, `Document`, roles, parent rules | pure functions, unit-tested (I1, I7) |
 | `db` | content and space SQL | placement columns written by inserts only (I2) |
+| `documents` | bounded transfers, upload journal, quotas, reads and autonomous object cleanup | verified publication and preserved originals (I25) |
 | `fga` | pinned store/model, check, role and link reads, guarded write; empty-store publication | roles and the space tree stay in OpenFGA; SQL publishes only the store/model binding |
 | `logging` | output format, request span, completion event | [logging](A3-manager-operations.md#logging) (I11, I13) |
-| `error` | status codes, `{"detail": ...}` bodies | [errors](A3-manager-operations.md#errors) |
+| `error` | status codes, `{"code": ..., "detail": ...}` bodies | [errors](A3-manager-operations.md#errors) |
 
 `roles` defines typed platform roles and scoped capabilities. `platform` serializes
 role mutations with bootstrap. `keycloak` owns one shared HTTP client and a synchronized
@@ -105,7 +112,7 @@ The same `utoipa-axum` registrations build the runtime routers and OpenAPI paths
 it emits the canonical `/fred-manager/v1` contract without constructing service state.
 The frontend generates `fredManagerOpenApi.ts` through its standard RTK codegen
 tool and registers the slice in the shared Redux store. A handwritten enhancement
-encodes the import's generated binary argument as FormData; paths, methods and
+encodes provisioning and original-upload binary arguments as FormData; paths, methods and
 response types remain generated.
 The bootstrap, personal-space and import
 endpoints disable automatic retry on 401 because expiry can follow committed
@@ -178,6 +185,10 @@ The existing Resources components consume bounded manager directory pages and
 current write decisions through the generated client. Their presentation remains
 shared with the separate knowledge-base consumer, whose service contract is
 unchanged. Manager folder identities never cross into knowledge-flow tag requests.
+The actor-scoped import controller retains active files across navigation and
+resolves durable receipts before retry. Account changes clear held files and
+partition generated-client caches; same-account token refresh preserves identity.
+The individual download helper handles the binary response with one bounded Blob.
 The [content chapter](05-documents.md) defines this boundary and lifecycle.
 
 ## Content access
@@ -346,15 +357,53 @@ stateDiagram-v2
 
 ## Document metadata and folder mutations
 
-The API reads document metadata and answers authorization probes. Document creation,
-rename, deletion and ingestion operations are not registered; unsupported paths
-return 404 and unsupported methods on `/documents/{id}` return 405. Existing rows
-remain readable under their owning space's current authority.
+The API reads published metadata, answers authorization probes and creates originals
+through the folder upload route below. Metadata and binary reads check the owning
+space's current authority. Document IDs are not Knowledge Flow identifiers.
 
 Folder rename/delete locate the immutable owning space, acquire its organization
 lock and authorize, then reread the folder through the held transaction (I22).
 A deletion that commits while a caller waits causes 404 without a fabricated success.
 The lock remains held through SQL commit; the extra read adds no OpenFGA call.
+
+## Original storage
+
+`documents::Storage` shares one configured S3 client and bounded transfer permits.
+The SQL `document_upload` journal records attempts; `document` contains published
+originals only. `document_storage` records one namespace binding, inventory cursor
+and maintenance lease, independently of individual request retention.
+
+```mermaid
+sequenceDiagram
+    participant UI as Existing Resources UI
+    participant M as Manager
+    participant PG as Postgres
+    participant FGA as OpenFGA
+    participant S3 as Private object storage
+    UI->>M: POST folder/documents, request key, one file
+    M->>FGA: Current organization and Write
+    Note over M: Bounded private spool, measured size and SHA-256
+    M->>PG: Lock organization, validate admission and live target
+    M->>FGA: Capture guard, recheck Write, consume guard
+    M->>PG: Reserve name and quota, commit
+    M->>S3: Conditional Put, then read back and verify
+    Note over M,S3: No organization lock during body or S3 IO
+    M->>PG: Lock organization, recheck token, CGU and reservation
+    M->>FGA: Capture guard, recheck Write, consume guard
+    M->>PG: Publish document and stored receipt, commit
+    M-->>UI: 201 receipt or 200 stored replay
+    UI->>M: Reload directory, download original
+    M->>FGA: Current organization and Read
+    M->>S3: Get and verify original while streaming
+    M-->>UI: Private attachment
+```
+
+Publication failure leaves cleanup work in SQL. API reconciliation claims a bounded
+batch, expires abandoned reservations under their organization locks and deletes
+failed objects outside locks. A persisted prefix scan rechecks SQL before deleting
+unreferenced objects, including late writes after a previous cleanup. Competing
+replicas share the lease; a contended organization is deferred without starving
+other candidates. The loop neither publishes documents nor calls processing services.
 
 ## Platform administration and self checks
 
@@ -515,7 +564,7 @@ Creation, rename and deletion use the same organization write boundary. Placemen
 lookup precedes the transaction; organization lock, guard capture, current context,
 write Check and guard fence precede the local mutation. Existing folders are reread
 under that lock. Recursive deletion is one atomic operation and fails if a document
-references any included folder. No per-folder authorization or Temporal dispatch
+or pending upload references any included folder. No per-folder authorization or Temporal dispatch
 occurs. The original dialogs prevent duplicate submission and discard completion
 after navigation; pending deletions of the same UUID share one request.
 

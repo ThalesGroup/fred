@@ -79,6 +79,21 @@ afterEach(async () => {
 });
 
 describe("OIDC renewal with real user storage", () => {
+  it("keeps queue identity through access-token expiry and renewal, then clears it on logout", async () => {
+    const session = await restoredSession();
+    const identity = session.sessionIdentity("sub");
+    expect(identity).toBe(JSON.stringify(["https://identity.example", "person"]));
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 301_000);
+    expect(session.token).toBeNull();
+    expect(session.tokenParsed).toBeNull();
+    expect(session.sessionIdentity("sub")).toBe(identity);
+    vi.spyOn(session.manager, "signinSilent").mockResolvedValue(person());
+    expect(await session.ensureFreshToken(0)).toBe(true);
+    expect(session.sessionIdentity("sub")).toBe(identity);
+    vi.spyOn(session.manager, "signoutRedirect").mockResolvedValue();
+    await session.logout();
+    expect(session.sessionIdentity("sub")).toBeNull();
+  });
   it.each([
     "invalid_grant",
     "login_required",

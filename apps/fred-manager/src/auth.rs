@@ -106,6 +106,8 @@ pub struct CurrentUser {
     pub token_audiences: Vec<String>,
     pub token_type: Option<String>,
     pub service_account: bool,
+    /// Validated JWT deadline, including configured skew; never persisted with uploads.
+    pub valid_until: Option<f64>,
 }
 
 // Directly identifying data never reaches a log line.
@@ -156,7 +158,7 @@ impl IntoResponse for AuthError {
         (
             StatusCode::UNAUTHORIZED,
             [(header::WWW_AUTHENTICATE, challenge)],
-            Json(json!({ "detail": detail })),
+            Json(json!({ "detail": detail, "code": "unauthorized" })),
         )
             .into_response()
     }
@@ -431,6 +433,10 @@ impl Verifier {
             first_name: string(&payload, &s.claims.given_name),
             last_name: string(&payload, &s.claims.family_name),
             service_account: bears_service_account_markers(&payload, client_id.as_deref()),
+            valid_until: payload
+                .get("exp")
+                .and_then(Value::as_f64)
+                .map(|exp| exp + s.clock_skew_seconds as f64),
             client_id,
             token_issuer: string(&payload, "iss"),
             token_audiences: match payload.get("aud") {
@@ -486,6 +492,7 @@ fn mock_admin() -> CurrentUser {
         token_audiences: Vec::new(),
         token_type: None,
         service_account: false,
+        valid_until: None,
     }
 }
 

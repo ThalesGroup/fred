@@ -101,11 +101,17 @@ import {
 } from "./documentOrdering.ts";
 
 import {
-  useListFoldersQuery,
+  useEntriesQuery,
+  useLazyListFoldersQuery,
   useCreateFolderMutation,
   useRenameFolderMutation,
   useDeleteFolderMutation,
 } from "../../../../../slices/fredManager/fredManagerApiEnhancements";
+import {
+  presentManagerDocument,
+  downloadManagerDocument,
+  type ResourceDocument,
+} from "../../../../features/imports/managerDocuments";
 import type { Folder } from "../../../../../slices/fredManager/fredManagerOpenApi";
 
 // Presentation nodes retain the original renderer. Manager metadata is never a KF tag:
@@ -169,7 +175,7 @@ interface DocumentWorkspaceProps {
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
 const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
 
-type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
+type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: ResourceDocument };
 
 type DocMenuAction = "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
 
@@ -242,12 +248,12 @@ function DocumentWorkspace({
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
   const [ordering, setOrdering] = useState<DocumentOrdering>(DEFAULT_ORDERING);
   const [folderOffset, setFolderOffset] = useState(0);
-  const managerQuery = useListFoldersQuery(
+  const managerQuery = useEntriesQuery(
     {
       id: managerSpaceId ?? "",
       parentId: currentFolderFull ?? undefined,
       search,
-      order: `${ordering.by === "created" ? "created" : "name"}_${ordering.order}`,
+      order: `${ordering.by}_${ordering.order}`,
       offset: folderOffset,
       limit: rowsPerPage,
     },
@@ -257,6 +263,7 @@ function DocumentWorkspace({
   if (managerQuery.isError) failedManagerRead.current = true;
   if (managerQuery.isSuccess && !managerQuery.isFetching) failedManagerRead.current = false;
   const directory = failedManagerRead.current ? undefined : managerQuery.currentData;
+  const [findManagerFolders] = useLazyListFoldersQuery();
   const [createManagerFolder] = useCreateFolderMutation();
   const [renameManagerFolder] = useRenameFolderMutation();
   const [deleteManagerFolder] = useDeleteFolderMutation();
@@ -441,7 +448,8 @@ function DocumentWorkspace({
     }
     return uids;
   }, [allTasks]);
-  const getDocStatus = (doc: DocumentMetadata): DocStatus => {
+  const getDocStatus = (doc: ResourceDocument): DocStatus | "stored" => {
+    if (doc.managerDocument) return "stored";
     const status = deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
     if (status === "processing" || activeDocTaskByUid.has(doc.identity.document_uid)) return status;
     return docOutcomes.failed.has(doc.identity.document_uid) ? "failed" : status;
@@ -515,7 +523,11 @@ function DocumentWorkspace({
     const current = directory?.ancestors[directory.ancestors.length - 1];
     return {
       ...(current ? folderNode(current) : { name: "", full: "", tagsHere: [], children: new Map() }),
-      children: new Map((directory?.items ?? []).map((folder) => [folder.id, folderNode(folder)])),
+      children: new Map(
+        (directory?.items ?? []).flatMap((entry) =>
+          entry.kind === "folder" ? [[entry.data.id, folderNode(entry.data)] as const] : [],
+        ),
+      ),
     };
   }, [directory]);
   const currentNode: TagNode = managerSpaceId ? managerNode : currentFull ? findNode(tree, currentFull) : tree;
@@ -1124,9 +1136,14 @@ function DocumentWorkspace({
   const rows: Row[] = useMemo(
     () => [
       ...childFolders.map((node): Row => ({ kind: "folder", node })),
-      ...(page?.docs ?? []).map((doc): Row => ({ kind: "document", doc })),
+      ...(managerSpaceId
+        ? (directory?.items ?? []).flatMap((entry) =>
+            entry.kind === "document" ? [presentManagerDocument(entry.data)] : [],
+          )
+        : (page?.docs ?? [])
+      ).map((doc): Row => ({ kind: "document", doc })),
     ],
-    [childFolders, page?.docs],
+    [childFolders, page?.docs, managerSpaceId, directory],
   );
 
   const filteredRows = useMemo(() => {
@@ -1147,7 +1164,7 @@ function DocumentWorkspace({
   );
   const { data: uploaders = [], isFetching: isFetchingUploaders } = useUsersByIdsQuery(
     { ids: uploaderUids },
-    { skip: uploaderUids.length === 0 },
+    { skip: !!managerSpaceId || uploaderUids.length === 0 },
   );
   const uploaderById = useMemo(() => new Map(uploaders.map((summary) => [summary.id, summary])), [uploaders]);
 
@@ -1245,6 +1262,10 @@ function DocumentWorkspace({
   const bulkDelete = () => {
     if (!hasSelection) return;
     if (managerSpaceId) {
+      if (selectedDocs.length) {
+        documentsUnavailable();
+        return;
+      }
       showConfirmationDialog({
         title: t("rework.resources.confirm.deleteTitle"),
         message: t("rework.resources.confirm.deleteManagerFolders", { count: selectedFolders.length }),
@@ -1372,6 +1393,10 @@ function DocumentWorkspace({
   };
 
   const bulkToggleSearchable = async () => {
+    if (managerSpaceId) {
+      documentsUnavailable();
+      return;
+    }
     // searchToggleMode being defined guarantees the toggle-relevant subset of
     // the selection is uniform (all searchable or all excluded), so toggling
     // every one of those docs unconditionally moves them all the same
@@ -1477,6 +1502,48 @@ function DocumentWorkspace({
     }
   };
 
+  const managerFolderPaths = useRef(new Map<string, Promise<string>>());
+  const ensureManagerFolderPath = async (segments: string[]): Promise<string | null> => {
+    if (!managerSpaceId) return null;
+    let parent = uploadTargetNode.managerFolder?.id ?? null;
+    for (const name of segments) {
+      const key = JSON.stringify([managerSpaceId, parent, name]);
+      let pending = managerFolderPaths.current.get(key);
+      if (!pending) {
+        const parentId = parent;
+        pending = (async () => {
+          try {
+            return (
+              await createManagerFolder({
+                createFolder: { space_id: managerSpaceId, parent_id: parentId, name },
+              }).unwrap()
+            ).id;
+          } catch (error) {
+            if ((error as { status?: number }).status !== 409) throw error;
+            let offset = 0;
+            for (;;) {
+              const page = await findManagerFolders({
+                id: managerSpaceId,
+                parentId: parentId ?? undefined,
+                search: name,
+                limit: 200,
+                offset,
+              }).unwrap();
+              const match = page.items.find((f) => f.name === name);
+              if (match) return match.id;
+              offset += page.items.length;
+              if (!page.items.length || offset >= page.total) throw error;
+            }
+          }
+        })();
+        managerFolderPaths.current.set(key, pending);
+        void pending.catch(() => managerFolderPaths.current.delete(key));
+      }
+      parent = await pending;
+    }
+    return parent;
+  };
+
   const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
     if (!canCreateFolder || (!node.managerFolder && !node.tagsHere[0])) return [];
     return [
@@ -1496,7 +1563,7 @@ function DocumentWorkspace({
     ];
   };
 
-  const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<DocMenuAction>[] => {
+  const moreOptionsForDoc = (doc: ResourceDocument): OptionModel<DocMenuAction>[] => {
     const activeTask = activeDocTaskByUid.get(doc.identity.document_uid);
     const options: OptionModel<DocMenuAction>[] = [];
     // No "error detail" entry here: the per-stage messages ride the "failed"
@@ -1572,7 +1639,13 @@ function DocumentWorkspace({
         },
       );
     }
-    return options;
+    return doc.managerDocument
+      ? options.map((option) => ({
+          ...option,
+          disabled: option.value !== "download",
+          tooltip: option.value !== "download" ? t("rework.resources.documentsUnavailable") : undefined,
+        }))
+      : options;
   };
 
   // Two of the tracks after "Auteur" hold nothing most of the time: a settled
@@ -1773,13 +1846,20 @@ function DocumentWorkspace({
                 </Tooltip>
               )}
             {row.kind === "document" && (
-              <Tooltip text={t("rework.resources.action.preview")}>
+              <Tooltip
+                text={
+                  row.doc.managerDocument
+                    ? t("rework.resources.documentsUnavailable")
+                    : t("rework.resources.action.preview")
+                }
+              >
                 <IconButton
                   color="on-surface-retreat"
                   variant="icon"
                   size="small"
                   icon={{ category: "outlined", type: "visibility" }}
                   aria-label={t("rework.resources.action.preview")}
+                  disabled={!!row.doc.managerDocument}
                   onClick={() => commands.preview(row.doc)}
                 />
               </Tooltip>
@@ -1799,7 +1879,13 @@ function DocumentWorkspace({
                   if (value === "delete") void confirmDeleteFolder(row.node);
                 } else {
                   if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
-                  if (value === "download") void commands.download(row.doc);
+                  if (value === "download") {
+                    if (row.doc.managerDocument)
+                      void downloadManagerDocument(row.doc.managerDocument).catch(() =>
+                        showError({ summary: t("rework.resources.toast.downloadError") }),
+                      );
+                    else void commands.download(row.doc);
+                  }
                   if (value === "labels") setLabelsTarget(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
                   if (value === "relaunch" && currentTag) void relaunchIngestion([row.doc], currentTag.id);
@@ -1856,10 +1942,11 @@ function DocumentWorkspace({
   const failedInitialLoad = managerSpaceId
     ? failedManagerRead.current
     : Boolean(currentTag && page && !page.loading && !page.loaded);
-  const isEmpty =
-    !tagsLoading &&
-    childFolders.length === 0 &&
-    (failedInitialLoad || (currentTag ? page?.loaded && page.docs.length === 0 : true));
+  const isEmpty = managerSpaceId
+    ? !managerQuery.isFetching && filteredRows.length === 0
+    : !tagsLoading &&
+      childFolders.length === 0 &&
+      (failedInitialLoad || (currentTag ? page?.loaded && page.docs.length === 0 : true));
   // "Create a library" belongs to the corpus root alone.
   const emptyMessage = failedInitialLoad
     ? t("rework.resources.empty.loadError")
@@ -2006,6 +2093,15 @@ function DocumentWorkspace({
           hasSelection ? (
             <BulkActionsBar
               selectedCount={selectedDocs.length + selectedFolders.length}
+              disabledReason={
+                managerSpaceId
+                  ? {
+                      delete: selectedDocs.length ? t("rework.resources.documentsUnavailable") : undefined,
+                      download: t("rework.resources.documentsUnavailable"),
+                      processing: t("rework.documentStorage.noProcessing"),
+                    }
+                  : undefined
+              }
               // Selection survives read-only because bulk download is a read:
               // only the actions that write drop out, so the same rows can
               // still be picked and fetched as a ZIP.
@@ -2149,6 +2245,7 @@ function DocumentWorkspace({
           setDroppedFiles(undefined);
           setDropTargetNode(null);
           pendingFolderTagIds.current.clear();
+          managerFolderPaths.current.clear();
         }}
         initialFiles={droppedFiles}
         teamId={teamId}
@@ -2156,9 +2253,11 @@ function DocumentWorkspace({
         destinationPath={
           managerSpaceId ? (dropTargetNode?.name ?? displayPath) || undefined : uploadTargetNode.full || undefined
         }
-        unavailableReason={managerSpaceId ? t("rework.resources.documentsUnavailable") : undefined}
+        managerDestination={
+          managerSpaceId ? { spaceId: managerSpaceId, folderId: uploadTargetNode.managerFolder?.id } : undefined
+        }
         metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
-        ensureFolderPath={!managerSpaceId && canCreateFolder ? ensureFolderPath : undefined}
+        ensureFolderPath={canCreateFolder ? (managerSpaceId ? ensureManagerFolderPath : ensureFolderPath) : undefined}
         requireFolderPerFile={managerSpaceId ? !uploadTargetNode.managerFolder : !uploadTargetTag}
         // Reached long after the drawer closed — the transfer is detached, and
         // by then this workspace may be gone. Refetching a query whose
@@ -2166,6 +2265,11 @@ function DocumentWorkspace({
         // the next mount fetches anyway.
         onUploadComplete={() => {
           if (!mounted.current) return;
+          if (managerSpaceId) {
+            void managerQuery.refetch();
+            onDocumentsChanged?.();
+            return;
+          }
           if (uploadTargetTag) void loadTagPage(uploadTargetTag.id, perTag[uploadTargetTag.id]?.offset ?? 0);
           void refetchTags();
         }}

@@ -70,11 +70,19 @@ pub async fn acceptance(pool: &PgPool, uid: &str) -> AppResult<Option<Acceptance
     )
 }
 
-pub async fn require_accepted(pool: &PgPool, version: Option<&str>, uid: &str) -> AppResult<()> {
+pub async fn require_accepted<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    version: Option<&str>,
+    uid: &str,
+) -> AppResult<()> {
     if let Some(version) = version
-        && !acceptance(pool, uid)
-            .await?
-            .is_some_and(|row| row.version == version)
+        && !sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from terms_acceptance where user_id = $1 and version = $2)",
+        )
+        .bind(uid)
+        .bind(version)
+        .fetch_one(ex)
+        .await?
     {
         return Err(AppError::Denied("user_not_accept_gcu".into()));
     }

@@ -123,14 +123,22 @@ enables folder creation and document-panel access in the selected directory.
 She creates a library, opens it and creates a subfolder. Refreshing preserves them.
 Renaming the library changes its label while the subfolder keeps its identity and
 location. Searching and sorting cover the current directory, with accurate folder
-counts and bounded pages. She confirms subtree deletion; a document anywhere below
+counts and bounded pages. She confirms subtree deletion; a document or pending upload anywhere below
 it refuses the entire operation. A selection of several roots reports any partial
 failure. Creation, rename and deletion recheck authority on the server.
 
-The document panel opens with sending unavailable. It does not ingest content or
-create knowledge-flow tags. Statistics and quota keep their existing service
-behavior; their failure does not block folder management. See
-[content ownership](05-documents.md) for the boundaries and guarantees.
+She opens the existing document drawer in a library, selects originals and imports
+them. Nonconflicting files start independently; a conflicting name requires skipping
+and never overwrites a document. Transfers continue while she navigates away; the
+import panel restores their state when she returns to Resources. It resolves a lost
+response from manager's durable receipt before
+offering a retry. After reload she finds the stored rows, their sizes and dates, and
+downloads an original through its existing menu. The downloaded bytes match the file.
+
+Statistics and quota come from manager. The status means stored; no Knowledge Flow
+tag, ingestion task or Temporal call is created. Preview and processing controls
+remain visible and unavailable. A reader can browse and download but cannot upload.
+See [content ownership](05-documents.md) for authority, recovery and storage limits.
 
 ## Joining and governing organizations, teams and projects
 

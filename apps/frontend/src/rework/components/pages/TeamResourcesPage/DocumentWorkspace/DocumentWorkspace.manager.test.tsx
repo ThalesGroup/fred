@@ -24,6 +24,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
+  documents: [] as import("../../../../../slices/fredManager/fredManagerOpenApi").Document[],
   drawerProps: [] as Record<string, unknown>[],
   folders: [] as {
     id: string;
@@ -47,7 +48,8 @@ const probe = vi.hoisted(() => ({
   legacyRequests: [] as string[],
 }));
 vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
-  useListFoldersQuery: (query: Record<string, unknown>) => {
+  useLazyListFoldersQuery: () => [vi.fn()],
+  useEntriesQuery: (query: Record<string, unknown>) => {
     probe.query = query;
     const parent = query.parentId as string | undefined;
     const ancestors = [];
@@ -59,11 +61,15 @@ vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
     const matches = probe.folders.filter(
       (f) => f.parent_id === (parent ?? null) && f.name.toLowerCase().includes(String(query.search).toLowerCase()),
     );
+    const items = [
+      ...matches.map((data) => ({ kind: "folder", data })),
+      ...probe.documents.filter((d) => d.folder_id === parent).map((data) => ({ kind: "document", data })),
+    ];
     return {
       currentData: {
-        items: matches.slice(Number(query.offset), Number(query.offset) + Number(query.limit)),
+        items: items.slice(Number(query.offset), Number(query.offset) + Number(query.limit)),
         ancestors,
-        total: matches.length,
+        total: items.length,
         offset: query.offset,
         limit: query.limit,
         can_write: probe.canWrite,
@@ -206,6 +212,7 @@ async function menuAction(name: string) {
   );
 }
 beforeEach(async () => {
+  probe.documents = [];
   probe.folders = [
     {
       id: "root-id",
@@ -257,9 +264,10 @@ it("restores both original controls from manager authority, navigates by id and 
   await click(action("action.addFile"));
   const drawer = probe.drawerProps[probe.drawerProps.length - 1]!;
   expect(drawer.isOpen).toBe(true);
-  expect(drawer.unavailableReason).toBe("rework.resources.documentsUnavailable");
+  expect(drawer.managerDestination).toEqual({ spaceId: "space-1", folderId: "root-id" });
+  expect(drawer.unavailableReason).toBeUndefined();
   expect(drawer.metadata).toEqual({ tags: [] });
-  expect(drawer.ensureFolderPath).toBeUndefined();
+  expect(drawer.ensureFolderPath).toBeTypeOf("function");
   expect(probe.legacyRequests).toEqual([]);
 });
 
@@ -399,6 +407,51 @@ it("keeps a root-row file drop targeted at that folder in the original upload pa
   expect(drawer.initialFiles).toEqual([file]);
   expect(drawer.requireFolderPerFile).toBe(false);
   expect(drawer.destinationPath).toBe("Library");
-  expect(drawer.unavailableReason).toBe("rework.resources.documentsUnavailable");
+  expect(drawer.managerDestination).toEqual({ spaceId: "space-1", folderId: "root-id" });
+  expect(drawer.unavailableReason).toBeUndefined();
+  expect(probe.legacyRequests).toEqual([]);
+});
+
+it("keeps document bulk controls visible but disables processing, ZIP and deletion", async () => {
+  probe.folders = probe.folders.filter((f) => !f.parent_id);
+  probe.documents = [
+    {
+      id: "document",
+      space_id: "space-1",
+      folder_id: "root-id",
+      name: "original.txt",
+      mime: "text/plain",
+      size: 5,
+      sha256: "a".repeat(64),
+      created_by: "writer",
+      created_at: "2026-10-19T08:00:00Z",
+    },
+  ];
+  await render();
+  await click(namedButton("Library"));
+  await act(async () => {
+    (container.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement).click();
+  });
+  expect(container.textContent).toContain("rework.documentStorage.stored");
+  expect(container.querySelector('[data-variant="pending"]')).toBeNull();
+  // The registry alone determines this state, including a newly mounted page.
+  await act(async () => {
+    root.unmount();
+  });
+  root = createRoot(container);
+  await render();
+  await click(namedButton("Library"));
+  expect(container.textContent).toContain("rework.documentStorage.stored");
+  await act(async () => {
+    (container.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement).click();
+  });
+  for (const name of ["delete", "download", "includeInSearch"]) {
+    const button = action(`bulkActions.${name}`) as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    expect(button.disabled).toBe(true);
+    await act(async () => button.click());
+  }
+  expect(probe.deletes).toEqual([]);
+  expect(probe.confirm).toBeUndefined();
   expect(probe.legacyRequests).toEqual([]);
 });

@@ -32,7 +32,7 @@ macro_rules! folder {
 }
 macro_rules! document {
     () => {
-        "select id, space_id, folder_id, name, mime, size, sha256, created_by from document"
+        "select id, space_id, folder_id, name, mime, size, sha256, created_by, created_at from document"
     };
 }
 
@@ -130,13 +130,12 @@ pub async fn folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Resu
         .await
 }
 
-pub async fn folders(pool: &PgPool, space: Uuid, query: &FolderQuery) -> sqlx::Result<FolderPage> {
-    // Count, page and breadcrumbs describe one snapshot, including during deletion.
-    let mut tx = pool.begin().await?;
-    sqlx::query("set transaction isolation level repeatable read, read only")
-        .execute(&mut *tx)
-        .await?;
-    let ancestors = if let Some(parent) = query.parent_id {
+pub async fn folder_ancestors<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    space: Uuid,
+    parent: Option<Uuid>,
+) -> sqlx::Result<Vec<Folder>> {
+    if let Some(parent) = parent {
         let rows = sqlx::query_as::<_, Folder>(
             "with recursive ancestors as (
                 select f.*, 1 as depth from folder f where id = $1 and space_id = $2
@@ -144,14 +143,23 @@ pub async fn folders(pool: &PgPool, space: Uuid, query: &FolderQuery) -> sqlx::R
                 select p.*, a.depth + 1 from folder p join ancestors a
                     on p.id = a.parent_id and p.space_id = a.space_id where a.depth < 15
             ) select id, space_id, parent_id, name, path, created_at from ancestors order by depth desc"
-        ).bind(parent).bind(space).fetch_all(&mut *tx).await?;
+        ).bind(parent).bind(space).fetch_all(ex).await?;
         if rows.is_empty() {
             return Err(sqlx::Error::RowNotFound);
         }
-        rows
+        Ok(rows)
     } else {
-        Vec::new()
-    };
+        Ok(Vec::new())
+    }
+}
+
+pub async fn folders(pool: &PgPool, space: Uuid, query: &FolderQuery) -> sqlx::Result<FolderPage> {
+    // Count, page and breadcrumbs describe one snapshot, including during deletion.
+    let mut tx = pool.begin().await?;
+    sqlx::query("set transaction isolation level repeatable read, read only")
+        .execute(&mut *tx)
+        .await?;
+    let ancestors = folder_ancestors(&mut *tx, space, query.parent_id).await?;
     let total = folder_selection("select count(*)", space, query)
         .build_query_scalar::<i64>()
         .fetch_one(&mut *tx)
@@ -288,27 +296,6 @@ pub async fn documents(
     .bind(limit)
     .fetch_all(pool)
     .await
-}
-
-pub async fn insert_document<'e>(
-    pool: impl sqlx::PgExecutor<'e>,
-    d: &Document,
-) -> sqlx::Result<()> {
-    sqlx::query(
-        "insert into document (id, space_id, folder_id, name, mime, size, sha256, created_by)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)",
-    )
-    .bind(d.id)
-    .bind(d.space_id)
-    .bind(d.folder_id)
-    .bind(&d.name)
-    .bind(&d.mime)
-    .bind(d.size)
-    .bind(&d.sha256)
-    .bind(&d.created_by)
-    .execute(pool)
-    .await?;
-    Ok(())
 }
 
 pub async fn rename_document<'e>(

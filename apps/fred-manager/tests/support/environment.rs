@@ -50,6 +50,17 @@ pub async fn env() -> Env {
     }
 }
 
+/// Metadata-only fixtures exercise placement/lifecycle without fabricating production originals.
+pub async fn insert_document(
+    pool: &PgPool,
+    d: &fred_manager::domain::Document,
+) -> sqlx::Result<()> {
+    sqlx::query("insert into document (id,space_id,folder_id,name,mime,size,sha256,created_by,created_at,object_key,quota_owner) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$2)")
+        .bind(d.id).bind(d.space_id).bind(d.folder_id).bind(&d.name).bind(&d.mime).bind(d.size).bind(&d.sha256).bind(&d.created_by).bind(d.created_at).bind(format!("fixture/{}",d.id))
+        .execute(pool).await?;
+    Ok(())
+}
+
 /// A space by parent and name, resolved as the importer does: organizations by name,
 /// children among their parent's OpenFGA children.
 pub async fn named_space(

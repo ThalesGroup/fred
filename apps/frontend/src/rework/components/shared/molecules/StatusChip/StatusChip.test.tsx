@@ -54,6 +54,7 @@ describe("StatusChip", () => {
   });
 
   it.each([
+    ["stored", "done"],
     ["processing", "processing"],
     ["raw", "pending"],
     ["failed", "failed"],

@@ -56,7 +56,11 @@ export const createDynamicBaseQuery = (): BaseQueryFn<
     const requestArgs = normalizeArgs(args);
 
     // 1) Proactively ensure token is still valid before making the request.
+    const sessionIdentity = () => KeyCloakService.GetSessionIdentity?.() ?? KeyCloakService.GetUserId?.();
+    const actor = sessionIdentity();
     await KeyCloakService.ensureFreshToken(30);
+    if (actor !== sessionIdentity())
+      return { error: { status: "CUSTOM_ERROR", error: "Account changed during request" } };
 
     // 2) First attempt
     let result = await raw(requestArgs, api, extraOptions);
@@ -67,6 +71,8 @@ export const createDynamicBaseQuery = (): BaseQueryFn<
     if (result.error && result.error.status === 401 && extraOptions?.retryUnauthorized !== false) {
       const ok = await KeyCloakService.ensureFreshToken(0);
       if (ok) {
+        if (actor !== sessionIdentity())
+          return { error: { status: "CUSTOM_ERROR", error: "Account changed during request" } };
         result = await raw(requestArgs, api, extraOptions);
       }
       // 4) Still unauthorized? Clean logout to avoid a broken UI state.
@@ -75,6 +81,8 @@ export const createDynamicBaseQuery = (): BaseQueryFn<
       }
     }
 
+    if (actor !== sessionIdentity())
+      return { error: { status: "CUSTOM_ERROR", error: "Account changed during request" } };
     if (result.error) handlePlatformAccessDenial(result.error.status, result.error.data);
     return result;
   };

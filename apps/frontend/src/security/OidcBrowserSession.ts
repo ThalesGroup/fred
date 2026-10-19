@@ -77,7 +77,18 @@ export class OidcBrowserSession {
   // Access tokens stay in oidc-client-ts's session store; Fred does not copy
   // them to its legacy localStorage key.
   get tokenParsed(): Record<string, unknown> | null {
-    const token = this.token;
+    return this.parseToken(this.token);
+  }
+
+  /** Cache/queue identity survives token expiry; it is never an authorization decision. */
+  sessionIdentity(uidClaim: string): string | null {
+    if (this.invalidated) return null;
+    const claims = this.parseToken(this.user?.access_token ?? null);
+    const subject = claims?.[uidClaim];
+    return typeof subject === "string" && subject ? JSON.stringify([claims?.iss, subject]) : null;
+  }
+
+  private parseToken(token: string | null): Record<string, unknown> | null {
     if (!token) return null;
     try {
       const payload = token.split(".")[1];

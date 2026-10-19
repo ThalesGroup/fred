@@ -79,7 +79,7 @@ fn stats(mut samples: Vec<f64>) -> Value {
 }
 
 // Client-timed pg_locks samples approximate residency; they are not exact lock timings.
-async fn sample_locks(
+pub(super) async fn sample_locks(
     pool: PgPool,
     stop: Arc<AtomicBool>,
     ready: tokio::sync::oneshot::Sender<()>,
@@ -241,6 +241,7 @@ async fn folder_scaling() {
             onboarding: Default::default(),
             lifecycle: Default::default(),
             directory: None,
+            content: None,
         },
         "/api",
         &[],

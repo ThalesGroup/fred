@@ -24,6 +24,7 @@ use crate::domain::RuleError;
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct ErrorBody {
     pub detail: String,
+    pub code: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -42,11 +43,27 @@ pub enum AppError {
     Conflict(String),
     #[error("{0}")]
     Unprocessable(String),
+    #[error("{detail}")]
+    Problem {
+        status: StatusCode,
+        code: &'static str,
+        detail: &'static str,
+    },
     #[error(transparent)]
     Internal(anyhow::Error),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+
+impl AppError {
+    pub fn problem(status: StatusCode, code: &'static str, detail: &'static str) -> Self {
+        Self::Problem {
+            status,
+            code,
+            detail,
+        }
+    }
+}
 
 impl From<anyhow::Error> for AppError {
     fn from(error: anyhow::Error) -> Self {
@@ -72,7 +89,21 @@ impl From<sqlx::Error> for AppError {
             sqlx::Error::Database(db)
                 if db.is_unique_violation() || db.is_foreign_key_violation() =>
             {
-                AppError::Conflict(db.message().to_string())
+                AppError::Conflict("conflicting name or resource reference".into())
+            }
+            sqlx::Error::Io(_)
+            | sqlx::Error::Tls(_)
+            | sqlx::Error::PoolTimedOut
+            | sqlx::Error::PoolClosed => {
+                AppError::Unavailable("database temporarily unavailable".into())
+            }
+            sqlx::Error::Database(db)
+                if matches!(
+                    db.code().as_deref(),
+                    Some("55P03" | "57014" | "40001" | "40P01")
+                ) =>
+            {
+                AppError::Unavailable("database temporarily busy".into())
             }
             _ => AppError::Internal(e.into()),
         }
@@ -88,6 +119,7 @@ impl IntoResponse for AppError {
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Conflict(_) => StatusCode::CONFLICT,
             AppError::Unprocessable(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            AppError::Problem { status, .. } => *status,
             AppError::Internal(e) => {
                 tracing::error!(error = ?e, "internal error");
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -97,7 +129,32 @@ impl IntoResponse for AppError {
             AppError::Internal(_) => "internal error".to_string(),
             other => other.to_string(),
         };
-        (status, Json(ErrorBody { detail: message })).into_response()
+        let code = match &self {
+            AppError::Problem { code, .. } => *code,
+            AppError::NotFound => "not_found",
+            AppError::Forbidden => "forbidden",
+            AppError::Denied(_) => "admission_required",
+            AppError::Unavailable(_) => "dependency_unavailable",
+            AppError::BadRequest(_) => "invalid_request",
+            AppError::Conflict(_) => "conflict",
+            AppError::Unprocessable(_) => "invalid_fields",
+            AppError::Internal(_) => "internal_error",
+        };
+        let mut response = (
+            status,
+            Json(ErrorBody {
+                detail: message,
+                code: code.into(),
+            }),
+        )
+            .into_response();
+        if status == StatusCode::TOO_MANY_REQUESTS || code == "upload_in_progress" {
+            response.headers_mut().insert(
+                axum::http::header::RETRY_AFTER,
+                axum::http::HeaderValue::from_static("5"),
+            );
+        }
+        response
     }
 }
 

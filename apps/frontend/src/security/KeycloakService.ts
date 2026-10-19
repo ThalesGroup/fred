@@ -346,11 +346,19 @@ const GetKeycloakRealmConfig = (): KeycloakRealmConfig | null => {
   return { url, realm, clientId: identityClientId };
 };
 
+/** Stable cache identity, separate from the validity of the current bearer. */
+const GetSessionIdentity = (): string | null => {
+  if (sessionInvalidated) return null;
+  if (isSecurityEnabled) return oidcSession?.sessionIdentity(uidClaim) ?? null;
+  return JSON.stringify([GetTokenParsed()?.iss, DEV_USERNAME]);
+};
+
 export const KeyCloakService = {
   CallLogin: Login,
   CallLogout: Logout,
   GetUserName,
   GetUserId,
+  GetSessionIdentity,
   GetUserFullName,
   GetUserGivenName,
   GetUserMail,

@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import JSZip from "jszip";
+import { documentStorageJourney } from "./document-storage-browser.mjs";
 import { assertAccountAtBottom } from "./assert-app-layout.mjs";
 
 const manager = process.env.FRED_MANAGER_BROWSER_URL;
@@ -276,245 +277,264 @@ try {
   await server.waitForRequestsIdle();
   browser = await chromium.launch({ headless: true });
   const root = await login("root", "it-root", "/admin");
-  await expect(root.page.getByRole("link", { name: "Provisioning", exact: true })).toBeVisible();
-  await expect(root.page.getByRole("link", { name: "Migration", exact: true })).toHaveCount(0);
-  await assertAccountPages(root, true);
-  await expect(root.page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
-  await expect(root.page.getByRole("button", { name: "Home", exact: true })).toHaveCount(0);
-  await root.page.goto(origin + "/marketplace");
-  await expect(root.page).toHaveURL(origin + "/admin/organizations");
-  await root.page.getByRole("link", { name: "Provisioning", exact: true }).click();
-  await expect(root.page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
+  if (process.env.FRED_MANAGER_BROWSER_DOCUMENTS_ONLY === "1") {
+    await importFile(root.page, bundle);
+    const priya = await login("priya", "Azerty123_", "/home");
+    const opening = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
+    await priya.page.getByRole("button", { name: "Personal space", exact: true }).click();
+    const opened = await opening;
+    assert.equal(opened.status(), 201);
+    const personal = await opened.json();
+    await priya.page.goto(`${origin}/team/${personal.id}/resources`);
+    await documentStorageJourney({ ...priya, origin, space: personal.id, expect });
+    assert.deepEqual(pageErrors, [], "Browser application errors");
+    console.log(
+      "Manager document browser acceptance passed: original upload, lost acknowledgment, navigation, reload, conflict skip and identical download without processing services.",
+    );
+  } else {
+    await expect(root.page.getByRole("link", { name: "Provisioning", exact: true })).toBeVisible();
+    await expect(root.page.getByRole("link", { name: "Migration", exact: true })).toHaveCount(0);
+    await assertAccountPages(root, true);
+    await expect(root.page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
+    await expect(root.page.getByRole("button", { name: "Home", exact: true })).toHaveCount(0);
+    await root.page.goto(origin + "/marketplace");
+    await expect(root.page).toHaveURL(origin + "/admin/organizations");
+    await root.page.getByRole("link", { name: "Provisioning", exact: true }).click();
+    await expect(root.page.getByRole("heading", { name: "Provisioning", exact: true })).toBeVisible();
 
-  // Hold the actual outgoing request, assert pending controls, then allow it to
-  // reach the real importer. No fabricated result can satisfy this assertion.
-  let release;
-  const held = new Promise((resolve) => {
-    release = resolve;
-  });
-  let reached;
-  const entering = new Promise((resolve) => {
-    reached = resolve;
-  });
-  await root.page.route(
-    "**/fred-manager/v1/import-export/import",
-    async (route) => {
-      reached();
-      await held;
-      await route.continue();
-    },
-    { times: 1 },
-  );
-  const firstPromise = importFile(root.page, bundle);
-  await entering;
-  await expect(root.page.getByRole("button", { name: "Importing...", exact: true })).toBeDisabled();
-  await expect(root.page.locator('input[type="file"]')).toBeDisabled();
-  await expect(root.page.getByRole("heading", { name: "Import completed" })).toHaveCount(0);
-  release();
-  const first = await firstPromise;
-  assert.equal(first.identities_resolved, 15);
-  assert.equal(first.identities_created, 15);
-  assert.equal(first.spaces_reconciled, 4);
-  const teamsBefore = await get(root.context, root.bearer, "/admin/teams");
-  const grantsBefore = await get(root.context, root.bearer, "/users/platform-roles");
-  const replay = await importFile(root.page, bundle);
-  assert.equal(replay.identities_created, 0);
-  assert.equal(replay.grants_acknowledged, first.grants_acknowledged);
-  assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
-  assert.deepEqual(await get(root.context, root.bearer, "/users/platform-roles"), grantsBefore);
+    // Hold the actual outgoing request, assert pending controls, then allow it to
+    // reach the real importer. No fabricated result can satisfy this assertion.
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    let reached;
+    const entering = new Promise((resolve) => {
+      reached = resolve;
+    });
+    await root.page.route(
+      "**/fred-manager/v1/import-export/import",
+      async (route) => {
+        reached();
+        await held;
+        await route.continue();
+      },
+      { times: 1 },
+    );
+    const firstPromise = importFile(root.page, bundle);
+    await entering;
+    await expect(root.page.getByRole("button", { name: "Importing...", exact: true })).toBeDisabled();
+    await expect(root.page.locator('input[type="file"]')).toBeDisabled();
+    await expect(root.page.getByRole("heading", { name: "Import completed" })).toHaveCount(0);
+    release();
+    const first = await firstPromise;
+    assert.equal(first.identities_resolved, 15);
+    assert.equal(first.identities_created, 15);
+    assert.equal(first.spaces_reconciled, 4);
+    const teamsBefore = await get(root.context, root.bearer, "/admin/teams");
+    const grantsBefore = await get(root.context, root.bearer, "/users/platform-roles");
+    const replay = await importFile(root.page, bundle);
+    assert.equal(replay.identities_created, 0);
+    assert.equal(replay.grants_acknowledged, first.grants_acknowledged);
+    assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
+    assert.deepEqual(await get(root.context, root.bearer, "/users/platform-roles"), grantsBefore);
 
-  // The same public builder produces a variant containing a project.
-  const fixture = resolve(dirname(bundle), "project-fixture");
-  await cp("../fred-manager/tests/fixtures/import_export/demo_provisioning", fixture, { recursive: true });
-  await writeFile(
-    `${fixture}/projects.json`,
-    JSON.stringify([
-      { ref: "browser-project", name: "Browser project", team: "northbridge", roles: { bob: ["admin", "member"] } },
-    ]),
-  );
-  const projectZip = resolve(dirname(bundle), "project.zip");
-  execFileSync("make", ["-C", "../fred-manager", "build-demo-bundle"], {
-    env: { ...process.env, DEMO_PROVISIONING_FIXTURE_DIR: fixture, DEMO_BUNDLE_FILE: projectZip },
-    stdio: "pipe",
-  });
-  const projectResult = await importFile(root.page, projectZip);
-  assert.equal(projectResult.spaces_reconciled, 5);
-  assert.equal(projectResult.identities_created, 0);
+    // The same public builder produces a variant containing a project.
+    const fixture = resolve(dirname(bundle), "project-fixture");
+    await cp("../fred-manager/tests/fixtures/import_export/demo_provisioning", fixture, { recursive: true });
+    await writeFile(
+      `${fixture}/projects.json`,
+      JSON.stringify([
+        { ref: "browser-project", name: "Browser project", team: "northbridge", roles: { bob: ["admin", "member"] } },
+      ]),
+    );
+    const projectZip = resolve(dirname(bundle), "project.zip");
+    execFileSync("make", ["-C", "../fred-manager", "build-demo-bundle"], {
+      env: { ...process.env, DEMO_PROVISIONING_FIXTURE_DIR: fixture, DEMO_BUNDLE_FILE: projectZip },
+      stdio: "pipe",
+    });
+    const projectResult = await importFile(root.page, projectZip);
+    assert.equal(projectResult.spaces_reconciled, 5);
+    assert.equal(projectResult.identities_created, 0);
 
-  await mkdir("target", { recursive: true });
-  await root.page.screenshot({ path: "target/provisioning-browser.png", fullPage: true });
-  await root.page.setViewportSize({ width: 390, height: 844 });
-  assert(await root.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
-  await root.page.screenshot({ path: "target/provisioning-browser-narrow.png", fullPage: true });
+    await mkdir("target", { recursive: true });
+    await root.page.screenshot({ path: "target/provisioning-browser.png", fullPage: true });
+    await root.page.setViewportSize({ width: 390, height: 844 });
+    assert(await root.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
+    await root.page.screenshot({ path: "target/provisioning-browser-narrow.png", fullPage: true });
 
-  const legacy = new JSZip().file("manifest.json", JSON.stringify({ format_version: 1 })).file("users.json", "[]");
-  const failure = await importFile(
-    root.page,
-    { name: "legacy.zip", mimeType: "application/zip", buffer: await legacy.generateAsync({ type: "nodebuffer" }) },
-    422,
-  );
-  assert.equal(failure.detail, "not_yet_supported");
-  await expect(root.page.getByRole("alert")).toContainText("This bundle format is not yet supported.");
-  await expect(root.page.getByRole("alert")).toContainText("Some changes may already be applied.");
+    const legacy = new JSZip().file("manifest.json", JSON.stringify({ format_version: 1 })).file("users.json", "[]");
+    const failure = await importFile(
+      root.page,
+      { name: "legacy.zip", mimeType: "application/zip", buffer: await legacy.generateAsync({ type: "nodebuffer" }) },
+      422,
+    );
+    assert.equal(failure.detail, "not_yet_supported");
+    await expect(root.page.getByRole("alert")).toContainText("This bundle format is not yet supported.");
+    await expect(root.page.getByRole("alert")).toContainText("Some changes may already be applied.");
 
-  assert.deepEqual(await get(root.context, root.bearer, "/me/spaces"), []);
-  // Switch identities in the same browser, exercising logout and fresh Redux state.
-  let bobBearer;
-  root.page.on("request", (request) => {
-    if (request.url() === `${origin}/fred-manager/v1/me`) bobBearer = request.headers().authorization;
-  });
-  await logout(root.page);
-  await root.page.locator("#username").fill("bob");
-  await root.page.locator("#password").fill("Azerty123_");
-  await root.page.locator("#kc-login").click();
-  // Leave Bob's consent pending, return to root, then check Bob still needs his own consent.
-  await expect(root.page.getByRole("button", { name: "Accept the TOS", exact: true })).toBeVisible();
-  await logout(root.page);
-  await root.page.locator("#username").fill("root");
-  await root.page.locator("#password").fill("it-root");
-  await root.page.locator("#kc-login").click();
-  await root.page.goto(origin + "/home");
-  await expect(root.page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
-  await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toHaveCount(0);
-  await logout(root.page);
-  await root.page.locator("#username").fill("bob");
-  await root.page.locator("#password").fill("Azerty123_");
-  await root.page.locator("#kc-login").click();
-  await acceptTerms(root.page);
-  await root.page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(root.page.getByRole("heading", { name: /^Hello / })).toBeVisible();
-  await expect(root.page.getByRole("link", { name: "Demo", exact: true })).toHaveCount(0);
-  const projectLink = root.page.getByRole("link", { name: "Browser project", exact: true });
-  const projectHref = await projectLink.getAttribute("href");
-  assert.match(projectHref, /^\/team\/[^/]+\/agents$/);
-  await projectLink.click();
-  await expect(root.page).toHaveURL(origin + projectHref);
-  await expect(root.page.getByRole("link", { name: "Prompts", exact: true })).toBeVisible();
-  await expect(root.page.getByRole("link", { name: "Resources", exact: true })).toBeVisible();
-  await root.page.screenshot({ path: "target/provisioning-spaces-narrow.png", fullPage: true });
-  await root.page.setViewportSize({ width: 1280, height: 900 });
-  await root.page.screenshot({ path: "target/provisioning-spaces.png", fullPage: true });
-  const bob = { page: root.page, context: root.context, bearer: bobBearer };
-  await assertAccountPages(bob, false);
-  await assertPreservedNavigation(bob.page);
-  await expect(bob.page.getByRole("button", { name: "Technical console", exact: true })).toHaveCount(0);
-  await bob.page.goto(origin + "/admin/provisioning");
-  await expect(bob.page.getByRole("alert")).toContainText("Provisioning requires a platform administrator role");
-  await expect(bob.page.locator('input[type="file"]')).toHaveCount(0);
-  await expect(bob.page.getByRole("link", { name: "Provisioning", exact: true })).toHaveCount(0);
-  const spaces = await get(bob.context, bob.bearer, "/me/spaces");
-  const project = spaces.find((space) => space.name === "Browser project");
-  const north = spaces.find((space) => space.name === "northbridge");
-  const organization = spaces.find((space) => space.name === "Demo");
-  assert.deepEqual(project.path, [organization.id, north.id, project.id]);
-  assert.deepEqual([...project.roles].sort(), ["admin", "editor", "member"]);
-  assert.deepEqual(project.inherited_roles, ["editor"]);
-  assert.deepEqual(north.roles, ["editor"]);
-  const denied = await bob.context.request.post(`${origin}/fred-manager/v1/import-export/import`, {
-    headers: { Authorization: bob.bearer },
-    multipart: { file: { name: "demo.zip", mimeType: "application/zip", buffer: await readFile(bundle) } },
-  });
-  assert.equal(denied.status(), 403);
+    assert.deepEqual(await get(root.context, root.bearer, "/me/spaces"), []);
+    // Switch identities in the same browser, exercising logout and fresh Redux state.
+    let bobBearer;
+    root.page.on("request", (request) => {
+      if (request.url() === `${origin}/fred-manager/v1/me`) bobBearer = request.headers().authorization;
+    });
+    await logout(root.page);
+    await root.page.locator("#username").fill("bob");
+    await root.page.locator("#password").fill("Azerty123_");
+    await root.page.locator("#kc-login").click();
+    // Leave Bob's consent pending, return to root, then check Bob still needs his own consent.
+    await expect(root.page.getByRole("button", { name: "Accept the TOS", exact: true })).toBeVisible();
+    await logout(root.page);
+    await root.page.locator("#username").fill("root");
+    await root.page.locator("#password").fill("it-root");
+    await root.page.locator("#kc-login").click();
+    await root.page.goto(origin + "/home");
+    await expect(root.page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
+    await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toHaveCount(0);
+    await logout(root.page);
+    await root.page.locator("#username").fill("bob");
+    await root.page.locator("#password").fill("Azerty123_");
+    await root.page.locator("#kc-login").click();
+    await acceptTerms(root.page);
+    await root.page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(root.page.getByRole("heading", { name: /^Hello / })).toBeVisible();
+    await expect(root.page.getByRole("link", { name: "Demo", exact: true })).toHaveCount(0);
+    const projectLink = root.page.getByRole("link", { name: "Browser project", exact: true });
+    const projectHref = await projectLink.getAttribute("href");
+    assert.match(projectHref, /^\/team\/[^/]+\/agents$/);
+    await projectLink.click();
+    await expect(root.page).toHaveURL(origin + projectHref);
+    await expect(root.page.getByRole("link", { name: "Prompts", exact: true })).toBeVisible();
+    await expect(root.page.getByRole("link", { name: "Resources", exact: true })).toBeVisible();
+    await root.page.screenshot({ path: "target/provisioning-spaces-narrow.png", fullPage: true });
+    await root.page.setViewportSize({ width: 1280, height: 900 });
+    await root.page.screenshot({ path: "target/provisioning-spaces.png", fullPage: true });
+    const bob = { page: root.page, context: root.context, bearer: bobBearer };
+    await assertAccountPages(bob, false);
+    await assertPreservedNavigation(bob.page);
+    await expect(bob.page.getByRole("button", { name: "Technical console", exact: true })).toHaveCount(0);
+    await bob.page.goto(origin + "/admin/provisioning");
+    await expect(bob.page.getByRole("alert")).toContainText("Provisioning requires a platform administrator role");
+    await expect(bob.page.locator('input[type="file"]')).toHaveCount(0);
+    await expect(bob.page.getByRole("link", { name: "Provisioning", exact: true })).toHaveCount(0);
+    const spaces = await get(bob.context, bob.bearer, "/me/spaces");
+    const project = spaces.find((space) => space.name === "Browser project");
+    const north = spaces.find((space) => space.name === "northbridge");
+    const organization = spaces.find((space) => space.name === "Demo");
+    assert.deepEqual(project.path, [organization.id, north.id, project.id]);
+    assert.deepEqual([...project.roles].sort(), ["admin", "editor", "member"]);
+    assert.deepEqual(project.inherited_roles, ["editor"]);
+    assert.deepEqual(north.roles, ["editor"]);
+    const denied = await bob.context.request.post(`${origin}/fred-manager/v1/import-export/import`, {
+      headers: { Authorization: bob.bearer },
+      multipart: { file: { name: "demo.zip", mimeType: "application/zip", buffer: await readFile(bundle) } },
+    });
+    assert.equal(denied.status(), 403);
 
-  const alice = await login("alice", "Azerty123_");
-  // Another platform owner reaches the page and replays the bundle without changes.
-  await expect(alice.page.locator('input[type="file"]')).toHaveCount(1);
-  await importFile(alice.page, bundle, 200);
-  assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
-  assert.deepEqual(await get(bob.context, bob.bearer, "/me/spaces"), spaces);
-  // Explicit eligibility: Bob has no entry and the real command denies creation.
-  await bob.page.goto(origin + "/home");
-  await expect(bob.page.getByRole("button", { name: "Personal space", exact: true })).toHaveCount(0);
-  const bobOpen = await bob.context.request.post(`${origin}/fred-manager/v1/me/personal-space`, {
-    headers: { Authorization: bob.bearer },
-    data: { organization_id: organization.id },
-  });
-  assert.equal(bobOpen.status(), 403);
+    const alice = await login("alice", "Azerty123_");
+    // Another platform owner reaches the page and replays the bundle without changes.
+    await expect(alice.page.locator('input[type="file"]')).toHaveCount(1);
+    await importFile(alice.page, bundle, 200);
+    assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
+    assert.deepEqual(await get(bob.context, bob.bearer, "/me/spaces"), spaces);
+    // Explicit eligibility: Bob has no entry and the real command denies creation.
+    await bob.page.goto(origin + "/home");
+    await expect(bob.page.getByRole("button", { name: "Personal space", exact: true })).toHaveCount(0);
+    const bobOpen = await bob.context.request.post(`${origin}/fred-manager/v1/me/personal-space`, {
+      headers: { Authorization: bob.bearer },
+      data: { organization_id: organization.id },
+    });
+    assert.equal(bobOpen.status(), 403);
 
-  const priya = await login("priya", "Azerty123_", "/home");
-  await assertAccountAtBottom(priya.page);
-  const beforePersonal = await get(priya.context, priya.bearer, "/me/spaces");
-  assert.equal(beforePersonal.filter((space) => space.personal_owner).length, 0);
-  const personalEntry = priya.page.getByRole("button", { name: "Personal space", exact: true });
-  let personalCalls = 0;
-  let releasePersonal;
-  let enteredPersonal;
-  const personalHeld = new Promise((resolve) => {
-    releasePersonal = resolve;
-  });
-  const personalEntering = new Promise((resolve) => {
-    enteredPersonal = resolve;
-  });
-  await priya.page.route(
-    "**/fred-manager/v1/me/personal-space",
-    async (route) => {
-      personalCalls++;
-      enteredPersonal();
-      await personalHeld;
-      await route.continue();
-    },
-    { times: 1 },
-  );
-  const firstPersonal = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
-  await personalEntry.focus();
-  await priya.page.keyboard.press("Enter");
-  await personalEntering;
-  await expect(personalEntry).toBeDisabled();
-  await priya.page.keyboard.press("Enter");
-  releasePersonal();
-  const createdPersonal = await firstPersonal;
-  assert.equal(createdPersonal.status(), 201);
-  const personal = await createdPersonal.json();
-  assert.equal(personalCalls, 1);
-  await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/agents`);
-  await expect(priya.page.getByText("Personal space", { exact: true })).toBeVisible();
-  const personalMembership = (await get(priya.context, priya.bearer, "/me/spaces")).find((s) => s.id === personal.id);
-  assert.equal(personalMembership.organization_id, organization.id);
-  assert.deepEqual(personalMembership.path, [personal.id]);
-  await priya.page.getByRole("button", { name: "Home", exact: true }).click();
-  await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
-  await expect(priya.page.getByText("fredlab", { exact: true })).toBeVisible();
-  await expect(priya.page.getByRole("link", { name: "Prompts", exact: true })).toBeVisible();
-  await priya.page.getByRole("button", { name: "Home", exact: true }).click();
-  const repeated = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
-  await personalEntry.click();
-  const reused = await repeated;
-  assert.equal(reused.status(), 200);
-  assert.equal((await reused.json()).id, personal.id);
-  await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/agents`);
-  await priya.page.reload();
-  await expect(priya.page.getByText("Personal space", { exact: true })).toBeVisible();
-  await priya.page.screenshot({ path: "target/personal-space.png", fullPage: true });
-  await priya.page.setViewportSize({ width: 390, height: 844 });
-  assert(await priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth));
-  await priya.page.screenshot({ path: "target/personal-space-narrow.png", fullPage: true });
-  await priya.page.getByRole("button", { name: "Home", exact: true }).click();
-  // A transport refusal stays visible and requires a fresh deliberate action.
-  await priya.page.route(
-    "**/fred-manager/v1/me/personal-space",
-    (route) =>
-      route.fulfill({
-        status: 401,
-        contentType: "application/json",
-        body: JSON.stringify({ detail: "expired" }),
-      }),
-    { times: 1 },
-  );
-  await personalEntry.click();
-  await expect(priya.page.getByRole("alert")).toBeVisible();
-  await expect(personalEntry).toBeEnabled();
-  await personalEntry.click();
-  await expect(priya.page.getByRole("alert")).toHaveCount(0);
-  // Retained navigation reaches the original Resources screen. Folder lifecycle
-  // and visual parity have separate focused acceptance.
-  await priya.page.setViewportSize({ width: 1280, height: 900 });
-  await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
-  await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/resources`);
-  assert(!(await get(bob.context, bob.bearer, "/me/spaces")).some((item) => item.id === personal.id));
-  assert.deepEqual(pageErrors, [], "Browser application errors");
-  console.log(
-    "Manager browser acceptance passed: admission, account pages, provisioning/replay, memberships, personal opening and retained product navigation with unavailable non-migrated services. Resource workflow parity is excluded.",
-  );
+    const priya = await login("priya", "Azerty123_", "/home");
+    await assertAccountAtBottom(priya.page);
+    const beforePersonal = await get(priya.context, priya.bearer, "/me/spaces");
+    assert.equal(beforePersonal.filter((space) => space.personal_owner).length, 0);
+    const personalEntry = priya.page.getByRole("button", { name: "Personal space", exact: true });
+    let personalCalls = 0;
+    let releasePersonal;
+    let enteredPersonal;
+    const personalHeld = new Promise((resolve) => {
+      releasePersonal = resolve;
+    });
+    const personalEntering = new Promise((resolve) => {
+      enteredPersonal = resolve;
+    });
+    await priya.page.route(
+      "**/fred-manager/v1/me/personal-space",
+      async (route) => {
+        personalCalls++;
+        enteredPersonal();
+        await personalHeld;
+        await route.continue();
+      },
+      { times: 1 },
+    );
+    const firstPersonal = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
+    await personalEntry.focus();
+    await priya.page.keyboard.press("Enter");
+    await personalEntering;
+    await expect(personalEntry).toBeDisabled();
+    await priya.page.keyboard.press("Enter");
+    releasePersonal();
+    const createdPersonal = await firstPersonal;
+    assert.equal(createdPersonal.status(), 201);
+    const personal = await createdPersonal.json();
+    assert.equal(personalCalls, 1);
+    await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/agents`);
+    await expect(priya.page.getByText("Personal space", { exact: true })).toBeVisible();
+    const personalMembership = (await get(priya.context, priya.bearer, "/me/spaces")).find((s) => s.id === personal.id);
+    assert.equal(personalMembership.organization_id, organization.id);
+    assert.deepEqual(personalMembership.path, [personal.id]);
+    await priya.page.getByRole("button", { name: "Home", exact: true }).click();
+    await priya.page.getByRole("link", { name: "fredlab", exact: true }).click();
+    await expect(priya.page.getByText("fredlab", { exact: true })).toBeVisible();
+    await expect(priya.page.getByRole("link", { name: "Prompts", exact: true })).toBeVisible();
+    await priya.page.getByRole("button", { name: "Home", exact: true }).click();
+    const repeated = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
+    await personalEntry.click();
+    const reused = await repeated;
+    assert.equal(reused.status(), 200);
+    assert.equal((await reused.json()).id, personal.id);
+    await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/agents`);
+    await priya.page.reload();
+    await expect(priya.page.getByText("Personal space", { exact: true })).toBeVisible();
+    await priya.page.screenshot({ path: "target/personal-space.png", fullPage: true });
+    await priya.page.setViewportSize({ width: 390, height: 844 });
+    await expect
+      .poll(() => priya.page.locator("main").evaluate((node) => node.scrollWidth <= node.clientWidth))
+      .toBe(true);
+    await priya.page.screenshot({ path: "target/personal-space-narrow.png", fullPage: true });
+    await priya.page.getByRole("button", { name: "Home", exact: true }).click();
+    // A transport refusal stays visible and requires a fresh deliberate action.
+    await priya.page.route(
+      "**/fred-manager/v1/me/personal-space",
+      (route) =>
+        route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "expired" }),
+        }),
+      { times: 1 },
+    );
+    await personalEntry.click();
+    await expect(priya.page.getByRole("alert")).toBeVisible();
+    await expect(personalEntry).toBeEnabled();
+    await personalEntry.click();
+    await expect(priya.page.getByRole("alert")).toHaveCount(0);
+    // Retained navigation reaches the original Resources screen. Folder lifecycle
+    // and visual parity have separate focused acceptance.
+    await priya.page.setViewportSize({ width: 1280, height: 900 });
+    await priya.page.getByRole("link", { name: "Resources", exact: true }).click();
+    await expect(priya.page).toHaveURL(origin + `/team/${personal.id}/resources`);
+    await documentStorageJourney({ ...priya, origin, space: personal.id, expect });
+    assert(!(await get(bob.context, bob.bearer, "/me/spaces")).some((item) => item.id === personal.id));
+    assert.deepEqual(pageErrors, [], "Browser application errors");
+    console.log(
+      "Manager browser acceptance passed: admission, account pages, provisioning/replay, memberships, personal opening and retained product navigation with unavailable non-migrated services. Original upload, conflict skip, reload and identical download pass without processing services.",
+    );
+  }
 } catch (error) {
   console.error({ pageErrors, assetFailures, unavailableServices });
   throw error;
