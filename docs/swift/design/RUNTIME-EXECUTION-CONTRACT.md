@@ -2311,7 +2311,8 @@ re-measurements).
 ordinary assistant text (prefixed `RECALLED_REASONING_PREFIX`), for any
 message still inside the current open tool loop; it is dropped only once
 the turn closes (`final` reached) — closed-turn reasoning is never replayed
-into a later turn's context. There is no protocol-level channel that marks
+into a later turn's context. (Mistral since 2026-10-19: every turn's reasoning is
+replayed as native `thinking` chunks, see §8.117.) There is no protocol-level channel that marks
 re-homed reasoning as privileged — it is ordinary `content`, the same field
 a user-facing reply is written into, so any consumer reading a checkpointed
 transcript must not assume a stronger separation than a text prefix
@@ -6407,7 +6408,7 @@ The exact empty sentinel is distinct from ordinary cited-answer blocks, which
 carry reference IDs. Native tool calls, including duplicates and their IDs, are
 preserved unchanged.
 
-Recovery is bounded, validates every call before allocating call IDs, and marks
+Recovery is bounded (by text size and call count, §8.117), validates every call before allocating call IDs, and marks
 the normalized message so the Mistral-gated streaming bridge withholds the typed
 marker and call syntax from assistant/reasoning SSE for the same mixed content
 shape. If a completed message already carries native calls and marked content,
@@ -7086,3 +7087,46 @@ establish identity. The existing tool names, table aliases and schema-before-SQL
 flow are retained. Unscoped listing excludes attachments; direct explicit-UID API
 access retains uploader authorization. Legacy text-only attachments remain on the
 text path. See the `tabular-chat-attachments` capability specification.
+
+### 8.117 Recovery of streamed Mistral tool-call text (2026-10-14, #3110)
+
+The §8.92 recovery no longer caps the number of content blocks. A streamed
+response is aggregated with one block per provider delta, so a long reasoning
+turn ends with hundreds of `thinking` blocks and the former 256-block cap
+rejected it before parsing. The 16k-character cap on recovered text and the
+16-call cap remain the bounds; thinking blocks before the tool name are skipped,
+as are blocks with no content (`{}` or a bare typed marker) anywhere in the message.
+The stream marker detector and renderer use the same payloadless-block rule,
+including blocks sharing a chunk with the sentinel or splitting a tool name.
+
+`content_to_text` (transcript, history and replay rendering) no longer renders
+the `reference` sentinel or tool-call blocks (`tool_use`, `tool_call`,
+`input_json_delta`) as their Python repr, so `{'type': 'reference', ...}` never
+appears in an answer, the stored history, or the context replayed to the model.
+A `refusal` block renders as its refusal text. Payloadless provider blocks are
+omitted; unknown blocks carrying data and non-dict objects keep the visible
+`str()` fallback. Literal braces in text remain unchanged. Superseding §8.92
+for Mistral, text after the first recovered call is dropped (only its length is logged): in every recorded
+leak it was runaway output, never an answer; text before it stays the content.
+Text calls are also recovered when the message already has native calls: they
+come first, and one equal in name and arguments to a native call is dropped,
+native IDs kept. Recovery retains the original thinking blocks alongside the
+safe preamble, including for a duplicate native call, so the next request can
+replay that reasoning. Planning renders only the safe preamble from this mixed
+content, including when streamed together with a native call. At the reference anchor a `.` may precede the tool name
+(`...landscape.read_document`); the longest registered name still wins. A native call whose name is not registered
+but ends in a registered tool name (a model looping its output into the name, any
+model) is renamed to that tool; other unknown names keep the tool node's "not a
+valid tool" error, clipped to 256 characters, and an oversized string bound in a
+log scope is shortened instead of failing the turn.
+Mistral reasoning is replayed natively (2026-10-19, superseding §8.37 for
+Mistral only). A plain `ChatOpenAI` serving a Mistral model is built as
+`MistralReasoningReplayChatOpenAI` (`support/reasoning_replay.py`), whose payload
+sends each assistant message's reasoning back as one `thinking` chunk before its
+text, and `CheckpointHygieneMiddleware` keeps that reasoning in every turn
+(`keep_native_reasoning`) instead of re-homing the open turn's as text. The
+history size budget counts thinking text. Other models, Azure clients included,
+are unchanged. Leak-study A/B on `mistral-medium`, `reasoning_effort: high`,
+12 runs per arm: text-written tool calls 26/146 → 0/188, decks 7/12 → 12/12,
+runaway hangs 3 → 0; median call 17.8 s → 23.8 s from the larger input.
+Migration note: `docs/swift/ops/migrations/3110-recover-streamed-mistral-tool-calls.md`.

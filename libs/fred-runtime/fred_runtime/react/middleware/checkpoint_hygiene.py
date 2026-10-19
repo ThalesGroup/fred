@@ -26,7 +26,11 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, AnyMessage
 
-from fred_runtime.support.thinking import thread_reasoning_within_open_turn
+from fred_runtime.support.reasoning_replay import replays_native_reasoning
+from fred_runtime.support.thinking import (
+    keep_native_reasoning,
+    thread_reasoning_within_open_turn,
+)
 from fred_runtime.support.tool_loop import (
     ChatTurnTooLargeError,
     collect_tool_outputs,
@@ -49,9 +53,10 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
     Why this exists:
     - poisoned checkpoints (dangling tool calls from crashed turns) make OpenAI
       reject the payload with HTTP 400; unbounded history contaminates queries
-    - raw provider reasoning blocks must never be replayed as such (the model
-      client drops them anyway); the open turn's reasoning is instead carried
-      back as text, see `thread_reasoning_within_open_turn`
+    - raw provider reasoning blocks are not replayed as such (the model client
+      drops them); the open turn's reasoning is instead carried back as text,
+      see `thread_reasoning_within_open_turn`. Mistral is the exception: it
+      gets every turn's reasoning back natively, see `keep_native_reasoning`
     - the legacy loop applied sanitize → trim → reasoning handling to the MODEL
       INPUT only, never to the persisted checkpoint — so this must be a
       `wrap_model_call` request override, NOT a `before_model` state update
@@ -98,23 +103,13 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
             # it already ran on the untrimmed list above. Re-run it: idempotent
             # on an already-clean list, closes the gap on a freshly-cut one.
             messages = sanitize_dangling_tool_calls(trimmed)
-        # Reasoning continuity (RUNTIME-05 Layer 2c, RFC Amendment E §E.3).
-        # Provider-native reasoning blocks cannot be replayed as such — the model
-        # client drops them — so the reasoning of the turn IN PROGRESS is carried
-        # back as ordinary text and reasoning from closed turns is dropped.
-        # Without this the model gets its own message back with the content
-        # emptied, re-derives the plan, and re-issues the identical tool call:
-        # measured 9/12 turns and 67 duplicate calls on a bare prompt, 0/12 with
-        # this (p = 1.7e-4). Raw reasoning blocks are still never replayed.
-        #
-        # Must run BEFORE the size budget below (found in PR review): a
-        # `thinking` block's own text isn't counted by `_message_char_len`
-        # (it's structured reasoning content, not the plain `content` string
-        # or a tool-call argument) until this call flattens it into ordinary
-        # text. Budgeting first would measure the pre-flatten shape and miss
-        # however large the rehomed reasoning trace turns out to be — the
-        # budget must see what the handler will actually receive.
-        messages = thread_reasoning_within_open_turn(messages)
+        # Reasoning continuity: without it the model re-issues its last call.
+        # Mistral gets it back natively, others as open-turn text (contract
+        # §8.37, §8.117). Runs before the size budget so the budget sees it.
+        if replays_native_reasoning(request.model):
+            messages = keep_native_reasoning(messages)
+        else:
+            messages = thread_reasoning_within_open_turn(messages)
         if self._max_history_chars is not None:
             # Message-count trim above says nothing about payload size: a
             # handful of large tool outputs (a generated document, a big RAG

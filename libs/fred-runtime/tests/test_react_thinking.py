@@ -163,6 +163,21 @@ def test_stringify_plain_text_unchanged() -> None:
     assert stringify_langchain_content([{"type": "text", "text": "a"}]) == "a"
 
 
+def test_payloadless_blocks_leave_literal_braces_and_unknown_payloads_visible() -> None:
+    unknown = {"type": "future_block", "value": "keep me"}
+    content = [
+        {"type": "text", "text": "Use {} to reset. "},
+        {},
+        {"type": "signature", "index": 0},
+        {"id": "empty-delta"},
+        "Literal {} stays. ",
+        unknown,
+    ]
+    expected = f"Use {{}} to reset. Literal {{}} stays. {unknown}"
+    assert content_to_text(content) == expected
+    assert stringify_langchain_content(content) == expected
+
+
 @pytest.mark.parametrize("split", [3, 10, 35])
 def test_text_fragments_preserve_mermaid_fence_in_history_and_replay(
     split: int,
@@ -258,6 +273,25 @@ def test_content_to_text_matches_stringify() -> None:
         {"type": "text", "text": "keep me"},
     ]
     assert content_to_text(blocks) == "keep me" == stringify_langchain_content(blocks)
+
+
+def test_content_to_text_drops_blocks_without_text() -> None:
+    blocks = [
+        "build_presentation",
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": '{"slides": []}'},
+    ]
+    assert content_to_text(blocks) == 'build_presentation{"slides": []}'
+
+
+def test_content_to_text_renders_refusal_and_keeps_unknown_blocks() -> None:
+    unknown = {"type": "metadata", "value": "keep me"}
+    blocks = [
+        {"type": "refusal", "refusal": "I cannot help with that."},
+        {"type": "tool_use", "id": "call-1", "name": "ls", "input": {}},
+        unknown,
+    ]
+    assert content_to_text(blocks) == "I cannot help with that." + str(unknown)
 
 
 # ---------------------------------------------------------------------------

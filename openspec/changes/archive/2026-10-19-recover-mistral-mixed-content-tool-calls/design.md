@@ -30,15 +30,35 @@ Alternative: flatten the whole list through the generic text renderer and parse 
 
 ### Make the stream bridge recognize the same mixed shape
 
-Treat plain strings, typed text blocks, thinking blocks, and the exact empty sentinel as eligible content-list members when detecting the marker. Collect text on either side in order, and pass the joined fragments to the existing tool-name suffix probe. An unknown typed block keeps the generic rendering path so its text is not lost when recovery is rejected. Keep the current completed-message metadata decision: a recovered call discards its buffered encoding, while an unrecovered response releases buffered text. Do not broaden the branch for non-Mistral output.
+The parser, marker detector and renderer share one definition of a payloadless block: only `type`, `index` and `id` keys, excluding malformed `text` and `reference` blocks. These blocks have no visible text, including between fragments of a tool name or in the same chunk as its sentinel. Literal braces in text and unknown blocks carrying a payload remain visible.
 
-Alternative: hide every empty reference block in generic text rendering. That would mask the visible symptom but leave the tool unexecuted and could silently alter ordinary responses.
+Treat plain strings, typed text blocks, thinking blocks, and the exact empty sentinel as eligible content-list members when detecting the marker. Collect text on either side in order, and pass the joined fragments to the existing tool-name suffix probe. An unknown typed block carrying a payload keeps the generic rendering path so its data is not lost when recovery is rejected. Keep the current completed-message metadata decision: a recovered call discards its buffered encoding, while an unrecovered response releases buffered text. Do not broaden the branch for non-Mistral output.
+
+Alternative: hide every empty reference block in generic text rendering. That would mask the visible symptom but leave the tool unexecuted and could silently alter ordinary responses. (Revisited for #3110: the generic renderer now drops only the call `reference` and tool-call blocks (`tool_use`, `tool_call`, `input_json_delta`), renders a `refusal` block as its refusal text, and keeps the visible fallback for unknown blocks with payloads and non-dict objects. Hiding the sentinel is no longer a substitute for recovery, which now fires; it only stops its Python repr reaching answers, history and the model's replayed context, and no consumer reads that repr. Unknown blocks with payloads are not hidden, and literal text is unchanged.)
 
 ### Handle repeated markers and native calls without leaking syntax
 
 Allow a later exact marker only after another registered tool name. Remove only validated markers while preserving the original text bytes, then validate the entire call sequence before allocating any call IDs. Adjacent markers, modified references, malformed arguments, and a later marker without a registered name reject the whole recovery candidate.
 
 When the completed message already carries native tool calls, keep those calls and IDs. If its mixed content contains the exact marker, discard the pending marked stream buffer instead of releasing it as answer text and then reclassifying it as a Planning preamble. Safe prose emitted before the tool-name probe remains available as a preamble.
+
+### Bound recovery by text, not by content blocks (#3110)
+
+The parser first rejected lists longer than 256 blocks. A streamed response is aggregated by `AIMessageChunk.__add__`, which appends typed blocks without merging them, so a long reasoning turn arrives as hundreds of one-delta `thinking` blocks and every such recovery candidate was rejected before parsing. The cap is removed rather than raised: thinking blocks are skipped in constant time, and the 16k character cap and 16-call cap already bound the parsing work.
+
+Alternative: normalise the list (drop thinking, merge adjacent text) before applying the block cap. Same result with more code; no remaining bound depends on the block count.
+
+Mistral can also keep writing after the call it leaked: over-closed JSON, `{} {}`, diff headers, looping prose, a half-written second call. In all 27 leaks recorded on 2026-10-13 that text was garbage, never an answer, so all text after the first recovered call is dropped (its length is logged) and only the preamble stays. Risk: a genuine trailing sentence is lost; the turn continues with the tool result and the model speaks again. This replaces the earlier closer-only residue rule.
+
+Seven of those leaks also carried a native call, so text recovery now runs on messages with native calls too: text calls first (they precede the native delta in the stream), an exact `(name, args)` duplicate of a native call dropped, native IDs kept. One leak ended a sentence on the next call's name (`...landscape.read_document`), so at the reference anchor a `.` before the name is a valid boundary; the longest registered name still wins, and native-call name repair keeps the strict boundary.
+
+### Replay Mistral reasoning natively (leak study, 2026-10-19)
+
+Recovery retains the original thinking blocks alongside the safe preamble, including when the text call duplicates a native call. Planning renders only the preamble from that mixed content even when a native-call chunk withheld it during streaming. Checkpoint hygiene and the model client then normalize that reasoning for replay; cleaning call syntax must not erase the next request's context.
+
+Fred dropped reasoning blocks from replayed history (`langchain_openai` removes `thinking` blocks; the open turn got its reasoning back only as prefixed text). Mistral's docs ask for the reasoning chunks back. With them replayed (variant B) against the unchanged runtime (variant A), 12 runs each on `mistral-medium` with `reasoning_effort: high`: leaked calls 26/146 → 0/188, decks 7/12 → 12/12, hangs 3 → 0, execution errors 2 → 0; median call 17.8 s → 23.8 s (bigger input), run time comparable or shorter. One evening, arms run sequentially.
+
+`with_mistral_reasoning_replay` (applied in `RoutedChatModelFactory.build_for_chat`) gives a plain `ChatOpenAI` with a Mistral model name a subclass whose payload puts the reasoning back as one `thinking` chunk; `CheckpointHygieneMiddleware` then keeps every turn's reasoning (`keep_native_reasoning`), as measured. Scope is Mistral only: OpenAI-compatible reasoning models do not accept the chunk back, and Azure clients and other providers keep the previous handling. Not measured: replaying only the open turn's reasoning, which would cost less context on long conversations.
 
 ### Reproduce from a redacted checkpoint shape
 

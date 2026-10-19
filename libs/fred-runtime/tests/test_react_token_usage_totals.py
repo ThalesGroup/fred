@@ -38,6 +38,7 @@ from typing import cast
 import pytest
 from fred_runtime.react.middleware.tool_call_recovery import (
     RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
+    ToolCallTextRecoveryMiddleware,
 )
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_sdk.contracts.context import RuntimeContext
@@ -50,7 +51,11 @@ from fred_sdk.contracts.runtime import (
     ThoughtDeltaEvent,
     ToolCallRuntimeEvent,
 )
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.messages.tool import ToolCall
+from langchain_core.tools import BaseTool, tool
 
 
 class _FakePortable:
@@ -373,6 +378,119 @@ async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> N
     ] == ["read_query"]
 
 
+@tool
+def ls(path: str) -> str:
+    """List a fake directory."""
+
+    return "fake-file.md"
+
+
+@pytest.mark.asyncio
+async def test_call_after_hundreds_of_streamed_thinking_deltas_runs_unseen() -> None:
+    deltas: list[str | dict[str, object]] = [
+        *(
+            {"type": "thinking", "thinking": [{"type": "text", "text": "x"}]}
+            for _ in range(300)
+        ),
+        {"type": "text", "text": "l"},
+        {"type": "text", "text": "s"},
+        {"type": "reference", "reference_ids": []},
+        *({"type": "text", "text": part} for part in ('{"path"', ': "/"}', "}")),
+    ]
+    aggregated = AIMessageChunk(content="")
+    for delta in deltas:
+        aggregated += AIMessageChunk(content=[delta])
+    completed = AIMessage(
+        content=aggregated.content,
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[completed])
+
+    recovered = (
+        await ToolCallTextRecoveryMiddleware().awrap_model_call(
+            ModelRequest(
+                model=cast(BaseChatModel, None),
+                messages=[],
+                tools=cast(list[BaseTool | dict[str, object]], [ls]),
+            ),
+            handler,
+        )
+    ).result[0]
+    events = [
+        *(("messages", (AIMessageChunk(content=[delta]), {})) for delta in deltas),
+        ("updates", {"agent": {"messages": [recovered]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    assert not [e for e in collected if isinstance(e, AssistantDeltaRuntimeEvent)]
+    thoughts = "".join(
+        event.delta for event in collected if isinstance(event, ThoughtDeltaEvent)
+    )
+    assert thoughts == "x" * 300
+    assert [
+        event.tool_name
+        for event in collected
+        if isinstance(event, ToolCallRuntimeEvent)
+    ] == ["ls"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("coalesced", [False, True])
+@pytest.mark.parametrize("valid", [False, True])
+async def test_payloadless_blocks_do_not_break_streamed_call_recovery(
+    coalesced: bool, valid: bool
+) -> None:
+    arguments = '{"path":"/"}' if valid else '{"path":'
+    blocks: list[str | dict[str, object]] = [
+        {"type": "thinking", "thinking": "inspect files"},
+        {"type": "text", "text": "l"},
+        {},
+        {"type": "text", "text": "s"},
+        {"type": "signature", "index": 0},
+        {"type": "reference", "reference_ids": []},
+        {"id": "empty-delta"},
+        {"type": "text", "text": arguments},
+    ]
+    completed = AIMessage(
+        content=blocks, response_metadata={"model_name": "mistral-medium-latest"}
+    )
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[completed])
+
+    recovered = (
+        await ToolCallTextRecoveryMiddleware().awrap_model_call(
+            ModelRequest(model=cast(BaseChatModel, None), messages=[], tools=[ls]),
+            handler,
+        )
+    ).result[0]
+    chunks = [blocks] if coalesced else [[block] for block in blocks]
+    events = [
+        *(("messages", (AIMessageChunk(content=chunk), {})) for chunk in chunks),
+        ("updates", {"agent": {"messages": [recovered]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    answer = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    )
+    assert answer == ("" if valid else f"ls{arguments}")
+    assert (
+        "".join(
+            event.delta for event in collected if isinstance(event, ThoughtDeltaEvent)
+        )
+        == "inspect files"
+    )
+    calls = [event for event in collected if isinstance(event, ToolCallRuntimeEvent)]
+    assert [event.tool_name for event in calls] == (["ls"] if valid else [])
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("content", "tool_name", "args"),
@@ -531,6 +649,56 @@ async def test_native_call_with_marked_content_does_not_publish_call_syntax_as_p
 
 
 @pytest.mark.asyncio
+async def test_recovered_native_duplicate_keeps_coalesced_preamble_as_planning() -> (
+    None
+):
+    thinking = {"type": "thinking", "thinking": "inspect files"}
+    preamble = "I will inspect the directory."
+    native_call: ToolCall = {"id": "native-1", "name": "ls", "args": {"path": "/"}}
+    call_blocks = [
+        {"type": "text", "text": f"{preamble}\n\nls"},
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": '{"path":"/"}'},
+    ]
+    completed = AIMessage(
+        content=[thinking, *call_blocks],
+        tool_calls=[native_call],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[completed])
+
+    recovered = (
+        await ToolCallTextRecoveryMiddleware().awrap_model_call(
+            ModelRequest(model=cast(BaseChatModel, None), messages=[], tools=[ls]),
+            handler,
+        )
+    ).result[0]
+    collected = await _run_stream(
+        [
+            ("messages", (AIMessageChunk(content=[thinking]), {})),
+            (
+                "messages",
+                (AIMessageChunk(content=call_blocks, tool_calls=[native_call]), {}),
+            ),
+            ("updates", {"agent": {"messages": [recovered]}}),
+        ]
+    )
+
+    assert not [e for e in collected if isinstance(e, AssistantDeltaRuntimeEvent)]
+    assert [e.delta for e in collected if isinstance(e, ThoughtDeltaEvent)] == [
+        "inspect files",
+        preamble,
+    ]
+    assert [
+        (e.call_id, e.tool_name)
+        for e in collected
+        if isinstance(e, ToolCallRuntimeEvent)
+    ] == [("native-1", "ls")]
+
+
+@pytest.mark.asyncio
 async def test_capability_only_tool_name_is_withheld_from_react_stream() -> None:
     recovered = AIMessage(
         content="",
@@ -685,8 +853,8 @@ async def test_mixed_reference_with_unknown_block_remains_visible() -> None:
         if isinstance(event, AssistantDeltaRuntimeEvent)
     )
     assert "read" in streamed
-    assert "reference_ids" in streamed
     assert "keep this block" in streamed
+    assert "reference_ids" not in streamed
     assert not [event for event in collected if isinstance(event, ToolCallRuntimeEvent)]
 
 

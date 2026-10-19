@@ -250,6 +250,16 @@ def safe_value(
     raise ValueError("unsupported logging value")
 
 
+def _clipped(value: object) -> object:
+    """Shorten an oversized string field; a model-written name must not fail a scope."""
+    if not isinstance(value, str) or len(value) <= MAX_VALUE_BYTES // 4:
+        return value
+    encoded = value.encode("utf-8")
+    if len(encoded) <= MAX_VALUE_BYTES:
+        return value
+    return encoded[: MAX_VALUE_BYTES - 3].decode("utf-8", "ignore") + "..."
+
+
 def safe_key(key: object) -> str:
     """Restrict metadata names; call at binding and incoming envelope boundaries."""
     if not isinstance(key, str) or not key or len(key) > 64 or not key.isascii():
@@ -303,7 +313,8 @@ def log_context(
     **fields: object,
 ) -> Generator[None, None, None]:
     """Bind nested metadata and restore it on all exits, including cancellation."""
-    validated = safe_context({**(values or {}), **fields})
+    merged = {**(values or {}), **fields}
+    validated = safe_context({key: _clipped(value) for key, value in merged.items()})
     tokens = bind_contextvars(**{**dict.fromkeys(clear), **validated})
     try:
         yield
