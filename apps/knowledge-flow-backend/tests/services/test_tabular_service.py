@@ -1902,13 +1902,15 @@ async def test_tabular_service_requires_ready_excel_catalog(tmp_path, metadata_s
     [csv_description] = await service.describe_documents(_user(), ["doc-sales"])
     assert csv_description.markdown is None
 
-    with pytest.raises(FileNotFoundError, match="Preview not ready"):
+    with pytest.raises(FileNotFoundError, match="Preview not ready") as error:
         await service.describe_documents(_user(), ["doc-excel"])
+    assert error.value.reason == "preview_not_ready"
 
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     await MetadataService().save_document_metadata(_user(), metadata)
-    with pytest.raises(FileNotFoundError, match="output.md"):
+    with pytest.raises(FileNotFoundError, match="output.md") as error:
         await service.describe_documents(_user(), ["doc-excel"])
+    assert error.value.reason == "preview_artifact_unavailable"
 
     content_store.save_output("doc-excel", output_dir)
     [description] = await service.describe_documents(_user(), ["doc-excel"])
@@ -2562,3 +2564,70 @@ async def test_tabular_checks_each_workbook_once_with_bounded_concurrency(monkey
     assert len(datasets) == 46
     assert sorted(rebac.checked_document_uids) == sorted(row.document_uid for row in rows)
     assert 1 < peak <= 10
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("row_tags", "scope", "reason", "readable", "scoped"),
+    [
+        (None, None, "no_readable_documents", 0, 0),
+        (["library"], set(), "empty_authorized_scope", 0, 0),
+        (["outside"], {"library"}, "no_documents_in_scope", 0, 0),
+        (["library"], None, "no_registered_tables", 1, 1),
+    ],
+)
+async def test_discovery_empty_explains_observed_stages_without_extra_io(monkeypatch, caplog, row_tags, scope, reason, readable, scoped):
+    import logging
+    from unittest.mock import AsyncMock
+
+    service = object.__new__(TabularService)
+    rows = [] if row_tags is None else [_metadata(document_uid="UID-CANARY", file_name="CONTENT-CANARY.csv", tag_ids=row_tags)]
+    service.metadata_store = _rows_store(rows)
+    service.metadata_store.metadata_in_tags = AsyncMock(wraps=service.metadata_store.metadata_in_tags)
+    service.metadata_store.get_all_metadata = AsyncMock(return_value=[])
+    service.rebac = _FakeRebac({"UID-CANARY"}, readable_tag_ids={"library"})
+    service.rebac.has_user_permission = AsyncMock(wraps=service.rebac.has_user_permission)
+    service._resolve_scope_tag_ids = AsyncMock(return_value=scope)
+    with caplog.at_level(logging.INFO):
+        assert await service.list_documents(_user(), include_session_scope=False) == []
+    [event] = [r for r in caplog.records if r.getMessage() == "tabular.discovery_empty"]
+    assert event.reason == reason
+    assert event.readable_metadata_count == readable and event.scoped_metadata_count == scoped and event.resolved_table_count == 0
+    assert event.levelno == logging.INFO
+    assert "CANARY" not in repr(event.__dict__)
+    service.metadata_store.metadata_in_tags.assert_awaited_once()
+    service.metadata_store.get_all_metadata.assert_not_awaited()
+    service.rebac.has_user_permission.assert_not_awaited()
+    service._resolve_scope_tag_ids.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_nonempty_discovery_has_no_empty_diagnostic(tmp_path, metadata_store, caplog):
+    import logging
+
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="available", file_name="sales.csv", content="amount\n10\n")
+    service = TabularService()
+    service.rebac = _FakeRebac({"available"})
+    with caplog.at_level(logging.INFO):
+        assert len(await service.list_documents(_user())) == 1
+    assert not [r for r in caplog.records if r.getMessage() == "tabular.discovery_empty"]
+
+
+@pytest.mark.asyncio
+async def test_description_unresolved_classification_preserves_permission_boundary(monkeypatch):
+    from unittest.mock import AsyncMock
+    from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound
+
+    service = object.__new__(TabularService)
+    service.metadata_store = _rows_store([])
+    service.rebac = _FakeRebac({"missing"})
+    service._resolve_scope_tag_ids = AsyncMock(return_value=None)
+    with pytest.raises(TabularDescriptionNotFound) as error:
+        await service.describe_documents(_user(), ["missing"], include_session_scope=False)
+    assert error.value.reason == "datasets_not_resolved"
+    assert str(error.value) == "Requested tabular datasets were not found: missing"
+    assert service.rebac.checked_document_uids == ["missing"]
+    service.rebac = _FakeRebac(set())
+    with pytest.raises(PermissionError):
+        await service.describe_documents(_user(), ["missing"], include_session_scope=False)
+    assert service.rebac.checked_document_uids == ["missing"]
