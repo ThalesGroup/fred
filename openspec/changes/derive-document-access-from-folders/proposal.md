@@ -6,9 +6,9 @@ The model already makes the enumeration unnecessary: `document#read` and `resour
 
 ## What Changes
 
-- Knowledge Flow stops enumerating documents and resources in OpenFGA. Readable documents are those whose stored tags intersect the caller's authorized tags: the active scope's tags when one is set, otherwise the caller's readable tags.
-- Tabular resolution, `get_documents_metadata`, label lookups and resource listing use that rule. The evaluation-worker special case in tabular resolution folds into the scoped path.
-- Label store queries narrow by tag ids in SQL instead of an expanded document-uid list.
+- Knowledge Flow stops enumerating documents and resources in OpenFGA. Stored membership selects candidates from the active scope or readable folders; each candidate still requires its OpenFGA object READ permission. SQL membership alone is not an authorization grant.
+- Tabular resolution, `get_documents_metadata`, label lookups and resource listing use that rule. The existing evaluation-worker team-only exception and disabled-ReBAC behavior remain explicit.
+- Label store queries narrow candidates by tag ids. Authorize all matching UIDs before computing label page totals and offsets; derive vocabulary only from checked documents.
 - The remaining enumerations (folders, teams, file areas) keep the plain `ListObjects` call. `lookup_resources` logs a warning when a response reaches the server's default 1,000-result limit or nears its default deadline, so a truncation can no longer go unnoticed.
 
 Not in scope: historical orphan repair (issue item 4), the per-candidate checks added for folder inventories, the FGA model, and the organization/project redesign (`simplify-corpus-authorization`). Do not close #2845 automatically.

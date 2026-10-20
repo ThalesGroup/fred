@@ -24,4 +24,12 @@
 - Knowledge Flow offline: 1,560 passed, 2 skipped, 45 deselected; `make code-quality` clean.
 - The 1,500/3,000 tabular test fails on the previous resolver (document enumeration) and passes with this change.
 - Validation harness: 54 passed; `scenarios/test_folder_inventory.py` collects its four cases. Not run against a live stack.
-- PostgreSQL branch of the label tag filter is exercised only on SQLite offline; the live scenario covers PostgreSQL.
+- Prior label-filter tests used SQLite only. The folder-inventory live scenario calls tabular APIs and does not exercise the three label queries on PostgreSQL.
+
+## 4. Confidentiality correction and review
+
+- [ ] 4.1 Confirm base/HEAD behavior with real SQL and deterministic barriers; inspect title, name, retrievability, resource content and ingestion writes
+- [ ] 4.2 Restore bounded candidate checks for metadata, labels, resources and tabular operations, preserving scopes and special authorization paths
+- [ ] 4.3 Prove denial for A and retained access for B across all affected surfaces, exact pagination, error propagation, and 1,500/3,000-document completeness
+- [ ] 4.4 Exercise all three label query filters on real isolated PostgreSQL and report separately from SQLite and OpenFGA doubles
+- [ ] 4.5 Run required tests/root quality, independent full review and correction review; reconcile documentation and PR evidence
