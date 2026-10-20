@@ -42,6 +42,7 @@ from fred_sdk.contracts.prompt_utils import (
 )
 
 from ..runtime_context import get_runtime_context_or_none
+from ..runtime_support.current_date import DEFERRED_TODAY_TOKEN
 
 # Matches only {simple_identifier} — same pattern as the validator so the two
 # surfaces stay in sync. Non-simple patterns ({}, {0}, {x.y}) are not touched.
@@ -81,6 +82,7 @@ def render_prompt_template(
     binding: BoundRuntimeContext,
     agent_id: str,
     extra_tokens: dict[str, str] | None = None,
+    defer_today: bool = False,
 ) -> str:
     """
     Render one ReAct-style system prompt template with runtime-safe substitution.
@@ -95,6 +97,7 @@ def render_prompt_template(
     - extra_tokens is an internal mechanism for SDK-level agent developer templates
       (e.g. prompts.planning injected as prompts_planning); it is not available to
       user-authored prompts submitted via the control-plane UI
+    - defer_today keeps the date token for the shared model-call boundary
 
     Safety guarantee:
     - only {simple_identifier} patterns present in the merged token map are
@@ -107,6 +110,8 @@ def render_prompt_template(
     tokens = safe_prompt_token_map(binding, agent_id=agent_id)
     if extra_tokens:
         tokens = {**tokens, **extra_tokens}
+    if defer_today:
+        tokens["today"] = DEFERRED_TODAY_TOKEN
 
     def _replace(m: re.Match[str]) -> str:
         return tokens.get(m.group(1), m.group(0))
@@ -321,7 +326,9 @@ def build_document_scope_suffix(binding: BoundRuntimeContext) -> str:
     )
 
 
-def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) -> str:
+def build_context_prompt_suffix(
+    binding: BoundRuntimeContext, *, agent_id: str, defer_today: bool = False
+) -> str:
     """
     Render the session's attached chat-context prompts as a system-prompt suffix.
 
@@ -350,7 +357,10 @@ def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) 
     # same neutralisation as the other data-derived blocks.
     rendered = escape_reserved_prompt_tags(
         render_prompt_template(
-            context_prompt_text, binding=binding, agent_id=agent_id
+            context_prompt_text,
+            binding=binding,
+            agent_id=agent_id,
+            defer_today=defer_today,
         ).strip()
     )
     if not rendered:
@@ -430,6 +440,7 @@ def compose_system_prompt(
     tool_suffix: str = "",
     skills_prompt: str = "",
     tabular_tools_available: bool,
+    defer_today: bool = False,
 ) -> str:
     """
     Assemble the system prompt shared by the ReAct and Deep runtimes.
@@ -484,7 +495,9 @@ def compose_system_prompt(
         else ""
     )
     per_turn = (
-        build_context_prompt_suffix(binding, agent_id=agent_id),
+        build_context_prompt_suffix(
+            binding, agent_id=agent_id, defer_today=defer_today
+        ),
         build_document_scope_suffix(binding),
         build_attachment_context_suffix(
             binding, tabular_tools_available=tabular_tools_available

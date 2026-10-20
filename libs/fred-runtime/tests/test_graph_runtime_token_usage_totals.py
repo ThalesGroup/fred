@@ -28,6 +28,7 @@ an unmeasurable number there would be worse than reporting none.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fred_runtime.graph.node_context import NodeContext
@@ -43,10 +44,11 @@ from fred_sdk.contracts.runtime import (
     ToolCallRuntimeEvent,
 )
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.outputs import ChatGenerationChunk
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import tool as lc_tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 def _binding() -> BoundRuntimeContext:
@@ -155,6 +157,8 @@ class _Route(BaseModel):
 class _StructuredModel(FakeListChatModel):
     """Answers structured calls the way LangChain's `include_raw=True` does."""
 
+    seen_messages: list[list[BaseMessage]] = Field(default_factory=list)
+
     def with_structured_output(  # type: ignore[override]
         self, schema: Any, *, include_raw: bool = False, **kwargs: Any
     ) -> Runnable[Any, Any]:
@@ -163,13 +167,31 @@ class _StructuredModel(FakeListChatModel):
             usage_metadata={"input_tokens": 40, "output_tokens": 5, "total_tokens": 45},
         )
         parsed = _Route(route="search")
-        return RunnableLambda(
-            lambda _messages: (
+
+        async def respond(messages: list[BaseMessage]) -> dict[str, Any] | _Route:
+            self.seen_messages.append(messages)
+            return (
                 {"raw": raw, "parsed": parsed, "parsing_error": None}
                 if include_raw
                 else parsed
             )
-        )
+
+        return RunnableLambda(respond)
+
+
+class _StreamingModel(FakeListChatModel):
+    seen_messages: list[list[BaseMessage]] = Field(default_factory=list)
+
+    async def _astream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        self.seen_messages.append(messages)
+        async for chunk in super()._astream(messages, stop, run_manager, **kwargs):
+            yield chunk
 
 
 def test_structured_model_call_counts_toward_the_turn_total() -> None:
@@ -187,3 +209,32 @@ def test_structured_model_call_counts_toward_the_turn_total() -> None:
         "cache_read_tokens": 0,
         "cache_creation_tokens": 0,
     }
+
+
+def test_graph_model_calls_receive_date_without_mutating_caller_messages() -> None:
+    from datetime import UTC, datetime
+
+    date = datetime.now(UTC).date().isoformat()
+    streaming = _StreamingModel(responses=["answer"])
+    system = SystemMessage(content="Existing graph instructions")
+    messages = [system, HumanMessage(content="What is today's date?")]
+    asyncio.run(_node_context({}, model=streaming).invoke_model(messages))
+
+    (streamed,) = streaming.seen_messages
+    assert len(streamed) == 2
+    assert isinstance(streamed[0], SystemMessage)
+    assert f"Current UTC date: {date}" in streamed[0].content
+    assert "without a time" in streamed[0].content
+    assert "Existing graph instructions" in streamed[0].content
+    assert system.content == "Existing graph instructions"
+    assert messages[0] is system
+
+    structured = _StructuredModel(responses=[""])
+    human = HumanMessage(content="What is today's date?")
+    asyncio.run(
+        _node_context({}, model=structured).invoke_structured_model(_Route, [human])
+    )
+    (structured_messages,) = structured.seen_messages
+    assert isinstance(structured_messages[0], SystemMessage)
+    assert f"Current UTC date: {date}" in structured_messages[0].content
+    assert structured_messages[1] is human

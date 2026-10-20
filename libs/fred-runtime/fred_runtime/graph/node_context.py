@@ -61,7 +61,7 @@ from fred_sdk.contracts.runtime import (
 )
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.func import task
@@ -69,6 +69,7 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.runtime_support.current_date import current_date_instruction
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
@@ -306,12 +307,27 @@ class NodeContext:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
         return self.model
 
+    @staticmethod
+    def _with_current_date(messages: list[BaseMessage]) -> list[BaseMessage]:
+        instruction = current_date_instruction()
+        if messages and isinstance(messages[0], SystemMessage):
+            first = messages[0]
+            if isinstance(first.content, str):
+                return [
+                    first.model_copy(
+                        update={"content": f"{instruction}\n\n{first.content}"}
+                    ),
+                    *messages[1:],
+                ]
+        return [SystemMessage(content=instruction), *messages]
+
     async def invoke_model(
         self,
         messages: list[BaseMessage],
     ) -> BaseMessage:
         """Call the bound model, streaming each token to the UI as it arrives."""
         model = self._require_model()
+        messages = self._with_current_date(messages)
         model_name = _resolve_model_name(model)
         with _observe(
             self,
@@ -355,6 +371,7 @@ class NodeContext:
     ) -> BaseModel:
         """Call the bound model for validated routing or extraction output."""
         model = self._require_model()
+        messages = self._with_current_date(messages)
         model_name = _resolve_model_name(model)
         # include_raw: the parsed object alone carries no usage metadata, and
         # the call's tokens must still reach the turn total and the span.

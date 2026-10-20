@@ -1,14 +1,14 @@
 ---
 schema: 1
-title: "Give generic assistants the current date in their default prompts"
+title: "Give every agent the current date at model invocation"
 impact: none
 configuration: none
-configuration_reason: "Only the bundled generic assistant prompt text changes; no deployment setting changes."
-no_action_reason: "The existing runtime expands the date token, so normal fred-agents deployment is enough and no stored data needs migration."
+configuration_reason: "The runtime supplies the date; no deployment setting changes."
+no_action_reason: "The runtime adds the date at each model call, so saved prompts and stored data need no migration."
 ---
 ## Applicability
 
-Deployments offering the generic ReAct or Deep assistant templates.
+Deployments running ReAct, Deep, or Graph agents.
 
 ## Prerequisites
 
@@ -20,13 +20,13 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy fred-agents normally. New generic assistant instances receive the updated
-English or French default prompt.
+Deploy fred-runtime normally. Existing and new agents receive the current UTC
+date at model invocation without prompt edits.
 
 ## Validation
 
-Create a generic ReAct or Deep assistant and ask for today's date. Its default
-prompt should contain the current UTC date and instruct a date-only answer.
+Ask an existing ReAct, Deep, and Graph agent for today's date. The model input
+should contain the current UTC date and instruct a date-only answer.
 
 ## Rollback
 
@@ -34,6 +34,6 @@ Use the normal rollback procedure. No stored data migration is involved.
 
 ## Limitations
 
-Existing instances with a saved prompt, including a copy of the previous
-default, keep that prompt until edited. The date token uses the UTC calendar
-date, which may differ from a user's local date around midnight.
+The date uses the UTC calendar, which may differ from a user's local date around
+midnight. Graph handlers must use the supported `NodeContext` model methods to
+receive the date instruction.

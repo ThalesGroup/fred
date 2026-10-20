@@ -29,7 +29,7 @@ from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.config import (
     ensure_config,
     merge_configs,
@@ -37,6 +37,7 @@ from langchain_core.runnables.config import (
 )
 
 from fred_runtime.common.outbound_credentials import delegation_enabled
+from fred_runtime.runtime_support.current_date import add_current_date_to_system_prompt
 from fred_runtime.runtime_support.llm_diagnostics import (
     LlmObservation,
     LlmProgressCallback,
@@ -86,6 +87,11 @@ class TracingKpiMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
+        request = request.override(
+            system_message=SystemMessage(
+                content=add_current_date_to_system_prompt(request.system_prompt or "")
+            )
+        )
         model_name = extract_model_name_from_object(request.model) or "unknown"
         sizes: dict[str, int] = {}
         settings = effective_model_settings(request.model)

@@ -27,12 +27,14 @@ from fred_runtime.react.react_prompting import (
     compose_system_prompt,
     demote_markdown_headings,
     render_prompt_block,
+    render_prompt_template,
 )
 from fred_runtime.react.react_tool_binding import (
     BoundTool,
     build_runtime_tool_prompt_suffix,
     tabular_tools_bound,
 )
+from fred_runtime.runtime_support.current_date import DEFERRED_TODAY_TOKEN
 from fred_runtime.skills.catalog import PlatformSkills
 from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.context import (
@@ -45,6 +47,29 @@ from fred_sdk.contracts.skills import SkillInvocation
 from langchain_core.tools import BaseTool
 
 _EXPECTED_MERMAID_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
+
+
+def test_render_prompt_template_can_defer_today_until_model_call() -> None:
+    assert (
+        render_prompt_template(
+            "Saved date: {today}",
+            binding=_binding(),
+            agent_id="agent-1",
+            defer_today=True,
+        )
+        == f"Saved date: {DEFERRED_TODAY_TOKEN}"
+    )
+
+
+def test_composed_selected_prompt_can_defer_today_until_model_call() -> None:
+    prompt = compose_system_prompt(
+        "BASE",
+        binding=_binding(context_prompt_text="Selected date: {today}"),
+        agent_id="agent-1",
+        tabular_tools_available=False,
+        defer_today=True,
+    )
+    assert f"Selected date: {DEFERRED_TODAY_TOKEN}" in prompt
 
 
 def _binding(

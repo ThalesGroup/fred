@@ -416,7 +416,7 @@ part of the first block:
 
 | Order | Tag                     | Content                                                                                                                           | Edited by                         | Validated at save                                                       |
 | ----- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------- |
-| 1     | `platform_instructions` | Shipped platform instructions, ending with the precedence clause                                                                  | Nobody (pod image)                | No, code-owned                                                          |
+| 1     | `platform_instructions` | Shipped platform instructions, including the precedence clause, plus the current UTC date injected by the runtime               | Nobody (pod image and runtime)    | No, code-owned                                                          |
 | 2     | `platform_prompt`       | Admin-editable platform prompt (Postgres row, else the pod default)                                                               | Platform admin                    | Yes, 422                                                                |
 | 3     | `tools`                 | Tool list grouped by MCP server with each server's `agent_instructions`, Deep's filesystem note, and the configured skill catalog | Pod operator (YAML), fred-runtime | No, code-owned; a remote server's tool descriptions are escaped as data |
 | 4     | `agent_instructions`    | The agent's rendered template, with every string tuning value substituted in                                                      | Owning team                       | Yes, 422 on every string field                                          |
@@ -430,6 +430,16 @@ tool result, file name) is data, not instruction; and a reserved
 tag name met anywhere but this prompt opens nothing. The per-turn context
 (selected prompts, document scope, attachments, §5) follows the four blocks,
 untagged.
+
+The shared model-call middleware adds the current UTC calendar date to
+`platform_instructions` at each ReAct or Deep model call, even when no platform
+prompt file is configured. It also resolves `{today}` in the composed prompt at
+that call, so a long turn crossing UTC midnight receives the new date.
+The instruction asks for a date without a time when the user asks for today's
+date. The `platform_prompt` JSON is not token-rendered, and a saved admin prompt
+replaces its default. Graph model calls use the same date instruction through
+`NodeContext.invoke_model` and `invoke_structured_model`; Graph does not use the
+four-block composer. Stored agent and admin prompts are unchanged.
 
 The procedural exception covers only skills advertised by the configured catalog
 and read through its declared loader, or supplied by the runtime as a selected

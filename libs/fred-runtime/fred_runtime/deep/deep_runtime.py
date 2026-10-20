@@ -240,6 +240,7 @@ class DeepAgentRuntime(ReActRuntime):
             policy.system_prompt_template,
             binding=binding,
             agent_id=self.definition.agent_id,
+            defer_today=True,
         )
         system_prompt = _compose_system_prompt(
             system_prompt,
@@ -268,6 +269,7 @@ class DeepAgentRuntime(ReActRuntime):
                 if part
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
+            defer_today=True,
         )
         # Bind the child's effective policy to both its custom tools and
         # Deep's built-in filesystem tools.

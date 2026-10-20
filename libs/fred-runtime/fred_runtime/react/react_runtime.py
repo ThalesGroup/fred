@@ -1285,6 +1285,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             binding=binding,
             agent_id=self.definition.agent_id,
             extra_tokens=tuning_tokens or None,
+            defer_today=True,
         )
         # No content preview here — this logger feeds the generic app-log
         # store (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7:
@@ -1311,6 +1312,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
                 ),
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
+            defer_today=True,
         )
         if delegation_enabled():
             logger.debug("[LLM][SYSTEM PROMPT] total_len=%d", len(system_prompt))
