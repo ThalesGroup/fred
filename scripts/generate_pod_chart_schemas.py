@@ -127,6 +127,27 @@ def agent_pod(configuration: dict) -> dict:
                     "annotations": _OBJECT_FREE,
                 }
             ),
+            "httpRoute": _obj(
+                {
+                    "enabled": _BOOL,
+                    "parentRefs": _arr(
+                        _obj(
+                            {
+                                "group": _STRING,
+                                "kind": _STRING,
+                                "name": {"type": "string", "minLength": 1},
+                                "namespace": _STRING,
+                                "sectionName": _STRING,
+                                "port": _INT,
+                            },
+                            required=["name"],
+                        )
+                    ),
+                    "hostnames": _arr({"type": "string", "minLength": 1}),
+                    "requestTimeout": _STRING,
+                    "annotations": _OBJECT_FREE,
+                }
+            ),
             "extraConfigFiles": {
                 "type": "object",
                 "additionalProperties": {"type": ["string", "object"]},
