@@ -35,14 +35,14 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.contracts.runtime import DocumentPortCallError
 
-UID = "da74bd08ed284fd0aabcc73a529f9585"
+UID = "test-document-uid"
 NAME = "02-technical-requirements.md"
 MARKER = "private-upstream-detail"
 
 
 class _Settings:
     id = "agent-a"
-    team_id = "team-1"
+    team_id: str | None = "team-1"
     tuning: AgentTuning | None = None
     active_mcp_servers: Sequence[MCPServerRef] = ()
 

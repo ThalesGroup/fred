@@ -54,7 +54,7 @@ from pydantic import Field
 
 class _Settings:
     id = "reader"
-    team_id = None
+    team_id: str | None = None
     tuning: AgentTuning | None = None
     active_mcp_servers: Sequence[MCPServerRef] = ()
 
@@ -64,7 +64,7 @@ class _Agent(ReActAgentDefinition):
     description: str = "Read a discovered document"
 
     def policy(self) -> ReActPolicy:
-        return ReActPolicy()
+        return ReActPolicy(system_prompt_template="Read the discovered document.")
 
 
 class _Model(BaseChatModel):
@@ -93,7 +93,7 @@ class _Model(BaseChatModel):
             result = next(m for m in reversed(messages) if isinstance(m, ToolMessage))
             assert result.artifact.is_error
             assert "exact opaque uid" in result.content
-            uid = "da74bd08ed284fd0aabcc73a529f9585"
+            uid = "test-document-uid"
         else:
             result = next(m for m in reversed(messages) if isinstance(m, ToolMessage))
             assert "Authorized source text" in result.content
@@ -159,7 +159,7 @@ async def test_delegated_read_recovers_in_the_same_model_loop() -> None:
                     headers={"X-Fred-Denial-Cause": "permission_refused"},
                     text="private-upstream-body",
                 )
-            assert request.url.path.endswith("/da74bd08ed284fd0aabcc73a529f9585")
+            assert request.url.path.endswith("/test-document-uid")
             return httpx.Response(200, json={"content": "Authorized source text"})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as client:
@@ -176,7 +176,7 @@ async def test_delegated_read_recovers_in_the_same_model_loop() -> None:
                 model=model,
                 tools=[],
                 system_prompt=(
-                    'Discovery returned {"uid":"da74bd08ed284fd0aabcc73a529f9585",'
+                    'Discovery returned {"uid":"test-document-uid",'
                     '"name":"02-technical-requirements.md"}. Read that document.'
                 ),
                 binding=binding,
