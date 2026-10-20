@@ -40,7 +40,7 @@ Knowledge Flow SHALL select document and resource candidates from stored members
 
 - **WHEN** candidate authorization fails
 - **THEN** the request fails instead of returning partial results or treating the failure as a denial
-- **AND** at most ten object permission checks run concurrently per request
+- **AND** at most ten permission checks for discovered candidates run concurrently per request
 
 #### Scenario: Existing special authorization paths
 
