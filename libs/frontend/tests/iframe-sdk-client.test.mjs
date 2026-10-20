@@ -85,7 +85,11 @@ function contextMessage(overrides = {}) {
   };
 }
 
-async function connectedClient(options = {}, configure = () => {}) {
+async function connectedClient(
+  options = {},
+  configure = () => {},
+  context = {},
+) {
   const fake = new FakeWindow();
   configure(fake);
   const restore = installWindow(fake);
@@ -95,7 +99,7 @@ async function connectedClient(options = {}, configure = () => {}) {
     ...options,
   });
   const connection = client.connect();
-  fake.emit(contextMessage());
+  fake.emit(contextMessage(context));
   await connection;
   return { client, fake, restore };
 }
@@ -516,6 +520,118 @@ test("resolves HTTP errors and reconstructs all bodyless responses", async () =>
     await assert.rejects(
       transport,
       (error) => error.code === "transport-error",
+    );
+  } finally {
+    client.dispose();
+    restore();
+  }
+});
+
+test("keeps text and refuses binary bodies on a host without the capability", async () => {
+  const { client, fake, restore } = await connectedClient();
+  try {
+    const text = client.request("items", { method: "POST", body: "{}" });
+    const request = fake.posts.at(-1).message;
+    assert.equal(request.body, "{}");
+    assert.equal("responseType" in request, false);
+    fake.emit({
+      type: "fred:response",
+      requestId: request.requestId,
+      status: 200,
+      headers: {},
+      body: "ok",
+    });
+    assert.equal(await (await text).text(), "ok");
+
+    const posts = fake.posts.length;
+    const form = new FormData();
+    form.append("field", "value");
+    for (const body of [new Blob(["x"]), form]) {
+      await assert.rejects(
+        client.request("items", { method: "POST", body }),
+        (error) => error.code === "unsupported-by-host",
+      );
+    }
+    assert.equal(fake.posts.length, posts);
+  } finally {
+    client.dispose();
+    restore();
+  }
+});
+
+test("relays Blob and FormData bodies and Blob responses on a capable host", async () => {
+  const { client, fake, restore } = await connectedClient({}, () => {}, {
+    capabilities: ["binary-bodies"],
+  });
+  try {
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00]);
+    const upload = new Blob([bytes], { type: "application/octet-stream" });
+    const download = client.request("exports", {
+      method: "POST",
+      body: upload,
+    });
+    const request = fake.posts.at(-1).message;
+    assert.equal(request.body, upload);
+    assert.equal(request.responseType, "blob");
+    fake.emit({
+      type: "fred:response",
+      requestId: request.requestId,
+      status: 200,
+      headers: { "content-type": "application/vnd.ms-excel" },
+      body: new Blob([bytes]),
+    });
+    const response = await download;
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+
+    const json = client.request("items");
+    fake.emit({
+      type: "fred:response",
+      requestId: fake.posts.at(-1).message.requestId,
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: new Blob(['{"é":1}']),
+    });
+    assert.deepEqual(await (await json).json(), { é: 1 });
+
+    const form = new FormData();
+    form.append("label", "PPS");
+    form.append("file", new Blob([bytes]), "pps.xlsx");
+    const posted = client.request("uploads", { method: "POST", body: form });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const multipart = fake.posts.at(-1).message;
+    assert.match(
+      multipart.headers["content-type"],
+      /^multipart\/form-data; boundary=/,
+    );
+    const parsed = await new Response(multipart.body, {
+      headers: { "content-type": multipart.headers["content-type"] },
+    }).formData();
+    assert.equal(parsed.get("label"), "PPS");
+    assert.equal(parsed.get("file").name, "pps.xlsx");
+    assert.deepEqual(
+      new Uint8Array(await parsed.get("file").arrayBuffer()),
+      bytes,
+    );
+    fake.emit({
+      type: "fred:response",
+      requestId: multipart.requestId,
+      status: 201,
+      headers: {},
+      body: new Blob([]),
+    });
+    assert.equal((await posted).status, 201);
+
+    await assert.rejects(
+      client.request("uploads", {
+        method: "POST",
+        body: form,
+        headers: { "content-type": "multipart/form-data" },
+      }),
+      (error) => error.code === "invalid-request",
+    );
+    await assert.rejects(
+      client.request("uploads", { method: "POST", body: new ArrayBuffer(4) }),
+      (error) => error.code === "invalid-request",
     );
   } finally {
     client.dispose();
