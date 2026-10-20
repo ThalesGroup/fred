@@ -43,6 +43,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     read_tabular_artifact,
     read_tabular_multi_artifact,
 )
+from knowledge_flow_backend.features.tabular.diagnostics import ResolutionSummary, TabularDescriptionNotFound
 from knowledge_flow_backend.features.tabular.execution import (
     DuckDBAbortHandle,
     close_duckdb_connection,
@@ -324,6 +325,7 @@ class TabularService:
           `describe_documents(...)` for the extraction catalog and typed tables.
         """
 
+        summary = ResolutionSummary()
         datasets = await self._resolve_authorized_datasets(
             user,
             document_library_tags_ids=document_library_tags_ids,
@@ -333,7 +335,10 @@ class TabularService:
             include_session_scope=include_session_scope,
             include_corpus_scope=include_corpus_scope,
             corpus_document_uids=corpus_document_uids,
+            summary=summary,
         )
+        if not datasets:
+            summary.log_empty()
         return [
             TabularDocumentResponse(
                 document_uid=document_datasets[0].metadata.document_uid,
@@ -402,7 +407,7 @@ class TabularService:
             forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
             if forbidden_uids:
                 raise PermissionError(forbidden_datasets_message(forbidden_uids))
-            raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
+            raise TabularDescriptionNotFound(f"Requested tabular datasets were not found: {', '.join(missing_uids)}", reason="datasets_not_resolved")
 
         spreadsheet_uids = [document_uid for document_uid in requested_uids if self._document_kind(datasets_by_uid[document_uid]) == "spreadsheet"]
         read_limit = asyncio.Semaphore(8)
@@ -411,9 +416,12 @@ class TabularService:
             metadata = datasets_by_uid[document_uid][0].metadata
             preview_status = metadata.processing.stages.get(ProcessingStage.PREVIEW_READY, ProcessingStatus.NOT_STARTED)
             if preview_status != ProcessingStatus.DONE:
-                raise FileNotFoundError(f"Preview not ready for document {document_uid}. Current preview stage: {preview_status.value}.")
-            async with read_limit:
-                content = await asyncio.to_thread(self.content_store.get_output_artifact, f"{document_uid}/output/output.md")
+                raise TabularDescriptionNotFound(f"Preview not ready for document {document_uid}. Current preview stage: {preview_status.value}.", reason="preview_not_ready")
+            try:
+                async with read_limit:
+                    content = await asyncio.to_thread(self.content_store.get_output_artifact, f"{document_uid}/output/output.md")
+            except FileNotFoundError as exc:
+                raise TabularDescriptionNotFound(str(exc), reason="preview_artifact_unavailable") from exc
             return document_uid, content.decode("utf-8")
 
         ordered_datasets = [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
@@ -906,18 +914,23 @@ class TabularService:
         include_session_scope: bool = True,
         include_corpus_scope: bool = True,
         corpus_document_uids: list[str] | None = None,
+        summary: ResolutionSummary | None = None,
     ) -> list[ResolvedDataset]:
         """Resolve scoped corpus tables and explicitly supplied owned attachments.
 
         Source flags keep the branches independent; aliases stay deterministic."""
 
+        summary = summary if summary is not None else ResolutionSummary()
+        attachment_summary = ResolutionSummary()
         lookups = []
         if include_corpus_scope:
             lookups.append(
-                self._resolve_corpus_documents(user, document_library_tags_ids=document_library_tags_ids, owner_filter=owner_filter, team_id=team_id, corpus_document_uids=corpus_document_uids)
+                self._resolve_corpus_documents(
+                    user, document_library_tags_ids=document_library_tags_ids, owner_filter=owner_filter, team_id=team_id, corpus_document_uids=corpus_document_uids, summary=summary
+                )
             )
         if include_session_scope and attachment_uids:
-            lookups.append(self._resolve_owned_attachment_datasets(user, list(dict.fromkeys(attachment_uids))))
+            lookups.append(self._resolve_owned_attachment_datasets(user, list(dict.fromkeys(attachment_uids)), summary=attachment_summary))
         results = await asyncio.gather(*lookups)
         visible_documents, scoped_tag_ids = results[0] if include_corpus_scope else ([], None)
         owned = results[-1] if include_session_scope and attachment_uids else {}
@@ -945,6 +958,7 @@ class TabularService:
                 if metadata.document_uid not in corpus_document_uids and not selected_library:
                     continue
 
+            summary.scoped_metadata_count += 1
             artifact = read_tabular_artifact(metadata)
             if artifact is not None:
                 resolved_datasets.append(
@@ -990,6 +1004,9 @@ class TabularService:
                 batch = candidate_uids[start : start + 10]
                 permissions = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in batch))
                 readable_uids.update(uid for uid, allowed in zip(batch, permissions) if allowed)
+            denied_count = len(candidate_uids) - len(readable_uids)
+            summary.readable_metadata_count -= denied_count
+            summary.scoped_metadata_count -= denied_count
             resolved_datasets = [dataset for dataset in resolved_datasets if dataset.metadata.document_uid in readable_uids]
 
         if include_session_scope and attachment_uids:
@@ -997,6 +1014,11 @@ class TabularService:
             for uid, datasets in owned.items():
                 if uid not in corpus_uids and datasets[0].metadata.processing.stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE:
                     resolved_datasets.extend(datasets)
+        summary.readable_metadata_count += attachment_summary.readable_metadata_count
+        summary.scoped_metadata_count += attachment_summary.scoped_metadata_count
+        if attachment_summary.readable_metadata_count:
+            summary.authorized_scope_empty = False
+        summary.resolved_table_count = len(resolved_datasets)
         return resolved_datasets
 
     async def _get_dataset_or_raise(
@@ -1128,7 +1150,7 @@ class TabularService:
         datasets = TabularService._as_owned_attachment_datasets(metadata, user=user)
         return datasets[0] if datasets else None
 
-    async def _resolve_owned_attachment_datasets(self, user: KeycloakUser, document_uids: list[str]) -> dict[str, list[ResolvedDataset]]:
+    async def _resolve_owned_attachment_datasets(self, user: KeycloakUser, document_uids: list[str], *, summary: ResolutionSummary | None = None) -> dict[str, list[ResolvedDataset]]:
         """Batch-resolve uploader-owned tables for explicit or authorized conversation UIDs."""
 
         if not document_uids:
@@ -1136,6 +1158,9 @@ class TabularService:
         rows = await self.metadata_store.get_metadata_by_uids(document_uids)
         resolved: dict[str, list[ResolvedDataset]] = {}
         for metadata in rows:
+            if summary is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and metadata.identity.uploaded_by == user.uid and not metadata.tags.tag_ids:
+                summary.readable_metadata_count += 1
+                summary.scoped_metadata_count += 1
             datasets = self._as_owned_attachment_datasets(metadata, user=user)
             if datasets:
                 resolved[metadata.document_uid] = datasets
@@ -1149,6 +1174,7 @@ class TabularService:
         owner_filter: OwnerFilter | None,
         team_id: str | None,
         corpus_document_uids: list[str] | None,
+        summary: ResolutionSummary,
     ) -> tuple[list[DocumentMetadata], set[str] | None]:
         """Corpus candidates and the active scope's authorized tag ids.
 
@@ -1158,26 +1184,33 @@ class TabularService:
         scoped_tag_ids = await self._resolve_scope_tag_ids(
             user, document_library_tags_ids=None if corpus_document_uids is not None else document_library_tags_ids, owner_filter=owner_filter, team_id=team_id
         )
+        summary.scope_applied = scoped_tag_ids is not None or corpus_document_uids is not None
+        summary.authorized_scope_empty = scoped_tag_ids == set()
         authorized_tag_ids = scoped_tag_ids
         if authorized_tag_ids is None:
             readable_tags = await self.rebac.lookup_user_resources(user, TagPermission.READ)
             if isinstance(readable_tags, RebacDisabledResult):
                 # Tagless fast-ingest documents require uploader authorization, even
                 # when corpus ReBAC is disabled.
-                return [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids], None
+                documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
+                summary.readable_metadata_count = len(documents)
+                return documents, None
             if is_service_agent(user) and not holds_caller_role(user):
                 # The evaluation worker reads only a supplied team's folders.
                 return [], None
             authorized_tag_ids = {tag.id for tag in readable_tags}
 
         if corpus_document_uids is None:
-            return await self.metadata_store.metadata_in_tags(list(authorized_tag_ids)), scoped_tag_ids
+            documents = await self.metadata_store.metadata_in_tags(list(authorized_tag_ids))
+            summary.readable_metadata_count = len(documents)
+            return documents, scoped_tag_ids
         selected_tag_ids = authorized_tag_ids.intersection(document_library_tags_ids or [])
         explicit, selected = await asyncio.gather(
             self.metadata_store.get_metadata_by_uids(corpus_document_uids),
             self.metadata_store.metadata_in_tags(list(selected_tag_ids)),
         )
         by_uid = {metadata.document_uid: metadata for metadata in [*explicit, *selected] if authorized_tag_ids.intersection(metadata.tags.tag_ids or [])}
+        summary.readable_metadata_count = len(by_uid)
         return list(by_uid.values()), scoped_tag_ids
 
     async def _resolve_scope_tag_ids(

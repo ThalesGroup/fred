@@ -58,7 +58,6 @@ async def test_mcp_inner_request_uses_admitted_context_and_a_fresh_request_id(
 ):
     import json
 
-    import httpx
     from fastapi import FastAPI, Request
 
     pytest.importorskip("fastapi_mcp")
@@ -67,7 +66,10 @@ async def test_mcp_inner_request_uses_admitted_context_and_a_fresh_request_id(
     from fred_core.logs.propagation import CONTEXT_HEADER
     from fred_core.security import mcp_delegation, oidc
     from fred_core.security.delegation import AssertedUser
-    from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
+    from fred_core.security.mcp_delegation_fastapi import (
+        DelegatedFastApiMCP,
+        delegated_mcp_http_client,
+    )
 
     app = FastAPI()
     app.add_middleware(RequestLoggingMiddleware)
@@ -95,15 +97,10 @@ async def test_mcp_inner_request_uses_admitted_context_and_a_fresh_request_id(
     )
     await anext(auth)
     try:
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app),
-            base_url="http://local.invalid",
-            follow_redirects=True,
-        ) as client:
+        async with delegated_mcp_http_client(app) as client:
             # Exercise the changed bridge through real ASGI requests, without
             # booting an unrelated MCP server/session lifecycle.
-            server = object.__new__(DelegatedFastApiMCP)
-            server._forward_headers = set()
+            server = DelegatedFastApiMCP(app, http_client=client, headers=[])
             with log_context(
                 request_id="outer-request",
                 correlation_id="journey",

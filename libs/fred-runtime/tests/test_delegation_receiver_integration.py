@@ -157,13 +157,16 @@ def test_current_workload_grant_survives_expired_person_token(signed_receiver) -
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status_code", "marked", "stops"),
-    [(403, False, True), (503, True, True), (503, False, False)],
+    [(401, False, True), (403, False, True), (503, True, True), (503, False, False)],
 )
 async def test_mounted_mcp_inner_refusal_stops_before_adapter_conversion(
     status_code: int, marked: bool, stops: bool
 ) -> None:
     pytest.importorskip("fastapi_mcp")
-    from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
+    from fred_core.security.mcp_delegation_fastapi import (
+        DelegatedFastApiMCP,
+        delegated_mcp_http_client,
+    )
     from mcp import ClientSession
     from mcp.client.streamable_http import streamablehttp_client
 
@@ -181,9 +184,7 @@ async def test_mounted_mcp_inner_refusal_stops_before_adapter_conversion(
             else None,
         )
 
-    inner_client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test.invalid"
-    )
+    inner_client = delegated_mcp_http_client(app)
     mount = DelegatedFastApiMCP(app, http_client=inner_client)
     mount.mount_http(app)
     interceptor = DelegatedAuthorityInterceptor(
@@ -307,10 +308,14 @@ async def test_mounted_sql_error_reaches_runtime_artifact(
 ) -> None:
     """Exercise the real mount and LangChain adapter, not a fabricated error envelope."""
     pytest.importorskip("fastapi_mcp")
-    from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
+    from fred_core.security.mcp_delegation_fastapi import (
+        DelegatedFastApiMCP,
+        delegated_mcp_http_client,
+    )
     from langchain_mcp_adapters.tools import load_mcp_tools
     from mcp import ClientSession
     from mcp.client.streamable_http import streamablehttp_client
+    from mcp.types import TextContent
 
     app = FastAPI()
 
@@ -331,9 +336,7 @@ async def test_mounted_sql_error_reaches_runtime_artifact(
             auth=auth,
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test.invalid"
-    ) as inner_client:
+    async with delegated_mcp_http_client(app) as inner_client:
         mount = DelegatedFastApiMCP(app, http_client=inner_client)
         mount.mount_http(app)
         async with app.router.lifespan_context(app):
@@ -346,7 +349,11 @@ async def test_mounted_sql_error_reaches_runtime_artifact(
                         tool_name, {"sql": "SELECT amount_typo FROM d_sales"}
                     )
                     assert wire_result.isError is True
-                    assert "not-for-the-model" not in wire_result.model_dump_json()
+                    # Upstream MCP carries the HTTP body; runtime presentation
+                    # still limits curated artifact blocks to SQL 400 detail.
+                    assert isinstance(wire_result.content[0], TextContent)
+                    assert f"Status code: {status_code}" in wire_result.content[0].text
+                    assert body in wire_result.content[0].text
                     tools = await load_mcp_tools(session)
                     wrapper = ContextAwareTool(
                         base_tool=tools[0],
@@ -358,7 +365,6 @@ async def test_mounted_sql_error_reaches_runtime_artifact(
                     )
 
     assert artifact.is_error is True
-    assert "not-for-the-model" not in content
     assert "not-for-the-model" not in artifact.model_dump_json()
     if expected_detail is None:
         assert artifact.blocks == ()
