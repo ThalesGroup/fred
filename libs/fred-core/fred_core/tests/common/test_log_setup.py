@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from fred_core.logs.base_log_store import LogEventDTO
 from fred_core.logs.log_setup import (
     AUDIT_LOGGER_NAME,
     CompactJsonFormatter,
@@ -33,6 +32,7 @@ from fred_core.logs.log_setup import (
     UvicornSensitiveQueryFilter,
     log_setup,
 )
+from fred_core.logs.log_structures import LogEventDTO
 from fred_core.security.delegation import DelegationConfig, initialize_delegation
 
 
@@ -145,7 +145,7 @@ def test_uvicorn_sanitization_preserves_diagnostics_independently_of_delegation(
     assert record.exc_info is not None
     assert record.exc_info[1] is error
     assert record.stack_info == "ordinary stack"
-    assert record.detail == "ordinary extra"
+    assert record.__dict__["detail"] == "ordinary extra"
 
 
 class _Sink(logging.Handler):

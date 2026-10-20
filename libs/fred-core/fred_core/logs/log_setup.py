@@ -25,11 +25,12 @@ import threading
 from fred_pod.common.config_files import flush_startup_logs
 from fred_pod.common.structures import LogOutputFormat
 
-from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
+from fred_core.logs.base_log_store import BaseLogStore
 from fred_core.logs.log_structures import (
     AUDIT_LOGGER_NAME,
     KPI_LOGGER_NAME,
     LogCategory,
+    LogEventDTO,
 )
 from fred_core.logs.processors import (
     ContextSnapshotFilter,
