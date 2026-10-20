@@ -1,10 +1,9 @@
 ---
 schema: 1
 title: "Expose agent pods through an optional Gateway API HTTPRoute"
-impact: none
+impact: minor
 configuration: production
 configuration_reason: "The published agent-pod chart gains optional route values and schema; existing pod values remain valid because the route is disabled by default."
-no_action_reason: "The option is disabled by default, so a normal chart upgrade renders the same resources; Gateway activation is an optional later step."
 ---
 ## Applicability
 

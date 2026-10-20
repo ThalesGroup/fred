@@ -37,5 +37,4 @@ No deployment rollback action is needed for this validation change.
 
 ## Limitations
 
-The explicit 3.7.2 version exception for optional route activation remains
-documented in the separate release inclusion note.
+The HTTPRoute source note records the optional Gateway activation separately.
