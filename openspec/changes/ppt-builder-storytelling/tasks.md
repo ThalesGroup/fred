@@ -67,5 +67,5 @@
 - [x] 8.2 The runtime's tool-call text recovery skips a call sent with `tool_choice="none"`. Test: `libs/fred-runtime` `test_tool_call_recovery.py::test_a_reply_only_call_keeps_tool_call_text_as_text`
 - [x] 8.3 The working rules say a delivered deck or a proposed plan ends the answer (cuts and notes told to the user); "the same for cuts that matter" removed
 - [x] 8.4 `skip_plan` honoured only when its quote is in the user's latest message, word for word. Tests: `test_plan_validation.py::test_a_skip_quote_the_user_never_wrote_proposes_the_plan`, `test_skip_plan_is_the_model_s_call_in_any_language`
-- [ ] 8.5 Package checks (ppt-filler, fred-runtime); `openspec validate --strict`
+- [x] 8.5 Package checks: ppt-filler `make code-quality` + `make test` (942 passed), fred-runtime `make code-quality` + `make test` (2216 passed); `openspec validate --strict`
 - [ ] 8.6 Live check, same scenarios as 7.4: build calls per base turn, cap hits, re-call after a proposal, delivery rebuilds in confirm turns, `skip_plan` forcing, fixes applied on confirm, a failed build retried
