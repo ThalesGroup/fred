@@ -476,34 +476,64 @@ class Repo:
                 "Configuration changes require configuration: production or local with a specific explanation",
             )
             if production:
-                chart = "deploy/charts/fred/values.yaml"
-                schema = "deploy/charts/fred/values.schema.json"
-                removed_options = set()
-                validation_changed = False
-                if (
-                    schema in changed
-                    and schema in self.paths(base)
-                    and schema in self.paths()
-                ):
-                    old_schema = json.loads(self.read(schema, base))
-                    new_schema = json.loads(self.read(schema))
-                    removed_options = schema_property_paths(
-                        old_schema
-                    ) - schema_property_paths(new_schema)
-                    validation_changed = schema_validation_shape(
-                        old_schema
-                    ) != schema_validation_shape(new_schema)
-                require(
-                    chart in changed or (validation_changed and not removed_options),
-                    "Production configuration changes require Fred chart values.yaml or a chart schema validation change in the same PR",
-                )
-                if chart in changed:
-                    before = yaml.safe_load(self.read(chart, base))
-                    after = yaml.safe_load(self.read(chart))
+                chart_dirs = {
+                    str(Path(path).parent)
+                    for path in changed
+                    if path.startswith("deploy/charts/")
+                    and Path(path).name in {"values.yaml", "values.schema.json"}
+                }
+                substantive_chart = False
+                comment_only_chart = False
+                for directory in chart_dirs:
+                    chart = f"{directory}/values.yaml"
+                    schema = f"{directory}/values.schema.json"
+                    removed_options = set()
+                    validation_changed = False
+                    if (
+                        schema in changed
+                        and schema in self.paths(base)
+                        and schema in self.paths()
+                    ):
+                        old_schema = json.loads(self.read(schema, base))
+                        new_schema = json.loads(self.read(schema))
+                        removed_options = schema_property_paths(
+                            old_schema
+                        ) - schema_property_paths(new_schema)
+                        validation_changed = schema_validation_shape(
+                            old_schema
+                        ) != schema_validation_shape(new_schema)
                     require(
-                        before != after or removed_options or validation_changed,
-                        "Comment-only values.yaml edits require a generated chart schema validation change or removed option; declare local if appropriate",
+                        not removed_options or chart in changed,
+                        "Removing a chart option requires its values.yaml change in the same PR",
                     )
+                    if chart in changed:
+                        before = (
+                            yaml.safe_load(self.read(chart, base))
+                            if chart in self.paths(base)
+                            else None
+                        )
+                        after = (
+                            yaml.safe_load(self.read(chart))
+                            if chart in self.paths()
+                            else None
+                        )
+                        chart_substantive = (
+                            before != after
+                            or bool(removed_options)
+                            or validation_changed
+                        )
+                        substantive_chart |= chart_substantive
+                        comment_only_chart |= not chart_substantive
+                    else:
+                        substantive_chart |= validation_changed and not removed_options
+                if comment_only_chart and not substantive_chart:
+                    raise Invalid(
+                        "Comment-only values.yaml edits require a generated chart schema validation change or removed option; declare local if appropriate"
+                    )
+                require(
+                    substantive_chart,
+                    "Production configuration changes require chart values.yaml or a chart schema validation change in the same PR",
+                )
         return notes
 
     def coverage(self, base, notes):
