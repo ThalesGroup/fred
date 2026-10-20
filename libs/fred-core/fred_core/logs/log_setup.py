@@ -380,6 +380,7 @@ def log_setup(
         "aiosqlite",
         "httptools",
         "mcp.client.streamable_http",
+        "fastapi_mcp",
         "openai",
         "openai._base_client",
     )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -20,7 +21,7 @@ from fred_core.security.mcp_delegation import (
     mcp_mount_auth,
     strip_grant_tool_fields,
 )
-from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
+from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP, delegated_mcp_http_client
 from fred_core.security.oidc import get_current_user_without_gcu
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.structure import KeycloakUser
@@ -92,7 +93,13 @@ def _configure(store: AccountStatusStore | None = None, *, issuer: str = "https:
 
 
 def _app_with_mcp() -> tuple[FastAPI, FastApiMCP]:
-    app = FastAPI()
+    @asynccontextmanager
+    async def lifespan(_app):
+        async with inner_client:
+            yield
+
+    app = FastAPI(lifespan=lifespan)
+    inner_client = delegated_mcp_http_client(app)
     register_exception_handlers(app)
     router = APIRouter(dependencies=[Depends(declare_delegation_parameters)])
 
@@ -104,6 +111,7 @@ def _app_with_mcp() -> tuple[FastAPI, FastApiMCP]:
     mcp = strip_grant_tool_fields(
         DelegatedFastApiMCP(
             app,
+            http_client=inner_client,
             include_tags=["Documents"],
             auth_config=AuthConfig(dependencies=[Depends(mcp_mount_auth)]),
         )

@@ -40,7 +40,7 @@ from fred_core.security.mcp_delegation import (
     mcp_mount_auth,
     strip_grant_tool_fields,
 )
-from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
+from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP, delegated_mcp_http_client
 from fred_core.sql import require_tables
 from prometheus_client import start_http_server
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -253,6 +253,7 @@ def create_app() -> FastAPI:
                 with suppress(asyncio.CancelledError):
                     await db_pool_kpi_task
             await gc_diagnostics.stop()
+            await mcp_http_client.aclose()
             await application_context.shutdown()
 
     app = RequestLoggingFastAPI(
@@ -392,9 +393,11 @@ def create_app() -> FastAPI:
     # describes data the model receives milliseconds later anyway. If a response
     # field genuinely needs explaining, put the sentence in the route's docstring —
     # that is the part that reaches the model.
+    mcp_http_client = delegated_mcp_http_client(app)
     mcp_reports = _without_response_docs(
         DelegatedFastApiMCP(
             app,
+            http_client=mcp_http_client,
             name="Knowledge Flow Reports MCP",
             description="Create Markdown-first reports and get downloadable artifacts.",
             include_tags=["Reports"],  # ← export only these routes as tools
@@ -408,6 +411,7 @@ def create_app() -> FastAPI:
         mcp_opensearch_ops = _without_response_docs(
             DelegatedFastApiMCP(
                 app,
+                http_client=mcp_http_client,
                 name="Knowledge Flow OpenSearch Ops MCP",
                 description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
                 include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
@@ -425,6 +429,7 @@ def create_app() -> FastAPI:
         mcp_prometheus_ops = _without_response_docs(
             DelegatedFastApiMCP(
                 app,
+                http_client=mcp_http_client,
                 name="Knowledge Flow Prometheus Ops MCP",
                 description=("Read-only Prometheus-compatible operational tools for cluster-wide metrics exploration, PromQL queries, and metric discovery across namespaces and pods."),
                 include_tags=["Prometheus"],
@@ -441,6 +446,7 @@ def create_app() -> FastAPI:
         mcp_tabular = _without_response_docs(
             DelegatedFastApiMCP(
                 app,
+                http_client=mcp_http_client,
                 name="Knowledge Flow Tabular MCP",
                 description=(
                     "Read-only SQL access to the tabular documents ingested in Knowledge Flow: "
@@ -467,6 +473,7 @@ def create_app() -> FastAPI:
         mcp_text = _without_response_docs(
             DelegatedFastApiMCP(
                 app,
+                http_client=mcp_http_client,
                 name="Knowledge Flow Text MCP",
                 description=(
                     "Semantic text search interface backed by the vector store. "
@@ -486,6 +493,7 @@ def create_app() -> FastAPI:
         mcp_template = _without_response_docs(
             DelegatedFastApiMCP(
                 app,
+                http_client=mcp_http_client,
                 name="Knowledge Flow Text MCP",
                 description="MCP server for Knowledge Flow Text",
                 include_tags=["Templates", "Prompts"],
@@ -500,6 +508,7 @@ def create_app() -> FastAPI:
         mcp_resources = _without_response_docs(
             DelegatedFastApiMCP(
                 app,
+                http_client=mcp_http_client,
                 name="Knowledge Flow Resources MCP",
                 description=(
                     "Access to reusable resources for agents. "

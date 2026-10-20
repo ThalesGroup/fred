@@ -666,7 +666,9 @@ def test_shared_output_preserves_legacy_arguments_and_structured_fields(
 
 
 @pytest.mark.parametrize("delegation", [False, True])
+@pytest.mark.parametrize("dependency_logger", ["httpx.transport", "fastapi_mcp.server"])
 def test_dependency_child_diagnostics_remain_sanitized(
+    dependency_logger: str,
     capsys: pytest.CaptureFixture[str],
     delegation: bool,
 ) -> None:
@@ -677,7 +679,7 @@ def test_dependency_child_diagnostics_remain_sanitized(
         log_format="json",
         include_uvicorn=False,
     )
-    logging.getLogger("httpx.transport").warning(
+    logging.getLogger(dependency_logger).warning(
         "SECRET-CANARY signed_url=%s",
         "SECRET-CANARY",
         extra={"detail": "SECRET-CANARY"},
