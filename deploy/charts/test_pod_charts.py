@@ -202,6 +202,12 @@ class PodChartTests(unittest.TestCase):
         )
         self.assertIn("ingress_prefix: /my/agents/v2", result.stdout)
 
+    def test_knowledge_base_notes_give_the_publisher(self):
+        result = self.render("knowledge-base", KNOWLEDGE_BASE, notes=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("- client_id: pod", result.stdout)
+        self.assertIn("prefix: my.kb", result.stdout)
+
     def test_agent_pod_mounts_extra_config_files(self):
         result = self.render(
             "agent-pod",
