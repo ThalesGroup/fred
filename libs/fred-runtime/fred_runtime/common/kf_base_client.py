@@ -286,6 +286,7 @@ class KfBaseClient:
         *,
         phase_name: str,
         read_timeout: Optional[float] = None,
+        recover_permission_refusal: bool = False,
         **kwargs: Any,
     ) -> httpx.Response:
         """
@@ -295,6 +296,10 @@ class KfBaseClient:
         this single request only (the connect/pool timeouts stay short). Use it for
         long server-side operations such as document summarization, which can run far
         longer than the default per the shared client config.
+
+        Only the document markdown reader opts into `recover_permission_refusal`.
+        Its explicit permission refusal stays an HTTP error for the document tool
+        to report; account, delegation and unclassified refusals still stop the run.
         """
         if read_timeout is not None:
             kwargs["timeout"] = httpx.Timeout(
@@ -311,8 +316,13 @@ class KfBaseClient:
             r = await self._execute_authenticated_request(
                 method=method, path=path, **kwargs
             )
+            recoverable_refusal = (
+                recover_permission_refusal
+                and r.status_code == 403
+                and r.headers.get(DENIAL_CAUSE_HEADER) == "permission_refused"
+            )
             if self.credential_provider().delegated and (
-                r.status_code in (401, 403)
+                (r.status_code in (401, 403) and not recoverable_refusal)
                 or (
                     r.status_code == 503
                     and r.headers.get(DENIAL_CAUSE_HEADER)

@@ -41,7 +41,7 @@ A complete grant from a caller without the delegation role receives 403 when del
 
 `DelegatedCredentialProvider` checks run liveness and supplies the grant parameters; it acquires no token. The shared HTTP authentication adapter is the only source of the workload bearer: it takes a token from the same provider for each request and owns the single 401 renewal, whose retry carries the renewed token. Knowledge, document, workspace, team-wiki, binding and tool clients ask the provider for the grant immediately before a request and send the request through that adapter. Subagents derive a provider with their own agent identity and the same run. A missing or terminal record prevents a token or its renewal from being released, and liveness must still hold after the awaited acquisition. A failed acquisition writes one log line naming only the error type.
 
-`M2MTokenProvider` caches one service-account token per provider in runtime-process memory. Callers reuse it while more than 30 seconds remain. Renewal uses client credentials and one shared in-flight task. The shared HTTP authentication adapter refreshes after the first 401 and retries the same request once. Concurrent and delayed 401 responses for the same cache generation share the replacement. A first 403 or a retry returning 401/403 is terminal. Transport failures preserve their exception class with bounded text so existing polling callers can retry. After a failed acquisition, the next caller may retry immediately.
+`M2MTokenProvider` caches one service-account token per provider in runtime-process memory. Callers reuse it while more than 30 seconds remain. Renewal uses client credentials and one shared in-flight task. The shared HTTP authentication adapter refreshes after the first 401 and retries the same request once. Concurrent and delayed 401 responses for the same cache generation share the replacement. A first 403 or a retry returning 401/403 is terminal except for the document markdown read defined in Decision 8. Transport failures preserve their exception class with bounded text so existing polling callers can retry. After a failed acquisition, the next caller may retry immediately.
 
 An ordinary service identity without the caller role runs on its own bearer, with no delegated record. Its provider remains separate from the delegated workload provider.
 
@@ -118,6 +118,22 @@ The control-plane worker command selects its worker configuration. The knowledge
 
 Local run targets load an overlay only when named explicitly. The overlay can enable delegation directions only for a trusted issuer and audience, preserving all other configuration. The local setup helper supports inspection, writing and reset without editing tracked configuration.
 
+### 8. Restore recovery for the document markdown read (#3184)
+
+The observed Deep run received the correct UID and filename from discovery, then passed the filename to `read_document`. Delegation was accepted; READ on the supplied identifier was denied. The shared client's terminal 403 handling prevented the existing document capability's UID recovery message from reaching the model.
+
+Limit the exception to `KfDocumentClient.fetch_markdown`, the direct `GET /markdown/{document_uid}` request. Its call to the shared request helper opts into ordinary HTTP error handling only for status 403 with the exact existing `X-Fred-Denial-Cause: permission_refused` header. Other calls retain the default terminal behavior. The option is internal and never model-controlled. No receiver, MCP protocol, SDK error type or authorization rule changes.
+
+Enable the exception only for a nonempty single URL segment: exclude standalone `.` and `..`, path separators, query/fragment delimiters and percent escapes. A path-shaped model argument must not extend recovery to raw-content or artifact routes. This only limits the opt-in; it does not change existing routing or impose a UUID format.
+
+Reuse `DocumentPortCallError` and the document capability's failed-result path. Known 403/404 guidance must be bounded: ask the model to reuse the exact opaque UID from search, the document tree or attachments; do not assert existence or claim the identifier is certainly wrong. Do not include raw upstream bodies, URLs or exception details in that recovery message. Verify the actual runtime binding delivers the guidance to the next model call.
+
+Do not resolve filenames, impose UUID-only validation, add a discovery cache or retry automatically. Fred supports multiple shapes of opaque identifiers, and a string schema cannot establish accessibility. A subsequent corrected model call still passes existing account, team, scope and document authorization. Suspended accounts, unavailable account-status decisions, delegation failures, residual 401s, absent/unknown causes and local per-tool authority failures remain terminal.
+
+No extra authorization RPC, database read or discovery call is added. The current endpoint checks document READ after authentication; the request's identity checks and header separate this refusal from a global authority failure. Other document operations, tool naming ergonomics and native Workspace `read_file` diagnostics remain outside this bounded fix.
+
+Regression coverage injects the observed filename mistake, checks the failed result, then reads with the actual UID. Negative cases cover denied content and every retained terminal condition. A live NOVA-DOC rerun separately checks real model recovery and the requested artifacts.
+
 ## Risks / Trade-offs
 
 - Trusted workload credentials permit assertions for people; current person permissions and account status remain the authorization boundary. The grant is not independently signed or sender-bound.
@@ -140,3 +156,5 @@ Local run targets load an overlay only when named explicitly. The overlay can en
 5. Run the deployment acceptance matrix and secret-rotation drill. Rotation uses the identity provider's overlap period and a controlled workload restart.
 
 Both delegation switches can be disabled together. The authorization model and existing business data remain valid; caller-role holders still receive no service-role shortcuts.
+
+For #3184, rebuild the agent runtime image. The receiver already emits the required cause; receivers omitting it retain terminal behavior. No receiver upgrade, database or authorization-model migration, stored tuning or credential change is required. Runtime rollback restores the previous stop.

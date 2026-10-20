@@ -429,8 +429,29 @@ async def test_403_failure_teaches_uid_recovery() -> None:
     )
     assert msg.artifact.is_error is True
     assert "opaque uid" in msg.content
-    assert "document_uid=cahier.pdf" in msg.content
+    assert "not a file name or Workspace path" in msg.content
     # The recovery hint must also land in the artifact blocks (Graph agent path).
+    assert msg.artifact.blocks[0].text == msg.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [403, 404])
+async def test_read_refusal_gives_bounded_guidance_without_claiming_existence(
+    status: int,
+) -> None:
+    marker = "private upstream body https://internal.invalid/token?secret=value"
+    port = _FakeMarkdownPort(error=DocumentPortCallError(marker, status_code=status))
+    cap = DocumentVerbatimCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(port), config={}
+    )
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "cahier.pdf"})
+
+    assert msg.artifact.is_error is True
+    assert "exact opaque uid" in msg.content
+    assert "does not establish whether the document exists" in msg.content
+    assert "continue with accessible sources" in msg.content
+    assert marker not in msg.content
     assert msg.artifact.blocks[0].text == msg.content
 
 

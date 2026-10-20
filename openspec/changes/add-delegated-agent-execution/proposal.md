@@ -2,12 +2,15 @@
 
 ReAct and DeepAgent executions need renewable authentication while remaining subject to the person's current permissions and account status. Their authority and execution lifetime must end with the attended response, including supported child agents.
 
+Follow-up [#3184](https://github.com/ThalesGroup/fred/issues/3184) restores recovery when a model passes a filename to `read_document` instead of the opaque UID returned by discovery.
+
 ## What Changes
 
 - Authenticate delegated service calls with a workload access token and a plain `person`, `run`, `agent` grant. A shared provider supplies the grant after checking run liveness, and the shared HTTP authentication adapter is the only source of each request's workload bearer; execution state contains no person's bearer or refresh token.
 - Admit runs locally, check account status and team authorization, and resolve managed bindings through a read-only lookup carrying the grant.
 - Bind attended execution to its HTTP response on both streaming APIs. Completion, human pause, detected disconnect, failure and cancellation end the run, its descendants and its credential access. Human answers receive fresh admission.
 - Propagate `authority_lost`, `cancelled` and `delegation_unavailable` as typed terminal reasons through ReAct, DeepAgent and capability tools. Delegation imposes no run-duration, child-count, concurrent-run-count or record-age limit.
+- Let a direct document markdown read report a 403 explicitly classified as `permission_refused` as a recoverable tool error, with UID recovery guidance. Other calls and genuine authority failures keep their terminal behavior.
 - Validate grants against the verified caller role, audience, issuer and token purpose, and reject grant values containing `*` or `#`. Apply the asserted person's permissions and keep directly authenticated endpoint policies explicit.
 - Refuse an asserted person on control-plane routes that present the caller's bearer to another service, and make no such call when preparing managed execution for an asserted person.
 - Preserve ordinary service identities' own-bearer execution and service-role shortcuts. Delegation caller-role holders receive no service-role shortcut.

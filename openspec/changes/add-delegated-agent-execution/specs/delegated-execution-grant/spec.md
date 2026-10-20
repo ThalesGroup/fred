@@ -328,7 +328,16 @@ The terminal error event SHALL carry an optional `reason` with the values
 crash. A first HTTP 401 SHALL refresh the workload token and retry the same call
 exactly once. Concurrent 401 responses for the same cached token SHALL share
 that refresh. A first 403, a retry returning 401 or 403, or a structured
-`account_status_unavailable` refusal (503) SHALL end the run with reason `authority_lost`.
+`account_status_unavailable` refusal (503) SHALL end the run with reason `authority_lost`,
+except for a direct document markdown read whose 403 is explicitly classified as
+`permission_refused` by Knowledge Flow. That exception SHALL remain a failed tool
+operation with bounded guidance to reuse an opaque UID from authorized discovery.
+It SHALL NOT return denied content, confirm existence, claim that the identifier
+is certainly wrong, expose upstream details or change identity. Only a nonempty
+single document URL segment SHALL opt into this exception; path syntax, percent
+escapes, query/fragment delimiters and standalone dot segments SHALL NOT. Other endpoints,
+MCP calls, admission and local per-tool authority rechecks SHALL retain their
+existing terminal handling. No automatic retry or filename resolution is added.
 Unrelated 503 responses SHALL retain ordinary
 error handling. While account status is enforced, before each tool call of a
 delegated run, the per-tool recheck SHALL check the person's account status in
@@ -346,9 +355,28 @@ capability's own error handling.
 
 #### Scenario: Denied mid-run
 
-- **WHEN** a downstream call returns a first 403 or its authentication retry returns 401 or 403
+- **WHEN** a downstream call returns a first 403 or its authentication retry returns 401 or 403, without the direct document markdown exception
 - **THEN** the run ends with reason `authority_lost`, all children are cancelled,
   and no further execution, tool or data call is made for the run
+
+#### Scenario: A filename argument can be corrected
+
+- **GIVEN** discovery returned a readable document's UID and display name
+- **WHEN** the model passes the name to the markdown reader and receives 403 `permission_refused`
+- **THEN** the tool returns a failed result with UID recovery guidance and the run remains live
+- **AND** a subsequent call with the actual UID passes normal authorization checks and can read the document
+- **AND** no automatic retry, identifier substitution or token renewal is caused by the refusal
+
+#### Scenario: A refused document remains unreadable
+
+- **WHEN** the model supplies an inaccessible document's UID to the markdown reader
+- **THEN** no content or existence information is exposed and the same bounded guidance is returned
+
+#### Scenario: The exception remains limited to the document reader
+
+- **WHEN** another endpoint or a path-shaped markdown argument returns 403 `permission_refused`, or the markdown reader receives a residual 401, an absent/unknown denial cause or an account-status refusal
+- **THEN** the run stops with the existing typed reason and no recoverable document result is emitted
+- **AND** local account and team-agent permission failures still stop the run before invoking a tool
 
 #### Scenario: A workload bearer is renewed after rejection
 

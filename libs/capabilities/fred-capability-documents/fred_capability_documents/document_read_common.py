@@ -126,19 +126,22 @@ def document_tool_failure(
     else:
         cause = f"the {_KF_SERVICE} service call failed after {elapsed_s:.0f}s"
 
-    detail = f": {raw}" if raw else ""
-    message = (
-        f"Could not {action} (document_uid={document_uid}): {cause} "
-        f"[{err_type}{detail}]."
-    )
     if status_code in (403, 404):
-        message += (
-            " Likely cause: document_uid was not a document's opaque uid. If you "
-            "passed a file NAME, resolve the uid first — it is in the "
-            "conversation's attached-files list (the bracketed value after the "
-            "file name), in a search hit's 'uid' field, or on a DOCUMENT line of "
-            "the document tree. Then retry with a real document uid. Do not "
-            "repeat the uid to the user."
+        message = (
+            f"Could not {action}: the document is unavailable with the supplied "
+            f"identifier (HTTP {status_code}). Use the exact opaque uid from "
+            "the document tree, a search hit's 'uid' field, or the conversation's "
+            "attached-files list, not a file name or Workspace path. If you used "
+            "a name or path, correct the argument using a discovered uid. "
+            "If the uid is already correct, report that the document could not "
+            "be read and continue with accessible sources. This does not establish "
+            "whether the document exists. Do not repeat the uid to the user."
+        )
+    else:
+        detail = f": {raw}" if raw else ""
+        message = (
+            f"Could not {action} (document_uid={document_uid}): {cause} "
+            f"[{err_type}{detail}]."
         )
     return message, ToolInvocationResult(
         tool_ref=tool_ref,

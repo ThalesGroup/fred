@@ -466,6 +466,36 @@ Fred uses **OpenFGA** as the ReBAC engine (compatible with the Zanzibar model).
 
 - Deployment guidance for OpenFGA: https://openfga.dev/docs/getting-started/setup-openfga/overview
 
+### Listing what a user can read
+
+`ListObjects` is not a complete inventory. The plain API stops at
+`listObjectsMaxResults` (1,000 by default) and every variant stops at
+`listObjectsDeadline` (3 s by default), both without any signal.
+
+- `lookup_resources` logs `outcome=possibly_truncated` when a response reaches
+  1,000 objects or nears the default deadline. Each subfolder is a folder, so a
+  user reading more than 1,000 folders in total is still truncated. The
+  streamed API is not used: the SDK swallows its connection errors.
+- Documents and resources are never globally enumerated. Readable folders (or
+  the request's scope) select SQL candidates; stored membership can be stale and
+  is not an authorization grant. Ordinary-user results require object READ
+  checks, bounded to ten concurrent discovered-candidate checks per request.
+  Authorization failures fail the request. The existing evaluation-worker team-scoped exception remains.
+- Label pages authorize all matching candidates before sorting, counting and
+  slicing, then hydrate only the selected page. Vocabulary comes from checked
+  documents. Tabular resolution checks only documents with tabular artifacts,
+  once per workbook. Disabled corpus ReBAC does not remove attachment ownership.
+- Metadata, labels, resources and unscoped or library-only tabular inventory use
+  one folder ListObjects, plus one Check per candidate (only tabular candidates
+  for tabular operations). Ordinary team/personal tabular scopes use four folder
+  ListObjects (READ, OWNER, EDITOR, VIEWER); evaluation-worker team scopes use
+  three role lookups and their existing document-check exception.
+  Label pages repeat matching-candidate checks each time;
+  vocabulary reads and checks the folder corpus. These bounds are per request,
+  not a global capacity guarantee. Existing tabular diagnostics for R missing
+  requested UIDs can additionally issue R concurrent Checks. No SQL connection
+  is held during checks.
+
 ## Prerequisites
 
 - [Deploy OpenFGA](https://openfga.dev/docs/getting-started/setup-openfga/overview) (localy, with Docker, on Kubernetes...) and provide an API token to the ReBAC engine (see `token_env_var` below).
