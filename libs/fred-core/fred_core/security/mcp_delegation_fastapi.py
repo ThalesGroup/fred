@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import re
+from contextlib import suppress
 from contextvars import ContextVar
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import FastAPI
@@ -106,7 +108,7 @@ class DelegatedMCPTransport(httpx.AsyncBaseTransport):
                 headers["content-length"] = str(len(content))
         inner = httpx.Request(
             request.method,
-            request.url.copy_with(query=str(httpx.QueryParams(params)).encode("ascii")),
+            request.url.copy_with(query=urlencode(params).encode("ascii")),
             headers=headers,
             content=content,
             extensions=request.extensions,
@@ -138,15 +140,13 @@ async def _inner_response(response: httpx.Response) -> None:
         value = response.headers.get(f"X-{name}-ID", "")
         if _REFERENCE.fullmatch(value):
             fields[f"upstream_{name}_id"] = value
-    try:
+    # A diagnostic sink must not replace the operation's original failure.
+    with suppress(Exception):
         logger.log(
             logging.ERROR if response.status_code >= 500 else logging.WARNING,
             "mcp.inner_http_failure",
             extra=fields,
         )
-    except Exception:
-        # A diagnostic sink must not replace the operation's original failure.
-        pass
     if response.status_code in (401, 403) or (
         response.status_code == 503
         and response.headers.get(DENIAL_CAUSE_HEADER)

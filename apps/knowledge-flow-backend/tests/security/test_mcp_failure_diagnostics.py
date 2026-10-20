@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import io
+import json
 import logging
 from contextlib import asynccontextmanager
 from uuid import uuid4
@@ -289,7 +289,18 @@ def test_real_sql_400_result_and_full_delegated_json_log(tmp_path, metadata_stor
     app.include_router(router)
     app.dependency_overrides[get_current_user] = get_current_user_without_gcu
     inner, _ = _mount(app)
-    context = encode_log_context({"session_id": "session-proof", "team_id": "team-proof", "agent_id": "forged-agent", "user_id": "forged-user", "run_id": "forged-run", "request_id": "forged-request"})
+    context = encode_log_context(
+        {
+            "session_id": "session-proof",
+            "team_id": "team-proof",
+            "exchange_id": "exchange-proof",
+            "agent_instance_id": "instance-proof",
+            "agent_id": "forged-agent",
+            "user_id": "forged-user",
+            "run_id": "forged-run",
+            "request_id": "forged-request",
+        }
+    )
     with TestClient(app) as client:
         response = _call(client, "read_query", {"sql": f"SELECT amount_typo FROM {build_default_query_alias('sales', 'sales.csv')}", "dataset_uids": ["sales"]}, context=context)
     result = response.json()["result"]
@@ -302,6 +313,7 @@ def test_real_sql_400_result_and_full_delegated_json_log(tmp_path, metadata_stor
     [event] = [e for e in events if e["message"] == "mcp.inner_http_failure"]
     assert event["tool_name"] == "read_query" and event["upstream_http_status"] == 400
     assert event["session_id"] == "session-proof" and event["team_id"] == "team-proof"
+    assert event["exchange_id"] == "exchange-proof" and event["agent_instance_id"] == "instance-proof"
     assert event["agent_id"] == _GRANT["agent"] and event["user_id"] == _GRANT["person"] and event["run_id"] == _GRANT["run"]
     assert event["request_id"] == response.headers["X-Request-ID"]
     assert event["request_id"] != event["upstream_request_id"]
@@ -391,3 +403,56 @@ async def test_authority_wrapper_preserves_unrelated_exceptions_and_cancellation
             with pytest.raises(type(error)) as caught:
                 await mount._execute_api_tool(client, "unknown", {}, {})
             assert caught.value is error
+
+
+def test_interleaved_mounted_mcp_calls_keep_admitted_scopes_and_inner_references(caplog):
+    from fred_core.logs.processors import event_properties, install_context_capture
+
+    _configure()
+    app = RequestLoggingFastAPI()
+    admitted = {}
+    reached_both = asyncio.Event()
+
+    @app.get("/interleaved", operation_id="interleaved")
+    async def interleaved(user=Depends(get_current_user_without_gcu)):
+        admitted[user.uid] = current_context()
+        if len(admitted) == 2:
+            reached_both.set()
+        await asyncio.wait_for(reached_both.wait(), timeout=5)
+        raise HTTPException(404, detail="missing")
+
+    inner, _ = _mount(app)
+
+    async def check():
+        async with inner, app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://receiver") as client:
+
+            async def invoke(person):
+                grant = {"person": person, "run": "run-" + person, "agent": "agent-" + person}
+                headers = {**_HEADERS, CONTEXT_HEADER: encode_log_context({"session_id": "session-" + person, "team_id": "team-" + person})}
+                initialized = await client.post("/mcp", params=grant, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": _INITIALIZE})
+                assert initialized.status_code == 200
+                response = await client.post(
+                    "/mcp", params=grant, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "interleaved", "arguments": dict.fromkeys(_GRANT, "FORGED")}}
+                )
+                assert response.status_code == 200 and response.json()["result"]["isError"] is True
+
+            await asyncio.gather(invoke("one"), invoke("two"))
+
+    factory = logging.getLogRecordFactory()
+    install_context_capture()
+    try:
+        asyncio.run(check())
+    finally:
+        logging.setLogRecordFactory(factory)
+    failures = [event_properties(r) for r in caplog.records if r.getMessage() == "mcp.inner_http_failure"]
+    assert len(failures) == 2
+    for event in failures:
+        person = event["user_id"]
+        assert event["session_id"] == "session-" + person
+        assert event["team_id"] == "team-" + person
+        assert event["agent_id"] == "agent-" + person
+        assert event["run_id"] == "run-" + person
+        assert event["upstream_request_id"] == admitted[person]["request_id"]
+        assert event["request_id"] != event["upstream_request_id"]
+    assert admitted["one"]["request_id"] != admitted["two"]["request_id"]
+    assert mcp_delegation.verified_grant() is None

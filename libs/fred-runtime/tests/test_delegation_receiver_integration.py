@@ -315,6 +315,7 @@ async def test_mounted_sql_error_reaches_runtime_artifact(
     from langchain_mcp_adapters.tools import load_mcp_tools
     from mcp import ClientSession
     from mcp.client.streamable_http import streamablehttp_client
+    from mcp.types import TextContent
 
     app = FastAPI()
 
@@ -350,6 +351,7 @@ async def test_mounted_sql_error_reaches_runtime_artifact(
                     assert wire_result.isError is True
                     # Upstream MCP carries the HTTP body; runtime presentation
                     # still limits curated artifact blocks to SQL 400 detail.
+                    assert isinstance(wire_result.content[0], TextContent)
                     assert f"Status code: {status_code}" in wire_result.content[0].text
                     assert body in wire_result.content[0].text
                     tools = await load_mcp_tools(session)
