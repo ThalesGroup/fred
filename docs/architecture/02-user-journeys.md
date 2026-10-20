@@ -146,6 +146,8 @@ leaves the original downloadable; the retry action reuses it without file select
 Reload restores persisted progress and failures. Manager-derived outputs are isolated
 from the separate Knowledge Flow catalog and search/chat retrieval.
 See [content ownership](05-documents.md) for authority, recovery and storage limits.
+The [document journey](02a-document-journey.md) follows one PDF through these
+controls, SQL, OpenFGA, Temporal, S3 and the vector store, with observation checkpoints.
 
 ## Joining and governing organizations, teams and projects
 
