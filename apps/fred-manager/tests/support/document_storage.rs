@@ -219,6 +219,7 @@ impl Documents {
                 fga: observed,
                 auth: Arc::new(identity.auth().await),
                 content: Some(storage.clone()),
+                processing: None,
                 directory: None,
                 onboarding: Default::default(),
                 lifecycle: Default::default(),
@@ -482,6 +483,7 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
                     fga: d.e.fga.clone(),
                     auth: Arc::new(d.identity.auth().await),
                     content: Some(storage),
+                    processing: None,
                     directory: None,
                     onboarding: Default::default(),
                     lifecycle: Default::default(),
@@ -1417,3 +1419,6 @@ async fn document_cleanup_skips_a_contended_organization_without_starving_other_
     d.storage.cleanup_tick().await.unwrap();
     assert!(d.bucket.store.get(&pending_key).await.is_err());
 }
+
+#[path = "document_processing.rs"]
+mod processing;

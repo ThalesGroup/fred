@@ -63,6 +63,11 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery: () => [fetchPreview],
 }));
 
+const fetchManagerPreview = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve("manager markdown") })));
+vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+  useLazyPreviewQuery: () => [fetchManagerPreview],
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));

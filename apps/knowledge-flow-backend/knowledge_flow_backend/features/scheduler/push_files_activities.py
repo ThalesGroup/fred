@@ -51,10 +51,11 @@ async def resolve_push_input_file_for_worker(
     user: KeycloakUser,
     metadata: DocumentMetadata,
     working_dir: pathlib.Path,
+    ingestion_service=None,
 ) -> pathlib.Path:
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
-    ingestion_service = get_ingestion_service()
+    ingestion_service = ingestion_service if ingestion_service is not None else get_ingestion_service()
     await asyncio.to_thread(ingestion_service.get_local_copy, user, metadata, working_dir)
     return _first_input_file(working_dir / "input")
 
@@ -75,8 +76,11 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     logger.info("Push metadata activity started")
     emit_temporal_activity_queue_wait_kpi(phase="metadata")
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
+    from knowledge_flow_backend.features.manager_processing.service import manager_service
 
-    ingestion_service = get_ingestion_service()
+    ingestion_service = await manager_service(file.source_tag, "preparation", file=file)
+    if ingestion_service is None:
+        ingestion_service = get_ingestion_service()
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
     metadata = await ingestion_service.get_metadata(file.processed_by, file.document_uid)
@@ -119,8 +123,14 @@ async def push_input_process(
     logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s profile=%s", metadata.document_uid, profile)
 
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
+    from knowledge_flow_backend.features.manager_processing.service import manager_service
 
-    ingestion_service = get_ingestion_service()
+    ingestion_service = await manager_service(metadata.source.source_tag, "extraction")
+    if ingestion_service is not None and ingestion_service.already_committed:
+        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+        return metadata
+    if ingestion_service is None:
+        ingestion_service = get_ingestion_service()
 
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
@@ -146,6 +156,7 @@ async def push_input_process(
                         user=user,
                         metadata=metadata,
                         working_dir=working_dir,
+                        ingestion_service=ingestion_service,
                     ),
                     heartbeat_details={
                         "stage": "push_input_restore",
@@ -160,6 +171,7 @@ async def push_input_process(
                 profile=profile,
                 stage="push_input_process",
                 started_at=started_at,
+                manager_job_json=getattr(ingestion_service, "extraction_context", None),
                 in_process_fallback=lambda: to_thread_with_heartbeat(
                     ingestion_service.process_input,
                     user,
@@ -196,6 +208,9 @@ async def push_input_process(
         )
         return metadata
     except Exception as exc:
+        record_failure = getattr(ingestion_service, "record_failure", None)
+        if record_failure is not None:
+            record_failure(exc)
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
         metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
         try:
@@ -218,4 +233,7 @@ async def push_input_process(
             status="error",
             exc=exc,
         )
+        from knowledge_flow_backend.features.manager_processing.client import raise_permanent_failure
+
+        raise_permanent_failure(exc)
         raise

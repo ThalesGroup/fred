@@ -41,8 +41,13 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
     `TagPermission.UPDATE` on every tag the document carries). Used by the
     ordinary `OutputProcess` workflow."""
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
+    from knowledge_flow_backend.features.manager_processing.service import manager_service
 
-    ingestion_service = get_ingestion_service()
+    ingestion_service = await manager_service(file.source_tag, "indexing", file=file)
+    if ingestion_service is not None and ingestion_service.already_committed:
+        return metadata
+    if ingestion_service is None:
+        ingestion_service = get_ingestion_service()
     return await _output_process_impl(
         file,
         metadata,
@@ -116,7 +121,7 @@ async def _output_process_impl(
             if output_stage == ProcessingStage.VECTORIZED:
                 from knowledge_flow_backend.common.structures import InMemoryVectorStorage
 
-                vector_store = ApplicationContext.get_instance().get_config().storage.vector_store
+                vector_store = ingestion_service.settings.vector_store if hasattr(ingestion_service, "descriptor") else ApplicationContext.get_instance().get_config().storage.vector_store
                 if isinstance(vector_store, InMemoryVectorStorage) and not accept_memory_storage:
                     raise exceptions.ApplicationError(
                         "❌ Vectorization from temporal activity is not allowed with an in-memory vector store. Please configure a persistent vector store like OpenSearch.",
@@ -157,6 +162,9 @@ async def _output_process_impl(
         )
         return metadata
     except Exception as exc:
+        record_failure = getattr(ingestion_service, "record_failure", None)
+        if record_failure is not None:
+            record_failure(exc)
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
         stage = output_stage or ProcessingStage.PREVIEW_READY
         metadata.mark_stage_error(stage, error_message)
@@ -177,6 +185,9 @@ async def _output_process_impl(
             status="error",
             exc=exc,
         )
+        from knowledge_flow_backend.features.manager_processing.client import raise_permanent_failure
+
+        raise_permanent_failure(exc)
         raise
 
 

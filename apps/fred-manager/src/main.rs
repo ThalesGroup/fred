@@ -35,6 +35,13 @@ async fn main() -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&api::openapi())?);
         return Ok(());
     }
+    if args == ["processing-schema"] {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&fred_manager::processing::models::schema())?
+        );
+        return Ok(());
+    }
     if args == ["generate-config-schema"] {
         println!(
             "{}",
@@ -189,7 +196,20 @@ async fn serve(config: Config) -> Result<()> {
             }
         })
     });
+    let processing = match (&config.scheduler.processing, &content) {
+        (Some(settings), Some(originals)) => Some(
+            fred_manager::processing::Processing::configured(
+                settings.clone(),
+                originals.clone(),
+                config.security()?,
+            )
+            .await?,
+        ),
+        (Some(_), None) => anyhow::bail!("processing requires original storage"),
+        _ => None,
+    };
     let state = api::AppState {
+        processing,
         content,
         directory: fred_manager::keycloak::Directory::configured(config.security.m2m.as_ref())?,
         auth: std::sync::Arc::new(auth::Authenticator::start(config.security()?).await?),
@@ -375,5 +395,51 @@ async fn worker(config: Config) -> Result<()> {
     .await?;
     fred_manager::lifecycle::policy::Catalog::load(config.policies.purge_catalog_path.as_deref())?;
     let listen = config.listen_addr();
-    fred_manager::lifecycle::worker::run(pool, fga, config.scheduler.lifecycle, &listen).await
+    let mut dispatch = tokio::spawn({
+        let pool = pool.clone();
+        async move {
+            if let Some(settings) = config.scheduler.processing {
+                fred_manager::processing::dispatch::run(pool, settings).await;
+            } else {
+                std::future::pending::<()>().await;
+            }
+        }
+    });
+    let listener = tokio::net::TcpListener::bind(&listen).await?;
+    let mut health = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route("/healthz", axum::routing::get(|| async { "ok" })),
+        )
+        .await
+    });
+    let result = loop {
+        let lifecycle = tokio::select! {
+            result = fred_manager::lifecycle::worker::run(pool.clone(), fga.clone(), config.scheduler.lifecycle.clone()) => result,
+            _ = &mut dispatch => break Err(anyhow::anyhow!("processing dispatcher stopped")),
+            _ = &mut health => break Err(anyhow::anyhow!("worker health listener stopped")),
+        };
+        match lifecycle {
+            Ok(()) => break Ok(()),
+            Err(_) => tracing::warn!(
+                error_code = "lifecycle_retry",
+                "Lifecycle worker will reconnect"
+            ),
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {},
+            _ = worker_shutdown() => break Ok(()),
+            _ = &mut dispatch => break Err(anyhow::anyhow!("processing dispatcher stopped")),
+            _ = &mut health => break Err(anyhow::anyhow!("worker health listener stopped")),
+        }
+    };
+    health.abort();
+    dispatch.abort();
+    result
+}
+
+async fn worker_shutdown() {
+    let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .expect("signal handler");
+    tokio::select! {_=tokio::signal::ctrl_c()=>{},_=term.recv()=>{}}
 }

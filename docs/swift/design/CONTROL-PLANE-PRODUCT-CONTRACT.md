@@ -780,6 +780,19 @@ Prefer a neutral control-plane contract over direct reuse of
 `agentic_backend.core.agents.agent_spec.MCPServerConfiguration` if reuse would
 keep a hard dependency on `agentic-backend`.
 
+### 3.8.1 Manager Resources document processing (2026-10-20)
+
+The Rust manager deployment owns Resources folders, immutable originals and
+processing receipts. Upload-only remains independent of ingestion services;
+upload-and-process and later retries use manager HTTP admission and the existing
+KF `ProcessPush` workflow through Temporal. `PipelineDefinition`, `FileToProcess`,
+activity signatures and worker registrations are unchanged. KF owns configured
+extraction/output algorithms, with isolated manager persistence and authenticated
+callbacks. Resources preview and progress use manager's published state. This
+surface does not change conversation attachment routing or expose manager outputs
+through legacy search/chat. The [document chapter](../../architecture/05-documents.md)
+is the authoritative behavioral reference.
+
 ### 3.9 Attachment metadata and file upload routing
 
 **2026-06-18 — Decision refreshed (AGENT-FILESYSTEM):** Binary upload and agent
@@ -792,7 +805,8 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
   Response: { download_url, key, file_name, size, … }
 ```
 
-The control-plane does not proxy or store binary content. Users browse corpus
+The Python control-plane does not proxy or store binary content; the Rust manager
+Resources surface is described above. Users browse corpus
 documents in Resources; conversation attachments use their existing document
 path. Knowledge Flow retains technical `/fs` paths for capability configuration
 assets and generated PPT outputs under

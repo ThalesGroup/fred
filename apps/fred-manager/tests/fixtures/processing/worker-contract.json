@@ -1,0 +1,862 @@
+{
+  "workflow": "ProcessPush",
+  "schema": {
+    "$defs": {
+      "FileToProcess": {
+        "properties": {
+          "source_tag": {
+            "title": "Source Tag",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Name"
+          },
+          "profile": {
+            "$ref": "#/$defs/IngestionProcessingProfile",
+            "default": "medium"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Task Id"
+          },
+          "document_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Uid"
+          },
+          "external_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "External Path"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Size"
+          },
+          "modified_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Modified Time"
+          },
+          "hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Hash"
+          },
+          "processed_by": {
+            "$ref": "#/$defs/KeycloakUser"
+          },
+          "logging_context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Logging Context"
+          },
+          "extraction_task_queue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Extraction Task Queue"
+          },
+          "push_metadata_activity_timeout_seconds": {
+            "default": 300,
+            "title": "Push Metadata Activity Timeout Seconds",
+            "type": "integer"
+          },
+          "pull_metadata_activity_timeout_seconds": {
+            "default": 1800,
+            "title": "Pull Metadata Activity Timeout Seconds",
+            "type": "integer"
+          },
+          "output_activity_timeout_seconds": {
+            "default": 3600,
+            "title": "Output Activity Timeout Seconds",
+            "type": "integer"
+          },
+          "input_activity_timeout_seconds": {
+            "default": 3600,
+            "title": "Input Activity Timeout Seconds",
+            "type": "integer"
+          },
+          "heartbeat_timeout_seconds": {
+            "default": 300,
+            "title": "Heartbeat Timeout Seconds",
+            "type": "integer"
+          },
+          "retry_initial_interval_seconds": {
+            "default": 30,
+            "title": "Retry Initial Interval Seconds",
+            "type": "integer"
+          },
+          "retry_backoff_coefficient": {
+            "default": 2.0,
+            "title": "Retry Backoff Coefficient",
+            "type": "number"
+          },
+          "retry_maximum_interval_seconds": {
+            "default": 600,
+            "title": "Retry Maximum Interval Seconds",
+            "type": "integer"
+          },
+          "retry_maximum_attempts": {
+            "default": 6,
+            "title": "Retry Maximum Attempts",
+            "type": "integer"
+          },
+          "retry_non_retryable_error_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Retry Non Retryable Error Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_tag",
+          "processed_by"
+        ],
+        "title": "FileToProcess",
+        "type": "object"
+      },
+      "IngestionProcessingProfile": {
+        "enum": [
+          "fast",
+          "medium",
+          "rich"
+        ],
+        "title": "IngestionProcessingProfile",
+        "type": "string"
+      },
+      "KeycloakUser": {
+        "description": "Represents an authenticated Keycloak user.",
+        "properties": {
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Email"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Last Name"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The token's authorized party (`azp`, or `client_id` when `azp` is absent). Set for a client-credentials identity, so a caller can be checked against one exact client rather than a broad service role.",
+            "title": "Client Id"
+          },
+          "token_issuer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Token Issuer"
+          },
+          "token_audiences": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Token Audiences",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "token_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Token Type"
+          },
+          "caller_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Caller Roles",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "service_account": {
+            "default": false,
+            "title": "Service Account",
+            "type": "boolean"
+          },
+          "admission_claims": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "title": "Admission Claims",
+            "type": "object"
+          },
+          "admission_invalid_claims": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Admission Invalid Claims",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "admission_issued_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Admission Issued At"
+          },
+          "admission_expires_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Admission Expires At"
+          }
+        },
+        "required": [
+          "uid",
+          "username",
+          "roles"
+        ],
+        "title": "KeycloakUser",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "workflow_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Workflow Id"
+      },
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "files": {
+        "items": {
+          "$ref": "#/$defs/FileToProcess"
+        },
+        "title": "Files",
+        "type": "array"
+      },
+      "max_parallelism": {
+        "default": 1,
+        "title": "Max Parallelism",
+        "type": "integer"
+      },
+      "logging_context": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Logging Context"
+      }
+    },
+    "required": [
+      "name",
+      "files"
+    ],
+    "title": "PipelineDefinition",
+    "type": "object"
+  },
+  "processor_profiles": {
+    "fast": {
+      "use_gpu": false,
+      "process_images": false,
+      "generate_summary": false,
+      "input_activity_timeout": "90m",
+      "push_metadata_activity_timeout": "5m",
+      "pull_metadata_activity_timeout": "30m",
+      "output_activity_timeout": "1h",
+      "activity_heartbeat_timeout": "5m",
+      "pdf": {
+        "extractor": "docling",
+        "do_ocr": false,
+        "docling_num_threads": 4
+      },
+      "text_splitter": {
+        "chunk_size": 1500,
+        "chunk_overlap": 150,
+        "preserve_tables": true
+      },
+      "input_processors": [
+        {
+          "suffix": ".pdf",
+          "class_path": "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".docx",
+          "class_path": "knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".doc",
+          "class_path": "knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".odt",
+          "class_path": "knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".pptx",
+          "class_path": "knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".ppt",
+          "class_path": "knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".csv",
+          "class_path": "knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xlsx",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xls",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xlsm",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".txt",
+          "class_path": "knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".md",
+          "class_path": "knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jsonl",
+          "class_path": "knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".png",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jpg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jpeg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".gif",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".bmp",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".svg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".webp",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".ico",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        }
+      ],
+      "retry_initial_interval": "5s",
+      "retry_backoff_coefficient": 2.0,
+      "retry_maximum_interval": "20s",
+      "retry_maximum_attempts": 3,
+      "retry_non_retryable_error_types": []
+    },
+    "medium": {
+      "use_gpu": false,
+      "process_images": false,
+      "generate_summary": false,
+      "input_activity_timeout": "2h",
+      "push_metadata_activity_timeout": "5m",
+      "pull_metadata_activity_timeout": "30m",
+      "output_activity_timeout": "1h",
+      "activity_heartbeat_timeout": "5m",
+      "pdf": {
+        "extractor": "docling",
+        "do_ocr": true,
+        "docling_num_threads": 2
+      },
+      "text_splitter": {
+        "chunk_size": 1500,
+        "chunk_overlap": 150,
+        "preserve_tables": true
+      },
+      "input_processors": [
+        {
+          "suffix": ".pdf",
+          "class_path": "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".docx",
+          "class_path": "knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".doc",
+          "class_path": "knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".odt",
+          "class_path": "knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".pptx",
+          "class_path": "knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".ppt",
+          "class_path": "knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".csv",
+          "class_path": "knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xlsx",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xls",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xlsm",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".txt",
+          "class_path": "knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".md",
+          "class_path": "knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jsonl",
+          "class_path": "knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".png",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jpg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jpeg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".gif",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".bmp",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".svg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".webp",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".ico",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        }
+      ],
+      "retry_initial_interval": "20s",
+      "retry_backoff_coefficient": 2.0,
+      "retry_maximum_interval": "2m",
+      "retry_maximum_attempts": 5,
+      "retry_non_retryable_error_types": []
+    },
+    "rich": {
+      "use_gpu": false,
+      "process_images": true,
+      "generate_summary": false,
+      "input_activity_timeout": "2h",
+      "push_metadata_activity_timeout": "5m",
+      "pull_metadata_activity_timeout": "30m",
+      "output_activity_timeout": "1h",
+      "activity_heartbeat_timeout": "5m",
+      "pdf": {
+        "extractor": "docling",
+        "do_ocr": true,
+        "docling_num_threads": 2
+      },
+      "text_splitter": {
+        "chunk_size": 1500,
+        "chunk_overlap": 150,
+        "preserve_tables": true
+      },
+      "input_processors": [
+        {
+          "suffix": ".pdf",
+          "class_path": "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".docx",
+          "class_path": "knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".doc",
+          "class_path": "knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".odt",
+          "class_path": "knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".pptx",
+          "class_path": "knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".ppt",
+          "class_path": "knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".csv",
+          "class_path": "knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xlsx",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xls",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".xlsm",
+          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".txt",
+          "class_path": "knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".md",
+          "class_path": "knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jsonl",
+          "class_path": "knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".png",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jpg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".jpeg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".gif",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".bmp",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".svg",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".webp",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".ico",
+          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "description": null
+        }
+      ],
+      "retry_initial_interval": "30s",
+      "retry_backoff_coefficient": 2.0,
+      "retry_maximum_interval": "5m",
+      "retry_maximum_attempts": 7,
+      "retry_non_retryable_error_types": []
+    }
+  },
+  "profiles": {
+    "fast": {
+      "extraction_task_queue": "ingestion-fast",
+      "push_metadata_activity_timeout_seconds": 300,
+      "pull_metadata_activity_timeout_seconds": 1800,
+      "output_activity_timeout_seconds": 3600,
+      "input_activity_timeout_seconds": 5400,
+      "heartbeat_timeout_seconds": 300,
+      "retry_initial_interval_seconds": 5,
+      "retry_backoff_coefficient": 2.0,
+      "retry_maximum_interval_seconds": 20,
+      "retry_maximum_attempts": 3,
+      "retry_non_retryable_error_types": []
+    },
+    "medium": {
+      "extraction_task_queue": "ingestion-medium",
+      "push_metadata_activity_timeout_seconds": 300,
+      "pull_metadata_activity_timeout_seconds": 1800,
+      "output_activity_timeout_seconds": 3600,
+      "input_activity_timeout_seconds": 7200,
+      "heartbeat_timeout_seconds": 300,
+      "retry_initial_interval_seconds": 20,
+      "retry_backoff_coefficient": 2.0,
+      "retry_maximum_interval_seconds": 120,
+      "retry_maximum_attempts": 5,
+      "retry_non_retryable_error_types": []
+    },
+    "rich": {
+      "extraction_task_queue": "ingestion-rich",
+      "push_metadata_activity_timeout_seconds": 300,
+      "pull_metadata_activity_timeout_seconds": 1800,
+      "output_activity_timeout_seconds": 3600,
+      "input_activity_timeout_seconds": 7200,
+      "heartbeat_timeout_seconds": 300,
+      "retry_initial_interval_seconds": 30,
+      "retry_backoff_coefficient": 2.0,
+      "retry_maximum_interval_seconds": 300,
+      "retry_maximum_attempts": 7,
+      "retry_non_retryable_error_types": []
+    }
+  }
+}

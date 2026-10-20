@@ -45,6 +45,9 @@ class BaseOutputProcessor(ABC):
 
     description: Optional[str] = None
 
+    def __init__(self, *, context=None):
+        self.context = context
+
     @abstractmethod
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         """

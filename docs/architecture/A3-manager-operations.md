@@ -452,3 +452,43 @@ Restoring only SQL can lose bytes; restoring only objects lets cleanup remove ke
 without matching metadata. The ordinary local reset does not migrate content.
 Migration and rollback constraints are in the
 [migration note](../swift/ops/migrations/rust-fred-manager.md).
+
+
+## Document processing
+
+`scheduler.processing` configures manager admission, the existing KF Temporal
+namespace/queue, exported worker contract, allowed service identity and separate
+S3 derived bucket. `manager_processing` configures KF callbacks, credentials,
+separate durable vectors and per-activity temporary capacity. Settings are validated
+at API and worker startup, including when new admissions are disabled. The existing
+worker image supplies LibreOffice. The [processing overlay](../../deploy/charts/fred/examples/document-processing.yaml)
+and [migration procedure](../swift/ops/migrations/rust-fred-manager.md#optional-document-processing)
+define provisioning, export, rollout and draining.
+
+The dispatcher uses bounded batches and leases, with no Temporal RPC under a SQL
+lock. Namespace retention must exceed the accepted queue horizon. An uncertain
+start is reconciled by workflow identity; missing acknowledged history cannot
+create another execution. Queue/execution expiry produces a durable safe failure.
+The worker health server and dispatch loop are supervised together.
+
+Each attempt bounds output bytes, artifact count, chunks and generations. Stage
+claims reserve derived capacity; cleanup releases abandoned reservations only after
+confirmed cleanup. KF cleanup polls bounded batches, verifies vector deletion and
+retains failed work for later sweeps. Published generation objects and vector
+ordinals remain protected. SQL failure prevents cleanup acknowledgment.
+
+Extraction runs in the existing supervised child. Original and output budgets are
+checked before staging; converter scratch belongs to the activity workspace and
+is included in periodic capacity checks. PDF/Parquet intermediates move without a
+second full copy. CSV output monitors its complete workspace during DuckDB
+conversion and interrupts that connection when capacity is exceeded. Transient
+growth can exceed the configured budget between checks. A Kubernetes ephemeral-
+storage limit supplies an eviction backstop after excess usage is observed, not
+a synchronous filesystem cap. Size the volume for concurrent activities and
+converter overhead.
+
+Disable admission to drain, retaining the configuration and worker credentials
+until active attempts and abandoned cleanup finish. Restore manager SQL, original
+and derived objects and matching vector stores together, with writers stopped.
+Changing worker code or policy requires compatible deployment or draining; frozen
+policy does not pin the installed Python implementation.

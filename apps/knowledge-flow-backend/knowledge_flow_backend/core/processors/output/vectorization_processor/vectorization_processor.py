@@ -49,9 +49,8 @@ class VectorizationProcessor(BaseOutputProcessor):
 
     description = "Splits documents, embeds chunks, and stores vectors plus summaries for retrieval."
 
-    def __init__(self):
-        self.context = ApplicationContext.get_instance()
-        self.content_loader = self.context.get_content_store()
+    def __init__(self, *, context=None, vector_store=None):
+        self.context = context if context is not None else ApplicationContext.get_instance()
 
         self.splitter = self.context.get_text_splitter()
         logger.info(f"✂️ Text splitter initialized: {self.splitter.__class__.__name__}")
@@ -74,11 +73,8 @@ class VectorizationProcessor(BaseOutputProcessor):
             },
         )
 
-        self.vector_store = self.context.get_create_vector_store(self.embedder)
+        self.vector_store = vector_store if vector_store is not None else self.context.get_create_vector_store(self.embedder)
         logger.info(f"🗃️ Vector store initialized: {self.vector_store.__class__.__name__}")
-
-        self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
-        logger.info(f"📝 Metadata store initialized: {self.metadata_store.__class__.__name__}")
 
         self.kpi: BaseKPIWriter = self.context.get_kpi_writer()
 

@@ -30,6 +30,9 @@ import { getStreamingMarkdownState, type PendingStreamingFence } from "./streami
 
 interface MarkdownRendererProps {
   text: string;
+  imageRenderer?: React.ComponentType<{ src?: string; alt?: string }>;
+  /** Keep document-provided diagrams inert, including their external assets. */
+  diagramsAsCode?: boolean;
   /** Present local file references as labels instead of application routes. */
   localLinksAsText?: boolean;
   onSourceClick?: (index: number) => void;
@@ -194,6 +197,8 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
 export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps>(function MarkdownRenderer(
   {
     text,
+    imageRenderer,
+    diagramsAsCode = false,
     localLinksAsText = false,
     onSourceClick,
     streaming = false,
@@ -215,6 +220,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
   // components (MermaidBlock, CodeBlock) and cause their effects to re-fire.
   const components = useMemo(
     () => ({
+      ...(imageRenderer ? { img: imageRenderer } : {}),
       ...(localLinksAsText
         ? {
             a: ({ href, children, title }: { href?: string; children?: React.ReactNode; title?: string }) =>
@@ -235,10 +241,10 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
         if (!codeNode) return <pre>{children}</pre>;
         const lang = fencedLanguage(codeNode);
         const code = hastText(codeNode).replace(/\n$/, "");
-        if (lang === "mindmap" || lang === "mindmap-json") {
+        if (!diagramsAsCode && (lang === "mindmap" || lang === "mindmap-json")) {
           return <MindMapBlock code={code} language={lang} />;
         }
-        if (lang === "mermaid") {
+        if (!diagramsAsCode && lang === "mermaid") {
           return <MermaidBlock code={code} />;
         }
         return <CodeBlock code={code} language={lang} />;
@@ -281,7 +287,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
           }
         : {}),
     }),
-    [onSourceClick, headingAnchors, inline, linksInNewTab, localLinksAsText],
+    [onSourceClick, headingAnchors, inline, linksInNewTab, localLinksAsText, imageRenderer, diagramsAsCode],
   );
 
   function pendingFenceLanguage(fence: PendingStreamingFence): string {

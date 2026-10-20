@@ -245,5 +245,9 @@ async def run_worker(
     # cancelled before the caller's shutdown disposes the database engine and the
     # KPI writer their activities are still using.
     async with asyncio.TaskGroup() as group:
+        if IngestionWorkerRole.common in active_roles:
+            from knowledge_flow_backend.features.manager_processing.cleanup import run as manager_cleanup
+
+            group.create_task(manager_cleanup())
         for worker in workers:
             group.create_task(worker.run())

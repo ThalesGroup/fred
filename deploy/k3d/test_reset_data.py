@@ -177,6 +177,8 @@ class FakeReset(reset.Reset):
         if service == "fga" and method == "GET":
             return self.store_pages[1 if "continuation_token" in path else 0]
         if service == "files":
+            if method == "POST":
+                self.file_names.append(path.split("/")[2])
             if method == "DELETE":
                 self.file_names.remove(path.split("/")[2].split("?")[0])
             return {"Entries": [{"FullPath": "/buckets/" + n} for n in self.file_names]}
@@ -328,6 +330,81 @@ class ResetTests(unittest.TestCase):
             with self.assertRaises(reset.Refused):
                 self.preflight()
             self.assert_read_only()
+
+    def manager_processing(self):
+        for name in reset.MANAGER_APPS:
+            c = self.r.configs[name]["configuration"]
+            c["storage"]["content"] = {"endpoint": "http://seaweedfs:8333", "bucket": "fred-manager-originals"}
+            c["scheduler"]["processing"] = {
+                "enabled": False,
+                "temporal": {"host": "temporal:7233"},
+                "derived": {"endpoint": "http://seaweedfs:8333", "bucket": "fred-manager-derived"},
+            }
+        for name in ("knowledge-flow-backend", "knowledge-flow-worker"):
+            self.r.configs[name]["configuration"]["manager_processing"] = {
+                "enabled": False,
+                "endpoint": "http://seaweedfs:8333",
+                "bucket": "fred-manager-derived",
+                "vector_store": {"type": "opensearch", "index": "fred-manager-vectors"},
+            }
+
+    def test_manager_local_originals_derived_and_vectors_are_cleared(self):
+        self.manager_processing()
+        self.r.file_names += ["fred-manager-originals", "fred-manager-derived"]
+        self.preflight()
+        self.assert_read_only()
+        self.r.execute()
+        self.assertEqual(set(self.r.file_names), {"fred-manager-originals", "fred-manager-derived"})
+        self.assertIn(("http", "search", "/fred-manager-vectors", "DELETE"), self.r.calls)
+
+    def test_manager_external_storage_or_processing_is_refused_even_when_disabled(self):
+        for name, path, value in (
+            ("fred-manager", ["storage", "content", "endpoint"], "https://external"),
+            ("fred-manager", ["storage", "content", "bucket"], "foreign"),
+            ("fred-manager-worker", ["scheduler", "processing", "derived", "endpoint"], "https://external"),
+            ("fred-manager-worker", ["scheduler", "processing", "temporal", "host"], "external:7233"),
+            ("fred-manager-worker", ["scheduler", "processing", "temporal", "namespace"], "other"),
+            ("knowledge-flow-worker", ["manager_processing", "endpoint"], "https://external"),
+            ("knowledge-flow-worker", ["manager_processing", "bucket"], "foreign"),
+            ("knowledge-flow-worker", ["manager_processing", "vector_store", "index"], "foreign"),
+        ):
+            with self.subTest(name=name, path=path):
+                self.r = FakeReset()
+                self.manager_processing()
+                target = self.r.configs[name]["configuration"]
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                with self.assertRaises(reset.Refused):
+                    self.preflight()
+                self.assert_read_only()
+
+    def test_manager_bucket_without_matching_configuration_is_refused(self):
+        self.r.file_names += ["fred-manager-originals"]
+        with self.assertRaisesRegex(reset.Refused, "other content buckets"):
+            self.preflight()
+        self.assert_read_only()
+
+    def test_upgrade_reset_never_reinstalls_old_baseline_or_model(self):
+        self.r.for_upgrade = True
+        self.preflight()
+        self.r.calls.clear()
+        self.r.execute()
+        # Old images can recreate both SQL baseline and FGA model on startup.
+        self.assertFalse(any(c[:2] == ("create", "-f") for c in self.r.calls))
+        for name in reset.APPS:
+            self.assertIn(("scale", "deployment/" + name, "--replicas=0"), self.r.calls)
+            self.assertFalse(any(c[0] == "scale" and c[1] == "deployment/" + name and c[2] != "--replicas=0" for c in self.r.calls))
+        self.assertIn(("scale", "deployment/temporal", "--replicas=1"), self.r.calls)
+        self.assertFalse(self.r.state_file.exists())
+
+    def test_failed_reset_cannot_resume_under_another_mode(self):
+        self.preflight()
+        self.r.state_file.write_text(json.dumps(self.r.state))
+        self.r.for_upgrade = True
+        with self.assertRaisesRegex(reset.Refused, "reset mode changed"):
+            self.preflight()
+        self.assert_read_only()
 
     def test_openfga_inventory_is_paginated_and_rejects_foreign_stores(self):
         self.r.store_pages = [

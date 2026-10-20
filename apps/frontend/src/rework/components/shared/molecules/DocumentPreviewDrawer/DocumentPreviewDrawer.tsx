@@ -53,7 +53,14 @@ export default function DocumentPreviewDrawer({ target, onClose }: DocumentPrevi
         hasNativePreview(target?.fileName) ? <DocumentViewerModeToggle view={view} onChange={setView} /> : undefined
       }
     >
-      {target && <DocumentViewer documentUid={target.documentUid} fileName={target.fileName} view={view} />}
+      {target && (
+        <DocumentViewer
+          documentUid={target.documentUid}
+          fileName={target.fileName}
+          manager={target.manager}
+          view={view}
+        />
+      )}
     </InlineDrawer>
   );
 }

@@ -141,6 +141,8 @@ pub struct PostgresConfig {
 pub struct SchedulerConfig {
     #[serde(default)]
     pub lifecycle: crate::lifecycle::policy::LifecycleConfig,
+    #[serde(default)]
+    pub processing: Option<crate::processing::config::ProcessingConfig>,
 }
 
 fn terms_version<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
@@ -207,11 +209,24 @@ impl Configuration {
         let text = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
         let config: Self =
             serde_yaml_ng::from_str(&text).with_context(|| format!("invalid {path}"))?;
-        config.scheduler.lifecycle.validate()?;
-        if let Some(content) = &config.storage.content {
+        config.validate()?;
+        Ok((path, config))
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        self.scheduler.lifecycle.validate()?;
+        if let Some(content) = &self.storage.content {
             content.validate()?;
         }
-        Ok((path, config))
+        if let Some(processing) = &self.scheduler.processing {
+            processing.validate(
+                self.storage
+                    .content
+                    .as_ref()
+                    .context("processing requires original storage")?,
+            )?;
+        }
+        Ok(())
     }
 
     pub fn listen_addr(&self) -> String {

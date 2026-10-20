@@ -217,6 +217,21 @@ impl ObjectStore {
             .map_err(|_| anyhow::anyhow!("original content is unavailable"))
     }
 
+    pub async fn get_range(
+        &self,
+        key: &str,
+        range: Option<String>,
+    ) -> Result<aws_sdk_s3::operation::get_object::GetObjectOutput> {
+        self.client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .set_range(range)
+            .send()
+            .await
+            .map_err(|_| anyhow::anyhow!("content is unavailable"))
+    }
+
     pub async fn delete(&self, key: &str) -> Result<()> {
         self.client
             .delete_object()

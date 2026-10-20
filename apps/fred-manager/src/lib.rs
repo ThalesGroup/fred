@@ -29,6 +29,7 @@ pub mod lifecycle;
 pub mod logging;
 pub mod onboarding;
 pub mod platform;
+pub mod processing;
 pub mod roles;
 pub mod spaces;
 

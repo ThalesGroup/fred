@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
@@ -25,7 +25,9 @@ import {
   hasNativePreview,
   isTabularFile,
 } from "../../../../utils/documentViewerUtils";
+import { useLazyPreviewQuery } from "../../../../../slices/fredManager/fredManagerApiEnhancements";
 import styles from "./DocumentViewer.module.css";
+import { ManagerPreviewImage } from "./ManagerPreviewImage";
 
 export type ViewMode = "file" | "raw";
 
@@ -33,6 +35,7 @@ const VIEW_TABS: ViewMode[] = ["file", "raw"];
 
 interface DocumentViewerProps {
   documentUid: string;
+  manager?: boolean;
   /** Real file name incl. extension — decides the render strategy (§2.1, FRONT-13). Falls
    * back to markdown rendering when absent, matching the pre-FRONT-13 behavior. */
   fileName?: string | null;
@@ -63,15 +66,29 @@ interface DocumentViewerProps {
  * Deliberately chrome-less: both hosting contexts already provide their own
  * header/close affordance (the page's top bar, `InlineDrawer`'s header).
  */
-export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded, view }: DocumentViewerProps) {
+export function DocumentViewer({
+  documentUid,
+  fileName,
+  onMarkdownLoaded,
+  view,
+  manager = false,
+}: DocumentViewerProps) {
   if (!hasNativePreview(fileName)) {
     return (
-      <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
+      <MarkdownDocumentBody
+        manager={manager}
+        documentUid={documentUid}
+        onLoaded={onMarkdownLoaded}
+        fullWidth={isTabularFile(fileName)}
+      />
     );
   }
 
   const nativeBody = (
-    <PdfStreamingDocumentViewer documentUid={documentUid} sourceUrl={documentPdfSourceUrl(documentUid, fileName)} />
+    <PdfStreamingDocumentViewer
+      documentUid={documentUid}
+      sourceUrl={documentPdfSourceUrl(documentUid, fileName, manager)}
+    />
   );
 
   if (!view) {
@@ -80,7 +97,11 @@ export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded, view }
 
   return (
     <div className={styles.viewerBody}>
-      {view === "file" ? nativeBody : <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} />}
+      {view === "file" ? (
+        nativeBody
+      ) : (
+        <MarkdownDocumentBody manager={manager} documentUid={documentUid} onLoaded={onMarkdownLoaded} />
+      )}
     </div>
   );
 }
@@ -114,10 +135,12 @@ export function DocumentViewerModeToggle({ view, onChange }: { view: ViewMode; o
 
 function MarkdownDocumentBody({
   documentUid,
+  manager = false,
   onLoaded,
   fullWidth,
 }: {
   documentUid: string;
+  manager?: boolean;
   onLoaded?: (content: string) => void;
   fullWidth?: boolean;
 }) {
@@ -131,6 +154,17 @@ function MarkdownDocumentBody({
   const [unavailable, setUnavailable] = useState(false);
   const [fetchPreview] = useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery();
 
+  const [fetchManagerPreview] = useLazyPreviewQuery();
+  const imageRenderer = useMemo(
+    () =>
+      manager
+        ? function Image(props: { src?: string; alt?: string }) {
+            return <ManagerPreviewImage {...props} documentUid={documentUid} />;
+          }
+        : undefined,
+    [manager, documentUid],
+  );
+
   useEffect(() => {
     if (!documentUid) return;
     // Guards against a superseded response winning the race: if `documentUid`
@@ -140,11 +174,19 @@ function MarkdownDocumentBody({
     let cancelled = false;
     setLoading(true);
     setUnavailable(false);
-    fetchPreview({ documentUid })
-      .unwrap()
-      .then((resp) => {
+    const response = manager
+      ? fetchManagerPreview({ id: documentUid, artifact: "raw" })
+          .unwrap()
+          .then((value) => {
+            if (typeof value !== "string") throw new Error("Invalid preview");
+            return value;
+          })
+      : fetchPreview({ documentUid })
+          .unwrap()
+          .then((resp) => decodeMaybeBase64Utf8(resp?.content ?? ""));
+    response
+      .then((decoded) => {
         if (cancelled) return;
-        const decoded = decodeMaybeBase64Utf8(resp?.content ?? "");
         setContent(decoded);
         setUnavailable(decoded.trim() === "");
         onLoaded?.(decoded);
@@ -163,7 +205,7 @@ function MarkdownDocumentBody({
     };
     // onLoaded is a per-render callback (title-derivation), not a fetch dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentUid, fetchPreview]);
+  }, [documentUid, manager, fetchPreview, fetchManagerPreview]);
 
   if (loading) {
     return (
@@ -181,7 +223,13 @@ function MarkdownDocumentBody({
   }
   return (
     <div className={styles.markdownBody}>
-      <MarkdownRenderer text={content} fullWidth={fullWidth} />
+      <MarkdownRenderer
+        text={content}
+        fullWidth={fullWidth}
+        imageRenderer={imageRenderer}
+        localLinksAsText={manager}
+        diagramsAsCode={manager}
+      />
     </div>
   );
 }

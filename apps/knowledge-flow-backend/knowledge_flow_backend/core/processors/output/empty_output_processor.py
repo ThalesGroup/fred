@@ -32,7 +32,7 @@ class EmptyOutputProcessor(BaseOutputProcessor):
 
     description = "Skips output processing for file types that should not be post-processed."
 
-    def __init__(self):
+    def __init__(self, *, context=None):
         super().__init__()
 
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:

@@ -1,0 +1,30 @@
+{
+  "clientId": "knowledge-flow-worker",
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "serviceAccountsEnabled": true,
+  "standardFlowEnabled": false,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "fullScopeAllowed": false,
+  "protocolMappers": [
+    {
+      "name": "manager-audience",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "config": {"included.custom.audience": "fred-manager", "access.token.claim": "true", "id.token.claim": "false"}
+    },
+    {
+      "name": "workload-client-id",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-hardcoded-claim-mapper",
+      "config": {"claim.name": "client_id", "claim.value": "knowledge-flow-worker", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "false"}
+    },
+    {
+      "name": "workload-username",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-property-mapper",
+      "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "false"}
+    }
+  ]
+}

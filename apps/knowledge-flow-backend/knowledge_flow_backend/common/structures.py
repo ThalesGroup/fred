@@ -320,6 +320,35 @@ VectorStorageConfig = Annotated[
 ]
 
 
+class ManagerProcessingConfig(BaseModel):
+    """Workload identity and isolated persistence for manager-owned documents."""
+
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    url: str
+    issuer: str
+    audience: str = "fred-manager"
+    client_id: str = "knowledge-flow-worker"
+    client_secret_env: str = "MANAGER_WORKER_CLIENT_SECRET"
+    endpoint: str
+    bucket: str
+    region: str = "us-east-1"
+    access_key_env: str = "MANAGER_DERIVED_ACCESS_KEY"
+    secret_key_env: str = "MANAGER_DERIVED_SECRET_KEY"
+    vector_store: VectorStorageConfig
+    allow_insecure: bool = False
+    temporary_bytes: int = Field(default=1_073_741_824, ge=1_048_576, le=21_474_836_480, description="Per-activity original plus output byte budget; size the worker volume for concurrent activities.")
+
+    @model_validator(mode="after")
+    def validate_transport(self):
+        for url in (self.url, self.issuer, self.endpoint):
+            if not url.startswith("https://") and not (self.allow_insecure and url.startswith("http://")):
+                raise ValueError("manager processing endpoints require HTTPS")
+        if self.vector_store.type == "in_memory":
+            raise ValueError("manager processing requires a durable vector store")
+        return self
+
+
 class ProcessingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1125,10 +1154,32 @@ class Configuration(BaseModel):
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
+    manager_processing: ManagerProcessingConfig | None = None
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
     filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
+
+    @model_validator(mode="after")
+    def isolate_manager_processing(self):
+        manager = self.manager_processing
+        if manager is None or not manager.enabled:
+            return self
+        legacy = self.storage.vector_store
+        derived = manager.vector_store
+        if legacy.type == derived.type:
+            for field in ("index", "collection_name", "table"):
+                if hasattr(legacy, field) and getattr(legacy, field) == getattr(derived, field):
+                    raise ValueError("manager and legacy vector namespaces must differ")
+        if isinstance(self.content_storage, MinioStorageConfig) and manager.bucket in {
+            self.content_storage.bucket_name,
+            f"{self.content_storage.bucket_name}-documents",
+            f"{self.content_storage.bucket_name}-objects",
+        }:
+            raise ValueError("manager and legacy content buckets must differ")
+        if isinstance(self.filesystem, MinioFilesystemConfig) and manager.bucket == self.filesystem.bucket_name:
+            raise ValueError("manager and legacy filesystem buckets must differ")
+        return self
 
     @model_validator(mode="before")
     @classmethod

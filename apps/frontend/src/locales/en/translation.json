@@ -2331,6 +2331,10 @@
         "reported": "Reported by the pipeline",
         "stage": "Stage: {{stage}}",
         "stages": {
+          "queued": "Waiting for processing",
+          "preparation": "Preparing the file",
+          "extraction": "Extracting content",
+          "indexing": "Indexing content",
           "raw": "File storage",
           "preview": "Content extraction",
           "vector": "Search indexing",
@@ -4264,7 +4268,19 @@
       "failed": "Original could not be stored",
       "stored": "Stored",
       "wrongFile": "Select the original file with the same name and size.",
-      "retryFailed": "The result could not be verified. Try again before sending the file."
+      "retryFailed": "The result could not be verified. Try again before sending the file.",
+      "processingErrors": {
+        "unsupported_input": "This document format cannot be processed with the selected profile.",
+        "access_changed": "Access changed during processing. Check your access before retrying.",
+        "integrity_failure": "Document integrity could not be verified. The original is preserved.",
+        "extraction_failed": "Content extraction failed. You can retry processing.",
+        "preview_failed": "The document preview could not be generated. You can retry processing.",
+        "indexing_failed": "Document indexing failed. You can retry processing.",
+        "capacity_exceeded": "Processing capacity was reached. Try again later.",
+        "delivery_unknown": "Processing did not start within the allowed time. You can retry.",
+        "deadline_exceeded": "Processing exceeded the allowed time. You can retry.",
+        "worker_failed": "Processing failed. The original is preserved and can be processed again."
+      }
     }
   },
   "runtime": {

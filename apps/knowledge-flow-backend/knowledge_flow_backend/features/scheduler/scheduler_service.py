@@ -24,7 +24,7 @@ from fred_core.scheduler import (
     resolve_scheduler_backend,
 )
 
-from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig, extraction_task_queue, parse_duration_seconds
+from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
 from knowledge_flow_backend.features.scheduler.in_memory_scheduler import InMemoryScheduler
@@ -33,6 +33,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcessWithoutUser,
     PipelineDefinition,
 )
+from knowledge_flow_backend.features.scheduler.submission_policy import submission_policy
 from knowledge_flow_backend.features.scheduler.temporal_scheduler import TemporalScheduler
 
 logger = logging.getLogger(__name__)
@@ -98,24 +99,7 @@ class IngestionTaskService:
         base_task_queue = self._scheduler_config.temporal.task_queue
         for file in files:
             normalized_profile = self._processing_config.normalize_profile(file.profile)
-            profile_config = self._processing_config.get_profile_config(normalized_profile)
-            with_timeout = FileToProcess.from_file_to_process_without_user(file, user).model_copy(
-                update={
-                    # Resolved per document, so one submission may freely mix profiles:
-                    # only the extraction activity leaves the common queue.
-                    "extraction_task_queue": extraction_task_queue(base_task_queue, normalized_profile),
-                    "push_metadata_activity_timeout_seconds": parse_duration_seconds(profile_config.push_metadata_activity_timeout, field_name="push_metadata_activity_timeout"),
-                    "pull_metadata_activity_timeout_seconds": parse_duration_seconds(profile_config.pull_metadata_activity_timeout, field_name="pull_metadata_activity_timeout"),
-                    "output_activity_timeout_seconds": parse_duration_seconds(profile_config.output_activity_timeout, field_name="output_activity_timeout"),
-                    "input_activity_timeout_seconds": profile_config.input_activity_timeout_seconds,
-                    "heartbeat_timeout_seconds": profile_config.activity_heartbeat_timeout_seconds,
-                    "retry_initial_interval_seconds": profile_config.retry_initial_interval_seconds,
-                    "retry_backoff_coefficient": profile_config.retry_backoff_coefficient,
-                    "retry_maximum_interval_seconds": profile_config.retry_maximum_interval_seconds,
-                    "retry_maximum_attempts": profile_config.retry_maximum_attempts,
-                    "retry_non_retryable_error_types": list(profile_config.retry_non_retryable_error_types),
-                }
-            )
+            with_timeout = FileToProcess.from_file_to_process_without_user(file, user).model_copy(update=submission_policy(self._processing_config, base_task_queue, normalized_profile))
             enriched_files.append(with_timeout)
 
         definition = PipelineDefinition(

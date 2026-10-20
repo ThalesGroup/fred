@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
+from contextvars import ContextVar
 from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Union
 
 from attr import dataclass
@@ -46,6 +47,10 @@ def is_session_chunk(chunk: Dict[str, Any]) -> bool:
     """
     metadata = chunk.get("metadata") or {}
     return metadata.get("scope") == "session"
+
+
+# Per-call persistence observer; an ingestion adapter can fence IDs before writes.
+vector_write_observer: ContextVar[Any] = ContextVar("vector_write_observer", default=None)
 
 
 @dataclass(frozen=True)
@@ -85,6 +90,8 @@ class BaseVectorStore(ABC):
     - Ingestion (idempotent via stable ids)
     - ANN search (semantic)
     """
+
+    strict_operations: bool = False
 
     @abstractmethod
     def add_documents(self, documents: List[Document], *, ids: Optional[List[str]] = None) -> List[str]:

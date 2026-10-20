@@ -189,7 +189,7 @@ pub async fn connect(config: &LifecycleConfig) -> Result<Client> {
     .context("lifecycle Temporal connection timeout")?
     .map_err(|_| anyhow::anyhow!("lifecycle Temporal unavailable"))
 }
-pub async fn run(pool: PgPool, fga: Fga, config: LifecycleConfig, listen: &str) -> Result<()> {
+pub async fn run(pool: PgPool, fga: Fga, config: LifecycleConfig) -> Result<()> {
     let client = match connect(&config).await {
         Ok(client) => client,
         Err(error) if !config.enabled => {
@@ -212,21 +212,12 @@ pub async fn run(pool: PgPool, fga: Fga, config: LifecycleConfig, listen: &str) 
         .build();
     let mut worker = Worker::new(&runtime, client, options)?;
     let shutdown = worker.shutdown_handle();
-    let listener = tokio::net::TcpListener::bind(listen).await?;
-    let health = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            axum::Router::new().route("/healthz", axum::routing::get(|| async { "ok" })),
-        )
-        .await
-    });
     let signal = tokio::spawn(async move {
         shutdown_signal().await?;
         shutdown();
         Ok::<_, std::io::Error>(())
     });
     let result = worker.run().await;
-    health.abort();
     signal.abort();
     result.map_err(|_| anyhow::anyhow!("lifecycle worker stopped unexpectedly"))
 }

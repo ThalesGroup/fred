@@ -5317,6 +5317,19 @@ choice applies only to those documents. Cancel submits nothing. Pending requests
 suppress repeated clicks. Completed relaunches supply a new terminal task outcome
 so an earlier failure does not outlive a successful retry.
 
+### Manager Resources bindings - 2026-10-20
+
+The existing upload drawer, import panel, row/bulk processing actions and File/Raw
+viewer use manager identities on manager-backed Resources routes. The drawer offers
+upload-only and configured fast/medium/rich processing. Stored original and
+processing completion have separate outcomes. Reload reads persisted processing
+summaries; failed attempts can be retried without a local File. Both directory
+chips and import cards translate the same stable manager error codes. Preview
+loads authenticated manager artifacts, with bounded raw text and local images.
+The [Resources journey](../../architecture/02-user-journeys.md#priya-opens-resources)
+defines user behavior and authority. Existing Knowledge Flow consumers retain their
+own bindings.
+
 ## Prompt commands in the composer — 2026-09-28
 
 ### `RichInputField` — command trigger and placeholder

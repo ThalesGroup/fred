@@ -19,7 +19,7 @@ import styles from "./BulkActionsBar.module.css";
 
 interface BulkActionsBarProps {
   selectedCount: number;
-  disabledReason?: { delete?: string; download?: string; processing?: string };
+  disabledReason?: { delete?: string; download?: string; search?: string; processing?: string };
   /** Omit to hide the action, like `onDownload` — a workspace rooted at a
    *  machine-filled library offers reading only, and the backend refuses a
    *  person's delete there anyway. */
@@ -106,13 +106,13 @@ export default function BulkActionsBar({
               ? "rework.resources.bulkActions.excludeFromSearch"
               : "rework.resources.bulkActions.includeInSearch";
           return (
-            <Tooltip text={disabledReason?.processing ?? t(key)}>
+            <Tooltip text={disabledReason?.search ?? disabledReason?.processing ?? t(key)}>
               <IconButton
                 variant="outlined"
                 size="small"
                 icon={{ category: "outlined", type: searchToggle.mode === "exclude" ? "search_off" : "search" }}
                 aria-label={t(key)}
-                disabled={!!disabledReason?.processing}
+                disabled={!!(disabledReason?.search ?? disabledReason?.processing)}
                 loading={searchToggle.loading}
                 onClick={searchToggle.onClick}
               />

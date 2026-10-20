@@ -140,7 +140,12 @@ export function hasNativePreview(fileName: string | null | undefined): boolean {
  * Example:
  * - `documentPdfSourceUrl("abc", "rapport.docx") // "/knowledge-flow/v1/raw_content/pdf/abc"`
  */
-export function documentPdfSourceUrl(documentUid: string, fileName: string | null | undefined): string {
+export function documentPdfSourceUrl(
+  documentUid: string,
+  fileName: string | null | undefined,
+  manager = false,
+): string {
+  if (manager) return `/fred-manager/v1/documents/${encodeURIComponent(documentUid)}/preview?artifact=native`;
   const route = isPdfFile(fileName) ? "stream" : "pdf";
   return `/knowledge-flow/v1/raw_content/${route}/${documentUid}`;
 }

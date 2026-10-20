@@ -135,9 +135,16 @@ response from manager's durable receipt before
 offering a retry. After reload she finds the stored rows, their sizes and dates, and
 downloads an original through its existing menu. The downloaded bytes match the file.
 
-Statistics and quota come from manager. The status means stored; no Knowledge Flow
-tag, ingestion task or Temporal call is created. Preview and processing controls
-remain visible and unavailable. A reader can browse and download but cannot upload.
+Statistics and quota come from manager. Priya chooses upload-only or, when enabled,
+upload-and-process with fast, medium or rich. Stored means the original is safe;
+processing has its own stage and outcome in the table and import panel. Manager
+sends processing through Temporal to the existing Knowledge Flow worker. A reader
+can browse, preview and download but cannot upload or start processing.
+
+On completion, Priya opens the existing File/Raw preview modes. A processing failure
+leaves the original downloadable; the retry action reuses it without file selection.
+Reload restores persisted progress and failures. Manager-derived outputs are isolated
+from the separate Knowledge Flow catalog and search/chat retrieval.
 See [content ownership](05-documents.md) for authority, recovery and storage limits.
 
 ## Joining and governing organizations, teams and projects

@@ -58,36 +58,38 @@ export function ImportStepper({ task }: { task: TaskViewModel }) {
 
   return (
     <ol className={styles.stepper} aria-label={t("rework.imports.stepper.label")}>
-      {(task.kind === "document_upload" ? IMPORT_PHASES.slice(0, 1) : IMPORT_PHASES).map((phase, i) => (
-        <Fragment key={phase}>
-          {i > 0 && <li className={styles.link} data-state={links[i - 1]} aria-hidden />}
-          <li
-            className={styles.phase}
-            data-state={states[i]}
-            aria-label={`${importPhaseName(phase, t)} — ${t(`rework.imports.phaseState.${states[i]}`)}`}
-            aria-current={states[i] === "current" ? "step" : undefined}
-          >
-            {/* Inside the <li>, not around it: the Tooltip renders a <span>,
-                which between <ol> and <li> would break the list. */}
-            <Tooltip
-              content={
-                <span className={styles.tip}>
-                  <span className={styles.tipName}>{importPhaseName(phase, t)}</span>
-                  <span className={styles.tipHint}>
-                    {task.kind === "document_upload"
-                      ? t("rework.documentStorage.storedHint")
-                      : importPhaseHint(phase, t)}
-                  </span>
-                </span>
-              }
+      {(task.kind === "document_upload" && task.stage === "upload" ? IMPORT_PHASES.slice(0, 1) : IMPORT_PHASES).map(
+        (phase, i) => (
+          <Fragment key={phase}>
+            {i > 0 && <li className={styles.link} data-state={links[i - 1]} aria-hidden />}
+            <li
+              className={styles.phase}
+              data-state={states[i]}
+              aria-label={`${importPhaseName(phase, t)} — ${t(`rework.imports.phaseState.${states[i]}`)}`}
+              aria-current={states[i] === "current" ? "step" : undefined}
             >
-              <span className={styles.marker}>
-                <Marker state={states[i]} />
-              </span>
-            </Tooltip>
-          </li>
-        </Fragment>
-      ))}
+              {/* Inside the <li>, not around it: the Tooltip renders a <span>,
+                which between <ol> and <li> would break the list. */}
+              <Tooltip
+                content={
+                  <span className={styles.tip}>
+                    <span className={styles.tipName}>{importPhaseName(phase, t)}</span>
+                    <span className={styles.tipHint}>
+                      {task.kind === "document_upload" && task.stage === "upload"
+                        ? t("rework.documentStorage.storedHint")
+                        : importPhaseHint(phase, t)}
+                    </span>
+                  </span>
+                }
+              >
+                <span className={styles.marker}>
+                  <Marker state={states[i]} />
+                </span>
+              </Tooltip>
+            </li>
+          </Fragment>
+        ),
+      )}
     </ol>
   );
 }

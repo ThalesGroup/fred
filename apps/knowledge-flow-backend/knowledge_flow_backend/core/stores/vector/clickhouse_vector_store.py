@@ -583,7 +583,9 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                 "text": text or "",
                 "metadata": self._decode_metadata(metadata_raw, retrievable),
             }
-        except Exception:
+        except Exception as error:
+            if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
+                raise
             logger.exception("[VECTOR][CLICKHOUSE] failed to fetch chunk %s", chunk_uid)
             return {"chunk_uid": chunk_uid}
 
@@ -619,7 +621,9 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                 chunk_uid,
                 document_uid,
             )
-        except Exception:
+        except Exception as error:
+            if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
+                raise
             logger.exception(
                 "[VECTOR][CLICKHOUSE] failed to delete chunk %s for document_uid=%s",
                 chunk_uid,

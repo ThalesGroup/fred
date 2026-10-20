@@ -68,6 +68,7 @@ async fn provisioning_browser_journey() {
             fga: e.fga.clone(),
             directory: Some(directory.clone()),
             content: Some(content),
+            processing: None,
         },
         "/fred-manager/v1",
         &[],

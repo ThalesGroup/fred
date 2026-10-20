@@ -80,7 +80,7 @@ struct FileUpload {
 }
 
 /// Create one immutable original; the request key is scoped to the authenticated actor.
-#[utoipa::path(post,path="/folders/{id}/documents",params(("id"=Uuid,Path),("Idempotency-Key"=Uuid,Header,description="Required request UUID"),("retry_of"=Option<Uuid>,Query)),request_body(content=FileUpload,content_type="multipart/form-data"),responses(
+#[utoipa::path(post,path="/folders/{id}/documents",params(("id"=Uuid,Path),("Idempotency-Key"=Uuid,Header,description="Required request UUID"),("retry_of"=Option<Uuid>,Query),("profile"=Option<crate::processing::models::Profile>,Query,description="Omit for upload only")),request_body(content=FileUpload,content_type="multipart/form-data"),responses(
 (status=400,body=crate::error::ErrorBody),(status=201,body=UploadReceipt),(status=200,body=UploadReceipt),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=408,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=413,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=429,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)
 ))]
 async fn upload(
@@ -105,7 +105,7 @@ async fn upload(
             &user,
             id,
             key,
-            query.retry_of,
+            query,
             multipart.map_err(|_| {
                 AppError::problem(
                     StatusCode::BAD_REQUEST,
@@ -113,21 +113,29 @@ async fn upload(
                     "Expected multipart/form-data with one file",
                 )
             })?,
+            s.processing.as_deref(),
         )
         .await;
     let (mut response, receipt_key) = match outcome {
-        Ok((fresh, receipt)) => (
+        Ok((fresh, mut receipt)) => {
+            if let Some(id) = receipt.document_id {
+                receipt.processing = crate::processing::store::summaries(&s.pool, &[id])
+                    .await?
+                    .remove(&id);
+            }
             (
-                if fresh {
-                    StatusCode::CREATED
-                } else {
-                    StatusCode::OK
-                },
-                Json(receipt),
+                (
+                    if fresh {
+                        StatusCode::CREATED
+                    } else {
+                        StatusCode::OK
+                    },
+                    Json(receipt),
+                )
+                    .into_response(),
+                key,
             )
-                .into_response(),
-            key,
-        ),
+        }
         Err(
             error @ AppError::Problem {
                 code: "upload_in_progress",
@@ -159,7 +167,9 @@ async fn preflight(
     Id(id): Id,
     Input(input): Input<Preflight>,
 ) -> AppResult<Json<PreflightResult>> {
-    Ok(Json(storage(&s)?.preflight(&user.uid, id, input).await?))
+    let mut result = storage(&s)?.preflight(&user.uid, id, input).await?;
+    result.storage.processing_enabled = s.processing.as_ref().is_some_and(|p| p.config.enabled);
+    Ok(Json(result))
 }
 
 #[utoipa::path(get,path="/spaces/{id}/entries",params(("id"=Uuid,Path),("parent_id"=Option<Uuid>,Query),("search"=Option<String>,Query),("order"=Option<EntryOrder>,Query),("offset"=Option<i64>,Query),("limit"=Option<i64>,Query)),responses((status=200,body=Directory),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
@@ -169,9 +179,9 @@ async fn entries(
     Id(id): Id,
     Params(query): Params<EntryQuery>,
 ) -> AppResult<Json<Directory>> {
-    Ok(Json(
-        Storage::directory(&s.pool, &s.fga, &user.uid, id, query).await?,
-    ))
+    let mut directory = Storage::directory(&s.pool, &s.fga, &user.uid, id, query).await?;
+    directory.processing_enabled = s.processing.as_ref().is_some_and(|p| p.config.enabled);
+    Ok(Json(directory))
 }
 
 #[utoipa::path(get,path="/spaces/{id}/storage",params(("id"=Uuid,Path)),responses((status=200,body=StorageSummary),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
@@ -180,7 +190,9 @@ async fn summary(
     AdmittedUser(user): AdmittedUser,
     Id(id): Id,
 ) -> AppResult<Json<StorageSummary>> {
-    Ok(Json(storage(&s)?.summary(&user.uid, id).await?))
+    let mut result = storage(&s)?.summary(&user.uid, id).await?;
+    result.processing_enabled = s.processing.as_ref().is_some_and(|p| p.config.enabled);
+    Ok(Json(result))
 }
 
 #[utoipa::path(get,path="/spaces/{id}/document-uploads",params(("id"=Uuid,Path),("before"=Option<chrono::DateTime<chrono::Utc>>,Query),("before_key"=Option<Uuid>,Query),("limit"=Option<i64>,Query)),responses((status=200,body=Vec<UploadReceipt>),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]

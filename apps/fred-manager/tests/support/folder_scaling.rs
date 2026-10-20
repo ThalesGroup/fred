@@ -242,6 +242,7 @@ async fn folder_scaling() {
             lifecycle: Default::default(),
             directory: None,
             content: None,
+            processing: None,
         },
         "/api",
         &[],

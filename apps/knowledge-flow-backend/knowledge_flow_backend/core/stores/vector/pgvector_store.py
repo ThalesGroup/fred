@@ -427,6 +427,27 @@ class PgVectorStoreAdapter(BaseVectorStore):
             logger.exception("[VECTOR][PGVECTOR] failed to fetch chunks for document_uid=%s", document_uid)
             raise RuntimeError("Failed to fetch chunks from PGVector.")
 
+    def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
+        with self._engine.connect() as connection:
+            row = connection.execute(
+                text(
+                    "SELECT e.cmetadata->>'chunk_uid',e.document,e.cmetadata FROM langchain_pg_embedding e JOIN langchain_pg_collection c ON c.uuid=e.collection_id WHERE c.name=:collection AND e.cmetadata->>'chunk_uid'=:chunk AND e.cmetadata->>'document_uid'=:document"
+                ),
+                {"collection": self.collection_name, "chunk": chunk_uid, "document": document_uid},
+            ).first()
+        if row is None:
+            return {"chunk_uid": chunk_uid}
+        return {"chunk_uid": row[0], "text": row[1], "metadata": row[2]}
+
+    def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
+        with self._engine.begin() as connection:
+            connection.execute(
+                text(
+                    "DELETE FROM langchain_pg_embedding e USING langchain_pg_collection c WHERE c.uuid=e.collection_id AND c.name=:collection AND e.cmetadata->>'chunk_uid'=:chunk AND e.cmetadata->>'document_uid'=:document"
+                ),
+                {"collection": self.collection_name, "chunk": chunk_uid, "document": document_uid},
+            )
+
     # ---------- BaseVectorStore: ANN search ----------
 
     def ann_search(

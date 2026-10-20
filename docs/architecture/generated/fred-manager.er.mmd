@@ -8,6 +8,9 @@ erDiagram
 "document" }o--|| "folder" : "folder_id, space_id"
 "document_upload" |o--o| "document" : "document_id"
 "document_upload" |o--o| "document_upload" : "retry_of"
+"document_processing" }o--|| "space" : "space_id"
+"document_processing" }o--|| "document" : "document_id"
+"document_processing" |o--o| "document_processing" : "retry_of"
 
 "space_deletion" {
   uuid id
@@ -83,6 +86,9 @@ erDiagram
   text inventory_cursor
   bigint inventory_bytes
   bigint orphan_bytes
+  text derived_endpoint
+  text derived_bucket
+  text derived_prefix
   timestamp_with_time_zone inventory_completed_at
   uuid lease_owner
   timestamp_with_time_zone lease_until
@@ -109,7 +115,44 @@ erDiagram
   timestamp_with_time_zone acknowledged_at
   uuid retry_of FK
   uuid successor_key
+  text processing_profile
   timestamp_with_time_zone cleanup_due_at
   integer cleanup_attempts
   timestamp_with_time_zone cleaned_at
+}
+"document_processing" {
+  uuid id
+  uuid request_key
+  text actor
+  uuid installation_id
+  uuid document_id FK
+  uuid organization_id
+  uuid space_id FK
+  text original_sha256
+  text profile
+  text status
+  text stage
+  bigint revision
+  text workflow_id
+  jsonb submission
+  text run_id
+  timestamp_with_time_zone first_dispatch_at
+  timestamp_with_time_zone delivered_at
+  timestamp_with_time_zone delivery_due_at
+  integer delivery_attempts
+  uuid dispatch_owner
+  timestamp_with_time_zone dispatch_until
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone deadline_at
+  timestamp_with_time_zone completed_at
+  text error_code
+  uuid retry_of FK
+  jsonb profile_settings
+  jsonb generations
+  jsonb manifest
+  bigint chunks
+  bigint vectors
+  bigint rows
+  bigint reserved_bytes
+  timestamp_with_time_zone cleanup_due_at
 }

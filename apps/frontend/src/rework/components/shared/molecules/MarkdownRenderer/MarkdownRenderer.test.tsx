@@ -134,3 +134,13 @@ describe("MarkdownRenderer code routing", () => {
     expect(codeBlocks()).toHaveLength(0);
   });
 });
+
+it("keeps untrusted document diagrams as inert code, including Mermaid image nodes", () => {
+  const text =
+    '```mermaid\nflowchart LR\nA@{ img: "https://example.invalid/tracker.png" }\n```\n\n```mindmap\nroot\n```';
+  act(() => root.render(<MarkdownRenderer text={text} diagramsAsCode />));
+  expect(container.querySelector("[data-mermaid-block], [data-mindmap-block], img")).toBeNull();
+  expect(codeBlocks()).toHaveLength(2);
+  act(() => root.render(<MarkdownRenderer text={text} />));
+  expect(container.querySelector("[data-mermaid-block]")).not.toBeNull();
+});

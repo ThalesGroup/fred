@@ -14,6 +14,7 @@
 
 import logging
 import tempfile
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -97,7 +98,7 @@ class TabularProcessor(BaseOutputProcessor):
 
     description = "Converts CSV outputs to document-scoped Parquet artifacts using DuckDB without loading them fully in pandas."
 
-    def __init__(self):
+    def __init__(self, *, context=None, content_store=None, vector_store=None):
         """
         Initialize the tabular processor for the active runtime mode.
 
@@ -109,8 +110,8 @@ class TabularProcessor(BaseOutputProcessor):
         - Instantiate once from the output-processor registry.
         - Call `process(...)` with the extracted CSV file path and document metadata.
         """
-        context = ApplicationContext.get_instance()
-        self.content_store = context.get_content_store()
+        context = context if context is not None else ApplicationContext.get_instance()
+        self.content_store = content_store if content_store is not None else context.get_content_store()
         self.tabular_config = context.get_config().storage.tabular_store
         self.csv_reader = CsvTabularProcessor()
 
@@ -121,7 +122,7 @@ class TabularProcessor(BaseOutputProcessor):
         self.vector_store = None
         if self.tabular_config.pointer_chunks_enabled:
             self.embedder = context.get_embedder()
-            self.vector_store = context.get_create_vector_store(self.embedder)
+            self.vector_store = vector_store if vector_store is not None else context.get_create_vector_store(self.embedder)
 
         logger.info("Initializing TabularPipeline")
 
@@ -304,7 +305,7 @@ class TabularProcessor(BaseOutputProcessor):
             source_revision=source_revision,
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False, dir=getattr(self.content_store, "temporary_directory", None)) as tmp:
             parquet_path = Path(tmp.name)
 
         try:
@@ -362,32 +363,34 @@ class TabularProcessor(BaseOutputProcessor):
         """
         connection = duckdb.connect(database=":memory:")
         try:
-            source_relation_sql = self.csv_reader.build_duckdb_read_relation_sql(
-                csv_path,
-                csv_read_options,
-                sample_size=-1,
-            )
-            # The table-function SQL below comes from locally escaped CSV path
-            # and encoding settings, not from end-user SQL text.
-            source_query = f"SELECT * FROM {source_relation_sql}"  # nosec B608
-            raw_relation = connection.sql(source_query)
-            if not raw_relation.columns and csv_path.stat().st_size > 0:
-                raise ValueError(f"Failed to parse tabular file: {csv_path}")
+            watch = getattr(self.content_store, "watch_conversion", None)
+            with watch(connection) if watch is not None else nullcontext():
+                source_relation_sql = self.csv_reader.build_duckdb_read_relation_sql(
+                    csv_path,
+                    csv_read_options,
+                    sample_size=-1,
+                )
+                # The table-function SQL below comes from locally escaped CSV path
+                # and encoding settings, not from end-user SQL text.
+                source_query = f"SELECT * FROM {source_relation_sql}"  # nosec B608
+                raw_relation = connection.sql(source_query)
+                if not raw_relation.columns and csv_path.stat().st_size > 0:
+                    raise ValueError(f"Failed to parse tabular file: {csv_path}")
 
-            # DuckDB's CSV reader already returns unique column names — it suffixes
-            # duplicate headers (e.g. Sprint / Sprint_1) while preserving the
-            # original casing, accents and spaces. We keep those human-readable
-            # names verbatim in the Parquet artifact rather than sanitizing them;
-            # SQL callers quote the identifiers when querying via /tabular/query.
-            raw_relation.create_view("source_csv")
+                # DuckDB's CSV reader already returns unique column names — it suffixes
+                # duplicate headers (e.g. Sprint / Sprint_1) while preserving the
+                # original casing, accents and spaces. We keep those human-readable
+                # names verbatim in the Parquet artifact rather than sanitizing them;
+                # SQL callers quote the identifiers when querying via /tabular/query.
+                raw_relation.create_view("source_csv")
 
-            quoted_path = str(parquet_path).replace("'", "''")
-            compression = self.tabular_config.compression.replace("'", "''")
-            connection.execute(f"COPY source_csv TO '{quoted_path}' (FORMAT PARQUET, COMPRESSION '{compression}')")
+                quoted_path = str(parquet_path).replace("'", "''")
+                compression = self.tabular_config.compression.replace("'", "''")
+                connection.execute(f"COPY source_csv TO '{quoted_path}' (FORMAT PARQUET, COMPRESSION '{compression}')")
 
-            row_count = self._read_parquet_row_count(connection, parquet_path)
-            columns = self._read_parquet_schema(connection, parquet_path, row_count)
-            return GeneratedParquetMetadata(row_count=row_count, columns=columns)
+                row_count = self._read_parquet_row_count(connection, parquet_path)
+                columns = self._read_parquet_schema(connection, parquet_path, row_count)
+                return GeneratedParquetMetadata(row_count=row_count, columns=columns)
         finally:
             connection.close()
 

@@ -35,6 +35,7 @@ import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { makeSelectImportTasks, selectImportPanelOpenRequest, taskEvicted } from "../../../../features/tasks/taskSlice";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
+import { managerProcessingFailure } from "../../../../features/imports/managerDocuments";
 import { importFailure, INTERRUPTED_BEFORE_SEND } from "../../../../features/imports/importFailure";
 import { importPhaseHintFor, importPhaseLabel } from "../../../../features/imports/importPhases";
 import {
@@ -57,7 +58,7 @@ import type { ConflictDecision } from "../DocumentUploadDrawer/importConflicts";
 import { ImportStepper } from "./ImportStepper";
 import { useManagerImports } from "../../../../features/imports/useManagerImports";
 import {
-  managerFileHeld,
+  managerCanRetryWithoutFile,
   canCancelManagerImport,
   cancelManagerImport,
   retryManagerImport,
@@ -424,7 +425,9 @@ export function ImportPanel({
                   onDismiss={onDismiss}
                   dismissing={isAcknowledging(task.taskId)}
                   onResend={
-                    managerSpaceId && task.state === "failed" && !managerFileHeld(task.taskId) ? onResend : undefined
+                    managerSpaceId && task.state === "failed" && !managerCanRetryWithoutFile(task.taskId)
+                      ? onResend
+                      : undefined
                   }
                 />
               ))}
@@ -467,23 +470,29 @@ const ImportItem = memo(function ImportItem({
   const { t } = useTranslation();
   const failed = task.state === "failed";
   const isManager = task.kind === "document_upload";
-  const failure = failed && !isManager ? importFailure(task, t) : null;
+  const storageOnly = isManager && task.stage === "upload";
+  const failure =
+    failed && !storageOnly
+      ? isManager
+        ? { summary: managerProcessingFailure(task.error, t), detail: null, hopeless: false }
+        : importFailure(task, t)
+      : null;
   const awaitingDecision = task.stage === "decision";
   // Sending the file again is the only way to replace or retry, and only the
   // browser has the file. After a reload it does not, and offering an action
   // that cannot work would be worse than saying so.
-  const stillHeld = isManager ? managerFileHeld(task.taskId) : heldImport(task.taskId) !== undefined;
+  const stillHeld = isManager ? managerCanRetryWithoutFile(task.taskId) : heldImport(task.taskId) !== undefined;
 
   // The single line the markers opposite are about: the phase in flight, or —
   // when something interrupted it — why it stopped, or the question holding it.
-  const statusText = isManager
+  const statusText = storageOnly
     ? t(`rework.documentStorage.${task.step}`)
     : task.untracked
       ? t("rework.imports.untracked.summary")
       : (failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : importPhaseLabel(task, t)));
   // What that line means, for a reader who has not imported before. The same
   // sentence the stepper's markers carry, on whichever phase the line names.
-  const statusDetail = isManager
+  const statusDetail = storageOnly
     ? task.error === "name_conflict"
       ? t("rework.documentStorage.nameConflict", { names: task.target?.label })
       : task.error === "quota_exceeded"

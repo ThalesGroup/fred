@@ -86,6 +86,11 @@ class Reset:
         self.state_file = Path(os.environ["K3D_RESET_STATE_DIR"]) / "reset-state.json"
         self.headers = {}
         self.needs_stop_on_failure = False
+        mode = os.environ.get("K3D_RESET_FOR_UPGRADE", "")
+        require(mode in ("", "1"), "K3D_RESET_FOR_UPGRADE must be empty or 1")
+        self.for_upgrade = mode == "1"
+        self.allowed_buckets = set(BUCKETS)
+        self.indexes = set(INDEXES)
 
     def kubectl(self, *args, data=None, timeout=180):
         return run(
@@ -234,6 +239,28 @@ class Reset:
                     "custom lifecycle Temporal storage is unsupported",
                 )
             storage = c["storage"]
+            if manager:
+                content = storage.get("content")
+                if content:
+                    self.local_bucket(content, "fred-manager-originals")
+                processing = c.get("scheduler", {}).get("processing")
+                if processing:
+                    temporal = processing.get("temporal", {})
+                    require(
+                        temporal.get("host") == "temporal:7233"
+                        and temporal.get("namespace", "default") == "default",
+                        "custom processing Temporal storage is unsupported",
+                    )
+                    self.local_bucket(processing["derived"], "fred-manager-derived")
+            if name.startswith("knowledge-flow"):
+                processing = c.get("manager_processing")
+                if processing:
+                    self.local_bucket(processing, "fred-manager-derived")
+                    require(
+                        processing["vector_store"] == {"type": "opensearch", "index": "fred-manager-vectors"},
+                        "custom manager vector store is unsupported",
+                    )
+                    self.indexes.add("fred-manager-vectors")
             if not manager:
                 require(
                     storage["opensearch"]["host"] == "https://opensearch:9200",
@@ -282,6 +309,14 @@ class Reset:
                     "custom runtime storage is unsupported",
                 )
 
+    def local_bucket(self, config, expected):
+        require(
+            config.get("endpoint") == "http://seaweedfs:8333"
+            and config.get("bucket") == expected,
+            "custom manager content storage is unsupported",
+        )
+        self.allowed_buckets.add(expected)
+
     def stores(self):
         stores, token = [], ""
         while True:
@@ -317,7 +352,7 @@ class Reset:
             "bucket inventory exceeds supported page size",
         )
         names = [x["FullPath"].removeprefix("/buckets/") for x in page.get("Entries", []) or []]
-        require(set(names) <= BUCKETS, "other content buckets are present")
+        require(set(names) <= self.allowed_buckets, "other content buckets are present")
         return names
 
     def preflight(self):
@@ -510,6 +545,7 @@ class Reset:
             "context": self.context,
             "namespace": self.namespace,
             "signature": signature,
+            "for_upgrade": self.for_upgrade,
             "replicas": {n: self.deployments[n]["spec"].get("replicas", 1) for n in names},
         }
         if self.state_file.exists():
@@ -518,6 +554,7 @@ class Reset:
                 all(saved[k] == self.state[k] for k in ("context", "namespace", "signature")),
                 "deployments changed since failed reset; saved state cannot be reused",
             )
+            require(saved.get("for_upgrade", False) == self.for_upgrade, "reset mode changed since failed reset")
             self.state = saved
         require(self.state["replicas"]["temporal"] > 0, "Temporal must be enabled")
 
@@ -552,7 +589,7 @@ class Reset:
     def clear(self):
         for store in self.stores():
             self.http("fga", "/stores/" + quote(store["id"], safe=""), "DELETE")
-        for index in sorted(INDEXES):
+        for index in sorted(self.indexes):
             self.http("search", "/" + index, "DELETE", missing=True)
         for bucket in self.buckets():
             self.http(
@@ -571,7 +608,13 @@ class Reset:
             if db in ("fred", "data"):
                 self.sql("CREATE EXTENSION vector;", db)
 
+    def initialize_buckets(self):
+        # Manager validates pre-provisioned buckets before accepting any traffic.
+        for bucket in sorted(self.allowed_buckets - BUCKETS):
+            self.http("files", "/buckets/" + quote(bucket, safe="") + "/", "POST")
+
     def initialize(self):
+        self.initialize_buckets()
         self.http("fga", "/stores", "POST", body={"name": "fred"})
         self.scale("temporal", self.state["replicas"]["temporal"])
         self.wait_ready("temporal")
@@ -592,6 +635,8 @@ class Reset:
             "--command-timeout",
             "30s",
         )
+        if self.for_upgrade:
+            return
         for number, installed in enumerate(self.jobs):
             name = f"fred-data-reset-migration-{number}"
             self.kubectl(
@@ -638,8 +683,13 @@ class Reset:
             )
         print("Clearing local business data...", flush=True)
         self.clear()
-        print("Initializing schemas with installed images...", flush=True)
+        print("Initializing Temporal..." if self.for_upgrade else "Initializing schemas with installed images...", flush=True)
         self.initialize()
+        if self.for_upgrade:
+            self.needs_stop_on_failure = False
+            self.state_file.unlink()
+            print("Reset complete for upgrade. Fred remains stopped; deploy the target release to initialize its SQL baseline and OpenFGA model.")
+            return
         for name, count in self.state["replicas"].items():
             if name != "temporal":
                 self.scale(name, count)
@@ -662,10 +712,13 @@ def main():
         print("Erase: fred/data SQL, Fred OpenFGA stores, Temporal work, Fred indexes and content buckets.")
         print("Preserve: Keycloak accounts/clients, credentials, infrastructure, images, observability.")
         print("Stop local Fred processes connected through host ports before execution.")
+        if reset.for_upgrade:
+            print("Upgrade mode: leave SQL/FGA empty and Fred stopped for the target release; do not restart installed images.")
         confirm = os.environ.get("K3D_RESET_CONFIRM", "")
         require(confirm in ("", "reset"), "confirmation must be CONFIRM=reset")
         if not confirm:
-            print("Preview only. Execute with: make k3d-app-reset DIR=<this checkout> CONFIRM=reset")
+            prefix = "K3D_RESET_FOR_UPGRADE=1 " if reset.for_upgrade else ""
+            print(f"Preview only. Execute with: {prefix}make k3d-app-reset DIR=<this checkout> CONFIRM=reset")
             return
         try:
             reset.execute()

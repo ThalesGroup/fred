@@ -108,6 +108,9 @@ class StorageTest(unittest.TestCase):
                 )
 
             r.kubectl = docker_exec
+            for bucket in ("fred-manager-originals", "fred-manager-derived"):
+                r.local_bucket({"endpoint": "http://seaweedfs:8333", "bucket": bucket}, bucket)
+            r.indexes.add("fred-manager-vectors")
             deadline = time.monotonic() + 100
             while True:
                 try:
@@ -140,7 +143,7 @@ class StorageTest(unittest.TestCase):
                 "fred-manager-8bd7b5ba-d75f-462f-b7e6-e85df773065b",
             ):
                 r.http("fga", "/stores", "POST", body={"name": name})
-            for index in (*reset.INDEXES, "infra-logs"):
+            for index in (*r.indexes, "infra-logs"):
                 r.http("search", "/" + index, "PUT", body={})
                 r.http(
                     "search",
@@ -167,7 +170,8 @@ class StorageTest(unittest.TestCase):
                 "http://seaweedfs:8888/buckets/filesystem/nested/",
                 data=payload,
             )
-            self.assertEqual(r.buckets(), ["filesystem"])
+            r.initialize_buckets()
+            self.assertEqual(set(r.buckets()), {"filesystem", "fred-manager-originals", "fred-manager-derived"})
             r.clear()
             self.assertEqual(r.stores(), [])
             self.assertEqual(r.buckets(), [])
@@ -182,12 +186,24 @@ class StorageTest(unittest.TestCase):
             )
             for db in ("keycloak", "evaluation"):
                 self.assertEqual(r.sql("SELECT value FROM marker;", db).strip(), "retained")
-            for index in reset.INDEXES:
+            for index in r.indexes:
                 self.assertIsNone(r.http("search", "/" + index, missing=True))
             self.assertEqual(r.http("search", "/infra-logs/_count")["count"], 1)
             r.clear()
             self.assertEqual(r.stores(), [])
             self.assertEqual(r.sql("SELECT value FROM marker;", "keycloak").strip(), "retained")
+            r.initialize_buckets()
+            for bucket in ("fred-manager-originals", "fred-manager-derived"):
+                self.assertFalse(r.http("files", f"/buckets/{bucket}/?limit=1").get("Entries"))
+                # Exercise the same S3 readiness probes used by manager startup.
+                for query in ("versioning", "lifecycle", "object-lock"):
+                    response = docker_exec(
+                        "exec", "-i", "deployment/opensearch", "-c", "opensearch", "--",
+                        "curl", "--silent", "--write-out", "\n%{http_code}",
+                        f"http://seaweedfs:8333/{bucket}?{query}",
+                    )
+                    self.assertNotIn("NoSuchBucket", response)
+                    self.assertIn(response.rsplit("\n", 1)[1], ("200", "404"))
 
 
 if __name__ == "__main__":

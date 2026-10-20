@@ -102,6 +102,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         fga: e.fga.clone(),
         directory: None,
         content: None,
+        processing: None,
         onboarding: Default::default(),
         lifecycle: lifecycle.clone(),
     });

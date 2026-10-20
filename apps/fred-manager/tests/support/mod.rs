@@ -20,6 +20,8 @@ pub struct Gate {
 }
 #[derive(Default)]
 pub struct Control {
+    pub worker_token: Option<String>,
+    pub worker_token_requests: usize,
     pub subject_delay: bool,
     pub subject_lookups: Vec<String>,
     pub subject_active: usize,
@@ -57,6 +59,7 @@ impl IdentityServer {
         let lookup_control = control.clone();
         let create_control = control.clone();
         let subject_control = control.clone();
+        let token_control = control.clone();
         let app = Router::new()
             .route(
                 "/realms/app/protocol/openid-connect/certs",
@@ -67,7 +70,20 @@ impl IdentityServer {
             )
             .route(
                 "/realms/app/protocol/openid-connect/token",
-                post(|| async { Json(json!({"access_token":"service-token", "expires_in":300})) }),
+                post(move |axum::Form(form): axum::Form<BTreeMap<String, String>>| {
+                    let control = token_control.clone();
+                    async move {
+                        let mut c = control.lock().await;
+                        if c.worker_token.is_some() {
+                            assert_eq!(form.get("grant_type").map(String::as_str), Some("client_credentials"));
+                            assert_eq!(form.get("client_id").map(String::as_str), Some("manager-worker"));
+                            assert_eq!(form.get("client_secret").map(String::as_str), Some("fixture"));
+                            assert_eq!(form.get("audience").map(String::as_str), Some("app"));
+                            c.worker_token_requests += 1;
+                        }
+                        Json(json!({"access_token":c.worker_token.as_deref().unwrap_or("service-token"), "expires_in":300}))
+                    }
+                }),
             )
             .route(
                 "/admin/realms/app/users",

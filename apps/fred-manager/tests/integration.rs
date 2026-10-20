@@ -919,6 +919,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         fga: e.fga.clone(),
         directory: Some(server.directory()),
         content: None,
+        processing: None,
     });
     let request = |method: &str, path: &str, actor: Option<&str>, body: &str| {
         let mut builder = Request::builder()
@@ -1035,6 +1036,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
             pool: e.pool.clone(),
             fga: e.fga.clone(),
             content: None,
+            processing: None,
             directory: Some(if other_realm {
                 other.directory()
             } else {
@@ -2151,6 +2153,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         fga: observed_fga,
         directory: Some(directory.clone()),
         content: None,
+        processing: None,
     });
     let (status, report) = http_import(&app, &token, &bytes).await;
     assert_eq!(status, 200, "{report}");
@@ -3348,6 +3351,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         fga: e.fga.clone(),
         directory: Some(directory.clone()),
         content: None,
+        processing: None,
     });
     let token = server.token("root");
     let mut value = serde_json::json!({"users":[{"username":"alice","password":"private-password"},{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"alice":["admin","member","organization_owner"]}},{"ref":"b","name":"B","roles":{"bob":["admin","member","organization_owner"]}}],"teams":[{"ref":"at","name":"Team","organization":"a","roles":{"alice":["admin","member"]}},{"ref":"bt","name":"Team","organization":"b","roles":{"bob":["admin","analyst"]}}],"projects":[{"ref":"ap","name":"Project","team":"at","roles":{"alice":["admin","editor"]}},{"ref":"bp","name":"Project","team":"bt","roles":{"bob":["admin"]}}]});
@@ -3567,6 +3571,7 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         fga: e.fga.clone(),
         directory: Some(server.directory()),
         content: None,
+        processing: None,
     });
     let token = server.token("root");
     let pending = tokio::spawn(async move {
@@ -3607,6 +3612,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         fga: e.fga.clone(),
         directory: None,
         content: None,
+        processing: None,
         lifecycle: Default::default(),
         onboarding: Onboarding {
             gcu_version: Some("v1".into()),
@@ -4422,6 +4428,7 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
             lifecycle: Default::default(),
             directory: Some(identity.directory()),
             content: None,
+            processing: None,
         },
         "/fred-manager/v1",
         &[],

@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Original document storage and upload recovery; no processing is scheduled here.
+//! Original storage and upload recovery, with optional atomic processing intent.
 mod cleanup;
 pub mod config;
 pub mod http;

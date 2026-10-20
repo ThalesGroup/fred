@@ -13,6 +13,18 @@ export const enhancedFredManagerApi = fredManagerApi.enhanceEndpoints({
     receipts: { providesTags: ["DocumentUploads"] },
     receipt: { providesTags: ["DocumentUploads"] },
     acknowledge: { invalidatesTags: ["DocumentUploads"], extraOptions: { retryUnauthorized: false } },
+    start: { invalidatesTags: ["Documents", "DocumentUploads"], extraOptions: { retryUnauthorized: false } },
+    preview(endpoint) {
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        return {
+          ...(typeof request === "string" ? { url: request } : request),
+          responseHandler: "text",
+          timeout: 30_000,
+        };
+      };
+    },
     upload(endpoint) {
       endpoint.extraOptions = { retryUnauthorized: false };
       endpoint.invalidatesTags = ["Documents", "DocumentUploads"];
@@ -48,6 +60,8 @@ export const enhancedFredManagerApi = fredManagerApi.enhanceEndpoints({
 });
 
 export const {
+  useStartMutation,
+  useLazyPreviewQuery,
   useEntriesQuery,
   useLazyEntriesQuery,
   useSummaryQuery,

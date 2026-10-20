@@ -139,6 +139,9 @@ create table document_storage (
     inventory_cursor text,
     inventory_bytes bigint not null default 0,
     orphan_bytes bigint not null default 0,
+    derived_endpoint text,
+    derived_bucket text,
+    derived_prefix text,
     inventory_completed_at timestamptz,
     lease_owner uuid,
     lease_until timestamptz
@@ -167,6 +170,7 @@ create table document_upload (
     acknowledged_at timestamptz,
     retry_of uuid unique references document_upload(id) on delete set null,
     successor_key uuid,
+    processing_profile text check(processing_profile in ('fast','medium','rich')),
     cleanup_due_at timestamptz not null default now(),
     cleanup_attempts integer not null default 0,
     cleaned_at timestamptz,
@@ -179,6 +183,72 @@ create index document_upload_active_quota on document_upload(quota_owner) includ
 create index document_upload_receipts on document_upload(actor, space_id, created_at desc, request_key desc) where acknowledged_at is null;
 create index document_upload_cleanup on document_upload(cleanup_due_at, id) where status = 'failed' and cleaned_at is null;
 create index document_upload_expiration on document_upload(expires_at, id) where status = 'pending';
+
+-- Processing attempts outlive delivery and activity retries. Generations are bounded
+-- operational state, not grants; the space remains the only authorization object.
+create table document_processing (
+    id uuid primary key,
+    request_key uuid not null,
+    actor text not null,
+    installation_id uuid not null,
+    document_id uuid not null references document(id),
+    organization_id uuid not null,
+    space_id uuid not null references space(id),
+    original_sha256 text not null check(original_sha256 ~ '^[0-9a-f]{64}$'),
+    profile text not null check(profile in ('fast','medium','rich')),
+    status text not null default 'pending' check(status in ('pending','running','succeeded','failed')),
+    stage text not null default 'queued' check(stage in ('queued','preparation','extraction','indexing','done')),
+    revision bigint not null default 0,
+    workflow_id text not null unique,
+    submission jsonb not null,
+    run_id text,
+    first_dispatch_at timestamptz,
+    delivered_at timestamptz,
+    delivery_due_at timestamptz not null default now(),
+    delivery_attempts integer not null default 0,
+    dispatch_owner uuid,
+    dispatch_until timestamptz,
+    created_at timestamptz not null default now(),
+    deadline_at timestamptz not null,
+    completed_at timestamptz,
+    error_code text,
+    retry_of uuid unique references document_processing(id),
+    profile_settings jsonb not null,
+    generations jsonb not null default '[]',
+    manifest jsonb,
+    chunks bigint not null default 0 check(chunks>=0),
+    vectors bigint not null default 0 check(vectors>=0 and vectors<=chunks),
+    rows bigint check(rows>=0),
+    reserved_bytes bigint not null default 0 check(reserved_bytes>=0),
+    cleanup_due_at timestamptz not null default now(),
+    unique(actor,request_key),
+    check((status in ('succeeded','failed')) = (completed_at is not null)),
+    check((status='succeeded') = (manifest is not null)),
+    check(jsonb_typeof(generations)='array' and jsonb_array_length(generations)<=64)
+);
+create unique index document_processing_active on document_processing(document_id) where status in ('pending','running');
+create unique index document_processing_success on document_processing(document_id) where status='succeeded';
+create index document_processing_history on document_processing(document_id,created_at desc,id desc);
+create index document_processing_delivery on document_processing(delivery_due_at,id) where status in ('pending','running');
+create index document_processing_cleanup on document_processing(cleanup_due_at,id);
+
+create function protect_processing_identity() returns trigger language plpgsql as $$
+begin
+    if TG_OP='UPDATE' then
+        if (new.actor,new.request_key,new.installation_id,new.document_id,new.organization_id,new.space_id,new.original_sha256,new.profile,new.workflow_id,new.retry_of,new.submission,new.profile_settings)
+            is distinct from (old.actor,old.request_key,old.installation_id,old.document_id,old.organization_id,old.space_id,old.original_sha256,old.profile,old.workflow_id,old.retry_of,old.submission,old.profile_settings) then
+            raise exception 'processing identity is immutable';
+        end if;
+        if old.status in ('succeeded','failed') and (new.status,new.stage,new.completed_at,new.error_code,new.manifest) is distinct from (old.status,old.stage,old.completed_at,old.error_code,old.manifest) then
+            raise exception 'processing outcome is final';
+        end if;
+    end if;
+    if not exists(select 1 from document where id=new.document_id and space_id=new.space_id and sha256=new.original_sha256) then
+        raise exception 'processing input does not match original';
+    end if;
+    return new;
+end $$;
+create trigger document_processing_identity before insert or update on document_processing for each row execute function protect_processing_identity();
 
 -- The organization lock orders application mutations; these checks also protect SQL callers.
 create function protect_pending_document_uploads() returns trigger language plpgsql as $$

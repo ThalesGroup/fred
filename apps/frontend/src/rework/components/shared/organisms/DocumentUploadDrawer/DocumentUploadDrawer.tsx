@@ -67,7 +67,7 @@ import styles from "./DocumentUploadDrawer.module.css";
 
 interface DocumentUploadDrawerProps {
   isOpen: boolean;
-  managerDestination?: { spaceId: string; folderId?: string };
+  managerDestination?: { spaceId: string; folderId?: string; processingEnabled?: boolean };
   /** Keep the existing panel available while its destination cannot accept uploads. */
   unavailableReason?: string;
   onClose: () => void;
@@ -115,6 +115,8 @@ export function DocumentUploadDrawer({
 
   const dispatch = useDispatch<ManagerDispatch>();
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
+  const processingAvailable = !managerDestination || managerDestination.processingEnabled === true;
+  const effectiveMode = processingAvailable ? uploadMode : "upload";
   const [profile, setProfile] = useState<IngestionProcessingProfile>("fast");
 
   const uploadModeOptions = useMemo<OptionModel<"upload" | "process">[]>(
@@ -337,6 +339,8 @@ export function DocumentUploadDrawer({
         ).unwrap();
         if (group.files.some((file) => file.size > verdict.storage.max_file_bytes))
           throw new Error(t("rework.documentStorage.fileLimit"));
+        if (effectiveMode === "process" && !verdict.storage.processing_enabled)
+          throw new Error(t("rework.documentStorage.noProcessing"));
         if (!verdict.storage.uploads_enabled) throw new Error(t("rework.documentStorage.unavailable"));
         const taken = new Set(verdict.conflicts);
         budget = {
@@ -359,7 +363,12 @@ export function DocumentUploadDrawer({
         return;
       }
       const completion = selected.length
-        ? runManagerImport(dispatch, managerDestination.spaceId, selected)
+        ? runManagerImport(
+            dispatch,
+            managerDestination.spaceId,
+            selected,
+            effectiveMode === "process" ? profile : undefined,
+          )
         : Promise.resolve();
       if (awaitingSkip) {
         if (selected.length) {
@@ -596,12 +605,15 @@ export function DocumentUploadDrawer({
                     managerDestination
                       ? uploadModeOptions.map((option) => ({
                           ...option,
-                          disabled: option.value === "process",
-                          tooltip: option.value === "process" ? t("rework.documentStorage.noProcessing") : undefined,
+                          disabled: option.value === "process" && !processingAvailable,
+                          tooltip:
+                            option.value === "process" && !processingAvailable
+                              ? t("rework.documentStorage.noProcessing")
+                              : undefined,
                         }))
                       : uploadModeOptions
                   }
-                  value={managerDestination ? "upload" : uploadMode}
+                  value={effectiveMode}
                   onChange={setUploadMode}
                   size="small"
                   compact
@@ -613,7 +625,7 @@ export function DocumentUploadDrawer({
                   <label className={styles.label}>{t("documentLibrary.processingProfile")}</label>
                   <Select<IngestionProcessingProfile>
                     options={profileOptions}
-                    disabled={!!managerDestination}
+                    disabled={effectiveMode === "upload"}
                     value={profile}
                     onChange={setProfile}
                     size="small"
@@ -729,7 +741,7 @@ export function DocumentUploadDrawer({
               </div>
             )}
 
-            {managerDestination && (
+            {managerDestination && effectiveMode === "upload" && (
               <div className={styles.quotaWarning} role="status">
                 {t("rework.documentStorage.storedHint")}
               </div>

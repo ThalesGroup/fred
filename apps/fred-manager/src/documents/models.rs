@@ -33,6 +33,9 @@ pub struct UploadReceipt {
     pub completed_at: Option<DateTime<Utc>>,
     pub acknowledged_at: Option<DateTime<Utc>>,
     pub successor_key: Option<Uuid>,
+    pub processing_profile: Option<crate::processing::models::Profile>,
+    #[sqlx(skip)]
+    pub processing: Option<crate::processing::models::Summary>,
 }
 
 #[derive(Clone, sqlx::FromRow)]
@@ -42,6 +45,7 @@ pub(super) struct UploadRow {
     pub quota_owner: Uuid,
     pub object_key: String,
     pub expires_at: DateTime<Utc>,
+    pub organization_id: Uuid,
     #[sqlx(flatten)]
     pub receipt: UploadReceipt,
 }
@@ -69,6 +73,7 @@ pub struct StorageSummary {
     pub reserved_bytes: i64,
     pub max_file_bytes: u64,
     pub uploads_enabled: bool,
+    pub processing_enabled: bool,
     pub documents: i64,
     pub bytes: i64,
     pub types: Vec<TypeUsage>,
@@ -94,6 +99,8 @@ pub struct Directory {
     pub offset: i64,
     pub limit: i64,
     pub can_write: bool,
+    pub processing_enabled: bool,
+    pub processing: std::collections::HashMap<Uuid, crate::processing::models::Summary>,
 }
 
 #[derive(Deserialize, Default, utoipa::ToSchema)]
@@ -104,10 +111,12 @@ pub struct ReceiptQuery {
     pub limit: Option<i64>,
 }
 
-#[derive(Deserialize, Default, utoipa::ToSchema)]
+#[derive(Clone, Copy, Deserialize, Default, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UploadQuery {
     pub retry_of: Option<Uuid>,
+    /// Omitted means upload only; a profile atomically requests processing after storage.
+    pub profile: Option<crate::processing::models::Profile>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, utoipa::ToSchema)]

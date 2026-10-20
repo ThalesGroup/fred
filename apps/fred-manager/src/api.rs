@@ -54,6 +54,7 @@ pub struct AppState {
     pub lifecycle: crate::lifecycle::Lifecycle,
     pub directory: Option<Directory>,
     pub content: Option<Arc<crate::documents::Storage>>,
+    pub processing: Option<Arc<crate::processing::Processing>>,
 }
 
 impl FromRef<AppState> for Arc<Authenticator> {
@@ -1005,6 +1006,7 @@ pub fn governance_router(state: AppState) -> Router {
 fn governance_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .merge(crate::documents::http::routes())
+        .merge(crate::processing::http::routes())
         .routes(routes!(frontend_config))
         .routes(routes!(onboarding_status))
         .routes(routes!(accept_terms))

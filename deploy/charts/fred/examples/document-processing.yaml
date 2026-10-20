@@ -1,0 +1,84 @@
+# Merge after document-storage.yaml and the deployment's existing values.
+# Provision the dedicated derived bucket, Secret and exported contract ConfigMap
+# as described in docs/swift/ops/migrations/rust-fred-manager.md.
+applications:
+  control-plane-backend:
+    extraEnvVars: &processing-manager-env
+      - name: FRED_CONTENT_ACCESS_KEY
+        valueFrom:
+          secretKeyRef: {name: manager-document-storage, key: access-key}
+      - name: FRED_CONTENT_SECRET_KEY
+        valueFrom:
+          secretKeyRef: {name: manager-document-storage, key: secret-key}
+      - name: MANAGER_DERIVED_ACCESS_KEY
+        valueFrom:
+          secretKeyRef: {name: manager-processing, key: access-key}
+      - name: MANAGER_DERIVED_SECRET_KEY
+        valueFrom:
+          secretKeyRef: {name: manager-processing, key: secret-key}
+    extraVolumes: &processing-contract-volumes
+      - name: processing-contract
+        configMap: {name: manager-processing-contract}
+    extraVolumeMounts: &processing-contract-mounts
+      - name: processing-contract
+        mountPath: /app/processing-contract
+        readOnly: true
+    configuration:
+      scheduler:
+        processing:
+          enabled: true
+          worker_contract_file: /app/processing-contract/worker-contract.json
+          temporal:
+            host: temporal:7233
+            namespace: default
+            task_queue: ingestion
+          worker:
+            issuer: https://identity.example.test/realms/app
+            audience: fred-manager
+            client_id: knowledge-flow-worker
+          derived:
+            endpoint: https://s3.example.test
+            bucket: fred-manager-derived
+            prefix: fred-manager
+            access_key_env_var: MANAGER_DERIVED_ACCESS_KEY
+            secret_key_env_var: MANAGER_DERIVED_SECRET_KEY
+  control-plane-worker:
+    extraEnvVars: *processing-manager-env
+    extraVolumes: *processing-contract-volumes
+    extraVolumeMounts: *processing-contract-mounts
+  knowledge-flow-worker:
+    extraEnvVars:
+      - name: MANAGER_WORKER_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: {name: manager-processing, key: worker-client-secret}
+      - name: MANAGER_DERIVED_ACCESS_KEY
+        valueFrom:
+          secretKeyRef: {name: manager-processing, key: access-key}
+      - name: MANAGER_DERIVED_SECRET_KEY
+        valueFrom:
+          secretKeyRef: {name: manager-processing, key: secret-key}
+    configuration:
+      scheduler:
+        enabled: true
+        backend: temporal
+        temporal:
+          host: temporal:7233
+          namespace: default
+          task_queue: ingestion
+      manager_processing:
+        enabled: true
+        url: https://manager.example.test/control-plane/v1
+        issuer: https://identity.example.test/realms/app
+        audience: fred-manager
+        client_id: knowledge-flow-worker
+        endpoint: https://s3.example.test
+        bucket: fred-manager-derived
+        vector_store:
+          type: opensearch
+          index: fred-manager-vectors
+        temporary_bytes: 1073741824
+    resources:
+      requests:
+        ephemeral-storage: 4Gi
+      limits:
+        ephemeral-storage: 8Gi

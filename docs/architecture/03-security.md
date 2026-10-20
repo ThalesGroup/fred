@@ -184,6 +184,23 @@ filename metadata are not trusted for execution or rendering. The autonomous cle
 loop retains no user token: SQL journal and published rows constrain its deletions.
 The [document chapter](05-documents.md) describes that state machine.
 
+## Processing authority and publication
+
+Worker callbacks require a signed service-account token with the exact configured
+issuer, audience and client, independently of the browser profile. Human bearer
+tokens cannot use this protocol. Manager binds callbacks to installation, document,
+original digest, accepted actor and stage generation; serialized worker user claims
+confer no authority. Original access and final publication recheck that actor's
+current organization, space Write permission and CGU. Publication uses the same
+organization lock and OpenFGA guard as other content writes, after remote artifact
+verification. Failed-stage fencing remains possible after actor revocation.
+
+Previews use current reader authority, allowlisted manifest paths, bounded streams,
+private/no-store and nosniff headers. Browser rendering suppresses remote embeds
+and active content. The worker's object credentials cover the separate derived
+bucket; original bytes are obtained through manager. Workflow histories and safe
+public errors carry no bearer tokens, storage secrets or provider diagnostics.
+
 ## Service identities
 
 Manager resolves and creates provisioning identities with its own Keycloak client,

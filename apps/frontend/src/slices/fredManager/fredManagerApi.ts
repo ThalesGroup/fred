@@ -3,12 +3,13 @@
 
 import { createApi, defaultSerializeQueryArgs } from "@reduxjs/toolkit/query/react";
 import { createDynamicBaseQuery } from "../../common/dynamicBaseQuery";
+import { managerFetch } from "./managerFetch";
 
 import { KeyCloakService } from "../../security/KeycloakService";
 
 export const fredManagerApi = createApi({
   reducerPath: "fredManagerApi",
-  baseQuery: createDynamicBaseQuery(),
+  baseQuery: createDynamicBaseQuery(managerFetch),
   serializeQueryArgs: (args) =>
     defaultSerializeQueryArgs({
       ...args,

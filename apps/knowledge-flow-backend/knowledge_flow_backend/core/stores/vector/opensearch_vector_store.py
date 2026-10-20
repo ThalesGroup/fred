@@ -614,8 +614,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             `self._next_retry_split_chunk_size(previous_chunk_size=None)`
         """
         from knowledge_flow_backend.application_context import ApplicationContext
+        from knowledge_flow_backend.core.stores.vector.base_vector_store import vector_write_observer
 
-        configured_splitter = ApplicationContext.get_instance().get_text_splitter()
+        observer = vector_write_observer.get()
+        configured_splitter = observer.splitter if observer is not None else ApplicationContext.get_instance().get_text_splitter()
         configured_chunk_size = getattr(configured_splitter, "chunk_size", None)
         base_chunk_size = previous_chunk_size or configured_chunk_size
         if not isinstance(base_chunk_size, int) or base_chunk_size <= 128:
@@ -665,8 +667,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             `self._split_single_document_for_retry(doc, forced_id="chunk-1", chunk_size=750)`
         """
         from knowledge_flow_backend.application_context import ApplicationContext
+        from knowledge_flow_backend.core.stores.vector.base_vector_store import vector_write_observer
 
-        configured_splitter = ApplicationContext.get_instance().get_text_splitter()
+        observer = vector_write_observer.get()
+        configured_splitter = observer.splitter if observer is not None else ApplicationContext.get_instance().get_text_splitter()
         retry_splitter_type: Any = type(configured_splitter)
         chunk_overlap = getattr(configured_splitter, "chunk_overlap", 0)
         preserve_tables = getattr(configured_splitter, "preserve_tables", True)
@@ -825,6 +829,11 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 doc.metadata.setdefault("vector_index", self._index)
                 doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
                 doc.metadata.setdefault("ingested_at", now_iso)
+            from knowledge_flow_backend.core.stores.vector.base_vector_store import vector_write_observer
+
+            observer = vector_write_observer.get()
+            if observer is not None:
+                ids = observer.before_write(documents, ids)
             assigned_ids = list(self._lc.add_documents(documents, ids=ids))
             logger.info(
                 "[VECTOR][OPENSEARCH] batch attempt succeeded index=%s batch_size=%s assigned=%s retry_attempt=%s split_chunk_size=%s",
@@ -1256,7 +1265,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 "text": src.get("text", ""),
                 "metadata": md,
             }
-        except Exception:
+        except Exception as error:
+            if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
+                raise
             logger.exception("[VECTOR][OPENSEARCH] failed to fetch chunk %s", chunk_uid)
             return {"chunk_uid": chunk_uid}
 
@@ -1279,7 +1290,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 return
             self._client.delete(index=self._index, id=chunk_uid)
             logger.debug("[VECTOR][OPENSEARCH] deleted chunk %s for document_uid=%s", chunk_uid, document_uid)
-        except Exception:
+        except Exception as error:
+            if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
+                raise
             logger.exception("[VECTOR][OPENSEARCH] failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
 
     def _build_hits(self, hits_data: List, hit_type: Type[T]) -> List[T]:

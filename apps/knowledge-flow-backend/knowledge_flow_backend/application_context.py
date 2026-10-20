@@ -309,6 +309,10 @@ class ApplicationContext:
     _task_service_instance: Optional[Any] = None
 
     def __init__(self, configuration: Configuration):
+        import threading
+
+        self._manager_vector_lock = threading.Lock()
+        self._manager_vector_store = None
         # Allow reuse if already initialized with same config
         if ApplicationContext._instance is not None:
             # Optionally: log or assert config equality here
@@ -373,7 +377,7 @@ class ApplicationContext:
 
         if class_path not in self._output_processor_instances:
             logger.debug(f"Creating new instance of output processor: {class_path}")
-            self._output_processor_instances[class_path] = processor_class()
+            self._output_processor_instances[class_path] = processor_class(context=self) if getattr(self, "_inject_processor_context", False) else processor_class()
 
         return self._output_processor_instances[class_path]
 
@@ -732,18 +736,33 @@ class ApplicationContext:
         """
         if self._vector_store_instance is not None:
             return self._vector_store_instance
+        self._vector_store_instance = self.build_vector_store(embedding_model, self.configuration.storage.vector_store)
+        return self._vector_store_instance
+
+    def get_manager_vector_store(self):
+        with self._manager_vector_lock:
+            if self._manager_vector_store is None:
+                settings = self.configuration.manager_processing
+                if settings is None or not settings.enabled:
+                    raise ValueError("Manager processing is disabled")
+                instance = self.build_vector_store(self.get_embedder(), settings.vector_store)
+                instance.strict_operations = True
+                self._manager_vector_store = instance
+            return self._manager_vector_store
+
+    def build_vector_store(self, embedding_model: Embeddings, store) -> BaseVectorStore:
+        """Construct an explicitly selected namespace without changing the legacy singleton."""
         embedding_model_name = self.configuration.embedding_model.name or "unknown"
-        store = self.configuration.storage.vector_store
 
         if isinstance(store, OpenSearchVectorIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
+            opensearch_config = self.configuration.storage.opensearch
             if not opensearch_config:
                 raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
 
-            self._vector_store_instance = OpenSearchVectorStoreAdapter(
+            instance = OpenSearchVectorStoreAdapter(
                 embedding_model=embedding_model,
                 embedding_model_name=embedding_model_name,
                 kpi=self.get_kpi_writer(),
@@ -755,23 +774,23 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 bulk_size=store.bulk_size,
             )
-            return self._vector_store_instance
+            return instance
         elif isinstance(store, ChromaVectorStorageConfig):
             from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore
 
             local_path = Path(store.local_path).expanduser()
             local_path.mkdir(parents=True, exist_ok=True)
-            self._vector_store_instance = ChromaDBVectorStore(
+            instance = ChromaDBVectorStore(
                 persist_path=str(local_path),
                 collection_name=store.collection_name,
                 embeddings=embedding_model,
                 embedding_model_name=embedding_model_name,
             )
         elif isinstance(store, InMemoryVectorStorage):
-            self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model, embedding_model_name=embedding_model_name)
+            instance = InMemoryLangchainVectorStore(embedding_model=embedding_model, embedding_model_name=embedding_model_name)
         elif isinstance(store, PgVectorStorageConfig):
-            pg = get_configuration().storage.postgres
-            self._vector_store_instance = PgVectorStoreAdapter(
+            pg = self.configuration.storage.postgres
+            instance = PgVectorStoreAdapter(
                 embedding_model=embedding_model,
                 embedding_model_name=embedding_model_name,
                 connection_string=pg.dsn(),
@@ -794,12 +813,12 @@ class ApplicationContext:
                     ) from exc
                 raise
 
-            ch = get_configuration().storage.clickhouse
+            ch = self.configuration.storage.clickhouse
             if not ch:
                 raise ValueError("Missing ClickHouse configuration")
             if not ch.password:
                 raise ValueError("Missing ClickHouse credentials: CLICKHOUSE_PASSWORD")
-            self._vector_store_instance = ClickHouseVectorStoreAdapter(
+            instance = ClickHouseVectorStoreAdapter(
                 embedding_model=embedding_model,
                 embedding_model_name=embedding_model_name,
                 host=ch.host,
@@ -812,7 +831,7 @@ class ApplicationContext:
                 verify=ch.verify,
                 bulk_size=store.bulk_size,
             )
-            self._vector_store_instance.validate_index_or_fail()
+            instance.validate_index_or_fail()
             logger.info(
                 "[VECTOR][CLICKHOUSE] Using host=%s database=%s table=%s",
                 ch.host,
@@ -821,7 +840,7 @@ class ApplicationContext:
             )
         else:
             raise ValueError("Unsupported vector store backend")
-        return self._vector_store_instance
+        return instance
 
     def get_metadata_store(self) -> BaseMetadataStore:
         if self._metadata_store_instance is not None:

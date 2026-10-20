@@ -35,6 +35,7 @@ type DocumentRefreshers = {
 export interface DocumentPreviewTarget {
   documentUid: string;
   fileName?: string;
+  manager?: boolean;
 }
 
 export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefreshers = {}) {
@@ -161,7 +162,10 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   );
   const preview = useCallback(
     (doc: DocumentMetadata) => {
-      const previewReady = doc.processing?.stages?.preview === "done";
+      const manager = "managerDocument" in doc;
+      const previewReady =
+        doc.processing?.stages?.preview === "done" ||
+        (manager && doc.identity.document_name.toLowerCase().endsWith(".pdf"));
 
       if (!previewReady) {
         showInfo?.({
@@ -177,6 +181,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
       setPreviewTarget({
         documentUid: doc.identity.document_uid,
         fileName: doc.identity.document_name,
+        manager,
       });
     },
     [showInfo, t],

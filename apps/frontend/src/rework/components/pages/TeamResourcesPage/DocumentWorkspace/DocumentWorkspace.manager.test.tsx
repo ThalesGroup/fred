@@ -24,6 +24,9 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
+  processingEnabled: false,
+  processing: {} as Record<string, import("../../../../../slices/fredManager/fredManagerOpenApi").Summary>,
+  starts: vi.fn().mockResolvedValue({}),
   documents: [] as import("../../../../../slices/fredManager/fredManagerOpenApi").Document[],
   drawerProps: [] as Record<string, unknown>[],
   folders: [] as {
@@ -73,6 +76,8 @@ vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
         offset: query.offset,
         limit: query.limit,
         can_write: probe.canWrite,
+        processing_enabled: probe.processingEnabled,
+        processing: probe.processing,
       },
       isSuccess: !probe.error,
       isError: probe.error,
@@ -108,6 +113,10 @@ vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
       },
     }),
   ],
+}));
+vi.mock("../../../../features/imports/managerImportRun", () => ({
+  startManagerProcessing: (...args: unknown[]) => probe.starts(...args),
+  managerActor: () => "writer",
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
@@ -213,6 +222,9 @@ async function menuAction(name: string) {
 }
 beforeEach(async () => {
   probe.documents = [];
+  probe.processingEnabled = false;
+  probe.processing = {};
+  probe.starts.mockClear();
   probe.folders = [
     {
       id: "root-id",
@@ -264,7 +276,7 @@ it("restores both original controls from manager authority, navigates by id and 
   await click(action("action.addFile"));
   const drawer = probe.drawerProps[probe.drawerProps.length - 1]!;
   expect(drawer.isOpen).toBe(true);
-  expect(drawer.managerDestination).toEqual({ spaceId: "space-1", folderId: "root-id" });
+  expect(drawer.managerDestination).toEqual({ spaceId: "space-1", folderId: "root-id", processingEnabled: false });
   expect(drawer.unavailableReason).toBeUndefined();
   expect(drawer.metadata).toEqual({ tags: [] });
   expect(drawer.ensureFolderPath).toBeTypeOf("function");
@@ -407,7 +419,7 @@ it("keeps a root-row file drop targeted at that folder in the original upload pa
   expect(drawer.initialFiles).toEqual([file]);
   expect(drawer.requireFolderPerFile).toBe(false);
   expect(drawer.destinationPath).toBe("Library");
-  expect(drawer.managerDestination).toEqual({ spaceId: "space-1", folderId: "root-id" });
+  expect(drawer.managerDestination).toEqual({ spaceId: "space-1", folderId: "root-id", processingEnabled: false });
   expect(drawer.unavailableReason).toBeUndefined();
   expect(probe.legacyRequests).toEqual([]);
 });
@@ -455,3 +467,46 @@ it("keeps document bulk controls visible but disables processing, ZIP and deleti
   expect(probe.confirm).toBeUndefined();
   expect(probe.legacyRequests).toEqual([]);
 });
+
+it.each(["row", "bulk"])(
+  "starts a stored manager document through the %s control with no legacy tag",
+  async (entry) => {
+    probe.processingEnabled = true;
+    probe.folders = probe.folders.slice(0, 1);
+    probe.documents = [
+      {
+        id: "doc",
+        space_id: "space-1",
+        folder_id: "root-id",
+        name: "stored.txt",
+        size: 5,
+        mime: "text/plain",
+        sha256: "a".repeat(64),
+        created_by: "writer",
+        created_at: "2026-10-19T08:00:00Z",
+      },
+    ];
+    await render();
+    await click(namedButton("Library"));
+    if (entry === "row") await menuAction("relaunchIngestion");
+    else {
+      await act(async () => (container.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement).click());
+      await click(container.querySelector('button[aria-label^="rework.resources.bulkActions.relaunchIngestion"]'));
+    }
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog).not.toBeNull();
+    await click(dialog.querySelector('button[aria-haspopup="listbox"]'));
+    await click(
+      [...document.querySelectorAll('[role="presentation"] li')].find((node) =>
+        node.textContent?.includes("documentLibrary.profileMedium"),
+      )!,
+    );
+    await click(
+      [...dialog.querySelectorAll("button")].find(
+        (button) => button.textContent === "rework.resources.action.relaunchIngestion",
+      )!,
+    );
+    expect(probe.starts).toHaveBeenCalledWith(expect.any(Function), "doc", "medium", undefined);
+    expect(probe.legacyRequests).toEqual([]);
+  },
+);

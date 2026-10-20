@@ -30,13 +30,11 @@ export function serializeQueryParams(params: Record<string, unknown>): string {
   return search.toString();
 }
 
-export const createDynamicBaseQuery = (): BaseQueryFn<
-  string | FetchArgs,
-  unknown,
-  FetchBaseQueryError,
-  { retryUnauthorized?: boolean }
-> => {
+export const createDynamicBaseQuery = (
+  fetchFn?: typeof fetch,
+): BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError, { retryUnauthorized?: boolean }> => {
   const raw = fetchBaseQuery({
+    fetchFn,
     paramsSerializer: serializeQueryParams,
     prepareHeaders: (headers) => {
       const token = KeyCloakService.GetToken();

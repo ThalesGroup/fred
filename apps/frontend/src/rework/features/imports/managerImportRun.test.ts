@@ -215,3 +215,143 @@ it("keeps retry bytes and queue identity while the same session renews an expire
   expect(managerFileHeld(key)).toBe(true);
   expect(managerImportsSnapshot()[0].phase).toBe("failed");
 });
+
+it("keeps active processing visible across stale acknowledged receipts and older revisions", async () => {
+  const key = crypto.randomUUID();
+  const processing = {
+    id: "attempt",
+    document_id: key,
+    profile: "fast" as const,
+    status: "running" as const,
+    stage: "indexing" as const,
+    revision: 5,
+    created_at: new Date().toISOString(),
+    completed_at: null,
+    error_code: null,
+    retry_of: null,
+    chunks: 0,
+    vectors: 0,
+    rows: null,
+  };
+  let current = {
+    ...receipt(key),
+    processing_profile: "fast" as const,
+    processing,
+    acknowledged_at: new Date().toISOString(),
+  };
+  fetcher.mockImplementation(async () => reply([current]));
+  await refreshManagerImports(store.dispatch, "space");
+  expect(managerImportsSnapshot()[0].receipt?.processing?.stage).toBe("indexing");
+  current = { ...current, processing: { ...processing, status: "failed" as never, revision: 3 } };
+  await refreshManagerImports(store.dispatch, "space");
+  expect(managerImportsSnapshot()[0].receipt?.processing?.revision).toBe(5);
+});
+
+it("submits the selected profile and retries failed processing from the retained original without a File", async () => {
+  let stored: UploadReceipt | undefined;
+  const operation = crypto.randomUUID();
+  fetcher.mockImplementation(async (request) => {
+    const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname.endsWith("/documents")) {
+      expect(url.searchParams.get("profile")).toBe("rich");
+      stored = {
+        ...receipt(request.headers.get("idempotency-key")!),
+        processing_profile: "rich",
+        processing: {
+          id: operation,
+          document_id: "document",
+          profile: "rich",
+          status: "failed",
+          stage: "indexing",
+          revision: 3,
+          created_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          error_code: "indexing_failed",
+          retry_of: null,
+          chunks: 0,
+          vectors: 0,
+          rows: null,
+        },
+      };
+      return reply(stored);
+    }
+    if (request.method === "POST") {
+      expect(url.pathname.endsWith("/processing")).toBe(true);
+      expect(await request.json()).toEqual({ profile: "rich", retry_of: operation });
+      stored = {
+        ...stored!,
+        processing: {
+          ...stored!.processing!,
+          id: "retry",
+          status: "pending",
+          revision: 1,
+          created_at: new Date(Date.now() + 1).toISOString(),
+        },
+      };
+      return reply(stored.processing);
+    }
+    return reply(stored);
+  });
+  await runManagerImport(store.dispatch, "space", selection(), "rich");
+  const key = managerImportsSnapshot()[0].key;
+  expect(managerFileHeld(key)).toBe(false);
+  await retryManagerImport(store.dispatch, key);
+  expect(managerImportsSnapshot()[0].receipt?.processing?.id).toBe("retry");
+  expect(fetcher.mock.calls.filter(([r]) => r.method === "POST")).toHaveLength(2);
+});
+
+it("binds ambiguous processing retry keys to their predecessor after a recovered successor also fails", async () => {
+  const key = crypto.randomUUID();
+  let stored: UploadReceipt = {
+    ...receipt(key),
+    processing: {
+      id: "A",
+      document_id: key,
+      profile: "fast",
+      status: "failed",
+      stage: "extraction",
+      revision: 4,
+      created_at: "2026-10-19T10:00:00Z",
+      completed_at: "2026-10-19T10:01:00Z",
+      error_code: "worker_failed",
+      retry_of: null,
+      chunks: 0,
+      vectors: 0,
+      rows: null,
+    },
+  };
+  const keys: string[] = [];
+  fetcher.mockImplementation(async (request) => {
+    if (request.method === "POST") {
+      keys.push(request.headers.get("idempotency-key")!);
+      const body = await request.json();
+      expect(body.retry_of).toBe(keys.length === 1 ? "A" : "B");
+      if (keys.length === 1) {
+        stored = {
+          ...stored,
+          processing: { ...stored.processing!, id: "B", retry_of: "A", created_at: "2026-10-19T10:02:00Z" },
+        };
+        throw new TypeError("lost accepted response");
+      }
+      stored = {
+        ...stored,
+        processing: {
+          ...stored.processing!,
+          id: "C",
+          retry_of: "B",
+          status: "pending",
+          created_at: "2026-10-19T10:03:00Z",
+        },
+      };
+      return reply(stored.processing);
+    }
+    return reply(request.url.includes("/document-uploads/") ? stored : [stored]);
+  });
+  await refreshManagerImports(store.dispatch, "space");
+  await expect(retryManagerImport(store.dispatch, key)).rejects.toBeDefined();
+  await refreshManagerImports(store.dispatch, "space");
+  await retryManagerImport(store.dispatch, key);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).not.toBe(keys[1]);
+  expect(managerImportsSnapshot()[0].receipt?.processing?.id).toBe("C");
+});

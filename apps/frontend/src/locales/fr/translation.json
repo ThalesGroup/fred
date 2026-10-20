@@ -2331,6 +2331,10 @@
         "reported": "Signalé par le traitement",
         "stage": "Étape : {{stage}}",
         "stages": {
+          "queued": "En attente de traitement",
+          "preparation": "Préparation du fichier",
+          "extraction": "Extraction du contenu",
+          "indexing": "Indexation du contenu",
           "raw": "Stockage du fichier",
           "preview": "Extraction du contenu",
           "vector": "Indexation pour la recherche",
@@ -4264,7 +4268,19 @@
       "failed": "L'original n'a pas pu être stocké",
       "stored": "Stocké",
       "wrongFile": "Sélectionnez le fichier original de même nom et de même taille.",
-      "retryFailed": "Le résultat n'a pas pu être vérifié. Réessayez avant de renvoyer le fichier."
+      "retryFailed": "Le résultat n'a pas pu être vérifié. Réessayez avant de renvoyer le fichier.",
+      "processingErrors": {
+        "unsupported_input": "Ce format ne peut pas être traité avec le profil sélectionné.",
+        "access_changed": "Les accès ont changé pendant le traitement. Vérifiez vos accès avant de relancer.",
+        "integrity_failure": "L'intégrité du document n'a pas pu être vérifiée. L'original est conservé.",
+        "extraction_failed": "L'extraction du contenu a échoué. Vous pouvez relancer le traitement.",
+        "preview_failed": "L'aperçu du document n'a pas pu être généré. Vous pouvez relancer le traitement.",
+        "indexing_failed": "L'indexation du document a échoué. Vous pouvez relancer le traitement.",
+        "capacity_exceeded": "La capacité de traitement est atteinte. Réessayez plus tard.",
+        "delivery_unknown": "Le traitement n'a pas démarré dans le délai prévu. Vous pouvez le relancer.",
+        "deadline_exceeded": "Le traitement a dépassé le délai autorisé. Vous pouvez le relancer.",
+        "worker_failed": "Le traitement a échoué. L'original est conservé et peut être retraité."
+      }
     }
   },
   "runtime": {

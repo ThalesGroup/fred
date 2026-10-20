@@ -39,8 +39,8 @@ class SummarizationOutputProcessor(BaseOutputProcessor):
 
     description = "Generates document abstracts and keywords without vectorizing content."
 
-    def __init__(self) -> None:
-        self.context = ApplicationContext.get_instance()
+    def __init__(self, *, context=None) -> None:
+        self.context = context if context is not None else ApplicationContext.get_instance()
         self.splitter = self.context.get_text_splitter()
         self.smart_summarizer = SmartDocSummarizer(
             model_config=self.context.configuration.chat_model,

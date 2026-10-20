@@ -100,6 +100,7 @@ import {
   type DocumentSortField,
 } from "./documentOrdering.ts";
 
+import { startManagerProcessing } from "../../../../features/imports/managerImportRun";
 import {
   useEntriesQuery,
   useLazyListFoldersQuery,
@@ -109,6 +110,7 @@ import {
 } from "../../../../../slices/fredManager/fredManagerApiEnhancements";
 import {
   presentManagerDocument,
+  managerProcessingErrors,
   downloadManagerDocument,
   type ResourceDocument,
 } from "../../../../features/imports/managerDocuments";
@@ -257,7 +259,12 @@ function DocumentWorkspace({
       offset: folderOffset,
       limit: rowsPerPage,
     },
-    { skip: !managerSpaceId, refetchOnMountOrArgChange: true },
+    {
+      skip: !managerSpaceId,
+      refetchOnMountOrArgChange: true,
+      pollingInterval: managerSpaceId ? 3000 : 0,
+      skipPollingIfUnfocused: true,
+    },
   );
   const failedManagerRead = useRef(false);
   if (managerQuery.isError) failedManagerRead.current = true;
@@ -449,7 +456,10 @@ function DocumentWorkspace({
     return uids;
   }, [allTasks]);
   const getDocStatus = (doc: ResourceDocument): DocStatus | "stored" => {
-    if (doc.managerDocument) return "stored";
+    if (doc.managerDocument) {
+      const status = doc.managerProcessing?.status;
+      return status === "succeeded" ? "ready" : status === "failed" ? "failed" : status ? "processing" : "stored";
+    }
     const status = deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
     if (status === "processing" || activeDocTaskByUid.has(doc.identity.document_uid)) return status;
     return docOutcomes.failed.has(doc.identity.document_uid) ? "failed" : status;
@@ -470,7 +480,12 @@ function DocumentWorkspace({
   }, [taskHistory]);
   // Queue wait and worker retries remain active; absence from the local feed
   // is never proof that a workflow stopped.
-  const isRelaunchable = (doc: DocumentMetadata): boolean => {
+  const isRelaunchable = (doc: ResourceDocument): boolean => {
+    if (doc.managerDocument)
+      return (
+        !pendingRelaunches.has(doc.identity.document_uid) &&
+        (!doc.managerProcessing || doc.managerProcessing.status === "failed")
+      );
     const uid = doc.identity.document_uid;
     if (pendingRelaunches.has(uid) || activeDocTaskByUid.has(uid) || liveTeamDocUids.has(uid)) return false;
     if (Object.values(doc.processing?.stages ?? {}).includes("in_progress")) return false;
@@ -739,7 +754,7 @@ function DocumentWorkspace({
   // the same single round trip as one row. Returns whether the call went
   // through — the caller clears its selection only then.
   const relaunchIngestion = useCallback(
-    async (docs: DocumentMetadata[], tagId: string): Promise<boolean> => {
+    async (docs: ResourceDocument[], tagId: string): Promise<boolean> => {
       if (docs.length === 0 || docs.some((doc) => relaunchRequests.current.has(doc.identity.document_uid)))
         return false;
       for (const doc of docs) relaunchRequests.current.add(doc.identity.document_uid);
@@ -755,6 +770,17 @@ function DocumentWorkspace({
           if (!selectedProfile) return false;
         }
         try {
+          if (managerSpaceId) {
+            for (const doc of docs)
+              await startManagerProcessing(
+                dispatch,
+                doc.identity.document_uid,
+                doc.managerProcessing?.profile ?? selectedProfile ?? "fast",
+                doc.managerProcessing,
+              );
+            showSuccess?.({ summary: t("rework.resources.toast.relaunchStarted", { count: docs.length }) });
+            return true;
+          }
           const result = await processDocuments({
             processDocumentsRequest: {
               files: docs.map((doc) => ({
@@ -796,7 +822,7 @@ function DocumentWorkspace({
         setPendingRelaunches(new Set(relaunchRequests.current));
       }
     },
-    [dispatch, processDocuments, showSuccess, showError, t, loadTagPage, perTag],
+    [dispatch, processDocuments, showSuccess, showError, t, loadTagPage, perTag, managerSpaceId],
   );
 
   // Deletes the folder's tag; the backend cascades to sub-folders and untags/
@@ -1138,7 +1164,9 @@ function DocumentWorkspace({
       ...childFolders.map((node): Row => ({ kind: "folder", node })),
       ...(managerSpaceId
         ? (directory?.items ?? []).flatMap((entry) =>
-            entry.kind === "document" ? [presentManagerDocument(entry.data)] : [],
+            entry.kind === "document"
+              ? [presentManagerDocument(entry.data, directory?.processing?.[entry.data.id])]
+              : [],
           )
         : (page?.docs ?? [])
       ).map((doc): Row => ({ kind: "document", doc })),
@@ -1241,10 +1269,10 @@ function DocumentWorkspace({
   const relaunchableSelection = selectedDocs.filter(isRelaunchable);
   const [bulkRelaunching, setBulkRelaunching] = useState(false);
   const bulkRelaunch = async () => {
-    if (!currentTag || relaunchableSelection.length === 0) return;
+    if ((!managerSpaceId && !currentTag) || relaunchableSelection.length === 0) return;
     setBulkRelaunching(true);
     try {
-      if (await relaunchIngestion(relaunchableSelection, currentTag.id)) setSelectedKeys(new Set());
+      if (await relaunchIngestion(relaunchableSelection, currentTag?.id ?? "")) setSelectedKeys(new Set());
     } finally {
       setBulkRelaunching(false);
     }
@@ -1642,8 +1670,11 @@ function DocumentWorkspace({
     return doc.managerDocument
       ? options.map((option) => ({
           ...option,
-          disabled: option.value !== "download",
-          tooltip: option.value !== "download" ? t("rework.resources.documentsUnavailable") : undefined,
+          disabled: option.value !== "download" && !(option.value === "relaunch" && directory?.processing_enabled),
+          tooltip:
+            option.value !== "download" && !(option.value === "relaunch" && directory?.processing_enabled)
+              ? t("rework.resources.documentsUnavailable")
+              : undefined,
         }))
       : options;
   };
@@ -1700,7 +1731,9 @@ function DocumentWorkspace({
       return (
         <StatusChip
           status={getDocStatus(row.doc)}
-          errors={row.doc.processing?.errors}
+          errors={
+            row.doc.managerDocument ? managerProcessingErrors(row.doc.managerProcessing, t) : row.doc.processing?.errors
+          }
           documentUid={row.doc.identity.document_uid}
           // The failure a Temporal child job reported: for a run that died
           // before any stage started, this is the ONLY account of it —
@@ -1708,7 +1741,7 @@ function DocumentWorkspace({
           // hand from the task feed, so the Resources tab stops being the one
           // surface that shows "Erreur" with nothing behind it (#2315 put the
           // message on the task; it only ever reached the task popover).
-          taskError={docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
+          taskError={row.doc.managerDocument ? undefined : docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
           justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
         />
       );
@@ -1846,20 +1879,13 @@ function DocumentWorkspace({
                 </Tooltip>
               )}
             {row.kind === "document" && (
-              <Tooltip
-                text={
-                  row.doc.managerDocument
-                    ? t("rework.resources.documentsUnavailable")
-                    : t("rework.resources.action.preview")
-                }
-              >
+              <Tooltip text={t("rework.resources.action.preview")}>
                 <IconButton
                   color="on-surface-retreat"
                   variant="icon"
                   size="small"
                   icon={{ category: "outlined", type: "visibility" }}
                   aria-label={t("rework.resources.action.preview")}
-                  disabled={!!row.doc.managerDocument}
                   onClick={() => commands.preview(row.doc)}
                 />
               </Tooltip>
@@ -1888,7 +1914,8 @@ function DocumentWorkspace({
                   }
                   if (value === "labels") setLabelsTarget(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
-                  if (value === "relaunch" && currentTag) void relaunchIngestion([row.doc], currentTag.id);
+                  if (value === "relaunch" && (row.doc.managerDocument || currentTag))
+                    void relaunchIngestion([row.doc], currentTag?.id ?? "");
                   if (value === "delete" && currentTag) {
                     showConfirmationDialog({
                       title: t("rework.resources.confirm.deleteTitle"),
@@ -2098,7 +2125,8 @@ function DocumentWorkspace({
                   ? {
                       delete: selectedDocs.length ? t("rework.resources.documentsUnavailable") : undefined,
                       download: t("rework.resources.documentsUnavailable"),
-                      processing: t("rework.documentStorage.noProcessing"),
+                      search: t("rework.resources.documentsUnavailable"),
+                      processing: directory?.processing_enabled ? undefined : t("rework.documentStorage.noProcessing"),
                     }
                   : undefined
               }
@@ -2254,7 +2282,13 @@ function DocumentWorkspace({
           managerSpaceId ? (dropTargetNode?.name ?? displayPath) || undefined : uploadTargetNode.full || undefined
         }
         managerDestination={
-          managerSpaceId ? { spaceId: managerSpaceId, folderId: uploadTargetNode.managerFolder?.id } : undefined
+          managerSpaceId
+            ? {
+                spaceId: managerSpaceId,
+                folderId: uploadTargetNode.managerFolder?.id,
+                processingEnabled: directory?.processing_enabled,
+              }
+            : undefined
         }
         metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
         ensureFolderPath={canCreateFolder ? (managerSpaceId ? ensureManagerFolderPath : ensureFolderPath) : undefined}

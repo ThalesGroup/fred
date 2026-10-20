@@ -18,13 +18,18 @@ use uuid::Uuid;
 
 impl Storage {
     pub async fn receipt(&self, actor: &str, key: Uuid) -> AppResult<UploadReceipt> {
-        let row: UploadReceipt =
+        let mut row: UploadReceipt =
             sqlx::query_as("select * from document_upload where actor=$1 and request_key=$2")
                 .bind(actor)
                 .bind(key)
                 .fetch_one(&self.pool)
                 .await?;
         authorized(&self.pool, &self.fga, actor, row.space_id, Permission::Read).await?;
+        if let Some(id) = row.document_id {
+            row.processing = crate::processing::store::summaries(&self.pool, &[id])
+                .await?
+                .remove(&id);
+        }
         Ok(row)
     }
 
@@ -38,8 +43,14 @@ impl Storage {
         if query.before.is_some() != query.before_key.is_some() {
             return Err(invalid("Both receipt cursor fields are required"));
         }
-        Ok(sqlx::query_as("select * from document_upload where actor=$1 and space_id=$2 and acknowledged_at is null and successor_key is null and ($3::timestamptz is null or (created_at,request_key)<($3,$4)) order by created_at desc,request_key desc limit $5")
-            .bind(actor).bind(space).bind(query.before).bind(query.before_key).bind(query.limit.unwrap_or(50).clamp(1,200)).fetch_all(&self.pool).await?)
+        let mut receipts:Vec<UploadReceipt>=sqlx::query_as("select * from document_upload u where actor=$1 and space_id=$2 and (acknowledged_at is null or exists(select 1 from document_processing p where p.document_id=u.document_id and p.status in ('pending','running'))) and successor_key is null and ($3::timestamptz is null or (created_at,request_key)<($3,$4)) order by created_at desc,request_key desc limit $5")
+            .bind(actor).bind(space).bind(query.before).bind(query.before_key).bind(query.limit.unwrap_or(50).clamp(1,200)).fetch_all(&self.pool).await?;
+        let ids: Vec<Uuid> = receipts.iter().filter_map(|r| r.document_id).collect();
+        let mut summaries = crate::processing::store::summaries(&self.pool, &ids).await?;
+        for receipt in &mut receipts {
+            receipt.processing = receipt.document_id.and_then(|id| summaries.remove(&id));
+        }
+        Ok(receipts)
     }
 
     pub async fn acknowledge(&self, actor: &str, key: Uuid) -> AppResult<()> {
@@ -50,8 +61,20 @@ impl Storage {
                 "An active upload cannot be dismissed",
             ));
         }
+        let mut tx = self.pool.begin().await?;
+        if let Some(id) = row.document_id {
+            sqlx::query("select pg_advisory_xact_lock(991,hashtext($1))")
+                .bind(id.to_string())
+                .execute(&mut *tx)
+                .await?;
+            let active:bool=sqlx::query_scalar("select exists(select 1 from document_processing where document_id=$1 and status in ('pending','running'))").bind(id).fetch_one(&mut *tx).await?;
+            if active {
+                return Err(crate::processing::conflict("processing_active"));
+            }
+        }
         sqlx::query("update document_upload set acknowledged_at=coalesce(acknowledged_at,clock_timestamp()) where actor=$1 and request_key=$2 and status<>'pending'")
-            .bind(actor).bind(key).execute(&self.pool).await?;
+            .bind(actor).bind(key).execute(&mut *tx).await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -80,6 +103,7 @@ impl Storage {
             types,
             max_file_bytes: self.config.limits.file_bytes,
             uploads_enabled: self.config.uploads_enabled,
+            processing_enabled: false,
         })
     }
 
@@ -203,6 +227,7 @@ impl Storage {
                 .ok_or_else(unavailable)
             })
             .collect::<AppResult<Vec<_>>>()?;
+        let processing = crate::processing::store::summaries(&mut *tx, &documents).await?;
         tx.commit().await?;
         Ok(Directory {
             items,
@@ -211,6 +236,8 @@ impl Storage {
             offset,
             limit,
             can_write,
+            processing_enabled: false,
+            processing,
         })
     }
 
@@ -225,6 +252,12 @@ impl Storage {
             Permission::Read,
         )
         .await?;
+        self.stream_original(document).await
+    }
+
+    /// The caller has already checked the document's exact owning-space authority.
+    pub(crate) async fn stream_original(&self, document: Document) -> AppResult<Response> {
+        let id = document.id;
         let permit = self.downloads.clone().try_acquire_owned().map_err(|_| {
             AppError::problem(
                 StatusCode::TOO_MANY_REQUESTS,

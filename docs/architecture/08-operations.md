@@ -39,6 +39,9 @@ the same checkout and command, retaining infrastructure, credentials and data.
 own queue. SQL receipts are the durable work source; acceptance has no Temporal
 RPC. The worker polls due operations, applies bounded cleanup activities and
 retains incomplete work for later sweeps. HTTP startup does not connect to Temporal.
+The same supervised process runs the optional processing outbox independently of
+lifecycle enablement. It delivers existing KF workflows, reconciles acknowledgments
+and expires work; disabling admission still drains accepted attempts.
 [Manager operations](A3-manager-operations.md#space-deletion-lifecycle) defines
 configuration, activation, progress and recovery.
 
@@ -73,6 +76,11 @@ composition. It refuses other applications and unsupported storage configuration
 stops producers before deletion, replays installed SQL migrations and waits for
 service readiness before reporting success. A partial failure leaves Fred stopped
 and retains original replica counts for retry; it provides no data rollback.
+For a changed manager baseline/model, `K3D_RESET_FOR_UPGRADE=1` skips installed
+application migrations and leaves Fred stopped for the target release. It recreates
+validated local manager buckets before returning. Known manager derived/index
+resources are cleared with the SQL state; external storage or Temporal configuration
+is refused before deletion, even when processing admission is disabled.
 This local reset is separate from production backup and recovery procedures.
 
 ## Implementation references

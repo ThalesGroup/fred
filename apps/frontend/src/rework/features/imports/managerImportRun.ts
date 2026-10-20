@@ -3,7 +3,7 @@
 
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { enhancedFredManagerApi as api } from "../../../slices/fredManager/fredManagerApiEnhancements";
-import type { UploadReceipt } from "../../../slices/fredManager/fredManagerOpenApi";
+import type { UploadReceipt, Profile, Summary } from "../../../slices/fredManager/fredManagerOpenApi";
 import type { store } from "../../../common/store";
 
 export type ManagerDispatch = typeof store.dispatch;
@@ -19,6 +19,7 @@ export interface ManagerImport {
   error?: string;
   receipt?: UploadReceipt;
   retryOf?: string;
+  profile?: Profile;
 }
 const MAX_ENTRIES = 500;
 const TTL = 7 * 24 * 60 * 60 * 1000;
@@ -107,10 +108,6 @@ function remove(actor: string, key: string) {
 function record(actor: string, receipt: UploadReceipt) {
   if (managerActor() !== actor) return;
   const key = receipt.request_key;
-  if (receipt.acknowledged_at || receipt.successor_key) {
-    remove(actor, key);
-    return;
-  }
   const phase = receipt.status === "pending" ? (active.has(key) ? "uploading" : "uncertain") : receipt.status;
   const value: ManagerImport = {
     key,
@@ -121,9 +118,28 @@ function record(actor: string, receipt: UploadReceipt) {
     createdAt: new Date(receipt.created_at).getTime(),
     phase,
     receipt,
-    error: receipt.error_code ?? undefined,
+    error: receipt.processing?.error_code ?? receipt.error_code ?? undefined,
+    profile: receipt.processing_profile ?? undefined,
   };
   const old = entries.find((e) => e.key === key);
+  if (old?.receipt?.status === "stored" && receipt.status !== "stored") return;
+  if (
+    old?.receipt?.processing &&
+    (!receipt.processing || Date.parse(old.receipt.processing.created_at) > Date.parse(receipt.processing.created_at))
+  )
+    return;
+  if (
+    old?.receipt?.processing?.id === receipt.processing?.id &&
+    (old?.receipt?.processing?.revision ?? -1) > (receipt.processing?.revision ?? -1)
+  )
+    return;
+  if (
+    (receipt.acknowledged_at && !["pending", "running"].includes(receipt.processing?.status ?? "")) ||
+    receipt.successor_key
+  ) {
+    remove(actor, key);
+    return;
+  }
   if (old) patch(actor, key, value);
   else if (entries.length < MAX_ENTRIES) changed(actor, [...entries, value]);
   if (phase === "stored") files.delete(key);
@@ -222,6 +238,7 @@ async function send(dispatch: ManagerDispatch, actor: string, entry: ManagerImpo
         id: entry.folderId,
         "Idempotency-Key": entry.key,
         retryOf: entry.retryOf,
+        profile: entry.profile,
         fileUpload: { file },
       }),
     ).unwrap();
@@ -245,6 +262,7 @@ export function runManagerImport(
   dispatch: ManagerDispatch,
   spaceId: string,
   selected: { file: File; folderId: string }[],
+  profile?: Profile,
 ) {
   current();
   const actor = owner;
@@ -260,6 +278,7 @@ export function runManagerImport(
       size: file.size,
       createdAt: Date.now(),
       phase: "queued",
+      profile,
     };
   });
   changed(actor, [...entries, ...batch]);
@@ -268,6 +287,13 @@ export function runManagerImport(
 export function managerFileHeld(key: string) {
   current();
   return files.has(key);
+}
+export function managerCanRetryWithoutFile(key: string) {
+  current();
+  return (
+    files.has(key) ||
+    entries.some((e) => e.key === key && e.receipt?.status === "stored" && e.receipt.processing?.status === "failed")
+  );
 }
 export function canCancelManagerImport(key: string) {
   current();
@@ -285,9 +311,7 @@ export async function retryManagerImport(dispatch: ManagerDispatch, key: string,
   const actor = owner;
   if (active.has(key) || retrying.has(key)) return;
   const entry = entries.find((e) => e.key === key);
-  const file = picked ?? files.get(key);
-  if (!entry || !file) throw new Error("reselect_file");
-  if (file.name.normalize("NFC") !== entry.name || file.size !== entry.size) throw new Error("wrong_file");
+  if (!entry) return;
   retrying.add(key);
   try {
     let receipt = await lookup(dispatch, actor, key);
@@ -295,7 +319,15 @@ export async function retryManagerImport(dispatch: ManagerDispatch, key: string,
       receipt = await lookup(dispatch, actor, receipt.successor_key);
       return;
     }
+    if (receipt?.status === "stored" && receipt.document_id && receipt.processing?.status === "failed") {
+      await startManagerProcessing(dispatch, receipt.document_id, receipt.processing.profile, receipt.processing);
+      await lookup(dispatch, actor, key);
+      return;
+    }
     if (receipt && receipt.status !== "failed") return;
+    const file = picked ?? files.get(key);
+    if (!file) throw new Error("reselect_file");
+    if (file.name.normalize("NFC") !== entry.name || file.size !== entry.size) throw new Error("wrong_file");
     if (managerActor() !== actor) return;
     const retry = {
       ...entry,
@@ -321,4 +353,36 @@ export async function dismissManagerImport(dispatch: ManagerDispatch, key: strin
   if (receipt?.status === "pending") throw new Error("upload_in_progress");
   if (receipt) await dispatch(api.endpoints.acknowledge.initiate({ id: key })).unwrap();
   remove(actor, key);
+}
+
+/** Retry keys survive a lost response and a reload, without resending the original. */
+export async function startManagerProcessing(
+  dispatch: ManagerDispatch,
+  documentId: string,
+  profile: Profile,
+  previous?: Summary | null,
+) {
+  const actor = managerActor();
+  const storage = `fred.manager.processing:${actor}:${documentId}`;
+  const binding = `${previous?.id ?? "initial"}:${profile}`;
+  let key: string;
+  {
+    let saved: { binding?: string; key?: string } = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(storage) ?? "{}");
+    } catch {
+      /* Ignore corrupted local hints. */
+    }
+    key = saved.binding === binding && saved.key ? saved.key : crypto.randomUUID();
+    localStorage.setItem(storage, JSON.stringify({ binding, key }));
+  }
+  const result = await dispatch(
+    api.endpoints.start.initiate({
+      id: documentId,
+      "Idempotency-Key": key,
+      start: { profile, retry_of: previous?.id },
+    }),
+  ).unwrap();
+  if (managerActor() !== actor) throw new Error("account_changed");
+  return result;
 }

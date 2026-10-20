@@ -3,9 +3,10 @@
 ## Classification and content ownership
 
 A space owns its folder tree, document registry and stored originals. Manager owns
-their identity and storage lifecycle. Knowledge Flow owns document processing;
-manager storage requests invoke neither ingestion nor Temporal. Manager folder
-UUIDs and Knowledge Flow tag UUIDs are distinct identity domains.
+their identity, storage lifecycle and processing receipts. Knowledge Flow workers
+own extraction and output algorithms. Upload-only requires no ingestion service;
+optional processing dispatches the existing `ProcessPush` workflow through Temporal.
+Manager folder UUIDs and Knowledge Flow tag UUIDs are distinct identity domains.
 
 A folder has one immutable space and at most one parent in that space. Paths
 contain UUIDs, not display names. Renaming changes one label without rewriting
@@ -79,7 +80,7 @@ Publication failure leaves no visible document. Originals are immutable (I25).
 ## Receipts, retries and cleanup
 
 `Idempotency-Key` is a request UUID scoped to the authenticated actor. The journal
-binds it to destination, canonical name, size and digest. Repeating a stored upload
+binds it to destination, canonical name, size, digest and optional processing profile. Repeating a stored upload
 returns the same document ID; different bound content conflicts. Pending work
 returns a conflict with a receipt location and retry delay. A terminal failed
 attempt needs a new key linked by `retry_of`; only one successor can win.
@@ -105,10 +106,11 @@ receipts expire after the configured retention period.
 
 After storage, the existing table displays filename, size, file-type icon and real
 creation date. Reload finds the same identity. Statistics and quota use manager's
-registry and reservations. The status says stored, without implying indexing or
-search availability. The existing preview, processing, replacement, document
-deletion and bulk ZIP controls remain visible and unavailable in this journey.
-The separate knowledge-base consumer retains its existing service bindings.
+registry and reservations. Storage and processing have separate outcomes; neither
+implies search/chat availability. With processing configured, existing row/bulk
+processing actions and the upload drawer's fast/medium/rich choices use manager.
+Replacement, document deletion and bulk ZIP remain unavailable. The separate
+knowledge-base consumer retains its existing service bindings.
 
 Individual download checks current read permission and streams the original with
 bounded server buffers and deadlines. It forces attachment, octet-stream,
@@ -122,3 +124,37 @@ See the [Resources journey](02-user-journeys.md#priya-opens-resources),
 [request costs](09-quality.md#original-storage-costs-and-failure-evidence),
 [runtime](A1-manager-runtime.md#original-storage) and
 [operations](A3-manager-operations.md#original-storage).
+
+## Processing a stored original
+
+An upload with a profile publishes the original and its processing intent in one
+transaction. An editor can also process a stored-only document or explicitly retry
+a failed attempt without another file transfer. One active attempt and one linked
+successor per failure prevent competing starts. Each attempt freezes the Python
+worker's exported policy and profile settings. Original quota is charged once.
+
+The manager worker leases due SQL intents, releases database locks, then starts
+`ProcessPush` using unchanged `PipelineDefinition` and `FileToProcess` payloads.
+It describes uncertain submissions before retrying, rejects duplicate workflow
+identities and expires queued/running work within configured deadlines. Temporal
+history contains references and orchestration metadata, never files or credentials.
+
+The existing KF activities select a manager persistence adapter through the source
+reference. They stream an authorized original, run the existing extraction and
+output processors, and stage immutable derived artifacts and generation-scoped
+vectors in separate stores. Native Word/ODT/PowerPoint previews use the existing
+Office-to-PDF converter in the supervised extraction process. CSV/Excel use the
+existing tabular processors. No legacy tag, catalog row or task is created.
+
+Preparation, extraction and indexing claim monotonically fenced generations.
+Manager verifies artifact sizes/hashes before the final guarded transaction checks
+current actor access and CGU and publishes the manifest. A stale activity cannot
+replace a committed stage or terminal outcome. Cleanup journals bounded vector
+identifiers and objects, repeats sweeps for late writes, and preserves originals
+and published generations. Failure retains the original and a safe stage/error.
+
+Resources and the import panel read persisted summaries, including after reload.
+Existing File/Raw preview modes read authenticated manager endpoints, with native
+PDF range support. Raw previews cap browser text at 8 MiB; protected local images
+use authenticated Blob URLs. Remote images, active HTML, diagrams and local links
+cannot bypass those controls. Published previews require current read authority.

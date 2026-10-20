@@ -54,6 +54,55 @@ const injectedRtkApi = api.injectEndpoints({
     deletionStatus: build.query<DeletionStatusApiResponse, DeletionStatusApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/deletions/${queryArg.operationId}` }),
     }),
+    cleanup: build.query<CleanupApiResponse, CleanupApiArg>({
+      query: () => ({ url: `/fred-manager/v1/document-processing/cleanup` }),
+    }),
+    cleaned: build.mutation<CleanedApiResponse, CleanedApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/document-processing/cleanup`,
+        method: "POST",
+        body: queryArg.cleaned,
+      }),
+    }),
+    abandon: build.mutation<AbandonApiResponse, AbandonApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/document-processing/${queryArg.id}/abandon`,
+        method: "POST",
+        body: queryArg.failure,
+      }),
+    }),
+    claim: build.mutation<ClaimApiResponse, ClaimApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/document-processing/${queryArg.id}/claim`,
+        method: "POST",
+        body: queryArg.claim,
+      }),
+    }),
+    commit: build.mutation<CommitApiResponse, CommitApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/document-processing/${queryArg.id}/commit`,
+        method: "POST",
+        body: queryArg.commit,
+      }),
+    }),
+    original: build.query<OriginalApiResponse, OriginalApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/document-processing/${queryArg.id}/original`,
+        params: {
+          generation: queryArg.generation,
+        },
+      }),
+    }),
+    vectors: build.mutation<VectorsApiResponse, VectorsApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/document-processing/${queryArg.id}/vectors`,
+        method: "POST",
+        body: queryArg.vectorPlan,
+      }),
+    }),
+    work: build.query<WorkApiResponse, WorkApiArg>({
+      query: (queryArg) => ({ url: `/fred-manager/v1/document-processing/${queryArg.id}/work` }),
+    }),
     receipt: build.query<ReceiptApiResponse, ReceiptApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/document-uploads/${queryArg.id}` }),
     }),
@@ -62,6 +111,32 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     content: build.query<ContentApiResponse, ContentApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/documents/${queryArg.id}/content` }),
+    }),
+    preview: build.query<PreviewApiResponse, PreviewApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/documents/${queryArg.id}/preview`,
+        params: {
+          artifact: queryArg.artifact,
+        },
+      }),
+    }),
+    history: build.query<HistoryApiResponse, HistoryApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/documents/${queryArg.id}/processing`,
+        params: {
+          before: queryArg.before,
+        },
+      }),
+    }),
+    start: build.mutation<StartApiResponse, StartApiArg>({
+      query: (queryArg) => ({
+        url: `/fred-manager/v1/documents/${queryArg.id}/processing`,
+        method: "POST",
+        body: queryArg.start,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+      }),
     }),
     createFolder: build.mutation<CreateFolderApiResponse, CreateFolderApiArg>({
       query: (queryArg) => ({ url: `/fred-manager/v1/folders`, method: "POST", body: queryArg.createFolder }),
@@ -82,6 +157,7 @@ const injectedRtkApi = api.injectEndpoints({
         },
         params: {
           retry_of: queryArg.retryOf,
+          profile: queryArg.profile,
         },
       }),
     }),
@@ -236,6 +312,41 @@ export type DeletionStatusApiResponse = /** status 200 undefined */ Receipt;
 export type DeletionStatusApiArg = {
   operationId: string;
 };
+export type CleanupApiResponse = /** status 200 undefined */ Cleanup[];
+export type CleanupApiArg = void;
+export type CleanedApiResponse = unknown;
+export type CleanedApiArg = {
+  cleaned: Cleaned;
+};
+export type AbandonApiResponse = /** status 200 undefined */ Summary;
+export type AbandonApiArg = {
+  id: string;
+  failure: Failure;
+};
+export type ClaimApiResponse = /** status 200 undefined */ Descriptor;
+export type ClaimApiArg = {
+  id: string;
+  claim: Claim;
+};
+export type CommitApiResponse = /** status 200 undefined */ Summary;
+export type CommitApiArg = {
+  id: string;
+  commit: Commit;
+};
+export type OriginalApiResponse = /** status 200 undefined */ string;
+export type OriginalApiArg = {
+  id: string;
+  generation: string;
+};
+export type VectorsApiResponse = unknown;
+export type VectorsApiArg = {
+  id: string;
+  vectorPlan: VectorPlan;
+};
+export type WorkApiResponse = /** status 200 undefined */ Work;
+export type WorkApiArg = {
+  id: string;
+};
 export type ReceiptApiResponse = /** status 200 undefined */ UploadReceipt;
 export type ReceiptApiArg = {
   id: string;
@@ -247,6 +358,23 @@ export type AcknowledgeApiArg = {
 export type ContentApiResponse = /** status 200 undefined */ string;
 export type ContentApiArg = {
   id: string;
+};
+export type PreviewApiResponse = /** status 200 undefined */ string | /** status 206 undefined */ string;
+export type PreviewApiArg = {
+  id: string;
+  /** native, raw, metadata, or a relative path from the published manifest. */
+  artifact?: string;
+};
+export type HistoryApiResponse = /** status 200 undefined */ Summary[];
+export type HistoryApiArg = {
+  id: string;
+  before?: string | null;
+};
+export type StartApiResponse = /** status 200 undefined */ Summary;
+export type StartApiArg = {
+  id: string;
+  "Idempotency-Key": string;
+  start: Start;
 };
 export type CreateFolderApiResponse = /** status 201 Success */ Folder;
 export type CreateFolderApiArg = {
@@ -267,6 +395,8 @@ export type UploadApiArg = {
   /** Required request UUID */
   "Idempotency-Key": string;
   retryOf?: string;
+  /** Omit for upload only */
+  profile?: Profile;
   fileUpload: FileUpload;
 };
 export type PreflightApiResponse = /** status 200 undefined */ PreflightResult;
@@ -459,6 +589,118 @@ export type Receipt = {
   target_kind: SpaceKind;
   target_parent_id?: string | null;
 };
+export type Profile = "fast" | "medium" | "rich";
+export type Work = {
+  contract_version: number;
+  document_id: string;
+  installation_id: string;
+  original_sha256: string;
+  processing_id: string;
+  profile: Profile;
+};
+export type Cleanup = {
+  batch: number;
+  chunks: number;
+  cursor: number;
+  generation: string;
+  output_prefix: string;
+  preserve_objects: boolean;
+  protected_ordinals: number[];
+  work: Work;
+};
+export type Cleaned = {
+  cursor: number;
+  generation: string;
+  next_cursor: number;
+  objects_empty: boolean;
+  work: Work;
+};
+export type Stage = "queued" | "preparation" | "extraction" | "indexing" | "done";
+export type ProcessingStatus = "pending" | "running" | "succeeded" | "failed";
+export type Summary = {
+  chunks: number;
+  completed_at?: string | null;
+  created_at: string;
+  document_id: string;
+  error_code?: string | null;
+  id: string;
+  profile: Profile;
+  retry_of?: string | null;
+  revision: number;
+  rows?: number | null;
+  stage: Stage;
+  status: ProcessingStatus;
+  vectors: number;
+};
+export type FailureCode =
+  | "unsupported_input"
+  | "access_changed"
+  | "integrity_failure"
+  | "extraction_failed"
+  | "preview_failed"
+  | "indexing_failed"
+  | "capacity_exceeded"
+  | "worker_failed"
+  | "deadline_exceeded"
+  | "delivery_unknown";
+export type Failure = {
+  code: FailureCode;
+  generation?: string | null;
+  stage: Stage;
+  work: Work;
+};
+export type Artifact = {
+  path: string;
+  sha256: string;
+  size: number;
+};
+export type Manifest = {
+  artifacts: Artifact[];
+  chunks: number;
+  generation: string;
+  rows?: number | null;
+  vector_ordinals: number[];
+  vectors: number;
+};
+export type Descriptor = {
+  actor: string;
+  committed?: Manifest | null;
+  expires_at: string;
+  file: any;
+  folder_id: string;
+  folder_path: string;
+  generation: string;
+  max_artifacts: number;
+  max_chunks: number;
+  max_output_bytes: number;
+  mime: string;
+  name: string;
+  organization_id: string;
+  output_prefix: string;
+  predecessor?: Manifest | null;
+  profile_settings: any;
+  size: number;
+  space_id: string;
+  stage: Stage;
+  work: Work;
+};
+export type Claim = {
+  activity_id: string;
+  attempt: number;
+  execution_id: string;
+  stage: Stage;
+  work: Work;
+};
+export type Commit = {
+  manifest: Manifest;
+  stage: Stage;
+  work: Work;
+};
+export type VectorPlan = {
+  count: number;
+  generation: string;
+  work: Work;
+};
 export type UploadStatus = "pending" | "stored" | "failed";
 export type UploadReceipt = {
   acknowledged_at?: string | null;
@@ -469,12 +711,18 @@ export type UploadReceipt = {
   folder_id: string;
   mime: string;
   name: string;
+  processing?: Summary | null;
+  processing_profile?: Profile | null;
   request_key: string;
   sha256: string;
   size: number;
   space_id: string;
   status: UploadStatus;
   successor_key?: string | null;
+};
+export type Start = {
+  profile: Profile;
+  retry_of?: string | null;
 };
 export type Folder = {
   created_at: string;
@@ -504,6 +752,7 @@ export type StorageSummary = {
   bytes: number;
   documents: number;
   max_file_bytes: number;
+  processing_enabled: boolean;
   quota_bytes: number;
   reserved_bytes: number;
   types: TypeUsage[];
@@ -611,6 +860,10 @@ export type Directory = {
   items: Entry[];
   limit: number;
   offset: number;
+  processing: {
+    [key: string]: Summary;
+  };
+  processing_enabled: boolean;
   total: number;
 };
 export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
@@ -644,11 +897,27 @@ export const {
   useBootstrapPlatformAdminMutation,
   useDeletionStatusQuery,
   useLazyDeletionStatusQuery,
+  useCleanupQuery,
+  useLazyCleanupQuery,
+  useCleanedMutation,
+  useAbandonMutation,
+  useClaimMutation,
+  useCommitMutation,
+  useOriginalQuery,
+  useLazyOriginalQuery,
+  useVectorsMutation,
+  useWorkQuery,
+  useLazyWorkQuery,
   useReceiptQuery,
   useLazyReceiptQuery,
   useAcknowledgeMutation,
   useContentQuery,
   useLazyContentQuery,
+  usePreviewQuery,
+  useLazyPreviewQuery,
+  useHistoryQuery,
+  useLazyHistoryQuery,
+  useStartMutation,
   useCreateFolderMutation,
   useDeleteFolderMutation,
   useRenameFolderMutation,

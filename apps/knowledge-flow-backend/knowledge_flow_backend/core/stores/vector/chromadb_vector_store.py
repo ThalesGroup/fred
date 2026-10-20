@@ -478,7 +478,9 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             restored_meta = restore_metadata(metadata or {})
             out = {"chunk_uid": chunk_uid, "text": text, "metadata": restored_meta}
             return out
-        except Exception:
+        except Exception as error:
+            if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
+                raise
             logger.exception("[SEARCH] Failed to fetch chunk for chunk_uid=%s", chunk_uid)
             return {"chunk_uid": chunk_uid}
 
@@ -496,7 +498,9 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
                     ]
                 }
             )
-        except Exception:
+        except Exception as error:
+            if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
+                raise
             logger.exception("[SEARCH] Failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
 
     # -------- Search --------

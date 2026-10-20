@@ -86,7 +86,7 @@ def test_extraction_child_requests_input_only_construction(monkeypatch, tmp_path
     monkeypatch.setattr(extraction_process.DocumentMetadata, "model_validate_json", Mock(return_value="metadata"))
     send = Mock()
     monkeypatch.setattr(extraction_process, "_send_outcome", send)
-    request = SimpleNamespace(config_file=None, input_path=str(tmp_path / "input.pdf"), output_dir=str(tmp_path), metadata_json="{}", profile="rich")
+    request = SimpleNamespace(manager_job_json=None, config_file=None, input_path=str(tmp_path / "input.pdf"), output_dir=str(tmp_path), metadata_json="{}", profile="rich")
     pipe = Mock()
 
     extraction_process._child_main(request, pipe, 1)

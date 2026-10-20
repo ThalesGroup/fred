@@ -45,3 +45,9 @@
 .viewerBody {
   height: 100%;
 }
+
+.previewImage {
+  display: inline-block;
+  min-width: 1em;
+  min-height: 1em;
+}

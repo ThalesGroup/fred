@@ -1,0 +1,101 @@
+[
+  {
+    "files": [
+      {
+        "display_name": "00000000-0000-0000-0000-000000000001",
+        "document_uid": "00000000-0000-0000-0000-000000000001",
+        "extraction_task_queue": "ingestion-fast",
+        "heartbeat_timeout_seconds": 300,
+        "input_activity_timeout_seconds": 5400,
+        "logging_context": "eyJjb250ZXh0Ijp7ImNvcnJlbGF0aW9uX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwidXNlcl9pZCI6IndyaXRlciIsIndvcmtmbG93X2lkIjoibWFuYWdlci1jb250cmFjdC10ZXN0In0sInYiOjF9",
+        "output_activity_timeout_seconds": 3600,
+        "processed_by": {
+          "roles": [],
+          "uid": "writer",
+          "username": "writer"
+        },
+        "profile": "fast",
+        "pull_metadata_activity_timeout_seconds": 1800,
+        "push_metadata_activity_timeout_seconds": 300,
+        "retry_backoff_coefficient": 2.0,
+        "retry_initial_interval_seconds": 5,
+        "retry_maximum_attempts": 3,
+        "retry_maximum_interval_seconds": 20,
+        "retry_non_retryable_error_types": [],
+        "source_tag": "manager:00000000-0000-0000-0000-000000000001:00000000-0000-0000-0000-000000000001",
+        "tags": [],
+        "task_id": null
+      }
+    ],
+    "logging_context": "eyJjb250ZXh0Ijp7ImNvcnJlbGF0aW9uX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwidXNlcl9pZCI6IndyaXRlciIsIndvcmtmbG93X2lkIjoibWFuYWdlci1jb250cmFjdC10ZXN0In0sInYiOjF9",
+    "max_parallelism": 1,
+    "name": "manager-document-processing",
+    "workflow_id": "manager-contract-test"
+  },
+  {
+    "files": [
+      {
+        "display_name": "00000000-0000-0000-0000-000000000001",
+        "document_uid": "00000000-0000-0000-0000-000000000001",
+        "extraction_task_queue": "ingestion-medium",
+        "heartbeat_timeout_seconds": 300,
+        "input_activity_timeout_seconds": 7200,
+        "logging_context": "eyJjb250ZXh0Ijp7ImNvcnJlbGF0aW9uX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwidXNlcl9pZCI6IndyaXRlciIsIndvcmtmbG93X2lkIjoibWFuYWdlci1jb250cmFjdC10ZXN0In0sInYiOjF9",
+        "output_activity_timeout_seconds": 3600,
+        "processed_by": {
+          "roles": [],
+          "uid": "writer",
+          "username": "writer"
+        },
+        "profile": "medium",
+        "pull_metadata_activity_timeout_seconds": 1800,
+        "push_metadata_activity_timeout_seconds": 300,
+        "retry_backoff_coefficient": 2.0,
+        "retry_initial_interval_seconds": 20,
+        "retry_maximum_attempts": 5,
+        "retry_maximum_interval_seconds": 120,
+        "retry_non_retryable_error_types": [],
+        "source_tag": "manager:00000000-0000-0000-0000-000000000001:00000000-0000-0000-0000-000000000001",
+        "tags": [],
+        "task_id": null
+      }
+    ],
+    "logging_context": "eyJjb250ZXh0Ijp7ImNvcnJlbGF0aW9uX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwidXNlcl9pZCI6IndyaXRlciIsIndvcmtmbG93X2lkIjoibWFuYWdlci1jb250cmFjdC10ZXN0In0sInYiOjF9",
+    "max_parallelism": 1,
+    "name": "manager-document-processing",
+    "workflow_id": "manager-contract-test"
+  },
+  {
+    "files": [
+      {
+        "display_name": "00000000-0000-0000-0000-000000000001",
+        "document_uid": "00000000-0000-0000-0000-000000000001",
+        "extraction_task_queue": "ingestion-rich",
+        "heartbeat_timeout_seconds": 300,
+        "input_activity_timeout_seconds": 7200,
+        "logging_context": "eyJjb250ZXh0Ijp7ImNvcnJlbGF0aW9uX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwidXNlcl9pZCI6IndyaXRlciIsIndvcmtmbG93X2lkIjoibWFuYWdlci1jb250cmFjdC10ZXN0In0sInYiOjF9",
+        "output_activity_timeout_seconds": 3600,
+        "processed_by": {
+          "roles": [],
+          "uid": "writer",
+          "username": "writer"
+        },
+        "profile": "rich",
+        "pull_metadata_activity_timeout_seconds": 1800,
+        "push_metadata_activity_timeout_seconds": 300,
+        "retry_backoff_coefficient": 2.0,
+        "retry_initial_interval_seconds": 30,
+        "retry_maximum_attempts": 7,
+        "retry_maximum_interval_seconds": 300,
+        "retry_non_retryable_error_types": [],
+        "source_tag": "manager:00000000-0000-0000-0000-000000000001:00000000-0000-0000-0000-000000000001",
+        "tags": [],
+        "task_id": null
+      }
+    ],
+    "logging_context": "eyJjb250ZXh0Ijp7ImNvcnJlbGF0aW9uX2lkIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwidXNlcl9pZCI6IndyaXRlciIsIndvcmtmbG93X2lkIjoibWFuYWdlci1jb250cmFjdC10ZXN0In0sInYiOjF9",
+    "max_parallelism": 1,
+    "name": "manager-document-processing",
+    "workflow_id": "manager-contract-test"
+  }
+]

@@ -108,6 +108,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         fga: observed,
         directory: None,
         content: None,
+        processing: None,
     });
     let reader = identity.token("reader");
     let base = format!("/spaces/{}", team.id);
@@ -355,6 +356,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
         fga: observed,
         directory: None,
         content: None,
+        processing: None,
     });
     let token = identity.token("writer");
     let (status, root) = create(&app, &token, team.id, None, "  Dossiers été  ").await;

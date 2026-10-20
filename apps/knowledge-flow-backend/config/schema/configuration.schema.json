@@ -1084,6 +1084,115 @@
       "type": "object",
       "additionalProperties": false
     },
+    "ManagerProcessingConfig": {
+      "additionalProperties": false,
+      "description": "Workload identity and isolated persistence for manager-owned documents.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "issuer": {
+          "title": "Issuer",
+          "type": "string"
+        },
+        "audience": {
+          "default": "fred-manager",
+          "title": "Audience",
+          "type": "string"
+        },
+        "client_id": {
+          "default": "knowledge-flow-worker",
+          "title": "Client Id",
+          "type": "string"
+        },
+        "client_secret_env": {
+          "default": "MANAGER_WORKER_CLIENT_SECRET",
+          "title": "Client Secret Env",
+          "type": "string"
+        },
+        "endpoint": {
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "bucket": {
+          "title": "Bucket",
+          "type": "string"
+        },
+        "region": {
+          "default": "us-east-1",
+          "title": "Region",
+          "type": "string"
+        },
+        "access_key_env": {
+          "default": "MANAGER_DERIVED_ACCESS_KEY",
+          "title": "Access Key Env",
+          "type": "string"
+        },
+        "secret_key_env": {
+          "default": "MANAGER_DERIVED_SECRET_KEY",
+          "title": "Secret Key Env",
+          "type": "string"
+        },
+        "vector_store": {
+          "discriminator": {
+            "mapping": {
+              "chroma": "#/$defs/ChromaVectorStorageConfig",
+              "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
+              "in_memory": "#/$defs/InMemoryVectorStorage",
+              "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
+              "pgvector": "#/$defs/PgVectorStorageConfig"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/InMemoryVectorStorage"
+            },
+            {
+              "$ref": "#/$defs/OpenSearchVectorIndexConfig"
+            },
+            {
+              "$ref": "#/$defs/ChromaVectorStorageConfig"
+            },
+            {
+              "$ref": "#/$defs/PgVectorStorageConfig"
+            },
+            {
+              "$ref": "#/$defs/ClickHouseVectorStorageConfig"
+            }
+          ],
+          "title": "Vector Store"
+        },
+        "allow_insecure": {
+          "default": false,
+          "title": "Allow Insecure",
+          "type": "boolean"
+        },
+        "temporary_bytes": {
+          "default": 1073741824,
+          "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
+          "maximum": 21474836480,
+          "minimum": 1048576,
+          "title": "Temporary Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "url",
+        "issuer",
+        "endpoint",
+        "bucket",
+        "vector_store"
+      ],
+      "title": "ManagerProcessingConfig",
+      "type": "object"
+    },
     "MinioFilesystemConfig": {
       "properties": {
         "type": {
@@ -3020,6 +3129,17 @@
     "processing": {
       "$ref": "#/$defs/ProcessingConfig",
       "description": "A collection of feature flags to enable or disable optional functionality."
+    },
+    "manager_processing": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ManagerProcessingConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "document_sources": {
       "additionalProperties": {

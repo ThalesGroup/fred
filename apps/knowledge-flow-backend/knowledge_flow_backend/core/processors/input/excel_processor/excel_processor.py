@@ -41,7 +41,7 @@ import subprocess  # nosec
 import tempfile
 import unicodedata
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -61,6 +61,7 @@ from knowledge_flow_backend.core.processors.input.excel_processor.excel_extracto
     _step,
     log,
 )
+from knowledge_flow_backend.core.stores.content.base_content_store import StoredObjectInfo
 from knowledge_flow_backend.features.tabular.artifacts import (
     build_table_query_alias,
     build_tabular_table_object_key,
@@ -91,32 +92,36 @@ def recalc_with_libreoffice(path: str) -> str:
     # Confine LibreOffice's user profile to the fresh temp dir: the recalc never
     # touches the shared ~/.config/libreoffice profile (no pollution) and concurrent
     # ingestion workers each get an isolated profile instead of racing on one.
-    profile_dir = Path(outdir) / ".lo_profile"
-    subprocess.run(
-        [
-            soffice_path,
-            "--headless",
-            "--nologo",
-            "--nofirststartwizard",
-            f"-env:UserInstallation={profile_dir.as_uri()}",
-            "--convert-to",
-            "xlsx",
-            "--outdir",
-            outdir,
-            path,
-        ],
-        check=True,
-        capture_output=True,
-    )  # nosec: controlled command arguments, shell=False
-    # Pick up whatever LibreOffice wrote rather than reconstructing the name (it
-    # normalises the filename, e.g. trims trailing spaces). The profile lives in a
-    # sub-directory, so the single produced .xlsx directly in outdir is unambiguous.
-    produced = [f for f in os.listdir(outdir) if f.lower().endswith(".xlsx")]
-    if not produced:
-        raise RuntimeError(f"LibreOffice did not produce a file in {outdir}")
-    result_path = os.path.join(outdir, produced[0])
-    log.info("  [RECALC] LibreOffice → %s", result_path)
-    return result_path
+    try:
+        profile_dir = Path(outdir) / ".lo_profile"
+        subprocess.run(
+            [
+                soffice_path,
+                "--headless",
+                "--nologo",
+                "--nofirststartwizard",
+                f"-env:UserInstallation={profile_dir.as_uri()}",
+                "--convert-to",
+                "xlsx",
+                "--outdir",
+                outdir,
+                path,
+            ],
+            check=True,
+            capture_output=True,
+        )  # nosec: controlled command arguments, shell=False
+        # Pick up whatever LibreOffice wrote rather than reconstructing the name (it
+        # normalises the filename, e.g. trims trailing spaces). The profile lives in a
+        # sub-directory, so the single produced .xlsx directly in outdir is unambiguous.
+        produced = [f for f in os.listdir(outdir) if f.lower().endswith(".xlsx")]
+        if not produced:
+            raise RuntimeError(f"LibreOffice did not produce a file in {outdir}")
+        result_path = os.path.join(outdir, produced[0])
+        log.info("  [RECALC] LibreOffice → %s", result_path)
+        return result_path
+    except BaseException:
+        shutil.rmtree(outdir, ignore_errors=True)
+        raise
 
 
 class ExcelProcessor(BaseMarkdownProcessor):
@@ -139,6 +144,7 @@ class ExcelProcessor(BaseMarkdownProcessor):
     # ------------------------------------------------------------------ #
     # Extraction / export options
     # ------------------------------------------------------------------ #
+    put_file_override: Callable[..., StoredObjectInfo] | None = None
     include_hidden_sheets: bool = True
     include_hidden_cells: bool = False
     apply_format_masking: bool = True
@@ -248,11 +254,13 @@ class ExcelProcessor(BaseMarkdownProcessor):
             recalc_dir = os.path.dirname(load_path)
         else:
             load_path = path
-        wb_values = load_workbook(load_path, data_only=True, keep_links=False)
-        wb_formulas = load_workbook(load_path, data_only=False, keep_links=False)
-        if recalc_dir:
-            shutil.rmtree(recalc_dir, ignore_errors=True)
-            _step("RECALC", "temporary recalculated file removed")
+        try:
+            wb_values = load_workbook(load_path, data_only=True, keep_links=False)
+            wb_formulas = load_workbook(load_path, data_only=False, keep_links=False)
+        finally:
+            if recalc_dir:
+                shutil.rmtree(recalc_dir, ignore_errors=True)
+                _step("RECALC", "temporary recalculated file removed")
 
         return ExcelExtractor(
             wb_values,
@@ -510,7 +518,7 @@ class ExcelProcessor(BaseMarkdownProcessor):
             logger.warning("[PROCESSOR][EXCEL] No ApplicationContext: skipping table registration for document %s", document_uid)
             return
 
-        content_store = context.get_content_store()
+        put_file = self.put_file_override or context.get_content_store().put_file
         artifacts_prefix = context.get_config().storage.tabular_store.artifacts_prefix
         source_revision = self._compute_source_revision(source_path)
         generated_at = utc_now_iso()
@@ -532,7 +540,7 @@ class ExcelProcessor(BaseMarkdownProcessor):
                 source_revision=source_revision,
                 table_file_name=local_file.name,
             )
-            stored = content_store.put_file(object_key, local_file, content_type="application/vnd.apache.parquet")
+            stored = put_file(object_key, local_file, content_type="application/vnd.apache.parquet")
             entry.update(
                 {
                     "dataset_uid": document_uid,

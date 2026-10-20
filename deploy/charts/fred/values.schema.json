@@ -6646,6 +6646,239 @@
                   "title": "ProcessingConfig",
                   "type": "object"
                 },
+                "manager_processing": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Workload identity and isolated persistence for manager-owned documents.",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "title": "Enabled",
+                          "type": "boolean"
+                        },
+                        "url": {
+                          "title": "Url",
+                          "type": "string"
+                        },
+                        "issuer": {
+                          "title": "Issuer",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "default": "fred-manager",
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "client_id": {
+                          "default": "knowledge-flow-worker",
+                          "title": "Client Id",
+                          "type": "string"
+                        },
+                        "client_secret_env": {
+                          "default": "MANAGER_WORKER_CLIENT_SECRET",
+                          "title": "Client Secret Env",
+                          "type": "string"
+                        },
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "vector_store": {
+                          "discriminator": {
+                            "mapping": {
+                              "chroma": "#/$defs/ChromaVectorStorageConfig",
+                              "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
+                              "in_memory": "#/$defs/InMemoryVectorStorage",
+                              "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
+                              "pgvector": "#/$defs/PgVectorStorageConfig"
+                            },
+                            "propertyName": "type"
+                          },
+                          "oneOf": [
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "in_memory",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "InMemoryVectorStorage",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "opensearch",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "description": "OpenSearch index name",
+                                  "title": "Index",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of documents to send in each bulk insert request",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "index"
+                              ],
+                              "title": "OpenSearchVectorIndexConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Local, embedded Chroma. No server needed.\n- persist_path: folder where Chroma (DuckDB/Parquet) stores data\n- collection_name: logical collection for your chunks\n- distance: ANN space; 'cosine' matches our UI-friendly similarity",
+                              "properties": {
+                                "type": {
+                                  "const": "chroma",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "local_path": {
+                                  "default": "~/.fred/knowledge-flow/chromadb-vector-store",
+                                  "description": "Local vector storage path",
+                                  "title": "Local Path",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Chroma collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                },
+                                "distance": {
+                                  "default": "cosine",
+                                  "description": "Vector space (affects HNSW metric)",
+                                  "enum": [
+                                    "cosine",
+                                    "l2",
+                                    "ip"
+                                  ],
+                                  "title": "Distance",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "ChromaVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "PostgreSQL + pgvector backend.\n- Uses shared `storage.postgres` connection settings.\n- Stores vectors in the default pgvector table under a collection name.",
+                              "properties": {
+                                "type": {
+                                  "const": "pgvector",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Logical collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "PgVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "ClickHouse backend.\n- Uses shared `storage.clickhouse` connection settings.\n- Stores vectors in the configured table.",
+                              "properties": {
+                                "type": {
+                                  "const": "clickhouse",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "table": {
+                                  "default": "fred_vectors",
+                                  "description": "ClickHouse table name for chunks",
+                                  "title": "Table",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of rows per insert batch",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "ClickHouseVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            }
+                          ],
+                          "title": "Vector Store"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
+                        "temporary_bytes": {
+                          "default": 1073741824,
+                          "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
+                          "maximum": 21474836480,
+                          "minimum": 1048576,
+                          "title": "Temporary Bytes",
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "issuer",
+                        "endpoint",
+                        "bucket",
+                        "vector_store"
+                      ],
+                      "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
                 "document_sources": {
                   "additionalProperties": {
                     "discriminator": {
@@ -11706,6 +11939,239 @@
                   "title": "ProcessingConfig",
                   "type": "object"
                 },
+                "manager_processing": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Workload identity and isolated persistence for manager-owned documents.",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "title": "Enabled",
+                          "type": "boolean"
+                        },
+                        "url": {
+                          "title": "Url",
+                          "type": "string"
+                        },
+                        "issuer": {
+                          "title": "Issuer",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "default": "fred-manager",
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "client_id": {
+                          "default": "knowledge-flow-worker",
+                          "title": "Client Id",
+                          "type": "string"
+                        },
+                        "client_secret_env": {
+                          "default": "MANAGER_WORKER_CLIENT_SECRET",
+                          "title": "Client Secret Env",
+                          "type": "string"
+                        },
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "vector_store": {
+                          "discriminator": {
+                            "mapping": {
+                              "chroma": "#/$defs/ChromaVectorStorageConfig",
+                              "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
+                              "in_memory": "#/$defs/InMemoryVectorStorage",
+                              "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
+                              "pgvector": "#/$defs/PgVectorStorageConfig"
+                            },
+                            "propertyName": "type"
+                          },
+                          "oneOf": [
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "in_memory",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "InMemoryVectorStorage",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "opensearch",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "description": "OpenSearch index name",
+                                  "title": "Index",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of documents to send in each bulk insert request",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "index"
+                              ],
+                              "title": "OpenSearchVectorIndexConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Local, embedded Chroma. No server needed.\n- persist_path: folder where Chroma (DuckDB/Parquet) stores data\n- collection_name: logical collection for your chunks\n- distance: ANN space; 'cosine' matches our UI-friendly similarity",
+                              "properties": {
+                                "type": {
+                                  "const": "chroma",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "local_path": {
+                                  "default": "~/.fred/knowledge-flow/chromadb-vector-store",
+                                  "description": "Local vector storage path",
+                                  "title": "Local Path",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Chroma collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                },
+                                "distance": {
+                                  "default": "cosine",
+                                  "description": "Vector space (affects HNSW metric)",
+                                  "enum": [
+                                    "cosine",
+                                    "l2",
+                                    "ip"
+                                  ],
+                                  "title": "Distance",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "ChromaVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "PostgreSQL + pgvector backend.\n- Uses shared `storage.postgres` connection settings.\n- Stores vectors in the default pgvector table under a collection name.",
+                              "properties": {
+                                "type": {
+                                  "const": "pgvector",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Logical collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "PgVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "ClickHouse backend.\n- Uses shared `storage.clickhouse` connection settings.\n- Stores vectors in the configured table.",
+                              "properties": {
+                                "type": {
+                                  "const": "clickhouse",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "table": {
+                                  "default": "fred_vectors",
+                                  "description": "ClickHouse table name for chunks",
+                                  "title": "Table",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of rows per insert batch",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "title": "ClickHouseVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            }
+                          ],
+                          "title": "Vector Store"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
+                        "temporary_bytes": {
+                          "default": 1073741824,
+                          "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
+                          "maximum": 21474836480,
+                          "minimum": 1048576,
+                          "title": "Temporary Bytes",
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "issuer",
+                        "endpoint",
+                        "bucket",
+                        "vector_store"
+                      ],
+                      "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
                 "document_sources": {
                   "additionalProperties": {
                     "discriminator": {
@@ -16708,6 +17174,216 @@
                   "title": "ProcessingConfig",
                   "type": "object"
                 },
+                "manager_processing": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Workload identity and isolated persistence for manager-owned documents.",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "title": "Enabled",
+                          "type": "boolean"
+                        },
+                        "url": {
+                          "title": "Url",
+                          "type": "string"
+                        },
+                        "issuer": {
+                          "title": "Issuer",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "default": "fred-manager",
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "client_id": {
+                          "default": "knowledge-flow-worker",
+                          "title": "Client Id",
+                          "type": "string"
+                        },
+                        "client_secret_env": {
+                          "default": "MANAGER_WORKER_CLIENT_SECRET",
+                          "title": "Client Secret Env",
+                          "type": "string"
+                        },
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "vector_store": {
+                          "discriminator": {
+                            "mapping": {
+                              "chroma": "#/$defs/ChromaVectorStorageConfig",
+                              "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
+                              "in_memory": "#/$defs/InMemoryVectorStorage",
+                              "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
+                              "pgvector": "#/$defs/PgVectorStorageConfig"
+                            },
+                            "propertyName": "type"
+                          },
+                          "oneOf": [
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "in_memory",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "InMemoryVectorStorage",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "opensearch",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "description": "OpenSearch index name",
+                                  "title": "Index",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of documents to send in each bulk insert request",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "OpenSearchVectorIndexConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Local, embedded Chroma. No server needed.\n- persist_path: folder where Chroma (DuckDB/Parquet) stores data\n- collection_name: logical collection for your chunks\n- distance: ANN space; 'cosine' matches our UI-friendly similarity",
+                              "properties": {
+                                "type": {
+                                  "const": "chroma",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "local_path": {
+                                  "default": "~/.fred/knowledge-flow/chromadb-vector-store",
+                                  "description": "Local vector storage path",
+                                  "title": "Local Path",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Chroma collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                },
+                                "distance": {
+                                  "default": "cosine",
+                                  "description": "Vector space (affects HNSW metric)",
+                                  "enum": [
+                                    "cosine",
+                                    "l2",
+                                    "ip"
+                                  ],
+                                  "title": "Distance",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "ChromaVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "PostgreSQL + pgvector backend.\n- Uses shared `storage.postgres` connection settings.\n- Stores vectors in the default pgvector table under a collection name.",
+                              "properties": {
+                                "type": {
+                                  "const": "pgvector",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Logical collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "PgVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "ClickHouse backend.\n- Uses shared `storage.clickhouse` connection settings.\n- Stores vectors in the configured table.",
+                              "properties": {
+                                "type": {
+                                  "const": "clickhouse",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "table": {
+                                  "default": "fred_vectors",
+                                  "description": "ClickHouse table name for chunks",
+                                  "title": "Table",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of rows per insert batch",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "ClickHouseVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            }
+                          ],
+                          "title": "Vector Store"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
+                        "temporary_bytes": {
+                          "default": 1073741824,
+                          "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
+                          "maximum": 21474836480,
+                          "minimum": 1048576,
+                          "title": "Temporary Bytes",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
                 "document_sources": {
                   "additionalProperties": {
                     "discriminator": {
@@ -21557,6 +22233,216 @@
                   },
                   "title": "ProcessingConfig",
                   "type": "object"
+                },
+                "manager_processing": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Workload identity and isolated persistence for manager-owned documents.",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "title": "Enabled",
+                          "type": "boolean"
+                        },
+                        "url": {
+                          "title": "Url",
+                          "type": "string"
+                        },
+                        "issuer": {
+                          "title": "Issuer",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "default": "fred-manager",
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "client_id": {
+                          "default": "knowledge-flow-worker",
+                          "title": "Client Id",
+                          "type": "string"
+                        },
+                        "client_secret_env": {
+                          "default": "MANAGER_WORKER_CLIENT_SECRET",
+                          "title": "Client Secret Env",
+                          "type": "string"
+                        },
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "vector_store": {
+                          "discriminator": {
+                            "mapping": {
+                              "chroma": "#/$defs/ChromaVectorStorageConfig",
+                              "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
+                              "in_memory": "#/$defs/InMemoryVectorStorage",
+                              "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
+                              "pgvector": "#/$defs/PgVectorStorageConfig"
+                            },
+                            "propertyName": "type"
+                          },
+                          "oneOf": [
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "in_memory",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "InMemoryVectorStorage",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "opensearch",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "description": "OpenSearch index name",
+                                  "title": "Index",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of documents to send in each bulk insert request",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "OpenSearchVectorIndexConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Local, embedded Chroma. No server needed.\n- persist_path: folder where Chroma (DuckDB/Parquet) stores data\n- collection_name: logical collection for your chunks\n- distance: ANN space; 'cosine' matches our UI-friendly similarity",
+                              "properties": {
+                                "type": {
+                                  "const": "chroma",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "local_path": {
+                                  "default": "~/.fred/knowledge-flow/chromadb-vector-store",
+                                  "description": "Local vector storage path",
+                                  "title": "Local Path",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Chroma collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                },
+                                "distance": {
+                                  "default": "cosine",
+                                  "description": "Vector space (affects HNSW metric)",
+                                  "enum": [
+                                    "cosine",
+                                    "l2",
+                                    "ip"
+                                  ],
+                                  "title": "Distance",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "ChromaVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "PostgreSQL + pgvector backend.\n- Uses shared `storage.postgres` connection settings.\n- Stores vectors in the default pgvector table under a collection name.",
+                              "properties": {
+                                "type": {
+                                  "const": "pgvector",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Logical collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "PgVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "ClickHouse backend.\n- Uses shared `storage.clickhouse` connection settings.\n- Stores vectors in the configured table.",
+                              "properties": {
+                                "type": {
+                                  "const": "clickhouse",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "table": {
+                                  "default": "fred_vectors",
+                                  "description": "ClickHouse table name for chunks",
+                                  "title": "Table",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of rows per insert batch",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "ClickHouseVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            }
+                          ],
+                          "title": "Vector Store"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
+                        "temporary_bytes": {
+                          "default": 1073741824,
+                          "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
+                          "maximum": 21474836480,
+                          "minimum": 1048576,
+                          "title": "Temporary Bytes",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 },
                 "document_sources": {
                   "additionalProperties": {
@@ -26408,6 +27294,216 @@
                   "title": "ProcessingConfig",
                   "type": "object"
                 },
+                "manager_processing": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Workload identity and isolated persistence for manager-owned documents.",
+                      "properties": {
+                        "enabled": {
+                          "default": false,
+                          "title": "Enabled",
+                          "type": "boolean"
+                        },
+                        "url": {
+                          "title": "Url",
+                          "type": "string"
+                        },
+                        "issuer": {
+                          "title": "Issuer",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "default": "fred-manager",
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "client_id": {
+                          "default": "knowledge-flow-worker",
+                          "title": "Client Id",
+                          "type": "string"
+                        },
+                        "client_secret_env": {
+                          "default": "MANAGER_WORKER_CLIENT_SECRET",
+                          "title": "Client Secret Env",
+                          "type": "string"
+                        },
+                        "endpoint": {
+                          "title": "Endpoint",
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "title": "Bucket",
+                          "type": "string"
+                        },
+                        "region": {
+                          "default": "us-east-1",
+                          "title": "Region",
+                          "type": "string"
+                        },
+                        "access_key_env": {
+                          "default": "MANAGER_DERIVED_ACCESS_KEY",
+                          "title": "Access Key Env",
+                          "type": "string"
+                        },
+                        "secret_key_env": {
+                          "default": "MANAGER_DERIVED_SECRET_KEY",
+                          "title": "Secret Key Env",
+                          "type": "string"
+                        },
+                        "vector_store": {
+                          "discriminator": {
+                            "mapping": {
+                              "chroma": "#/$defs/ChromaVectorStorageConfig",
+                              "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
+                              "in_memory": "#/$defs/InMemoryVectorStorage",
+                              "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
+                              "pgvector": "#/$defs/PgVectorStorageConfig"
+                            },
+                            "propertyName": "type"
+                          },
+                          "oneOf": [
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "in_memory",
+                                  "title": "Type",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "InMemoryVectorStorage",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "properties": {
+                                "type": {
+                                  "const": "opensearch",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "description": "OpenSearch index name",
+                                  "title": "Index",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of documents to send in each bulk insert request",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "OpenSearchVectorIndexConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Local, embedded Chroma. No server needed.\n- persist_path: folder where Chroma (DuckDB/Parquet) stores data\n- collection_name: logical collection for your chunks\n- distance: ANN space; 'cosine' matches our UI-friendly similarity",
+                              "properties": {
+                                "type": {
+                                  "const": "chroma",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "local_path": {
+                                  "default": "~/.fred/knowledge-flow/chromadb-vector-store",
+                                  "description": "Local vector storage path",
+                                  "title": "Local Path",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Chroma collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                },
+                                "distance": {
+                                  "default": "cosine",
+                                  "description": "Vector space (affects HNSW metric)",
+                                  "enum": [
+                                    "cosine",
+                                    "l2",
+                                    "ip"
+                                  ],
+                                  "title": "Distance",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "ChromaVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "PostgreSQL + pgvector backend.\n- Uses shared `storage.postgres` connection settings.\n- Stores vectors in the default pgvector table under a collection name.",
+                              "properties": {
+                                "type": {
+                                  "const": "pgvector",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "collection_name": {
+                                  "default": "fred_chunks",
+                                  "description": "Logical collection name",
+                                  "title": "Collection Name",
+                                  "type": "string"
+                                }
+                              },
+                              "title": "PgVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "ClickHouse backend.\n- Uses shared `storage.clickhouse` connection settings.\n- Stores vectors in the configured table.",
+                              "properties": {
+                                "type": {
+                                  "const": "clickhouse",
+                                  "title": "Type",
+                                  "type": "string"
+                                },
+                                "table": {
+                                  "default": "fred_vectors",
+                                  "description": "ClickHouse table name for chunks",
+                                  "title": "Table",
+                                  "type": "string"
+                                },
+                                "bulk_size": {
+                                  "default": 1000,
+                                  "description": "Number of rows per insert batch",
+                                  "title": "Bulk Size",
+                                  "type": "integer"
+                                }
+                              },
+                              "title": "ClickHouseVectorStorageConfig",
+                              "type": "object",
+                              "additionalProperties": false
+                            }
+                          ],
+                          "title": "Vector Store"
+                        },
+                        "allow_insecure": {
+                          "default": false,
+                          "title": "Allow Insecure",
+                          "type": "boolean"
+                        },
+                        "temporary_bytes": {
+                          "default": 1073741824,
+                          "description": "Per-activity original plus output byte budget; size the worker volume for concurrent activities.",
+                          "maximum": 21474836480,
+                          "minimum": 1048576,
+                          "title": "Temporary Bytes",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "ManagerProcessingConfig",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
                 "document_sources": {
                   "additionalProperties": {
                     "discriminator": {
@@ -29388,6 +30484,302 @@
                         }
                       },
                       "type": "object"
+                    },
+                    "processing": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "derived": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "access_key_env_var": {
+                                  "type": "string"
+                                },
+                                "allow_insecure": {
+                                  "type": "boolean"
+                                },
+                                "bucket": {
+                                  "type": "string"
+                                },
+                                "cleanup_enabled": {
+                                  "description": "Disable admission and cleanup while restoring a database/storage pair.",
+                                  "type": "boolean"
+                                },
+                                "endpoint": {
+                                  "type": "string"
+                                },
+                                "force_path_style": {
+                                  "type": "boolean"
+                                },
+                                "limits": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "cleanup_backlog_bytes": {
+                                      "default": 1073741824,
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "cleanup_batch": {
+                                      "default": 100,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "cleanup_interval_seconds": {
+                                      "default": 30,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "downloads": {
+                                      "default": 8,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "file_bytes": {
+                                      "default": 104857600,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "idle_seconds": {
+                                      "default": 30,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "organization_bytes": {
+                                      "default": 5368709120,
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "personal_bytes": {
+                                      "default": 5368709120,
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "receipt_retention_days": {
+                                      "default": 7,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "s3_seconds": {
+                                      "default": 120,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "team_bytes": {
+                                      "default": 5368709120,
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "temp_bytes": {
+                                      "default": 838860800,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "transfer_seconds": {
+                                      "default": 300,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "uploads": {
+                                      "default": 8,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "prefix": {
+                                  "type": "string"
+                                },
+                                "region": {
+                                  "type": "string"
+                                },
+                                "secret_key_env_var": {
+                                  "type": "string"
+                                },
+                                "temp_dir": {
+                                  "type": "string"
+                                },
+                                "uploads_enabled": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "endpoint",
+                                "bucket"
+                              ],
+                              "type": "object"
+                            },
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "limits": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "cleanup_backlog_bytes": {
+                                  "default": 1073741824,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "cleanup_batch": {
+                                  "default": 100,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "cleanup_interval_seconds": {
+                                  "default": 30,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "downloads": {
+                                  "default": 8,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "file_bytes": {
+                                  "default": 104857600,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "idle_seconds": {
+                                  "default": 30,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "organization_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "personal_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "receipt_retention_days": {
+                                  "default": 7,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "s3_seconds": {
+                                  "default": 120,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "team_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "temp_bytes": {
+                                  "default": 838860800,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "transfer_seconds": {
+                                  "default": 300,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "uploads": {
+                                  "default": 8,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "temporal": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "connect_timeout_seconds": {
+                                  "default": 5,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "host": {
+                                  "default": "localhost:7233",
+                                  "type": "string"
+                                },
+                                "namespace": {
+                                  "default": "default",
+                                  "type": "string"
+                                },
+                                "rpc_timeout_seconds": {
+                                  "default": 10,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "task_queue": {
+                                  "default": "fred-manager-lifecycle",
+                                  "type": "string"
+                                },
+                                "workflow_id_prefix": {
+                                  "default": "fred-manager-lifecycle",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "worker": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "audience": {
+                                  "type": "string"
+                                },
+                                "client_id": {
+                                  "type": "string"
+                                },
+                                "issuer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "issuer",
+                                "audience",
+                                "client_id"
+                              ],
+                              "type": "object"
+                            },
+                            "worker_contract_file": {
+                              "description": "Generated by KF features.scheduler.export_contract from the deployed KF configuration.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "temporal",
+                            "worker_contract_file",
+                            "worker",
+                            "derived"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "type": "object"
@@ -30824,6 +32216,302 @@
                         }
                       },
                       "type": "object"
+                    },
+                    "processing": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "derived": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "access_key_env_var": {
+                                  "type": "string"
+                                },
+                                "allow_insecure": {
+                                  "type": "boolean"
+                                },
+                                "bucket": {
+                                  "type": "string"
+                                },
+                                "cleanup_enabled": {
+                                  "description": "Disable admission and cleanup while restoring a database/storage pair.",
+                                  "type": "boolean"
+                                },
+                                "endpoint": {
+                                  "type": "string"
+                                },
+                                "force_path_style": {
+                                  "type": "boolean"
+                                },
+                                "limits": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "cleanup_backlog_bytes": {
+                                      "default": 1073741824,
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "cleanup_batch": {
+                                      "default": 100,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "cleanup_interval_seconds": {
+                                      "default": 30,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "downloads": {
+                                      "default": 8,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "file_bytes": {
+                                      "default": 104857600,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "idle_seconds": {
+                                      "default": 30,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "organization_bytes": {
+                                      "default": 5368709120,
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "personal_bytes": {
+                                      "default": 5368709120,
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "receipt_retention_days": {
+                                      "default": 7,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "s3_seconds": {
+                                      "default": 120,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "team_bytes": {
+                                      "default": 5368709120,
+                                      "format": "int64",
+                                      "type": "integer"
+                                    },
+                                    "temp_bytes": {
+                                      "default": 838860800,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "transfer_seconds": {
+                                      "default": 300,
+                                      "format": "int64",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "uploads": {
+                                      "default": 8,
+                                      "format": "int32",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "prefix": {
+                                  "type": "string"
+                                },
+                                "region": {
+                                  "type": "string"
+                                },
+                                "secret_key_env_var": {
+                                  "type": "string"
+                                },
+                                "temp_dir": {
+                                  "type": "string"
+                                },
+                                "uploads_enabled": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "endpoint",
+                                "bucket"
+                              ],
+                              "type": "object"
+                            },
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "limits": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "cleanup_backlog_bytes": {
+                                  "default": 1073741824,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "cleanup_batch": {
+                                  "default": 100,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "cleanup_interval_seconds": {
+                                  "default": 30,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "downloads": {
+                                  "default": 8,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "file_bytes": {
+                                  "default": 104857600,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "idle_seconds": {
+                                  "default": 30,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "organization_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "personal_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "receipt_retention_days": {
+                                  "default": 7,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "s3_seconds": {
+                                  "default": 120,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "team_bytes": {
+                                  "default": 5368709120,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "temp_bytes": {
+                                  "default": 838860800,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "transfer_seconds": {
+                                  "default": 300,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "uploads": {
+                                  "default": 8,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "temporal": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "connect_timeout_seconds": {
+                                  "default": 5,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "host": {
+                                  "default": "localhost:7233",
+                                  "type": "string"
+                                },
+                                "namespace": {
+                                  "default": "default",
+                                  "type": "string"
+                                },
+                                "rpc_timeout_seconds": {
+                                  "default": 10,
+                                  "format": "int64",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "task_queue": {
+                                  "default": "fred-manager-lifecycle",
+                                  "type": "string"
+                                },
+                                "workflow_id_prefix": {
+                                  "default": "fred-manager-lifecycle",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "worker": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "audience": {
+                                  "type": "string"
+                                },
+                                "client_id": {
+                                  "type": "string"
+                                },
+                                "issuer": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "issuer",
+                                "audience",
+                                "client_id"
+                              ],
+                              "type": "object"
+                            },
+                            "worker_contract_file": {
+                              "description": "Generated by KF features.scheduler.export_contract from the deployed KF configuration.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "temporal",
+                            "worker_contract_file",
+                            "worker",
+                            "derived"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "type": "object"

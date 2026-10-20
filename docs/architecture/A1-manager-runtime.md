@@ -17,8 +17,10 @@ flowchart LR
     openfga["OpenFGA<br/>store fred-manager"]
     postgres[("Postgres<br/>database fred")]
     objects[("S3<br/>original document namespace")]
-    temporal["Temporal<br/>manager lifecycle queue"]
+    temporal["Temporal<br/>lifecycle and KF ingestion queues"]
     worker["fred-manager worker"]
+    kf["Existing Knowledge Flow workers"]
+    derived[("Isolated derived objects and vectors")]
 
     operator -- "ZIP + operator bearer" --> manager
     client -- "bearer token" --> manager
@@ -30,6 +32,10 @@ flowchart LR
     manager -- "immutable originals, bounded inventory" --> objects
     worker --> temporal
     worker --> postgres & openfga
+    temporal --> kf
+    kf -- "authenticated persistence callbacks" --> manager
+    kf --> derived
+    manager -- "verify and publish manifest" --> derived
 ```
 
 | Partner | What fred-manager uses | Contract |
@@ -38,7 +44,7 @@ flowchart LR
 | OpenFGA | `check`, `write`, `read` on its own store | [model and contracts](A2-manager-contracts.md), OpenFGA model |
 | Postgres | Its tables in the `fred` database | [model and contracts](A2-manager-contracts.md), Schema |
 | S3 | Conditional Put, verified Get, Delete and paginated List | [original storage](#original-storage) |
-| Temporal | Manager-owned space-deletion scheduling/activities | [lifecycle](#space-deletion-lifecycle) |
+| Temporal | Manager-owned lifecycle and delivery of existing KF ProcessPush | [lifecycle](#space-deletion-lifecycle) |
 | Clients | Public configuration and health; authenticated onboarding and business routes | [HTTP surface](A2-manager-contracts.md#fred-manager-http-surface) and [authentication](03-security.md#authentication) |
 | Services acting for a user | `/authorize/document`, `/authorize/scope` | [runtime reference](A1-manager-runtime.md), Search scope |
 
@@ -95,6 +101,7 @@ flowchart TB
 | `bootstrap` | the one-time root grant | two steps under the bootstrap lock (I9) |
 | `domain` | `Space`, `Folder`, `Document`, roles, parent rules | pure functions, unit-tested (I1, I7) |
 | `db` | content and space SQL | placement columns written by inserts only (I2) |
+| `processing` | durable acceptance, dispatch, stage fences, manifests, previews and cleanup | current actor authority and isolated publication (I26) |
 | `documents` | bounded transfers, upload journal, quotas, reads and autonomous object cleanup | verified publication and preserved originals (I25) |
 | `fga` | pinned store/model, check, role and link reads, guarded write; empty-store publication | roles and the space tree stay in OpenFGA; SQL publishes only the store/model binding |
 | `logging` | output format, request span, completion event | [logging](A3-manager-operations.md#logging) (I11, I13) |
@@ -615,3 +622,40 @@ FGA deletion rereads the first page after every mutation. SQL identifiers surviv
 ambiguous acknowledgments. An organization guard is removed last, fenced by the
 platform guard; a failed final SQL commit is recoverable without recreating that
 guard. Workflow history carries operation IDs, not credentials or canonical grants.
+
+## Document processing
+
+`processing::Processing` shares manager SQL/FGA and original storage, with its own
+strict workload authenticator and derived S3 client. `document_processing` is both
+the attempt journal and delivery outbox; it has a different lifetime from upload
+receipts and retains generations, policy, result counts and dispatch leases.
+`document_storage` binds the derived namespace to the installation.
+
+```mermaid
+sequenceDiagram
+    participant UI as Resources
+    participant M as Manager API
+    participant DB as Manager SQL
+    participant D as Manager worker
+    participant T as Temporal
+    participant K as Existing KF workers
+    participant S as Derived stores
+    UI->>M: Upload with profile, or process stored original
+    M->>DB: Guarded original and processing intent commit
+    M-->>UI: Original identity and processing summary
+    D->>DB: Lease due intents and release locks
+    D->>T: Describe or start existing ProcessPush
+    T->>K: Existing preparation, extraction, indexing activities
+    K->>M: Authenticated generation claim and original stream
+    K->>S: Stage immutable artifacts and scoped vectors
+    K->>M: Commit generation manifest
+    M->>S: Verify artifact bytes outside SQL lock
+    M->>DB: Recheck actor, fence and publish result
+    UI->>M: Reload persisted state and authorized preview
+```
+
+The Python export supplies the existing workflow JSON schema and profile policy.
+Rust validates and serializes that contract; workflow/activity names, argument
+shapes and registrations remain unchanged. Activity adapters select separate
+persistence only for manager sources. Queue routing and extraction supervision
+remain in the existing worker. HTTP startup has no Temporal connection.

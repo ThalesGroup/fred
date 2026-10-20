@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::{
     Storage, authorized, conflict, invalid,
-    models::{UploadReceipt, UploadRow, UploadStatus},
+    models::{UploadQuery, UploadReceipt, UploadRow, UploadStatus},
     unavailable,
 };
 use crate::{
@@ -96,11 +96,16 @@ impl Storage {
         user: &CurrentUser,
         folder_id: Uuid,
         key: Uuid,
-        retry_of: Option<Uuid>,
+        choices: UploadQuery,
         multipart: Multipart,
+        processing: Option<&crate::processing::Processing>,
     ) -> AppResult<(bool, UploadReceipt)> {
+        let profile = choices.profile;
         if !self.config.uploads_enabled {
             return Err(unavailable());
+        }
+        if profile.is_some() && processing.is_none_or(|p| !p.config.enabled) {
+            return Err(crate::processing::unavailable());
         }
         let _permit = self.uploads.clone().try_acquire_owned().map_err(|_| {
             AppError::problem(
@@ -118,6 +123,16 @@ impl Storage {
             Permission::Write,
         )
         .await?;
+        if profile.is_some() {
+            Box::pin(
+                processing
+                    .ok_or_else(crate::processing::unavailable)?
+                    .derived
+                    .validate_bucket(),
+            )
+            .await
+            .map_err(|_| crate::processing::unavailable())?;
+        }
         let spool = tokio::time::timeout(self.deadline(), self.spool(multipart))
             .await
             .map_err(|_| {
@@ -128,7 +143,7 @@ impl Storage {
                 )
             })??;
         let (fresh, row) = self
-            .reserve(user, &space, &folder, key, retry_of, &spool)
+            .reserve(user, &space, &folder, key, &spool, choices)
             .await?;
         if !fresh {
             return Ok((false, row.receipt));
@@ -138,7 +153,7 @@ impl Storage {
                 .put_verified(&row.object_key, &spool.path, spool.size, &spool.digest)
                 .await
                 .map_err(|_| unavailable())?;
-            self.publish(user, &row).await
+            self.publish(user, &row, processing).await
         }
         .await;
         match outcome {
@@ -242,9 +257,10 @@ impl Storage {
         space: &Space,
         folder: &Folder,
         key: Uuid,
-        retry_of: Option<Uuid>,
         file: &Spool,
+        choices: UploadQuery,
     ) -> AppResult<(bool, UploadRow)> {
+        let UploadQuery { retry_of, profile } = choices;
         let mut tx = self.writer(user, space.id).await?;
         let current = db::folder(&mut *tx, folder.id).await?;
         if current.space_id != space.id {
@@ -262,6 +278,7 @@ impl Storage {
                 || row.receipt.name != file.name
                 || row.receipt.size != file.size
                 || row.receipt.sha256 != digest
+                || row.receipt.processing_profile != profile
             {
                 return Err(conflict(
                     "idempotency_conflict",
@@ -293,6 +310,7 @@ impl Storage {
                 || previous.receipt.name != file.name
                 || previous.receipt.sha256 != digest
                 || previous.receipt.size != file.size
+                || previous.receipt.processing_profile != profile
             {
                 return Err(conflict(
                     "invalid_retry",
@@ -332,10 +350,10 @@ impl Storage {
             return Err(unavailable());
         }
         let id = Uuid::new_v4();
-        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',clock_timestamp()+make_interval(secs=>$13),$14) returning *")
+        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',clock_timestamp()+make_interval(secs=>$13),$14,$15) returning *")
             .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space.id).bind(folder.id).bind(owner)
             .bind(&file.name).bind(&file.mime).bind(file.size).bind(&digest).bind(format!("{}{id}",self.prefix))
-            .bind(self.config.limits.lease_seconds() as f64).bind(predecessor.as_ref().map(|p|p.id)).fetch_one(&mut *tx).await?;
+            .bind(self.config.limits.lease_seconds() as f64).bind(predecessor.as_ref().map(|p|p.id)).bind(profile).fetch_one(&mut *tx).await?;
         if let Some(previous) = predecessor {
             sqlx::query("update document_upload set successor_key=$2, acknowledged_at=clock_timestamp() where id=$1").bind(previous.id).bind(key).execute(&mut *tx).await?;
         }
@@ -344,7 +362,12 @@ impl Storage {
         Ok((true, row))
     }
 
-    async fn publish(&self, user: &CurrentUser, upload: &UploadRow) -> AppResult<UploadReceipt> {
+    async fn publish(
+        &self,
+        user: &CurrentUser,
+        upload: &UploadRow,
+        processing: Option<&crate::processing::Processing>,
+    ) -> AppResult<UploadReceipt> {
         let mut tx = self.writer(user, upload.receipt.space_id).await?;
         let row: UploadRow = sqlx::query_as("select * from document_upload where id=$1 for update")
             .bind(upload.id)
@@ -361,6 +384,22 @@ impl Storage {
             .bind(row.id).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(&row.receipt.name).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.actor).bind(&row.object_key).bind(row.quota_owner).execute(&mut *tx).await?;
         let receipt = sqlx::query_as("update document_upload set status='stored',document_id=id,completed_at=clock_timestamp() where id=$1 and status='pending' and expires_at>clock_timestamp() returning *")
             .bind(row.id).fetch_one(&mut *tx).await?;
+        if let Some(profile) = row.receipt.processing_profile {
+            processing
+                .ok_or_else(crate::processing::unavailable)?
+                .admit(
+                    &mut tx,
+                    &row.actor,
+                    row.receipt.request_key,
+                    row.id,
+                    row.organization_id,
+                    &crate::processing::models::Start {
+                        profile,
+                        retry_of: None,
+                    },
+                )
+                .await?;
+        }
         token_current(user)?;
         tx.commit().await?;
         tracing::info!(target:"fred.security.audit", audit_event="document.stored", operation_id=%row.id, actor_uid=%user.uid, space_id=%row.receipt.space_id, outcome="succeeded", "Document original stored");

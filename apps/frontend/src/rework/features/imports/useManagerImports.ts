@@ -46,8 +46,9 @@ export function useManagerImports(spaceId?: string) {
           target: { type: "document", id: e.receipt?.document_id ?? e.key, label: e.name },
           owner: actor,
           localOnly: true,
-          state:
-            e.phase === "stored"
+          state: e.receipt?.processing
+            ? e.receipt.processing.status
+            : e.phase === "stored"
               ? "succeeded"
               : e.phase === "uploading"
                 ? "running"
@@ -55,14 +56,28 @@ export function useManagerImports(spaceId?: string) {
                   ? "pending"
                   : "failed",
           progress: null,
-          step: e.phase,
+          step: e.receipt?.processing
+            ? {
+                queued: "listed",
+                preparation: "uploading",
+                extraction: "processing",
+                indexing: "indexing",
+                done: "done",
+              }[e.receipt.processing.stage]
+            : e.phase,
           error: e.error ?? null,
-          lastSeq: -1,
-          stage: "upload",
+          lastSeq: e.receipt?.processing?.revision ?? -1,
+          stage: e.receipt?.processing ? "analysis" : "upload",
           teamId: e.spaceId,
           conflict: null,
           registeredAt: e.createdAt,
-          terminalAt: e.receipt?.completed_at ? new Date(e.receipt.completed_at).getTime() : null,
+          terminalAt: e.receipt?.processing
+            ? e.receipt.processing.completed_at
+              ? new Date(e.receipt.processing.completed_at).getTime()
+              : null
+            : e.receipt?.completed_at
+              ? new Date(e.receipt.completed_at).getTime()
+              : null,
           acknowledgedAt: null,
           warnings: null,
           untracked: false,
