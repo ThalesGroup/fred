@@ -24,6 +24,13 @@ ingress:
   host: ""
   annotations: {}
 
+httpRoute:
+  enabled: false
+  parentRefs: []
+  hostnames: []
+  requestTimeout: ""
+  annotations: {}
+
 # Mounted as /app/config/configuration.yaml: fred-runtime's AgentPodConfig,
 # validated against it by values.schema.json. Set at least app.runtime_id,
 # app.base_url, security.m2m and security.user (README.md, "Configure").

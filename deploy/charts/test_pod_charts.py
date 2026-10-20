@@ -131,6 +131,60 @@ class PodChartTests(unittest.TestCase):
                 result = self.render(chart, merged(without, {"extraEnvVars": named}))
                 self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_agent_pod_http_route(self):
+        default = self.render("agent-pod", AGENT)
+        self.assertEqual(default.returncode, 0, default.stderr)
+        self.assertNotIn("kind: HTTPRoute", default.stdout)
+
+        values = merged(
+            AGENT,
+            {
+                "httpRoute": {
+                    "enabled": True,
+                    "parentRefs": [
+                        {
+                            "name": "public-gateway",
+                            "namespace": "envoy-gateway-system",
+                            "sectionName": "https",
+                        }
+                    ],
+                    "hostnames": ["app.example.com"],
+                    "requestTimeout": "300s",
+                }
+            },
+        )
+        result = self.render("agent-pod", values)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for expected in (
+            "kind: HTTPRoute",
+            "name: public-gateway",
+            "namespace: envoy-gateway-system",
+            "app.example.com",
+            'value: "/my/agents/v2"',
+            "name: release-agent-pod",
+            "port: 80",
+            'request: "300s"',
+        ):
+            self.assertIn(expected, result.stdout)
+
+    def test_agent_pod_http_route_requires_gateway_and_hostname(self):
+        enabled = merged(AGENT, {"httpRoute": {"enabled": True}})
+        self.assert_refused("agent-pod", enabled, "httpRoute.parentRefs is required")
+        gateway = merged(
+            enabled, {"httpRoute": {"parentRefs": [{"name": "public-gateway"}]}}
+        )
+        self.assert_refused("agent-pod", gateway, "httpRoute.hostnames is required")
+        self.assert_refused(
+            "agent-pod",
+            merged(gateway, {"httpRoute": {"hostnames": [""]}}),
+            "minLength: got 0, want 1",
+        )
+        self.assert_refused(
+            "agent-pod",
+            merged(AGENT, {"httpRoute": {"hostnmes": ["app.example.com"]}}),
+            "additional properties 'hostnmes' not allowed",
+        )
+
     def test_agent_pod_base_url_is_canonical(self):
         for path in ("foo", "/foo/", "/a//b", "/a/../b"):
             with self.subTest(path=path):
