@@ -2409,14 +2409,12 @@ async def test_document_discovery_unions_scoped_sources(tmp_path, metadata_store
 async def test_corpus_selection_union_remains_inside_owner_scope(monkeypatch, libraries, documents, expected):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     service.rebac = _FakeRebac({"doc-A", "doc-B", "outside-owner"})
     rows = [_metadata(document_uid=uid, file_name=uid + ".csv", tag_ids=[tag]) for uid, tag in [("doc-A", "lib-A"), ("doc-B", "lib-B"), ("outside-owner", "lib-foreign")]]
     service.metadata_store = _rows_store(rows)
     service._resolve_scope_tag_ids = AsyncMock(return_value={"lib-A", "lib-B"})
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
     datasets = await service._resolve_authorized_datasets(
         _user(), include_session_scope=False, owner_filter=OwnerFilter.TEAM, team_id="team-1", document_library_tags_ids=libraries, corpus_document_uids=documents
     )
@@ -2427,14 +2425,12 @@ async def test_corpus_selection_union_remains_inside_owner_scope(monkeypatch, li
 async def test_scoped_inventory_excludes_unready_legacy_and_removed_attachments(monkeypatch):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     rows = [_attachment_metadata(document_uid=uid, file_name=uid + ".csv", uploaded_by=owner) for uid, owner in [("ready", "u-1"), ("unready", "u-1"), ("legacy", "u-1"), ("foreign", "u-2")]]
     rows[0].mark_stage_done(ProcessingStage.SQL_INDEXED)
     rows[3].mark_stage_done(ProcessingStage.SQL_INDEXED)
     service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=rows))
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: None if metadata.document_uid == "legacy" else object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: None if metadata.document_uid == "legacy" else object())
     requested = [row.document_uid for row in rows]
     datasets = await service._resolve_authorized_datasets(_user(), include_corpus_scope=False, attachment_uids=requested)
     assert [dataset.metadata.document_uid for dataset in datasets] == ["ready"]
@@ -2447,14 +2443,12 @@ async def test_scoped_inventory_excludes_unready_legacy_and_removed_attachments(
 async def test_corpus_grant_does_not_replace_attachment_ownership(monkeypatch):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     service.rebac = _FakeRebac({"foreign"})
     foreign = _attachment_metadata(document_uid="foreign", file_name="private.csv", uploaded_by="u-2")
     service.metadata_store = _rows_store([foreign])
     service._resolve_scope_tag_ids = AsyncMock(return_value=None)
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
     assert await service._resolve_authorized_datasets(_user(), attachment_uids=["foreign"]) == []
 
 
@@ -2524,14 +2518,12 @@ async def test_tabular_stored_membership_does_not_override_document_denial(tmp_p
 async def test_tabular_candidate_authorization_failure_propagates(monkeypatch, scope):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     service.metadata_store = _rows_store([_metadata(document_uid="denied", file_name="confidential.csv", tag_ids=["shared-library"])])
     service.rebac = _FakeRebac(set(), readable_tag_ids={"shared-library"})
     service.rebac.has_user_permission = AsyncMock(side_effect=RuntimeError("authorization unavailable"))
     service.tag_service = _FakeTagService(readable_tag_ids={"shared-library"}, team_scopes={"team-a": {"shared-library"}}, personal_scope={"shared-library"})
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
 
     with pytest.raises(RuntimeError, match="authorization unavailable"):
         await service._resolve_authorized_datasets(_user(), include_session_scope=False, **scope)
@@ -2539,8 +2531,6 @@ async def test_tabular_candidate_authorization_failure_propagates(monkeypatch, s
 
 @pytest.mark.asyncio
 async def test_tabular_checks_each_workbook_once_with_bounded_concurrency(monkeypatch):
-    import knowledge_flow_backend.features.tabular.service as module
-
     rows = [_metadata(document_uid=f"workbook-{index}", file_name=f"workbook-{index}.xlsx", tag_ids=["shared-library"]) for index in range(23)]
     non_tabular = _metadata(document_uid="plain-document", file_name="note.txt", tag_ids=["shared-library"])
     service = object.__new__(TabularService)
@@ -2561,10 +2551,9 @@ async def test_tabular_checks_each_workbook_once_with_bounded_concurrency(monkey
             active -= 1
 
     rebac.has_user_permission = slow_check
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: None)
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: None)
     monkeypatch.setattr(
-        module,
-        "read_tabular_multi_artifact",
+        "knowledge_flow_backend.features.tabular.service.read_tabular_multi_artifact",
         lambda metadata: None if metadata.document_uid == "plain-document" else SimpleNamespace(tables=[SimpleNamespace(query_alias=f"{metadata.document_uid}_{index}") for index in range(2)]),
     )
 
