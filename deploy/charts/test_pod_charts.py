@@ -61,10 +61,18 @@ def merged(base: dict, overrides: dict) -> dict:
 @unittest.skipUnless(shutil.which("helm"), "helm is not installed")
 class PodChartTests(unittest.TestCase):
     def render(
-        self, chart: str, values: dict, *, notes: bool = False
+        self, chart: str, values: dict, *, notes: bool = False, dependency: bool = False
     ) -> subprocess.CompletedProcess:
         with tempfile.TemporaryDirectory() as work:
             source = CHARTS / chart
+            if dependency:
+                # The chart as a parent chart's subchart, its values under its name.
+                source = Path(work) / "parent"
+                shutil.copytree(CHARTS / chart, source / "charts" / chart)
+                (source / "Chart.yaml").write_text(
+                    "apiVersion: v2\nname: parent\nversion: 1.0.0\n"
+                )
+                values = {chart: values}
             if notes:
                 # helm renders NOTES.txt only on install, which needs a cluster:
                 # render it as an ordinary template of a copy instead.
@@ -172,6 +180,18 @@ class PodChartTests(unittest.TestCase):
             "additional properties 'replicas' not allowed",
         )
 
+    def test_both_charts_render_as_a_dependency(self):
+        # Helm hands every subchart a `global` key, which the schema must accept.
+        for chart, values in (("agent-pod", AGENT), ("knowledge-base", KNOWLEDGE_BASE)):
+            with self.subTest(chart=chart):
+                result = self.render(chart, values, dependency=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                refused = self.render(
+                    chart, merged(values, {"replicas": 2}), dependency=True
+                )
+                self.assertNotEqual(refused.returncode, 0, refused.stdout)
+                self.assertIn("additional properties 'replicas'", refused.stderr)
+
     def test_agent_pod_notes_give_the_registration(self):
         result = self.render("agent-pod", AGENT, notes=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -181,6 +201,12 @@ class PodChartTests(unittest.TestCase):
             result.stdout,
         )
         self.assertIn("ingress_prefix: /my/agents/v2", result.stdout)
+
+    def test_knowledge_base_notes_give_the_publisher(self):
+        result = self.render("knowledge-base", KNOWLEDGE_BASE, notes=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("- client_id: pod", result.stdout)
+        self.assertIn("prefix: my.kb", result.stdout)
 
     def test_agent_pod_mounts_extra_config_files(self):
         result = self.render(
