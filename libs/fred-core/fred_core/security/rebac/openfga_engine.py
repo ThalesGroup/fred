@@ -78,6 +78,11 @@ _MAX_TUPLES_PER_WRITE = 100
 # a reference that keeps gaining tuples from looping forever.
 _MAX_REFERENCE_CLEANUP_PASSES = 10
 
+# OpenFGA cuts ListObjects at `listObjectsMaxResults` (1,000 by default) and at
+# `listObjectsDeadline` (3 s by default) without signalling either.
+_LIST_OBJECTS_DEFAULT_MAX_RESULTS = 1000
+_LIST_OBJECTS_DEADLINE_WARNING_SECONDS = 2.5
+
 _ORGANIZATION_OBJECT = f"{Resource.ORGANIZATION.value}:{ORGANIZATION_ID}"
 _ACCOUNT_STATUS_RELATION_NAMES = frozenset(
     relation.value for relation in _ACCOUNT_STATUS_RELATIONS
@@ -403,11 +408,25 @@ class OpenFgaRebacEngine(RebacEngine):
                 ],
             )
             options = self._build_options(consistency=consistency_token)
+            started = time.monotonic()
             response = await client.list_objects(body, options)
-            return [
+            elapsed = time.monotonic() - started
+            references = [
                 OpenFgaRebacEngine._openfga_id_to_reference(obj)
                 for obj in response.objects
             ]
+            if (
+                len(references) >= _LIST_OBJECTS_DEFAULT_MAX_RESULTS
+                or elapsed >= _LIST_OBJECTS_DEADLINE_WARNING_SECONDS
+            ):
+                logger.warning(
+                    "event=authorization_list_objects outcome=possibly_truncated type=%s relation=%s returned=%d elapsed_s=%.2f",
+                    resource_type.value,
+                    permission.value,
+                    len(references),
+                    elapsed,
+                )
+            return references
 
     async def lookup_subjects(
         self,

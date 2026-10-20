@@ -448,8 +448,10 @@ injection is performed against the shared deployment.
 
 ## Folder inventory and deletion
 
-`scenarios/test_folder_inventory.py` covers the known-folder part of
-[#2845](https://github.com/ThalesGroup/fred/issues/2845). The default case creates
+`scenarios/test_folder_inventory.py` covers
+[#2845](https://github.com/ThalesGroup/fred/issues/2845). The tabular case uploads
+one team CSV and checks that discovery (team-scoped and unscoped), description and a
+SQL query all reach it. The folder case creates
 three processed documents, checks the folder detail and paginated listing, then
 deletes the folder. Store audit counts and the team's storage counter must first
 increase by the fixture's exact contribution, then return to their baseline.
@@ -461,14 +463,15 @@ No Test Assistant or chat model is required for this focused campaign.
 ```bash
 make integration-test-k3d VALIDATION_ARGS="scenarios/test_folder_inventory.py"
 
-# Explicitly create 1,001 extra readable documents plus 20 processed target docs:
+# Explicitly create the large background corpora (1,001 for the folder case,
+# 3,000 for the tabular case):
 FRED_VALIDATION_LARGE_CORPUS=1 make integration-test-k3d \
   VALIDATION_ARGS="scenarios/test_folder_inventory.py"
 ```
 
-The large case is skipped by default. It uploads the background corpus in batches
-of 50 through `/upload-documents`, without scheduling embeddings for it. It then
-checks the small target folder amid more than 1,000 readable documents. Allow time
+The large cases are skipped by default. They upload the background corpus in batches
+of 50 through `/upload-documents`, without scheduling embeddings for it. They then
+check the small target folder, or the CSV, amid more than 1,000 readable documents. Allow time
 for upload, authorization, store audits and cleanup; this is a correctness campaign,
 not a latency benchmark. Use only a disposable local test deployment with sufficient
 quota. The ordering of a real OpenFGA ListObjects result is not guaranteed; the

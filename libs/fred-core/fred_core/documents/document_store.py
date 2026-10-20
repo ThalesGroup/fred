@@ -368,21 +368,19 @@ class BaseDocumentMetadataStore:
     async def get_document_uids_with_any_label(
         self,
         labels: set[str],
-        document_uids: set[str] | None = None,
+        tag_ids: set[str] | None = None,
         session: AsyncSession | None = None,
     ) -> List[str]:
         """Return the uids of documents carrying ANY of `labels` (OR
-        semantics) as a single indexed `label IN (...)` query — the
-        multi-label sibling of `get_document_uids_with_label`, for callers
-        that would otherwise loop it once per label. Same narrowing/
-        authorization contract: narrow via `document_uids`, this method
-        applies no authorization of its own."""
+        semantics) as a single indexed `label IN (...)` query, optionally
+        narrowed to documents filed under `tag_ids` (the caller's authorized
+        folders — this method applies no authorization of its own)."""
 
     @abstractmethod
     async def get_document_uids_with_any_label_page(
         self,
         labels: set[str],
-        document_uids: set[str] | None = None,
+        tag_ids: set[str] | None = None,
         *,
         offset: int = 0,
         limit: int = 50,
@@ -393,17 +391,17 @@ class BaseDocumentMetadataStore:
         `COUNT(*)`, instead of fetching every matching uid and slicing in
         Python — enumerating many pages does not re-fetch the whole match set
         on each call. Same narrowing/authorization contract: narrow via
-        `document_uids`, this method applies no authorization of its own."""
+        `tag_ids`, this method applies no authorization of its own."""
 
     @abstractmethod
     async def get_distinct_labels(
         self,
-        document_uids: set[str] | None = None,
+        tag_ids: set[str] | None = None,
         session: AsyncSession | None = None,
     ) -> List[str]:
         """Return the distinct labels in use, sorted, optionally narrowed to
-        `document_uids` (see `get_document_uids_with_label` — same
-        authorization contract: narrow here, this method applies none)."""
+        documents filed under `tag_ids` (same authorization contract: narrow
+        here, this method applies none)."""
 
     @abstractmethod
     async def touch_label_mutation_audit_fields(

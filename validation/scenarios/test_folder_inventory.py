@@ -164,3 +164,74 @@ def test_folder_inventory_and_last_link_cleanup(
             set(checked(client.get(f"/tags/{background['id']}")).json()["item_ids"])
             == background_uids
         )
+
+
+@pytest.mark.parametrize(
+    "background_count",
+    [
+        0,
+        pytest.param(
+            3000,
+            marks=pytest.mark.skipif(
+                os.getenv("FRED_VALIDATION_LARGE_CORPUS") != "1",
+                reason="Set FRED_VALIDATION_LARGE_CORPUS=1 to create 3,000 background documents",
+            ),
+        ),
+    ],
+)
+def test_tabular_workbook_amid_large_readable_corpus(
+    cp: ClientFactory, kf: ClientFactory, background_count: int
+) -> None:
+    """Tabular tools see a team CSV however many documents the caller can read."""
+    editor = next(
+        name for name, user in USERS.items() if user.is_team_editor_in(TEST_TEAM)
+    )
+    team = next(
+        t for t in checked(cp(editor).get("/teams")).json() if t["name"] == TEST_TEAM
+    )
+    team_id = team.get("id") or team["team_id"]
+    client = kf(editor)
+
+    with ExitStack() as cleanup:
+        background = cleanup.enter_context(library(client, team_id))
+        target = cleanup.enter_context(library(client, team_id))
+        upload_unprocessed(client, background["id"], background_count)
+        uid = ingest(
+            client,
+            [target["id"]],
+            "",
+            file=(f"validation-{uuid4().hex}.csv", "city,amount\nParis,10\nLyon,20\n", "text/csv"),
+        )
+        scope = {"owner_filter": "team", "team_id": team_id}
+
+        def listed(params: dict) -> set[str]:
+            documents = checked(client.get("/tabular/documents", params=params, timeout=180)).json()
+            return {d["document_uid"] for d in documents}
+
+        wait_until(lambda: uid in listed(scope), description="tabular indexing", timeout=180)
+        assert uid in listed({}), "Unscoped discovery must also see the workbook"
+
+        [description] = checked(
+            client.get(
+                "/tabular/documents/schemas",
+                params={"document_uids": uid, **scope},
+                timeout=180,
+            )
+        ).json()
+        alias = description["tables"][0]["query_alias"]
+        result = checked(
+            client.post(
+                "/tabular/query",
+                json={"sql": f'SELECT SUM(amount) AS total FROM "{alias}"', "dataset_uids": [uid], **scope},
+                timeout=180,
+            )
+        ).json()
+        assert result["rows"] == [{"total": 30}]
+        found = checked(
+            client.post(
+                "/tabular/search",
+                json={"keyword": "Lyon", "dataset_uids": [uid], **scope},
+                timeout=180,
+            )
+        ).json()
+        assert [match["document_uid"] for match in found["matches"]] == [uid]

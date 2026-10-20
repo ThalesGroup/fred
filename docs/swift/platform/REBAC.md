@@ -466,6 +466,21 @@ Fred uses **OpenFGA** as the ReBAC engine (compatible with the Zanzibar model).
 
 - Deployment guidance for OpenFGA: https://openfga.dev/docs/getting-started/setup-openfga/overview
 
+### Listing what a user can read
+
+`ListObjects` is not a complete inventory. The plain API stops at
+`listObjectsMaxResults` (1,000 by default) and every variant stops at
+`listObjectsDeadline` (3 s by default), both without any signal.
+
+- `lookup_resources` logs `outcome=possibly_truncated` when a response reaches
+  1,000 objects or nears the default deadline. Each subfolder is a folder, so a
+  user reading more than 1,000 folders in total is still truncated. The
+  streamed API is not used: the SDK swallows its connection errors.
+- Documents and resources are never enumerated. `document#read` and
+  `resource#read` are `read from parent`, so one is readable exactly when one of
+  its folders is: resolve the readable folders (or the request's scope), then
+  select by stored folder membership. Known candidates may be checked one by one.
+
 ## Prerequisites
 
 - [Deploy OpenFGA](https://openfga.dev/docs/getting-started/setup-openfga/overview) (localy, with Docker, on Kubernetes...) and provide an API token to the ReBAC engine (see `token_env_var` below).

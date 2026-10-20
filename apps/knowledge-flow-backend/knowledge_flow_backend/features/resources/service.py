@@ -65,15 +65,17 @@ class ResourceService:
         return await self._resource_store.get_resource_by_id(resource_id)
 
     async def list_resources_by_kind(self, *, kind: ResourceKind, user: KeycloakUser) -> list[Resource]:
-        authorized_resources_ref = await self.rebac.lookup_user_resources(user, ResourcePermission.READ)
+        # `resource#read = read from parent`: readable folders bound the result,
+        # whereas enumerating readable resources is capped and unbounded.
+        readable_tags = await self.rebac.lookup_user_resources(user, TagPermission.READ)
         resources = await self._resource_store.get_all_resources(kind=kind)
 
-        if isinstance(authorized_resources_ref, RebacDisabledResult):
+        if isinstance(readable_tags, RebacDisabledResult):
             # rebac disabled, skip filtering
             return resources
 
-        authorized_resources_ids = {r.id for r in authorized_resources_ref}
-        return [res for res in resources if res.id in authorized_resources_ids]
+        readable_tag_ids = {tag.id for tag in readable_tags}
+        return [res for res in resources if readable_tag_ids.intersection(res.library_tags)]
 
     async def delete(self, *, resource_id: str, user: KeycloakUser) -> None:
         await self.rebac.check_user_permission_or_raise(user, ResourcePermission.DELETE, resource_id)

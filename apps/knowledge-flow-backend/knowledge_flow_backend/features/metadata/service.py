@@ -129,19 +129,26 @@ class MetadataService:
             readable.update(uid for uid, allowed in zip(batch, results) if allowed)
         return readable
 
+    async def _readable_tag_ids(self, user: KeycloakUser) -> set[str] | RebacDisabledResult:
+        """Folders the user can read. A document is readable exactly when one of
+        its folders is (`document#read = read from parent`), so this replaces any
+        enumeration of readable documents, whose count is unbounded."""
+        refs = await self.rebac.lookup_user_resources(user, TagPermission.READ)
+        if isinstance(refs, RebacDisabledResult):
+            return refs
+        return {ref.id for ref in refs}
+
     async def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        readable_tags = await self._readable_tag_ids(user)
 
         try:
             docs = await self.metadata_store.get_all_metadata(filters_dict)
 
-            if isinstance(authorized_doc_ref, RebacDisabledResult):
+            if isinstance(readable_tags, RebacDisabledResult):
                 # if rebac is disabled, do not filter
                 return docs
 
-            # Filter by permission (todo: use rebac ids to filter at store (DB) level)
-            authorized_doc_ids = [d.id for d in authorized_doc_ref]
-            return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+            return [d for d in docs if readable_tags.intersection(d.tags.tag_ids or [])]
         except MetadataDeserializationError as e:
             logger.error(f"[Metadata] Deserialization error: {e}")
             raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
@@ -955,23 +962,21 @@ class MetadataService:
         Pushes `offset`/`limit` into the store query
         (`get_document_uids_with_any_label_page`) rather than fetching every
         matching uid and slicing in Python — enumerating many pages does not
-        repeat a full, unbounded label scan on each call. The one thing that
-        IS still per-call is the ReBAC `lookup_user_resources` resolution
-        (same cost every other authorized/paginated listing in this service
-        pays per call; there is no cross-call authorization cache here).
+        repeat a full, unbounded label scan on each call. The readable-folder
+        resolution is still per call; there is no cross-call authorization
+        cache here.
         """
         targets = set(normalize_labels([label]))
         if not targets:
             return [], 0
 
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
+        readable_tags = await self._readable_tag_ids(user)
+        if isinstance(readable_tags, RebacDisabledResult):
             page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, offset=offset, limit=limit)
         else:
-            authorized_ids = {d.id for d in authorized_doc_ref}
-            if not authorized_ids:
+            if not readable_tags:
                 return [], 0
-            page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, document_uids=authorized_ids, offset=offset, limit=limit)
+            page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, tag_ids=readable_tags, offset=offset, limit=limit)
         docs = await self.metadata_store.get_metadata_by_uids(page_uids) if page_uids else []
         return docs, total
 
@@ -985,14 +990,13 @@ class MetadataService:
         if not targets:
             return set()
 
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
+        readable_tags = await self._readable_tag_ids(user)
+        if isinstance(readable_tags, RebacDisabledResult):
             uids = await self.metadata_store.get_document_uids_with_any_label(targets)
         else:
-            authorized_ids = {d.id for d in authorized_doc_ref}
-            if not authorized_ids:
+            if not readable_tags:
                 return set()
-            uids = await self.metadata_store.get_document_uids_with_any_label(targets, document_uids=authorized_ids)
+            uids = await self.metadata_store.get_document_uids_with_any_label(targets, tag_ids=readable_tags)
         return set(uids)
 
     async def list_document_labels(self, user: KeycloakUser) -> list[str]:
@@ -1000,14 +1004,13 @@ class MetadataService:
         (UI vocabulary) — an indexed distinct query narrowed to the caller's
         authorized documents, never revealing a label used only on documents
         the caller cannot read."""
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
+        readable_tags = await self._readable_tag_ids(user)
+        if isinstance(readable_tags, RebacDisabledResult):
             return await self.metadata_store.get_distinct_labels()
 
-        authorized_ids = {d.id for d in authorized_doc_ref}
-        if not authorized_ids:
+        if not readable_tags:
             return []
-        return await self.metadata_store.get_distinct_labels(document_uids=authorized_ids)
+        return await self.metadata_store.get_distinct_labels(tag_ids=readable_tags)
 
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
