@@ -14,6 +14,7 @@
 
 # app/features/resource/service.py
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -65,8 +66,8 @@ class ResourceService:
         return await self._resource_store.get_resource_by_id(resource_id)
 
     async def list_resources_by_kind(self, *, kind: ResourceKind, user: KeycloakUser) -> list[Resource]:
-        # `resource#read = read from parent`: readable folders bound the result,
-        # whereas enumerating readable resources is capped and unbounded.
+        # Stored folders only select candidates: a stale save can restore a
+        # removed SQL membership while OpenFGA continues to deny the resource.
         readable_tags = await self.rebac.lookup_user_resources(user, TagPermission.READ)
         resources = await self._resource_store.get_all_resources(kind=kind)
 
@@ -75,7 +76,13 @@ class ResourceService:
             return resources
 
         readable_tag_ids = {tag.id for tag in readable_tags}
-        return [res for res in resources if readable_tag_ids.intersection(res.library_tags)]
+        candidates = [res for res in resources if readable_tag_ids.intersection(res.library_tags)]
+        readable: list[Resource] = []
+        for start in range(0, len(candidates), 10):
+            batch = candidates[start : start + 10]
+            allowed = await asyncio.gather(*(self.rebac.has_user_permission(user, ResourcePermission.READ, res.id) for res in batch))
+            readable.extend(res for res, permitted in zip(batch, allowed) if permitted)
+        return readable
 
     async def delete(self, *, resource_id: str, user: KeycloakUser) -> None:
         await self.rebac.check_user_permission_or_raise(user, ResourcePermission.DELETE, resource_id)

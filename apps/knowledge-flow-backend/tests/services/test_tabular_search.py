@@ -28,7 +28,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fred_core import KeycloakUser, TagPermission
+from fred_core import DocumentPermission, KeycloakUser, TagPermission
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -72,11 +72,12 @@ class _FakeRebac:
     async def lookup_user_resources(self, user, permission):
         """Readable documents expose their folder; documents are never enumerated."""
         del user
-        assert permission == TagPermission.READ
+        assert permission is TagPermission.READ
         return [SimpleNamespace(id=f"lib-{uid}") for uid in sorted(self.readable_document_uids)]
 
     async def has_user_permission(self, user, permission, resource_id):
-        del user, permission
+        del user
+        assert permission is DocumentPermission.READ
         return resource_id in self.readable_document_uids
 
 

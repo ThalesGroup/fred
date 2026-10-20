@@ -74,10 +74,12 @@ async def test_service_agent_sees_team_dataset_despite_empty_user_baseline(tmp_p
         team_id="team-a",
     )
     assert schema.document_uid == "doc-team-a"
+    assert service.rebac.checked_document_uids == []
 
 
 @pytest.mark.asyncio
-async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_store):
+@pytest.mark.parametrize("direct_grant", [False, True])
+async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_store, direct_grant):
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
 
@@ -92,7 +94,7 @@ async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_
     )
 
     service = TabularService()
-    service.rebac = _FakeRebac(set())
+    service.rebac = _FakeRebac({"doc-team-a"} if direct_grant else set(), readable_tag_ids={"tag-team-a"} if direct_grant else set())
     service.tag_service = _FakeTagService(
         readable_tag_ids=set(),
         team_scopes={"team-a": {"tag-team-a"}},
@@ -100,7 +102,7 @@ async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_
 
     assert await service.list_datasets(_user(["service_agent"])) == []
 
-    with pytest.raises(PermissionError):
+    with pytest.raises(FileNotFoundError if direct_grant else PermissionError):
         await service.describe_documents(
             _user(["service_agent"]),
             ["doc-team-a"],
@@ -130,7 +132,9 @@ async def test_the_team_datasets_are_kept_for_a_service_identity_only(tmp_path: 
     service = TabularService()
     service.rebac = _FakeRebac(set())
     service.tag_service = _FakeTagService(
-        readable_tag_ids=set(),
+        # A delegated workload must still honor a document denial when stored
+        # folder membership and the authoritative object grant disagree.
+        readable_tag_ids={"tag-team-a"},
         team_scopes={"team-a": {"tag-team-a"}},
     )
     # A workload that speaks for people also holds the service role; as itself it reads nothing.
@@ -143,6 +147,7 @@ async def test_the_team_datasets_are_kept_for_a_service_identity_only(tmp_path: 
 
     assert [dataset.document_uid for dataset in evaluator] == ["doc-team-a"]
     assert workload == []
+    assert service.rebac.checked_document_uids == ["doc-team-a"]
 
 
 @pytest.mark.asyncio
@@ -197,7 +202,7 @@ async def test_normal_user_with_rebac_relation_can_access_team_dataset(tmp_path:
     service = TabularService()
     # A regular user must be allowed when they can read the team's folder;
     # this confirms the normal ReBAC path still works.
-    service.rebac = _FakeRebac(set(), readable_tag_ids={"tag-team-a"})
+    service.rebac = _FakeRebac({"doc-team-a"}, readable_tag_ids={"tag-team-a"})
     service.tag_service = _FakeTagService(
         readable_tag_ids={"tag-team-a"},
         team_scopes={"team-a": {"tag-team-a"}},

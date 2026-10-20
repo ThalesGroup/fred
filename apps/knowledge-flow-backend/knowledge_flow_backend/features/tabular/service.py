@@ -27,9 +27,10 @@ from typing import Literal
 
 import duckdb
 import pandas as pd
-from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, TagPermission
+from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, TagPermission, is_service_agent
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
@@ -979,6 +980,18 @@ class TabularService:
                     )
                 )
 
+        # Stored folder membership supplies candidates, not document permission.
+        # Check only tabular documents, once per workbook, before exposing tables.
+        # Evaluation workers retain their existing team-folder authorization.
+        if not (scoped_tag_ids is not None and is_service_agent(user) and not holds_caller_role(user)):
+            candidate_uids = list(dict.fromkeys(dataset.metadata.document_uid for dataset in resolved_datasets))
+            readable_uids: set[str] = set()
+            for start in range(0, len(candidate_uids), 10):
+                batch = candidate_uids[start : start + 10]
+                permissions = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in batch))
+                readable_uids.update(uid for uid, allowed in zip(batch, permissions) if allowed)
+            resolved_datasets = [dataset for dataset in resolved_datasets if dataset.metadata.document_uid in readable_uids]
+
         if include_session_scope and attachment_uids:
             corpus_uids = {dataset.metadata.document_uid for dataset in resolved_datasets}
             for uid, datasets in owned.items():
@@ -1137,11 +1150,10 @@ class TabularService:
         team_id: str | None,
         corpus_document_uids: list[str] | None,
     ) -> tuple[list[DocumentMetadata], set[str] | None]:
-        """Readable corpus documents and the active scope's tag ids.
+        """Corpus candidates and the active scope's authorized tag ids.
 
-        A document is readable exactly when one of its folders is, so documents
-        come from the stored membership of the scope's folders, or of every
-        readable folder when unscoped; readable documents are never enumerated."""
+        Stored folder membership narrows discovery without enumerating readable
+        documents. The dataset resolver checks tabular candidates individually."""
 
         scoped_tag_ids = await self._resolve_scope_tag_ids(
             user, document_library_tags_ids=None if corpus_document_uids is not None else document_library_tags_ids, owner_filter=owner_filter, team_id=team_id
@@ -1153,6 +1165,9 @@ class TabularService:
                 # Tagless fast-ingest documents require uploader authorization, even
                 # when corpus ReBAC is disabled.
                 return [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids], None
+            if is_service_agent(user) and not holds_caller_role(user):
+                # The evaluation worker reads only a supplied team's folders.
+                return [], None
             authorized_tag_ids = {tag.id for tag in readable_tags}
 
         if corpus_document_uids is None:

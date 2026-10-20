@@ -78,8 +78,9 @@ class _FakeRebac:
     — documents are readable through their folders and never enumerated — or
     `RebacDisabledResult` when `disabled=True` ("everything")."""
 
-    def __init__(self, *, readable_uids: set[str] | None = None, denied: set[str] | None = None, disabled: bool = False):
+    def __init__(self, *, readable_uids: set[str] | None = None, readable_tags: set[str] | None = None, denied: set[str] | None = None, disabled: bool = False):
         self._readable_uids = readable_uids or set()
+        self._readable_tags = readable_tags if readable_tags is not None else {f"lib-{uid}" for uid in self._readable_uids}
         self._denied = denied or set()
         self._disabled = disabled
 
@@ -94,7 +95,7 @@ class _FakeRebac:
         assert permission == TagPermission.READ
         if self._disabled:
             return RebacDisabledResult()
-        return [SimpleNamespace(id=f"lib-{uid}") for uid in self._readable_uids]
+        return [SimpleNamespace(id=tag_id) for tag_id in self._readable_tags]
 
 
 def _user(uid: str = "u-1") -> SimpleNamespace:
@@ -485,8 +486,8 @@ async def test_a_stale_save_does_not_erase_a_label_added_after_the_snapshot(tmp_
 @pytest.mark.asyncio
 async def test_label_lookups_cover_a_folder_larger_than_the_authorization_inventory(tmp_path, monkeypatch) -> None:
     engine = await _make_sqlite_engine(tmp_path, "large_folder.sqlite3")
-    service = _build_service(engine, _FakeRebac(readable_uids={"shared"}), monkeypatch)
     uids = [f"doc-{index:04}" for index in range(1500)]
+    service = _build_service(engine, _FakeRebac(readable_uids=set(uids), readable_tags={"lib-shared"}), monkeypatch)
     async with AsyncSession(engine) as session, session.begin():
         for uid in uids:
             await service.metadata_store.save_metadata(_doc(uid, tag_ids=["lib-shared"]), session=session)
@@ -497,3 +498,24 @@ async def test_label_lookups_cover_a_folder_larger_than_the_authorization_invent
     assert total == 1500
     assert [doc.document_uid for doc in page] == uids[1400:]
     assert await service.list_document_labels(_user()) == ["DAT"]
+
+
+@pytest.mark.asyncio
+async def test_label_pages_count_and_slice_only_checked_candidates(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "checked_pages.sqlite3")
+    service = _build_service(engine, _FakeRebac(readable_uids={"b", "d", "f"}, readable_tags={"folder"}), monkeypatch)
+    for uid in ["a", "b", "c", "d", "e", "f"]:
+        await service.metadata_store.save_metadata(_doc(uid, tag_ids=["folder"]))
+        await service.metadata_store.add_label(uid, "shared")
+    await service.metadata_store.add_label("a", "secret")
+
+    first, total = await service.get_documents_with_label_page(_user(), "shared", offset=0, limit=2)
+    second, second_total = await service.get_documents_with_label_page(_user(), "shared", offset=2, limit=2)
+    last, last_total = await service.get_documents_with_label_page(_user(), "shared", offset=3, limit=2)
+
+    assert [doc.document_uid for doc in first] == ["b", "d"]
+    assert [doc.document_uid for doc in second] == ["f"]
+    assert last == []
+    assert total == second_total == last_total == 3
+    assert await service.get_document_uids_with_any_label(_user(), ["shared", "secret"]) == {"b", "d", "f"}
+    assert await service.list_document_labels(_user()) == ["shared"]
