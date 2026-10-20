@@ -22,8 +22,8 @@
 
 - [x] 4.1 Run the focused cross-boundary tests, affected offline module suites, applicable raw type checks and root `make code-quality` after implementation; record commands/results and actual exclusions in this task file or the PR, keeping formatter work out of the diff.
 - [x] 4.2 Update the existing observability guide with event/reason meanings and inner-reference navigation, and add the required English migration note with operational impact `none`; verify it explains restored ordinary MCP error text and the preserved authority contract, agrees with emitted JSON and requires no configuration, package upgrade or HTTP schema change.
-- [ ] 4.3 Apply the full branch audit against the actual PR target, obtain the required independent read-only correctness/performance review, resolve findings, and push/open the dedicated draft PR; verify the PR records reviewed base/head, verification and exclusions.
-- [ ] 4.4 Reconcile these artifacts with the verified implementation, sync the structured-logging delta and archive through the repository procedures; verify OpenSpec validation and the final shipped requirements match the change.
+- [x] 4.3 Apply the full branch audit against the actual PR target, obtain the required independent read-only correctness/performance review, resolve findings, and push/open the dedicated draft PR; verify the PR records reviewed base/head, verification and exclusions.
+- [x] 4.4 Reconcile these artifacts with the verified implementation, sync the structured-logging delta and archive through the repository procedures; verify OpenSpec validation and the final shipped requirements match the change.
 
 
 ## Verification evidence
@@ -37,3 +37,7 @@
 - Author audit: base `1cfde953717d661d6c9a059aa2ff492da374b27d`, full implementation and affected consumers/docs. Independent read-only correctness/security/privacy and performance/concurrency reviews covered `7aa9073b1` plus subsequent code/test delta in `f1831f211`; no actionable findings. Later import-only and documentation/spec close-out changes were author-reviewed.
 - Captured real KF SQL HTTP 400 via mounted MCP inside outer HTTP 200, with complete failure/access JSON logs, delegated user/run/agent identity, session/team/exchange/instance context and linked inner references. Evidence is included in the draft PR description.
 - Exclusions: unrelated login-link planning; live deployment/GCP collector validation; a production-load campaign. Integration tests remain outside the offline suites.
+
+Draft PR: https://github.com/ThalesGroup/fred/pull/3197 (target swift, assigned to florian-muller, GitHub reports MERGEABLE).
+
+The optional repository-wide active-change validation sweep also reported existing out-of-scope errors in `add-agent-initiated-human-questions`, `rebase-python-images-on-ubuntu`, and `whitelist-lists-individual-exceptions` (52 other changes passed). This change and the synced structured-logging spec passed strict validation; unrelated planning was not modified.
