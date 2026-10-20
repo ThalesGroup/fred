@@ -33,8 +33,10 @@ enabled only with `FRED_VALIDATION_LARGE_CORPUS=1` on the validation command.
 
 ## Upgrade
 
-Deploy Knowledge Flow and the control plane normally. No schema, FGA model, chart
-or frontend change is required.
+Deploy Knowledge Flow, the control plane and fred-agents normally. The runtime
+also lets a delegated document markdown read report a known permission refusal
+as a tool error, so an agent can correct a filename mistakenly supplied as a UID.
+No schema, FGA model, chart or frontend change is required.
 
 ## Validation
 
@@ -44,6 +46,12 @@ is listed, described and queryable. That scenario does not exercise label SQL.
 The fred-core PostgreSQL integration suite separately exercises the three label
 queries, including 32,768 folder IDs. Deterministic service tests cover completed
 folder removal followed by stale saves and denial across the affected surfaces.
+
+For delegated document reading, verify that an erroneous filename produces
+bounded UID guidance and a subsequent call with an authorized discovered UID
+succeeds in the same run. Focused runtime tests cover denied content, path-shaped
+arguments and retained terminal account/delegation failures. This check does not
+establish that a full tender analysis or its output artifacts are correct.
 
 ## Rollback
 

@@ -180,6 +180,13 @@ class KfDocumentClient(KfBaseClient):
             method="GET",
             path=f"/markdown/{document_uid}",
             phase_name="kf_document_markdown_fetch",
+            # Only a single document segment may opt in: model-supplied path
+            # syntax must not extend recovery to another endpoint.
+            recover_permission_refusal=(
+                bool(document_uid)
+                and document_uid not in (".", "..")
+                and not any(char in document_uid for char in "/\\?#%")
+            ),
         )
         r.raise_for_status()
         data = r.json()

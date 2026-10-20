@@ -46,6 +46,15 @@ renewable client-credentials token carrying the `delegation_caller` role and the
 Refusals stop the run with a typed reason: `authority_lost` (403, suspension, or
 `account_status_unavailable` 503) or `delegation_unavailable` (no workload token).
 
+The direct document markdown reader makes one exception: a 403 with the exact
+`X-Fred-Denial-Cause: permission_refused` header becomes a failed tool result
+with bounded guidance to reuse an opaque UID from authorized discovery. This
+allows a mistaken filename to be corrected in the same run without disclosing
+document existence or content. The exception applies only to a single document
+URL segment; path-shaped arguments and other operations retain terminal handling.
+Every subsequent call still undergoes normal authorization. Account suspension,
+unavailable account checks, residual 401s and unclassified 403s remain terminal.
+
 ## Switches
 
 `security.delegation.act_for_people` (outgoing, agent backends) and
