@@ -503,19 +503,22 @@ async def test_label_lookups_cover_a_folder_larger_than_the_authorization_invent
 @pytest.mark.asyncio
 async def test_label_pages_count_and_slice_only_checked_candidates(tmp_path, monkeypatch) -> None:
     engine = await _make_sqlite_engine(tmp_path, "checked_pages.sqlite3")
-    service = _build_service(engine, _FakeRebac(readable_uids={"b", "d", "f"}, readable_tags={"folder"}), monkeypatch)
-    for uid in ["a", "b", "c", "d", "e", "f"]:
-        await service.metadata_store.save_metadata(_doc(uid, tag_ids=["folder"]))
-        await service.metadata_store.add_label(uid, "shared")
-    await service.metadata_store.add_label("a", "secret")
+    try:
+        service = _build_service(engine, _FakeRebac(readable_uids={"b", "d", "f"}, readable_tags={"folder"}), monkeypatch)
+        for uid in ["a", "b", "c", "d", "e", "f"]:
+            await service.metadata_store.save_metadata(_doc(uid, tag_ids=["folder"]))
+            await service.metadata_store.add_label(uid, "shared")
+        await service.metadata_store.add_label("a", "secret")
 
-    first, total = await service.get_documents_with_label_page(_user(), "shared", offset=0, limit=2)
-    second, second_total = await service.get_documents_with_label_page(_user(), "shared", offset=2, limit=2)
-    last, last_total = await service.get_documents_with_label_page(_user(), "shared", offset=3, limit=2)
+        first, total = await service.get_documents_with_label_page(_user(), "shared", offset=0, limit=2)
+        second, second_total = await service.get_documents_with_label_page(_user(), "shared", offset=2, limit=2)
+        last, last_total = await service.get_documents_with_label_page(_user(), "shared", offset=3, limit=2)
 
-    assert [doc.document_uid for doc in first] == ["b", "d"]
-    assert [doc.document_uid for doc in second] == ["f"]
-    assert last == []
-    assert total == second_total == last_total == 3
-    assert await service.get_document_uids_with_any_label(_user(), ["shared", "secret"]) == {"b", "d", "f"}
-    assert await service.list_document_labels(_user()) == ["shared"]
+        assert [doc.document_uid for doc in first] == ["b", "d"]
+        assert [doc.document_uid for doc in second] == ["f"]
+        assert last == []
+        assert total == second_total == last_total == 3
+        assert await service.get_document_uids_with_any_label(_user(), ["shared", "secret"]) == {"b", "d", "f"}
+        assert await service.list_document_labels(_user()) == ["shared"]
+    finally:
+        await engine.dispose()
