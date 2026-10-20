@@ -116,6 +116,7 @@
     }
   },
   "capability": {
+    "panelLoadFailed": "This panel could not load. Reload the page.",
     "web_research": {
       "name": "Search the web",
       "description": "Search public sources and read web pages through controlled external access."
