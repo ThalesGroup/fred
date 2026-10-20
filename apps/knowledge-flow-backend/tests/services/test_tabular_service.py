@@ -2616,6 +2616,7 @@ async def test_nonempty_discovery_has_no_empty_diagnostic(tmp_path, metadata_sto
 @pytest.mark.asyncio
 async def test_description_unresolved_classification_preserves_permission_boundary(monkeypatch):
     from unittest.mock import AsyncMock
+
     from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound
 
     service = object.__new__(TabularService)
