@@ -215,6 +215,33 @@ class GitTests(unittest.TestCase):
         self.write(schema_path, json.dumps(constrained))
         self.repo(worktree=True).check_pr(base)
 
+    def test_pod_chart_values_support_production_note(self):
+        chart = "deploy/charts/agent-pod/values.yaml"
+        self.write(chart, "httpRoute:\n  enabled: false\n")
+        self.commit("add pod chart values")
+        base = self.git("rev-parse", "HEAD")
+        self.add_note("route", configuration="production")
+        self.write(chart, "httpRoute:\n  enabled: false\n  hostnames: []\n")
+        self.repo(worktree=True).check_pr(base)
+        self.write(chart, "httpRoute:\n  enabled: false\n# example\n")
+        with self.assertRaisesRegex(m.Invalid, "Comment-only"):
+            self.repo(worktree=True).check_pr(base)
+
+    def test_other_chart_values_cannot_mask_option_removal(self):
+        fred_schema = "deploy/charts/fred/values.schema.json"
+        pod_values = "deploy/charts/agent-pod/values.yaml"
+        self.write(
+            fred_schema, json.dumps({"properties": {"removed": {"type": "string"}}})
+        )
+        self.write(pod_values, "httpRoute:\n  enabled: false\n")
+        self.commit("add chart options")
+        base = self.git("rev-parse", "HEAD")
+        self.add_note("config", configuration="production")
+        self.write(fred_schema, json.dumps({"properties": {}}))
+        self.write(pod_values, "httpRoute:\n  enabled: true\n")
+        with self.assertRaisesRegex(m.Invalid, "values.yaml"):
+            self.repo(worktree=True).check_pr(base)
+
     def test_commented_option_removal_requires_chart_schema_evidence(self):
         chart = "deploy/charts/fred/values.yaml"
         schema_path = "deploy/charts/fred/values.schema.json"
