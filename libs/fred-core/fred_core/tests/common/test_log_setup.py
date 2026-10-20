@@ -113,122 +113,39 @@ def test_uvicorn_sensitive_query_filter_redacts_token_in_args() -> None:
     assert record.args[1] == "/agentic/v1/chatbot/query/ws?token=<redacted>&x=1"
 
 
-def test_delegation_access_record_is_bounded_and_drops_encoded_grant_pairs() -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
+@pytest.mark.parametrize(
+    "config",
+    [
+        DelegationConfig(),
+        DelegationConfig(accept_delegated_calls=True),
+        DelegationConfig(act_for_people=True),
+    ],
+)
+def test_uvicorn_sanitization_preserves_diagnostics_independently_of_delegation(
+    config: DelegationConfig,
+) -> None:
+    initialize_delegation(config)
+    error = RuntimeError("ordinary failure")
     record = logging.LogRecord(
-        name="uvicorn.access",
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg='%s - "%s %s HTTP/%s" %d',
-        args=(
-            "SYNTHETIC-CLIENT-CANARY",
-            "POST",
-            "/documents?ordinary=visible&p%65rson=SYNTHETIC-PERSON-CANARY&"
-            "run=SYNTHETIC-RUN-CANARY&agent=SYNTHETIC-AGENT-CANARY&last=kept",
-            "1.1",
-            200,
-        ),
-        exc_info=None,
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Failure at %s",
+        ("/documents?person=synthetic-person&token=synthetic-token&ordinary=visible",),
+        (type(error), error, None),
     )
-
-    assert UvicornSensitiveQueryFilter().filter(record) is True
-    assert record.getMessage() == (
-        "access event=request outcome=responded method=POST status=200"
+    record.stack_info = "ordinary stack"
+    record.detail = "ordinary extra"
+    assert UvicornSensitiveQueryFilter().filter(record)
+    assert (
+        record.getMessage()
+        == "Failure at /documents?person=synthetic-person&token=<redacted>&ordinary=visible"
     )
-    assert "CANARY" not in repr(record.__dict__)
-    assert "ordinary" not in record.getMessage()
-
-
-@pytest.mark.parametrize("status", [200, "SYNTHETIC-STATUS-CANARY"])
-def test_delegation_access_record_excludes_unbounded_metadata(status: object) -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
-    record = logging.LogRecord(
-        name="uvicorn.access",
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg='%s - "%s %s HTTP/%s" %d',
-        args=(
-            "SYNTHETIC-CLIENT-CANARY",
-            "SYNTHETIC-METHOD-CANARY",
-            "/documents?person=SYNTHETIC-PERSON-CANARY",
-            "SYNTHETIC-VERSION-CANARY",
-            status,
-        ),
-        exc_info=None,
-    )
-    record.message = "SYNTHETIC-MESSAGE-CANARY"
-    record.exc_text = "SYNTHETIC-EXCEPTION-CANARY"
-    record.stack_info = "SYNTHETIC-STACK-CANARY"
-
-    UvicornSensitiveQueryFilter().filter(record)
-
-    assert "CANARY" not in repr(record.__dict__)
-    if status == 200:
-        assert record.getMessage().endswith("method=OTHER status=200")
-
-
-def test_delegation_access_string_url_is_bounded_without_identifiers() -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
-    record = logging.LogRecord(
-        name="uvicorn.access",
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg=(
-            "POST /documents?ordinary=visible&person=SYNTHETIC-PERSON-CANARY&"
-            "run=SYNTHETIC-RUN-CANARY&agent=SYNTHETIC-AGENT-CANARY 200"
-        ),
-        args=(),
-        exc_info=None,
-    )
-
-    assert UvicornSensitiveQueryFilter().filter(record) is True
-    assert record.getMessage() == (
-        "access event=request outcome=responded method=OTHER status=None"
-    )
-    assert "CANARY" not in repr(record.__dict__)
-
-
-def test_without_delegation_grant_query_behavior_is_preserved() -> None:
-    initialize_delegation(DelegationConfig())
-    record = logging.LogRecord(
-        name="uvicorn.access",
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg="GET %s",
-        args=("/documents?person=synthetic-person&ordinary=visible",),
-        exc_info=None,
-    )
-
-    UvicornSensitiveQueryFilter().filter(record)
-
-    assert record.getMessage() == (
-        "GET /documents?person=synthetic-person&ordinary=visible"
-    )
-
-
-def test_acting_for_people_alone_still_keeps_grant_values_out_of_the_log() -> None:
-    # A grant sent to a backend that does not believe it is still caller-chosen text.
-    initialize_delegation(DelegationConfig(act_for_people=True))
-    record = logging.LogRecord(
-        name="uvicorn.access",
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg="GET %s",
-        args=("/documents?person=synthetic-person&ordinary=visible",),
-        exc_info=None,
-    )
-
-    UvicornSensitiveQueryFilter().filter(record)
-
-    assert record.getMessage() == (
-        "access event=request outcome=responded method=OTHER status=None"
-    )
-    assert "synthetic-person" not in repr(record.__dict__)
+    assert record.exc_info is not None
+    assert record.exc_info[1] is error
+    assert record.stack_info == "ordinary stack"
+    assert record.detail == "ordinary extra"
 
 
 class _Sink(logging.Handler):
@@ -689,14 +606,22 @@ def test_dependency_child_diagnostics_remain_sanitized(
     assert json.loads(output)["severity"] == "WARNING"
 
 
-@pytest.mark.parametrize("delegation", [False, True])
+@pytest.mark.parametrize(
+    "config",
+    [
+        DelegationConfig(),
+        DelegationConfig(accept_delegated_calls=True),
+        DelegationConfig(act_for_people=True),
+    ],
+)
 @pytest.mark.parametrize("log_format", ["json", "text"])
-def test_uvicorn_error_traceback_remains_sanitized(
+def test_uvicorn_error_preserves_traceback_with_targeted_redaction(
     capsys: pytest.CaptureFixture[str],
-    delegation: bool,
+    config: DelegationConfig,
     log_format: Literal["json", "text"],
 ) -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=delegation))
+    initialize_delegation(config)
+    url = "https://example.invalid/file?access_token=SYNTHETIC-CREDENTIAL&format=csv"
     with _wired_uvicorn_logging():
         log_setup(
             service_name="server-contract",
@@ -705,18 +630,22 @@ def test_uvicorn_error_traceback_remains_sanitized(
             use_rich=False,
         )
         try:
-            raise RuntimeError("SECRET-CANARY")
-        except RuntimeError:
-            logging.getLogger("uvicorn.error").exception(
-                "ASGI failure %s", "SECRET-CANARY", extra={"detail": "SECRET-CANARY"}
+            raise RuntimeError("workbook parse failed") from ValueError(
+                "Failed request " + url
             )
+        except RuntimeError:
+            logging.getLogger("uvicorn.error").exception("ASGI operation failed")
         output = capsys.readouterr().out
-        assert "SECRET-CANARY" not in output
-        assert "server event=uvicorn outcome=failed reason=server_error" in output
+        assert "SYNTHETIC-CREDENTIAL" not in output
+        assert "workbook parse failed" in output
+        assert "ValueError" in output
+        assert "ASGI operation failed" in output
         if log_format == "json":
+            assert len(output.splitlines()) == 1
             event = json.loads(output)
             assert event["severity"] == "ERROR"
-            assert "exception" not in event
+            assert "Traceback" in event["exception"]
+            assert "test_uvicorn_error_preserves_traceback" in event["exception"]
 
 
 def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> None:
@@ -757,6 +686,7 @@ async def test_fastapi_unhandled_error_keeps_response_and_log_references(
     from fred_core.common.fastapi_handlers import register_exception_handlers
     from fred_core.kpi.base_kpi_writer import BaseKPIWriter
     from fred_core.kpi.http_middleware import KPIMiddleware
+    from fred_core.logs.context import bind_operation_context
     from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
     from httpx import ASGITransport, AsyncClient
     from starlette.middleware.cors import CORSMiddleware
@@ -781,7 +711,13 @@ async def test_fastapi_unhandled_error_keeps_response_and_log_references(
 
     @app.get("/failure")
     async def failure() -> None:
-        raise RuntimeError("SECRET-CANARY")
+        bind_operation_context(
+            user_id="synthetic-user",
+            session_id="synthetic-session",
+            agent_id="synthetic-agent",
+            team_id="synthetic-team",
+        )
+        raise RuntimeError("ordinary application failure")
 
     async with AsyncClient(
         transport=ASGITransport(app=app, raise_app_exceptions=False),
@@ -803,7 +739,7 @@ async def test_fastapi_unhandled_error_keeps_response_and_log_references(
     exposed = response.headers["access-control-expose-headers"].lower()
     assert "x-request-id" in exposed and "x-correlation-id" in exposed
     output = capsys.readouterr().out
-    assert "SECRET-CANARY" not in output
+    assert "ordinary application failure" in output
     events = [json.loads(line) for line in output.splitlines()]
     completed = [
         event
@@ -819,6 +755,11 @@ async def test_fastapi_unhandled_error_keeps_response_and_log_references(
     for event in [completed[0], failure_event]:
         assert event["request_id"] == response.headers["x-request-id"]
         assert event["correlation_id"] == response.headers["x-correlation-id"]
+        assert event["user_id"] == "synthetic-user"
+        assert event["session_id"] == "synthetic-session"
+        assert event["agent_id"] == "synthetic-agent"
+        assert event["team_id"] == "synthetic-team"
+    assert "RuntimeError: ordinary application failure" in failure_event["exception"]
     assert preflight.status_code == 200
     assert [call.kwargs["method"] for call in kpi.api_call.call_args_list] == [
         "GET",
@@ -1068,6 +1009,7 @@ async def test_interleaved_request_context_survives_stream_and_thread_then_retir
         ("responded", 404, None, "404 | 8ms"),
         ("responded", 404, "x" * 1025, "404 | 8ms"),
         ("failed", None, None, "no response | 8ms | failed"),
+        ("failed", 200, "/stream", "200 | 8ms | failed"),
         ("cancelled", None, None, "no response | 8ms | cancelled"),
         ("cancelled", 200, None, "200 | 8ms | cancelled"),
         ("disconnected", 200, None, "200 | 8ms | disconnected"),
@@ -1105,7 +1047,7 @@ async def test_http_completion_message_is_readable_and_retains_structured_fields
         if status is not None:
             await send({"type": "http.response.start", "status": status, "headers": []})
         if case == "failed":
-            raise RuntimeError("exception-secret-canary")
+            raise RuntimeError("ordinary application failure")
         if case == "cancelled":
             raise asyncio.CancelledError()
         if case == "disconnected":
@@ -1142,8 +1084,9 @@ async def test_http_completion_message_is_readable_and_retains_structured_fields
     output = capsys.readouterr().out
     safe_route = route if route is not None and len(route) <= 1024 else "<unmatched>"
     expected = f"POST {safe_route} → {summary}"
-    assert len(store.indexed) == 1
-    event = store.indexed[0]
+    completions = [event for event in store.indexed if event.logger == "http"]
+    assert len(completions) == 1
+    event = completions[0]
     assert event.msg == expected
     assert event.extra is not None
     assert event.extra["http_method"] == "POST"
@@ -1152,7 +1095,12 @@ async def test_http_completion_message_is_readable_and_retains_structured_fields
     assert event.extra.get("http_status") == status
     assert event.extra.get("route") == (route if safe_route != "<unmatched>" else None)
     if log_format == "json":
-        assert json.loads(output)["message"] == expected
+        completion = next(
+            json.loads(line)
+            for line in output.splitlines()
+            if json.loads(line)["logger"] == "http"
+        )
+        assert completion["message"] == expected
     else:
         assert expected in output
     assert "secret-canary" not in output
@@ -1234,10 +1182,206 @@ async def test_completion_handles_real_stream_disconnect_and_probe_failures(
     ],
 )
 def test_free_enrollment_capability_is_redacted_without_delegation(path, monkeypatch):
-    monkeypatch.setattr("fred_core.logs.log_setup._delegation_in_use", lambda: False)
     record = logging.LogRecord(
         "uvicorn.access", logging.INFO, __file__, 0, "%s", (path,), None
     )
     UvicornSensitiveQueryFilter().filter(record)
     assert "opaque-token" not in record.getMessage()
     assert "<redacted>" in record.getMessage()
+
+
+@pytest.mark.parametrize(
+    "case", ["absent", "unmarked", "marked", "marked-cause", "empty-info"]
+)
+def test_reported_exception_filter_is_a_pure_exact_exception_check(case: str) -> None:
+    from fred_core.logs.reported_exceptions import (
+        AlreadyReportedExceptionFilter,
+        mark_reported,
+        was_reported,
+    )
+
+    error = RuntimeError("same message")
+    if case == "marked":
+        mark_reported(error)
+    elif case == "marked-cause":
+        cause = RuntimeError("same message")
+        mark_reported(cause)
+        error.__cause__ = cause
+    info = None if case == "absent" else (type(error), error, None)
+    if case == "empty-info":
+        info = (None, None, None)
+    record = logging.LogRecord(
+        "uvicorn.error", logging.ERROR, __file__, 1, "failure", (), info
+    )
+    before = dict(record.__dict__)
+    assert AlreadyReportedExceptionFilter().filter(record) is (case != "marked")
+    assert record.__dict__ == before
+    assert was_reported(error) is (case == "marked")
+    assert not was_reported(RuntimeError("same message"))
+
+
+def test_reported_exception_marker_supports_frozen_exception_subclasses() -> None:
+    from dataclasses import dataclass
+
+    from fred_core.logs.reported_exceptions import mark_reported, was_reported
+
+    @dataclass(frozen=True)
+    class FrozenFailure(Exception):
+        message: str
+
+    error = FrozenFailure("failure")
+    mark_reported(error)
+    assert was_reported(error)
+    assert "_fred_already_logged" not in str(error)
+
+
+def test_duplicate_filter_is_separate_and_replaced_on_reinitialization() -> None:
+    from fred_core.logs.reported_exceptions import AlreadyReportedExceptionFilter
+
+    with _wired_uvicorn_logging():
+        for _ in range(2):
+            log_setup(service_name="filter-wiring", store=_StubLogStore())
+        filters = logging.getLogger("uvicorn.error").filters
+        assert sum(isinstance(f, AlreadyReportedExceptionFilter) for f in filters) == 1
+        duplicate = next(
+            i
+            for i, f in enumerate(filters)
+            if isinstance(f, AlreadyReportedExceptionFilter)
+        )
+        redaction = next(
+            i
+            for i, f in enumerate(filters)
+            if isinstance(f, UvicornSensitiveQueryFilter)
+        )
+        assert duplicate < redaction
+
+
+@pytest.mark.asyncio
+async def test_concurrent_request_exceptions_keep_the_completion_identity(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import asyncio
+
+    from fred_core.common.fastapi_handlers import register_exception_handlers
+    from fred_core.logs.context import bind_operation_context
+    from fred_core.logs.http import RequestLoggingFastAPI
+    from httpx import ASGITransport, AsyncClient
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    log_setup(
+        service_name="concurrent-errors",
+        store=_StubLogStore(),
+        log_format="json",
+        include_uvicorn=False,
+    )
+    app = RequestLoggingFastAPI()
+
+    async def dispatch(request, call_next):
+        return await call_next(request)
+
+    app.add_middleware(BaseHTTPMiddleware, dispatch=dispatch)
+    register_exception_handlers(app)
+    ready: set[str] = set()
+    both_ready = asyncio.Event()
+    fields = ("user_id", "session_id", "agent_id", "team_id")
+
+    @app.get("/probe/{name}")
+    async def probe(name: str) -> dict[str, bool]:
+        if name == "fresh":
+            return {"ok": True}
+        bind_operation_context({field: name + "-" + field for field in fields})
+        ready.add(name)
+        if len(ready) == 2:
+            both_ready.set()
+        await asyncio.wait_for(both_ready.wait(), timeout=5)
+        raise RuntimeError("failure for " + name)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        first, second = await asyncio.gather(
+            client.get("/probe/first"), client.get("/probe/second")
+        )
+        fresh = await client.get("/probe/fresh")
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    for name, response in [("first", first), ("second", second)]:
+        assert response.status_code == 500
+        request_events = [
+            event
+            for event in events
+            if event.get("request_id") == response.headers["x-request-id"]
+        ]
+        assert len(request_events) == 2
+        assert {event["logger"] for event in request_events} == {
+            "http",
+            "fred_core.logs.http",
+        }
+        for event in request_events:
+            assert event["severity"] == "ERROR"
+            assert event["correlation_id"] == response.headers["x-correlation-id"]
+            assert all(event[field] == name + "-" + field for field in fields)
+        diagnostic = next(event for event in request_events if "exception" in event)
+        assert "RuntimeError: failure for " + name in diagnostic["exception"]
+    fresh_events = [
+        event
+        for event in events
+        if event.get("request_id") == fresh.headers["x-request-id"]
+    ]
+    assert len(fresh_events) == 1
+    assert all(field not in fresh_events[0] for field in fields)
+    assert fresh_events[0]["severity"] == "INFO"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["caught", "http", "response", "oserror"])
+async def test_http_error_diagnostic_ownership(
+    capsys: pytest.CaptureFixture[str], case: str
+) -> None:
+    from fastapi import HTTPException
+    from fred_core.common.fastapi_handlers import register_exception_handlers
+    from fred_core.logs.http import RequestLoggingFastAPI
+    from httpx import ASGITransport, AsyncClient
+    from starlette.responses import JSONResponse
+
+    log_setup(
+        service_name="ownership",
+        store=_StubLogStore(),
+        log_format="json",
+        include_uvicorn=False,
+    )
+    app = RequestLoggingFastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/failure")
+    async def failure() -> JSONResponse:
+        if case == "caught":
+            try:
+                raise ValueError("controller failure")
+            except ValueError:
+                logging.getLogger("synthetic.controller").exception("Controller failed")
+                raise HTTPException(500, "Internal server error")
+        if case == "http":
+            raise HTTPException(500, "Internal server error")
+        if case == "oserror":
+            raise OSError("application storage failure")
+        return JSONResponse({"detail": "Internal server error"}, status_code=500)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/failure")
+    assert response.status_code == 500
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert len(events) == (2 if case in {"caught", "oserror"} else 1)
+    completion = next(event for event in events if event["logger"] == "http")
+    assert completion["http_status"] == 500
+    assert completion["severity"] == "ERROR"
+    assert "exception" not in completion
+    if case in {"caught", "oserror"}:
+        diagnostic = next(event for event in events if "exception" in event)
+        assert diagnostic["request_id"] == completion["request_id"]
+        assert diagnostic["logger"] == (
+            "synthetic.controller" if case == "caught" else "fred_core.logs.http"
+        )

@@ -25,6 +25,7 @@ from contextlib import contextmanager
 import pytest
 import uvicorn
 from fastapi import APIRouter
+from fred_core.logs.context import bind_operation_context
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_core.security.delegation import DelegationConfig, preserved_delegation
 
@@ -69,8 +70,11 @@ def _restored_logging() -> Iterator[None]:
             lg.disabled = disabled
 
 
-def _register_probe(router: APIRouter) -> None:
+def _register_probe(router: APIRouter, *, failure: bool = False) -> None:
     async def probe(name: str) -> dict[str, bool]:
+        if failure:
+            bind_operation_context(user_id="synthetic-user", session_id="synthetic-session", agent_id="synthetic-agent", team_id="synthetic-team")
+            raise RuntimeError("synthetic request failure")
         return {"ok": True}
 
     router.add_api_route("/probe/{name}", probe)
@@ -113,7 +117,7 @@ async def _serve_one_request(server: uvicorn.Server, sink: _Sink) -> bytes:
     return response
 
 
-async def _served_records(app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig) -> tuple[bytes, list[logging.LogRecord]]:
+async def _served_records(app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig, *, failure: bool = False) -> tuple[bytes, list[logging.LogRecord]]:
     """Serve one request through the application `create_app` builds; return the response and every record."""
     config = app_context.configuration.model_copy(deep=True)
     config.security.delegation = delegation
@@ -123,7 +127,7 @@ async def _served_records(app_context: ApplicationContext, monkeypatch: pytest.M
     # Controllers need live stores; one probe route on the application router stands in for them.
     for name in [name for name in vars(main_module) if name.endswith("Controller")]:
         monkeypatch.setattr(main_module, name, lambda *args, **kwargs: None)
-    monkeypatch.setattr(main_module, "TasksController", _register_probe)
+    monkeypatch.setattr(main_module, "TasksController", lambda router: _register_probe(router, failure=failure))
     sink = _Sink()
     with preserved_delegation(), _restored_logging():
         # Production order: uvicorn configures its loggers, then the factory runs log_setup.
@@ -133,6 +137,26 @@ async def _served_records(app_context: ApplicationContext, monkeypatch: pytest.M
         logging.getLogger().addHandler(sink)
         response = await _serve_one_request(uvicorn.Server(uvicorn_config), sink)
     return response, sink.records
+
+
+@pytest.mark.parametrize("delegation", [DelegationConfig(), DelegationConfig(accept_delegated_calls=True), DelegationConfig(act_for_people=True)])
+@pytest.mark.asyncio
+async def test_real_server_reports_one_correlated_exception_and_one_completion(app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig) -> None:
+    response, records = await _served_records(app_context, monkeypatch, delegation, failure=True)
+    assert response.startswith(b"HTTP/1.1 500 ")
+    errors = [record for record in records if record.levelno >= logging.ERROR]
+    assert len(errors) == 2
+    assert {record.name for record in errors} == {"http", "fred_core.logs.http"}
+    diagnostic = next(record for record in errors if record.exc_info)
+    assert diagnostic.getMessage() == "Unhandled request failure"
+    assert str(diagnostic.exc_info[1]) == "synthetic request failure"
+    snapshots = [getattr(record, "_fred_snapshot").values for record in errors]
+    assert snapshots[0] == snapshots[1]
+    for field in ("user_id", "session_id", "agent_id", "team_id"):
+        assert snapshots[0][field] == "synthetic-" + field.removesuffix("_id")
+    assert snapshots[0]["request_id"].encode() in response
+    assert snapshots[0]["correlation_id"].encode() in response
+    assert not any(record.name == "uvicorn.error" for record in errors)
 
 
 @pytest.mark.parametrize(
