@@ -75,6 +75,9 @@ _SERVICE_MONITOR = _obj(
 def _pod_props(configuration: dict) -> dict:
     """What both pod charts share: the image, the pod, its credentials and its file."""
     return {
+        # Helm passes `global` to every subchart: without it, a chart that depends
+        # on this one fails validation.
+        "global": _OBJECT_FREE,
         "image": _IMAGE,
         "imagePullSecrets": _arr(_obj({"name": _STRING})),
         "nameOverride": _STRING,
