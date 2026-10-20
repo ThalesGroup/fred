@@ -185,6 +185,31 @@ async def test_completed_mistral_tool_call_text_becomes_a_native_call() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_a_reply_only_call_keeps_tool_call_text_as_text() -> None:
+    """tool_choice="none" asks for a reply: recovering a call would undo it."""
+    middleware = ToolCallTextRecoveryMiddleware()
+    request = ModelRequest(
+        model=cast(BaseChatModel, None),
+        messages=[],
+        tools=[read_query],
+        tool_choice="none",
+    )
+    message = AIMessage(
+        content=_structured_call_content(
+            "read_query", '{"sql": "SELECT 1", "dataset_uids": ["fake-dataset"]}'
+        ),
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+    response = ModelResponse(result=[message])
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return response
+
+    kept = await middleware.awrap_model_call(request, handler)
+    assert kept is response and not message.tool_calls
+
+
 def _question_tool() -> BaseTool:
     async def invoke(**payload: Any) -> str:
         return ""

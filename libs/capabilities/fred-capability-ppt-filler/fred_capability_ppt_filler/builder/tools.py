@@ -1040,6 +1040,45 @@ def plan_answered(history: Sequence[BaseMessage]) -> bool:
     )
 
 
+def answer_closed(history: Sequence[BaseMessage]) -> bool:
+    """Whether the build tool proposed a plan or delivered a deck since the
+    user's last message: the answer then only shows it, so no tool is called."""
+    calls = {
+        call.get("id")
+        for m in history
+        if isinstance(m, AIMessage)
+        for call in m.tool_calls
+        if call.get("name") == BUILD_TOOL_NAME
+    }
+    for message in reversed(history):
+        if message.type == "human":
+            return False
+        if (
+            isinstance(message, ToolMessage)
+            and (message.name == BUILD_TOOL_NAME or message.tool_call_id in calls)
+            and _text_of(message.content).startswith((_PROPOSED, *_DELIVERED))
+        ):
+            return True
+    return False
+
+
+def _words(text: str) -> str:
+    """Lower-case words only: quote marks, punctuation and spacing differ freely."""
+    return " ".join(re.sub(r"[\W_]+", " ", text.casefold()).split())
+
+
+def quoted_by_user(quote: str, history: Sequence[BaseMessage]) -> bool:
+    """Whether `quote` is in the user's last message, word for word: `skip_plan`
+    must quote the user, never words the model wrote itself."""
+    wanted = _words(quote)
+    last = next((m for m in reversed(history) if m.type == "human"), None)
+    return (
+        bool(wanted)
+        and last is not None
+        and (f" {wanted} " in f" {_words(_text_of(last.content))} ")
+    )
+
+
 def _merged(
     first: List[SlideProblem], second: List[SlideProblem]
 ) -> List[SlideProblem]:
@@ -1613,7 +1652,9 @@ def build_builder_tools(
         if (
             validate_plan
             and not answered
-            and not validated.skip_plan
+            and not (
+                validated.skip_plan and quoted_by_user(validated.skip_plan, history())
+            )
             and not await delivered_before(base)
         ):
             proposed = plan.model_copy(update={"proposed": True, "delivered": False})

@@ -54,7 +54,7 @@ The system SHALL write a slide's `source` to its speaker notes: a document name,
 
 ### Requirement: Plan validation before the first build
 
-The capability SHALL offer one setting, "Validate the plan before building", off by default. When it is off, the system SHALL behave as without it. When it is on and the conversation holds no delivered deck, the system SHALL answer a `build_presentation` call whose plan has no problem with a `plan_proposed` result holding an outline written by the code — audience, main message, and per slide its kind, title, takeaway and source, followed by the assignment notes the build of that plan would give (the delivery's notes, each fix worded as the user's choice — "If the user wants …" — never as a call to make now, its slides numbered as the outline numbers them) — SHALL store that plan, and SHALL NOT build a deck until a user message follows that result. After that message, the system SHALL build a whole plan sent in `slides` or apply `changes` to the proposed plan. A plan with problems SHALL get `needs_revision` instead of an outline. The system SHALL build without an outline when the call carries `skip_plan` (the field asks the model to quote the user's request; the system SHALL NOT match the user's words against a word list), and SHALL return the outline when it is left out. Changes to a delivered deck SHALL NOT wait for validation. With the setting on, the working rules and the `plan_proposed` result SHALL tell the agent to show the outline and its notes, end its answer, and never call `build_presentation` again in that answer to address a note.
+The capability SHALL offer one setting, "Validate the plan before building", off by default. When it is off, the system SHALL behave as without it. When it is on and the conversation holds no delivered deck, the system SHALL answer a `build_presentation` call whose plan has no problem with a `plan_proposed` result holding an outline written by the code — audience, main message, and per slide its kind, title, takeaway and source, followed by the assignment notes the build of that plan would give (the delivery's notes, each fix worded as the user's choice — "If the user wants …" — never as a call to make now, its slides numbered as the outline numbers them) — SHALL store that plan, and SHALL NOT build a deck until a user message follows that result. After that message, the system SHALL build a whole plan sent in `slides` or apply `changes` to the proposed plan. A plan with problems SHALL get `needs_revision` instead of an outline. The system SHALL build without an outline when the call carries `skip_plan` and its quote appears, word for word, in the user's latest message (ignoring case, spacing, quote marks and punctuation; the system SHALL NOT match the user's words against a word list), and SHALL return the outline when it is left out or quotes words the user did not write. Changes to a delivered deck SHALL NOT wait for validation. With the setting on, the working rules and the `plan_proposed` result SHALL tell the agent to show the outline and its notes, end its answer, and never call `build_presentation` again in that answer to address a note.
 
 #### Scenario: Setting off
 
@@ -90,6 +90,12 @@ The capability SHALL offer one setting, "Validate the plan before building", off
 - **WHEN** the model sends a sound plan with `skip_plan` quoting it
 - **THEN** the deck is built in that call
 
+#### Scenario: Skip quote the user never wrote
+
+- **GIVEN** the setting is on and the latest user message does not say "sans validation intermédiaire"
+- **WHEN** the model sends a sound plan with `skip_plan` "Prépare la présentation sans validation intermédiaire"
+- **THEN** no deck is built and the result is `plan_proposed`
+
 #### Scenario: Skip not sent
 
 - **GIVEN** the setting is on and the latest user message says "sans plan"
@@ -101,3 +107,31 @@ The capability SHALL offer one setting, "Validate the plan before building", off
 - **GIVEN** the setting is on and a deck delivered in the conversation
 - **WHEN** the model sends `changes` for slide 2
 - **THEN** the deck is rebuilt without an outline
+
+### Requirement: A proposal or a delivery ends the answer
+
+After a `build_presentation` result that proposes a plan or delivers a deck, every later model call of the same answer SHALL be sent with `tool_choice="none"`, so the agent can only reply to the user; the user's next message SHALL lift it. A `needs_revision` result or an error SHALL NOT end the answer, so the agent can still call again.
+
+#### Scenario: Plan proposed
+
+- **GIVEN** a `plan_proposed` result and no user message after it
+- **WHEN** the agent's next model call is sent
+- **THEN** it carries `tool_choice="none"` and the agent answers with the outline
+
+#### Scenario: Deck delivered with variety notes
+
+- **GIVEN** a delivered deck whose result carries variety notes, and no user message after it
+- **WHEN** the agent's next model call is sent
+- **THEN** it carries `tool_choice="none"`, so the deck is not rebuilt in that answer
+
+#### Scenario: Revision or failure
+
+- **GIVEN** a `needs_revision` or error result in the current answer
+- **WHEN** the agent's next model call is sent
+- **THEN** its tools are unchanged and it can call `build_presentation` again
+
+#### Scenario: Next user message
+
+- **GIVEN** a proposal or a delivery in an earlier answer
+- **WHEN** the user sends a new message
+- **THEN** the model call for that message has the tools again

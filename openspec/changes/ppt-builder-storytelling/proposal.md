@@ -28,8 +28,11 @@ The builder's rule stays: the model writes content and intent, the code picks th
 
 - `ppt-builder`: requirements "Every content slide has a takeaway", "A chart holds one measure", "Figures are sourced", "Plan validation before the first build". Applied after `ppt-builder-capability`, `ppt-builder-charts` and `ppt-builder-intent-fields` phases A–B; owns the `takeaway` field, whose on-slide placement is `ppt-builder-intent-fields` phase C (design D2).
 
+- `model-tool-call-recovery`: added "A reply-only model call is never recovered into a tool call" (design D10).
+
 ## Impact
 
 - `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/`: new `story.py` (takeaway, figure, unit and source checks; conversation figures); `plan.py` (`SlidePlan.takeaway`, `SlidePlan.source`, `DeckPlan.audience`/`main_message`/`proposed`); `tools.py` (checks before the assignment, outline result, gate, `skip_plan`, schema descriptions); `render.py` (notes lines, illustrative caption); `changes.py` (`takeaway`, `source` paths); `capability.py` (`validate_plan` setting, working rules); `fill.py` / `checks.py` (note codes); `lexicon.py` (illustrative-allowance, skip-plan and source words, fr/en).
 - Frontend `apps/frontend/src/rework/features/capabilities/ppt_builder/`: the toggle in the config widget, `types.ts`, `DeckSummaryButton.tsx` notes, `locales/{en,fr}`; Help Center `features/capabilities.md` (fr + en). No generated client change expected (the setting is a manifest field, not a router model).
+- `libs/fred-runtime` `react/middleware/tool_call_recovery.py`: a call sent with `tool_choice="none"` is not recovered (design D10).
 - No new table, migration or dependency: the proposed plan uses the existing `cap_ppt_builder_deck_plan` row. Migration note: a line in the capability's note (unreleased feature, impact none).

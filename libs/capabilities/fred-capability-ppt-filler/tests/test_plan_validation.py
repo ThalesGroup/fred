@@ -24,9 +24,19 @@ import pytest
 from fred_capability_ppt_filler.builder import capability as capability_mod
 from fred_capability_ppt_filler.builder import tools
 from fred_capability_ppt_filler.builder.builtin import builtin_template
+from fred_capability_ppt_filler.builder.capability import (
+    PptBuilderCapability,
+    PptBuilderConfig,
+)
 from fred_capability_ppt_filler.builder.plan import DeckPlan
 from fred_capability_ppt_filler.fill import PptPreviewPart
-from langchain_core.messages import HumanMessage
+from fred_sdk.contracts.capability import (
+    CapabilityContext,
+    CapabilityIdentity,
+    EmptyModel,
+)
+from fred_sdk.contracts.runtime import RuntimeServices
+from langchain_core.messages import AIMessage, HumanMessage
 from port_fakes import FakeWorkspace
 from story_tools import CHART, COVER, DECK, POINTS, USER, answered, build_tool, deck
 
@@ -155,6 +165,74 @@ async def test_skip_plan_is_the_model_s_call_in_any_language(
     )
     text, _ = await words_only(slides=DECK)
     assert text.startswith("Plan proposed")
+
+
+@pytest.mark.asyncio
+async def test_a_skip_quote_the_user_never_wrote_proposes_the_plan(
+    monkeypatch, deck_plan_store
+):
+    """Live: medium invented "sans validation intermédiaire" to force a build."""
+    build = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
+    text, _ = await build(
+        slides=DECK, skip_plan="Prépare la présentation sans validation intermédiaire"
+    )
+    assert text.startswith("Plan proposed"), text
+    # Case, spacing, quote marks and punctuation may differ from the user's words.
+    loose = await build_tool(
+        monkeypatch,
+        _first_turn("Pas de plan, construis-le ! " + USER),
+        validate_plan=True,
+    )
+    text, _ = await loose(slides=DECK, skip_plan="« pas de  PLAN construis-le »")
+    assert text.startswith("Delivered"), text
+
+
+def test_a_proposal_or_a_delivery_closes_the_answer_until_the_user_speaks():
+    proposed = answered("Plan proposed: nothing was built yet. Show this outline")
+    delivered = answered("Delivered: 'deck.pptx', 3 slides.")
+    revision = answered('Not built: needs_revision. {"status": "needs_revision"}')
+    assert tools.answer_closed(proposed) and tools.answer_closed(delivered)
+    # A revision or a failure still lets the model call again.
+    assert not tools.answer_closed(revision)
+    assert not tools.answer_closed(
+        answered("No deck was built: the template could not")
+    )
+    assert not tools.answer_closed(proposed + [HumanMessage(content="Ok, vas-y")])
+    assert tools.answer_closed(proposed + [AIMessage(content="Voici le plan")])
+
+
+@pytest.mark.asyncio
+async def test_the_model_call_after_a_proposal_gets_no_tool():
+    """Live: medium re-called the tool after a proposal up to the call cap."""
+    ctx = CapabilityContext(
+        identity=CapabilityIdentity(
+            user_id="u-1", session_id="s", agent_instance_id="i"
+        ),
+        config=PptBuilderConfig(validate_plan=True),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(workspace_fs=FakeWorkspace()),
+    )
+    (middleware,) = PptBuilderCapability().middleware(ctx)
+    seen: list = []
+
+    class _Request:
+        system_prompt = ""
+        tools: list = []
+
+        def __init__(self, messages: list) -> None:
+            self.messages = messages
+
+        def override(self, **update):
+            seen.append(update)
+            return self
+
+    async def _handler(request):
+        return request
+
+    proposed = answered("Plan proposed: nothing was built yet.")
+    for history in (proposed, _first_turn(), proposed + [HumanMessage(content="ok")]):
+        await middleware.awrap_model_call(_Request(history), _handler)  # type: ignore[arg-type]
+    assert [u.get("tool_choice") for u in seen] == ["none", None, None]
 
 
 @pytest.mark.asyncio
