@@ -309,7 +309,10 @@ _OUTLINE = {
     False: "Ask the user to validate an outline first only when they asked for it, or when the "
     "request does not say what the presentation is about.",
     True: "Ask first only when the request does not say what the presentation is about; never "
-    "write an outline in the chat: the tool shows one to the user before the first deck.",
+    "write an outline in the chat: the tool shows one to the user before the first deck. Building "
+    "directly means calling the tool: when it proposes a plan, your answer shows that outline "
+    "and its notes, then ends; the user answers first, so never call the tool again in that "
+    "answer to address a note.",
 }
 
 

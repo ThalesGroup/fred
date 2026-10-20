@@ -1107,7 +1107,13 @@ def _split(
     return None
 
 
-def _split_note(split: _Split, at: Dict[int, int]) -> str:
+def _if_wanted(goal: str, fix: str, planned: bool, delivered: str) -> str:
+    """A plan's notes are the user's to decide: the fix is tied to their wish,
+    never a call to make before they answer."""
+    return f"If the user wants {goal}: {fix}." if planned else delivered
+
+
+def _split_note(split: _Split, at: Dict[int, int], planned: bool = False) -> str:
     first = split.slides[0]
     sizes = " + ".join(str(_entries(s.plan)) for s in split.slides)
     more = "a second" if len(split.slides) == 2 else f"{len(split.slides) - 1} more"
@@ -1125,8 +1131,8 @@ def _split_note(split: _Split, at: Dict[int, int]) -> str:
         remedy = "send fewer rows or shorter cells"
     return (
         f"Slide {at[first.index]}: its {split.entries} {split.what} continue on {more} "
-        f"'{split.kind}' slide ({sizes}{header}{marked}): {why}. To keep one "
-        f"slide, {remedy}."
+        f"'{split.kind}' slide ({sizes}{header}{marked}): {why}. "
+        + _if_wanted("one slide", remedy, planned, f"To keep one slide, {remedy}.")
     )
 
 
@@ -1371,7 +1377,7 @@ def _close_options(
 
 
 def _substitution(
-    slide: _Slide, chosen: Pattern, offered: set[str], number: int
+    slide: _Slide, chosen: Pattern, offered: set[str], number: int, planned: bool
 ) -> Optional[str]:
     """What was built instead of the requested kind, why, and the edit that
     would give the requested kind."""
@@ -1385,9 +1391,19 @@ def _substitution(
     why = _why_not(slide, offered, asked)
     if why is not None:
         if asked == "closing" and not slide.last:
-            remedy = "To make it the closing slide, move it to the end."
+            remedy = _if_wanted(
+                "it as the closing slide",
+                "move it to the end",
+                planned,
+                "To make it the closing slide, move it to the end.",
+            )
         elif asked == "cover" and not slide.first:
-            remedy = "To make it the cover, move it to the start."
+            remedy = _if_wanted(
+                "it as the cover",
+                "move it to the start",
+                planned,
+                "To make it the cover, move it to the start.",
+            )
         else:
             remedy = "Nothing to do."
         return f"{head}: {why}. {remedy}"
@@ -1403,8 +1419,14 @@ def _substitution(
             r.option.removesuffix(_OR_OTHER_KIND) for r in reasons if r.option
         )
     )
+    fix = "; ".join(fixes)
     remedy = (
-        f"To get the '{asked}' slide, call again and {'; '.join(fixes)}."
+        _if_wanted(
+            f"the '{asked}' slide",
+            fix,
+            planned,
+            f"To get the '{asked}' slide, call again and {fix}.",
+        )
         if fixes
         else "Nothing to do."
     )
@@ -1830,7 +1852,7 @@ def _repeats(
     return repeats
 
 
-def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
+def _repeat_note(repeat: Repeat, at: Dict[int, int], planned: bool = False) -> str:
     """The passive note: the slides and the kinds their content suits."""
     at_text = ", ".join(str(at[n]) for n in repeat.slides)
     if repeat.in_a_row:
@@ -1845,14 +1867,21 @@ def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
         )
     if repeat.suggested:
         note += " Their content suits: " + "; ".join(repeat.suggestions(at)) + "."
-        return note + " To vary them, recast one as above."
+        return f"{note} " + _if_wanted(
+            "them varied",
+            "recast one as above",
+            planned,
+            "To vary them, recast one as above.",
+        )
+    fewer = f"use fewer '{repeat.kind}' slides"
     return (
-        note + " No other slide of this template suits them: to vary them, use fewer "
-        f"'{repeat.kind}' slides."
+        f"{note} No other slide of this template suits them"
+        + (". " if planned else ": ")
+        + _if_wanted("them varied", fewer, planned, f"to vary them, {fewer}.")
     )
 
 
-def _repeated_note(number: int, kept: bool) -> str:
+def _repeated_note(number: int, kept: bool, planned: bool = False) -> str:
     """Never silent: a slide built alike on the user's word, or one that could not be."""
     if kept:
         return (
@@ -1861,8 +1890,13 @@ def _repeated_note(number: int, kept: bool) -> str:
         )
     return (
         f"Slide {number} has `repeat_layout`, but its content does not fit slide "
-        f"{number - 1}'s template slide, so it was built on another one. To keep that "
-        f"layout, shape its content like slide {number - 1}'s."
+        f"{number - 1}'s template slide, so it was built on another one. "
+        + _if_wanted(
+            "that layout",
+            f"shape its content like slide {number - 1}'s",
+            planned,
+            f"To keep that layout, shape its content like slide {number - 1}'s.",
+        )
     )
 
 
@@ -2023,14 +2057,19 @@ def assign(
             return at[slides[k].index] + (slides[k].part - 1 if deck else 0)
 
         notes = [
-            _substitution(slide, pattern, offered, number(k))
+            _substitution(slide, pattern, offered, number(k), not deck)
             for k, (slide, pattern) in enumerate(zip(slides, chosen))
         ]
         # With a limit, a run is a repeat and noted as one.
         notes += [
             f"Slides {number(i - 2)} to {number(i)} use the same template slide: no other "
-            "one holds their content. To make them look different, give one of them "
-            "another content shape."
+            "one holds their content. "
+            + _if_wanted(
+                "them to look different",
+                "give one of them another content shape",
+                not deck,
+                "To make them look different, give one of them another content shape.",
+            )
             for i in range(2, len(chosen))
             if caps is None
             and chosen[i].design_key
@@ -2039,9 +2078,9 @@ def assign(
             and slides[i].part == slides[i - 1].part == 1
             and not _exempt(slides[i])
         ]
-        notes += [_repeated_note(at[n], kept) for n, kept in repeated.items()]
-        notes += [_split_note(split, at) for split in splits.values()]
-        notes += [_repeat_note(r, at) for r in repeats]
+        notes += [_repeated_note(at[n], kept, not deck) for n, kept in repeated.items()]
+        notes += [_split_note(split, at, not deck) for split in splits.values()]
+        notes += [_repeat_note(r, at, not deck) for r in repeats]
         return list(dict.fromkeys(n for n in notes if n))
 
     # The deck's own numbers: a split list's parts are slides of their own.

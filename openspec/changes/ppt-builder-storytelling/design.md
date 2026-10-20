@@ -125,6 +125,10 @@ Review of session 4fbe0531 (`~/fred-tmp/deck-review-4fbe0531/REVIEW.md`). Wordin
 - **The outline carries the assignment notes** its build would give (`assignment.notes`, same text as at delivery): the user validated "Couverture" for a slide built as a section, and the fix cost one more build.
 - **Repeated slides and a split list state their fix** ("use fewer 'section' slides", "To keep one slide, …") instead of "Nothing to do". Kept: the advisory variety notes, and intent notes whose slide is built as asked.
 
+### D9. The outline's notes are the user's to decide (owner decision 2026-10-20)
+
+With reasoning replay, mistral-medium re-called `build_presentation` 7–12 times after a proposal, up to the per-turn call cap: the notes read as fixes to make now ("call again and …", "recast one …") and the working rules said "build directly". A proposal's notes now tie each fix to the user's wish ("If the user wants …: …"), its header says they are for the user, and the gated working rules say the proposal ends the answer. Delivery notes are unchanged: after a delivery, the agent may still act on them. Study: `~/fred-tmp/leak-study/PLAN-REPEAT.md` (fixes 2 and 3).
+
 ## Risks / Trade-offs
 
 - [More revision rounds on weak models] → checks run before the assignment and share one revision; each option is a concrete edit; measured in the eval (first-call success, rounds per deck).

@@ -87,15 +87,21 @@ async def test_the_outline_carries_the_notes_its_build_would_give(
 ):
     """A cover shown as 'Couverture' was built as a section: one more build."""
     early = [COVER, {**POINTS, "kind": "closing"}, CHART]
-    note = (
+    fact = (
         "Slide 2: built as 'section' instead of 'closing': a closing slide can only "
-        "end the deck. To make it the closing slide, move it to the end."
+        "end the deck."
     )
     gated = await build_tool(monkeypatch, _first_turn(), validate_plan=True)
     proposed, _ = await gated(slides=early)
     direct = await build_tool(monkeypatch, _first_turn())
     delivered, _ = await direct(slides=early)
-    assert note in delivered and note in proposed
+    assert f"{fact} To make it the closing slide, move it to the end." in delivered
+    # The proposal's notes are the user's to decide: the model shows them and stops.
+    assert (
+        f"{fact} If the user wants it as the closing slide: move it to the end."
+        in proposed
+    )
+    assert "Notes for the user" in proposed and "even for a note" in proposed
     assert proposed.startswith("Plan proposed")
 
 
@@ -180,6 +186,14 @@ def test_the_plan_gate_is_visible_to_the_model_only_when_it_is_on():
     assert "skip_plan" not in schema
     gate = tools._args_schema(inventory, True).model_json_schema()
     assert "skip_plan" in gate["properties"]
+
+
+def test_a_proposed_plan_ends_the_answer_even_with_notes():
+    """Live loop: the plan's notes read as fixes to make now, and the model
+    re-called the tool up to the call cap instead of showing the outline."""
+    gated = capability_mod.build_instructions(True, validate_plan=True)
+    assert "never call the tool again in that answer to address a note" in gated
+    assert "address a note" not in capability_mod.build_instructions(True)
 
 
 def test_a_refused_call_is_resent_as_its_result_says():

@@ -1080,18 +1080,18 @@ def _proposal(
     kinds = [p.kind if p else None for p in assignment.patterns]
     payload = {"status": "plan_proposed", "slides": len(plan.slides)}
     told = (
-        "Building this plan would also give these notes: tell the user what they change "
-        "in the outline, and apply their fixes when you build:\n"
+        "Notes for the user, with the outline: choices they may want to change. None is "
+        "a fix for you to make now; apply only what the user asks, once they answer:\n"
         + "\n".join(notes)
         + "\n"
         if notes
         else ""
     )
     return _answer(
-        f"{_PROPOSED} Show this outline to the user in their language and ask them to "
-        "validate or correct it; end your answer; do not call build_presentation again in "
-        "this answer. Once they answer, build it: the whole deck in `slides`, or `changes` "
-        f"to this plan.\n{story.outline(plan, kinds)}\n{told}"
+        f"{_PROPOSED} Show this outline and its notes to the user in their language and ask "
+        "them to validate or correct it; end your answer; do not call build_presentation "
+        "again in this answer, even for a note. Once they answer, build it: the whole deck "
+        f"in `slides`, or `changes` to this plan.\n{story.outline(plan, kinds)}\n{told}"
         + json.dumps(payload, ensure_ascii=False)
     )
 

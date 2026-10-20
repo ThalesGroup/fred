@@ -52,3 +52,11 @@
 - [x] 6.3 The `plan_proposed` outline lists the assignment notes the build would give; Help Center fr + en. Test: `test_plan_validation.py::test_the_outline_carries_the_notes_its_build_would_give`; offline replay of 4fbe0531 call 10 with the gate on shows the cover fallback note
 - [x] 6.4 Repeat note without alternative and split note end on their fix. Tests: `test_assign.py`, `test_table_slides.py`
 - [x] 6.5 Package checks (933 passed); `openspec validate --strict`
+
+## 7. The outline's notes are the user's to decide (owner decision 2026-10-20, design D9)
+
+- [x] 7.1 A proposal's notes word each fix as the user's choice ("If the user wants …: …") instead of "call again and …", "To vary them, recast one …", "To keep one slide, send at most …"; the delivery notes keep their wording; the proposal says the notes are for the user and not a fix to make now. Tests: `test_assign.py::test_an_agenda_too_long_goes_to_a_close_kind_that_holds_it`, `test_an_agenda_one_entry_too_long_continues_on_a_second_agenda_slide`, `test_every_note_numbers_slides_as_its_outline_does`, `test_plan_validation.py::test_the_outline_carries_the_notes_its_build_would_give` (extended)
+- [x] 7.2 With the plan gate on, the working rules say a proposed plan ends the answer: show the outline and its notes, never call the tool again in that answer to address a note. Test: `test_plan_validation.py::test_a_proposed_plan_ends_the_answer_even_with_notes`
+- [x] 7.3 Package checks; `openspec validate --strict`
+- [ ] 7.4 Live A/B (B settings, mistral-medium, reasoning replay, ≤4 parallel): build calls per base turn and turns ending on the call cap, before / after
+- Not changed (pending owner decision): `tool_choice="none"` after a proposal, the turn-scoped cap message, the `skip_plan` quote check (`~/fred-tmp/leak-study/PLAN-REPEAT.md` fixes 1, 4, 5)

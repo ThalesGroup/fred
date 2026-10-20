@@ -530,6 +530,12 @@ def test_an_agenda_too_long_goes_to_a_close_kind_that_holds_it():
         "fit (items: 17 given, max 8). To get the 'agenda' slide, call again and trim "
         "to 8 items or split them over two slides."
     ]
+    # A proposal's notes are the user's to decide, never a call to make now.
+    assert assignment.plan_notes == [
+        "Slide 2: built as 'process' instead of 'agenda': the 'agenda' slide does not "
+        "fit (items: 17 given, max 8). If the user wants the 'agenda' slide: trim "
+        "to 8 items or split them over two slides."
+    ]
 
 
 # --- a list continued on a second slide -------------------------------------------------------
@@ -570,6 +576,9 @@ def test_an_agenda_one_entry_too_long_continues_on_a_second_agenda_slide():
         "(1/2) and (2/2)): the largest 'agenda' slide holds 8. To keep one slide, "
         "send at most 8 items."
     ]
+    assert assignment.plan_notes[0].endswith(
+        "holds 8. If the user wants one slide: send at most 8 items."
+    )
     # The model's plan itself is untouched.
     assert plan.slides[1].title == "Sommaire" and len(plan.slides[1].items) == 9
 
@@ -2000,3 +2009,4 @@ def test_every_note_numbers_slides_as_its_outline_does():
         and "slide 4 (dated items)" in planned
     )
     assert "nothing to do" not in " ".join(assignment.notes).casefold()
+    assert "If the user wants them varied: recast one as above." in planned
