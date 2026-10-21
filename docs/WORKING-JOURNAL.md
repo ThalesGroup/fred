@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F10](#f10-import-zip-et-jeton-de-lopérateur) | Import ZIP sans borne par le jeton de l'opérateur | Tests automatisés validés | 04, A1, 09 |
 | [F07](#f07-validation-jwt-toujours-stricte) | Issuer et audience JWT toujours vérifiés | Tests automatisés validés | 03, I10 (09), A3 |
 | [F04](#f04-suppression-de-la-création-opérateur) | Création par HTTP ou ZIP | Accepté par Dimi | 03, 03a, 04, 09, A1/A3, carte des sources |
 | [F19](#f19-formatage-rust-et-qualité) | Formatage Rust et qualité | Contrôle qualité réussi | Aucun changement de comportement |
@@ -76,6 +77,22 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F10 Import ZIP et jeton de l'opérateur
+
+- 2026-10-21 : vérification sur HEAD `e84826c50`, verdict confirmé. La réconciliation
+  tenait la durée restante du bearer (30 à 300 s en local) comme borne, ce qui empêchait un
+  gros import de jamais aboutir ; verrous plateforme/organisations tenus jusqu'au commit ;
+  tuples des espaces annulés jamais collectés, sans effet de droits. Dimi choisit B.
+  `Importer` reçoit l'uid de l'opérateur authentifié une fois à l'admission (HTTP ou CLI) ;
+  chaque étape revérifie seulement `platform_owner` dans OpenFGA. Erreur `Unauthorized`
+  interne supprimée. Test d'attente réécrit : retrait du rôle refusé, bearer expiré pendant
+  l'attente accepté par HTTP (I5, I18). Arc42 04, A1 (séquence, effet 503 des verrous,
+  orphelins) et 09 (I18, verrous) mis à jour, blocs régénérés. A, C et D non retenus.
+  `cargo check --all-targets` et `cargo fmt` exécutés ; tests et qualité non exécutés ;
+  aucun commit.
+- 2026-10-21 : Dimi confirme que tests, intégration, qualité et contrôle arc42 sont bons
+  et autorise le commit de F10.
 
 ## F07 Validation JWT toujours stricte
 

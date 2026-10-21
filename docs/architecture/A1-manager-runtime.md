@@ -482,8 +482,10 @@ operator bearer, connects to SQL without migrating and verifies migration
 versions/checksums. It loads the published FGA store/model and checks platform owner.
 Multipart `POST /import-export/import` checks the authenticated caller's platform
 owner authority before reading exactly one `file` field. Both parse the same ZIP
-on a blocking worker and invoke `Importer`. A new organization requires a declared
-owner and admin.
+on a blocking worker and invoke `Importer` with the authenticated operator. A new
+organization requires a declared owner and admin. The bearer is verified once, at
+admission; every later boundary rechecks `platform_owner` in OpenFGA. Revoking that
+role stops the import at its next boundary; bearer expiry after admission does not.
 
 ```mermaid
 sequenceDiagram
@@ -503,7 +505,7 @@ sequenceDiagram
     C->>PG: release read-only locks
     loop each identity
         C->>PG: lock platform
-        C->>FGA: capture platform guard, recheck authority, consume guard
+        C->>FGA: capture platform guard, recheck platform owner, consume guard
         C->>KC: resolve or create with service credentials
         C->>PG: release lock
     end
@@ -512,11 +514,11 @@ sequenceDiagram
     C->>KC: verify distinct organization owner subjects, at most eight concurrently
     loop each organization subtree
         C->>FGA: initialize new guard, capture platform and organization revisions
-        C->>FGA: recheck authority, attachments and subtree parent requirements
+        C->>FGA: recheck platform owner, attachments and subtree parent requirements
         C->>PG: insert missing rows in parent-first order
         C->>FGA: guarded parent-first batches: a new space's parent link with its first grants, audit acknowledgments
     end
-    C->>FGA: capture platform guard, recheck authority and grant platform roles
+    C->>FGA: capture platform guard, recheck platform owner and grant platform roles
     C->>PG: commit space rows, release locks
     C-->>C: return completed counts
 ```
@@ -525,7 +527,10 @@ Predictable bundle, passwordless-identity, email-conflict, missing new-space-adm
 and conflicting-attachment errors fail whole-bundle preflight before provisioning writes (I18). Directory
 traversal holds no mutation lock. Child names are read only after acquiring all
 organization locks. Reconciliation retains those locks and the platform lock through
-SQL commit. It captures revisions before rechecking authority and parent access,
+SQL commit. Meanwhile, role and platform mutations anywhere on the platform, and
+folder, team or project writes in the declared organizations, wait at most five
+seconds for their lock and then answer 503. It captures revisions before rechecking
+platform ownership and parent access,
 then carries acknowledged revisions through batches of at most 96 link and space-role
 tuples plus four guard operations (I4, I5). A subtree with no role writes consumes its guard
 explicitly. Organization owners are checked once per distinct subject before subtree
@@ -543,7 +548,10 @@ Reconciliation is additive (I17): undeclared roles remain and requested grants a
 repaired. Renaming a declaration identifies a different space. Identities and
 acknowledged FGA grants can survive a failed SQL transaction; there is no distributed
 rollback. New rows commit after their initial grants, and rolled-back UUIDs are never
-reused. The CLI exits nonzero on failure; HTTP returns safe phase/count information.
+reused. Tuples already written for a rolled-back space remain in OpenFGA and nothing
+collects them: they grant nothing, because context and child resolution ignore IDs
+absent from SQL, but they add entries to the subjects' role Reads and the parent's
+child Reads. The CLI exits nonzero on failure; HTTP returns safe phase/count information.
 HTTP 200 means reconciliation completes, not merely that an upload is accepted.
 
 Local folder mutations capture the organization guard, authorize, consume

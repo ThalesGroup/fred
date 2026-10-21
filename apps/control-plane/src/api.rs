@@ -1104,8 +1104,6 @@ async fn import_blueprint(
         }
         let directory = s.directory.as_ref().filter(|d| s.auth.directory_subjects_match(d.realm()))
             .ok_or_else(|| AppError::Unavailable("import requires configured Keycloak service credentials and matching subject authentication".into()).into_response())?;
-        let bearer = request.headers().get(header::AUTHORIZATION).and_then(|h| h.to_str().ok())
-            .and_then(|h| h.split_once(' ')).filter(|(scheme,_)| scheme.eq_ignore_ascii_case("bearer")).map(|(_,token)| token.trim()).unwrap_or("").to_owned();
         let mut multipart = Multipart::from_request(request, &s).await.map_err(|e| upload_error(e.status()))?;
         let mut field = multipart.next_field().await.map_err(|e| upload_error(e.status()))?
             .ok_or_else(|| upload_error(StatusCode::BAD_REQUEST))?;
@@ -1123,7 +1121,7 @@ async fn import_blueprint(
                 let status = match error { InputError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE, _ => StatusCode::UNPROCESSABLE_ENTITY };
                 (status, Json(serde_json::json!({"detail":error.to_string()}))).into_response()
             })?;
-        let report = Importer { pool: &s.pool, fga: &s.fga, directory, auth: &s.auth, bearer: &bearer }.run(&bundle).await
+        let report = Importer { pool: &s.pool, fga: &s.fga, directory, operator: &user.uid }.run(&bundle).await
             .map_err(|error| {
                 let status = error.downcast_ref::<crate::provisioning::Failure>().map(|e| e.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
                 (status, Json(serde_json::json!({"detail":error.to_string()}))).into_response()

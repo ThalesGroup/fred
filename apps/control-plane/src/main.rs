@@ -378,16 +378,15 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
             .await
             .map_err(|_| anyhow::anyhow!("cannot read provisioning bundle"))?;
         let bundle = tokio::task::spawn_blocking(move || Bundle::parse(&bytes)).await??;
-        Ok::<_, anyhow::Error>((pool, fga, directory, auth, bearer, bundle))
+        Ok::<_, anyhow::Error>((pool, fga, directory, caller.uid, bundle))
     }
     .await;
-    let (pool, fga, directory, auth, bearer, bundle) = prepared.map_err(import_setup_error)?;
+    let (pool, fga, directory, operator, bundle) = prepared.map_err(import_setup_error)?;
     let report = Importer {
         pool: &pool,
         fga: &fga,
         directory: &directory,
-        auth: &auth,
-        bearer: bearer.trim(),
+        operator: &operator,
     }
     .run(&bundle)
     .await?;

@@ -14,10 +14,10 @@
 
 //! Additive provisioning. Preflight is read-only; each identity mutation holds the
 //! platform lock, and space reconciliation holds platform then organization locks.
-//! There is no distributed rollback: replay resolves identities and committed IDs.
+//! No distributed rollback: replay resolves identities and committed IDs. The caller
+//! authenticates the operator once; each mutation boundary rechecks OpenFGA authority.
 
 use crate::{
-    auth::Authenticator,
     bootstrap, db,
     domain::{Role, Space, SpaceKind, SpaceRow},
     fga::{Fga, Guard, Link, Scope, Tuple},
@@ -32,10 +32,6 @@ use uuid::Uuid;
 
 pub use crate::blueprint::Bundle;
 use crate::error::AppError;
-
-#[derive(Debug, thiserror::Error)]
-#[error("invalid or expired operator bearer")]
-struct Unauthorized;
 
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
@@ -57,8 +53,6 @@ impl Failure {
                 AppError::Internal(_) => S::SERVICE_UNAVAILABLE,
                 AppError::Problem { status, .. } => *status,
             }
-        } else if error.is::<Unauthorized>() {
-            S::UNAUTHORIZED
         } else if let Some(e) = error.downcast_ref::<sqlx::Error>() {
             match e {
                 sqlx::Error::Database(db)
@@ -78,7 +72,6 @@ impl Failure {
         // Never retain the dependency error chain or interpolate supplied values.
         let reason = match status {
             S::FORBIDDEN => "forbidden",
-            S::UNAUTHORIZED => "invalid or expired operator bearer",
             S::UNPROCESSABLE_ENTITY => "invalid identity or space declaration",
             S::CONFLICT => "state or authorization conflict",
             S::INTERNAL_SERVER_ERROR => "internal failure",
@@ -123,23 +116,15 @@ pub struct Importer<'a> {
     pub pool: &'a PgPool,
     pub fga: &'a Fga,
     pub directory: &'a Directory,
-    pub auth: &'a Authenticator,
-    pub bearer: &'a str,
+    /// Operator uid, authenticated at admission against the directory's realm.
+    pub operator: &'a str,
 }
 impl Importer<'_> {
-    /// Verify token again at every mutation boundary, including after waiting for locks.
-    async fn authorize(&self) -> Result<String> {
-        ensure!(
-            self.auth.directory_subjects_match(self.directory.realm()),
-            "import requires enabled Keycloak subject authentication in the directory realm"
-        );
-        let caller = self
-            .auth
-            .authenticate(Some(self.bearer))
-            .await
-            .map_err(|_| Unauthorized)?;
-        platform::require_owner(self.fga, &caller.uid).await?;
-        Ok(caller.uid)
+    /// Recheck platform ownership at every mutation boundary, including after lock waits;
+    /// bearer expiry after admission does not bound the import's duration.
+    async fn authorize(&self) -> Result<()> {
+        platform::require_owner(self.fga, self.operator).await?;
+        Ok(())
     }
 
     /// All predictable conflicts are checked for the whole bundle before writes.
@@ -462,7 +447,7 @@ impl Importer<'_> {
                 .fga
                 .guard(&[Scope::Platform, Scope::Organization(org.id)])
                 .await?;
-            let actor = self.authorize().await?;
+            self.authorize().await?;
             self.validate_parents(bundle, &resolved, subjects, Some(org.id))
                 .await?;
             self.validate_organizations(&mut tx, bundle, &resolved, subjects, Some(org.id))
@@ -497,8 +482,7 @@ impl Importer<'_> {
                 // An acknowledged batch must never leave eligibility before its content prerequisite.
                 grants.sort_by_key(|tuple| tuple.role == Role::PersonalSpaceCreator);
                 wrote |= link.is_some() || !grants.is_empty();
-                self.grant_spaces(&mut guard, &actor, link, &grants, report)
-                    .await?;
+                self.grant_spaces(&mut guard, link, &grants, report).await?;
             }
             if !wrote {
                 self.fga.fence(&mut guard).await?;
@@ -508,7 +492,7 @@ impl Importer<'_> {
             let mut guard = self.fga.guard(&[Scope::Platform]).await?;
             for entry in &bundle.users {
                 for role in &entry.platform {
-                    let actor = self.authorize().await?;
+                    self.authorize().await?;
                     let user = &subjects[&entry.identity.username];
                     ensure!(
                         self.directory.exists(user).await?,
@@ -519,7 +503,7 @@ impl Importer<'_> {
                         .await?;
                     report.grants_acknowledged += 1;
                     logging::audit_relation(
-                        Some(&actor),
+                        Some(self.operator),
                         user,
                         role.relation(),
                         "platform:root",
@@ -536,7 +520,6 @@ impl Importer<'_> {
     async fn grant_spaces(
         &self,
         guard: &mut Guard,
-        actor: &str,
         mut link: Option<Link>,
         tuples: &[Tuple<'_>],
         report: &mut Report,
@@ -555,7 +538,7 @@ impl Importer<'_> {
             report.grants_acknowledged += batch.len();
             for tuple in batch {
                 logging::audit_relation(
-                    Some(actor),
+                    Some(self.operator),
                     tuple.user,
                     tuple.role.as_str(),
                     &format!("space:{}", tuple.space),

@@ -146,7 +146,8 @@ team/name. Existing identity fields, passwords, committed space IDs and undeclar
 roles are preserved. Requested grants are repaired; no content role or CGU
 acceptance is invented. A new organization declares at least one owner and one
 admin, possibly the same person; owner is refused on teams and projects. Import
-requires a platform owner.
+requires a platform owner, authenticated once at admission and rechecked before each
+write; bearer expiry after admission does not interrupt it.
 
 Keycloak, PostgreSQL and OpenFGA do not share a transaction. An error can leave
 created identities or acknowledged grants; replay follows correction of the cause

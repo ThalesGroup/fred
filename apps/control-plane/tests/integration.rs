@@ -1181,9 +1181,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
     use control_plane::{provisioning::Importer, roles::PlatformRole};
     let e = env().await;
     let server = support::IdentityServer::start().await;
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
@@ -1194,8 +1192,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
         pool: &e.pool,
         fga: &fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "root",
     };
     let first = importer.run(&bundle).await.unwrap();
     assert_eq!(first.identities_created, 3);
@@ -1286,7 +1283,6 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
     use control_plane::{provisioning::Importer, roles::PlatformRole};
     let e = env().await;
     let server = support::IdentityServer::start().await;
-    let auth = server.auth().await;
     let directory = server.directory();
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
@@ -1301,24 +1297,18 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
         .await
         .unwrap();
     let before = e.fga.platform_grants().await.unwrap();
-    for token in [
-        "invalid".into(),
-        server.token("observer"),
-        server
-            .sign(serde_json::json!({"sub":"root","iss":server.realm,"aud":"app","iat":1,"exp":2})),
-    ] {
+    // Bearer validity is checked at admission (HTTP and CLI); here only authority.
+    for operator in ["observer", "nobody"] {
         let result = Importer {
             pool: &e.pool,
             fga: &e.fga,
             directory: &directory,
-            auth: &auth,
-            bearer: &token,
+            operator,
         }
         .run(&provisioning_bundle())
         .await;
         assert!(result.is_err());
     }
-    let token = server.token("root");
     for (users, teams) in [
         (
             serde_json::json!([{"username":"alice","password":"private-password"},{"username":"tail"}]),
@@ -1334,8 +1324,7 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
             pool: &e.pool,
             fga: &e.fga,
             directory: &directory,
-            auth: &auth,
-            bearer: &token,
+            operator: "root",
         }
         .run(&bundle)
         .await
@@ -1413,9 +1402,7 @@ async fn provisioning_replay_after_identity_and_sql_failures_reuses_committed_st
     use control_plane::provisioning::Importer;
     let e = env().await;
     let server = support::IdentityServer::start().await;
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
@@ -1424,8 +1411,7 @@ async fn provisioning_replay_after_identity_and_sql_failures_reuses_committed_st
         pool: &e.pool,
         fga: &e.fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "root",
     };
     server.control.lock().await.fail_create = true;
     assert!(importer.run(&bundle).await.is_err());
@@ -1456,9 +1442,7 @@ async fn simultaneous_imports_reuse_usernames_and_space_names() {
     use control_plane::provisioning::Importer;
     let e = env().await;
     let server = support::IdentityServer::start().await;
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
@@ -1467,8 +1451,7 @@ async fn simultaneous_imports_reuse_usernames_and_space_names() {
         pool: &e.pool,
         fga: &e.fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "root",
     };
     let (one, two) = tokio::join!(importer.run(&bundle), importer.run(&bundle));
     one.unwrap();
@@ -1486,12 +1469,15 @@ async fn simultaneous_imports_reuse_usernames_and_space_names() {
 // Proves: I5, I18
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
-    use control_plane::provisioning::Importer;
-    for expired in [false, true] {
+async fn provisioning_waiter_rechecks_revocation_but_not_bearer_expiry() {
+    use control_plane::{
+        api::{AppState, governance_router},
+        provisioning::Importer,
+    };
+    let bundle = br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"new","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[],"projects":[]}"#;
+    for revoked in [true, false] {
         let e = env().await;
         let server = support::IdentityServer::start().await;
-        let auth = server.auth().await;
         let directory = server.directory();
         bootstrap::grant_root(&e.pool, &e.fga, "root")
             .await
@@ -1502,35 +1488,48 @@ async fn provisioning_waiter_rechecks_revoked_or_expired_operator() {
             .execute(&mut *tx)
             .await
             .unwrap();
-        let now = chrono::Utc::now().timestamp();
-        let token = if expired {
-            server.sign(serde_json::json!({"sub":"root","iss":server.realm,"aud":"app","iat":now,"exp":now+1}))
+        let pending = if revoked {
+            let (pool, fga) = (e.pool.clone(), e.fga.clone());
+            tokio::spawn(async move {
+                Importer {
+                    pool: &pool,
+                    fga: &fga,
+                    directory: &directory,
+                    operator: "root",
+                }
+                .run(&parse_blueprint(bundle).unwrap())
+                .await
+                .is_ok()
+            })
         } else {
-            server.token("root")
+            // Admission accepts this bearer; it expires while the import waits.
+            let app = governance_router(AppState {
+                onboarding: Default::default(),
+                lifecycle: Default::default(),
+                auth: std::sync::Arc::new(server.auth().await),
+                pool: e.pool.clone(),
+                fga: e.fga.clone(),
+                directory: Some(directory),
+                content: None,
+                processing: None,
+            });
+            let now = chrono::Utc::now().timestamp();
+            let token = server.sign(
+                serde_json::json!({"sub":"root","iss":server.realm,"aud":"app","iat":now,"exp":now+2}),
+            );
+            tokio::spawn(
+                async move { http_import(&app, &token, &fixture_zip(bundle)).await.0 == 200 },
+            )
         };
-        let pool = e.pool.clone();
-        let fga = e.fga.clone();
-        let pending = tokio::spawn(async move {
-            let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"new","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[],"projects":[]}"#).unwrap();
-            Importer {
-                pool: &pool,
-                fga: &fga,
-                directory: &directory,
-                auth: &auth,
-                bearer: &token,
-            }
-            .run(&bundle)
-            .await
-        });
         wait_for_advisory_waiter(&e.pool).await;
-        if expired {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-        } else {
+        if revoked {
             delete_tuple(&e, "root", "platform_owner", "platform:root").await;
+        } else {
+            tokio::time::sleep(Duration::from_secs(3)).await;
         }
         tx.commit().await.unwrap();
-        assert!(pending.await.unwrap().is_err());
-        assert!(server.users.lock().await.is_empty());
+        assert_eq!(pending.await.unwrap(), !revoked);
+        assert_eq!(server.users.lock().await.is_empty(), revoked);
     }
 }
 
@@ -1805,9 +1804,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
     use control_plane::provisioning::Importer;
     let e = env().await;
     let server = support::IdentityServer::start().await;
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
@@ -1849,8 +1846,7 @@ async fn provisioning_batches_large_parent_and_child_grants_and_keeps_personal_s
         pool: &e.pool,
         fga: &fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "root",
     };
     let report = importer.run(&bundle).await.unwrap();
     assert_eq!(report.grants_acknowledged, 317);
@@ -1911,9 +1907,7 @@ async fn preflight_does_not_block_revocation_and_cancelled_identity_creation_rep
     for cancel in [false, true] {
         let e = env().await;
         let server = support::IdentityServer::start().await;
-        let auth = server.auth().await;
         let directory = server.directory();
-        let token = server.token("root");
         bootstrap::grant_root(&e.pool, &e.fga, "root")
             .await
             .unwrap();
@@ -1930,8 +1924,7 @@ async fn preflight_does_not_block_revocation_and_cancelled_identity_creation_rep
                 pool: &pool,
                 fga: &fga,
                 directory: &directory,
-                auth: &auth,
-                bearer: &token,
+                operator: "root",
             }
             .run(&provisioning_bundle())
             .await
@@ -1943,15 +1936,12 @@ async fn preflight_does_not_block_revocation_and_cancelled_identity_creation_rep
             pending.abort();
             assert!(pending.await.unwrap_err().is_cancelled());
             gate.release.notify_one();
-            let auth = server.auth().await;
             let directory = server.directory();
-            let token = server.token("root");
             let result = Importer {
                 pool: &e.pool,
                 fga: &e.fga,
                 directory: &directory,
-                auth: &auth,
-                bearer: &token,
+                operator: "root",
             }
             .run(&provisioning_bundle())
             .await
@@ -2015,8 +2005,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         pool: &e.pool,
         fga: &e.fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: &root.uid,
     };
     // Predictable identity failures cannot create even the first account in a bundle.
     let declaration = serde_json::json!({"users":[{"username":"prefix","password":"private-password"},{"username":"tail","password":"private-password"}],"organizations":[{"ref":"o","name":"Preflight","roles":{"prefix":["organization_owner","admin"]}}],"teams":[],"projects":[]});
@@ -2339,15 +2328,12 @@ async fn provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgm
             fault.fail_at = nth;
             fault.after = nth % 2 == 0;
         }
-        let auth = server.auth().await;
         let directory = server.directory();
-        let token = server.token("root");
         let importer = Importer {
             pool: &e.pool,
             fga: &fga,
             directory: &directory,
-            auth: &auth,
-            bearer: &token,
+            operator: "root",
         };
         let error = importer
             .run(&provisioning_bundle())
@@ -2438,16 +2424,13 @@ async fn cancellation_after_fga_write_rolls_back_new_space_and_replays() {
     .await
     .unwrap();
     let pool = e.pool.clone();
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     let pending = tokio::spawn(async move {
         Importer {
             pool: &pool,
             fga: &fga,
             directory: &directory,
-            auth: &auth,
-            bearer: &token,
+            operator: "root",
         }
         .run(&provisioning_bundle())
         .await
@@ -2487,15 +2470,12 @@ async fn cancellation_after_fga_write_rolls_back_new_space_and_replays() {
             .is_none()
     );
     gate.release.notify_one();
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     let report = Importer {
         pool: &e.pool,
         fga: &e.fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "root",
     }
     .run(&provisioning_bundle())
     .await
@@ -2552,17 +2532,14 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
     let held = hold_organization_lock(&e, org.id).await;
     let pool = e.pool.clone();
     let fga = e.fga.clone();
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("delegate");
     let bytes=br#"{"users":[{"username":"alice"},{"username":"bob","platform_roles":["platform_observer"]}],"organizations":[{"ref":"org","name":"Existing","roles":{"alice":["admin","member","organization_owner"],"bob":["member"]}}],"teams":[{"ref":"New","name":"New","organization":"org","roles":{"alice":["admin"],"bob":["analyst"]}}],"projects":[]}"#;
     let pending = tokio::spawn(async move {
         Importer {
             pool: &pool,
             fga: &fga,
             directory: &directory,
-            auth: &auth,
-            bearer: &token,
+            operator: "delegate",
         }
         .run(&parse_blueprint(bytes).unwrap())
         .await
@@ -2593,15 +2570,12 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
     .unwrap();
     delete_tuple(&e, "bob", "analyst", &format!("space:{}", team.id)).await;
     proxy.fault.lock().await.fail_at = 2;
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("delegate");
     let importer = Importer {
         pool: &e.pool,
         fga: &fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "delegate",
     };
     assert!(
         importer
@@ -4690,12 +4664,10 @@ async fn import_rechecks_owner_identity_before_publishing_spaces() {
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    let auth = server.auth().await;
     let directory = server.directory();
     let gate = Arc::new(support::Gate::default());
     server.control.lock().await.create_gate = Some(gate.clone());
     let bundle = parse_blueprint(br#"{"users":[{"username":"alice"},{"username":"bob","password":"fixture-password"}],"organizations":[{"ref":"org","name":"Race","roles":{"alice":["organization_owner","admin"]}}],"teams":[],"projects":[]}"#).unwrap();
-    let token = server.token("root");
     let pool = e.pool.clone();
     let fga = e.fga.clone();
     let pending = tokio::spawn(async move {
@@ -4703,8 +4675,7 @@ async fn import_rechecks_owner_identity_before_publishing_spaces() {
             pool: &pool,
             fga: &fga,
             directory: &directory,
-            auth: &auth,
-            bearer: &token,
+            operator: "root",
         }
         .run(&bundle)
         .await
@@ -4752,15 +4723,12 @@ async fn import_checks_distinct_owners_once_with_bounded_concurrency() {
     let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({
         "users":users,"organizations":[{"ref":"a","name":"A","roles":roles}],"teams":[],"projects":[]
     })).unwrap()).unwrap();
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     control_plane::provisioning::Importer {
         pool: &e.pool,
         fga: &e.fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "root",
     }
     .run(&bundle)
     .await
@@ -4985,19 +4953,16 @@ async fn import_rejects_cross_organization_declarations_before_identity_writes()
     let e = env().await;
     let server = support::IdentityServer::start().await;
     let directory = server.directory();
-    let auth = server.auth().await;
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    let token = server.token("root");
     let value = serde_json::json!({"users":[{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"bob":["admin","organization_owner","member"]}},{"ref":"b","name":"B","roles":{"bob":["admin","organization_owner","member"]}}],"teams":[],"projects":[]});
     let bundle = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();
     let importer = Importer {
         pool: &e.pool,
         fga: &e.fga,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "root",
     };
     let failure = importer.run(&bundle).await.unwrap_err();
     assert!(failure.to_string().contains("preflight"));
@@ -5223,9 +5188,7 @@ async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
     server.users.lock().await.insert("bob".into(), "bob".into());
     let gate = std::sync::Arc::new(support::Gate::default());
     server.control.lock().await.create_gate = Some(gate.clone());
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     let bundle = parse_blueprint(br#"{"users":[{"username":"carol","password":"private-password"},{"username":"bob"}],"organizations":[{"ref":"b","name":"B","roles":{"carol":["organization_owner","admin"],"bob":["member"]}}],"teams":[],"projects":[]}"#).unwrap();
     let (pool, fga) = (e.pool.clone(), e.fga.clone());
     let import = tokio::spawn(async move {
@@ -5233,8 +5196,7 @@ async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
             pool: &pool,
             fga: &fga,
             directory: &directory,
-            auth: &auth,
-            bearer: &token,
+            operator: "root",
         }
         .run(&bundle)
         .await
@@ -5503,9 +5465,7 @@ async fn import_orders_personal_eligibility_after_content_across_failed_batches(
         .await
         .unwrap();
     let server = support::IdentityServer::start().await;
-    let auth = server.auth().await;
     let directory = server.directory();
-    let token = server.token("root");
     let mut users = Vec::new();
     let mut roles = serde_json::Map::new();
     for i in 0..96 {
@@ -5540,8 +5500,7 @@ async fn import_orders_personal_eligibility_after_content_across_failed_batches(
         pool: &e.pool,
         fga: &observed,
         directory: &directory,
-        auth: &auth,
-        bearer: &token,
+        operator: "root",
     };
     value["organizations"][0]["roles"]["user-095"] = serde_json::json!(["personal_space_creator"]);
     let invalid = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();

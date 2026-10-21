@@ -483,8 +483,6 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
     .unwrap();
     let identity = support::IdentityServer::start().await;
     let directory = identity.directory();
-    let identity_auth = identity.auth().await;
-    let token = identity.token("root");
     let bundle = parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"TSN","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[{"ref":"team","name":"BID","organization":"org","roles":{"alice":["admin"]}}],"projects":[]}"#).unwrap();
     let gate = std::sync::Arc::new(support::Gate::default());
     proxy.fault.lock().await.gate = Some(gate.clone());
@@ -515,8 +513,7 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
             pool: &pool,
             fga: &import_fga,
             directory: &import_directory,
-            auth: &identity_auth,
-            bearer: &token,
+            operator: "root",
         }
         .run(&bundle)
         .await
