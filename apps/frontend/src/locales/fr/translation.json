@@ -116,6 +116,7 @@
     }
   },
   "capability": {
+    "panelLoadFailed": "Ce panneau n'a pas pu se charger. Rechargez la page.",
     "web_research": {
       "name": "Rechercher sur le Web",
       "description": "Rechercher des sources publiques et lire des pages Web via un accès externe contrôlé."
