@@ -2,6 +2,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import PlatformAccessExpirationPicker from "./PlatformAccessExpirationPicker";
 import TextInput from "@shared/atoms/TextInput/TextInput";
@@ -395,18 +396,20 @@ export default function PlatformAccessLinkManager({
           hideCancel
           confirmLabel={t("rework.back")}
           footerStart={
-            <Button
+            <IconButton
+              type="button"
               color="primary"
-              variant="outlined"
+              variant="icon"
               size="small"
-              disabled={joiners.isFetching || links.isFetching}
+              icon={{ category: "outlined", type: "refresh" }}
+              title={t("common.refresh")}
+              aria-label={t("common.refresh")}
+              loading={joiners.isFetching || links.isFetching}
               onClick={() => {
                 void joiners.refetch();
                 void links.refetch();
               }}
-            >
-              {t("common.refresh")}
-            </Button>
+            />
           }
           onCancel={() => setJoinersLink(undefined)}
           onConfirm={() => setJoinersLink(undefined)}

@@ -415,9 +415,9 @@ it("keeps cached joiners visible during refresh and handles errors and empty res
 it("refreshes joined users and the underlying opening count on demand", () => {
   render();
   act(() => button("links.joiners").click());
-  const refresh = [...frontDialog().querySelectorAll<HTMLButtonElement>("button")].find(
-    (node) => node.textContent === "common.refresh",
-  )!;
+  const refresh = frontDialog().querySelector<HTMLButtonElement>('button[aria-label="common.refresh"]')!;
+  expect(refresh.title).toBe("common.refresh");
+  expect(refresh.textContent).toBe("refresh");
   expect(document.querySelector(`.${styles.boundedTable} [title="7"]`)).not.toBeNull();
   act(() => refresh.click());
   expect(hooks.joinerRefetch).toHaveBeenCalledOnce();
@@ -428,6 +428,7 @@ it("refreshes joined users and the underlying opening count on demand", () => {
   expect(frontDialog().textContent).toContain("simon");
   expect(document.querySelector(`.${styles.boundedTable} [title="7"]`)).not.toBeNull();
   expect(refresh.disabled).toBe(true);
+  expect(refresh.getAttribute("aria-busy")).toBe("true");
   hooks.joinerFetching = false;
   hooks.fetching = false;
   hooks.linkOpeningCount = 8;
