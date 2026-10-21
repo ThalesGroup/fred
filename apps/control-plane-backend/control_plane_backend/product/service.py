@@ -84,6 +84,9 @@ from control_plane_backend.agent_instances.suspension import (
     reconcile_instance_config_health,
     reconcile_instance_suspension,
 )
+from control_plane_backend.agent_marketplace.notifications import (
+    notify_republish_needed,
+)
 from control_plane_backend.capabilities.authz import (
     can_team_use_capability,
     filter_entries_by_usable,
@@ -3137,6 +3140,14 @@ async def update_agent_instance(
             store, updated, kpi_writer=deps.get_kpi_writer()
         )
         updated = cleared if cleared is not None else updated
+    if updated is not None and deps.get_notification_service is not None:
+        await notify_republish_needed(
+            deps.get_notification_service(),
+            store=deps.get_agent_marketplace_store(),
+            before=record,
+            after=updated,
+            editor=user,
+        )
     if updated is not None:
         try:
             effective_tuning = new_tuning if new_tuning is not None else record.tuning

@@ -61,6 +61,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.store import TeamAgentsDeletion
+from control_plane_backend.agent_marketplace.notifications import notify_unpublished
 from control_plane_backend.agent_marketplace.store import (
     RemovalReason,
     RemovedEntry,
@@ -73,6 +74,7 @@ from control_plane_backend.marketplace_settings.effective import (
     load_marketplace_default,
 )
 from control_plane_backend.marketplace_settings.schemas import TeamMarketplaceView
+from control_plane_backend.notifications.service import display_name
 from control_plane_backend.product.prompt_starter_kit import (
     STARTER_CATEGORY_NAMES,
     STARTER_PROMPTS,
@@ -1154,6 +1156,12 @@ async def update_team(
         except IntegrityError as exc:
             raise _name_conflict_or(exc, patch_data) from exc
         emit_unpublished(removed, actor_uid=user.uid)
+        await notify_unpublished(
+            deps.get_notification_service() if deps.get_notification_service else None,
+            removed,
+            actor_uid=user.uid,
+            actor_name=display_name(user),
+        )
         _log_rename(team_id, renamed_from, patch_data, user)
         if updated is not None:
             metadata = updated

@@ -401,7 +401,8 @@ class ApplicationContext:
     def get_agent_instance_store(self) -> AgentInstanceStore:
         if self._agent_instance_store is None:
             self._agent_instance_store = AgentInstanceStore(
-                engine=self.get_pg_async_engine()
+                engine=self.get_pg_async_engine(),
+                notifications=self.get_notification_service(),
             )
         return self._agent_instance_store
 

@@ -47,6 +47,10 @@ from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.names import CopyLocale
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_marketplace.notifications import (
+    notify_unpublished,
+    resolve_republished,
+)
 from control_plane_backend.agent_marketplace.schemas import (
     MarketplaceAgentCapability,
     MarketplaceAgentDetail,
@@ -75,6 +79,10 @@ from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.marketplace_settings.effective import (
     effective_marketplace_settings,
     load_marketplace_default,
+)
+from control_plane_backend.notifications.service import (
+    NotificationService,
+    display_name,
 )
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.agent_copy import (
@@ -121,6 +129,11 @@ class MarketplaceError(Exception):
 
 def _store(deps: ProductServiceDependencies) -> AgentMarketplaceStore:
     return deps.get_agent_marketplace_store()
+
+
+def _notifications(deps: ProductServiceDependencies) -> NotificationService | None:
+    getter = deps.get_notification_service
+    return getter() if getter is not None else None
 
 
 def _version_conflict() -> MarketplaceError:
@@ -485,6 +498,7 @@ async def publish_agent(
             team_id=team_id,
             snapshot=snapshot,
             expected_version=request.expected_version,
+            published_by=user.uid,
         )
     except MarketplaceVersionConflict as exc:
         raise _version_conflict() from exc
@@ -503,6 +517,7 @@ async def publish_agent(
         republished=not is_new,
         user_id=user.uid,
     )
+    await resolve_republished(_notifications(deps), entry_id=entry.entry_id, user=user)
     counters = (await store.counters([entry.entry_id]))[entry.entry_id]
     view = _state_view(entry, counters, agent_updated_at=record.updated_at, full=True)
     assert view is not None
@@ -571,6 +586,12 @@ async def unpublish_agent(
             code="marketplace_entry_not_found",
         ) from exc
     emit_unpublished([removed], actor_uid=user.uid)
+    await notify_unpublished(
+        _notifications(deps),
+        [removed],
+        actor_uid=user.uid,
+        actor_name=display_name(user),
+    )
 
 
 async def dismiss_marketplace_removal(
