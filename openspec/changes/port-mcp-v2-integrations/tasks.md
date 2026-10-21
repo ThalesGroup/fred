@@ -1,10 +1,10 @@
 ## 1. Client compatibility
 
-- [ ] 1.1 Pin an MCP v2-compatible FastMCP client in the runtime and verify dependency resolution and imports in its locked environment.
-- [ ] 1.2 Replace `MultiServerMCPClient` discovery and lifecycle with Fred-owned MCP tool wrappers; verify `streamable_http` and `stdio` tool listing and calls through focused runtime tests.
+- [ ] 1.1 Pin `langchain[mcp]` with FastMCP 4 and MCP SDK v2 in the runtime; verify dependency resolution and imports in its locked environment.
+- [ ] 1.2 Replace `MultiServerMCPClient` discovery and lifecycle with the first-party `MCPAdapter`; verify `streamable_http` and `stdio` tool listing and calls without a Fred-owned tool wrapper.
 - [ ] 1.3 Move live person bearer refresh and one-time expiry retry to the call boundary; verify a token change after discovery and a 401 retry with targeted tests.
 - [ ] 1.4 Preserve delegated grant, M2M auth, origin confinement, redirect refusal, and authority-loss handling; verify each with targeted security tests.
-- [ ] 1.5 Preserve tool names, server metadata, structured results, and error mapping in ReAct and Graph consumers; verify affected runtime integration tests.
+- [ ] 1.5 Preserve tool names, server metadata, structured results, and error mapping in ReAct and Graph consumers using adapter results; verify affected runtime integration tests.
 
 ## 2. Knowledge Flow server compatibility
 
