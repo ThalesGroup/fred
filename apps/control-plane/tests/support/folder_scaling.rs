@@ -351,9 +351,10 @@ async fn folder_scaling() {
     for i in 0..50 {
         let owner = format!("owner-{i}");
         let writer = format!("writer-{i}");
-        let space = spaces::create_organization(&e.pool, &e.fga, &format!("separate-{i}"), &owner)
-            .await
-            .unwrap();
+        let space =
+            crate::support::member_organization(&e.pool, &e.fga, &format!("separate-{i}"), &owner)
+                .await
+                .unwrap();
         spaces::grant(
             &e.pool,
             &e.fga,

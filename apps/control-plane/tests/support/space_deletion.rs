@@ -259,11 +259,11 @@ async fn lifecycle_retention_personal_scope_and_final_guard_commit_failure() {
             .is_empty()
     );
     assert!(
-        spaces::create_organization(&e.pool, &e.fga, "Other", "alice")
+        crate::support::member_organization(&e.pool, &e.fga, "Other", "alice")
             .await
             .is_err()
     );
-    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "other-admin")
+    let other = crate::support::member_organization(&e.pool, &e.fga, "Other", "other-admin")
         .await
         .unwrap();
     let mut guard = e.fga.guard(&[Scope::Organization(other.id)]).await.unwrap();
@@ -332,7 +332,7 @@ async fn lifecycle_filtered_batches_lost_ack_and_unrelated_state() {
         .await
         .unwrap();
     let (org, team) = org_and_team(&e).await;
-    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "bob")
+    let other = crate::support::member_organization(&e.pool, &e.fga, "Other", "bob")
         .await
         .unwrap();
     sqlx::query("insert into folder (id,space_id,name,path) select gen_random_uuid(),$1,'folder-'||n,'/' from generate_series(1,1001) n").bind(team.id).execute(&e.pool).await.unwrap();
@@ -736,7 +736,7 @@ async fn lifecycle_orphan_pages_keep_anchors_through_lost_acknowledgments() {
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     let ghost = Uuid::new_v4();
@@ -885,7 +885,7 @@ async fn lifecycle_orphans_cannot_expand_the_committed_manifest_or_depth() {
         .await
         .unwrap();
     let (org, team) = org_and_team(&e).await;
-    let foreign = spaces::create_organization(&e.pool, &e.fga, "Other", "bob")
+    let foreign = crate::support::member_organization(&e.pool, &e.fga, "Other", "bob")
         .await
         .unwrap();
     let ghost = Uuid::new_v4();

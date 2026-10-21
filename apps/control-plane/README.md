@@ -108,7 +108,13 @@ Organization admins create teams, team admins create projects. The last admin of
 non-personal space, and the last owner of an organization, cannot be revoked. Capability checks and their contracts are in the
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
 
-Platform grants, organization-owner grants and operator `create-org` require the manager's service client. The factory
+Organizations are created through the platform form (`POST /control-plane/v1/admin/organizations`)
+or a provisioning ZIP. Without the frontend, use the authenticated HTTP endpoint or
+`make import-provisioning BUNDLE=<zip> TOKEN_FILE=<bearer-file>` on an initialized
+installation. Both paths require a platform owner; creation does not restore a lost
+platform-owner role.
+
+Platform grants and organization-owner grants require the manager's service client. The factory
 provisions the `control-plane` client and its directory grants. The cluster uses
 `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` from `fred-secrets`. To reuse that identity
 on the host, set `security.m2m.client_id` to `control-plane`, set its

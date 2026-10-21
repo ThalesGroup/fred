@@ -16,6 +16,20 @@ fn schema() -> Value {
 }
 
 #[test]
+fn cli_help_exposes_authenticated_import_without_operator_creation() {
+    let output = Command::new(env!("CARGO_BIN_EXE_control-plane"))
+        .arg("--help")
+        .env("CONFIG_FILE", "/nonexistent/manager-configuration")
+        .env("ENV_FILE", "/nonexistent/manager-env")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout).unwrap();
+    assert!(help.contains("import-provisioning"));
+    assert!(!help.contains("create-org"));
+}
+
+#[test]
 fn offline_command_is_deterministic_without_runtime_configuration() {
     let run = || {
         Command::new(env!("CARGO_BIN_EXE_control-plane"))

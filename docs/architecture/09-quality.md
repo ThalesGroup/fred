@@ -255,7 +255,6 @@ resolver before filtering active rows and enumerating descendants.
 | Create team or project | `Q(caller) + Q(admin) + 1 R_g + 1 C + P_d Read + P_c(parent) Read + W(4)` | Actor manages parent; nominated admin's direct parent roles; sibling names; link and admin in one Write |
 | Create personal space | `Q(caller) + 1 R_g + 2 C + P_o(org) Read + W(5)` | Organization read and explicit eligibility; all personal links; link, member and editor in one Write |
 | Reuse personal space | `Q(caller) + 1 R_g + 2 C + P_o(org) Read` | Organization and personal read; no SQL/FGA mutation |
-| Operator create organization | `W(2) + 2 R_g + Q(first person) + W(7)` | Directory subject lookup, initialize guard, then initial owner/admin/member grants |
 | Public configuration, personal onboarding and consent | `0` | SQL bootstrap/acceptance reads or consent upsert only |
 | Root bootstrap | `1 R_g + W(3)` | Bearer/secret and SQL marker govern admission |
 
@@ -415,7 +414,8 @@ organization, team and project, an organization analyst with a personal space)
 expects 3 Reads for `/me/spaces`, and `1 C + 1 Read` for both project
 and team scopes. These are wire-count assertions in disposable
 integration environments, not latency, throughput or scalability measurements.
-The pagination fixture has five roles on one organization and forces page size 2:
+The pagination fixture has five business roles (including personal-space eligibility)
+on one organization, a separate organization owner, and forces page size 2:
 context takes three Reads. Adding a first member costs six Reads (two guards, three
 caller pages, one empty target page), one Check and one Write with five operations.
 The two-organization attachment races use concurrency 2; other wire budgets use

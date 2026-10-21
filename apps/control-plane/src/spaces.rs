@@ -363,29 +363,6 @@ fn validate_space_name(name: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Organizations are created by an operator; the first person must be unattached.
-/// The first person becomes owner, admin and member: technical and business roles may be
-/// held by the same person.
-pub async fn create_organization(
-    pool: &PgPool,
-    fga: &Fga,
-    name: &str,
-    admin: &str,
-) -> AppResult<Space> {
-    initialize_organization(
-        pool,
-        fga,
-        name,
-        &[
-            (admin, Role::Admin),
-            (admin, Role::Member),
-            (admin, Role::OrganizationOwner),
-        ],
-        None,
-    )
-    .await
-}
-
 /// HTTP governance creates only the two explicitly selected roles, never content access.
 pub async fn create_managed_organization(
     pool: &PgPool,
@@ -426,27 +403,10 @@ pub async fn create_managed_organization(
             })?
             .id
     };
-    initialize_organization(
-        pool,
-        fga,
-        name,
-        &[
-            (owner.id.as_str(), Role::OrganizationOwner),
-            (admin.as_str(), Role::Admin),
-        ],
-        Some(caller),
-    )
-    .await
-}
-
-async fn initialize_organization(
-    pool: &PgPool,
-    fga: &Fga,
-    name: &str,
-    initial_roles: &[(&str, Role)],
-    caller: Option<&str>,
-) -> AppResult<Space> {
-    validate_space_name(name)?;
+    let initial_roles = [
+        (owner.id.as_str(), Role::OrganizationOwner),
+        (admin.as_str(), Role::Admin),
+    ];
     let id = Uuid::new_v4();
     let org = Space::from(SpaceRow {
         id,
@@ -473,14 +433,12 @@ async fn initialize_organization(
     let mut guard = fga
         .guard(&[Scope::Platform, Scope::Organization(id)])
         .await?;
-    if let Some(caller) = caller {
-        crate::platform::require_owner(fga, caller).await?;
-    }
+    crate::platform::require_owner(fga, caller).await?;
     let targets: BTreeSet<_> = initial_roles.iter().map(|(user, _)| *user).collect();
     for target in targets {
         may_attach(&mut *tx, fga, target, id).await?;
     }
-    persist(tx, fga, &mut guard, &org, &[], &tuples, caller).await?;
+    persist(tx, fga, &mut guard, &org, &[], &tuples, Some(caller)).await?;
     Ok(org)
 }
 

@@ -201,7 +201,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         .unwrap();
     assert_eq!(get(&app, &reader, &docs).await.0, 403);
     assert_eq!(get(&app, &reader, &format!("{base}/entries")).await.0, 403);
-    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "outsider")
+    let other = crate::support::member_organization(&e.pool, &e.fga, "Other", "outsider")
         .await
         .unwrap();
     assert_eq!(
@@ -291,7 +291,7 @@ async fn sql_placement_matches_fga_hierarchy_and_context() {
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn organization_context_reads_only_role_pages() {
     let e = env().await;
-    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     grant(&e, org.id, Role::Member, "reader").await;
@@ -401,7 +401,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
         .await
         .unwrap()
         .0;
-    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "outsider")
+    let other = crate::support::member_organization(&e.pool, &e.fga, "Other", "outsider")
         .await
         .unwrap();
     let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
@@ -652,15 +652,15 @@ async fn folder_rename_preserves_creation_name_rules() {
 
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn space_names_match_operator_and_http_creation_contracts() {
+async fn space_names_match_organization_and_child_http_creation_contracts() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     let identity = support::IdentityServer::start().await;
     let app = content_app(&e, &identity).await;
     for name in ["".into(), "  ".into(), "a\nb".into(), "é".repeat(181)] {
         assert!(matches!(
-            spaces::create_organization(&e.pool, &e.fga, &name, "bob").await,
-            Err(AppError::Unprocessable(_))
+            crate::support::member_organization(&e.pool, &e.fga, &name, "bob").await,
+            Err((422, _))
         ));
         for (kind, parent) in [("team", org.id), ("project", team.id)] {
             let body =
@@ -681,7 +681,7 @@ async fn space_names_match_operator_and_http_creation_contracts() {
     }
     assert!(e.fga.roles_of("bob").await.unwrap().is_empty());
     let name = format!(" /{} ", "é".repeat(177));
-    let other = spaces::create_organization(&e.pool, &e.fga, &name, "bob")
+    let other = crate::support::member_organization(&e.pool, &e.fga, &name, "bob")
         .await
         .unwrap();
     assert_eq!(other.name, name);

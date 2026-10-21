@@ -57,7 +57,7 @@ drive the library against real Postgres and OpenFGA.
 
 ```mermaid
 flowchart TB
-    main["main.rs<br/>serve, migrate, create-org, import-provisioning"]
+    main["main.rs<br/>serve, migrate, import-provisioning"]
     config["config.rs<br/>configuration.yaml + secrets"]
     logging["logging.rs<br/>stdout format, request ids"]
     api["api.rs<br/>routes, handlers"]

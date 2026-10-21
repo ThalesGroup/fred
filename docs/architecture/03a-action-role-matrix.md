@@ -194,7 +194,6 @@ OpenFGA model; that implication is not a stored grant of every role.
 
 | Entry point | Authority and effect |
 | --- | --- |
-| `create-org <name> <admin-user>` | Shell/configuration access and DB/FGA/Keycloak credentials; no bearer or platform-owner Check. Verifies initial person's IAM existence and organization compatibility, creates organization and initial owner/admin/member grants. |
 | `import-provisioning ... --token-file ...` | Authenticated bearer, CGU, platform owner and compatible directory; same provisioning engine as HTTP. |
 | `serve` | Verifies the SQL schema, then supervises HTTP and background tasks, including Temporal connections. |
 | `migrate` | Applies embedded SQLx migrations using database credentials only. |

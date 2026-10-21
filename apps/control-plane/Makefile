@@ -18,17 +18,6 @@ generate-openapi: ## Generate OpenAPI JSON without configuration or running serv
 	$(CARGO) run --quiet --locked -- generate-openapi > "$$tmp"; \
 	mv "$$tmp" openapi.json
 
-ORG_NAME ?=
-ORG_ADMIN ?=
-
-.PHONY: create-org
-create-org: dev ## Create an organization; its first person is owner, admin and member (usage: make create-org ORG_NAME=TSN ORG_ADMIN=<keycloak sub>)
-	@if [ -z "$(ORG_NAME)" ] || [ -z "$(ORG_ADMIN)" ]; then \
-		echo "❌ Usage: make create-org ORG_NAME=<name> ORG_ADMIN=<keycloak sub>"; \
-		exit 1; \
-	fi
-	$(CARGO) run -- create-org "$(ORG_NAME)" "$(ORG_ADMIN)"
-
 ##@ Docker
 
 .PHONY: docker-build

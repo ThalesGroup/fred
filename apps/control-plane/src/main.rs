@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! control-plane CLI: serve, operator organization creation, authenticated provisioning.
+//! control-plane CLI: serve, migrations, authenticated provisioning.
 
 use anyhow::{Context, Result};
 use futures::{FutureExt, StreamExt, future::LocalBoxFuture, stream::FuturesUnordered};
 use sqlx::postgres::PgPoolOptions;
 
-use control_plane::{api, auth, config::Configuration as Config, fga::Fga, logging, spaces};
+use control_plane::{api, auth, config::Configuration as Config, fga::Fga, logging};
 
-const USAGE: &str = "usage: control-plane [serve | migrate | generate-openapi | generate-config-schema | create-org <name> <admin-user> | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | migrate | generate-openapi | generate-config-schema | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -108,7 +108,6 @@ async fn main() -> Result<()> {
         .as_slice()
     {
         [] | ["serve"] => serve(config).await,
-        ["create-org", name, admin] => create_org(config, name, admin).await,
         ["import-provisioning", bundle, "--token-file", token] => {
             import(config, bundle, token).await
         }
@@ -312,29 +311,6 @@ async fn serve(config: Config) -> Result<()> {
         tracing::warn!("Manager shutdown deadline reached; cancelling remaining tasks");
     }
     result
-}
-
-/// Operator creation retains the historical combined owner/admin/member assignment.
-async fn create_org(config: Config, name: &str, admin: &str) -> Result<()> {
-    let directory =
-        control_plane::keycloak::Directory::configured(config.security.m2m.as_ref())?
-            .context("organization creation requires configured Keycloak service credentials")?;
-    let auth = auth::Authenticator::start(config.security()?).await?;
-    anyhow::ensure!(
-        auth.directory_subjects_match(directory.realm()),
-        "organization creation requires Keycloak subject mapping in the directory realm"
-    );
-    anyhow::ensure!(
-        directory.exists(admin).await?,
-        "organization owner does not exist in Keycloak"
-    );
-    let pool = pool(&config).await?;
-    let fga = fga(&config).await?.load(&pool).await?;
-    let org = spaces::create_organization(&pool, &fga, name, admin)
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    println!("{}", org.id);
-    Ok(())
 }
 
 /// Authentication precedes all initialization. SQL/model verification is read-only;

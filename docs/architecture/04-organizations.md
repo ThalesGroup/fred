@@ -55,11 +55,10 @@ no project; its organization manages it. Names are unique among siblings and amo
 organizations; identically named teams in different organizations remain different
 spaces. Placement is immutable.
 
-API creation, `create-org` and ZIP declarations accept nonblank names of 1..180
+API creation and ZIP declarations accept nonblank names of 1..180
 Unicode scalar values without control characters. Spaces and slashes are preserved;
-these labels are not folder paths. Invalid API names return 422, invalid CLI names
-fail before persistence, and invalid ZIP declarations are rejected before external
-writes. Existing names are not rewritten.
+these labels are not folder paths. Invalid API names return 422, and invalid ZIP
+declarations are rejected before external writes. Existing names are not rewritten.
 
 Editor, admin and analyst reach every descendant space; member stays local. An
 analyst of an organization therefore sees all its teams and projects, and a
@@ -129,8 +128,7 @@ usernames and writes those two direct roles, with no implicit member grant. One
 account may hold both roles. Name uniqueness and each nominee's single organization
 attachment are rechecked under the platform lock before guarded publication.
 Retired organizations reserve their name until cleanup, and are absent from the list.
-The existing operator `create-org` command retains its owner/admin/member initial
-assignment to one account. Neither creation path creates a personal space.
+Organization creation does not create a personal space.
 
 ## Provisioning people and spaces
 

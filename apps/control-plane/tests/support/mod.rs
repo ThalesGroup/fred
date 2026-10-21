@@ -253,3 +253,78 @@ impl IdentityServer {
 
 pub mod fga_proxy;
 pub mod real_keycloak;
+
+/// Create through HTTP with a separate governance owner, then explicitly grant content
+/// to the business administrator. The temporary platform grant leaves bootstrap untouched.
+pub async fn member_organization(
+    pool: &sqlx::PgPool,
+    fga: &control_plane::fga::Fga,
+    name: &str,
+    admin: &str,
+) -> Result<control_plane::domain::Space, (u16, serde_json::Value)> {
+    use control_plane::{
+        api::{AppState, governance_router},
+        db,
+        domain::Role,
+        fga::Scope,
+        roles::PlatformRole,
+        spaces,
+    };
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    let identity = IdentityServer::start().await;
+    let owner = format!("{admin}-owner");
+    for user in [owner.as_str(), admin] {
+        identity.users.lock().await.insert(user.into(), user.into());
+    }
+    let operator = format!("fixture-platform-{}", uuid::Uuid::new_v4());
+    let mut guard = fga.guard(&[Scope::Platform]).await.unwrap();
+    fga.write_platform(&mut guard, &operator, PlatformRole::PlatformOwner, true)
+        .await
+        .unwrap();
+    let app = governance_router(AppState {
+        pool: pool.clone(),
+        fga: fga.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/admin/organizations")
+                .header(
+                    "authorization",
+                    format!("Bearer {}", identity.token(&operator)),
+                )
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({"name":name,"owner_username":owner,"admin_username":admin}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut guard = fga.guard(&[Scope::Platform]).await.unwrap();
+    fga.write_platform(&mut guard, &operator, PlatformRole::PlatformOwner, false)
+        .await
+        .unwrap();
+    let status = response.status().as_u16();
+    let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    if status != 201 {
+        return Err((status, body));
+    }
+    let id = uuid::Uuid::parse_str(body["id"].as_str().unwrap()).unwrap();
+    spaces::grant(pool, fga, None, admin, id, Role::Member, admin)
+        .await
+        .unwrap();
+    Ok(db::space(pool, id).await.unwrap().into())
+}

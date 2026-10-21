@@ -67,7 +67,7 @@ async fn hold_organization_lock(e: &Env, org: Uuid) -> sqlx::Transaction<'static
 
 /// Organization TSN administered by alice, team BID under it, alice member of both.
 async fn org_and_team(e: &Env) -> (Space, Space) {
-    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     let team = spaces::create_space(
@@ -1733,69 +1733,34 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
         .lock()
         .await
         .insert("operator".into(), "operator".into());
-    // The operator CLI cannot seed an owner outside the configured IAM.
-    for case in ["missing", "unavailable", "mapping", "disabled", "valid"] {
-        let mut current = config.clone();
-        if case == "mapping" {
-            current["security"]["user"]["claims"] = serde_json::json!({"uid":"preferred_username"});
-        }
-        if case == "disabled" {
-            current["security"]["m2m"]["enabled"] = false.into();
-        }
-        std::fs::write(
-            temp.join("configuration.yaml"),
-            serde_yaml_ng::to_string(&current).unwrap(),
-        )
+    // Deployment credentials cannot create an organization via the removed CLI.
+    std::fs::write(
+        temp.join("configuration.yaml"),
+        serde_yaml_ng::to_string(&config).unwrap(),
+    )
+    .unwrap();
+    let before: i64 = sqlx::query_scalar("select count(*) from space")
+        .fetch_one(&e.pool)
+        .await
         .unwrap();
-        let alice = server
-            .directory()
-            .find_username("operator")
-            .await
-            .unwrap()
-            .unwrap()
-            .id;
-        let subject = match case {
-            "missing" | "unavailable" => case,
-            _ => &alice,
-        };
-        let before: i64 = sqlx::query_scalar("select count(*) from space")
-            .fetch_one(&e.pool)
-            .await
-            .unwrap();
-        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_control-plane"))
-            .args(["create-org", "Operator", subject])
-            .env("CONFIG_FILE", temp.join("configuration.yaml"))
-            .env("ENV_FILE", temp.join("absent.env"))
-            .env("FRED_POSTGRES_PASSWORD", "it")
-            .env("KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET", "private-secret")
-            .output()
-            .await
-            .unwrap();
-        assert_eq!(
-            output.status.success(),
-            case == "valid",
-            "{case}: {}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-        let after: i64 = sqlx::query_scalar("select count(*) from space")
-            .fetch_one(&e.pool)
-            .await
-            .unwrap();
-        assert_eq!(after, before + i64::from(case == "valid"));
-        if case == "valid" {
-            let id: Uuid = sqlx::query_scalar("select id from space where name = 'Operator'")
-                .fetch_one(&e.pool)
-                .await
-                .unwrap();
-            assert_eq!(
-                e.fga
-                    .space_holders(id, Role::OrganizationOwner)
-                    .await
-                    .unwrap(),
-                vec![alice]
-            );
-        }
-    }
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_control-plane"))
+        .args(["create-org", "Operator", "operator"])
+        .env("CONFIG_FILE", temp.join("configuration.yaml"))
+        .env("ENV_FILE", temp.join("absent.env"))
+        .env("FRED_POSTGRES_PASSWORD", "it")
+        .env("KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET", "private-secret")
+        .output()
+        .await
+        .unwrap();
+    assert!(!output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("usage: control-plane"), "{text}");
+    assert!(!text.contains("create-org"), "{text}");
+    let after: i64 = sqlx::query_scalar("select count(*) from space")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before);
     config["app"]["log_format"] = "json".into();
     let unavailable = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     config["security"]["rebac"]["api_url"] =
@@ -2569,7 +2534,7 @@ async fn import_rechecks_parent_after_wait_and_repairs_existing_space_grants() {
         .await
         .insert("alice".into(), "alice".into());
     server.users.lock().await.insert("bob".into(), "bob".into());
-    let org = spaces::create_organization(&e.pool, &e.fga, "Existing", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "Existing", "alice")
         .await
         .unwrap();
     e.fga
@@ -3246,7 +3211,7 @@ async fn waiting_content_writers_release_the_shared_pool() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
-    let peer = spaces::create_organization(&e.pool, &e.fga, "peer", "carol")
+    let peer = crate::support::member_organization(&e.pool, &e.fga, "peer", "carol")
         .await
         .unwrap();
     spaces::grant(
@@ -3672,7 +3637,7 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         .lock()
         .await
         .insert("alice".into(), "alice".into());
-    let org = spaces::create_organization(&e.pool, &e.fga, "Existing", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "Existing", "alice")
         .await
         .unwrap();
     let mut held = hold_organization_lock(&e, org.id).await;
@@ -4305,7 +4270,7 @@ async fn sibling_names_are_unique_and_uncommitted_links_are_ignored() {
     )
     .await;
     assert!(matches!(duplicate, Err(AppError::Conflict(_))));
-    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "carol")
+    let other = crate::support::member_organization(&e.pool, &e.fga, "Other", "carol")
         .await
         .unwrap();
     spaces::create_space(
@@ -4320,7 +4285,7 @@ async fn sibling_names_are_unique_and_uncommitted_links_are_ignored() {
     .await
     .unwrap();
     assert!(
-        spaces::create_organization(&e.pool, &e.fga, "TSN", "bob")
+        crate::support::member_organization(&e.pool, &e.fga, "TSN", "bob")
             .await
             .is_err()
     );
@@ -4359,7 +4324,7 @@ async fn sibling_names_are_unique_and_uncommitted_links_are_ignored() {
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn startup_refuses_existing_state_without_a_publication() {
     let e = env().await;
-    spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+    crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     sqlx::query("delete from authorization_store")
@@ -4533,7 +4498,7 @@ async fn organization_owners_name_admins_and_read_nothing() {
         "root",
         org.id,
         Role::OrganizationOwner,
-        "alice",
+        "alice-owner",
     )
     .await
     .unwrap();
@@ -4702,7 +4667,7 @@ async fn owner_grants_require_directory_identity_and_deleted_owners_can_be_revok
             app,
             &token,
             "DELETE",
-            &format!("/spaces/{}/roles/organization_owner/alice", org.id),
+            &format!("/spaces/{}/roles/organization_owner/alice-owner", org.id),
             ""
         )
         .await,
@@ -4816,10 +4781,10 @@ async fn import_checks_distinct_owners_once_with_bounded_concurrency() {
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn concurrent_attachments_choose_one_organization_and_creation_cannot_bypass_it() {
     let e = env().await;
-    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+    let a = crate::support::member_organization(&e.pool, &e.fga, "A", "alice")
         .await
         .unwrap();
-    let b = spaces::create_organization(&e.pool, &e.fga, "B", "carol")
+    let b = crate::support::member_organization(&e.pool, &e.fga, "B", "carol")
         .await
         .unwrap();
     let (first, second) = tokio::join!(
@@ -4838,8 +4803,8 @@ async fn concurrent_attachments_choose_one_organization_and_creation_cannot_bypa
         Some(winner)
     );
     assert!(matches!(
-        spaces::create_organization(&e.pool, &e.fga, "Third", "bob").await,
-        Err(AppError::Conflict(_))
+        crate::support::member_organization(&e.pool, &e.fga, "Third", "bob").await,
+        Err((409, _))
     ));
     assert!(
         named_space(&e.pool, &e.fga, None, "Third")
@@ -4871,10 +4836,10 @@ async fn concurrent_attachments_choose_one_organization_and_creation_cannot_bypa
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn a_late_attachment_cannot_publish_after_assignment_elsewhere() {
     let e = env().await;
-    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+    let a = crate::support::member_organization(&e.pool, &e.fga, "A", "alice")
         .await
         .unwrap();
-    let b = spaces::create_organization(&e.pool, &e.fga, "B", "carol")
+    let b = crate::support::member_organization(&e.pool, &e.fga, "B", "carol")
         .await
         .unwrap();
     let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
@@ -4930,7 +4895,7 @@ async fn ambiguous_context_fails_closed_and_remains_repairable() {
     use control_plane::fga::Tuple;
     let e = env().await;
     let (a, _, project) = tree(&e).await;
-    let b = spaces::create_organization(&e.pool, &e.fga, "B", "carol")
+    let b = crate::support::member_organization(&e.pool, &e.fga, "B", "carol")
         .await
         .unwrap();
     grant(&e, a.id, Role::Admin, "bob").await;
@@ -5046,7 +5011,7 @@ async fn import_rejects_cross_organization_declarations_before_identity_writes()
         0
     );
     server.users.lock().await.insert("bob".into(), "bob".into());
-    spaces::create_organization(&e.pool, &e.fga, "Existing", "bob")
+    crate::support::member_organization(&e.pool, &e.fga, "Existing", "bob")
         .await
         .unwrap();
     let mut other = value;
@@ -5074,11 +5039,12 @@ async fn import_rejects_cross_organization_declarations_before_identity_writes()
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn organization_context_exhausts_pages_and_grant_budget_includes_global_fencing() {
     let e = env().await;
-    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+    let a = crate::support::member_organization(&e.pool, &e.fga, "A", "alice")
         .await
         .unwrap();
     grant(&e, a.id, Role::Editor, "alice").await;
     grant(&e, a.id, Role::Analyst, "alice").await;
+    grant(&e, a.id, Role::PersonalSpaceCreator, "alice").await;
     let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
     let fga = Fga::connect(
         &proxy.base,
@@ -5169,10 +5135,10 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
     use serde_json::json;
     use tower::ServiceExt;
     let e = env().await;
-    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+    let a = crate::support::member_organization(&e.pool, &e.fga, "A", "alice")
         .await
         .unwrap();
-    let b = spaces::create_organization(&e.pool, &e.fga, "B", "carol")
+    let b = crate::support::member_organization(&e.pool, &e.fga, "B", "carol")
         .await
         .unwrap();
     grant(&e, a.id, Role::Editor, "bob").await;
@@ -5247,7 +5213,7 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
     let e = env().await;
-    let a = spaces::create_organization(&e.pool, &e.fga, "A", "alice")
+    let a = crate::support::member_organization(&e.pool, &e.fga, "A", "alice")
         .await
         .unwrap();
     bootstrap::grant_root(&e.pool, &e.fga, "root")
@@ -5420,7 +5386,7 @@ async fn personal_open_requires_explicit_eligibility_and_never_repairs_revocatio
         spaces::create_personal_space(&e.pool, &e.fga, "governor", org.id).await,
         Err(AppError::Forbidden)
     ));
-    let foreign = spaces::create_organization(&e.pool, &e.fga, "Other", "carol")
+    let foreign = crate::support::member_organization(&e.pool, &e.fga, "Other", "carol")
         .await
         .unwrap();
     spaces::grant(
@@ -5454,7 +5420,7 @@ async fn personal_open_requires_explicit_eligibility_and_never_repairs_revocatio
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
     let e = env().await;
-    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     for user in ["priya", "bob", "carol"] {
@@ -5530,7 +5496,7 @@ async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn import_orders_personal_eligibility_after_content_across_failed_batches() {
     let e = env().await;
-    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     bootstrap::grant_root(&e.pool, &e.fga, "root")
@@ -5617,7 +5583,7 @@ async fn import_orders_personal_eligibility_after_content_across_failed_batches(
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn personal_grant_budget_and_failed_creation_preserve_authority() {
     let e = env().await;
-    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     grant(&e, org.id, Role::Member, "priya").await;

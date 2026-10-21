@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F04](#f04-suppression-de-la-création-opérateur) | Création par HTTP ou ZIP | Accepté par Dimi | 03, 03a, 04, 09, A1/A3, carte des sources |
 | [F19](#f19-formatage-rust-et-qualité) | Formatage Rust et qualité | Contrôle qualité réussi | Aucun changement de comportement |
 | [F03](#f03-listing-resources-unique-et-rafraîchissement) | Listing Resources unique et rafraîchissement | Tests automatisés validés | 09, A1, A2, carte des sources |
 | [F02](#f02-attente-du-verrou-des-écritures) | Attente bornée sans connexion retenue | Tests automatisés validés | 03, 09, A1 |
@@ -74,6 +75,27 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F04 Suppression de la création opérateur
+
+- 2026-10-21 : après vérification sur `0829c5de4178ff85be47b8b16fc0bd9b017df53c`,
+  Dimi autorise la suppression de `create-org`. Correction sur le HEAD courant
+  `0fbc90239a21f06b1ec858ba18d1c1e367b670b7` : commande, cible Make et fonction
+  `spaces::create_organization` retirées ; création HTTP consolidée sans chemin
+  interne non authentifié. Les fixtures passent par HTTP avec un owner distinct
+  de l'admin métier, puis un grant member explicite. Les tests du CLI vérifient
+  son absence de l'aide et son refus sans création, même avec des credentials valides.
+  Arc42 et la carte des sources décrivent HTTP/ZIP ; la ligne de coûts opérateur
+  est retirée. La mention historique de F-009 décrit l'ancien état.
+  D3 (exclusivité des owners sur tous les chemins) reste hors périmètre ; aucun
+  droit déjà attribué n'est révoqué. Aucun contrat HTTP ni migration SQL modifié.
+  Relecture indépendante en lecture seule : dépendance au cinquième rôle dans le
+  test de pagination corrigée et relue (éligibilité personnelle explicite de
+  l'admin métier), reliquat documentaire CLI retiré. Aucun autre défaut concret
+  relevé dans ce périmètre. `make -C docs/architecture generate` exécuté avec succès.
+  Tests, build et qualité non exécutés par cet assistant.
+- 2026-10-21 : Dimi confirme « tout est bon » et autorise le commit et le push
+  de F04. Aucun résultat de test supplémentaire n'est fourni dans cet accord.
 
 ## F19 Formatage Rust et qualité
 

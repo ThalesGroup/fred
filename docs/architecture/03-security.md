@@ -119,7 +119,7 @@ Administration is business, ownership is technical. Each organization also has a
 management or descending permission (I21). Platform owners name organization owners,
 and an organization always keeps one (I14). New owner grants verify the subject in
 the configured Keycloak realm; an unavailable directory prevents the grant. This
-also applies to operator organization creation and import. Revocation accepts a
+also applies to import. Revocation accepts a
 deleted identity so stale grants can be removed. The check proves existence at
 lookup time; external IAM deletion is not transactional with OpenFGA. Teams and
 projects have no owner.
@@ -129,8 +129,7 @@ Platform owner implies all platform capabilities. Feature manager grants
 `edit_platform_prompt`; observer grants `observe_platform`. These grants do not imply
 space membership or content access: a platform owner provisions organizations through authenticated import and names
 their owners, and creates teams through ordinary space routes only with an organization
-admin role. The operator `create-org` command uses deployment credentials and does
-not check a caller role.
+admin role.
 
 Direct role tuples and the links evaluated for permission remain canonical in OpenFGA.
 SQL records each space's immutable `organization_id` and optional `parent_id` at
@@ -161,7 +160,7 @@ blocking lock acquisition. Each authorized mutation also
 consumes an OpenFGA guard revision captured before its checks; a delayed remote
 write cannot reuse a consumed revision. Platform operations acquire the platform
 lock before organization locks. All direct space-role grants and revocations,
-operator organization creation and import share this platform serialization and
+HTTP organization creation and import share this platform serialization and
 guard, preventing competing assignments in different organizations. Team/personal
 creation and content mutations retain their organization lock and guard. Role revocation cannot silently leave a child role,
 or a personal space role in an organization, without a direct parent content role,

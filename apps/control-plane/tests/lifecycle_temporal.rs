@@ -68,7 +68,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     let team = spaces::create_space(

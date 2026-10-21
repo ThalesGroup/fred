@@ -205,7 +205,7 @@ nonzero. Counts cover resolved/created identities, committed reconciled spaces a
 acknowledged grants; a lost response can leave uncounted remote effects. Success returns
 these counts as one JSON object (stdout or HTTP 200). The recovery action after a partial failure is replay
 with a valid operator token, after correcting the cause. Created identities are not deleted
-as compensation. `create-org` retains its operator/database trust boundary.
+as compensation.
 
 ## Deployment topology
 
@@ -298,8 +298,8 @@ API pool initialization calls the read-only `db::require_initialized` check. It
 requires the exact embedded migration versions and checksums, with no incomplete
 migration. An empty, older, newer or checksum-mismatched history prevents startup;
 the error directs the operator to the migration Job/command or history inspection.
-The API does not create tables or update migration history. `create-org` uses the
-same pool check; provisioning import also verifies initialization without migration.
+The API does not create tables or update migration history. Provisioning import
+also verifies initialization without migration.
 SQLx serializes the explicit migration runner with database locking.
 
 Outside Kubernetes, set `DATABASE_URL` for the target database and run
@@ -398,7 +398,7 @@ or upload contents. UI components and generated API paths are unchanged.
 `sync_schema_on_init` allows initialization of an empty installation only. An
 existing binding pins its model; a published model that differs from the binary's
 model is refused.
-Concurrent initializers converge. Ordinary loads, CLI import and create-org never
+Concurrent initializers converge. Ordinary loads and CLI import never
 synchronize models; changed logical store names and existing data without
 publication are refused.
 
