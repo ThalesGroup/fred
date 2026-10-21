@@ -265,7 +265,7 @@ async fn organization_console_registry_pagination_excludes_retired_and_costs_one
     for index in 0..102 {
         let id = Uuid::new_v4();
         ids.push(id);
-        sqlx::query("insert into space(id,kind,name) values($1,'organization',$2)")
+        sqlx::query("insert into space(id,kind,name,organization_id) values($1,'organization',$2,$1)")
             .bind(id)
             .bind(format!("Org {index}"))
             .execute(&e.pool)

@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-use control_plane::{db, domain::Space, fga::Fga, spaces};
+use control_plane::{db, domain::Space, fga::Fga};
 use sqlx::{AssertSqlSafe, PgPool};
 use std::time::Duration;
 use uuid::Uuid;
@@ -79,12 +79,5 @@ pub async fn named_space(
                 .find(|r| r.name == name)
         }
     };
-    Ok(match row {
-        Some(row) => Some(
-            spaces::place(fga, row)
-                .await
-                .map_err(|e| anyhow::anyhow!("{e}"))?,
-        ),
-        None => None,
-    })
+    Ok(row.map(Space::from))
 }

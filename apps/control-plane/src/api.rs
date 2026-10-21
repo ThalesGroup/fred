@@ -112,7 +112,7 @@ async fn require(
     permission: Permission,
     space: Uuid,
 ) -> AppResult<()> {
-    let placed = spaces::load(pool, fga, space).await?;
+    let placed = spaces::load(pool, space).await?;
     spaces::require_context(pool, fga, user, placed.organization).await?;
     if fga.check(user, permission, space).await? {
         Ok(())
@@ -672,7 +672,7 @@ async fn authorize_document(
     ApiJson(req): ApiJson<AuthorizeDocument>,
 ) -> AppResult<Json<Allowed>> {
     let document = db::document(&s.pool, req.document_id).await?;
-    let space = spaces::load(&s.pool, &s.fga, document.space_id).await?;
+    let space = spaces::load(&s.pool, document.space_id).await?;
     let allowed = spaces::in_organization(&s.pool, &s.fga, &user, space.organization).await?
         && s.fga
             .check(&user, req.permission, document.space_id)
@@ -860,7 +860,7 @@ async fn authorize_space(
     AdmittedUser(user): AdmittedUser,
     ApiJson(req): ApiJson<SpaceCheck>,
 ) -> AppResult<Json<Allowed>> {
-    let space = spaces::load(&s.pool, &s.fga, req.space_id).await?;
+    let space = spaces::load(&s.pool, req.space_id).await?;
     Ok(Json(Allowed {
         allowed: spaces::in_organization(&s.pool, &s.fga, &user.uid, space.organization).await?
             && s.fga
@@ -896,21 +896,9 @@ async fn team_registry(
         return Err(AppError::Forbidden);
     }
     // Registry metadata only, bounded independently of content and FGA memberships.
-    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner from space where kind = 'team' and personal_owner is null and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
+    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'team' and personal_owner is null and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
         .bind(query.after).fetch_all(&s.pool).await?;
-    let ids: Vec<Uuid> = teams.iter().map(|t| t.id).collect();
-    let orgs: std::collections::BTreeMap<Uuid, Option<Uuid>> =
-        s.fga.links_of(&ids, false).await?.into_iter().collect();
-    Ok(Json(
-        teams
-            .into_iter()
-            .map(|team| {
-                let org =
-                    orgs[&team.id].ok_or_else(|| anyhow::anyhow!("team has no organization"))?;
-                Ok(Space::placed(team, &[org], None))
-            })
-            .collect::<AppResult<_>>()?,
-    ))
+    Ok(Json(teams.into_iter().map(Space::from).collect()))
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -936,15 +924,12 @@ async fn organization_registry(
     Query(query): Query<RegistryQuery>,
 ) -> AppResult<Json<OrganizationPage>> {
     platform::require_owner(&s.fga, &user.uid).await?;
-    let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
+    let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
         .bind(query.after).fetch_all(&s.pool).await?;
     let next_cursor = (rows.len() > 100).then(|| rows[99].id);
     rows.truncate(100);
     Ok(Json(OrganizationPage {
-        items: rows
-            .into_iter()
-            .map(|row| Space::placed(row, &[], None))
-            .collect(),
+        items: rows.into_iter().map(Space::from).collect(),
         next_cursor,
     }))
 }

@@ -489,18 +489,6 @@ impl Fga {
         .collect()
     }
 
-    /// One concurrent `parent` (or `organization`) Read per space.
-    pub async fn links_of(
-        &self,
-        spaces: &[Uuid],
-        organization: bool,
-    ) -> Result<Vec<(Uuid, Option<Uuid>)>> {
-        self.concurrently(spaces, move |fga, id| async move {
-            fga.link_of(id, organization).await
-        })
-        .await
-    }
-
     /// One concurrent children Read per space.
     pub async fn children_of(&self, spaces: &[Uuid]) -> Result<Vec<(Uuid, Vec<Uuid>)>> {
         self.concurrently(

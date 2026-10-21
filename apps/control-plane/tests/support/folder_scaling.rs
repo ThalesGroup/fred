@@ -353,7 +353,7 @@ async fn folder_scaling() {
             .run("same-org-few-write", c, &targets, 2, true, Some(root.id))
             .await;
     }
-    // 41 direct roles, forced pages of 10, and 40 team placements: Q=5+40.
+    // 41 direct roles, forced pages of 10: Q=5, with no placement Reads.
     for i in 0..40 {
         let space = if i == 0 {
             team.clone()
@@ -375,10 +375,10 @@ async fn folder_scaling() {
     let before = tuples(&e).await;
     for c in [1, 10, 50] {
         campaign
-            .run("many-read", c, &targets, 45, false, Some(root.id))
+            .run("many-read", c, &targets, 5, false, Some(root.id))
             .await;
         campaign
-            .run("same-org-many-write", c, &targets, 46, true, Some(root.id))
+            .run("same-org-many-write", c, &targets, 6, true, Some(root.id))
             .await;
     }
     assert_eq!(tuples(&e).await, before);
@@ -432,7 +432,7 @@ async fn folder_scaling() {
     );
     assert_eq!(tuples(&e).await, before);
     let fault = proxy.fault.lock().await;
-    assert_eq!(fault.calls.get("read"), Some(&46));
+    assert_eq!(fault.calls.get("read"), Some(&6));
     assert_eq!(fault.calls.get("check"), Some(&1));
     assert_eq!(fault.writes, 1);
     drop(fault);

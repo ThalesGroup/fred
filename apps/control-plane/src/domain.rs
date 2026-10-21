@@ -33,16 +33,18 @@ pub(crate) fn valid_space_name(name: &str) -> bool {
     !name.trim().is_empty() && name.chars().count() <= 180 && !name.chars().any(char::is_control)
 }
 
-/// What SQL stores about a space. Its placement lives in OpenFGA links.
+/// Immutable placement is recorded with the space; roles remain in OpenFGA.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SpaceRow {
     pub id: Uuid,
     pub kind: SpaceKind,
     pub name: String,
     pub personal_owner: Option<String>,
+    pub parent_id: Option<Uuid>,
+    pub organization_id: Uuid,
 }
 
-/// A space with its placement read from OpenFGA.
+/// A space with its immutable placement and derived search path.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct Space {
     pub id: Uuid,
@@ -59,14 +61,19 @@ pub struct Space {
     pub organization: Uuid,
 }
 
-impl Space {
-    /// `ancestors` from the organization down; `organization` only for a personal space.
-    pub fn placed(row: SpaceRow, ancestors: &[Uuid], organization: Option<Uuid>) -> Space {
-        let mut path = ancestors.to_vec();
+impl From<SpaceRow> for Space {
+    fn from(row: SpaceRow) -> Self {
+        let mut path = Vec::new();
+        if let Some(parent) = row.parent_id {
+            if parent != row.organization_id {
+                path.push(row.organization_id);
+            }
+            path.push(parent);
+        }
         path.push(row.id);
         Space {
-            organization: organization.unwrap_or(path[0]),
-            parent_id: ancestors.last().copied(),
+            organization: row.organization_id,
+            parent_id: row.parent_id,
             path,
             id: row.id,
             kind: row.kind,
@@ -248,16 +255,16 @@ mod tests {
     use super::*;
 
     fn space(kind: SpaceKind, parent: Option<&Space>, personal: bool) -> Space {
+        let id = Uuid::new_v4();
         let row = SpaceRow {
-            id: Uuid::new_v4(),
+            id,
             kind,
             name: "x".into(),
             personal_owner: personal.then(|| "bob".into()),
+            parent_id: parent.filter(|_| !personal).map(|p| p.id),
+            organization_id: parent.map_or(id, |p| p.organization),
         };
-        match (personal, parent) {
-            (true, Some(org)) => Space::placed(row, &[], Some(org.id)),
-            _ => Space::placed(row, parent.map_or(&[], |p| &p.path), None),
-        }
+        Space::from(row)
     }
 
     // Proves: I1

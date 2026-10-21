@@ -166,9 +166,7 @@ pub(crate) async fn authorized(
     id: Uuid,
     permission: Permission,
 ) -> AppResult<Space> {
-    let space = spaces::load(pool, fga, id)
-        .await
-        .map_err(dependency_error)?;
+    let space = spaces::load(pool, id).await.map_err(dependency_error)?;
     if !spaces::in_organization(pool, fga, actor, space.organization)
         .await
         .map_err(dependency_error)?

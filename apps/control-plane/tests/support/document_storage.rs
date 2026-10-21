@@ -510,7 +510,7 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
         tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
             .await
             .unwrap();
-        let org = control_plane::spaces::load(&d.e.pool, &d.e.fga, d.folder.space_id)
+        let org = control_plane::spaces::load(&d.e.pool, d.folder.space_id)
             .await
             .unwrap()
             .organization;
@@ -627,7 +627,7 @@ async fn document_request_budget_is_independent_of_document_count_and_cleanup_is
     );
     let upload_calls = f.calls.clone();
     drop(f);
-    assert_eq!(upload_calls.get("read"), Some(&11));
+    assert_eq!(upload_calls.get("read"), Some(&5));
     assert_eq!(upload_calls.get("check"), Some(&3));
     assert_eq!(upload_calls.get("write"), Some(&2));
     d.fga_proxy.fault.lock().await.calls.clear();

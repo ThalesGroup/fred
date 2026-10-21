@@ -279,6 +279,11 @@ versions and checksums in `_sqlx_migrations`.
 
 `0001_manager_schema.sql` defines the initial schema; `0002_user_identity.sql`
 adds the local identity directory and its index without altering existing tables.
+`0003_space_placement.sql` adds immutable organization/parent metadata. It targets
+fresh installations and refuses any existing space rows before changing the schema.
+It performs no FGA backfill and deletes no data. A populated installation needs a
+separately prepared backfill before upgrading; pointing the migration Job at it
+does not reset it.
 A fresh installation applies the whole chain; an existing installation applies
 only pending files. Applied files are immutable, including comments and whitespace.
 The historical reset comment in `0001` is superseded by this policy and remains in

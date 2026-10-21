@@ -97,14 +97,14 @@ flowchart TB
 | --- | --- | --- |
 | `api` | HTTP surface, context validation and OpenFGA permission checks | handlers stay thin; mutations live in `spaces` and `platform` |
 | `auth` | `CurrentUser` extractor, JWKS cache | [security](03-security.md) |
-| `spaces` | placement from OpenFGA links, space/role mutations, memberships, search scope, folder creation and local write authorization | platform/organization locks and atomic guards (I4, I5, I23) |
+| `spaces` | immutable SQL placement, space/role mutations, memberships, search scope, folder creation and local write authorization | platform/organization locks and atomic guards (I4, I5, I23) |
 | `onboarding` | versioned consent, admitted/own-human extractors | acceptance is independent of roles and memberships (I19) |
 | `bootstrap` | the one-time root grant | two steps under the bootstrap lock (I9) |
 | `domain` | `Space`, `Folder`, `Document`, roles, parent rules | pure functions, unit-tested (I1, I7) |
 | `db` | content and space SQL | placement columns written by inserts only (I2) |
 | `processing` | durable acceptance, dispatch, stage fences, manifests, previews and cleanup | current actor authority and isolated publication (I26) |
 | `documents` | bounded transfers, upload journal, quotas, reads and autonomous object cleanup | verified publication and preserved originals (I25) |
-| `fga` | pinned store/model, check, role and link reads, guarded write; empty-store publication | roles and the space tree stay in OpenFGA; SQL publishes only the store/model binding |
+| `fga` | pinned store/model, check, role and link reads, guarded write; empty-store publication | roles and permission evaluation stay in OpenFGA; SQL stores placement and the store/model binding |
 | `logging` | output format, request span, completion event | [logging](A3-manager-operations.md#logging) (I11, I13) |
 | `error` | status codes, `{"code": ..., "detail": ...}` bodies | [errors](A3-manager-operations.md#errors) |
 
@@ -204,10 +204,11 @@ The [content chapter](05-documents.md) defines this boundary and lifecycle.
 Manager resolves the caller's unique organization, verifies the target space belongs
 to it, then asks OpenFGA for permission on that space. The same rule covers a
 document, its metadata and a folder page. Ambiguous attachment fails with 409.
-Organization resolution exhausts direct-role pages, then places committed spaces
-with at most 32 independent placements in flight per resolution. A project still
-reads its parent before its organization; a failed or cancelled resolution cancels
-remaining tasks. No SQL or OpenFGA authority is written by those tasks.
+Organization resolution exhausts direct-role pages, then selects distinct SQL
+organization IDs for their spaces in one query, including retired rows. Unknown
+SQL IDs confer no attachment. The same resolver validates memberships before
+filtering retired spaces from display. Target placement is read from SQL; no FGA
+placement Read is issued for context or target loading.
 
 ```mermaid
 sequenceDiagram
@@ -224,9 +225,9 @@ sequenceDiagram
     Note over M: RS256, exp, iat, lifetime ceiling, then user_id bound
     M->>PG: check current personal CGU acceptance
     M->>PG: select document and its space
-    M->>FGA: read target placement, then caller direct roles
-    M->>PG: select committed direct-grant spaces
-    M->>FGA: read their placement, validate unique organization
+    M->>PG: read target placement
+    M->>FGA: read all caller direct-role pages
+    M->>PG: resolve unique organization over existing direct-grant spaces
     M->>FGA: check user can_read space:{document.space_id}
     alt allowed
         M-->>C: 200 original bytes
@@ -277,7 +278,7 @@ decision remains a Check (I20).
 `grant` and `revoke` take the platform lock, then the organization lock, and capture
 both guard revisions before context and permission checks (I4, I5, I23).
 `create_space` and `create_personal_space` retain the organization lock and guard:
-the required existing parent membership already binds their nominated person. The organization comes from the space's immutable links,
+the required existing parent membership already binds their nominated person. The organization comes from the space's immutable SQL placement,
 read before locking. SQL locks order live callers; OpenFGA guard consumption
 rejects stale remote writes that outlive their caller or transaction.
 
@@ -446,7 +447,7 @@ capabilities are defined in `roles.rs` and the model in [model and contracts](A2
 resolve the space, returning 404 for an unknown id.
 
 `GET /admin/teams` requires `can_list_all_teams` and returns at most 100 non-personal
-team metadata records ordered by UUID, each placed by one concurrent `parent` Read.
+team metadata records ordered by UUID, with placement from the same SQL query.
 `?after=<uuid>` continues after the last id; it confers no content access.
 
 `GET /admin/organizations` requires platform ownership and selects active organization
@@ -547,7 +548,7 @@ held SQL connection. No workflow is dispatched by the API.
 
 | Id | Decision | Because | Consequence |
 | --- | --- | --- | --- |
-| D1 | The space tree lives only in OpenFGA as immutable `parent` links; editor, admin and analyst descend, member does not. | One authority answers who may do what where, including roles reaching descendants. | One Check per permission decision, evaluated through at most two parents; placement and structure operations read links (I20). Chapter 09 records complete request budgets. |
+| D1 | SQL records immutable placement at creation; matching OpenFGA links remain the model's authority for inherited permissions. Editor, admin and analyst descend, member does not. | OpenFGA decides permissions; SQL placement avoids per-role-space link Reads without storing grants. | One Check per permission decision, evaluated through at most two parents; context uses direct-role pages and one SQL query; structural enumeration still reads FGA links (I20). Chapter 09 records complete request budgets. |
 | D2 | Organization > team > project; a personal space is a one-member team without parent. | One model for every container; a personal space stays private to its owner. | Personal spaces inherit nothing and have their own management rule (I6). |
 | D3 | Folders carry no rights. | Rights per folder bring back traversal and per-item lists. | Access granularity is the space. |
 | D4 | Space and content placement are immutable. | SQL constraints and OpenFGA links preserve ownership. | Folder renames preserve placement; the API exposes no move operation. |
@@ -566,7 +567,7 @@ held SQL connection. No workflow is dispatched by the API.
 | D17 | Strict guard deletion and role changes share one OpenFGA Write. | A consumed revision rejects stale decisions without copying the role set. | One guard Read and two additional tuple operations per guarded scope; conflicting attempts reauthorize on replay. |
 | D18 | SQL pins store/model; a different published model is refused. | The binary owns exactly one schema and one model. | Startup never upgrades a model; ordinary loads stay read-only. |
 | D19 | One version-2 ZIP with explicit organizations, teams, projects and direct roles serves CLI and HTTP. | Reconciliation needs unambiguous parent scope and complete preflight. | Legacy formats are explicitly unsupported; bundle-local references do not add persistent identity or imply content grants. |
-| D20 | The unique organization is derived from canonical direct roles and full placement of committed spaces. Workspace discovery uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
+| D20 | The unique organization is derived from canonical direct roles and immutable SQL placement, including retired spaces. Workspace discovery uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
 | D21 | Personal creation requires explicit organization eligibility; opening reuses current authority. | Some people have no personal workspace; opening must not undo revocations. | First explicit open creates, repeats write nothing, and organization content remains a prerequisite. |
 
 ## Folder mutations from Resources

@@ -302,7 +302,7 @@ async fn processing_admission_fences_publication_and_original_survival() {
     let observed = d.fga_proxy.fault.lock().await;
     assert_eq!(
         observed.calls,
-        [("check".into(), 1), ("read".into(), 5), ("write".into(), 1)].into()
+        [("check".into(), 1), ("read".into(), 3), ("write".into(), 1)].into()
     );
     println!(
         "processing publication: FGA={:?}, locks={locks}",

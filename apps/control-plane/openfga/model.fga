@@ -22,7 +22,7 @@ type platform
     define can_manage_capabilities: feature_manager
     define can_edit_platform_prompt: prompt_editor
 
-# The space tree lives here only, written once at creation. A personal space has no
+# Permission links match immutable SQL placement, written once at creation. A personal space has no
 # parent; `organization` records who manages it and grants nothing.
 # A role on a space requires a direct content role on its parent (enforced by control-plane).
 type space

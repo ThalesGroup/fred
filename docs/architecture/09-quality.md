@@ -9,7 +9,7 @@ explanations move between chapters.
 | Id | Invariant | Held by |
 | --- | --- | --- |
 | I1 | An organization is a root, a team's parent is an organization, a project's parent is a non-personal team, a personal space has no parent. Sibling names and organization names are unique. | `domain::check_parent`, `spaces` under the organization lock, organization-name index |
-| I2 | Placement is immutable: a space's kind, owner and links, a folder's space, parent and path, a document's space and folder. Names may change; the authorized deletion lifecycle removes retired space links. | triggers; links written once with the creation grants |
+| I2 | Placement is immutable: a space's kind, owner and links, a folder's space, parent and path, a document's space and folder. Names may change; the authorized deletion lifecycle removes retired space links. | SQL placement triggers; matching FGA links published with creation grants before SQL commit |
 | I3 | A document's folder, and a sub-folder's parent, belong to the same space. | composite foreign keys |
 | I4 | Holding a role on a space requires a direct content role on its parent, and a personal-space role a direct content role on its organization, under any concurrency. Inherited access does not satisfy it. Personal creation eligibility also requires direct organization content. | `spaces`, organization lock and atomic OpenFGA guard |
 | I5 | Role and SQL mutations cannot publish a decision invalidated by an earlier successful revocation. External operations are authorized at dispatch. | checks after guard capture, atomic fence, SQL lock through commit |
@@ -68,15 +68,14 @@ sending SIGTERM, verifies bounded process exit and release of the server-side wa
 then restarts to completion. An injected SQL delete failure exhausts activity retries,
 produces a safe `retrying` receipt and recovers after the fault is removed.
 
-Let `L` be target placement Reads (0/1/2 for organization/team/project), and `D`
-the descendant page Reads. Lifecycle discovery requests 96 tuples per page and
+Let `D` be the descendant page Reads. Target placement comes from SQL. Lifecycle discovery requests 96 tuples per page and
 exhausts cursors: an organization reads child-team and personal-space pages and
 each team's project pages; a team reads project pages; a project reads none.
 These counts exclude authentication/admission, SQL and startup.
 
 | Phase | OpenFGA client RPCs and filters | SQL lock boundary |
 | --- | --- | --- |
-| First acceptance | `4 + L + D`: platform version Read, owner capability Check, placement Reads, organization version Read, descendant Reads by exact parent/organization subject plus `object=space:`, one four-operation guard Write | Platform then organization locks, held through complete subtree validation, retirement and commit; no Temporal RPC |
+| First acceptance | `4 + D`: platform version Read, owner capability Check, organization version Read, descendant Reads by exact parent/organization subject plus `object=space:`, one four-operation guard Write | Platform then organization locks, held through complete subtree validation, retirement and commit; no Temporal RPC |
 | Receipt replay/status | One current platform capability Check | Indexed receipt lookup, no mutation lock for an already committed receipt |
 | Ordinary cleanup batch | Five Reads: platform version, organization guard existence, organization version, exact target object, and incoming `user=space:<id>, object=space:`; zero or one Write, at most 96 payload deletes plus four guard operations | One bounded transaction, up to 1000 folder leaves or one tuple batch or one space row; no retention/retry sleep under locks |
 | Orphan descendant cleanup | Ordinary five Reads plus at most four filtered Reads per absent descendant level (two placement checks, exact object, incoming references); at most two levels, hence 13 Reads and one guarded Write for a supported chain | SQL existence is checked under the same platform/organization locks before each descent; no SQL space counter increment for ghosts |
@@ -97,14 +96,13 @@ Each retry rediscovers the remaining work, including after a lost write acknowle
 A committed incoming space outside the retired manifest is never deleted.
 Disconnected orphan roots are outside this targeted cleanup.
 
-On the local disposable-service fixture (six lifecycle tests running concurrently),
-one acceptance took 17.740 ms with three spaces, 1001 target folders and 243 target
-tuples. Another organization held 241 member tuples plus its owner/admin grants.
-Acceptance used exactly four Reads, one Check and one Write. Six cleanup attempts,
-including one committed FGA delete with a lost acknowledgment, took 149 ms; combined
-acceptance/cleanup used 34 Reads, one Check and seven Writes. Assertions cap every
-Write at 100 tuple operations and require filtered Reads. SQL progress records
-1001 folders and one space removed; all 241 unrelated member tuples remain.
+The lifecycle budget fixture has three spaces, 1001 target folders and 243 target
+tuples; another organization holds 241 member tuples plus its owner/admin grants.
+Its expected acceptance budget is three Reads, one Check and one Write. Six cleanup
+attempts, including one committed FGA delete with a lost acknowledgment, bring the
+total to 33 Reads, one Check and seven Writes. Assertions cap each Write at 100 tuple
+operations and require filtered Reads; SQL progress records 1001 folders and one
+space removed while unrelated grants remain.
 An additional single-cleanup-stream fixture, run alongside the 85-test integration
 suite, has one committed organization, one absent team, 100 absent projects and
 240 ghost grants. Alternating lost acknowledgments still converge: 1360 filtered
@@ -189,7 +187,8 @@ replace visual acceptance on a deployed instance.
 
 ## OpenFGA request costs
 
-Direct roles and the space tree live in OpenFGA. The client uses `Check`, paginated
+Direct roles and permission-evaluated links live in OpenFGA; immutable placement
+is also recorded in SQL. The client uses `Check`, paginated
 `Read` and `Write`; it does not issue `ListObjects`, `ListUsers`, `Expand` or `BatchCheck`.
 `Check` and `Read` request `HIGHER_CONSISTENCY`. A content check addresses one
 user, permission and space; the model evaluates descending roles through at most two
@@ -220,26 +219,28 @@ Keycloak calls. `C` is one Check; `W(n)` is one Write with `n` total inserts and
 `P_u`, `P_p` and `P_a(s)` are the actual Read page counts for a user's direct space
 roles, all platform grants, and holders of the admin/owner role being revoked on `s`. Each includes at least
 one request, even for an empty result. The client does not specify `page_size`.
-`L` is the number of link Reads placing a space: 0 for an organization, 1 for a team
-or personal space, 2 for a project. `P_c(s)` counts the Read pages of a space's
-children; `P_o(s)` counts its personal-space pages. `P_d` counts the pages of a
-user's direct roles on one space. Link and guard reads each return at most one
-matching tuple. Other Read counts vary with pagination, including empty results.
-`Q(u) = P_u + sum L(s)` Reads resolves a subject's organization over distinct committed
-direct-grant spaces. The resolver filters roles by `user=user:<u>, object=space:`
-and placements by exact space object and `parent` or `organization` relation.
-It exhausts all pages, grants no permissions, and fails on distinct organization IDs.
+`P_c(s)` counts the Read pages of a space's children; `P_o(s)` counts its
+personal-space pages. `P_d` counts the pages of a user's direct roles on one space.
+Guard reads return at most one matching tuple. Other Read counts vary with
+pagination, including empty results.
+`Q(u) = P_u` Reads resolves a subject's organization, followed by one SQL query
+selecting distinct `organization_id` values for the direct-grant space IDs.
+The resolver filters FGA roles by `user=user:<u>, object=space:`, exhausts every page,
+ignores IDs absent from SQL and includes retired rows. It fails on distinct
+organization IDs and grants no permission. Context and target loading perform zero
+FGA placement Reads. `/me/spaces` reuses its already-read roles with the same SQL
+resolver before filtering active rows and enumerating descendants.
 `Q` counts client RPCs, not OpenFGA server evaluation work.
 
 | Operation | OpenFGA calls | Read filter or decision scope |
 | --- | --- | --- |
-| Folder directory | `Q(caller) + L Read + 2 C` | Unique context, target placement, current read and write decisions on that space; zero Writes |
-| Content access; authorize document/space | `Q(caller) + L Read + 1 C` | Unique caller context, target placement, exact permission; a foreign context short-circuits before Check |
+| Folder directory | `Q(caller) + 2 C` | Unique context, target placement, current read and write decisions on that space; zero Writes |
+| Content access; authorize document/space | `Q(caller) + 1 C` | Unique caller context, target placement, exact permission; a foreign context short-circuits before Check |
 | Authorize platform | `1 C` | Exact platform permission; no business context |
-| Authorize scope | `Q(caller) + 1 C + L Read` | Target placement, caller context, then read permission Check |
+| Authorize scope | `Q(caller) + 1 C` | Target placement, caller context, then read permission Check |
 | `GET /me` | `4 C`, concurrent | Caller's four effective platform roles |
-| `GET /me/spaces` | `P_u + D + sum P_c(s) Read` | Direct roles; one link per directly granted team, project or personal space (`D`, concurrent); all child pages of each organization and team reached by a descending role, concurrent per level |
-| Team registry page | `1 C + t Read` | Platform registry permission; one concurrent `parent` Read per returned team, `t ≤ 100` |
+| `GET /me/spaces` | `P_u + sum P_c(s) Read` | Direct roles and SQL placement; all child pages of each organization and team reached by a descending role, concurrent per level |
+| Team registry page | `1 C` | Platform registry permission; SQL placement for at most 100 returned teams |
 | Organization registry page | `1 C` | Owner Check; SQL selects at most 101 active rows and returns 100; no tuple/identity enumeration or advisory lock |
 | HTTP create organization | `2 C + W(2) + 2 R_g + sum Q(distinct target) + W(6)` | Preflight and guarded owner Checks; two exact directory lookups (one for identical usernames) before locking; Owner/Admin grants only |
 | List platform grants | `1 C + P_p Read` | Owner check, then all subjects/roles on `platform:root` |
@@ -248,10 +249,10 @@ It exhausts all pages, grants no permissions, and fails on distinct organization
 | Grant organization owner | `Q(target) + 2 R_g + 1 C + W(5)` | Platform and organization guards; actor platform owner; separate Keycloak subject lookup |
 | Grant organization admin | `Q(caller) + Q(target) + 2 R_g + 1-2 C + W(5)` | Actor manages organization, else owns it |
 | Grant other organization role | `Q(caller) + Q(target) + 2 R_g + 1 C + W(5)` | Actor manages organization |
-| Grant team/project role | `Q(caller) + Q(target) + L Read + 2 R_g + 1 C + P_d Read + W(5)` | Actor manages space; target's direct parent roles |
-| Revoke space role | `Q(caller) + L Read + 2 R_g + 1-2 C + P_u Read + P_c(s) Read + W(4 + d)` | Target's direct roles across all spaces; children (an organization adds `P_o(s)` personal-space Reads); the second Check is only for an organization admin change |
+| Grant team/project role | `Q(caller) + Q(target) + 2 R_g + 1 C + P_d Read + W(5)` | Actor manages space; target's direct parent roles |
+| Revoke space role | `Q(caller) + 2 R_g + 1-2 C + P_u Read + P_c(s) Read + W(4 + d)` | Target's direct roles across all spaces; children (an organization adds `P_o(s)` personal-space Reads); the second Check is only for an organization admin change |
 | Revoke a held admin or owner role on a non-personal space | Previous row + `P_a(s) Read` | All direct holders of that role; an owner revocation omits `Q(caller)` and uses the independent platform-owner Check |
-| Create team or project | `Q(caller) + Q(admin) + L_p Read + 1 R_g + 1 C + P_d Read + P_c(parent) Read + W(4)` | Actor manages parent; nominated admin's direct parent roles; sibling names; link and admin in one Write |
+| Create team or project | `Q(caller) + Q(admin) + 1 R_g + 1 C + P_d Read + P_c(parent) Read + W(4)` | Actor manages parent; nominated admin's direct parent roles; sibling names; link and admin in one Write |
 | Create personal space | `Q(caller) + 1 R_g + 2 C + P_o(org) Read + W(5)` | Organization read and explicit eligibility; all personal links; link, member and editor in one Write |
 | Reuse personal space | `Q(caller) + 1 R_g + 2 C + P_o(org) Read` | Organization and personal read; no SQL/FGA mutation |
 | Operator create organization | `W(2) + 2 R_g + Q(first person) + W(7)` | Directory subject lookup, initialize guard, then initial owner/admin/member grants |
@@ -262,13 +263,13 @@ HTTP organization creation holds the platform advisory lock from name reservatio
 through new-guard initialization, both guard reads, current caller/target checks,
 FGA publication and SQL commit. Keycloak lookup precedes the lock. The final Write
 contains two role inserts and four guard-version operations. Target membership
-pages and placements determine its read cost; total users/documents do not.
+pages determine its FGA read cost; total users/documents do not.
 The registry's SQL page size determines its returned volume. These are client RPC
 counts, separate from OpenFGA's internal Check evaluation.
 
 `d` is 1 when the revoked role exists, otherwise 0. A successful absent space-role
 revocation still advances its guard. A platform-role revoke returns 404 when absent.
-`L_p` places the parent. SQL folder mutations use `Q(caller) + L Read + 1 R_g + 1 C + W(2)`;
+SQL folder mutations use `Q(caller) + 1 R_g + 1 C + W(2)`;
 the fence contains no role change. Existing-object mutation adds one indexed SQL
 existence read under the organization lock (I22), independently of document count. Each successful guard replacement adds two
 operations per scope, independent of the number of existing roles.
@@ -282,12 +283,12 @@ Sources: [client](../../apps/control-plane/src/fga.rs),
 
 Resources issues one combined directory request on entry, navigation, search, sort
 or page change, in addition to shared admission/membership queries. Its response
-contains current read-authorized rows and a write decision: `L + Q` Reads and
+contains current read-authorized rows and a write decision: `Q` Reads and
 2 Checks, zero Writes. No separate write probe or document listing is issued.
 Successful mutations invalidate the directory query. A failed read hides cached
 write authority until a fresh successful decision; it does not grant permission.
 
-Mutations cost `L + Q + 1` Reads, 1 Check and 1 Write containing two guard-version
+Mutations cost `Q + 1` Reads, 1 Check and 1 Write containing two guard-version
 operations. Stored tuple count is unchanged: no folder tuple is created or deleted.
 Target placement precedes locking; guard Read, context resolution, Check, fence,
 local mutation and SQL commit occur while the organization lock is held. Waiting
@@ -301,49 +302,16 @@ offsets still examine work proportional to the directory; limiting returned rows
 does not make that work constant. Recursive deletion scales with the removed
 subtree and its foreign-key checks, under the organization lock.
 
-A reproducible disposable fixture (`folder_scaling`, 2026-10-18) uses PostgreSQL
-15.12, OpenFGA 1.15.1 with in-memory storage, a debug manager called through its in-memory Axum router, a ten-connection SQL
-pool and an observing HTTP proxy. It starts with 10,000 folders: a root, 9,985
-immediate children and a branch reaching depth 15. A listing returns 50 folders;
-adding folders changes neither its FGA budget nor the initial 11 stored tuples.
-With one organization editor role, `L=0, Q=1`; adding 40 team-member roles and
-forcing ten tuples per page gives `Q=5+40=45`. Unrelated users are not enumerated.
-
-| Operation / caller | p95 latency ms, concurrency 1 / 10 / 50 | Requests/s at 50 |
-| --- | --- | --- |
-| Directory, one role | 14 / 110 / 87 | 534 |
-| Directory, 41 roles | 37 / 156 / 611 | 81 |
-| Create, one organization, one role | 15 / 104 / 891 | 53 |
-| Create, one organization, 41 roles | 40 / 402 / 1604 | 30 |
-| Create, separate organizations, one role each | 13 / 23 / 99 | 461 |
-
-Each cell is one burst of 1, 10 or 50 requests, not a steady-state throughput or
-production percentile estimate. The separate-organization comparison uses distinct
-callers creating root folders in initially empty spaces; the same-organization
-writes add children to the large tree. Folder writes add 122 rows before deletion.
-The SQL fixture's unfiltered first page takes 0.05 ms / 4 shared buffers; a one-child
-branch 0.02 ms / 3 buffers. Wide count, offset 9,900, substring selection and date
-sorting take respectively 0.74, 2.82, 2.20, 1.06 ms
-(214, 214, 269, 214 buffers).
-These warm local plans do not promise those latencies on other hardware or volumes.
-
-A separate connection polls advisory locks every requested millisecond. Its observed
-first-to-last sightings approximate lock residency, exclude SQL pool acquisition
-waits and miss short holds. Client sampling and scheduling can under- or overestimate
-individual durations; these are not exact lock timers or guaranteed bounds. At concurrency 50, p95 sampled wait/hold is 195/22 ms for
-one-role same-organization writers and 353/48 ms for 41-role writers. Separate
-organizations show no sampled advisory wait and 19 ms p95 hold. Maximum sampling
-gaps for those bursts are 6.9, 13.5 and 8.4 ms. Removing the 10,122-folder subtree
-takes 412 ms, with a 406 ms sampled hold and a 3.9 ms maximum sampling gap;
-stored FGA tuples are unchanged. The campaign asserts filtered Reads, exact RPC
-counts, two guard operations per mutation and no folder tuples.
-
-The measured limit is shared organization write serialization and membership
-resolution, not folder-specific FGA evaluation. Membership placement reads overlap
-with at most 32 in flight per resolution; concurrent callers multiply that work.
-The model traverses at most two space-parent links for its Check, independently of
-folder depth. These results support bounded folder navigation at the measured size;
-they do not establish optimal or unlimited concurrent write capacity.
+The disposable `folder_scaling` fixture uses 10,000 folders: a root, 9,985
+immediate children and a branch reaching depth 15. A listing returns 50 folders.
+With one organization editor role its expected directory budget is one Read and
+two Checks. With 40 additional team-member roles and forced pages of ten tuples,
+`Q=5`: five Reads and two Checks. Folder mutations add one guard Read and one
+Write, with one permission Check. No placement Reads or folder tuples are added.
+These source-derived budgets do not establish latency or throughput. Same-organization
+writes still serialize; pagination, SQL query work and FGA Check evaluation remain
+cardinality-dependent. The model traverses at most two parents independently of
+folder depth. The fixture samples lock residency and request latency when executed.
 
 For the ZIP importer, let `U` be users, `O` organizations, `N` new organizations,
 `G` normalized platform grants, `D` space-role tuples, `C` new teams and projects,
@@ -368,7 +336,7 @@ preflight, whole-bundle reconciliation and the guarded subtree check. Children
 Reads use `space:<parent>`, relation `parent`, in preflight and reconciliation.
 Authority Checks use `platform_owner` on `platform:root`. Guard Reads use the exact
 `guard:<scope>` object/revision relation. Attachment validation enumerates each assigned subject's
-direct roles and full committed placement at the checkpoints above. Space batches
+direct-role pages and SQL placement at the checkpoints above. Space batches
 contain at most 96 link and role inserts plus four guard operations; a new space's
 `parent` link shares its first batch. Platform grants contain
 three operations, with only the platform guard. FGA calls are sequential. Multi-page direct-role or child lists add their extra
@@ -397,10 +365,10 @@ fences, verifies content without dangling eligibility, then successfully replays
 
 Personal opening holds its organization SQL lock from guard capture through context,
 permission reads, link pagination, row reads and creation commit. With three members,
-two existing personal spaces and forced page size 1, creation measures 2 Checks,
-5 Reads and 1 Write (5 tuple operations). Reuse with three personal spaces measures
-2 Checks, 9 Reads and zero Writes. Exact guard: one Read; roles: 2 then 4 pages;
-personal links: 2 then 3 pages; reuse context adds one placement Read. Production
+two existing personal spaces and forced page size 1, creation expects 2 Checks,
+5 Reads and 1 Write (5 tuple operations). Reuse with three personal spaces expects
+2 Checks, 8 Reads and zero Writes. Exact guard: one Read; roles: 2 then 4 pages;
+personal links: 2 then 3 pages; SQL placement adds no FGA Read. Production
 page size stays unset; all continuation pages are read with higher consistency.
 The two-open race is concurrency 2, not a throughput measurement. Document count
 does not affect lookup. The UI waits for one membership refresh after success.
@@ -413,10 +381,10 @@ on a fresh Fred store; IAM identity reuse does not attach a person to another Fr
 batch-boundary fixture (105 users, 107 organization grants, 210 team grants, one new
 organization and team, no platform grants, `H=J=Z=E=0`) checks 114 Checks, 422 Reads
 (`X=3*105=315`, known identities, initially empty roles) and 111 Writes: 550 tuple operations and at most 100 per Write. The demo project variant
-(`U=2`, `H=2`, `E=2`) checks 9 Checks and 26 Reads: two subjects with
-organization/team roles each cost two Reads at each of three checkpoints. The hierarchy fixture (one
+(`U=2`, `H=2`, `E=2`) expects 9 Checks and 20 Reads: two subjects with
+organization/team roles each cost one Read at each of three checkpoints. The hierarchy fixture (one
 organization, team and project, an organization analyst with a personal space)
-checks 4 Reads for `/me/spaces`, and `1 C + 4 Read` and `1 C + 3 Read` for project
+expects 3 Reads for `/me/spaces`, and `1 C + 1 Read` for both project
 and team scopes. These are wire-count assertions in disposable
 integration environments, not latency, throughput or scalability measurements.
 The pagination fixture has five roles on one organization and forces page size 2:
@@ -432,7 +400,7 @@ platform guard initialization Write; existing state without a binding is refused
 Read pagination bounds each response, not the operation's memory: `read_keys`
 accumulates all matching tuples. With `R` direct role tuples and `S` returned spaces,
 `/me/spaces` uses `O(R + S)` application memory and `O(S log S + S * R)` processing
-for ordering, path walks and per-space role selection; its concurrent Reads are
+for ordering and per-space role selection; its concurrent Reads are
 unbounded within one level. Space revocation tests child membership in `O(R * D)`
 worst-case application work for `D` children and personal spaces. These costs concern Fred's processing of returned
 tuples, not OpenFGA's internal query plan.
@@ -482,7 +450,7 @@ Generated from the `// Proves:` markers.
 <!-- generated: invariants -->
 | Invariant | Proved by |
 | --- | --- |
-| I1 | `apps/control-plane/src/domain.rs::parent_rules`<br>`apps/control-plane/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/control-plane/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/control-plane/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/control-plane/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock`<br>`apps/control-plane/tests/integration.rs::sibling_names_are_unique_and_uncommitted_links_are_ignored`<br>`apps/control-plane/tests/support/organization_console.rs::organization_console_creation_authority_roles_failures_and_budget`<br>`apps/control-plane/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_role_semantics`<br>`apps/control-plane/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization` |
+| I1 | `apps/control-plane/src/domain.rs::parent_rules`<br>`apps/control-plane/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/control-plane/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/control-plane/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/control-plane/tests/integration.rs::blueprint_preflight_reads_child_names_after_organization_lock`<br>`apps/control-plane/tests/integration.rs::sibling_names_are_unique_and_uncommitted_links_are_ignored`<br>`apps/control-plane/tests/support/organization_console.rs::organization_console_creation_authority_roles_failures_and_budget`<br>`apps/control-plane/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_role_semantics`<br>`apps/control-plane/tests/support/resource_browsing.rs::sql_placement_matches_fga_hierarchy_and_context`<br>`apps/control-plane/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization` |
 | I2 | `apps/control-plane/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space`<br>`apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication`<br>`apps/control-plane/tests/support/document_processing.rs::processing_admission_request_budget_at_one_and_one_hundred_documents`<br>`apps/control-plane/tests/support/document_storage.rs::document_contract_guards_and_shared_project_quota`<br>`apps/control-plane/tests/support/document_storage.rs::document_creation_reads_conflicts_receipts_and_safe_download`<br>`apps/control-plane/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/control-plane/tests/support/resource_browsing.rs::folder_directory_pages_and_atomic_subtree_lifecycle` |
 | I3 | `apps/control-plane/tests/integration.rs::placement_is_immutable_and_folders_stay_in_their_space`<br>`apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication`<br>`apps/control-plane/tests/support/document_storage.rs::document_contract_guards_and_shared_project_quota`<br>`apps/control-plane/tests/support/document_storage.rs::document_creation_reads_conflicts_receipts_and_safe_download` |
 | I4 | `apps/control-plane/tests/browser_provisioning.rs::provisioning_browser_journey`<br>`apps/control-plane/tests/integration.rs::concurrent_revocations_keep_parent_access`<br>`apps/control-plane/tests/integration.rs::concurrent_grant_and_revoke_keep_the_invariant`<br>`apps/control-plane/tests/integration.rs::analyst_membership_is_content_and_personal_roles_remain_fixed`<br>`apps/control-plane/tests/integration.rs::provisioning_replays_every_role_without_updating_identities_or_implicit_content`<br>`apps/control-plane/tests/integration.rs::real_keycloak_service_account_provisions_complete_bundle`<br>`apps/control-plane/tests/integration.rs::provisioning_repairs_every_fga_boundary_including_ambiguous_acknowledgments`<br>`apps/control-plane/tests/integration.rs::import_rechecks_parent_after_wait_and_repairs_existing_space_grants`<br>`apps/control-plane/tests/integration.rs::a_timed_out_child_grant_cannot_arrive_after_parent_revocation`<br>`apps/control-plane/tests/integration.rs::a_cancelled_child_grant_is_fenced_after_client_restart`<br>`apps/control-plane/tests/integration.rs::noop_revocation_and_multiple_scopes_fence_stale_attempts`<br>`apps/control-plane/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors`<br>`apps/control-plane/tests/integration.rs::inherited_access_does_not_replace_parent_membership`<br>`apps/control-plane/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/control-plane/tests/integration.rs::import_orders_personal_eligibility_after_content_across_failed_batches`<br>`apps/control-plane/tests/integration.rs::personal_grant_budget_and_failed_creation_preserve_authority`<br>`apps/control-plane/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_filtered_batches_lost_ack_and_unrelated_state`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates` |
@@ -503,7 +471,7 @@ Generated from the `// Proves:` markers.
 | I20 | `apps/control-plane/tests/integration.rs::descending_roles_reach_projects_and_member_stays_local`<br>`apps/control-plane/tests/integration.rs::memberships_list_inherited_spaces_with_their_paths`<br>`apps/control-plane/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation` |
 | I21 | `apps/control-plane/tests/integration.rs::import_cli_is_read_only_until_authorized_and_requires_initialized_state`<br>`apps/control-plane/tests/integration.rs::organization_owners_name_admins_and_read_nothing`<br>`apps/control-plane/tests/integration.rs::owner_grants_require_directory_identity_and_deleted_owners_can_be_revoked`<br>`apps/control-plane/tests/integration.rs::import_rechecks_owner_identity_before_publishing_spaces`<br>`apps/control-plane/tests/integration.rs::import_checks_distinct_owners_once_with_bounded_concurrency` |
 | I22 | `apps/control-plane/tests/integration.rs::content_http_waiters_recheck_existence_after_deletion`<br>`apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_existing_worker_journey_without_kf_http`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication`<br>`apps/control-plane/tests/support/document_processing.rs::processing_admission_request_budget_at_one_and_one_hundred_documents`<br>`apps/control-plane/tests/support/document_storage.rs::document_contract_guards_and_shared_project_quota`<br>`apps/control-plane/tests/support/document_storage.rs::document_publication_rechecks_token_and_terms_without_locking_remote_io`<br>`apps/control-plane/tests/support/document_storage.rs::document_creation_reads_conflicts_receipts_and_safe_download`<br>`apps/control-plane/tests/support/document_storage.rs::document_revocation_cleanup_and_late_put_recovery`<br>`apps/control-plane/tests/support/document_storage.rs::shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owned_late_writes`<br>`apps/control-plane/tests/support/document_storage.rs::cleanup_inaccessible_original_does_not_starve_other_objects`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once` |
-| I23 | `apps/control-plane/tests/integration.rs::concurrent_attachments_choose_one_organization_and_creation_cannot_bypass_it`<br>`apps/control-plane/tests/integration.rs::a_late_attachment_cannot_publish_after_assignment_elsewhere`<br>`apps/control-plane/tests/integration.rs::ambiguous_context_fails_closed_and_remains_repairable`<br>`apps/control-plane/tests/integration.rs::import_rejects_cross_organization_declarations_before_identity_writes`<br>`apps/control-plane/tests/integration.rs::organization_context_exhausts_pages_and_grant_budget_includes_global_fencing`<br>`apps/control-plane/tests/integration.rs::business_http_checks_context_while_platform_metadata_stays_available`<br>`apps/control-plane/tests/integration.rs::import_rechecks_attachment_after_preflight_against_a_waiting_grant`<br>`apps/control-plane/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/control-plane/tests/integration.rs::personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait`<br>`apps/control-plane/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/control-plane/tests/support/organization_console.rs::organization_console_creation_authority_roles_failures_and_budget`<br>`apps/control-plane/tests/support/organization_console.rs::organization_console_registry_pagination_excludes_retired_and_costs_one_check`<br>`apps/control-plane/tests/support/organization_console.rs::organization_console_rechecks_waiting_creator_and_serializes_attachment`<br>`apps/control-plane/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_role_semantics`<br>`apps/control-plane/tests/support/resource_browsing.rs::organization_placement_reads_overlap_with_a_bounded_request_budget`<br>`apps/control-plane/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once` |
+| I23 | `apps/control-plane/tests/integration.rs::concurrent_attachments_choose_one_organization_and_creation_cannot_bypass_it`<br>`apps/control-plane/tests/integration.rs::a_late_attachment_cannot_publish_after_assignment_elsewhere`<br>`apps/control-plane/tests/integration.rs::ambiguous_context_fails_closed_and_remains_repairable`<br>`apps/control-plane/tests/integration.rs::import_rejects_cross_organization_declarations_before_identity_writes`<br>`apps/control-plane/tests/integration.rs::organization_context_exhausts_pages_and_grant_budget_includes_global_fencing`<br>`apps/control-plane/tests/integration.rs::business_http_checks_context_while_platform_metadata_stays_available`<br>`apps/control-plane/tests/integration.rs::import_rechecks_attachment_after_preflight_against_a_waiting_grant`<br>`apps/control-plane/tests/integration.rs::personal_open_requires_explicit_eligibility_and_never_repairs_revocation`<br>`apps/control-plane/tests/integration.rs::personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait`<br>`apps/control-plane/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/control-plane/tests/support/organization_console.rs::organization_console_creation_authority_roles_failures_and_budget`<br>`apps/control-plane/tests/support/organization_console.rs::organization_console_registry_pagination_excludes_retired_and_costs_one_check`<br>`apps/control-plane/tests/support/organization_console.rs::organization_console_rechecks_waiting_creator_and_serializes_attachment`<br>`apps/control-plane/tests/support/resource_browsing.rs::resource_reads_enforce_scope_and_role_semantics`<br>`apps/control-plane/tests/support/resource_browsing.rs::sql_placement_matches_fga_hierarchy_and_context`<br>`apps/control-plane/tests/support/resource_browsing.rs::organization_context_reads_only_role_pages`<br>`apps/control-plane/tests/support/resource_browsing.rs::folder_creation_governance_contract_and_request_budget`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once` |
 | I24 | `apps/control-plane/tests/lifecycle_temporal.rs::api_worker_restart_schedule_reconciliation_and_replay`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_authority_retirement_documents_and_durable_receipts`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_partial_link_loss_reserves_name_and_organization`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_retention_personal_scope_and_final_guard_commit_failure`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_filtered_batches_lost_ack_and_unrelated_state`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_waiters_recheck_retirement_and_authority_and_accept_once`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_aborted_creation_graph_does_not_block_cleanup`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_orphan_pages_keep_anchors_through_lost_acknowledgments`<br>`apps/control-plane/tests/support/space_deletion.rs::lifecycle_orphans_cannot_expand_the_committed_manifest_or_depth` |
 | I25 | `apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_existing_worker_journey_without_kf_http`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication`<br>`apps/control-plane/tests/support/document_storage.rs::document_creation_reads_conflicts_receipts_and_safe_download`<br>`apps/control-plane/tests/support/document_storage.rs::document_revocation_cleanup_and_late_put_recovery`<br>`apps/control-plane/tests/support/document_storage.rs::shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owned_late_writes`<br>`apps/control-plane/tests/support/document_storage.rs::cleanup_inaccessible_original_does_not_starve_other_objects` |
 | I26 | `apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_existing_worker_journey_without_kf_http`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication` |
@@ -534,40 +502,29 @@ A mixed import checks explicit conflicts and preservation of the existing origin
 Desktop and narrow captures record the existing Resources layout; they are not a
 mobile-layout acceptance test.
 
-Using `L` and `Q` above, a fresh successful upload performs `3 * (L + Q) + 2`
+Using `Q` above, a fresh successful upload performs `3 * Q + 2`
 Reads, three space-write Checks and two Writes of two guard operations each.
 The first context/Check occurs before body IO; each guarded SQL phase adds an
 exact version Read, context resolution, Check and fence before commit. Direct-role
-pagination and placement determine cost; document count and file size add no FGA
+pagination determines FGA RPC cost; document count and file size add no FGA
 calls or tuples. Checks' internal evaluation work is not measured by RPC count.
-A combined directory uses `L + Q` Reads and two Checks. Individual metadata,
-receipt, summary and download authorization uses `L + Q` Reads and one Read Check.
+A combined directory uses `Q` Reads and two Checks. Individual metadata,
+receipt, summary and download authorization uses `Q` Reads and one Read Check.
 Receipt acknowledgment reuses that authorization. Cleanup issues no FGA call.
 
-A disposable debug-build fixture on 2026-10-19 has five users, one organization,
-one team, two direct memberships for its writer, one 128 KiB original and upload
-concurrency one. It measures 11 Reads, three Checks and two Writes (four total
-guard operations), and 283 ms elapsed including a controlled Put gate and resource
-inspection. Directory access measures three Reads/two Checks both with one document
-and with 100 additional metadata fixture rows. Those synthetic rows do not claim
-100 additional stored objects. A second storage instance exercises competing cleanup
-claims and restart/cursor recovery, not upload-throughput scaling.
-
-At the held Put, temporary files total exactly 131,072 bytes and return to zero
-when the request finishes. Process RSS moves from 75,628 to 76,240 KiB; this includes
-the test router/proxies and other concurrent fixture work, not isolated production
-memory. The implementation bounds admitted spool bytes by upload permits times
-file ceiling, and streams remote verification/download through 64 KiB buffers.
-SDK, TLS, HTTP framing and runtime allocations are additional memory. The browser
-keeps at most three upload requests active and one original Blob of at most 100 MiB.
-
-The existing millisecond `pg_locks` sampler observes two guarded holds of 9.7 and
-12.3 ms, no sampled wait, and a maximum polling gap of 15.3 ms. These approximate
-spans miss short locks and are not exact timers. With S3 deliberately blocked,
-another connection acquires the organization lock in 0.19/0.42 ms in the token/CGU
-fixtures. No body or S3 IO retains the organization lock. SQL mutation lock waits
-are bounded to 5 s and statements to 15 s; remote FGA calls still occur inside
-both guarded transactions. Same-organization writers therefore serialize there.
+The storage budget fixture has five users, one organization, one team, two direct
+writer roles, one 128 KiB original and upload concurrency one. With roles fitting
+one page, its expected upload budget is five Reads, three Checks and two Writes
+(four guard operations). Directory access costs one Read and two Checks with one
+or 101 document rows. Synthetic metadata rows do not claim additional stored objects.
+The implementation bounds admitted spool bytes by upload permits times file ceiling,
+and streams verification/download through 64 KiB buffers. SDK, TLS, HTTP framing
+and runtime allocations are additional memory. The browser keeps at most three
+upload requests active and one original Blob of at most 100 MiB.
+No body or S3 IO retains the organization lock. SQL mutation lock waits are bounded
+to 5 s and statements to 15 s; FGA calls remain inside both guarded transactions.
+Same-organization writers therefore serialize there. RPC budgets do not estimate
+upload latency or throughput.
 
 Failure fixtures cover concurrent same-name and shared-team quota reservations,
 malformed/oversized bodies, lost acknowledgments, token expiry, consent withdrawal,
@@ -605,41 +562,25 @@ Processing adds no per-document OpenFGA tuples. Start/retry and final publicatio
 reuse the guarded space-write path: resolve placement, acquire the organization
 SQL lock, read its guard revision, exhaust actor membership pages, check space
 Write, replace the guard revision, then commit SQL. Derived object verification
-precedes that transaction. Membership count and ancestor depth drive FGA work;
+precedes that transaction. Membership pagination drives FGA RPC count; ancestor
+depth affects the model's internal Check evaluation;
 document/chunk count drives SQL, object and vector work, not authorization tuples.
 Status/preview/original access uses the corresponding current-space checks.
 Preparation claims verify actor authority without granting space roles. Later
 stage claims check the bound operation and fence; original reads and final
 publication recheck actor authority. Cleanup uses the persisted operation scope and makes no FGA writes.
 
-The 2026-10-19 disposable fixture has five users, one organization, one team and
-two writer memberships. At 1 and 100 document rows, and concurrency 1 and 8,
-forcing FGA Read pages to one tuple gives exactly six Reads, one Check and one
-Write per start request. The Reads are three exact space-parent reads, one exact
-guard-version read and two pages filtered by `user:writer` and `object=space:`.
-The Write replaces one guard tuple (one delete plus one insert); the Check asks
-`can_write` on the owning space. Concurrent matching keys return one attempt.
-The 100-row fixture has one real original and 99 metadata-only rows.
-
-Sampled single-request lock holds are 36.3/53.9 ms at 1/100 rows. At concurrency
-eight the maximum sampled holds are 54.7/47.1 ms and waits 115.1/269.9 ms.
-Maximum sampling gaps are 12.5, 24.1, 6.7 and 21.4 ms, so these are approximate
-spans, not exact timers or production capacity estimates. FGA server evaluation
-work is distinct from these client RPC counts. Authorization calls remain inside
-the short guarded transaction; object and Temporal IO remain outside it.
-
-A separate publication fixture (2026-10-20) has the same owning team and two
-writer membership pages. With forced page size one, final publication measures
-five Reads: two placement Reads, one guard Read and two membership pages. Unlike
-start, publication does not first call the additional space-loading helper. It
-uses one Check and one Write (two guard tuple operations); its sampled
-hold is 17.9 ms with a 4.7 ms maximum sampling gap. A concurrent revocation and
-publication fixture queues both behind the organization lock, revokes first,
-and rejects publication. Combined revocation/publication costs are 15 Reads,
-two Checks and one Write. The three sampled lock holds include the deliberate
-blocking transaction: maximum hold 98.0 ms, maximum wait 64.6 ms, maximum gap
-3.7 ms. These concurrency-two values include synchronization overhead and do
-not estimate normal publication latency.
+The processing budget fixture has five users, one organization, one team and two
+writer memberships. At 1 and 100 document rows, with concurrency 1 and 8 and one
+tuple per Read page, start expects three Reads, one Check and one Write per request:
+one guard Read and two direct-role pages. Final publication has the same budget.
+The Write replaces one guard tuple; the Check asks `can_write` on the owning space.
+There are no placement Reads. Concurrent matching keys return one attempt; the
+100-row fixture contains one real original and 99 metadata-only rows.
+Authorization runs inside the guarded SQL transaction; object and Temporal IO stay
+outside it. A concurrent revocation/publication fixture queues both behind the
+organization lock, revokes first and rejects publication. These fixtures carry RPC
+and behavior assertions, not production latency or capacity guarantees.
 
 Focused integration tests cover admission races, idempotent upload choices,
 stale stage claims, workload identity, revoked publication, generation cleanup and

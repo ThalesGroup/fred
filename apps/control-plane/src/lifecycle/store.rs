@@ -122,7 +122,7 @@ impl Lifecycle {
             return Ok(receipt);
         }
         require_active(&mut *tx, id).await?;
-        let root = spaces::place(fga, db::space(&mut *tx, id).await?).await?;
+        let root = Space::from(db::space(&mut *tx, id).await?);
         spaces::lock_organization(&mut tx, &root).await?;
         require_active(&mut *tx, id).await?;
         if root.personal_owner.is_some() {

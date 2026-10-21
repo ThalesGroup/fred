@@ -241,14 +241,17 @@ impl Importer<'_> {
                     {
                         return Err(invalid("new organization requires a declared owner"));
                     }
+                    let id = Uuid::new_v4();
                     SpaceRow {
-                        id: Uuid::new_v4(),
+                        id,
                         name: declaration.name.clone(),
                         kind: declaration.kind,
                         personal_owner: None,
+                        parent_id: parent.map(|p| p.id),
+                        organization_id: parent.map_or(id, |p| p.organization),
                     }
                 };
-                let space = Space::placed(row, parent.map_or(&[], |p| &p.path), None);
+                let space = Space::from(row);
                 resolved.push((space, is_new));
             }
             if !organizations {

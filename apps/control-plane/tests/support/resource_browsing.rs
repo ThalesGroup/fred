@@ -192,8 +192,8 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         assert_eq!(fault.calls.get("check"), Some(&2));
         assert_eq!(fault.writes, 0);
         assert_eq!(fault.calls.len(), 2);
-        // 5 direct-role pages + placement of team, team membership and personal.
-        assert_eq!(fault.calls.get("read"), Some(&8));
+        // Five direct-role pages, zero placement Reads for context or target.
+        assert_eq!(fault.calls.get("read"), Some(&5));
         assert!(fault.reads.iter().any(|r| {
             r["continuation_token"]
                 .as_str()
@@ -216,16 +216,90 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
     );
 }
 
+// Proves: I1, I23
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn sql_placement_matches_fga_hierarchy_and_context() {
+    let e = env().await;
+    let (org, team, project) = tree(&e).await;
+    grant(&e, org.id, Role::Analyst, "reader").await;
+    grant(&e, org.id, Role::PersonalSpaceCreator, "reader").await;
+    let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "reader", org.id)
+        .await
+        .unwrap();
+
+    // Independent reference: the previous resolver followed FGA links, not SQL placement.
+    for expected in [&org, &team, &project, &personal] {
+        let mut ancestors = Vec::new();
+        let organization = if expected.personal_owner.is_some() {
+            e.fga.link_of(expected.id, true).await.unwrap().unwrap()
+        } else {
+            if expected.kind != SpaceKind::Organization {
+                let parent = e.fga.link_of(expected.id, false).await.unwrap().unwrap();
+                ancestors.push(parent);
+                if expected.kind == SpaceKind::Project {
+                    ancestors.insert(0, e.fga.link_of(parent, false).await.unwrap().unwrap());
+                }
+            }
+            ancestors.first().copied().unwrap_or(expected.id)
+        };
+        let parent = ancestors.last().copied();
+        ancestors.push(expected.id);
+        let actual = spaces::load(&e.pool, expected.id).await.unwrap();
+        assert_eq!(
+            (actual.organization, actual.parent_id, actual.path),
+            (organization, parent, ancestors)
+        );
+    }
+    for user in ["alice", "reader", "unattached"] {
+        let roles = e.fga.roles_of(user).await.unwrap();
+        let ids: Vec<_> = roles.iter().map(|(id, _)| *id).collect();
+        let mut organizations = std::collections::BTreeSet::new();
+        for row in db::spaces(&e.pool, &ids).await.unwrap() {
+            let organization = if row.personal_owner.is_some() {
+                e.fga.link_of(row.id, true).await.unwrap().unwrap()
+            } else if row.kind == SpaceKind::Organization {
+                row.id
+            } else {
+                let parent = e.fga.link_of(row.id, false).await.unwrap().unwrap();
+                if row.kind == SpaceKind::Project {
+                    e.fga.link_of(parent, false).await.unwrap().unwrap()
+                } else {
+                    parent
+                }
+            };
+            organizations.insert(organization);
+        }
+        assert!(organizations.len() <= 1);
+        assert_eq!(
+            spaces::organization(&e.pool, &e.fga, user).await.unwrap(),
+            organizations.first().copied()
+        );
+    }
+    let memberships = spaces::memberships(&e.pool, &e.fga, "reader")
+        .await
+        .unwrap();
+    assert_eq!(memberships.len(), 4);
+    for membership in memberships {
+        let expected = [&org, &team, &project, &personal]
+            .into_iter()
+            .find(|s| s.id == membership.space.id)
+            .unwrap();
+        assert_eq!(membership.space.path, expected.path);
+        assert_eq!(membership.space.organization, org.id);
+    }
+}
+
 // Proves: I23
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn organization_placement_reads_overlap_with_a_bounded_request_budget() {
+async fn organization_context_reads_only_role_pages() {
     let e = env().await;
     let org = spaces::create_organization(&e.pool, &e.fga, "TSN", "alice")
         .await
         .unwrap();
     grant(&e, org.id, Role::Member, "reader").await;
-    // More placements than the cap exercise replenishment as well as concurrency.
+    // Distinct teams must not add any placement RPC to context resolution.
     for i in 0..40 {
         let team = spaces::create_space(
             &e.pool,
@@ -256,7 +330,6 @@ async fn organization_placement_reads_overlap_with_a_bounded_request_budget() {
     .unwrap();
     *proxy.fault.lock().await = support::fga_proxy::Fault {
         read_page_size: Some(10),
-        read_delay: Some(Duration::from_millis(20)),
         ..Default::default()
     };
     assert_eq!(
@@ -266,14 +339,15 @@ async fn organization_placement_reads_overlap_with_a_bounded_request_budget() {
         Some(org.id)
     );
     let fault = proxy.fault.lock().await;
-    assert_eq!(fault.calls.get("read"), Some(&45)); // five role pages, forty links
+    assert_eq!(fault.calls.get("read"), Some(&5)); // five role pages, no links
     assert_eq!(fault.calls.len(), 1);
     assert_eq!(fault.writes, 0);
-    assert!(
-        fault.peak_reads > 1 && fault.peak_reads <= 32,
-        "peak {}",
-        fault.peak_reads
-    );
+    assert!(fault.reads.iter().all(|r| {
+        r["tuple_key"]["user"] == "user:reader"
+            && r["tuple_key"]["object"] == "space:"
+            && r["tuple_key"].get("relation").is_none()
+            && r["consistency"] == "HIGHER_CONSISTENCY"
+    }));
     assert_eq!(fault.active_reads, 0);
 }
 
@@ -473,7 +547,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
         201
     );
     let fault = proxy.fault.lock().await;
-    assert_eq!(fault.calls.get("read"), Some(&3));
+    assert_eq!(fault.calls.get("read"), Some(&2));
     assert_eq!(fault.calls.get("check"), Some(&1));
     assert_eq!(fault.calls.get("write"), Some(&1));
     assert_eq!(fault.calls.len(), 3);

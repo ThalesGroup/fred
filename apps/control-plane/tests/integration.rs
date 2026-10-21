@@ -396,6 +396,11 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
         .unwrap();
 
     let moves = [
+        format!(
+            "update space set organization_id = '{}' where id = '{}'",
+            team.id, team.id
+        ),
+        format!("update space set parent_id = null where id = '{}'", team.id),
         format!("update space set kind = 'project' where id = '{}'", team.id),
         format!(
             "update space set personal_owner = 'alice' where id = '{}'",
@@ -2283,9 +2288,9 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         let fault = proxy.fault.lock().await;
         // U=2, O=1, B=2, H=2 existing-parent fallbacks, E=2 existing parents whose
         // children resolve names, N=G=Z=0; HTTP adds one admin Check.
-        // Two subjects with organization+team roles: 3*(2+2) context Reads.
+        // Two subjects: 3*(1+1) context Reads, with placement in SQL.
         assert_eq!(fault.calls.get("check"), Some(&9));
-        assert_eq!(fault.calls.get("read"), Some(&26));
+        assert_eq!(fault.calls.get("read"), Some(&20));
         assert_eq!(fault.calls.get("write"), Some(&4));
     }
     let project = named_space(&e.pool, &e.fga, Some(north.id), "Project")
@@ -3547,8 +3552,10 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         kind: SpaceKind::Project,
         name: "Collision".into(),
         personal_owner: None,
+        parent_id: Some(org.id),
+        organization_id: org.id,
     };
-    db::insert_space(&mut held, &Space::placed(row, &[org.id], None))
+    db::insert_space(&mut held, &Space::from(row))
         .await
         .unwrap();
     let mut guard = e.fga.guard(&[Scope::Organization(org.id)]).await.unwrap();
@@ -4284,7 +4291,7 @@ async fn hierarchy_reads_have_fixed_request_budgets() {
         counts
     };
     budget().await;
-    // Direct roles, the personal space's organization, then TSN's and BID's children.
+    // Direct roles, then TSN's and BID's children; placement is SQL metadata.
     assert_eq!(
         spaces::memberships(&e.pool, &fga, "ana")
             .await
@@ -4292,16 +4299,16 @@ async fn hierarchy_reads_have_fixed_request_budgets() {
             .len(),
         4
     );
-    assert_eq!(budget().await, (0, 4));
-    // Context: direct roles + personal link, plus target placement and Check.
+    assert_eq!(budget().await, (0, 3));
+    // Context: direct roles only; target placement requires no FGA Read.
     spaces::scope(&e.pool, &fga, "ana", project.id, None)
         .await
         .unwrap();
-    assert_eq!(budget().await, (1, 4));
+    assert_eq!(budget().await, (1, 1));
     spaces::scope(&e.pool, &fga, "ana", team.id, None)
         .await
         .unwrap();
-    assert_eq!(budget().await, (1, 3));
+    assert_eq!(budget().await, (1, 1));
 }
 
 // Proves: I8, I14, I21
@@ -4797,7 +4804,7 @@ async fn ambiguous_context_fails_closed_and_remains_repairable() {
         Some(a.id)
     );
     assert!(!reads(&e, "bob", a.id).await);
-    // A project role without its team membership is refused, not repaired.
+    // Context resolution agrees with direct FGA grants; it does not repair missing parent roles.
     e.fga
         .write(
             &mut e.fga.guard(&[Scope::Organization(a.id)]).await.unwrap(),
@@ -4810,10 +4817,21 @@ async fn ambiguous_context_fails_closed_and_remains_repairable() {
         )
         .await
         .unwrap();
-    assert!(matches!(
-        spaces::memberships(&e.pool, &e.fga, "orphan").await,
-        Err(AppError::Conflict(_))
-    ));
+    assert_eq!(
+        spaces::organization(&e.pool, &e.fga, "orphan").await.unwrap(),
+        Some(a.id)
+    );
+    let memberships = spaces::memberships(&e.pool, &e.fga, "orphan")
+        .await
+        .unwrap();
+    assert_eq!(memberships.len(), 1);
+    assert_eq!(memberships[0].space.id, project.id);
+    assert_eq!(memberships[0].space.path, project.path);
+    assert_eq!(memberships[0].space.organization, a.id);
+    assert_eq!(
+        e.fga.roles_of("orphan").await.unwrap(),
+        vec![(project.id, Role::Editor)]
+    );
     // Simulate a corrupt second organization attachment.
     e.fga
         .write(
@@ -5338,10 +5356,10 @@ async fn personal_open_budgets_exhaust_pages_and_recheck_after_lock_wait() {
         assert_eq!(fault.calls.get("check"), Some(&2));
         assert_eq!(fault.writes, if existing { 0 } else { 1 });
         // Exact guard: 1 page; roles: 2/4 pages; organization links: 2/3 pages.
-        // Existing personal placement adds one Read; no empty terminal page.
+        // SQL placement adds no Read; no empty terminal page.
         assert_eq!(
             fault.calls.get("read"),
-            Some(&(if existing { 9 } else { 5 }))
+            Some(&(if existing { 8 } else { 5 }))
         );
         assert!(fault.reads.iter().any(|r| {
             r["continuation_token"]
@@ -5661,10 +5679,20 @@ async fn api_starts_without_temporal_and_keeps_storage_optional() {
             .status(),
         201
     );
-    assert!(
-        tokio::time::timeout(Duration::from_millis(100), unavailable_temporal.accept())
+    // The supervised worker connects independently; HTTP stays available while
+    // its Temporal peer never completes the protocol handshake.
+    let (_connection, _) =
+        tokio::time::timeout(Duration::from_secs(5), unavailable_temporal.accept())
             .await
-            .is_err()
+            .unwrap()
+            .unwrap();
+    assert_eq!(
+        http.get(format!("{base}/healthz"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
     );
     child.kill().await.unwrap();
     child.wait().await.unwrap();

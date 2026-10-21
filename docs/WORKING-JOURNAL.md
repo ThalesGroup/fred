@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F01](#f01-coût-du-contexte-organisation) | Placement SQL immuable et contexte commun | Tests automatisés validés | 03, 04, A1/A2/A3, 09 |
 | [F-001](#f-001-environnement-de-développement) | Déploiement secondaire, renommage control-plane | Correction à valider après renommage | [Opérations](architecture/08-operations.md), à reporter |
 | [F-002](#f-002-bootstrap-administrateur) | Bootstrap administrateur plateforme et CGU | Validé par Dimi | [Parcours](architecture/02-user-journeys.md), [sécurité](architecture/03-security.md) |
 | [F-003](#f-003-organisation-et-équipe) | Création d'organisation et d'équipe | À parcourir | [Organisations](architecture/04-organizations.md) |
@@ -70,6 +71,37 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F01 Coût du contexte organisation
+
+- 2026-10-21 : sur accord de Dimi pour corriger et exécuter les tests,
+  `make test` réussit (45 unitaires, 10 contrats OpenAPI), ainsi que
+  `make test-integration` (106 tests). Deux attentes obsolètes corrigées :
+  un rôle projet isolé résout le même contexte dans organization et memberships
+  sans réparer les rôles parents ; le worker Temporal se connecte en arrière-plan
+  pendant que HTTP reste disponible même sans handshake Temporal. Arc42 précise
+  la première règle. Suites navigateur et Temporal dédiées, contrôles qualité et
+  contrôle arc42 non exécutés ; aucun commit ni push.
+
+- 2026-10-21 : sur HEAD `bc5a89cfeffb5d998d25994eaa175c4b994be4a1`,
+  Dimi approuve l'option A, cible installation neuve. Migration additive 0003,
+  `space.organization_id`/`parent_id` immuables, écrits par toutes les créations
+  avant publication FGA et commit SQL. La migration refuse les espaces existants ;
+  aucun effacement, remplissage FGA ou changement de l'installation courante.
+  Contexte commun aux contrôles et à memberships : pages de rôles FGA + une requête
+  SQL, espaces retirés inclus. Placement de la cible sans Read FGA. Tests ciblés
+  ajoutés/adaptés pour équivalence hiérarchique, immutabilité, ambiguïté après
+  retrait et budgets (41 rôles paginés par 10 : 5 Reads, au lieu de 45).
+  Arc42 décrit le comportement et les budgets attendus au présent. Les anciennes
+  mesures folder_scaling du 2026-10-18 (41 rôles, concurrence 50 : 81 req/s,
+  p95 611 ms) restent la référence pré-correction du commit ci-dessus, pas une
+  mesure du nouveau code. Relecture indépendante Rust/SQL/tests sans défaut
+  bloquant identifié ; corrections documentaires relues. Générations arc42 et
+  OpenAPI/client réussies (compilation Rust pour OpenAPI ; client identique,
+  aucune forme HTTP changée). Arc42 applique la chaîne SQL uniquement dans son
+  PostgreSQL jetable. Aucun test, contrôle qualité, build image, migration de
+  l'installation, commit ou push exécuté. Validation et commit restent à la main
+  de Dimi.
 
 ## F-010 Périmètre de revue et préparation du commit
 

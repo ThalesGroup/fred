@@ -44,16 +44,14 @@ pub async fn batch(pool: &PgPool, fga: &Fga, id: Uuid) -> AppResult<()> {
     if receipt.status == Status::Completed || receipt.due_at > Utc::now() {
         return Ok(());
     }
-    let organization = Space::placed(
-        SpaceRow {
-            id: receipt.organization_id,
-            kind: SpaceKind::Organization,
-            name: String::new(),
-            personal_owner: None,
-        },
-        &[],
-        None,
-    );
+    let organization = Space::from(SpaceRow {
+        id: receipt.organization_id,
+        kind: SpaceKind::Organization,
+        name: String::new(),
+        personal_owner: None,
+        parent_id: None,
+        organization_id: receipt.organization_id,
+    });
     spaces::lock_organization(&mut tx, &organization).await?;
     let mut guard = fga.guard(&[Scope::Platform]).await?;
     let row: Option<(Uuid, SpaceKind, bool)> = sqlx::query_as(

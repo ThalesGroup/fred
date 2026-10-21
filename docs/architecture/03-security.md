@@ -132,8 +132,12 @@ their owners, and creates teams through ordinary space routes only with an organ
 admin role. The operator `create-org` command uses deployment credentials and does
 not check a caller role.
 
-Direct role tuples and the space tree are canonical in OpenFGA: each space carries
-one immutable `parent` link. The model evaluates permissions, including roles
+Direct role tuples and the links evaluated for permission remain canonical in OpenFGA.
+SQL records each space's immutable `organization_id` and optional `parent_id` at
+creation, in the transaction committed after FGA accepts its links and initial roles.
+This placement metadata contains no user-role assignment or permission matrix.
+Ordinary children have a `parent` link; personal spaces have an `organization` link.
+The model evaluates permissions, including roles
 descending from ancestors; manager stores no inherited grant and computes no
 permission. Manager enforces the parent-membership rule when changing roles: a role
 on a child requires a direct content role on its parent, which inherited access
@@ -248,4 +252,4 @@ recheck retirement after their lock; reads already authorized may finish. Existi
 role revocation remains an immediate role operation without a purge request.
 The worker executes the accepted durable scope without retaining a user token.
 Remaining grants on retired rows still count towards the unique organization
-attachment, using the receipt's organization when placement links are gone.
+attachment, using `space.organization_id` even when FGA placement links are gone.

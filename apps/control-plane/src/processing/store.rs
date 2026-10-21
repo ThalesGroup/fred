@@ -206,7 +206,7 @@ impl Processing {
             .await
             .map_err(|_| super::unavailable())?;
         let d = db::document(&self.pool, id).await?;
-        let space = spaces::load(&self.pool, &self.fga, d.space_id).await?;
+        let space = spaces::load(&self.pool, d.space_id).await?;
         let mut tx = spaces::authorized_write(&self.pool, &self.fga, actor, d.space_id).await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
         let summary = self

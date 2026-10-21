@@ -170,7 +170,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .unwrap();
     assert_eq!(done.folders_deleted, 1001);
     assert_eq!(done.spaces_deleted, 1);
-    assert!(spaces::load(&e.pool, &e.fga, org.id).await.is_ok());
+    assert!(spaces::load(&e.pool, org.id).await.is_ok());
     let handle = client.get_workflow_handle::<SpaceDeletionSweep>(history_id);
     tokio::time::timeout(
         Duration::from_secs(15),

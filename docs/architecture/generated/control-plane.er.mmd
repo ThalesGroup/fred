@@ -1,6 +1,8 @@
 erDiagram
 
 "space" }o--o| "space_deletion" : "deletion_id"
+"space" }o--|| "space" : "organization_id"
+"space" }o--o| "space" : "parent_id"
 "folder" }o--|| "space" : "space_id"
 "folder" }o--|| "folder" : "parent_id, space_id"
 "document" }o--|| "space" : "quota_owner"
@@ -37,6 +39,8 @@ erDiagram
   text personal_owner
   timestamp_with_time_zone created_at
   uuid deletion_id FK
+  uuid organization_id FK
+  uuid parent_id FK
 }
 "folder" {
   uuid id

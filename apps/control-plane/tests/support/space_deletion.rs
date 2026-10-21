@@ -94,7 +94,7 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
             .id,
         receipt.id
     );
-    assert!(spaces::load(&e.pool, &e.fga, project.id).await.is_err());
+    assert!(spaces::load(&e.pool, project.id).await.is_err());
     assert!(
         spaces::create_folder(&e.pool, &e.fga, "alice", team.id, None, "blocked".into())
             .await
@@ -147,7 +147,7 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
     .await
     .unwrap();
     cleanup::batch(&e.pool, &e.fga, receipt.id).await.unwrap();
-    assert!(spaces::load(&e.pool, &e.fga, recreated.id).await.is_ok());
+    assert!(spaces::load(&e.pool, recreated.id).await.is_ok());
 }
 
 // Proves: I24, I1, I4, I23
@@ -196,6 +196,14 @@ async fn lifecycle_partial_link_loss_reserves_name_and_organization() {
         spaces::organization(&e.pool, &e.fga, "alice")
             .await
             .unwrap(),
+        Some(org.id)
+    );
+    let memberships = spaces::memberships(&e.pool, &e.fga, "bob")
+        .await
+        .unwrap();
+    assert!(memberships.iter().all(|m| m.space.id != p.id));
+    assert_eq!(
+        spaces::organization(&e.pool, &e.fga, "bob").await.unwrap(),
         Some(org.id)
     );
     // Receipt snapshots preserve the last-parent-content-role constraint after
@@ -257,6 +265,29 @@ async fn lifecycle_retention_personal_scope_and_final_guard_commit_failure() {
             .await
             .is_err()
     );
+    let other = spaces::create_organization(&e.pool, &e.fga, "Other", "other-admin")
+        .await
+        .unwrap();
+    let mut guard = e.fga.guard(&[Scope::Organization(other.id)]).await.unwrap();
+    let conflicting = control_plane::fga::Tuple {
+        user: "alice",
+        role: Role::Member,
+        space: other.id,
+    };
+    e.fga
+        .write(&mut guard, std::slice::from_ref(&conflicting), &[])
+        .await
+        .unwrap();
+    // Both entry points reject ambiguity even when one organization is invisible.
+    assert!(matches!(
+        spaces::organization(&e.pool, &e.fga, "alice").await,
+        Err(AppError::Conflict(_))
+    ));
+    assert!(matches!(
+        spaces::memberships(&e.pool, &e.fga, "alice").await,
+        Err(AppError::Conflict(_))
+    ));
+    e.fga.write(&mut guard, &[], &[conflicting]).await.unwrap();
     sqlx::query("update space_deletion set requested_at=now(), due_at=now() where id=$1")
         .bind(r.id)
         .execute(&e.pool)
@@ -359,7 +390,7 @@ async fn lifecycle_filtered_batches_lost_ack_and_unrelated_state() {
         let fault = proxy.fault.lock().await;
         assert_eq!(fault.calls.get("check"), Some(&1));
         assert_eq!(fault.calls.get("write"), Some(&1));
-        assert_eq!(fault.calls.get("read"), Some(&4));
+        assert_eq!(fault.calls.get("read"), Some(&3));
     }
     println!(
         "lifecycle acceptance: actors=1 spaces=3 target_tuples=243 unrelated_members=241 folders=1001 elapsed_us={}",
@@ -414,7 +445,7 @@ async fn lifecycle_filtered_batches_lost_ack_and_unrelated_state() {
     );
     // Six cleanup batches: two folder batches, three tuple batches (one lost
     // acknowledgment), then final metadata removal; five filtered Reads each.
-    assert_eq!(fault.calls.get("read"), Some(&34));
+    assert_eq!(fault.calls.get("read"), Some(&33));
     assert_eq!(fault.calls.get("write"), Some(&7));
     for write in &fault.written {
         let count = ["writes", "deletes"]
@@ -688,8 +719,8 @@ async fn lifecycle_aborted_creation_graph_does_not_block_cleanup() {
     assert!(e.fga.roles_of("aborted").await.unwrap().is_empty());
     for id in ghosts {
         assert!(e.fga.linked_to(id, false).await.unwrap().is_empty());
-        assert!(e.fga.links_of(&[id], false).await.unwrap()[0].1.is_none());
-        assert!(e.fga.links_of(&[id], true).await.unwrap()[0].1.is_none());
+        assert!(e.fga.link_of(id, false).await.unwrap().is_none());
+        assert!(e.fga.link_of(id, true).await.unwrap().is_none());
     }
 }
 

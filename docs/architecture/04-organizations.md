@@ -17,11 +17,20 @@ person's business context, not a space selector or a login preference.
 | Personal space | A private workspace managed by the same organization; attachment does not create it. |
 | Platform role | Authority to administer Fred independently of organization membership; no implicit access to business content. |
 
-Manager resolves this context from canonical OpenFGA direct roles and immutable
-placement, joined to committed SQL spaces. SQL holds no second membership record.
+Manager reads all pages of canonical OpenFGA direct roles, then resolves their
+distinct organization IDs with one SQL query over existing space rows, including
+retired rows. Tuples without a SQL row confer no attachment. SQL holds immutable
+placement, not a second membership record.
 Every granted role counts towards attachment, including governance-only roles;
-attachment itself grants no extra permission. Removing the last role in an
+attachment itself grants no extra permission. The same resolver validates
+`/me/spaces`, which subsequently excludes retired spaces from display. An empty
+visible list does not free a person from an attachment retained during deletion.
+Removing the last role in an
 organization removes attachment, subject to the existing dependent-role rules.
+Context resolution does not repair or revalidate parent membership prerequisites
+for existing grants: those checks run when assigning roles. An isolated direct
+project role therefore resolves to its SQL organization in both context and
+membership discovery; permission remains an OpenFGA decision.
 
 Bob's provisioning roles attach him to TSN. After authentication and personal CGU,
 `GET /me/spaces` returns his authorized memberships within that context. Home
@@ -71,9 +80,18 @@ workspace; further activations reuse it under current read authority. Import and
 organization creation grant no implicit entitlement and create no personal space.
 See the [Priya journey](02-user-journeys.md#priya-opens-her-personal-space).
 
-The tree lives in OpenFGA as `parent` links; SQL stores only each space's identity,
-kind, name and personal owner. A personal space has an `organization` link instead,
-which no permission uses. A space's path holds its ancestors then itself.
+SQL stores each space's identity, kind, name, personal owner and immutable placement:
+`organization_id` is the root's own ID for an organization, and the containing
+organization for every other space. `parent_id` is null for roots and personal
+spaces, the organization for a team, and the team for a project. Creation validates
+parent kinds and writes these values before publishing matching FGA links and roles;
+the SQL transaction commits only after FGA acceptance. Failed commits leave no SQL
+attachment even if FGA accepted the tuples.
+
+OpenFGA retains the `parent` links its model evaluates. A personal space has an
+`organization` link instead, which no permission uses. Paths are derived from SQL
+placement without FGA placement Reads: ancestors then self, or just self for a
+personal space. Current permission still requires an OpenFGA Check.
 
 ```mermaid
 flowchart TB
@@ -153,7 +171,10 @@ for recovery and pending name reservation. This snapshot never authorizes access
 Names remain reserved while their rows are pending, even after FGA link removal.
 Overlapping parent/child requests conflict; replay of the same UUID returns its
 receipt. Cleanup removes descendants before parents, retaining rows until external
-references are absent. [Runtime](A1-manager-runtime.md#space-deletion-lifecycle)
+references are absent. SQL parent/organization foreign keys also prevent removing
+a parent while a child row remains. Missing FGA links are not repaired by the SQL
+placement copy; a child omitted from FGA discovery can therefore prevent cleanup
+of its parent until the inconsistent state is resolved. [Runtime](A1-manager-runtime.md#space-deletion-lifecycle)
 and [operations](A3-manager-operations.md#space-deletion-lifecycle) describe execution.
 
 ## Export and portability
