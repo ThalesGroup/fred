@@ -13,4 +13,4 @@
 ## 3. Operations and review
 
 - [x] 3.1 Add Docker and Kubernetes deployment examples, runtime/CNI preflight, and a ready-path latency benchmark; verify manifests parse and the benchmark script validates.
-- [ ] 3.2 Run targeted tests and root quality gate, review the full branch against `origin/swift`, obtain independent read-only review, and record any remaining production gaps.
+- [x] 3.2 Run targeted tests and root quality gate, review the full branch against `origin/swift`, obtain independent read-only review, and record any remaining production gaps.
