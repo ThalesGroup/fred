@@ -61,6 +61,17 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Admin self-test authorization controls
+
+**Location:** `src/rework/components/pages/admin/SelfTestPage/AuthorizationExtras.tsx`
+
+**Status:** Functional; not visually reviewed. The second-account form has
+only credentials and the isolation/role campaign, with no team/role selection.
+The campaign requires credentials
+and confirmation, explains its temporary privilege changes and offers recovery
+when a local journal remains. Other runs are disabled during execution.
+Live browser validation of the new campaign remains pending.
+
 ---
 
 ### `SearchField`

@@ -350,7 +350,7 @@ Keycloak demo does not create matching mock identities automatically.
 | Documents and agent tools | Permissions and OpenFGA rules are unchanged. With delegation enabled, the runtime sends its workload bearer and the person/run/agent grant; document access remains limited by the person's permissions. Test both permitted and forbidden documents. |
 | Workload accounts | Each backend has its own M2M provider/client/scope configuration; it obtains tokens from the resolved endpoint. |
 | Bundle import | Known usernames resolve from the local directory. Unknown entries requiring account creation fail before authorization writes, including entries with a password. |
-| Admin self-test | The password/profile probe remains Keycloak-only. The credential-expiry scenario now uses the current session for both Keycloak and OIDC. |
+| Admin self-test | Keycloak keeps the account/password probe. For OIDC, an admin can paste an API access token obtained through a separate browser sign-in; the probe checks distinct backend identities and reciprocal personal-space access. The token is cleared from the field and not persisted or reported. The credential-expiry scenario uses the current session for both providers. |
 | Startup | An OIDC issuer need not have a `/realms/` path. Discovery failure or inconsistent provider/delegation/directory settings stop startup. |
 
 Verification on 2026-09-28: all nine generated configurations passed their JSON
