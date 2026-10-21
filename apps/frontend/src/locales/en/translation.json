@@ -266,7 +266,7 @@
       }
     },
     "spreadsheet": {
-      "name": "Create an Excel file",
+      "name": "Generate an Excel file",
       "description": "Ability to create a downloadable Excel workbook with typed columns and totals.",
       "panel": {
         "spreadsheet_pane": {
@@ -3112,7 +3112,7 @@
               "description": "Ability to fill a PPT file from a detailed template."
             },
             "spreadsheet": {
-              "title": "Create an Excel file",
+              "title": "Generate an Excel file",
               "description": "Ability to create a downloadable Excel file from data in the conversation."
             },
             "webPage": {

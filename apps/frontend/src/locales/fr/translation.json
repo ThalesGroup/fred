@@ -266,7 +266,7 @@
       }
     },
     "spreadsheet": {
-      "name": "Créer un fichier Excel",
+      "name": "Générer un fichier Excel",
       "description": "Capacité de créer un classeur Excel téléchargeable, avec des colonnes typées et des totaux.",
       "panel": {
         "spreadsheet_pane": {
@@ -3112,7 +3112,7 @@
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
             },
             "spreadsheet": {
-              "title": "Créer un fichier Excel",
+              "title": "Générer un fichier Excel",
               "description": "Capacité de créer un fichier Excel téléchargeable à partir des données de la conversation."
             },
             "webPage": {
