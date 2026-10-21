@@ -17,14 +17,17 @@
 from __future__ import annotations
 
 import io
+import json
 from datetime import datetime
 from typing import Any
 
 import pytest
 from fred_capability_spreadsheet.workbook import (
     MAX_CELL_CHARS,
+    MAX_PREVIEW_ROWS,
     CreateSpreadsheetInput,
     SpreadsheetInputError,
+    build_preview,
     build_workbook,
     sanitize_file_name,
 )
@@ -275,3 +278,76 @@ def test_limits_are_inclusive():
 )
 def test_sanitize_file_name(raw, expected):
     assert sanitize_file_name(raw) == expected
+
+
+def _preview(*sheets: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(build_preview(_request(*sheets)))
+
+
+def test_preview_carries_typed_values_and_display_formats():
+    columns = [
+        *TYPED_COLUMNS[:4],
+        {"header": "Amount", "type": "currency", "currency": "JPY"},
+        {"header": "Due", "type": "date"},
+    ]
+    rows = [["Pen", "3", "1,5", "12.5%", 1200, "2026-01-31T10:00:00"]]
+    sheet = _preview(_sheet(columns=columns, rows=rows))["sheets"][0]
+
+    assert sheet["name"] == "Data"
+    assert sheet["rows"] == [["Pen", 3, 1.5, 0.125, 1200, "2026-01-31"]]
+    assert sheet["row_count"] == 1
+    assert sheet["totals"] is None
+    assert sheet["columns"] == [
+        {"header": "Name", "type": "text"},
+        {"header": "Qty", "type": "integer", "decimals": 0},
+        {"header": "Price", "type": "number", "decimals": 2},
+        {"header": "Rate", "type": "percent", "decimals": 1},
+        {"header": "Amount", "type": "currency", "decimals": 0, "currency": "JPY"},
+        {"header": "Due", "type": "date"},
+    ]
+
+
+def test_preview_totals_mirror_the_excel_functions():
+    columns = [
+        {"header": "Line"},
+        {"header": "Sum", "type": "currency", "currency": "EUR", "total": "sum"},
+        {"header": "Avg", "type": "integer", "total": "average"},
+        {"header": "Min", "type": "number", "total": "min"},
+        {"header": "Max", "type": "percent", "total": "max"},
+        {"header": "Count", "type": "text", "total": "count"},
+    ]
+    rows = [
+        ["a", 1200, 1, 4.5, 0.1, "x"],
+        ["b", 350.5, 2, None, "25%", None],
+        ["c", None, None, -2, None, "y"],
+    ]
+    sheet = _preview(_sheet(columns=columns, rows=rows))["sheets"][0]
+    assert sheet["totals"] == ["Total", 1550.5, 1.5, -2, 0.25, 2]
+    assert sheet["columns"][1]["total"] == "sum"
+
+
+def test_preview_total_of_an_empty_numeric_column():
+    columns = [
+        {"header": "Sum", "type": "number", "total": "sum"},
+        {"header": "Avg", "type": "number", "total": "average"},
+    ]
+    sheet = _preview(_sheet(columns=columns, rows=[[None, None]]))["sheets"][0]
+    assert sheet["totals"] == [0, None]
+
+
+def test_preview_caps_rows_but_totals_cover_every_row():
+    count = MAX_PREVIEW_ROWS + 20
+    columns = [{"header": "N", "type": "integer", "total": "sum"}]
+    rows = [[1] for _ in range(count)]
+    sheet = _preview(_sheet(columns=columns, rows=rows))["sheets"][0]
+    assert len(sheet["rows"]) == MAX_PREVIEW_ROWS
+    assert sheet["row_count"] == count
+    assert sheet["totals"] == [count]
+
+
+def test_preview_keeps_every_sheet_and_formula_like_text():
+    preview = _preview(_sheet("One", rows=[["=1+1"]]), _sheet("Two", rows=[["été"]]))
+    assert preview["version"] == 1
+    assert [s["name"] for s in preview["sheets"]] == ["One", "Two"]
+    assert preview["sheets"][0]["rows"] == [["=1+1"]]
+    assert preview["sheets"][1]["rows"] == [["été"]]
