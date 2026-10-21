@@ -56,6 +56,7 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4c.2 Row length error states expected and received counts with sheet and row
 - [x] 4c.3 Description: call once per file, answer after a success; success text ends with "File created and shown to the user. Do not create it again; reply now."
 - [x] 4c.4 Per-turn idempotency: identical repeat call returns the first text, no new file or card
+- [x] 4c.5 Description: a sub-agent returns the data to the delegating agent instead of calling the tool (description only; no sub-agent signal in the tool context, general fix #3219)
 
 ## 5. Docs and release
 
@@ -87,3 +88,4 @@ Live-session fix pass, 2026-10-21 (session 41fde1b9, Deep agent on mistral-mediu
 
 - Package: `make test` 94 passed (new: 8 formula cases across number/percent/currency/integer and text `=HYPERLINK(`, `= sum(`, `=$B$2`, `=B2/B3`, each naming sheet/row/column and the exact message; `=== Section ===`, `+1`, `@SUM(A1)` and `=1+1` still stored as literal text; row mismatch "expected 3 values (one per column), got 4"; success text ending; identical repeat (also with `.xlsx` suffix) returns the first text with no write and no card; changed rows or a rebuilt tool write a new file); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
 - Not covered here: sub-agent cards never reaching the chat on Deep agents is a runtime issue, tracked separately.
+- Sub-agent guidance (4c.5): package `make code-quality` green, `make test` 94 passed (description asserts the sub-agent sentence).
