@@ -952,3 +952,15 @@ def test_round_on_a_large_value_does_not_overflow():
         [[1e20]],
     )
     assert _preview(sheet)["sheets"][0]["rows"] == [[1e20, 2e20]]
+
+
+@pytest.mark.parametrize(("decimals", "fmt"), [(0, "#,##0"), (3, "#,##0.000")])
+def test_a_rounded_number_column_shows_its_decimals(decimals, fmt):
+    sheet = _computed(
+        {
+            "header": "Calc",
+            "compute": {"op": "divide", "left": "Réel", "right": 7, "round": decimals},
+        }
+    )
+    assert _ws(sheet)["D2"].number_format == fmt
+    assert _preview(sheet)["sheets"][0]["columns"][3]["decimals"] == decimals
