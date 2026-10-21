@@ -115,3 +115,29 @@ export function formatSheet(sheet: SpreadsheetSheet, locale: string): FormattedS
 export function mayClip(text: string, layout: ColumnLayout | undefined): boolean {
   return !!layout && !layout.wrap && text.length > 0 && text.length + 4 > layout.width;
 }
+
+const ROW_PLACEHOLDER = /\{row\}/g;
+
+/**
+ * What Excel's formula bar shows for a cell: the formula of a computed or totals
+ * cell, else the typed value unformatted (no grouping or symbol, percent as "15%").
+ */
+export function formulaBarText(
+  sheet: SpreadsheetSheet,
+  formatted: FormattedSheet,
+  row: number,
+  column: number,
+  locale: string,
+): string {
+  const spec = sheet.columns[column];
+  if (!spec) return "";
+  if (row === 1) return spec.header;
+  if (row === sheet.row_count + 2 && formatted.totals) {
+    return spec.total_formula ?? formatted.totals[column] ?? "";
+  }
+  if (spec.formula) return spec.formula.replace(ROW_PLACEHOLDER, String(row));
+  const value = sheet.rows[row - 2]?.[column] ?? null;
+  if (typeof value !== "number") return formatted.rows[row - 2]?.[column] ?? "";
+  const raw = new Intl.NumberFormat(locale, { useGrouping: false, maximumSignificantDigits: 15 });
+  return spec.type === "percent" ? `${raw.format(value * 100)}%` : raw.format(value);
+}

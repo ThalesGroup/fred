@@ -34,7 +34,14 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import type { CapabilitySidePanelProps } from "../types";
 import SpreadsheetDownloadButton from "./SpreadsheetDownloadButton";
-import { type ColumnLayout, columnLetter, formatSheet, isRightAligned, mayClip } from "./spreadsheetFormat";
+import {
+  type ColumnLayout,
+  columnLetter,
+  formatSheet,
+  formulaBarText,
+  isRightAligned,
+  mayClip,
+} from "./spreadsheetFormat";
 import type { SpreadsheetPreview, SpreadsheetSheet } from "./types";
 import { useSessionSpreadsheet, useSpreadsheetPreview } from "./useSpreadsheetPreview";
 import styles from "./SpreadsheetPane.module.css";
@@ -113,7 +120,8 @@ function SheetGrid({
   const [selected, setSelected] = useState<CellAddress>({ row: 1, column: 0 });
   const tableRef = useRef<HTMLTableElement>(null);
   const focusPending = useRef(false);
-  const { rows, totals, layouts } = useMemo(() => formatSheet(sheet, locale), [sheet, locale]);
+  const formatted = useMemo(() => formatSheet(sheet, locale), [sheet, locale]);
+  const { rows, totals, layouts } = formatted;
   const headers = useMemo(() => sheet.columns.map((column) => column.header), [sheet]);
   const classes = useMemo(
     () =>
@@ -158,12 +166,7 @@ function SheetGrid({
     tableRef.current?.querySelector<HTMLElement>(`[data-cell="${selected.row}:${selected.column}"]`)?.focus();
   }, [selected]);
 
-  const value =
-    selected.row === 1
-      ? headers[selected.column]
-      : selected.row === totalsRow && totals
-        ? totals[selected.column]
-        : (rows[selected.row - 2]?.[selected.column] ?? "");
+  const value = formulaBarText(sheet, formatted, selected.row, selected.column, locale);
   const hidden = sheet.row_count - sheet.rows.length;
 
   return (
@@ -172,6 +175,9 @@ function SheetGrid({
         <output className={styles.nameBox} aria-label={t("capability.spreadsheet.selectedCell")}>
           {`${columnLetter(selected.column)}${selected.row}`}
         </output>
+        <span className={styles.fx} aria-hidden="true">
+          fx
+        </span>
         <span className={styles.cellValue} title={value}>
           {value}
         </span>

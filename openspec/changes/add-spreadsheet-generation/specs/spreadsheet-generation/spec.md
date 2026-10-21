@@ -56,7 +56,7 @@ When a column declares a total (`sum`, `average`, `min`, `max`, `count`), the sy
 
 ### Requirement: Invalid input is returned to the model
 
-The system SHALL reject invalid input with an error tool result that names the sheet, row and column at fault, and SHALL NOT write any file in that case. Invalid input includes an empty, duplicated, over-31-character or reserved (`History`) sheet name, a name containing `[ ] : * ? / \` or control characters, a row whose length differs from the column count, a value that cannot be converted to its column type, a non-finite number, a formula (any `=` value in a number, integer, percent or currency column, or a text cell such as `=SUM(B2:B6)` or `=B2/B3` that calls a function or references a cell), and a number whose lone comma could separate thousands or decimals (`"1,234"`). Control characters in cells and headers SHALL be removed, never raised as an error.
+The system SHALL reject invalid input with an error tool result that names the sheet, row and column at fault, and SHALL NOT write any file in that case. Invalid input includes an empty, duplicated, over-31-character or reserved (`History`) sheet name, a name containing `[ ] : * ? / \` or control characters, a row whose length differs from the column count, a value that cannot be converted to its column type, a non-finite number, a formula (any `=` value in a number, integer, percent or currency column, or a text cell such as `=SUM(B2:B6)` or `=B2/B3` that calls a function or references a cell), a number whose lone comma could separate thousands or decimals (`"1,234"`), and a text value holding other cells' JSON (a quote inside the text that closed it early, such as `Loyer", 1200, null], [`), which would otherwise shift the row's values into the wrong cells. Control characters in cells and headers SHALL be removed, never raised as an error.
 
 #### Scenario: Row length mismatch
 
@@ -72,6 +72,12 @@ The system SHALL reject invalid input with an error tool result that names the s
 
 - **WHEN** the model sends `"1,234"` in a number column
 - **THEN** the tool returns an error asking for a JSON number and no file is written
+
+#### Scenario: Text swallowing the rest of its row
+
+- **WHEN** the model sends `Loyer", 1200, 1150, null, null, null], [` as a text cell, the remainder of the row and the next row's start caught in one string
+- **THEN** the tool returns an error naming the sheet, row and column, saying the text holds other cells' JSON and asking for one plain value per cell, and no file is written
+- **AND** ordinary text with quotes or brackets (`Projet "Alpha", phase 2 [voir annexe]`) is kept as typed
 
 #### Scenario: Text pasted with control characters
 
@@ -186,8 +192,16 @@ Each created workbook SHALL be stored with a JSON preview beside it, and the con
 
 - **GIVEN** the preview is open
 - **WHEN** the user focuses the grid and presses the arrow keys
-- **THEN** the selection moves cell by cell, only the selected cell is focusable, and the name box shows its address and content
+- **THEN** the selection moves cell by cell, only the selected cell is focusable, and the formula bar shows its address and formula or value
 - **AND** a cell whose text may be cut shows its full text as a tooltip
+
+#### Scenario: Formula bar
+
+- **GIVEN** a sheet with a computed column and a `sum` total
+- **WHEN** the user selects a computed cell, by click or with the arrow keys
+- **THEN** a bar above the grid shows the cell address in the name box, an "fx" mark, and the cell's formula with that row's addresses (`D2  =IFERROR(ROUND(C2/B2,2),"")`), while the cell shows the computed value
+- **AND** a totals cell shows its formula (`=SUM(B2:B4)`), a literal cell its value without number formatting (`1200`, `96%`), and an empty cell nothing
+- **AND** the preview JSON carries one formula template per computed column (`{row}` for the row number) and one totals formula per totals column, never one per cell
 
 #### Scenario: A new request makes a new file
 

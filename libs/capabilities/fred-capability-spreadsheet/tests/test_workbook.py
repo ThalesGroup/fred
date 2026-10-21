@@ -25,6 +25,7 @@ from typing import Any
 import pytest
 from fred_capability_spreadsheet.workbook import (
     FORMULA_REJECTED,
+    LEAKED_ROW_REJECTED,
     MAX_CELL_CHARS,
     MAX_PREVIEW_ROWS,
     CreateSpreadsheetInput,
@@ -747,3 +748,91 @@ def test_compute_rejects_forward_references_text_type_and_duplicate_headers():
 def test_free_formula_refusal_points_to_compute():
     message = _error(_sheet("Data", [{"header": "V", "type": "number"}], [["=B2*2"]]))
     assert "set `compute` on the column for a per-row calculation" in message
+
+
+# Live case: a stray quote closed "Loyer" early, so this cell swallowed the rest
+# of its row and the next row's start, and the next row lost its label.
+LEAKED_ROWS = [
+    ['Loyer", 1200, 1150, null, null, null], [', 8000, 8400, None],
+    ["Matériel", 0, 500, None],
+]
+
+
+def test_a_text_cell_holding_leaked_row_json_is_rejected():
+    sheet = _computed(
+        {
+            "header": "Écart",
+            "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
+        },
+        rows=LEAKED_ROWS,
+    )
+    message = _error(sheet)
+    assert "row 2, column 1 ('Poste')" in message
+    assert LEAKED_ROW_REJECTED in message
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        'Matériel", 0, 500, null]',
+        'A", "B", null], ["C',
+        'x",null],[',
+    ],
+)
+def test_leaked_row_fragments_are_caught(raw):
+    assert LEAKED_ROW_REJECTED in _error(_sheet(rows=[[raw]]))
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        'Le "Total", 3 lignes',
+        'Projet "Alpha", phase 2 [voir annexe]',
+        "Liste [a, b], [c]",
+        "null",
+    ],
+)
+def test_ordinary_text_with_quotes_and_brackets_is_kept(raw):
+    assert _ws(_sheet(rows=[[raw]]))["A2"].value == raw
+
+
+def test_preview_carries_formula_templates_and_total_formulas():
+    sheet = _computed(
+        {
+            "header": "Taux",
+            "type": "percent",
+            "compute": {"op": "divide", "left": "Réel", "right": "Budget", "round": 2},
+            "total": "average",
+        },
+        {"header": "Part", "compute": {"op": "share_of_total", "column": "Réel"}},
+    )
+    columns = _preview(sheet)["sheets"][0]["columns"]
+    ws = _ws(sheet)
+    assert [c.get("formula") for c in columns] == [
+        None,
+        None,
+        None,
+        '=IFERROR(ROUND(C{row}/B{row},2),"")',
+        '=IFERROR(C{row}/SUM($C$2:$C$4),"")',
+    ]
+    # The template with the row number put in is exactly the file's formula.
+    for row in (2, 3, 4):
+        assert columns[3]["formula"].replace("{row}", str(row)) == ws[f"D{row}"].value
+        assert columns[4]["formula"].replace("{row}", str(row)) == ws[f"E{row}"].value
+    assert columns[3]["total_formula"] == ws["D5"].value == "=AVERAGE(D2:D4)"
+    assert columns[1]["total_formula"] == "=SUM(B2:B4)"
+    assert "total_formula" not in columns[0] and "formula" not in columns[0]
+
+
+def test_preview_total_formulas_cover_every_row_and_count_kinds():
+    sheet = _sheet(
+        columns=[
+            {"header": "Name", "total": "count"},
+            {"header": "Qty", "type": "integer", "total": "sum"},
+        ],
+        rows=[["x", 1]] * (MAX_PREVIEW_ROWS + 3),
+    )
+    columns = _preview(sheet)["sheets"][0]["columns"]
+    last = MAX_PREVIEW_ROWS + 4
+    assert columns[0]["total_formula"] == f"=COUNTA(A2:A{last})"
+    assert columns[1]["total_formula"] == f"=SUM(B2:B{last})"

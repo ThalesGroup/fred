@@ -85,6 +85,16 @@
   font: var(--font-label-medium);
 }
 
+/* Excel's "fx" mark between the name box and the formula/value text. */
+.fx {
+  flex-shrink: 0;
+  border-right: 1px solid var(--outline-muted);
+  padding-right: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  font-style: italic;
+}
+
 .cellValue {
   min-width: 0;
   overflow: hidden;

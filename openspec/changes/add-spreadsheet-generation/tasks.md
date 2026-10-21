@@ -66,6 +66,12 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4d.4 Preview values computed with the same semantics; free-formula refusal points to `compute`; tool description with one example
 - [x] 4d.5 Help Center en/fr: one sentence and an example
 
+## 4e. Live-session fixes, round 2 (2026-10-21, owner feedback)
+
+- [x] 4e.1 Reject a text cell holding leaked row JSON (`Loyer", 1200, null], [`), naming sheet, row, column; ordinary quoted/bracketed text kept
+- [x] 4e.2 Preview carries a formula template per computed column and the totals formula per totals column
+- [x] 4e.3 Pane: Excel formula bar (name box, "fx", formula or raw value), updated by click and arrow keys
+
 ## 5. Docs and release
 
 - [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
@@ -102,3 +108,9 @@ Computed columns, 2026-10-21:
 
 - Package: `make test` 121 passed (new: formula and preview value per op (`=C2-B2`, `=B2+10`, `=C2*1.2`, `=C2*(-2)`, `=IFERROR(C2/B2,"")`, `=IFERROR(ROUND(C2/3,1),"")`, `=IFERROR(C2/SUM($C$2:$C$4),"")`, `*` alias with case-insensitive header and `"2"`, `"15%"` operand); per-row and per-sheet addresses on two sheets; default number/percent formats; `SUM`/`COUNT` totals and preview totals over computed columns; chained computed columns and empty-result propagation; null placeholder, omitted and pre-filled computed cells; `ROUND` half away from zero (2.675 → 2.68, -0.125 → -0.13); 11 compute errors naming sheet and column; forward reference, text type, duplicate header; refusal message points to `compute`; tool description); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
 - LibreOffice headless CSV of a two-sheet workbook (subtract, divide + round with a 0 and an empty divisor, share of total, a chained multiply by -1.5, totals, a second sheet with a rounded share): every recalculated value equals the preview (`20`, `1,2`, `60%`, `-1,8`, empty for the zero/empty divisors and their dependants, totals `100`/`200`/`100%`, `14,3% 28,6% 57,1%`).
+
+Live-session round 2, 2026-10-21 (session 78bfa4f2, Deep agent on mistral-medium-latest):
+
+- Root cause of "null null null": the stored `Budget_Realisation-680539b6.preview.json` holds the text cell `Loyer", 1200, 1150, null, null, null], [` followed by `8000, 8400`: the model's quote closed "Loyer" early, so the row's JSON tail landed in one cell and the next row lost its label. Not a frontend `null` rendering (JSON null renders empty).
+- Package: `make test` 131 passed (new: the live rows rejected with sheet/row/column and the message; three leak fragments caught; quoted/bracketed text and `"null"` kept; formula templates equal the file's formula on every row, share range absolute, totals formula equal to the file's, none on literal columns; totals formulas cover rows beyond the preview cap, `COUNTA` on text); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
+- Frontend: `tsc --noEmit`, prettier and eslint clean on the spreadsheet feature; vitest on `features/capabilities/spreadsheet`: 5 files, 30 tests passed (new: formula bar for computed and totals cells by click and arrow keys, computed value in the cell, raw literal values, empty cell never "null"; `formulaBarText` unit cases incl. French decimal and percent).

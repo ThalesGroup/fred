@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { columnFormatter, columnLetter, formatSheet, mayClip } from "./spreadsheetFormat";
-import type { SpreadsheetColumn } from "./types";
+import { columnFormatter, columnLetter, formatSheet, formulaBarText, mayClip } from "./spreadsheetFormat";
+import type { SpreadsheetColumn, SpreadsheetSheet } from "./types";
 
 const plain = (value: string) => value.replace(/[\u00a0\u202f]/g, " ");
 const cell = (column: SpreadsheetColumn, locale: string) => columnFormatter(column, locale).cell;
@@ -98,5 +98,41 @@ describe("spreadsheetFormat", () => {
     expect(mayClip("1", { width: 10, wrap: false })).toBe(false);
     expect(mayClip("x".repeat(80), { width: 60, wrap: true })).toBe(false);
     expect(mayClip("", { width: 2, wrap: false })).toBe(false);
+  });
+
+  it("gives the formula bar a cell's formula, or its value unformatted like Excel", () => {
+    const sheet: SpreadsheetSheet = {
+      name: "S",
+      columns: [
+        {
+          header: "Amount",
+          type: "currency",
+          currency: "EUR",
+          decimals: 2,
+          total: "sum",
+          total_formula: "=SUM(A2:A3)",
+        },
+        { header: "Rate", type: "percent", decimals: 0 },
+        { header: "Due", type: "date" },
+        { header: "Diff", type: "number", decimals: 2, formula: "=A{row}-1" },
+      ],
+      rows: [
+        [1234.5, 0.07, "2026-01-31", 1233.5],
+        [null, null, null, null],
+      ],
+      row_count: 2,
+      totals: [1234.5, null, null, null],
+    };
+    const bar = (row: number, column: number, locale = "en") =>
+      formulaBarText(sheet, formatSheet(sheet, locale), row, column, locale);
+    expect(bar(1, 0)).toBe("Amount");
+    expect(bar(2, 0)).toBe("1234.5");
+    expect(bar(2, 0, "fr")).toBe("1234,5");
+    expect(bar(2, 1)).toBe("7%");
+    expect(bar(2, 2)).toBe("01/31/2026");
+    expect(bar(3, 3)).toBe("=A3-1");
+    expect(bar(3, 0)).toBe("");
+    expect(bar(4, 0)).toBe("=SUM(A2:A3)");
+    expect(bar(4, 1)).toBe("");
   });
 });

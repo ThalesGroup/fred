@@ -103,6 +103,8 @@ afterEach(async () => {
 });
 
 const cells = (selector: string) => [...container.querySelectorAll(selector)].map(text);
+// The formula bar: name box, "fx", then the formula or value of the selected cell.
+const barText = () => text(container.querySelector("output ~ span:last-child"));
 
 // happy-dom has no layout: fake the tab strip being narrower than its tabs.
 function fakeOverflow(clientWidth: number, scrollWidth: number) {
@@ -156,13 +158,13 @@ describe("SpreadsheetPane", () => {
     expect(cells("tfoot th")).toEqual(["4"]);
   });
 
-  it("shows the address and content of the clicked cell in the name box", async () => {
+  it("shows the address of the clicked cell and its unformatted value in the formula bar", async () => {
     await render();
     expect(cells("output")).toEqual(["A1"]);
     const amount = container.querySelectorAll<HTMLElement>("tbody tr:nth-child(2) td")[1];
     await act(async () => amount.click());
     expect(cells("output")).toEqual(["B3"]);
-    expect(text(container.querySelector("output + span"))).toBe("€350.50");
+    expect(barText()).toBe("350.5");
   });
 
   it("moves the selection with the arrow keys, keeping a single focusable cell", async () => {
@@ -179,14 +181,76 @@ describe("SpreadsheetPane", () => {
     await press("ArrowRight");
     expect(cells("output")).toEqual(["B2"]);
     expect(document.activeElement?.getAttribute("data-cell")).toBe("2:1");
-    expect(text(container.querySelector("output + span"))).toBe("€1,200.00");
+    expect(barText()).toBe("1200");
 
     // Down past the last preview row lands on the totals row; edges clamp.
     for (const key of ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowLeft"]) await press(key);
     expect(cells("output")).toEqual(["A4"]);
-    expect(text(container.querySelector("output + span"))).toBe("Total");
+    expect(barText()).toBe("Total");
     const focusable = [...container.querySelectorAll('[tabindex="0"][data-cell]')];
     expect(focusable.map((el) => el.getAttribute("data-cell"))).toEqual(["4:0"]);
+  });
+
+  it("shows the formula of computed and totals cells like Excel's formula bar, the value in the cell", async () => {
+    state.load = {
+      status: "ready",
+      preview: {
+        version: 1,
+        sheets: [
+          {
+            name: "Budget",
+            columns: [
+              { header: "Line", type: "text" },
+              {
+                header: "Budget",
+                type: "currency",
+                currency: "EUR",
+                decimals: 2,
+                total: "sum",
+                total_formula: "=SUM(B2:B3)",
+              },
+              { header: "Rate", type: "percent", decimals: 0, formula: '=IFERROR(ROUND(C{row}/B{row},2),"")' },
+            ],
+            rows: [
+              ["Rent", 1200, 0.96],
+              [null, 0, null],
+            ],
+            row_count: 2,
+            totals: ["Total", 1200, null],
+          },
+        ],
+      },
+    };
+    await render();
+    const select = async (address: string) =>
+      act(async () => container.querySelector<HTMLElement>(`[data-cell="${address}"]`)!.click());
+
+    expect(container.textContent).toContain("fx");
+    await select("3:2");
+    expect(cells("output")).toEqual(["C3"]);
+    expect(barText()).toBe('=IFERROR(ROUND(C3/B3,2),"")');
+    expect(text(container.querySelector('[data-cell="3:2"]'))).toBe("");
+    await select("2:2");
+    expect(barText()).toBe('=IFERROR(ROUND(C2/B2,2),"")');
+    expect(text(container.querySelector('[data-cell="2:2"]'))).toBe("96%");
+    await select("4:1");
+    expect(barText()).toBe("=SUM(B2:B3)");
+    expect(text(container.querySelector('[data-cell="4:1"]'))).toBe("€1,200.00");
+    // A literal cell shows its value; an empty one stays empty, never "null".
+    await select("4:0");
+    expect(barText()).toBe("Total");
+    await select("3:0");
+    expect(barText()).toBe("");
+    expect(container.querySelector("tbody")?.textContent).not.toContain("null");
+
+    // Keyboard moves update the bar too.
+    for (const key of ["ArrowUp", "ArrowRight", "ArrowRight"]) {
+      await act(async () => {
+        document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      });
+    }
+    expect(cells("output")).toEqual(["C2"]);
+    expect(barText()).toBe('=IFERROR(ROUND(C2/B2,2),"")');
   });
 
   it("gives cells that may be cut a title with their full text", async () => {

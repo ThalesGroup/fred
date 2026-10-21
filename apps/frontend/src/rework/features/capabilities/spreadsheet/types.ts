@@ -39,6 +39,10 @@ export interface SpreadsheetColumn {
   decimals?: number;
   currency?: string;
   total?: SpreadsheetTotalKind;
+  /** Computed column: its Excel formula, with `{row}` standing for the row number. */
+  formula?: string;
+  /** The totals row's Excel formula for this column. */
+  total_formula?: string;
 }
 
 export interface SpreadsheetSheet {
