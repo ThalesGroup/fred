@@ -18,14 +18,14 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 
 ## 3. Help Center
 
-- [x] 3.1 "Create an Excel file" section under Document production in `helpCenter/content/en/features/capabilities.md` (what it does, limits, example)
-- [x] 3.2 Same section in `fr/features/capabilities.md` ("Créer un fichier Excel")
+- [x] 3.1 "Generate an Excel file" section under Document production in `helpCenter/content/en/features/capabilities.md` (what it does, limits, example)
+- [x] 3.2 Same section in `fr/features/capabilities.md` ("Générer un fichier Excel")
 
 ## 3b. In-chat preview (option A, 2026-10-21)
 
 - [x] 3b.1 `build_preview` (D8): typed values, display decimals, 500-row cap with `row_count`, computed totals; written as `<file>.preview.json`; `spreadsheet_preview` part + `spreadsheet_pane` in the manifest; `LinkPart` fallback on build or upload failure
 - [x] 3b.2 Frontend plugin `capabilities/spreadsheet/`: card (Preview + download), slice in `common/store.tsx`, lazy `SpreadsheetPane` (sheet tabs, sticky header row and first column, locale formats, totals row, truncation note, unavailable state), en/fr strings
-- [x] 3b.3 Help Center en/fr: preview paragraph in "Create an Excel file"; AUTHORING row, README, migration note updated
+- [x] 3b.3 Help Center en/fr: preview paragraph in "Generate an Excel file"; AUTHORING row, README, migration note updated
 - [x] 3b.4 Tests: preview JSON (formats, totals, empty column, cap, sheets), capability (preview written, part fields, both fallbacks); vitest `SpreadsheetPane` and `spreadsheetFormat`
 - [x] 3b.5 Excel-like pane (owner request 2026-10-21): column letters, row numbers, workbook header as row 1, one scroll area with frozen headings, bottom sheet tabs with overflow arrows, name box; vitest updated
 
@@ -34,8 +34,21 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4.1 Offline tests: workbook read back with openpyxl (sheets, headers, values, number formats, currency symbols, freeze, widths, totals formulas), every validation error, every limit, injection guard, missing port
 - [x] 4.2 Capability tests: manifest, entry point discovery, tool schema has only LLM arguments, Graph assembly accepts it
 - [x] 4.3 `make code-quality`, `make test` in the package, fred-agents and frontend; `ruff --select I` and basedpyright
-- [ ] 4.4 Live check on the default Mistral model, ReAct and Deep agent: request -> tool call -> download -> file opens in LibreOffice without repair; record in verification evidence
+- [ ] 4.4 Live check on the default Mistral model, a ReAct agent and a Deep agent delegating to a sub-agent: request -> tool call -> download -> file opens in LibreOffice without repair; record in verification evidence
 - [x] 4.5 `fred-performance-reviewer` on the tool call site (CPU work off the event loop)
+
+## 4b. Review fixes and owner decisions (2026-10-21)
+
+- [x] 4b.1 Control characters stripped from cells and headers, rejected in sheet names; `History` reserved; header length bounded like cells
+- [x] 4b.2 Ambiguous `"1,234"` and NaN/Infinity refused; description asks for JSON numbers
+- [x] 4b.3 `#` and `%` stripped from file names (stopgap, #3213)
+- [x] 4b.4 Values converted once (`prepare`) for workbook and preview; `title` dropped from the part
+- [x] 4b.5 Dates in Excel's built-in short date (numFmtId 14); totals label per function in the conversation language (`language` argument, fr default)
+- [x] 4b.6 Limit errors and description tell the model to inform the user and suggest splitting; each call is a new file and card
+- [x] 4b.7 Pane: per-column formatters, memoized rows, sticky `thead`, `title` on cells that may clip, arrow-key navigation with one focusable cell
+- [x] 4b.8 Display name "Generate an Excel file" / "Générer un fichier Excel" in i18n, Help Center, README, migration note
+- [x] 4b.9 Tests: card renderer (register, live auto-open, history replay), preview slice (reset on session change), preview loader (stale URL), backend cases above
+- [x] 4b.10 Follow-up issues #3212, #3213, #3214, #3215; #3208 body updated
 
 ## 5. Docs and release
 
@@ -54,3 +67,11 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - `fred-performance-reviewer`: no blocking call on the event loop (generation and validation in `asyncio.to_thread`; argument parsing at the 50 000-cell limit is 3.5 ms); upload uses the existing async workspace client; no new metric or label; tool latency covered by the existing tool observability middleware. Concurrent builds bounded per pod at 4 by a module-level fail-fast counter mirroring PPT Filler's heavy-job slot (no queueing, not configurable, like PPT Filler's).
 - `make migration-check`: 1 new declaration valid (`impact: none`).
 - Divergence from the draft: byte-identical output dropped (openpyxl stamps zip and core-property times; tests read back instead). Not done: 4.4 live check, 5.3 archive.
+
+Fix pass, 2026-10-21 (after review "ready with fixes" and the owner's spec review):
+
+- Package: `make test` 84 passed (new: control characters stripped/rejected, `History` reserved, header length, ambiguous comma for number/currency/integer/percent, non-finite numbers, unambiguous separators still parse, `#`/`%` file names, built-in date format checked in `xl/styles.xml` (`numFmtId="14"`, no custom entry), totals label per function and language in file and preview, limit hint, single conversion; tool: `language` in the schema and not required, description wording, label through the tool, control character never escapes); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
+- fred-agents: `make test` 134 passed, 6 xfailed.
+- Frontend: `tsc --noEmit` clean; prettier and eslint clean on the touched files; vitest on `features/capabilities`, `features/helpCenter` and `AgentFormModal`: 49 files, 420 tests passed (spreadsheet: pane incl. arrow-key navigation and clipped-cell titles, per-column formatter count, card renderer, slice, preview loader).
+- LibreOffice headless CSV of a French workbook: date shown as `31/01/2026` (reader locale), totals label `Moyenne` with the computed average, control character stripped, no repair prompt.
+- Not done: 4.4 live check (ReAct and a Deep agent delegating to a sub-agent), 5.3 archive.
