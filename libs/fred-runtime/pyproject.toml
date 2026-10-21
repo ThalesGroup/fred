@@ -18,7 +18,7 @@ dependencies = [
   # rewrite langchain-mcp-adapters does not support yet — pin here to keep
   # fresh installs on mcp v1 until upstream ships v2 support. See #2194 and
   # https://github.com/langchain-ai/langchain-mcp-adapters/issues/578.
-  "mcp>=1.30.0,<3.0.0",
+  "mcp>=1.30.0,<2.0.0",
   "langchain>=1.4.2",
   "langchain-core>=1.6.5",
   "langgraph>=1.2.12",

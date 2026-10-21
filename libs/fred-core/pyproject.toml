@@ -92,7 +92,7 @@ dev = [
 mcp = [
     "fastapi-mcp==0.4.0",
     # fastapi-mcp consumes MCP v1; require its patched release for wheel consumers.
-    "mcp>=1.30.0,<3.0.0",
+    "mcp>=1.30.0,<2.0.0",
 ]
 migration = [
     "alembic>=1.18.4",
