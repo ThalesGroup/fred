@@ -5,7 +5,7 @@ decisions (§2) are settled by the owner; design in §3. Once reviewed, each
 slice in §6 moves to an OpenSpec change.
 **Author:** Maxime Daragon
 **Date:** 2026-10-21
-**Tracking:** #3223 (epic). Prerequisite for blocking: #2528.
+**Tracking:** #3223 (epic). Blocking gated on sub-agent coverage (§2).
 **Related:** #3031, #2710 (model catalog home), #2451 (empty cost tile),
 #2156, #2144, `TEAM-PLATFORM-POLICY-RFC.md` (excludes billing budgets),
 `openspec/specs/web-research/spec.md` (daily per-user quota precedent)
@@ -16,12 +16,14 @@ slice in §6 moves to an OpenSpec change.
 
 Fred has no limit on one person's LLM usage: a single user (or a Deep agent
 fanning out sub-agents) can exhaust the provider budget for everyone. Token
-counts are best-effort telemetry and incomplete: `_parse_turn_outcome`
-(`libs/fred-runtime/fred_runtime/app/agent_app.py:3469`) reads the final
-event only (one `model_name`, no `cache_creation_tokens`), so stopped,
-cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
-`fred_sdk/authoring/api.py:288`, document access) and sub-agent spend
-(#2528) are lost. There is no shared count admission can check.
+counts are best-effort telemetry and incomplete. ReAct already sums every
+agent-loop call into `final.token_usage` (`react_runtime.py:~495`, contract
+§8.41), but `_parse_turn_outcome` (`fred_runtime/app/agent_app.py:3469`)
+keeps one `model_name` per turn and drops `cache_creation_tokens`; errored,
+stopped or disconnected turns emit no `final` event; `ctx.extract_structured`
+(`fred_sdk/authoring/api.py:256`) uses `with_structured_output(...).ainvoke`
+and loses its usage; non-streaming `/agents/execute` and `/agents/evaluate`
+emit turn KPIs only on success. There is no shared count admission can check.
 
 ## 2. Decided
 
@@ -121,8 +123,9 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
 **Release gate: complete counting before blocking**
 - The server refuses the blocking switch until the per-model-call
   accumulator (§3) covers Stop/cancel/error, tool-internal model calls and
-  sub-agents (#2528). Tracking may ship earlier with a known under-count,
-  stated in the UI and the Help Center.
+  sub-agents, proven by sub-agent coverage tests (not by closing #2528, see
+  §3). Tracking may ship earlier with a known under-count, stated in the UI
+  and the Help Center.
 
 **Scope boundaries**
 - **Known v1 bypass:** knowledge-flow ingestion, vision, embeddings.
@@ -151,13 +154,16 @@ plus any `model_name` seen in the ledger without a price.
   control-plane, so `estimate_green_cost` reads this table (same fallback)
   and reports euros; the YAML keeps only co2e/kWh. Slice (b), closes #2451.
 
-**Per-turn accumulator (fred-runtime).** Counting happens at the model
-client (callback/wrapper), not from the final event, so every call is
-seen: the agent loop, tool-internal calls (`ctx.extract_structured`,
-document access) and sub-agents (same prerequisite as #2528). It splits
-usage per model, feeds the per-turn ceiling, and is reported on every exit
-path (success, error, Stop/cancel, abort, via `finally` / cancel handlers),
-from the same place as `_emit_turn_completed`.
+**Per-turn accumulator (fred-runtime).** Counting happens where models
+are built (`FredCoreModelProvider.build_model`, a callback propagated to
+child tasks), not in `TracingKpiMiddleware`, which only sees ReAct/Deep loop
+calls. Every call is seen: the agent loop, tool-internal calls
+(`ctx.extract_structured`, document access) and sub-agents. #2528 targets a
+custom `run_subagent` capability not on swift; sub-agents today are native
+Deep `task` children and `LocalRegistryAgentInvoker` (`agent_app.py:738`),
+in-process, so they are covered. It splits usage per model, feeds the
+per-turn ceiling, and is reported on every exit path (success, error,
+Stop/cancel, abort, via `finally` / cancel handlers).
 
 **Ledger (control-plane Postgres).** One insert-only row per model per run
 segment: `user_id`, `space_kind` (`team` | `personal`), `space_id`,
@@ -168,7 +174,8 @@ segment: `user_id`, `space_kind` (`team` | `personal`), `space_id`,
 (`chat`, `creation_assistant`, `evaluation`, `openai_compat`, `service`,
 `scheduled`, `m2m`; server-set), `user_anonymised` (bool), `created_at`.
 - Unique `(session_id, exchange_id, run_id, model_name)`. `run_id` is
-  minted per request because a HITL resume reuses the exchange_id
+  the delegated run's own (`AssertedUser.run_id`, `agent_app.py:~2289`)
+  when present, else minted per request: a HITL resume reuses the exchange_id
   (`_resolve_exchange_id`, `agent_app.py:3687`): each resume is its own
   segment, retries of one report never double count.
 - No-person rows: `source` `service`/`scheduled`/`m2m`, `user_id` null. A
@@ -203,9 +210,10 @@ grant where `granted_by == user_id` by a team admin is refused.
 
 **Admission on every entry point.** The `/runtime` binding call is not
 enough: `_resolve_agent_instance` (`agent_app.py:1777`) returns early for a
-direct `request.agent_id`. A dedicated admission call (one primary-key read
-added to the per-turn control-plane call, #3031) runs whatever the switch
-state on `POST /agents/execute` and `/agents/execute/stream` (managed
+direct `request.agent_id`. A dedicated control-plane admission call
+(`POST /usage/admission` recommended; one primary-key read, #3031), not a
+field on the binding response, runs alongside the `/runtime` binding call on
+the managed path and alone elsewhere, whatever the switch state, on `POST /agents/execute` and `/agents/execute/stream` (managed
 instance and direct `agent_id`), `/agents/evaluate`, the OpenAI-compatible
 router (`openai_compat_router.py:267`) and `POST /creation-assistant/draft`.
 HITL resumes are not checked.
@@ -226,9 +234,10 @@ sub-agent calls; when hit, the turn ends cleanly with a message.
 Parallel turns can overshoot, bounded by concurrent turns x ceiling.
 
 **Platform switches.** Reuse the platform access pattern: one settings row
-with an optimistic `revision` (`PlatformAccessSettingsRow`,
-`fred_core/security/platform_access/models.py:22`) and a PATCH like
-`/admin/platform/access`. Quotas get their own row (`tracking_enabled`,
+with an optimistic `revision` and a PATCH like `/admin/platform/access`.
+`PlatformAccessSettingsRow` lives in `fred_core`
+(`security/platform_access/models.py:22`); the quota row is built the same
+way but is control-plane-only (`tracking_enabled`,
 `blocking_enabled`): blocking without tracking is a 422, disabling tracking
 clears blocking, blocking is refused until the release gate (§2). The
 keep/reset choice is a new small dialog on the central `Dialog` molecule.
