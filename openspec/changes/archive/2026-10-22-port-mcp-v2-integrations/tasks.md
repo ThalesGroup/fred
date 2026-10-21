@@ -17,5 +17,5 @@
 
 - [x] 3.1 Replace v1-only dependencies and MCP `<2` constraints in core, runtime, and Knowledge Flow; update all affected uv lockfiles and verify `uv lock --check` in each package.
 - [x] 3.2 Document SDK v2 and legacy peer interoperability, supported runtime transports, and rollout/rollback in the existing deployment documentation; verify examples against the catalog model.
-- [ ] 3.3 Run v2 client-to-Knowledge Flow and legacy peer HTTP smoke tests, then the root `make code-quality` gate once the change is complete; record results in the PR.
-- [ ] 3.4 Review the full branch against `swift`, obtain an independent read-only review, resolve findings, reconcile this change with implementation, sync the delta spec, and archive the change; verify the draft PR has no unresolved checks before requesting final review.
+- [x] 3.3 Run v2 client-to-Knowledge Flow and legacy peer HTTP smoke tests, then the root `make code-quality` gate once the change is complete; record results in the PR.
+- [x] 3.4 Review the full branch against `swift`, obtain an independent read-only review, resolve findings, reconcile this change with implementation, sync the delta spec, and archive the change; verify the draft PR has no unresolved checks before requesting final review.
