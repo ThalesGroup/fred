@@ -1125,6 +1125,11 @@
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
+        "modelSpecs": {
+          "context": "Contexte : {{count}} tokens",
+          "input": "Entrée : {{count}} tokens",
+          "output": "Sortie : {{count}} tokens"
+        },
         "emptyApps": "Aucune application n'est encore installée sur cette plateforme.",
         "col": {
           "capability": "Fonctionnalité",

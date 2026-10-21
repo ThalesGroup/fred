@@ -996,9 +996,12 @@ export type McpCatalogResponse = {
 };
 export type ModelCatalogEntry = {
   chat_profile_ids?: string[];
+  context_window_tokens?: number | null;
   description?: string | null;
   display_name?: string | null;
   id: string;
+  max_input_tokens?: number | null;
+  max_output_tokens?: number | null;
   name: string;
   profile_ids?: string[];
   provider: string;
@@ -1270,7 +1273,10 @@ export type CapabilityCatalogEntry = {
   id: string;
   kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
   model_chat_profile_ids?: string[];
+  model_context_window_tokens?: number | null;
   model_display_name?: string | null;
+  model_max_input_tokens?: number | null;
+  model_max_output_tokens?: number | null;
   model_profile_ids?: string[];
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];

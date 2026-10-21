@@ -3768,6 +3768,12 @@ model knows which it is.
   same first-seen rule as `description`. `CapabilityCatalogEntry` carries it
   as `model_display_name`; the multi-pod union keeps a name authored on one pod
   when another serves the model unnamed.
+- An optional `discovery` source in `models_catalog.yaml` turns an
+  OpenAI-compatible `GET /models` inventory into chat profiles at pod startup.
+  The route advertises that resolved startup snapshot, including optional
+  `context_window_tokens`, `max_input_tokens` and `max_output_tokens`. Static
+  catalogs retain their file-read behavior. See `LLM_ROUTING_FRED.md` for the
+  operator contract.
 - The frontend prefers that string verbatim, then prettifies the real model
   `name`, then falls back to splitting the capability id.
 

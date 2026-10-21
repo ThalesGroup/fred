@@ -57,6 +57,7 @@ Each agentic pod owns a `models_catalog.yaml`. It declares:
 - reusable chat profiles;
 - one local chat default;
 - optional static `agent_id -> profile_id` overrides.
+- optionally, one OpenAI-compatible discovery source for chat profiles.
 
 The pod catalog is the fallback and the local source of model construction
 settings. It does not contain team, user, operation, or purpose rules.
@@ -140,6 +141,47 @@ picker and write validation fail closed. They do not certify a profile using an
 incomplete deployment view.
 
 ## Agentic pod author guide
+
+### Discover chat models from a gateway
+
+An operator can replace manually listed chat profiles with a discovery source:
+
+```yaml
+version: v1
+discovery:
+  source_id: primary-gateway
+  base_url: https://gateway.example/v1
+  default_model_id: chat-small
+  include_model_ids: [chat-small, chat-large]
+```
+
+At pod startup, Fred sends an authenticated `GET https://gateway.example/v1/models`
+and reads the OpenAI-compatible JSON shape `{"data": [{"id": "chat-small"}]}`.
+`base_url` is also used for chat inference. Set `OPENAI_API_KEY` in the pod
+environment; never put the key in YAML. `source_id` is a stable operator-chosen
+identity. Changing it creates new model capability and profile ids, which need
+new admin grants. `include_model_ids` is optional; when supplied, every listed
+id must be returned. A discovered default must be in the selected list. A
+static chat default and `discovery.default_model_id` cannot coexist.
+
+The standard `/models` response does not identify chat models or define their
+context sizes. Configure a gateway that lists chat models only, or use the
+allowlist to exclude embeddings and other modalities. Fred shows the exact
+upstream `id` in the admin Models table and uses it for inference. A nonblank
+`name` or `display_name` may provide a label. Positive integer
+`context_length` or `max_model_len`, `max_input_tokens`, and
+`max_output_tokens` are shown when present. These optional values are
+informational; they do not change routing, grants, or reasoning controls.
+
+Discovery runs once when the pod starts. The admin inventory and runtime use
+that same snapshot. Restart the pod to add or remove gateway models. New models
+start without a team grant and must be enabled in the existing admin Models
+view. A removed model in a saved team choice follows the existing drift error
+on the next restart. Discovery fails startup on an unavailable, invalid, or
+empty selected inventory; a catalog without `discovery` makes no network call.
+Static profiles can coexist with discovery for a gradual migration.
+
+### Static profiles
 
 A minimal catalog is:
 

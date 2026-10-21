@@ -1125,6 +1125,11 @@
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "emptyModels": "No models are advertised by any runtime pod yet.",
+        "modelSpecs": {
+          "context": "Context: {{count}} tokens",
+          "input": "Input: {{count}} tokens",
+          "output": "Output: {{count}} tokens"
+        },
         "emptyApps": "No applications are installed on this platform yet.",
         "col": {
           "capability": "Feature",

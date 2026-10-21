@@ -70,6 +70,22 @@
   font: var(--font-label-small);
 }
 
+.modelCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.modelSpecs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding-left: var(--spacing-xl);
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+}
+
 /* Pill badge — same visual language as the team-role chips
  * (TeamSettingsMembersTable's .roleChip): outlined pill, label-small type.
  * Static here (no hover/active state) since these are counts, not controls. */

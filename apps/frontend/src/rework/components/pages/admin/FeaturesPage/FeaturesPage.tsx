@@ -57,6 +57,7 @@ import {
   personalSpaceCount,
   requiresTeamSettings,
 } from "./capabilityEnablement";
+import { ModelIdentityCell } from "./ModelIdentityCell";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
 // an agent template into this same catalog, CAPAB-01 RFC §8.6) vs "model" (a
@@ -402,16 +403,19 @@ export default function FeaturesPage() {
     {
       label: t("rework.admin.capabilities.col.capability"),
       size: "2.4fr",
-      cellRenderer: (cap) => (
-        <EntityIdentity
-          name={capabilityLabel(t, cap)}
-          icon={toIconType(cap.icon, "tune")}
-          sourceId={cap.source_id}
-          runtimeId={cap.runtime_id}
-          version={cap.public_version}
-          dimmed={rowIsUnused(cap)}
-        />
-      ),
+      cellRenderer: (cap) =>
+        cap.kind === "model" ? (
+          <ModelIdentityCell capability={cap} dimmed={rowIsUnused(cap)} />
+        ) : (
+          <EntityIdentity
+            name={capabilityLabel(t, cap)}
+            icon={toIconType(cap.icon, "tune")}
+            sourceId={cap.source_id}
+            runtimeId={cap.runtime_id}
+            version={cap.public_version}
+            dimmed={rowIsUnused(cap)}
+          />
+        ),
     },
     // Reasoning activation (REASON-01 §5) — a models-only column, so it is
     // absent entirely from the tool/agent views rather than rendered blank.

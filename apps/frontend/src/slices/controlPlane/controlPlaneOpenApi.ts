@@ -4207,6 +4207,9 @@ export type CapabilityCatalogEntry = {
     [key: string]: ("low" | "medium" | "high")[];
   };
   model_display_name?: string | null;
+  model_context_window_tokens?: number | null;
+  model_max_input_tokens?: number | null;
+  model_max_output_tokens?: number | null;
 };
 export type AgentTemplateSummary = {
   template_id: string;
@@ -4878,6 +4881,9 @@ export type CapabilityEnablementItem = {
   reasoning_enabled?: boolean;
   /** For a `kind="model"` row: the ops-authored `model_display_name` from models_catalog.yaml, carried verbatim. `name` is the wire model value, which several models on one gateway can share, so the admin label prefers this when set. Display only. */
   model_display_name?: string | null;
+  model_context_window_tokens?: number | null;
+  model_max_input_tokens?: number | null;
+  model_max_output_tokens?: number | null;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
