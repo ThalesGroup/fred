@@ -24,6 +24,7 @@ from typing import Any
 
 import pytest
 from fred_capability_spreadsheet.workbook import (
+    FORMULA_REJECTED,
     MAX_CELL_CHARS,
     MAX_PREVIEW_ROWS,
     CreateSpreadsheetInput,
@@ -261,10 +262,7 @@ def test_formulas_are_rejected_with_an_actionable_message(column, value):
         _sheet("Sales", columns=[{"header": "Name"}, column], rows=[["a", value]])
     )
     assert f"Sheet 'Sales', row 2, column 2 ('{column['header']}')" in message
-    assert (
-        "formulas are not accepted: send the computed value, and set `total` on "
-        "the column for sums/averages" in message
-    )
+    assert FORMULA_REJECTED in message
 
 
 @pytest.mark.parametrize(
@@ -509,3 +507,243 @@ def test_conversion_happens_once_for_file_and_preview(monkeypatch):
     build_workbook(prepared)
     build_preview(prepared)
     assert calls == 2
+
+
+# --- computed columns ---------------------------------------------------------
+
+AMOUNTS = [
+    {"header": "Poste"},
+    {"header": "Budget", "type": "currency", "currency": "EUR", "total": "sum"},
+    {"header": "Réel", "type": "currency", "currency": "EUR", "total": "sum"},
+]
+
+
+def _computed(*extra: dict[str, Any], rows=None, name: str = "Data") -> dict[str, Any]:
+    return _sheet(
+        name,
+        AMOUNTS + list(extra),
+        rows if rows is not None else [["A", 100, 120], ["B", 0, 30], ["C", None, 50]],
+    )
+
+
+@pytest.mark.parametrize(
+    ("compute", "formula", "values"),
+    [
+        (
+            {"op": "subtract", "left": "Réel", "right": "Budget"},
+            "=C2-B2",
+            [20.0, 30.0, 50.0],
+        ),
+        ({"op": "add", "left": "Budget", "right": 10}, "=B2+10", [110.0, 10.0, 10.0]),
+        (
+            {"op": "multiply", "left": "Réel", "right": 1.2},
+            "=C2*1.2",
+            [144.0, 36.0, 60.0],
+        ),
+        (
+            {"op": "multiply", "left": "Réel", "right": -2},
+            "=C2*(-2)",
+            [-240.0, -60.0, -100.0],
+        ),
+        (
+            {"op": "divide", "left": "Réel", "right": "Budget"},
+            '=IFERROR(C2/B2,"")',
+            [1.2, None, None],
+        ),
+        (
+            {"op": "divide", "left": "Réel", "right": 3, "round": 1},
+            '=IFERROR(ROUND(C2/3,1),"")',
+            [40.0, 10.0, 16.7],
+        ),
+        (
+            {"op": "share_of_total", "column": "Réel"},
+            '=IFERROR(C2/SUM($C$2:$C$4),"")',
+            [0.6, 0.15, 0.25],
+        ),
+        ({"op": "*", "left": "réel", "right": "2"}, "=C2*2", [240.0, 60.0, 100.0]),
+        (
+            {"op": "multiply", "left": "Réel", "right": "15%"},
+            "=C2*0.15",
+            [18.0, 4.5, 7.5],
+        ),
+    ],
+)
+def test_computed_column_formulas_and_preview_values(compute, formula, values):
+    sheet = _computed({"header": "Calc", "type": "number", "compute": compute})
+    assert _ws(sheet)["D2"].value == formula
+    computed = [row[3] for row in _preview(sheet)["sheets"][0]["rows"]]
+    assert computed == [pytest.approx(v) if v is not None else None for v in values]
+
+
+def test_computed_formulas_use_each_row_and_sheet_addresses():
+    first = _computed(
+        {
+            "header": "Écart",
+            "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
+        }
+    )
+    second = _sheet(
+        "Other",
+        [
+            {"header": "Qty", "type": "integer"},
+            {"header": "Share", "compute": {"op": "share_of_total", "column": "Qty"}},
+        ],
+        [[1], [3]],
+    )
+    book = _build(first, second)
+    ws1, ws2 = book["Data"], book["Other"]
+    assert [ws1[f"D{r}"].value for r in (2, 3, 4)] == ["=C2-B2", "=C3-B3", "=C4-B4"]
+    assert ws2["B2"].value == '=IFERROR(A2/SUM($A$2:$A$3),"")'
+    assert ws2["B3"].value == '=IFERROR(A3/SUM($A$2:$A$3),"")'
+    # Untyped computed columns are numeric; share_of_total defaults to percent.
+    assert ws1["D2"].number_format == "#,##0.00"
+    assert ws2["B2"].number_format == "0%"
+
+
+def test_totals_and_preview_totals_cover_computed_columns():
+    sheet = _computed(
+        {
+            "header": "Écart",
+            "compute": {"op": "subtract", "left": "Réel", "right": "Budget"},
+            "total": "sum",
+        },
+        {
+            "header": "Ratio",
+            "compute": {"op": "divide", "left": "Réel", "right": "Budget"},
+            "total": "count",
+        },
+        {
+            "header": "Part",
+            "compute": {"op": "share_of_total", "column": "Réel"},
+            "total": "sum",
+        },
+    )
+    ws = _ws(sheet)
+    assert ws["D5"].value == "=SUM(D2:D4)"
+    assert ws["E5"].value == "=COUNT(E2:E4)"
+    assert ws["F5"].value == "=SUM(F2:F4)"
+    preview = _preview(sheet)["sheets"][0]
+    assert preview["totals"][3:] == [100.0, 1, pytest.approx(1.0)]
+    assert preview["columns"][5]["type"] == "percent"
+
+
+def test_computed_columns_chain_and_propagate_empty_results():
+    sheet = _computed(
+        {
+            "header": "Ratio",
+            "compute": {"op": "divide", "left": "Réel", "right": "Budget"},
+        },
+        {
+            "header": "Double",
+            "compute": {"op": "multiply", "left": "Ratio", "right": 2},
+        },
+        {"header": "Plus", "compute": {"op": "add", "left": "Réel", "right": 1}},
+        {
+            "header": "Écart",
+            "compute": {"op": "subtract", "left": "Plus", "right": "Réel"},
+        },
+    )
+    ws = _ws(sheet)
+    # A failing source makes the dependent formula fail too, so it is wrapped.
+    assert ws["E2"].value == '=IFERROR(D2*2,"")'
+    assert ws["G2"].value == "=F2-C2"
+    rows = _preview(sheet)["sheets"][0]["rows"]
+    assert [row[4] for row in rows] == [2.4, None, None]
+    assert [row[6] for row in rows] == [1.0, 1.0, 1.0]
+
+
+def test_rows_may_send_null_placeholders_or_omit_computed_columns():
+    compute = {"op": "multiply", "left": "Réel", "right": 2}
+    column = {"header": "x2", "compute": compute}
+    with_nulls = _computed(column, rows=[["A", 1, 2, None]])
+    without = _computed(column, rows=[["A", 1, 2]])
+    # A value sent for a computed column (even a formula) is ignored.
+    stale = _computed(column, rows=[["A", 1, 2, "=C2*2"]])
+    for sheet in (with_nulls, without, stale):
+        assert _ws(sheet)["D2"].value == "=C2*2"
+        assert _preview(sheet)["sheets"][0]["rows"] == [["A", 1, 2, 4.0]]
+    assert "null for an empty cell and for a computed column" in _error(
+        _computed(column, rows=[["A", 1]])
+    )
+
+
+def test_round_matches_excel_half_away_from_zero():
+    sheet = _sheet(
+        "Data",
+        [
+            {"header": "V", "type": "number"},
+            {
+                "header": "R",
+                "compute": {"op": "add", "left": "V", "right": 0, "round": 2},
+            },
+        ],
+        [[2.675], [-0.125], [1.005]],
+    )
+    assert _ws(sheet)["B2"].value == "=ROUND(A2+0,2)"
+    assert [row[1] for row in _preview(sheet)["sheets"][0]["rows"]] == [
+        2.68,
+        -0.13,
+        1.01,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("compute", "fragment"),
+    [
+        (
+            {"op": "power", "left": "Réel", "right": 2},
+            "compute op 'power' is not supported",
+        ),
+        (
+            {"op": "add", "left": "Montant", "right": 1},
+            "'Montant', which is not a column header",
+        ),
+        ({"op": "add", "left": "Poste", "right": 1}, "'Poste', a text column"),
+        ({"op": "divide", "left": "Réel", "right": 0}, "divide by 0 is not possible"),
+        ({"op": "divide", "left": "Réel", "right": "0"}, "divide by 0 is not possible"),
+        ({"op": "add", "left": "Réel"}, "add needs `left` and `right`"),
+        ({"op": "add", "left": 1, "right": 2}, "at least one column header"),
+        ({"op": "share_of_total"}, "share_of_total needs `column`"),
+        ({"op": "share_of_total", "column": "12"}, "share_of_total needs `column`"),
+        ({"op": "add", "left": "Calc", "right": 1}, "refers to its own column"),
+        (
+            {"op": "add", "left": "Réel", "right": 1, "round": 11},
+            "round must be between 0 and 10",
+        ),
+    ],
+)
+def test_compute_errors_name_sheet_column_and_fix(compute, fragment):
+    message = _error(_computed({"header": "Calc", "compute": compute}))
+    assert message.startswith("Sheet 'Data', column 4 ('Calc'): ")
+    assert fragment in message
+
+
+def test_compute_rejects_forward_references_text_type_and_duplicate_headers():
+    forward = _computed(
+        {"header": "A2", "compute": {"op": "add", "left": "B2", "right": 1}},
+        {"header": "B2", "compute": {"op": "add", "left": "Réel", "right": 1}},
+    )
+    assert "'B2', a computed column placed after it" in _error(forward)
+    text = _computed(
+        {
+            "header": "T",
+            "type": "text",
+            "compute": {"op": "add", "left": "Réel", "right": 1},
+        }
+    )
+    assert "must be number, integer, percent or currency, not 'text'" in _error(text)
+    duplicate = _sheet(
+        "Data",
+        [
+            {"header": "V", "type": "number"},
+            {"header": "V", "type": "number"},
+            {"header": "W", "compute": {"op": "add", "left": "V", "right": 1}},
+        ],
+        [[1, 2]],
+    )
+    assert "used by several columns" in _error(duplicate)
+
+
+def test_free_formula_refusal_points_to_compute():
+    message = _error(_sheet("Data", [{"header": "V", "type": "number"}], [["=B2*2"]]))
+    assert "set `compute` on the column for a per-row calculation" in message
