@@ -3137,12 +3137,12 @@ Parent and frame communicate only over `postMessage`, from the first message:
 
 ```text
 frame -> host : fred:ready { protocolVersion }
-host  -> frame: fred:context { protocolVersion, applicationId, context }
+host  -> frame: fred:context { protocolVersion, applicationId, context, capabilities? }
                 fred:route { subPath }
                 fred:response | fred:response-error { requestId, ... }
 frame -> host : fred:navigate { path, replace }
                 fred:open-chat { sessionId? }
-                fred:request { requestId, path, method, headers, body }
+                fred:request { requestId, path, method, headers, body, responseType? }
 ```
 
 The transport-neutral source of these protocol-`"1"` shapes, limits, pure parsers,
@@ -3157,10 +3157,14 @@ sub-path repeats—while request replies are settled only once by live request i
 
 The SDK adds client-side connection and request deadlines, a 16-request pending bound,
 local abort, and lifecycle disposal. These are local resource controls, not transferred
-cancellation or authorization. Its request API reconstructs buffered text/JSON
-`Response` objects, including inspectable HTTP errors and bodyless HEAD/204/205/304
-responses; it does not promise streams, binary bodies, remote cancellation, or
-automatic mutation retries. Host validation and all authority described below remain
+cancellation or authorization. Its request API reconstructs buffered `Response` objects,
+including inspectable HTTP errors and bodyless HEAD/204/205/304 responses. Bodies are
+text, or `Blob` both ways when the host announces `binary-bodies` in `capabilities`: the
+SDK then sends `Blob` and `FormData` (as a multipart `Blob`) bodies and sets
+`responseType: "blob"`, and the host answers that request with a `Blob`; it never sends
+one to a frame that did not ask. Upload size stays bounded by the gateway's
+`FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE`. The SDK does not promise streams, transfer
+progress, remote cancellation, or automatic mutation retries. Host validation and all authority described below remain
 mandatory for legacy and SDK clients alike.
 
 The host accepts a _set_ of protocol versions (currently `"1"`) because fork

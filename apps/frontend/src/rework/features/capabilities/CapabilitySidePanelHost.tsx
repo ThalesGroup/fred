@@ -26,7 +26,7 @@
 // ppt_filler and writable_document active shows no chrome at all until the agent
 // actually produces a deck or a document.
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDispatch } from "react-redux";
 import type { TFunction } from "i18next";
@@ -99,6 +99,21 @@ function PanelRestorer({ entry }: { entry: SidePanelEntry }) {
 // missing translation falls back to the widget id (never a blank label).
 const titleOf = (t: TFunction, entry: SidePanelEntry): string =>
   t(`capability.${entry.capabilityId}.panel.${entry.widget}.title`, { defaultValue: entry.widget });
+
+// A pane that fails to load or render stays inside its drawer instead of
+// tearing down the whole chat page through the router's error element.
+class PaneErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
 export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyChange }: CapabilitySidePanelHostProps) {
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
@@ -167,9 +182,18 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
             // A code-split panel suspends only while its chunk is in flight —
             // the first open of a page load — which is why the placeholder
             // cannot live here alone.
-            <Suspense fallback={paneLoading}>
-              <rendered.Component capabilityId={rendered.capabilityId} onClose={() => onActiveKeyChange(null)} />
-            </Suspense>
+            <PaneErrorBoundary
+              key={`${rendered.capabilityId}:${rendered.widget}`}
+              fallback={
+                <div className={styles.paneLoading} role="alert">
+                  {t("capability.panelLoadFailed")}
+                </div>
+              }
+            >
+              <Suspense fallback={paneLoading}>
+                <rendered.Component capabilityId={rendered.capabilityId} onClose={() => onActiveKeyChange(null)} />
+              </Suspense>
+            </PaneErrorBoundary>
           ) : (
             // Sliding, nothing mounted yet. Same placeholder either way, so the
             // wait reads the same and a pane owning its ✕ never leaves the
