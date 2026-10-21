@@ -127,11 +127,12 @@ example "a Total incl. VAT column equal to Excl. VAT × 1.2"). Each request
 produces a new file: to change one, ask the agent
 and it writes a corrected copy beside the previous one.
 
-**Its limits** — the agent writes every value itself, so the file stays
-modest in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in
-all; beyond that, the agent tells you and suggests splitting the data. No
-charts, no colors by value, no macros, and the agent does not edit an existing
-workbook. Deleting the conversation does not yet delete the files it produced.
+**Its limits** — the agent writes every value itself, so the file stays modest
+in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in all;
+beyond that, the agent tells you and suggests splitting the data. Charts are
+not available yet: add them in Excel from the data. No colors by value, no
+macros, and the agent does not edit an existing workbook. Deleting the
+conversation does not yet delete the files it produced.
 
 **The preview** — the **Preview** button on the file card opens the workbook
 beside the conversation: one tab per sheet, amounts and dates in your

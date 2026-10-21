@@ -138,7 +138,8 @@ copie corrigée à côté de la précédente.
 **Ses limites** — l'agent écrit lui-même chaque valeur, le fichier reste donc
 de taille modeste : au plus 10 feuilles, 5 000 lignes par feuille et 50 000
 cellules en tout ; au-delà, l'agent vous le dit et propose de découper les
-données. Pas de graphique, pas de couleurs selon les valeurs, pas de macro, et
+données. Les graphiques ne sont pas encore disponibles : ajoutez-les dans Excel
+à partir des données. Pas de couleurs selon les valeurs, pas de macro, et
 l'agent ne modifie pas un classeur existant. Supprimer la conversation ne
 supprime pas encore les fichiers qu'elle a produits.
 

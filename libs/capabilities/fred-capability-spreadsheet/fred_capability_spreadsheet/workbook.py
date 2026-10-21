@@ -36,6 +36,7 @@ from openpyxl.styles import Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 MAX_SHEETS = 10
 MAX_COLUMNS = 50
@@ -227,6 +228,13 @@ class ColumnSpec(BaseModel):
         return self
 
 
+_CHART_KEYS = frozenset({"chart", "charts", "graph", "graphs", "plot", "plots"})
+
+
+def _has_chart_key(data: dict[str, object]) -> bool:
+    return any(str(key).strip().lower() in _CHART_KEYS for key in data)
+
+
 class SheetSpec(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -256,6 +264,25 @@ class CreateSpreadsheetInput(BaseModel):
             "(Total, Moyenne... or Total, Average...). Defaults to 'fr'."
         ),
     )
+    # Set from the raw input, hidden from the model: charts are not supported, so
+    # chart arguments are dropped and the tool tells the model to say so.
+    charts_ignored: SkipJsonSchema[bool] = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _flag_chart_arguments(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        raw = cast(dict[str, object], data)
+        sheets = raw.get("sheets")
+        sheet_dicts = (
+            [cast(dict[str, object], s) for s in sheets if isinstance(s, dict)]
+            if isinstance(sheets, list)
+            else []
+        )
+        if _has_chart_key(raw) or any(_has_chart_key(s) for s in sheet_dicts):
+            return {**raw, "charts_ignored": True}
+        return data
 
 
 @dataclass(frozen=True)
