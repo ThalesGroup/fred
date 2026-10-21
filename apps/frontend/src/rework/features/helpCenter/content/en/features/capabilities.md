@@ -125,8 +125,12 @@ Excel computes (sum, average, minimum, maximum, count).
 **Its limits** — the agent writes every value itself, so the file stays
 modest in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in
 all. No charts, no colors by value, no macros, and the agent does not edit an
-existing workbook. There is no preview in the chat: download the file to
-open it.
+existing workbook.
+
+**The preview** — the **Preview** button on the file card opens the workbook
+beside the conversation: one tab per sheet, amounts and dates in your
+language's format, the totals row in bold. The preview shows the first 500
+rows of each sheet; download the file to see the rest.
 
 **An example** — "Put the expenses we have just listed into an Excel file, one
 sheet per month, with the amounts in euros and a total at the bottom."

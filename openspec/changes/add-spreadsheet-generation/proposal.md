@@ -6,7 +6,8 @@ Fred agents read Excel files through the tabular tools but cannot write one. Ask
 
 - **New capability `spreadsheet`** with one tool, `create_spreadsheet`. Users see it as "Create an Excel file" / "Créer un fichier Excel".
 - **Deterministic `.xlsx` generation with openpyxl**: one or more sheets, typed columns (text, number, integer, percent, currency, date), a per-column currency (`EUR`, `USD`, ...) shown as a symbol in the number format, styled and frozen header row, auto filter, column widths (declared or computed), an optional totals row whose cells are live Excel formulas (`SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`).
-- **Delivery through the existing output port**: the file is written with `RuntimeServices.workspace_fs` and returned as the standard `LinkPart` download chip, like PPT Filler's fallback path. No preview, new chat part, side panel, router, table or frontend plugin.
+- **Delivery through the existing output port**: the file is written with `RuntimeServices.workspace_fs`. No router or table.
+- **In-chat preview** (owner decision 2026-10-21, option A): a compact JSON preview is stored beside the file; a `spreadsheet_preview` chat part (card with Preview and download) opens a read-only `spreadsheet_pane` side panel through the existing capability plugin mechanism (like PPT Filler's deck preview). Falls back to the standard `LinkPart` download chip when the preview cannot be stored.
 - **Validation returned to the model**: wrong sheet name, row length mismatch, unparsable value for a column type, or a size limit returns an `is_error` tool result naming the sheet, row and column, and no file is written.
 - **Safety**: no macros (`.xlsx` only), no free-form formulas, and text cells starting with `=`, `+`, `-`, `@` are stored as literal text.
 - **Tool-only capability** (`tools()`, default `execution_models`), so it works on ReAct, Deep and Graph agents. The tool schema stays simple for Mistral models.
@@ -27,9 +28,10 @@ Fred agents read Excel files through the tabular tools but cannot write one. Ask
 
 - New package `libs/capabilities/fred-capability-spreadsheet/` (entry point `spreadsheet`), dependency `openpyxl>=3.1.5` (Knowledge Flow pins 3.1.5).
 - `apps/fred-agents/pyproject.toml` + `uv.lock`: the new package as an editable path dependency; image, pyright, pre-commit, CI change detection and root Makefile lists gain the package like the other capability packages.
+- `apps/frontend/src/rework/features/capabilities/spreadsheet/` (plugin, card, pane, slice registered in `common/store.tsx`, plugin listed in `capabilities/index.ts`); no new endpoint, the preview is read through the existing `/fs/download` route.
 - `apps/frontend/src/rework/components/pages/TeamAgentsPage/AgentFormModal/toolPacks.ts`: one pack; `apps/frontend/src/locales/{en,fr}/translation.json`: capability and pack strings.
 - `apps/frontend/src/rework/features/helpCenter/content/{en,fr}/features/capabilities.md`.
 - `docs/swift/capabilities/AUTHORING.md`: one row; package `README.md`.
 - No SDK, runtime, control-plane or OpenAPI change. No stored-config migration (`ConfigModel = EmptyModel`).
 - Migration note per `docs/swift/ops/MIGRATION-GUIDES.md`.
-- Out of scope: charts in the workbook, editing an existing workbook, `.xlsx` templates (later slice), server-side export of a tabular query result (#2738), in-chat preview.
+- Out of scope: charts in the workbook, editing an existing workbook, `.xlsx` templates (later slice), server-side export of a tabular query result (#2738), editing in the preview.

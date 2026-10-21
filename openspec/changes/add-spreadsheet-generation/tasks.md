@@ -21,6 +21,13 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 3.1 "Create an Excel file" section under Document production in `helpCenter/content/en/features/capabilities.md` (what it does, limits, example)
 - [x] 3.2 Same section in `fr/features/capabilities.md` ("Créer un fichier Excel")
 
+## 3b. In-chat preview (option A, 2026-10-21)
+
+- [x] 3b.1 `build_preview` (D8): typed values, display decimals, 500-row cap with `row_count`, computed totals; written as `<file>.preview.json`; `spreadsheet_preview` part + `spreadsheet_pane` in the manifest; `LinkPart` fallback on build or upload failure
+- [x] 3b.2 Frontend plugin `capabilities/spreadsheet/`: card (Preview + download), slice in `common/store.tsx`, lazy `SpreadsheetPane` (sheet tabs, sticky header row and first column, locale formats, totals row, truncation note, unavailable state), en/fr strings
+- [x] 3b.3 Help Center en/fr: preview paragraph in "Create an Excel file"; AUTHORING row, README, migration note updated
+- [x] 3b.4 Tests: preview JSON (formats, totals, empty column, cap, sheets), capability (preview written, part fields, both fallbacks); vitest `SpreadsheetPane` and `spreadsheetFormat`
+
 ## 4. Tests and verification
 
 - [x] 4.1 Offline tests: workbook read back with openpyxl (sheets, headers, values, number formats, currency symbols, freeze, widths, totals formulas), every validation error, every limit, injection guard, missing port
