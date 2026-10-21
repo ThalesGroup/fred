@@ -404,6 +404,9 @@ async def _build_enablement_item(
             not is_projected_product_object(entry) and entry.id in reasoning_enabled_ids
         ),
         model_display_name=entry.model_display_name,
+        model_context_window_tokens=entry.model_context_window_tokens,
+        model_max_input_tokens=entry.model_max_input_tokens,
+        model_max_output_tokens=entry.model_max_output_tokens,
     )
 
 

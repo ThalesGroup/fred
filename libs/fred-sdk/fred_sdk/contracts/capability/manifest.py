@@ -442,6 +442,9 @@ class CapabilityCatalogEntry(BaseModel):
     # frontend derives one from the capability id. Display only; nothing
     # routes or authorizes on it. Only `kind="model"` entries populate it.
     model_display_name: str | None = None
+    model_context_window_tokens: int | None = Field(default=None, gt=0)
+    model_max_input_tokens: int | None = Field(default=None, gt=0)
+    model_max_output_tokens: int | None = Field(default=None, gt=0)
 
     @classmethod
     def from_manifest(

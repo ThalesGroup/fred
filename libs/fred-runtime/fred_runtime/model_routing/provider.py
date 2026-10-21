@@ -23,7 +23,10 @@ Provider-style adapters for routed chat-model selection.
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from .catalog import ModelCatalog
 
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_embeddings, get_model
@@ -136,13 +139,17 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         *,
         resolver: ModelRoutingResolver,
         provider: ModelProvider | None = None,
+        catalog: ModelCatalog | None = None,
     ) -> None:
         self._resolver = resolver
         self._provider = provider or FredCoreModelProvider()
+        self.catalog = catalog
 
     def with_provider(self, provider: ModelProvider) -> RoutedChatModelFactory:
         """Same routing, models built by `provider` (a pod serving extra providers)."""
-        return RoutedChatModelFactory(resolver=self._resolver, provider=provider)
+        return RoutedChatModelFactory(
+            resolver=self._resolver, provider=provider, catalog=self.catalog
+        )
 
     def _chat_profile(
         self, profile_id: str | None

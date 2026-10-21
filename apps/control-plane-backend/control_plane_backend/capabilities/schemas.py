@@ -183,6 +183,9 @@ class CapabilityEnablementItem(BaseModel):
             "the admin label prefers this when set. Display only."
         ),
     )
+    model_context_window_tokens: int | None = Field(default=None, gt=0)
+    model_max_input_tokens: int | None = Field(default=None, gt=0)
+    model_max_output_tokens: int | None = Field(default=None, gt=0)
 
 
 class CapabilityEnablementList(BaseModel):

@@ -517,7 +517,7 @@ def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
             "Use load_agent_pod_config() for pod startup."
         )
 
-    catalog = load_model_catalog(catalog_path)
+    catalog = load_model_catalog(catalog_path).resolve_discovery()
     policy = catalog.to_policy()
     logger.info(
         "[fred-runtime] model routing from catalog=%s profiles=%d agent_overrides=%d",
@@ -525,7 +525,9 @@ def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
         len(policy.profiles),
         len(policy.agent_profile_overrides),
     )
-    return RoutedChatModelFactory(resolver=ModelRoutingResolver(policy))
+    return RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(policy), catalog=catalog
+    )
 
 
 @dataclass(slots=True)
@@ -1382,6 +1384,9 @@ class _ModelCatalogEntry(BaseModel):
     capability id apart. None means no profile named this model and the
     frontend falls back to that heuristic. First-declared wins, same
     first-seen rule as `description` above."""
+    context_window_tokens: int | None = None
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
 
 
 class _PlatformPromptFileResponse(BaseModel):
@@ -1497,6 +1502,9 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
                 name=name,
                 description=profile.description,
                 display_name=profile.model_display_name,
+                context_window_tokens=profile.context_window_tokens,
+                max_input_tokens=profile.max_input_tokens,
+                max_output_tokens=profile.max_output_tokens,
                 profile_ids=[profile.profile_id],
             )
             seen[key] = existing
@@ -1505,6 +1513,12 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
             # First declaring profile wins; a later one only fills a gap.
             if existing.display_name is None:
                 existing.display_name = profile.model_display_name
+            if existing.context_window_tokens is None:
+                existing.context_window_tokens = profile.context_window_tokens
+            if existing.max_input_tokens is None:
+                existing.max_input_tokens = profile.max_input_tokens
+            if existing.max_output_tokens is None:
+                existing.max_output_tokens = profile.max_output_tokens
         if profile.capability == ModelCapability.CHAT:
             existing.chat_profile_ids.append(profile.profile_id)
         # REASON-01 §5.3: aptitude is per profile, the toggle is per model —
@@ -1552,6 +1566,13 @@ def _project_model_catalog_response(catalog: Any) -> _ModelCatalogResponse:
             if capability_by_profile_id.get(profile_id) == ModelCapability.CHAT
         },
     )
+
+
+def _catalog_for_advertisement(path: str, snapshot: Any | None) -> Any:
+    # Remote discovery must advertise the same inventory the router loaded.
+    from ..model_routing import load_model_catalog
+
+    return snapshot if snapshot is not None else load_model_catalog(path)
 
 
 class _ResolvedAgentInstance(BaseModel):
@@ -5330,12 +5351,9 @@ def _build_agent_router(
           enablement is independent from the typed usage (`chat` today,
           potentially `embedding` once a production consumer exists).
 
-        Re-reads `models_catalog.yaml` fresh on every call (same file
-        `_build_chat_model_factory` loaded once at boot) rather than
-        caching the parsed catalog — this route is polled rarely (admin
-        catalog refresh), never per-turn, so the extra local file read is
-        immaterial and keeps this always consistent with whatever the pod
-        would actually resolve, with no separate cache to go stale.
+        A discovered inventory is held from startup so this route never
+        advertises a model the router has not loaded. Static-only catalogs
+        retain their existing local-file read on each admin request.
 
         How to use it:
         - call from control-plane's `_model_capabilities_for_source`
@@ -5343,12 +5361,12 @@ def _build_agent_router(
         Example:
         - `GET /fred/agents/v2/agents/models-catalog`
         """
-        from ..model_routing import load_model_catalog
-
         catalog_path = get_runtime_context().config.models_catalog_path
         if not catalog_path:
             return _ModelCatalogResponse(models=[])
-        catalog = load_model_catalog(catalog_path)
+        catalog = _catalog_for_advertisement(
+            catalog_path, get_runtime_context().config.model_catalog_snapshot
+        )
         return _project_model_catalog_response(catalog)
 
     @router.get("/platform-prompt")
@@ -6759,6 +6777,13 @@ def create_agent_app(
                         ),
                         mcp_configuration=config.get_mcp_configuration(),
                         models_catalog_path=config.get_models_catalog_path(),
+                        model_catalog_snapshot=(
+                            chat_factory.catalog
+                            if isinstance(chat_factory, RoutedChatModelFactory)
+                            and chat_factory.catalog is not None
+                            and chat_factory.catalog.discovery is not None
+                            else None
+                        ),
                         default_platform_prompt=_platform_prompt_file_field(
                             config, "platform_prompt"
                         ),

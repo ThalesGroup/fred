@@ -22,11 +22,17 @@ file and provides a strict Pydantic contract for externalized model catalogs.
 from __future__ import annotations
 
 from copy import deepcopy
+from hashlib import sha256
+import json
+import os
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
+import httpx
 import yaml
-from pydantic import Field
+from fred_core.common import ModelConfiguration
+from pydantic import Field, field_validator, model_validator
 
 from .contracts import (
     FrozenModel,
@@ -47,6 +53,73 @@ def _deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str
     return merged
 
 
+def _valid_model_id(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= 256
+        and value == value.strip()
+        and all(ord(char) >= 32 and ord(char) != 127 for char in value)
+    )
+
+
+class ModelDiscoverySource(FrozenModel):
+    source_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+    base_url: str
+    default_model_id: str | None = None
+    include_model_ids: tuple[str, ...] | None = None
+
+    @field_validator("base_url")
+    @classmethod
+    def _validate_base_url(cls, value: str) -> str:
+        parts = urlsplit(value)
+        if (
+            value != value.strip()
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+            or parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.username is not None
+            or parts.password is not None
+            or parts.query
+            or parts.fragment
+        ):
+            raise ValueError(
+                "discovery base_url must be an HTTP(S) URL without credentials, query or fragment"
+            )
+        return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def _validate_ids(self) -> "ModelDiscoverySource":
+        if self.default_model_id is not None and not _valid_model_id(
+            self.default_model_id
+        ):
+            raise ValueError("discovery default_model_id is invalid")
+        if self.include_model_ids is not None and (
+            not self.include_model_ids
+            or any(not _valid_model_id(item) for item in self.include_model_ids)
+            or len(set(self.include_model_ids)) != len(self.include_model_ids)
+        ):
+            raise ValueError(
+                "discovery include_model_ids must contain distinct nonblank ids"
+            )
+        return self
+
+
+def _positive_int(value: object) -> int | None:
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0
+        else None
+    )
+
+
+def _display_name(item: dict[str, Any]) -> str | None:
+    for key in ("name", "display_name"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 class ModelCatalog(FrozenModel):
     """
     File contract for `models_catalog.yaml`.
@@ -59,9 +132,145 @@ class ModelCatalog(FrozenModel):
     common_model_settings_by_capability: dict[ModelCapability, dict[str, Any]] = Field(
         default_factory=dict
     )
-    default_profile_by_capability: dict[ModelCapability, str]
-    profiles: tuple[ModelProfile, ...]
+    default_profile_by_capability: dict[ModelCapability, str] = Field(
+        default_factory=dict
+    )
+    profiles: tuple[ModelProfile, ...] = ()
     agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
+    discovery: ModelDiscoverySource | None = None
+
+    @model_validator(mode="after")
+    def _validate_discovery_default(self) -> "ModelCatalog":
+        if (
+            self.discovery is not None
+            and self.discovery.default_model_id is not None
+            and ModelCapability.CHAT in self.default_profile_by_capability
+        ):
+            raise ValueError(
+                "discovery default_model_id conflicts with the static chat default"
+            )
+        return self
+
+    def resolve_discovery(
+        self, *, transport: httpx.BaseTransport | None = None
+    ) -> "ModelCatalog":
+        source = self.discovery
+        if source is None:
+            return self
+        credential = os.getenv("OPENAI_API_KEY")
+        if not credential:
+            raise ValueError(
+                f"Model discovery source {source.source_id!r} requires OPENAI_API_KEY"
+            )
+        try:
+            with httpx.Client(
+                timeout=5.0, follow_redirects=False, transport=transport
+            ) as client:
+                with client.stream(
+                    "GET",
+                    f"{source.base_url}/models",
+                    headers={"Authorization": f"Bearer {credential}"},
+                ) as response:
+                    if response.status_code != 200:
+                        raise ValueError(f"HTTP {response.status_code}")
+                    chunks: list[bytes] = []
+                    size = 0
+                    for chunk in response.iter_bytes():
+                        size += len(chunk)
+                        if size > 1_048_576:
+                            raise ValueError("response exceeds 1 MiB")
+                        chunks.append(chunk)
+            payload = json.loads(b"".join(chunks))
+        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
+            cause = (
+                str(exc)
+                if isinstance(exc, ValueError)
+                and not isinstance(exc, json.JSONDecodeError)
+                else type(exc).__name__
+            )
+            raise ValueError(
+                f"Model discovery source {source.source_id!r} failed: {cause}"
+            ) from None
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+            raise ValueError(
+                f"Model discovery source {source.source_id!r} returned no data list"
+            )
+
+        included = (
+            set(source.include_model_ids)
+            if source.include_model_ids is not None
+            else None
+        )
+        selected: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for item in payload["data"]:
+            if not isinstance(item, dict) or not _valid_model_id(item.get("id")):
+                raise ValueError(
+                    f"Model discovery source {source.source_id!r} returned an invalid model id"
+                )
+            model_id = item["id"]
+            if model_id in seen_ids:
+                raise ValueError(
+                    f"Model discovery source {source.source_id!r} returned duplicate model ids"
+                )
+            seen_ids.add(model_id)
+            if included is None or model_id in included:
+                selected.append(item)
+        if not selected or (included is not None and not included.issubset(seen_ids)):
+            raise ValueError(
+                f"Model discovery source {source.source_id!r} has no complete selected inventory"
+            )
+
+        profiles = list(self.profiles)
+        existing_profile_ids = {profile.profile_id for profile in profiles}
+        existing_capability_ids = {profile.capability_id for profile in profiles}
+        default_profile_id: str | None = None
+        for item in selected:
+            wire_id = item["id"]
+            digest = sha256(wire_id.encode("utf-8")).hexdigest()
+            profile_id = f"discovered.chat.{source.source_id}.{digest}"
+            context = _positive_int(item.get("context_length")) or _positive_int(
+                item.get("max_model_len")
+            )
+            profile = ModelProfile(
+                profile_id=profile_id,
+                capability=ModelCapability.CHAT,
+                model_id=f"discovered.{source.source_id}.{digest}",
+                model_display_name=_display_name(item),
+                context_window_tokens=context,
+                max_input_tokens=_positive_int(item.get("max_input_tokens")),
+                max_output_tokens=_positive_int(item.get("max_output_tokens")),
+                model=ModelConfiguration(
+                    provider="openai",
+                    name=wire_id,
+                    settings={"base_url": source.base_url},
+                ),
+            )
+            if (
+                profile_id in existing_profile_ids
+                or profile.capability_id in existing_capability_ids
+            ):
+                raise ValueError(
+                    f"Model discovery source {source.source_id!r} conflicts with a static model identity"
+                )
+            profiles.append(profile)
+            existing_profile_ids.add(profile_id)
+            existing_capability_ids.add(profile.capability_id)
+            if wire_id == source.default_model_id:
+                default_profile_id = profile_id
+        defaults = dict(self.default_profile_by_capability)
+        if source.default_model_id is not None:
+            if default_profile_id is None:
+                raise ValueError(
+                    f"Model discovery source {source.source_id!r} is missing its default model"
+                )
+            defaults[ModelCapability.CHAT] = default_profile_id
+        return self.model_copy(
+            update={
+                "profiles": tuple(profiles),
+                "default_profile_by_capability": defaults,
+            }
+        )
 
     def to_policy(self) -> ModelRoutingPolicy:
         resolved_profiles: list[ModelProfile] = []

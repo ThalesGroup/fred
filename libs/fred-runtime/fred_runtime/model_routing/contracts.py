@@ -214,6 +214,9 @@ class ModelProfile(FrozenModel):
             "should agree, and the catalog projection takes the first declared."
         ),
     )
+    context_window_tokens: int | None = Field(default=None, gt=0)
+    max_input_tokens: int | None = Field(default=None, gt=0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
     supports_thinking: bool = Field(
         default=False,
         description=(

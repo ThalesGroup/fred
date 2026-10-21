@@ -187,6 +187,9 @@ async def test_admin_row_carries_the_display_name() -> None:
         icon="neurology",
         kind="model",
         model_display_name="Mistral Medium 3.1",
+        model_context_window_tokens=32768,
+        model_max_input_tokens=30000,
+        model_max_output_tokens=2048,
     )
 
     item = await _build_enablement_item(
@@ -199,6 +202,9 @@ async def test_admin_row_carries_the_display_name() -> None:
     )
 
     assert item.model_display_name == "Mistral Medium 3.1"
+    assert item.model_context_window_tokens == 32768
+    assert item.model_max_input_tokens == 30000
+    assert item.model_max_output_tokens == 2048
     assert item.name == "mistral"
 
 

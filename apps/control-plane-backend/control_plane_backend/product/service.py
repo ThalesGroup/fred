@@ -931,6 +931,10 @@ def _reasoning_efforts(raw: object) -> dict[str, tuple[ReasoningEffortLevel, ...
     }
 
 
+def _model_token_limit(raw: object) -> int | None:
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else None
+
+
 async def _model_capabilities_for_source_uncached(
     base_url: str,
 ) -> PodModelCatalog | None:
@@ -1009,6 +1013,11 @@ async def _model_capabilities_for_source_uncached(
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
             model_display_name=entry.get("display_name"),
+            model_context_window_tokens=_model_token_limit(
+                entry.get("context_window_tokens")
+            ),
+            model_max_input_tokens=_model_token_limit(entry.get("max_input_tokens")),
+            model_max_output_tokens=_model_token_limit(entry.get("max_output_tokens")),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry

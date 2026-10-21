@@ -240,6 +240,16 @@ async def aggregate_capability_catalog(
                         "model_display_name": (
                             entry.model_display_name or existing.model_display_name
                         ),
+                        "model_context_window_tokens": (
+                            entry.model_context_window_tokens
+                            or existing.model_context_window_tokens
+                        ),
+                        "model_max_input_tokens": (
+                            entry.model_max_input_tokens or existing.model_max_input_tokens
+                        ),
+                        "model_max_output_tokens": (
+                            entry.model_max_output_tokens or existing.model_max_output_tokens
+                        ),
                     }
                 )
             catalog[entry.id] = entry
