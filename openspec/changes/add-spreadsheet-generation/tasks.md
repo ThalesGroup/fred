@@ -82,6 +82,12 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4g.1 Tool description: do not add your own total/subtotal row for columns that set `total`; the totals row is added automatically
 - [x] 4g.2 Cheap check after a successful build, never a rejection: a data row whose first text cell is a total-like label (total, totaux, total général, grand total, sum, somme, sous-total, subtotal; or one followed by a word) in a sheet with a `total` column, with its total-column cells empty or equal to the automatic totals over the other rows, is named in the success text (sheet, row); one per sheet; file kept; only a count is logged
 
+## 4h. Charts not supported yet (2026-10-21, owner-approved)
+
+- [x] 4h.1 Tool description: charts are not supported yet; still create the workbook with its data and tell the user (they can insert a chart in Excel)
+- [x] 4h.2 Chart-like arguments (top level or per sheet) are ignored, not rejected (the schema already ignores unknown fields); a hidden flag adds the chart note to the success text before "reply now"
+- [x] 4h.3 Help Center en/fr "Generate an Excel file": one sentence that charts are not available yet
+
 ## 5. Docs and release
 
 - [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
@@ -133,3 +139,8 @@ Live-session round 3, 2026-10-21 (session 1e3ef259, Deep agent on mistral-medium
 Live-session round 3 follow-up, 2026-10-21 (session 1e3ef259): the model also sent its own "Total" row with empty values on top of `total: sum`, so the file held an empty "Total" row above the real totals row.
 
 - Package: `make test` 139 passed (new: an empty "Total" row named with sheet and row; filled "Total HT"/"Total TTC" rows equal to the totals named once per sheet; a "Total" row with other values, "TotalEnergies", and a sheet without `total` columns get no note; the tool keeps the file and returns the note before "reply now"; description asserts the no-own-total sentence); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
+
+Charts not supported yet, 2026-10-21:
+
+- Package: `make test` 143 passed (new: `chart` at top level, `Charts` at top level and `graph` on a sheet, each through a LangChain tool call: file and card written, chart note in the success text before "reply now"; no note without chart arguments; schema keeps exactly `file_name`, `sheets`, `language` and the description asserts the chart sentence); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
+- Frontend: prettier clean on the two Help Center files.

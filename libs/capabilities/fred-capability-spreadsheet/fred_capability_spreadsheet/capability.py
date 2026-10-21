@@ -75,6 +75,9 @@ _TOOL_DESCRIPTION = (
     "Create an Excel file (.xlsx) the user can download. Call this tool whenever "
     "the user asks, in any wording or language, for an Excel file, a spreadsheet, "
     "an .xlsx, or a table to download; never paste a Markdown table instead.\n"
+    "Charts are not supported yet: if the user asks for a chart, still create the "
+    "workbook with its data, and tell the user plainly that charts are not "
+    "available yet (they can insert one in Excel from the data).\n"
     "Each sheet has typed columns (text, number, integer, percent, currency, date) "
     "and rows holding exactly one value per column (null for an empty cell).\n"
     "Never compute derived columns yourself: when a column is derived from other "
@@ -193,7 +196,10 @@ def _error(message: str) -> tuple[str, ToolInvocationResult]:
 
 
 def _created_text(
-    output_file_name: str, hints: Sequence[str] = (), totals: Sequence[str] = ()
+    output_file_name: str,
+    hints: Sequence[str] = (),
+    totals: Sequence[str] = (),
+    charts_ignored: bool = False,
 ) -> str:
     note = (
         " Note: these columns hold values you computed, so the file has no formula "
@@ -206,6 +212,11 @@ def _created_text(
         note += (
             f" Note: {'; '.join(totals)} looks like a manual total next to the "
             "automatic totals row; next time, leave totals to total."
+        )
+    if charts_ignored:
+        note += (
+            " Note: charts are not supported yet; the workbook was created without "
+            "the chart. Tell the user."
         )
     return (
         f"The Excel file '{output_file_name}' has a download button in the chat; "
@@ -222,7 +233,10 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
     created: dict[str, str] = {}
 
     async def create_spreadsheet(
-        file_name: str, sheets: list[SheetSpec], language: str | None = None
+        file_name: str,
+        sheets: list[SheetSpec],
+        language: str | None = None,
+        charts_ignored: bool = False,
     ) -> tuple[str, ToolInvocationResult]:
         request = CreateSpreadsheetInput.model_validate(
             {"file_name": file_name, "sheets": sheets, "language": language}
@@ -237,7 +251,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         if request_key in created:
             logger.info("[SPREADSHEET] identical repeat call skipped")
             return (
-                _created_text(created[request_key]),
+                _created_text(created[request_key], charts_ignored=charts_ignored),
                 ToolInvocationResult(tool_ref=TOOL_NAME),
             )
         workspace = services.workspace_fs
@@ -300,9 +314,11 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             logger.info("[SPREADSHEET] literal derived columns=%d", len(hints))
         if totals:
             logger.info("[SPREADSHEET] manual total rows=%d", len(totals))
+        if charts_ignored:
+            logger.info("[SPREADSHEET] chart arguments ignored")
         created[request_key] = output_file_name
         return (
-            _created_text(output_file_name, hints, totals),
+            _created_text(output_file_name, hints, totals, charts_ignored),
             ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,)),
         )
 

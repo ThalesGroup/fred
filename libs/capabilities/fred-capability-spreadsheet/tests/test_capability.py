@@ -163,6 +163,8 @@ def test_tool_schema_exposes_only_llm_arguments():
     assert "Call this tool once per file" in schema["description"]
     assert "If you are a sub-agent" in schema["description"]
     assert "that agent creates one workbook" in schema["description"]
+    assert "Charts are not supported yet" in schema["description"]
+    assert "charts_ignored" not in str(schema)
 
 
 def test_graph_assembly_exposes_the_tool():
@@ -414,3 +416,45 @@ async def test_a_manual_total_row_keeps_the_file_and_returns_a_note():
         "automatic totals row" in content
     )
     assert content.endswith("Do not create it again; reply now.")
+
+
+CHART_NOTE = (
+    "Note: charts are not supported yet; the workbook was created without the "
+    "chart. Tell the user."
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "args",
+    [
+        {**ARGS, "chart": {"type": "bar", "x": "Line", "y": "Amount"}},
+        {**ARGS, "Charts": [{"type": "pie"}]},
+        {**ARGS, "sheets": [{**ARGS["sheets"][0], "graph": {"type": "line"}}]},
+    ],
+    ids=["top-level-chart", "top-level-charts", "sheet-graph"],
+)
+async def test_chart_arguments_are_dropped_and_the_user_is_told(args):
+    workspace = FakeWorkspace()
+    message = (
+        await SpreadsheetCapability()
+        .tools(_ctx(workspace))[0]
+        .ainvoke({"type": "tool_call", "id": "c-1", "name": TOOL_NAME, "args": args})
+    )
+
+    assert message.artifact.is_error is False and len(workspace.writes) == 2
+    assert message.artifact.ui_parts[0].type == "spreadsheet_preview"
+    assert CHART_NOTE in message.content
+    assert message.content.endswith("Do not create it again; reply now.")
+
+
+@pytest.mark.asyncio
+async def test_no_chart_argument_means_no_chart_note():
+    workspace = FakeWorkspace()
+    message = (
+        await SpreadsheetCapability()
+        .tools(_ctx(workspace))[0]
+        .ainvoke({"type": "tool_call", "id": "c-1", "name": TOOL_NAME, "args": ARGS})
+    )
+
+    assert "charts are not supported" not in message.content
