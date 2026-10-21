@@ -579,7 +579,7 @@ def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
         )
     _evaluate(computes, rows)
     formats = [
-        _number_format(column, [row[index] for row in rows])
+        _number_format(column, [row[index] for row in rows], computes[index])
         for index, column in enumerate(sheet.columns)
     ]
     return PreparedSheet(
@@ -1046,7 +1046,12 @@ def _write_totals(
             cell.number_format = sheet.formats[index]
 
 
-def _number_format(column: ColumnSpec, values: list[Converted]) -> str:
+def _number_format(
+    column: ColumnSpec, values: list[Converted], plan: ComputePlan | None = None
+) -> str:
+    if column.type == "number" and plan is not None and plan.decimals is not None:
+        # Show the decimals `round` keeps, not the default two.
+        return "#,##0" + ("." + "0" * plan.decimals if plan.decimals else "")
     if column.type == "currency" and column.currency:
         return CURRENCY_FORMATS[column.currency]
     if column.type == "percent":
