@@ -144,9 +144,17 @@ def test_tool_schema_exposes_only_llm_arguments():
         SpreadsheetCapability().tools(_ctx(FakeWorkspace()))[0]
     )["function"]
     assert schema["name"] == TOOL_NAME
-    assert set(schema["parameters"]["properties"]) == {"file_name", "sheets"}
+    assert set(schema["parameters"]["properties"]) == {
+        "file_name",
+        "sheets",
+        "language",
+    }
+    assert schema["parameters"]["required"] == ["file_name", "sheets"]
     assert "$defs" not in str(schema)
     assert "never paste a Markdown table" in schema["description"]
+    assert "as JSON numbers" in schema["description"]
+    assert "tell the user plainly" in schema["description"]
+    assert "Each call creates a new file" in schema["description"]
 
 
 def test_graph_assembly_exposes_the_tool():
@@ -181,7 +189,8 @@ async def test_writes_xlsx_and_preview_and_returns_the_preview_card():
     assert isinstance(part, SpreadsheetPreviewPart)
     assert part.type == "spreadsheet_preview"
     assert part.preview_id == f"teams/t/{path}"
-    assert part.file_name == part.title == "Q3 budget.xlsx"
+    assert part.file_name == "Q3 budget.xlsx"
+    assert "title" not in part.model_dump()
     assert part.xlsx_download_url == f"https://fred.test/download/{path}"
     assert part.preview_url == f"https://fred.test/download/{preview_path}"
 
@@ -212,6 +221,41 @@ async def test_preview_build_failure_falls_back_to_the_download_chip(monkeypatch
 
     assert len(workspace.writes) == 1
     assert isinstance(artifact.ui_parts[0], LinkPart)
+
+
+@pytest.mark.asyncio
+async def test_language_sets_the_totals_label_in_file_and_preview():
+    workspace = FakeWorkspace()
+    await _tool(workspace)(**ARGS, language="en")
+    ws = load_workbook(io.BytesIO(workspace.writes[0][1]))["Budget"]
+    assert ws["A4"].value == "Total"
+    args = {**ARGS, "sheets": [{**ARGS["sheets"][0]}]}
+    args["sheets"][0]["columns"] = [
+        {"header": "Line"},
+        {"header": "Amount", "type": "number", "total": "average"},
+    ]
+    await _tool(workspace)(**args, language="en")
+    assert json.loads(workspace.writes[3][1])["sheets"][0]["totals"][0] == "Average"
+    await _tool(workspace)(**args)
+    assert json.loads(workspace.writes[5][1])["sheets"][0]["totals"][0] == "Moyenne"
+
+
+@pytest.mark.asyncio
+async def test_file_name_with_hash_and_percent_is_stripped():
+    workspace = FakeWorkspace()
+    await _tool(workspace)(**{**ARGS, "file_name": "Q3 #2 50%"})
+    assert workspace.writes[0][0].startswith("spreadsheets/s-1/Q3 2 50-")
+    assert workspace.writes[0][3] == "Q3 2 50.xlsx"
+
+
+@pytest.mark.asyncio
+async def test_illegal_characters_never_escape_as_an_exception():
+    workspace = FakeWorkspace()
+    args = {**ARGS, "sheets": [{**ARGS["sheets"][0], "rows": [["Re\x0bnt", 1]]}]}
+    _content, artifact = await _tool(workspace)(**args)
+    assert artifact.is_error is False
+    ws = load_workbook(io.BytesIO(workspace.writes[0][1]))["Budget"]
+    assert ws["A2"].value == "Rent"
 
 
 @pytest.mark.asyncio
