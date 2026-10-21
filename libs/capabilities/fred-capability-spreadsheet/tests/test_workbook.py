@@ -194,7 +194,7 @@ def test_no_totals_row_without_data():
 
 
 def test_formula_like_text_is_stored_as_literal_text():
-    payload = '=HYPERLINK("http://example.test","x")'
+    payload = "=== Section ==="
     ws = _ws(
         _sheet(columns=[{"header": "Note"}], rows=[[payload], ["+1"], ["@SUM(A1)"]])
     )
@@ -240,7 +240,31 @@ def test_row_length_mismatch_names_sheet_and_row():
     message = _error(
         _sheet("Sales", columns=TYPED_COLUMNS[:3], rows=[["a", 1, 2], ["b", 1, 2, 3]])
     )
-    assert "Sheet 'Sales', row 3: 4 values for 3 columns" in message
+    assert "Sheet 'Sales', row 3: expected 3 values (one per column), got 4" in message
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ({"header": "Amount", "type": "number"}, "=SUM(B2:B6)"),
+        ({"header": "Share", "type": "percent"}, "=B2/SUM($B$2:$B$6)"),
+        ({"header": "Cost", "type": "currency"}, "=1+1"),
+        ({"header": "Qty", "type": "integer"}, " =B2*2"),
+        ({"header": "Note"}, '=HYPERLINK("http://example.test","x")'),
+        ({"header": "Note"}, "= sum(B2:B6)"),
+        ({"header": "Note"}, "=$B$2"),
+        ({"header": "Note"}, "=B2/B3"),
+    ],
+)
+def test_formulas_are_rejected_with_an_actionable_message(column, value):
+    message = _error(
+        _sheet("Sales", columns=[{"header": "Name"}, column], rows=[["a", value]])
+    )
+    assert f"Sheet 'Sales', row 2, column 2 ('{column['header']}')" in message
+    assert (
+        "formulas are not accepted: send the computed value, and set `total` on "
+        "the column for sums/averages" in message
+    )
 
 
 @pytest.mark.parametrize(

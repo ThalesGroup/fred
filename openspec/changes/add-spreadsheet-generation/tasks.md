@@ -50,6 +50,13 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4b.9 Tests: card renderer (register, live auto-open, history replay), preview slice (reset on session change), preview loader (stale URL), backend cases above
 - [x] 4b.10 Follow-up issues #3212, #3213, #3214, #3215; #3208 body updated
 
+## 4c. Live-session fixes (2026-10-21, owner-approved)
+
+- [x] 4c.1 Formulas rejected with "formulas are not accepted: send the computed value, and set `total` on the column for sums/averages" (numeric/percent/currency `=` values; text cells calling a function or referencing a cell); description and `rows` schema say literal computed values only
+- [x] 4c.2 Row length error states expected and received counts with sheet and row
+- [x] 4c.3 Description: call once per file, answer after a success; success text ends with "File created and shown to the user. Do not create it again; reply now."
+- [x] 4c.4 Per-turn idempotency: identical repeat call returns the first text, no new file or card
+
 ## 5. Docs and release
 
 - [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
@@ -75,3 +82,8 @@ Fix pass, 2026-10-21 (after review "ready with fixes" and the owner's spec revie
 - Frontend: `tsc --noEmit` clean; prettier and eslint clean on the touched files; vitest on `features/capabilities`, `features/helpCenter` and `AgentFormModal`: 49 files, 420 tests passed (spreadsheet: pane incl. arrow-key navigation and clipped-cell titles, per-column formatter count, card renderer, slice, preview loader).
 - LibreOffice headless CSV of a French workbook: date shown as `31/01/2026` (reader locale), totals label `Moyenne` with the computed average, control character stripped, no repair prompt.
 - Not done: 4.4 live check (ReAct and a Deep agent delegating to a sub-agent), 5.3 archive.
+
+Live-session fix pass, 2026-10-21 (session 41fde1b9, Deep agent on mistral-medium-latest):
+
+- Package: `make test` 94 passed (new: 8 formula cases across number/percent/currency/integer and text `=HYPERLINK(`, `= sum(`, `=$B$2`, `=B2/B3`, each naming sheet/row/column and the exact message; `=== Section ===`, `+1`, `@SUM(A1)` and `=1+1` still stored as literal text; row mismatch "expected 3 values (one per column), got 4"; success text ending; identical repeat (also with `.xlsx` suffix) returns the first text with no write and no card; changed rows or a rebuilt tool write a new file); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
+- Not covered here: sub-agent cards never reaching the chat on Deep agents is a runtime issue, tracked separately.
