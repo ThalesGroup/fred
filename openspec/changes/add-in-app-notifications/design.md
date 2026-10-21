@@ -37,6 +37,16 @@ Existing pieces this builds on:
 - `POST /notifications/seen` answers the new `NotificationSummary`; `before` is an opaque cursor (`next_cursor`), not a notification id.
 - `notification_type` is not in `PROMETHEUS_ALLOWED_LABELS`: per-type counts reach OpenSearch only. Adding the label is an owner decision.
 
+## Frontend implementation notes (divergences to confirm)
+
+- The bell, its popover, the polling hook and the type registry live in `rework/features/notifications/` (they consume RTK hooks); only `NotificationTile` is a shared molecule, props only. `MainNavBar` renders `NotificationsEntry` after its entries.
+- "Open the agent" leads to the team's Agents page (no per-agent route exists). The tile click follows the same link, so in slice 1 the button repeats the tile click; it is there for the button framework (`navigate` or `call` a domain endpoint, the latter unused until slice 2).
+- Cache tags: `seen` refreshes the badge only, `read` the list only, delete and clear both.
+- A tab opened in the background sends no summary request until it is first shown.
+- A handled row without `handled_by_name` (removal by deactivation, suspension, deletion) reads "Resolved: the agent left the marketplace".
+- Focus goes to the popover title on opening and back to the bell on Escape or the back arrow; the narrow-screen sheet does not trap focus.
+- Tests use the repository's `react-dom` + `act` pattern; `@testing-library` is not a dependency.
+
 ## Risks / Trade-offs
 
 - [Polling cost at scale] → one indexed count per visible tab every 15 s, nothing when hidden; measured in verification with the existing mock load tooling if needed.
