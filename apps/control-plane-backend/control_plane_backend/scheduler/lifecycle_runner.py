@@ -20,10 +20,13 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    DeleteExpiredNotificationsInput,
+    DeleteExpiredNotificationsResult,
     LifecycleManagerInput,
     LifecycleManagerResult,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
+    NotificationExpiryResult,
     RejectWikiProposalInput,
     WikiProposalActionResult,
     WikiProposalCandidateBatch,
@@ -51,6 +54,13 @@ RejectWikiProposalExecutor = Callable[
     [RejectWikiProposalInput],
     Awaitable[WikiProposalActionResult],
 ]
+DeleteExpiredNotificationsExecutor = Callable[
+    [DeleteExpiredNotificationsInput],
+    Awaitable[DeleteExpiredNotificationsResult],
+]
+
+NOTIFICATION_EXPIRY_BATCH_SIZE = 1000
+NOTIFICATION_EXPIRY_BUDGET_SECONDS = 30.0
 
 
 async def run_lifecycle_manager_once(
@@ -172,3 +182,35 @@ async def run_wiki_proposal_lifecycle_once(
         rejected=rejected,
         dry_run_actions=dry_run_actions,
     )
+
+
+async def run_notification_expiry_once(
+    *,
+    input_data: LifecycleManagerInput,
+    delete_batch: DeleteExpiredNotificationsExecutor,
+    clock: Callable[[], float],
+    logger: _Logger,
+    log_prefix: str,
+) -> NotificationExpiryResult:
+    """Delete expired notifications in batches until none remain or the time
+    budget is spent; the next tick continues. Reads already hide them."""
+    if input_data.dry_run:
+        logger.info("%s[DRY_RUN] notification expiry skipped", log_prefix)
+        return NotificationExpiryResult()
+    deadline = clock() + NOTIFICATION_EXPIRY_BUDGET_SECONDS
+    result = NotificationExpiryResult()
+    while True:
+        batch = await delete_batch(
+            DeleteExpiredNotificationsInput(limit=NOTIFICATION_EXPIRY_BATCH_SIZE)
+        )
+        result.batches += 1
+        result.deleted += batch.deleted
+        if batch.deleted < NOTIFICATION_EXPIRY_BATCH_SIZE or clock() >= deadline:
+            break
+    logger.info(
+        "%s notification expiry deleted=%s batches=%s",
+        log_prefix,
+        result.deleted,
+        result.batches,
+    )
+    return result

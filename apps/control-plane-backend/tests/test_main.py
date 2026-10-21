@@ -6687,6 +6687,7 @@ async def test_lifecycle_run_once_executes_in_memory_backend(
             # so this is the field's own default — the endpoint itself needed
             # no change to carry it.
             "wiki_proposals": {"scanned": 0, "rejected": 0, "dry_run_actions": 0},
+            "notifications": {"deleted": 0, "batches": 0},
         },
     }
 

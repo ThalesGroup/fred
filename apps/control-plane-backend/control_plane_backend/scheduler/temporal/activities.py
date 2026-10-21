@@ -27,6 +27,8 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    DeleteExpiredNotificationsInput,
+    DeleteExpiredNotificationsResult,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
     RejectWikiProposalInput,
@@ -44,6 +46,7 @@ LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME = "list_conversation_candidates"
 DELETE_CONVERSATION_ACTIVITY_NAME = "delete_conversation"
 LIST_WIKI_PROPOSAL_CANDIDATES_ACTIVITY_NAME = "list_wiki_proposal_candidates"
 REJECT_WIKI_PROPOSAL_ACTIVITY_NAME = "reject_wiki_proposal"
+DELETE_EXPIRED_NOTIFICATIONS_ACTIVITY_NAME = "delete_expired_notifications"
 
 
 def _activity_logger():
@@ -181,6 +184,21 @@ async def reject_wiki_proposal(
     return await reject_stale_wiki_proposal(candidate=input_data.candidate, deps=deps)
 
 
+async def delete_expired_notifications(
+    input_data: DeleteExpiredNotificationsInput,
+    deps: LifecycleActionDependencies | None = None,
+) -> DeleteExpiredNotificationsResult:
+    """Delete one batch of expired notifications (memory mode and Temporal)."""
+    if deps is None:
+        raise RuntimeError(
+            "LifecycleActionDependencies are required for notification expiry."
+        )
+    if deps.get_notification_store is None:
+        return DeleteExpiredNotificationsResult()
+    deleted = await deps.get_notification_store().delete_expired(limit=input_data.limit)
+    return DeleteExpiredNotificationsResult(deleted=deleted)
+
+
 class LifecycleActivities:
     """
     Bind lifecycle Temporal activities to one explicit dependency bundle.
@@ -291,3 +309,10 @@ class LifecycleActivities:
         - `activities=[activities.reject_wiki_proposal]`
         """
         return await reject_wiki_proposal(input_data, deps=self._deps)
+
+    @activity.defn(name=DELETE_EXPIRED_NOTIFICATIONS_ACTIVITY_NAME)
+    async def delete_expired_notifications(
+        self,
+        input_data: DeleteExpiredNotificationsInput,
+    ) -> DeleteExpiredNotificationsResult:
+        return await delete_expired_notifications(input_data, deps=self._deps)

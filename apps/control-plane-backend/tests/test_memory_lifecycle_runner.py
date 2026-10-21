@@ -14,9 +14,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
+from control_plane_backend.models.base import utcnow
+from control_plane_backend.models.notification_models import NotificationRow
+from control_plane_backend.notifications.store import (
+    NotificationDraft,
+    NotificationStore,
+)
+from control_plane_backend.scheduler.dependencies import LifecycleActionDependencies
+from control_plane_backend.scheduler.lifecycle_runner import (
+    run_notification_expiry_once,
+)
 from control_plane_backend.scheduler.memory.lifecycle_runner import (
     run_lifecycle_manager_once_in_memory,
 )
@@ -24,10 +34,15 @@ from control_plane_backend.scheduler.policies.policy_models import (
     ConversationLifecycleEvent,
     LifecycleTrigger,
 )
+from control_plane_backend.scheduler.temporal.activities import (
+    delete_expired_notifications,
+)
 from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    DeleteExpiredNotificationsInput,
+    DeleteExpiredNotificationsResult,
     LifecycleManagerInput,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
@@ -36,6 +51,20 @@ from control_plane_backend.scheduler.temporal.structures import (
     WikiProposalCandidate,
     WikiProposalCandidateBatch,
 )
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+def _patch_no_expired_notifications(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _nothing_expired(
+        _input_data: DeleteExpiredNotificationsInput,
+    ) -> DeleteExpiredNotificationsResult:
+        return DeleteExpiredNotificationsResult()
+
+    monkeypatch.setattr(
+        "control_plane_backend.scheduler.memory.lifecycle_runner.delete_expired_notifications",
+        _nothing_expired,
+    )
 
 
 def _patch_empty_wiki_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,6 +90,7 @@ def _patch_empty_wiki_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
         "control_plane_backend.scheduler.memory.lifecycle_runner.reject_wiki_proposal",
         _unreachable,
     )
+    _patch_no_expired_notifications(monkeypatch)
 
 
 @pytest.mark.asyncio
@@ -188,6 +218,7 @@ def _patch_empty_conversation_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
         "control_plane_backend.scheduler.memory.lifecycle_runner.delete_conversation",
         _unreachable,
     )
+    _patch_no_expired_notifications(monkeypatch)
 
 
 @pytest.mark.asyncio
@@ -240,3 +271,135 @@ async def test_in_memory_runner_also_sweeps_wiki_proposals_in_the_same_tick(
     assert result.wiki_proposals.scanned == 1
     assert result.wiki_proposals.rejected == 1
     assert result.wiki_proposals.dry_run_actions == 0
+
+
+@pytest.mark.asyncio
+async def test_in_memory_runner_also_expires_notifications_in_the_same_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limits: list[int] = []
+
+    async def _one_batch(
+        input_data: DeleteExpiredNotificationsInput,
+    ) -> DeleteExpiredNotificationsResult:
+        limits.append(input_data.limit)
+        return DeleteExpiredNotificationsResult(deleted=3)
+
+    _patch_empty_conversation_sweep(monkeypatch)
+    _patch_empty_wiki_sweep(monkeypatch)
+    monkeypatch.setattr(
+        "control_plane_backend.scheduler.memory.lifecycle_runner.delete_expired_notifications",
+        _one_batch,
+    )
+
+    result = await run_lifecycle_manager_once_in_memory(LifecycleManagerInput())
+
+    assert limits == [1000]
+    assert result.notifications.deleted == 3
+    assert result.notifications.batches == 1
+
+
+class _Log:
+    def info(self, msg: str, *args: object) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_notification_expiry_loops_until_a_short_batch() -> None:
+    sizes = iter([1000, 1000, 7])
+
+    async def _batch(
+        _input_data: DeleteExpiredNotificationsInput,
+    ) -> DeleteExpiredNotificationsResult:
+        return DeleteExpiredNotificationsResult(deleted=next(sizes))
+
+    result = await run_notification_expiry_once(
+        input_data=LifecycleManagerInput(),
+        delete_batch=_batch,
+        clock=lambda: 0.0,
+        logger=_Log(),
+        log_prefix="[TEST]",
+    )
+
+    assert (result.deleted, result.batches) == (2007, 3)
+
+
+@pytest.mark.asyncio
+async def test_notification_expiry_stops_when_the_budget_is_spent() -> None:
+    now = [0.0]
+
+    async def _full_batch(
+        _input_data: DeleteExpiredNotificationsInput,
+    ) -> DeleteExpiredNotificationsResult:
+        now[0] += 20.0
+        return DeleteExpiredNotificationsResult(deleted=1000)
+
+    result = await run_notification_expiry_once(
+        input_data=LifecycleManagerInput(),
+        delete_batch=_full_batch,
+        clock=lambda: now[0],
+        logger=_Log(),
+        log_prefix="[TEST]",
+    )
+
+    assert (result.deleted, result.batches) == (2000, 2)
+
+
+@pytest.mark.asyncio
+async def test_notification_expiry_deletes_nothing_on_a_dry_run() -> None:
+    async def _unreachable(
+        _input_data: DeleteExpiredNotificationsInput,
+    ) -> DeleteExpiredNotificationsResult:  # pragma: no cover
+        raise AssertionError("a dry run deletes nothing")
+
+    result = await run_notification_expiry_once(
+        input_data=LifecycleManagerInput(dry_run=True),
+        delete_batch=_unreachable,
+        clock=lambda: 0.0,
+        logger=_Log(),
+        log_prefix="[TEST]",
+    )
+
+    assert result.deleted == 0
+
+
+@pytest.mark.asyncio
+async def test_the_expiry_activity_deletes_expired_rows_only(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = NotificationStore(control_plane_sql_engine)
+    await store.upsert(
+        [
+            NotificationDraft(
+                recipient_id="alice",
+                type="agent.republish_needed",
+                group_key=g,
+                payload={},
+            )
+            for g in ("old", "live")
+        ]
+    )
+    async with control_plane_sql_engine.begin() as conn:
+        await conn.execute(
+            update(NotificationRow)
+            .where(NotificationRow.group_key == "old")
+            .values(expires_at=utcnow() - timedelta(days=1))
+        )
+    deps = LifecycleActionDependencies(
+        get_session_store=None,  # type: ignore[arg-type]
+        get_purge_queue_store=None,  # type: ignore[arg-type]
+        erase_session=None,  # type: ignore[arg-type]
+        get_service_bearer=None,  # type: ignore[arg-type]
+        get_task_service=None,  # type: ignore[arg-type]
+        get_team_wiki_store=None,  # type: ignore[arg-type]
+        get_policy_catalog=None,  # type: ignore[arg-type]
+        get_notification_store=lambda: store,
+    )
+
+    result = await delete_expired_notifications(
+        DeleteExpiredNotificationsInput(limit=1000), deps=deps
+    )
+
+    assert result.deleted == 1
+    rows, _ = await store.list_page("alice", limit=50)
+    assert [row.group_key for row in rows] == ["live"]

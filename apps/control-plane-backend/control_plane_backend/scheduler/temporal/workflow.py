@@ -21,10 +21,12 @@ from temporalio.common import RetryPolicy
 
 from control_plane_backend.scheduler.lifecycle_runner import (
     run_lifecycle_manager_once,
+    run_notification_expiry_once,
     run_wiki_proposal_lifecycle_once,
 )
 from control_plane_backend.scheduler.temporal.activities import (
     DELETE_CONVERSATION_ACTIVITY_NAME,
+    DELETE_EXPIRED_NOTIFICATIONS_ACTIVITY_NAME,
     LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME,
     LIST_WIKI_PROPOSAL_CANDIDATES_ACTIVITY_NAME,
     REJECT_WIKI_PROPOSAL_ACTIVITY_NAME,
@@ -33,6 +35,8 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    DeleteExpiredNotificationsInput,
+    DeleteExpiredNotificationsResult,
     LifecycleManagerInput,
     LifecycleManagerResult,
     ListConversationCandidatesInput,
@@ -108,6 +112,26 @@ class LifecycleManagerWorkflow:
             input_data=input_data,
             list_candidates=_list_wiki_candidates,
             reject_proposal=_reject_wiki_proposal,
+            logger=workflow.logger,
+            log_prefix="[LIFECYCLE]",
+        )
+
+        async def _delete_expired_notifications(
+            delete_input: DeleteExpiredNotificationsInput,
+        ) -> DeleteExpiredNotificationsResult:
+            return await workflow.execute_activity(
+                DELETE_EXPIRED_NOTIFICATIONS_ACTIVITY_NAME,
+                delete_input,
+                result_type=DeleteExpiredNotificationsResult,
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=retry_policy,
+            )
+
+        # workflow.time() keeps the budget deterministic on replay.
+        result.notifications = await run_notification_expiry_once(
+            input_data=input_data,
+            delete_batch=_delete_expired_notifications,
+            clock=workflow.time,
             logger=workflow.logger,
             log_prefix="[LIFECYCLE]",
         )

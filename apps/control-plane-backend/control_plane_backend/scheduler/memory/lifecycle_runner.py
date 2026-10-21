@@ -15,15 +15,18 @@
 from __future__ import annotations
 
 import logging
+import time
 from functools import partial
 
 from control_plane_backend.scheduler.dependencies import LifecycleActionDependencies
 from control_plane_backend.scheduler.lifecycle_runner import (
     run_lifecycle_manager_once,
+    run_notification_expiry_once,
     run_wiki_proposal_lifecycle_once,
 )
 from control_plane_backend.scheduler.temporal.activities import (
     delete_conversation,
+    delete_expired_notifications,
     list_conversation_candidates,
     list_wiki_proposal_candidates,
     reject_wiki_proposal,
@@ -91,6 +94,17 @@ async def run_lifecycle_manager_once_in_memory(
         input_data=input_data,
         list_candidates=list_wiki_candidates_executor,
         reject_proposal=reject_wiki_proposal_executor,
+        logger=logger,
+        log_prefix="[LIFECYCLE][IN_MEMORY]",
+    )
+    result.notifications = await run_notification_expiry_once(
+        input_data=input_data,
+        delete_batch=(
+            partial(delete_expired_notifications, deps=deps)
+            if deps is not None
+            else delete_expired_notifications
+        ),
+        clock=time.monotonic,
         logger=logger,
         log_prefix="[LIFECYCLE][IN_MEMORY]",
     )
