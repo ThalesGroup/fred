@@ -411,3 +411,32 @@ No direct duplicate was found in read-only GitHub searches; closed issue 2146
 is related, open issue 2770 addresses different runtime identity semantics.
 A single English issue draft is prepared locally, awaiting user confirmation.
 No backend fix or GitHub write has been performed.
+
+## Session membership regression commit
+
+For issue 3209, two tests were added to the existing
+`apps/control-plane-backend/tests/test_product_api_authz.py`: explicit
+CAN_READ_CONVERSATIONS wiring, and preservation of the guard's canonical
+team ID plus authenticated-owner filtering. No backend implementation changed.
+The guard regression is `xfail(strict=True, raises=AssertionError)` for the
+known defect; remove that marker when implementing the fix. No issue number
+was added to source comments or test names. This is a test-only lightweight
+change, not another product behavior change or OpenSpec plan.
+
+Using `apps/control-plane-backend/.venv/bin/python -m pytest --noconftest`:
+
+- Current implementation, file + `--runxfail -k get_team_sessions`: **1 failed,
+  1 passed, 14 deselected**, with the absent permission keyword causing the failure.
+- Proposed guard keyword applied to the real controller function in memory
+  via `/tmp/selftest-session-membership-fix/proposed_fix.py`, same test selection
+  with `--runxfail`: **2 passed, 14 deselected**. Source files were unchanged.
+- Entire test file, normal expected-failure handling: **15 passed, 1 xfailed**.
+- `python -m ruff check` and `python -m ruff format --check` on the touched file:
+  passed. `git diff --check`: passed.
+
+Initial attempts using the shared conftest stalled in its SQLite schema setup
+and were terminated. These controller wiring tests use module-local mocks
+and need no database; the completed runs disabled only conftest loading.
+This is focused controller regression evidence, not a full backend suite or
+a fresh HTTP integration run. The test diff was author-reviewed against the
+real controller, the proposed permission and existing neighboring test patterns.
