@@ -189,7 +189,7 @@ async def test_pages_are_newest_first_with_a_cursor(store: NotificationStore) ->
 
 
 def test_a_malformed_cursor_is_refused() -> None:
-    for value in ("", "123", "abc.id"):
+    for value in ("", "123", "abc.id", f"{10**30}.id"):
         with pytest.raises(ValueError):
             PageCursor.decode(value)
 

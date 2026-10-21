@@ -79,9 +79,12 @@ class PageCursor:
         micros, _, notification_id = value.partition(".")
         if not notification_id:
             raise ValueError("malformed cursor")
-        created_at = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(
-            microseconds=int(micros)
-        )
+        try:
+            created_at = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(
+                microseconds=int(micros)
+            )
+        except OverflowError as exc:
+            raise ValueError("malformed cursor") from exc
         return PageCursor(created_at=created_at, id=notification_id)
 
 
