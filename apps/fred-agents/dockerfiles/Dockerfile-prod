@@ -67,6 +67,7 @@ COPY libs/capabilities/fred-capability-documents/pyproject.toml /workspace/libs/
 COPY libs/capabilities/fred-capability-document-access/pyproject.toml /workspace/libs/capabilities/fred-capability-document-access/
 COPY libs/capabilities/fred-capability-mcp/pyproject.toml /workspace/libs/capabilities/fred-capability-mcp/
 COPY libs/capabilities/fred-capability-web-research/pyproject.toml /workspace/libs/capabilities/fred-capability-web-research/
+COPY libs/capabilities/fred-capability-code-sandbox/pyproject.toml /workspace/libs/capabilities/fred-capability-code-sandbox/
 
 RUN make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-project --no-install-local"
 
@@ -113,6 +114,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-documents 
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-web-research /workspace/libs/capabilities/fred-capability-web-research
+COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-code-sandbox /workspace/libs/capabilities/fred-capability-code-sandbox
 RUN cd /workspace/apps/fred-agents && \
     UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache

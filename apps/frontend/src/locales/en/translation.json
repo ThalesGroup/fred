@@ -117,6 +117,10 @@
   },
   "capability": {
     "panelLoadFailed": "This panel could not load. Reload the page.",
+    "code_sandbox": {
+      "name": "Code sandbox",
+      "description": "Run short Bash and Python programs in an isolated sandbox."
+    },
     "web_research": {
       "name": "Search the web",
       "description": "Search public sources and read web pages through controlled external access."

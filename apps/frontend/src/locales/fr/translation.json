@@ -117,6 +117,10 @@
   },
   "capability": {
     "panelLoadFailed": "Ce panneau n'a pas pu se charger. Rechargez la page.",
+    "code_sandbox": {
+      "name": "Sandbox de code",
+      "description": "Exécuter de courts programmes Bash et Python dans une sandbox isolée."
+    },
     "web_research": {
       "name": "Rechercher sur le Web",
       "description": "Rechercher des sources publiques et lire des pages Web via un accès externe contrôlé."
