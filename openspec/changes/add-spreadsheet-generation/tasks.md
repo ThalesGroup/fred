@@ -27,6 +27,7 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 3b.2 Frontend plugin `capabilities/spreadsheet/`: card (Preview + download), slice in `common/store.tsx`, lazy `SpreadsheetPane` (sheet tabs, sticky header row and first column, locale formats, totals row, truncation note, unavailable state), en/fr strings
 - [x] 3b.3 Help Center en/fr: preview paragraph in "Create an Excel file"; AUTHORING row, README, migration note updated
 - [x] 3b.4 Tests: preview JSON (formats, totals, empty column, cap, sheets), capability (preview written, part fields, both fallbacks); vitest `SpreadsheetPane` and `spreadsheetFormat`
+- [x] 3b.5 Excel-like pane (owner request 2026-10-21): column letters, row numbers, workbook header as row 1, one scroll area with frozen headings, bottom sheet tabs with overflow arrows, name box; vitest updated
 
 ## 4. Tests and verification
 

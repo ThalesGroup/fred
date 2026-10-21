@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { formatCell, formatTotal } from "./spreadsheetFormat";
+import { columnLayouts, columnLetter, formatCell, formatTotal } from "./spreadsheetFormat";
 import type { SpreadsheetColumn } from "./types";
 
 const plain = (value: string) => value.replace(/[  ]/g, " ");
@@ -37,5 +37,31 @@ describe("spreadsheetFormat", () => {
   it("leaves empty cells and unparsable dates as they are", () => {
     expect(formatCell(null, { header: "N", type: "number", decimals: 2 }, "en")).toBe("");
     expect(formatCell("soon", { header: "D", type: "date" }, "en")).toBe("soon");
+  });
+
+  it("names columns with Excel letters", () => {
+    expect([0, 25, 26, 51, 701, 702].map(columnLetter)).toEqual(["A", "Z", "AA", "AZ", "ZZ", "AAA"]);
+  });
+
+  it("sizes columns like the workbook writer and wraps only long text", () => {
+    const layouts = columnLayouts(
+      {
+        name: "S",
+        columns: [
+          { header: "Id", type: "integer", decimals: 0 },
+          { header: "Label", type: "text" },
+          { header: "Notes", type: "text" },
+        ],
+        rows: [[1, "Rent", "x".repeat(80)]],
+        row_count: 1,
+        totals: null,
+      },
+      "en",
+    );
+    expect(layouts).toEqual([
+      { width: 6, wrap: false },
+      { width: 7, wrap: false },
+      { width: 60, wrap: true },
+    ]);
   });
 });
