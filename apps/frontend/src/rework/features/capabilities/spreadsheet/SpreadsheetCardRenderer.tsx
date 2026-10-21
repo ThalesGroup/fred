@@ -62,8 +62,8 @@ export function SpreadsheetCardRenderer({ part }: UiPartRendererProps) {
         <span className={styles.icon} aria-hidden>
           <Icon category="outlined" type="table_chart" />
         </span>
-        <span className={styles.title} title={preview.title}>
-          {preview.title}
+        <span className={styles.title} title={preview.file_name}>
+          {preview.file_name}
         </span>
         <SpreadsheetDownloadButton href={preview.xlsx_download_url} fileName={preview.file_name} />
       </div>

@@ -15,15 +15,26 @@
 // Read-only, Excel-like preview of a spreadsheet the agent created: column
 // letters and row numbers frozen around one scrolling grid, the workbook's own
 // header as row 1, and sheet tabs at the bottom. Data is the JSON preview.
+// Arrow keys move the selection; only the selected cell is focusable.
 
-import { type KeyboardEvent, type MouseEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  memo,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import type { CapabilitySidePanelProps } from "../types";
 import SpreadsheetDownloadButton from "./SpreadsheetDownloadButton";
-import { columnLayouts, columnLetter, formatCell, formatTotal, isRightAligned } from "./spreadsheetFormat";
+import { type ColumnLayout, columnLetter, formatSheet, isRightAligned, mayClip } from "./spreadsheetFormat";
 import type { SpreadsheetPreview, SpreadsheetSheet } from "./types";
 import { useSessionSpreadsheet, useSpreadsheetPreview } from "./useSpreadsheetPreview";
 import styles from "./SpreadsheetPane.module.css";
@@ -35,6 +46,57 @@ interface CellAddress {
 }
 
 const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(" ") || undefined;
+
+const MOVES: Record<string, [number, number]> = {
+  ArrowUp: [-1, 0],
+  ArrowDown: [1, 0],
+  ArrowLeft: [0, -1],
+  ArrowRight: [0, 1],
+};
+
+interface GridRowProps {
+  /** Excel row number. */
+  row: number;
+  cells: string[];
+  classes: (string | undefined)[];
+  layouts: ColumnLayout[];
+  /** Selected column in this row, or -1: rows without the selection skip re-rendering. */
+  selectedColumn: number;
+  header?: boolean;
+  className?: string;
+}
+
+const GridRow = memo(function GridRow({
+  row,
+  cells,
+  classes,
+  layouts,
+  selectedColumn,
+  header = false,
+  className,
+}: GridRowProps) {
+  const Cell = header ? "th" : "td";
+  return (
+    <tr className={className}>
+      <th scope="row" className={cx(styles.rowHead, selectedColumn >= 0 && styles.headActive)}>
+        {row}
+      </th>
+      {cells.map((text, index) => (
+        <Cell
+          key={index}
+          scope={header ? "col" : undefined}
+          data-cell={`${row}:${index}`}
+          // Roving focus: only the selected cell is a tab stop.
+          tabIndex={selectedColumn === index ? 0 : undefined}
+          title={mayClip(text, layouts[index]) ? text : undefined}
+          className={cx(classes[index], selectedColumn === index && styles.selected)}
+        >
+          {text}
+        </Cell>
+      ))}
+    </tr>
+  );
+});
 
 function SheetGrid({
   sheet,
@@ -49,36 +111,59 @@ function SheetGrid({
 }) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<CellAddress>({ row: 1, column: 0 });
-  const layouts = useMemo(() => columnLayouts(sheet, locale), [sheet, locale]);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const focusPending = useRef(false);
+  const { rows, totals, layouts } = useMemo(() => formatSheet(sheet, locale), [sheet, locale]);
+  const headers = useMemo(() => sheet.columns.map((column) => column.header), [sheet]);
+  const classes = useMemo(
+    () =>
+      sheet.columns.map((column, index) =>
+        cx(isRightAligned(column) && styles.number, layouts[index]?.wrap && styles.wrap),
+      ),
+    [sheet, layouts],
+  );
   const totalsRow = sheet.row_count + 2;
-  const lastRow = sheet.totals ? totalsRow : sheet.row_count + 1;
+  const lastRow = totals ? totalsRow : sheet.row_count + 1;
   const rowHeadWidth = Math.max(String(lastRow).length + 2, 4);
   const tableWidth = rowHeadWidth + layouts.reduce((sum, layout) => sum + layout.width, 0);
+  const selectedIn = (row: number) => (selected.row === row ? selected.column : -1);
 
-  const cellClass = (row: number, column: number) =>
-    cx(
-      isRightAligned(sheet.columns[column]) && styles.number,
-      layouts[column]?.wrap && styles.wrap,
-      selected.row === row && selected.column === column && styles.selected,
-    );
-  const rowHead = (row: number) => (
-    <th scope="row" className={cx(styles.rowHead, selected.row === row && styles.headActive)}>
-      {row}
-    </th>
-  );
+  // Rendered rows in order: header (1), preview rows (2..), then the totals row.
+  const rowAt = (position: number) => (position === 0 ? 1 : position <= rows.length ? position + 1 : totalsRow);
+  const positionOf = (row: number) => (row === totalsRow && totals ? rows.length + 1 : row - 1);
+  const lastPosition = totals ? rows.length + 1 : rows.length;
+
+  const moveTo = (address: CellAddress) => {
+    focusPending.current = true;
+    setSelected(address);
+  };
   // One delegated handler: each cell carries its "row:column" address.
   const select = (event: MouseEvent<HTMLTableElement>) => {
     const cell = (event.target as HTMLElement).closest<HTMLElement>("[data-cell]");
     if (!cell?.dataset.cell) return;
     const [row, column] = cell.dataset.cell.split(":").map(Number);
-    setSelected({ row, column });
+    moveTo({ row, column });
   };
+  const navigate = (event: KeyboardEvent<HTMLTableElement>) => {
+    const move = MOVES[event.key];
+    if (!move) return;
+    event.preventDefault();
+    const position = Math.min(Math.max(positionOf(selected.row) + move[0], 0), lastPosition);
+    const column = Math.min(Math.max(selected.column + move[1], 0), sheet.columns.length - 1);
+    moveTo({ row: rowAt(position), column });
+  };
+  useLayoutEffect(() => {
+    if (!focusPending.current) return;
+    focusPending.current = false;
+    tableRef.current?.querySelector<HTMLElement>(`[data-cell="${selected.row}:${selected.column}"]`)?.focus();
+  }, [selected]);
+
   const value =
     selected.row === 1
-      ? sheet.columns[selected.column]?.header
-      : selected.row === totalsRow && sheet.totals
-        ? formatTotal(sheet.totals[selected.column], sheet.columns[selected.column], locale)
-        : formatCell(sheet.rows[selected.row - 2]?.[selected.column] ?? null, sheet.columns[selected.column], locale);
+      ? headers[selected.column]
+      : selected.row === totalsRow && totals
+        ? totals[selected.column]
+        : (rows[selected.row - 2]?.[selected.column] ?? "");
   const hidden = sheet.row_count - sheet.rows.length;
 
   return (
@@ -92,7 +177,14 @@ function SheetGrid({
         </span>
       </div>
       <div className={styles.gridScroll}>
-        <table className={styles.grid} style={{ width: `${tableWidth}ch` }} aria-label={sheet.name} onClick={select}>
+        <table
+          ref={tableRef}
+          className={styles.grid}
+          style={{ width: `${tableWidth}ch` }}
+          aria-label={sheet.name}
+          onClick={select}
+          onKeyDown={navigate}
+        >
           <colgroup>
             <col style={{ width: `${rowHeadWidth}ch` }} />
             {layouts.map((layout, index) => (
@@ -108,37 +200,38 @@ function SheetGrid({
                 </td>
               ))}
             </tr>
-            <tr className={styles.headerRow}>
-              {rowHead(1)}
-              {sheet.columns.map((column, index) => (
-                <th key={index} scope="col" data-cell={`1:${index}`} className={cellClass(1, index)}>
-                  {column.header}
-                </th>
-              ))}
-            </tr>
+            <GridRow
+              row={1}
+              cells={headers}
+              classes={classes}
+              layouts={layouts}
+              selectedColumn={selectedIn(1)}
+              header
+              className={styles.headerRow}
+            />
           </thead>
           <tbody>
-            {sheet.rows.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {rowHead(rowIndex + 2)}
-                {row.map((cell, index) => (
-                  <td key={index} data-cell={`${rowIndex + 2}:${index}`} className={cellClass(rowIndex + 2, index)}>
-                    {formatCell(cell, sheet.columns[index], locale)}
-                  </td>
-                ))}
-              </tr>
+            {rows.map((cells, index) => (
+              <GridRow
+                key={index}
+                row={index + 2}
+                cells={cells}
+                classes={classes}
+                layouts={layouts}
+                selectedColumn={selectedIn(index + 2)}
+              />
             ))}
           </tbody>
-          {sheet.totals && (
+          {totals && (
             <tfoot>
-              <tr className={styles.totals}>
-                {rowHead(totalsRow)}
-                {sheet.totals.map((cell, index) => (
-                  <td key={index} data-cell={`${totalsRow}:${index}`} className={cellClass(totalsRow, index)}>
-                    {formatTotal(cell, sheet.columns[index], locale)}
-                  </td>
-                ))}
-              </tr>
+              <GridRow
+                row={totalsRow}
+                cells={totals}
+                classes={classes}
+                layouts={layouts}
+                selectedColumn={selectedIn(totalsRow)}
+                className={styles.totals}
+              />
             </tfoot>
           )}
         </table>
@@ -302,8 +395,8 @@ export function SpreadsheetPane({ onClose }: CapabilitySidePanelProps) {
         <span className={styles.icon} aria-hidden>
           <Icon category="outlined" type="table_chart" />
         </span>
-        <span className={styles.title} title={current?.title}>
-          {current?.title ?? t("capability.spreadsheet.untitled")}
+        <span className={styles.title} title={current?.file_name}>
+          {current?.file_name ?? t("capability.spreadsheet.untitled")}
         </span>
         {current && (
           <SpreadsheetDownloadButton href={current.xlsx_download_url} fileName={current.file_name} labelled />
