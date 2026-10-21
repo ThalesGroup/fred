@@ -11,6 +11,12 @@ control-plane and selected knowledge-flow APIs, delivered feature by feature,
 with the existing Fred UI, security guarantees and overall architecture preserved
 except for explicitly approved reconstruction decisions.
 
+For Dimi's reconstruction, the companion
+[reconstruction method](../fred-reconstruction-method/SKILL.md) defines the agreed
+scope and canonical corpus. Historical RFC/OpenSpec content is evidence to reconcile,
+not a competing active authority. The read-only audit reports consolidation needs;
+it does not execute document deletion or corrections.
+
 ## Scope and independence
 
 Read root `AGENTS.md`, applicable legacy guidance and nested instructions first.

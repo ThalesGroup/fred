@@ -57,6 +57,20 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | [F-010](#f-010-périmètre-de-revue-et-préparation-du-commit) | Parcours, SQL, cartes et limites de livraison | Relu indépendamment, validation exécution non faite | À jour pour le périmètre décrit |
 
+## Méthode de consolidation
+
+- 2026-10-21 : méthode durable enregistrée dans
+  `.agents/skills/fred-reconstruction-method/SKILL.md`, reliée depuis AGENTS,
+  arc42 et le skill d'audit. Le skill est également accessible à Codex localement
+  sous `$fred-reconstruction-method` par un lien vers sa version du dépôt.
+- Objectif : parcours maîtrisés dans le périmètre accepté, références commitées,
+  revues indépendantes, corpus arc42 suffisant avec plan de fonctions et décisions
+  clés distincts de l'état implémenté. Retirer les anciens RFC/OpenSpec du corpus
+  actif après consolidation de leur information utile et de leurs consommateurs.
+- Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
+  skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
+  validation fonctionnelle n'a été lancée par cette création.
+
 ## F-010 Périmètre de revue et préparation du commit
 
 Revue du 2026-10-21 : branche `chore/rust-rebac`, HEAD

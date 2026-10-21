@@ -51,6 +51,19 @@ a push or publication. State accurately which validation was not performed.
 This working mode takes precedence over the automatic workflow, verification,
 review and close-out requirements below and in legacy guidance or skills.
 
+## Dimi's reconstruction method
+
+Use [fred-reconstruction-method](.agents/skills/fred-reconstruction-method/SKILL.md)
+for an explicitly requested reconstruction convergence or corpus review. It defines
+bounded completeness, independent review, the committed reference and the canonical
+arc42/source maps. For this workflow, arc42 also carries a clearly separated feature
+plan and key design decisions; proposals never masquerade as implemented behavior.
+Accepted entries there may replace new RFC/OpenSpec planning packages for the same
+slice. Scoped, authorized consolidation retires superseded prose only after preserving
+its useful contracts and resolving consumers. These reconstruction-specific rules
+supersede conflicting legacy planning/archive rules below; they do not authorize
+unrequested tests, commits, publication, resets or unrelated archive deletion.
+
 ## Locating reconstruction code and documentation
 
 For a question about the reconstructed user journey, start with the

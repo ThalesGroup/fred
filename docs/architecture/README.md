@@ -54,6 +54,16 @@ the [SQL table catalogue](A2-manager-contracts.md#control-plane-sql-catalogue),
 and [control-plane operations](A3-manager-operations.md). Generated blocks remain tied to
 source code; they are references, not another handwritten API specification.
 
+## Reconstruction method
+
+The [reconstruction method](../../.agents/skills/fred-reconstruction-method/SKILL.md)
+defines how this dossier converges with the implementation: current journeys and
+schemas, a separately labelled feature plan, and key design decisions. Proposed
+features are not implemented guarantees. Superseded RFC/OpenSpec prose leaves the
+active corpus only after its useful information and consumers are reconciled.
+The [review prompt](../../.agents/skills/fred-reconstruction-method/references/review-prompt.md)
+provides a bounded, independent audit request.
+
 ## Keeping one useful account
 
 - Explain current behavior and the reason for its boundaries, in the present tense.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fred: reconstruction maîtrisée"
+  short_description: "Périmètre précis, arc42 fiable et revue indépendante"
+  default_prompt: "Applique $fred-reconstruction-method au périmètre convenu et au commit courant pour faire converger le code, les preuves et le corpus arc42."
