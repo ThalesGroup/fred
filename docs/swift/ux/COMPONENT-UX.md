@@ -404,7 +404,8 @@ menu keeps the default rhythm. Opt-in `quietUnselected` (same chip only): unsele
 (the accent state layer and check stay).
 Sub-menu rows are rows with a chevron whose anchored panel is rendered by the parent as a
 sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface*`,
-`--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`.
+`--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`,
+`NotificationsPopover`.
 
 - **M3 alignment (2026-08-03)** — container corner moved from `--radius-m` to `--radius-s`
   (the M3 menu/text-field/chip radius), and a picked row now carries the dedicated
@@ -1068,6 +1069,38 @@ call site keeps rendering a bare `<button>`.
 It is `aria-hidden`. The caller passes an `aria-label` carrying the count —
 otherwise a screen reader announces the button with no number, or reads a bare
 digit after the name.
+
+---
+
+### Notifications: bell, `NotificationsPopover`, `NotificationTile` (2026-10-22)
+
+**Location:** `src/rework/features/notifications/` (bell entry, popover, type registry),
+`src/rework/components/shared/molecules/NotificationTile/`
+
+**Status:** `Functional`
+
+- **Bell** — last entry of `MainNavBar`, same medium IconButton and 1.25rem glyph as its
+  neighbours, `badgeCount` = unseen count (the atom's `999+` cap), count repeated in the
+  `aria-label`. Primary and filled while its popover is open, like an active entry.
+- **`NotificationsPopover`** — the `UserProfile` pattern: positioned beside the rail, over the
+  nav panel, surface from `MenuPopover` (`role="dialog"`). Header: title + text button
+  "Clear all" (disabled when empty); list newest first, "Show more" by cursor; empty state is
+  `PageEmptyState`. Focus goes to the title on opening and back to the bell on Escape. At
+  600px and below it becomes a full-screen sheet (no border, radius or shadow) with a back
+  arrow.
+- **`NotificationTile`** — props-only molecule: category icon well (`primary-container`
+  action, `success-container` response, `surface-container-high` information, as inside a
+  floating surface), title, body clamped to 2 lines, relative time, type buttons (small
+  filled/outlined), "Handled by" line instead of buttons. The title button stretches over
+  the tile; unread = emphasized title, `on-surface` body and a primary dot, with an "Unread"
+  prefix for screen readers. Delete (`close`, medium, `on-surface-retreat`) replaces the dot
+  on hover or focus, always visible on touch screens.
+
+#### Open UX issues
+
+- Not design-reviewed. The approved mockup's icon well is 36px; the tile uses
+  `--spacing-2xl` (40px) rather than an arbitrary size.
+- `PageEmptyState` keeps its page-sized 3rem icon inside the popover.
 
 ---
 
