@@ -14,8 +14,10 @@ Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
 - Invalid input or a size limit (10 sheets, 50 columns, 5000 rows per sheet,
   50000 cells) returns an error naming the sheet, row and column; no file is written.
 - Text that looks like a formula is stored as literal text. No macros.
-- The file is written through `RuntimeServices.workspace_fs` and shown in the
-  chat as a download chip. No config, table, router or chat part.
+- The file and a JSON preview (first 500 rows per sheet, totals computed for
+  display) are written through `RuntimeServices.workspace_fs`; the chat shows a
+  `spreadsheet_preview` card that opens a read-only side panel, or a download
+  chip when the preview could not be stored. No config, table or router.
 
 `tools()` only, so it works on ReAct, Deep and Graph agents. Admin-gated: a
 platform administrator opens it per team.

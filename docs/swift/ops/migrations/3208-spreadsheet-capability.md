@@ -8,9 +8,10 @@ no_action_reason: "The capability ships inside the fred-agents image and is regi
 ---
 ## Applicability
 
-Existing Fred deployments upgrading to this release. Only the fred-agents image
-changes: it gains the `fred-capability-spreadsheet` package and its pure-Python
-dependencies `openpyxl` and `et-xmlfile`. Third-party agent pods are unaffected.
+Existing Fred deployments upgrading to this release. The fred-agents image
+gains the `fred-capability-spreadsheet` package and its pure-Python
+dependencies `openpyxl` and `et-xmlfile`; the frontend gains the spreadsheet
+preview panel. Third-party agent pods are unaffected.
 
 ## Prerequisites
 
@@ -32,7 +33,8 @@ workspace storage, like PowerPoint outputs.
 
 The fred-agents boot log lists the `spreadsheet` capability. After opening it
 for a team and enabling it on an agent, asking that agent for an Excel file
-shows a download chip for an `.xlsx` that opens in Excel or LibreOffice.
+shows a file card: its preview opens beside the conversation, and the `.xlsx`
+it downloads opens in Excel or LibreOffice.
 
 ## Rollback
 
@@ -43,4 +45,5 @@ already generated stay in workspace storage.
 ## Limitations
 
 The workbook is limited to 10 sheets, 5,000 rows per sheet and 50,000 cells.
-There is no in-chat preview.
+The in-chat preview shows the first 500 rows of each sheet. Each file is
+stored with a small `.preview.json` beside it in the agent workspace.
