@@ -35,12 +35,14 @@ from langchain_core.tools import BaseTool
 from pydantic import Field
 
 from fred_runtime.common.kf_base_client import KfBaseClient, KnowledgeFlowAgentContext
+from fred_runtime.common.mcp_utils import MCP_DELEGATED_METADATA_KEY
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.token_expiry import (
     is_expired_httpx_status_error,
     unwrap_httpx_status_error,
 )
 from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_runtime.runtime_support import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
@@ -564,6 +566,18 @@ class ContextAwareTool(BaseTool):
         """Ensure mapping input and drop explicit null values."""
         return {k: v for k, v in (kwargs or {}).items() if v is not None}
 
+    def _check_delegated_result(self, result: Any) -> None:
+        if not (self.base_tool.metadata or {}).get(MCP_DELEGATED_METADATA_KEY):
+            return
+        if not isinstance(result, tuple) or len(result) != 2:
+            return
+        artifact = result[1]
+        if not isinstance(artifact, dict):
+            return
+        structured = artifact.get("structured_content")
+        if isinstance(structured, dict) and structured.get("cause") == "authority_lost":
+            raise AuthorityLostError() from None
+
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing.
 
@@ -583,12 +597,18 @@ class ContextAwareTool(BaseTool):
                     "Conversation-scoped tabular tools require async invocation"
                 )
             result = self.base_tool._run(**kwargs)
+            self._check_delegated_result(result)
         except Exception as e:
             run_stop = unwrap_run_stop_error(e)
             if run_stop is not None:
                 # Raised before any logging: a refused call's body is not ours
                 # to preview, and the run ends rather than answering the model.
                 raise run_stop
+            if (
+                (self.base_tool.metadata or {}).get(MCP_DELEGATED_METADATA_KEY)
+                and str(e) == "Tool access was refused."
+            ):
+                raise AuthorityLostError() from None
             # Check for HTTP status in the exception chain for better logs
             inner = _unwrap_httpx_status_error(e)
 
@@ -621,6 +641,7 @@ class ContextAwareTool(BaseTool):
                 kwargs = await self._inject_tabular_scope(kwargs)
                 kwargs = self._sanitize_tool_kwargs(kwargs)
             result = await self.base_tool._arun(config=config, **kwargs)
+            self._check_delegated_result(result)
         except asyncio.CancelledError:
             # Never swallow cancellation — re-raise so asyncio's cancellation
             # semantics stay intact. `ToolObservabilityMiddleware` records the
@@ -631,6 +652,11 @@ class ContextAwareTool(BaseTool):
             if run_stop is not None:
                 # Same rule as `_run`: a run-stopping error is not a tool result.
                 raise run_stop
+            if (
+                (self.base_tool.metadata or {}).get(MCP_DELEGATED_METADATA_KEY)
+                and str(e) == "Tool access was refused."
+            ):
+                raise AuthorityLostError() from None
             # Check for HTTP status in the exception chain for better logs
             inner = _unwrap_httpx_status_error(e)
 
