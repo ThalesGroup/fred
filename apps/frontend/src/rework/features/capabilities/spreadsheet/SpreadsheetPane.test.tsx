@@ -48,7 +48,6 @@ let root: ReturnType<typeof createRoot>;
 const part: SpreadsheetPreviewPartData = {
   type: "spreadsheet_preview",
   preview_id: "teams/t/q3.xlsx",
-  title: "Q3 budget.xlsx",
   file_name: "Q3 budget.xlsx",
   xlsx_download_url: "/fs/download/q3.xlsx",
   preview_url: "/fs/download/q3.preview.json",
@@ -83,7 +82,7 @@ const preview: SpreadsheetPreview = {
 };
 
 // Intl separates groups and currency symbols with (narrow) no-break spaces.
-const text = (el: Element | null | undefined) => (el?.textContent ?? "").replace(/[  ]/g, " ");
+const text = (el: Element | null | undefined) => (el?.textContent ?? "").replace(/[\u00a0\u202f]/g, " ");
 
 async function render() {
   await act(async () => root.render(<SpreadsheetPane capabilityId="spreadsheet" onClose={() => undefined} />));
@@ -164,6 +163,53 @@ describe("SpreadsheetPane", () => {
     await act(async () => amount.click());
     expect(cells("output")).toEqual(["B3"]);
     expect(text(container.querySelector("output + span"))).toBe("€350.50");
+  });
+
+  it("moves the selection with the arrow keys, keeping a single focusable cell", async () => {
+    await render();
+    const table = container.querySelector("table")!;
+    const press = async (key: string) =>
+      act(async () => {
+        (document.activeElement ?? table).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      });
+    expect(container.querySelectorAll('[tabindex="0"][data-cell]')).toHaveLength(1);
+    container.querySelector<HTMLElement>('[data-cell="1:0"]')!.focus();
+
+    await press("ArrowDown");
+    await press("ArrowRight");
+    expect(cells("output")).toEqual(["B2"]);
+    expect(document.activeElement?.getAttribute("data-cell")).toBe("2:1");
+    expect(text(container.querySelector("output + span"))).toBe("€1,200.00");
+
+    // Down past the last preview row lands on the totals row; edges clamp.
+    for (const key of ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowLeft"]) await press(key);
+    expect(cells("output")).toEqual(["A4"]);
+    expect(text(container.querySelector("output + span"))).toBe("Total");
+    const focusable = [...container.querySelectorAll('[tabindex="0"][data-cell]')];
+    expect(focusable.map((el) => el.getAttribute("data-cell"))).toEqual(["4:0"]);
+  });
+
+  it("gives cells that may be cut a title with their full text", async () => {
+    const long = "A fairly long description";
+    state.load = {
+      status: "ready",
+      preview: {
+        version: 1,
+        sheets: [
+          {
+            name: "Notes",
+            columns: [{ header: "Note", type: "text" }],
+            rows: [[long], ["ok"]],
+            row_count: 2,
+            totals: null,
+          },
+        ],
+      },
+    };
+    await render();
+    const [first, second] = [...container.querySelectorAll("tbody td")];
+    expect(first.getAttribute("title")).toBe(long);
+    expect(second.hasAttribute("title")).toBe(false);
   });
 
   it("switches sheet from the bottom tabs, by click or keyboard, and says how many rows are left out", async () => {
