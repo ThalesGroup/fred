@@ -69,4 +69,4 @@ The tool description carries the steering ("when the user asks for an Excel file
 - Large tables cost output tokens: rows pass through the model. Mitigation: limits and Help Center wording; the server-side export of query results is a separate issue.
 - openpyxl does not compute cached formula values: Excel and LibreOffice recompute on open; a reader that only reads cached values (pandas without recalculation) sees empty totals. Acceptable for a download.
 - A new dependency in the fred-agents image (openpyxl + et-xmlfile, pure Python).
-- Generation runs on the default thread pool without a dedicated bound; the 50 000-cell limit keeps one call to well under a second.
+- Generation runs on the default thread pool, bounded per pod at 4 concurrent builds (fail fast over the bound, as PPT Filler); the 50 000-cell limit keeps one call to well under a second.
