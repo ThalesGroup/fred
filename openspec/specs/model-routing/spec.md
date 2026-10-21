@@ -1,8 +1,10 @@
+# Model routing Specification
+
 ## Purpose
 
 Defines how a pod turns model catalog sources into routable profiles and exposes their identity and metadata for administrator controlled access.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: A model catalog can discover chat models from a compatible endpoint
 
@@ -19,6 +21,12 @@ The catalog SHALL accept an optional OpenAI-compatible source whose configured i
 - **GIVEN** a catalog with no discovery source
 - **WHEN** the pod starts and serves its model catalog
 - **THEN** its profiles and model entries are the same as before, without a discovery request
+
+#### Scenario: Mixed gateway inventory
+
+- **GIVEN** an allowlist naming a valid chat model and a gateway response containing excluded malformed or duplicate entries
+- **WHEN** the pod starts
+- **THEN** it validates and loads the selected chat model without treating excluded entries as profiles
 
 ### Requirement: Advertised discovered models match routable models
 
