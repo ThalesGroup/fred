@@ -50,6 +50,7 @@ from pydantic import BaseModel
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.notifications.store import NotificationStore
 from control_plane_backend.platform_access.service import mark_user_join_history_deleted
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.teams.dependencies import (
@@ -149,6 +150,10 @@ def _get_prompt_store(request: Request) -> PromptStore:
 
 def _get_announcement_store(request: Request) -> AnnouncementStore:
     return get_application_container(request).get_announcement_store()
+
+
+def _get_notification_store(request: Request) -> NotificationStore:
+    return get_application_container(request).get_notification_store()
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
@@ -435,6 +440,7 @@ async def delete_user(
     ],
     prompt_store: Annotated[PromptStore, Depends(_get_prompt_store)],
     announcement_store: Annotated[AnnouncementStore, Depends(_get_announcement_store)],
+    notification_store: Annotated[NotificationStore, Depends(_get_notification_store)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rebac.check_user_permission_or_raise(
@@ -462,6 +468,7 @@ async def delete_user(
     # Before the account, so a failure here is retried rather than orphaned.
     await prompt_store.delete_favorites_for_user(user_id)
     await announcement_store.delete_seen_for_user(user_id)
+    await notification_store.delete_for_user(user_id)
     await remove_user_avatar(user_id, deps)
     try:
         await delete_user_from_service(admin, user_id)

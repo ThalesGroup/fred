@@ -36,6 +36,7 @@ from control_plane_backend.config.models import Configuration
 from control_plane_backend.marketplace_settings.store import (
     PlatformMarketplaceSettingsStore,
 )
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.dependencies import (
@@ -123,6 +124,8 @@ class TeamServiceDependencies:
     get_agent_instance_store: Callable[[], AgentInstanceStore] | None = None
     # None = no KPI for the agents a team deletion removes (test bundles).
     get_kpi_writer: Callable[[], BaseKPIWriter] | None = None
+    # None = no notifications (test bundles).
+    get_notification_service: Callable[[], NotificationService] | None = None
 
 
 def build_team_service_dependencies(
@@ -248,6 +251,7 @@ def build_team_service_dependencies(
         get_agent_marketplace_store=container.get_agent_marketplace_store,
         get_agent_instance_store=container.get_agent_instance_store,
         get_kpi_writer=container.get_kpi_writer,
+        get_notification_service=container.get_notification_service,
     )
 
 

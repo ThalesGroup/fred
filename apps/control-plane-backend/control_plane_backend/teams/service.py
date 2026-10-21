@@ -343,6 +343,9 @@ async def delete_team(
             if deps.get_agent_instance_store is not None
             else None
         )
+        # Before the team row, so a failure here is retried rather than orphaned.
+        if deps.get_notification_service is not None:
+            await deps.get_notification_service().store.delete_for_team(team_id)
         await store.delete(team_id)
 
     if deleted is not None:

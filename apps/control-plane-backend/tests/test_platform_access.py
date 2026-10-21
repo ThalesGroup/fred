@@ -1310,6 +1310,7 @@ async def test_team_deletion_protects_admin_last_source_before_external_deletes(
         rebac=access.rebac,
         get_team_metadata_store=lambda: store,
         get_agent_instance_store=None,
+        get_notification_service=None,
     )
     with pytest.raises(HTTPException) as lockout:
         await delete_team(actor, TeamId("demo"), cast(TeamServiceDependencies, deps))

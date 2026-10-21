@@ -273,6 +273,7 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         get_agent_marketplace_store=lambda: market,
         get_agent_instance_store=lambda: agents,
         get_kpi_writer=None,
+        get_notification_service=None,
     )
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
