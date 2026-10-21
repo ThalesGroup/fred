@@ -195,6 +195,7 @@ PYPI_PACKAGES := \
 	libs/fred-core \
 	libs/fred-sdk \
 	libs/fred-runtime \
+	libs/capabilities/fred-capability-code-sandbox \
 	libs/capabilities/fred-capability-document-access \
 	libs/capabilities/fred-capability-documents \
 	libs/capabilities/fred-capability-html-artifact \
