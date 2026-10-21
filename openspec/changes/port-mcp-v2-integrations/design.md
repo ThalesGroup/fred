@@ -28,7 +28,7 @@ The adapter API is beta, so pin and test a known version. Its removal of MCP-spe
 
 ### Replace the Knowledge Flow server bridge with FastMCP 4
 
-Use FastMCP 4's OpenAPI provider to source tools from the existing tagged FastAPI routes. Use ordinary ASGI authentication and request context propagation around the mounted server so the verified grant reaches the inner route. Do not implement MCP request handling or tool conversion. Mount a stateless MCP HTTP app at each existing Knowledge Flow path. Compare generated names, descriptions, input schemas, and enabled-server sets against the current projection before switching it on. Remove the `fastapi-mcp` monkey patch and dependency only after those checks pass.
+Use FastMCP 4's `from_fastapi` integration, backed by its OpenAPI provider, to source tools from the existing tagged routes. Its public route maps select the same tool sets. Use ordinary ASGI authentication and request context propagation around the mounted server so the verified grant reaches the inner route. Do not implement MCP request handling or tool conversion. Mount a stateless MCP HTTP app at each existing Knowledge Flow path and combine its lifespan with the existing app lifespan. Compare generated names, descriptions, input schemas, and enabled-server sets against the current projection before switching it on. Remove the `fastapi-mcp` monkey patch and dependency only after those checks pass.
 
 Alternative: wait for `fastapi-mcp` to release v2 support. Its upstream v2 issue remains open, and the existing private subclass/patch would still need a port. FastMCP 4 has current protocol support and an OpenAPI provider, although Fred must explicitly preserve its FastAPI authorization semantics.
 
