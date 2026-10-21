@@ -98,6 +98,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "TeamJoinLink",
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
+    "ControlPlaneNotification",
   ],
   endpoints: {
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
@@ -191,6 +192,26 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: {
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    // In-app notifications: the badge count and the list carry separate ids so
+    // marking seen refreshes the badge without refetching the open list.
+    getNotificationSummaryControlPlaneV1NotificationsSummaryGet: {
+      providesTags: [{ type: "ControlPlaneNotification" as const, id: "SUMMARY" }],
+    },
+    listNotificationsControlPlaneV1NotificationsGet: {
+      providesTags: [{ type: "ControlPlaneNotification" as const, id: "LIST" }],
+    },
+    markNotificationsSeenControlPlaneV1NotificationsSeenPost: {
+      invalidatesTags: [{ type: "ControlPlaneNotification" as const, id: "SUMMARY" }],
+    },
+    markNotificationReadControlPlaneV1NotificationsNotificationIdReadPost: {
+      invalidatesTags: [{ type: "ControlPlaneNotification" as const, id: "LIST" }],
+    },
+    deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: {
+      invalidatesTags: ["ControlPlaneNotification"],
+    },
+    clearNotificationsControlPlaneV1NotificationsDelete: {
+      invalidatesTags: ["ControlPlaneNotification"],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
@@ -1165,6 +1186,13 @@ export const {
     useLazyPatchNotePackageQuery,
   useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
     useAnnouncementExposureHistoryQuery,
+  // In-app notifications.
+  useGetNotificationSummaryControlPlaneV1NotificationsSummaryGetQuery: useNotificationSummaryQuery,
+  useListNotificationsControlPlaneV1NotificationsGetQuery: useNotificationsQuery,
+  useMarkNotificationsSeenControlPlaneV1NotificationsSeenPostMutation: useMarkNotificationsSeenMutation,
+  useMarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostMutation: useMarkNotificationReadMutation,
+  useDeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteMutation: useDeleteNotificationMutation,
+  useClearNotificationsControlPlaneV1NotificationsDeleteMutation: useClearNotificationsMutation,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
