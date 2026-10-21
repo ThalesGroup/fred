@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { WikiPageSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiPageSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { ancestorsOf, buildWikiTree, canHaveChild, findRulesPage, moveTargets, visibleNodes } from "./wikiTree";
 
 function page(id: string, overrides: Partial<WikiPageSummary> = {}): WikiPageSummary {

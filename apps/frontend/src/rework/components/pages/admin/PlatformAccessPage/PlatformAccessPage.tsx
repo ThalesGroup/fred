@@ -28,8 +28,8 @@ import {
   useRevokePlatformUserMutation,
   useImportPlatformT0Mutation,
   useSetPlatformTeamMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { AdmissionSource, PlatformAccessUser } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { AdmissionSource, PlatformAccessUser } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import PlatformAccessActivationDialog from "./PlatformAccessActivationDialog";
 import PlatformAccessAddUsersDialog from "./PlatformAccessAddUsersDialog";
 import PlatformAccessT0RefreshDialog from "./PlatformAccessT0RefreshDialog";

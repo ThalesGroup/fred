@@ -30,7 +30,7 @@ vi.mock("../../../../common/platformAccess", () => ({
   platformPath: (path: string) => `/${path.replace(/^\//, "")}`,
 }));
 vi.mock("../../../../security/KeycloakService", () => ({ KeyCloakService: { CallLogout: vi.fn() } }));
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useFreeEnrollmentPreviewQuery: () => ({
     data: state.error || state.loading ? undefined : { team_name: "Demo", cgu_required: state.required },
     error: state.error,
@@ -43,7 +43,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useEnrollFreeTeamMutation: () => [state.enroll, {}],
   useRecordFreeOpeningMutation: () => [state.record, {}],
 }));
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetUserDetailsControlPlaneV1UserGetQuery: () => {
     throw new Error("Protected user query before enrollment");
   },

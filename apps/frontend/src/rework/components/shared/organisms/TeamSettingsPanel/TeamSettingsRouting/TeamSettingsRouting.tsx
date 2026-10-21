@@ -27,13 +27,13 @@ import type {
   DisableImpact,
   TeamWithPermissions,
   UpdateTeamRoutingPolicyRequest,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   useAvailableModelProfilesQuery,
   useLazyDisableImpactQuery,
   useTeamRoutingPolicyQuery,
   useUpdateTeamRoutingPolicyMutation,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./TeamSettingsRouting.module.scss";
 
 interface TeamSettingsRoutingProps {

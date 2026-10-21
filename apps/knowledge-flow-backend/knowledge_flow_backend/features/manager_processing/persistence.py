@@ -50,11 +50,6 @@ class ScopedVectors:
                 document.metadata.update(
                     document_uid=str(d.work.document_id),
                     chunk_uid=identifier,
-                    manager_installation=str(d.work.installation_id),
-                    manager_organization=str(d.organization_id),
-                    manager_space=str(d.space_id),
-                    manager_processing=str(d.work.processing_id),
-                    manager_generation=str(d.generation),
                 )
                 self.bytes += len(to_json({"text": document.page_content, "metadata": document.metadata}))
                 if self.bytes > d.max_output_bytes:
@@ -91,7 +86,8 @@ class ScopedVectors:
             ordinal = self.aliases[identifier]
             document = self.documents[ordinal]
             stored = self.underlying.get_chunk(str(d.work.document_id), identifier)
-            if stored.get("text") != document.page_content or stored.get("metadata", {}).get("manager_generation") != str(d.generation):
+            metadata = stored.get("metadata", {})
+            if stored.get("text") != document.page_content or metadata.get("document_uid") != str(d.work.document_id) or metadata.get("chunk_uid") != identifier:
                 raise ManagerError("indexing_failed")
             records.append(to_json({"id": identifier, "text": document.page_content, "metadata": document.metadata}).decode("utf-8"))
             ordinals.append(ordinal)

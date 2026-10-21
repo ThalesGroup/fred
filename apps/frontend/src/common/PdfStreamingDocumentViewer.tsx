@@ -19,7 +19,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useTranslation } from "react-i18next";
-import { useLazyPlatformAccessStatusQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
+import { useLazyPlatformAccessStatusQuery } from "../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { getConfig } from "./config";
 import { useAuthToken } from "../security/AuthContext";
 import styles from "./PdfStreamingDocumentViewer.module.css";

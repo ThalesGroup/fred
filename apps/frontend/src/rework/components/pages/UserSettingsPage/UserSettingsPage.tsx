@@ -24,7 +24,7 @@ import { uiThemeLabel, type UiTheme } from "../../../../app/uiThemes.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
-import { useMeQuery, useMySpacesQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements.ts";
+import { useMeQuery, useMySpacesQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { getConfig } from "../../../../common/config";
 

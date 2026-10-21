@@ -25,7 +25,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const queryMock = vi.fn();
 let language = "fr";
 
-vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePatchNoteHistoryQuery: () => queryMock(),
 }));
 vi.mock("react-i18next", () => ({

@@ -1,8 +1,0 @@
-{
-  "schemaFile": "../../../../fred-manager/openapi.json",
-  "apiFile": "./fredManagerApi.ts",
-  "apiImport": "fredManagerApi",
-  "outputFile": "fredManagerOpenApi.ts",
-  "exportName": "fredManagerApi",
-  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
-}

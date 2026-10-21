@@ -14,7 +14,7 @@
 
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { CapabilityCard } from "../CapabilityCard/CapabilityCard.tsx";
 import { ToolPackCard } from "../ToolPackCard/ToolPackCard.tsx";
 import {

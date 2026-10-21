@@ -15,7 +15,7 @@
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TeamAdminCharterContent from "@shared/molecules/TeamAdminCharterContent/TeamAdminCharterContent.tsx";
-import { useAcceptTeamAdminCharterMutation } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import { useAcceptTeamAdminCharterMutation } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
 import styles from "./TeamAdminCharterPage.module.css";
 
 /** Stands in for a team's pages until its pending admin accepts the charter. */

@@ -17,7 +17,7 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
-import { useKnowledgeBaseQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import { useKnowledgeBaseQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
 import DocumentWorkspace from "../TeamResourcesPage/DocumentWorkspace/DocumentWorkspace.tsx";
 import styles from "./KnowledgeBaseDocumentsPage.module.css";
 

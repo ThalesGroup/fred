@@ -97,7 +97,7 @@ let uploadersQueryResult: { data: { id: string; first_name?: string; last_name?:
   isFetching: true,
 };
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: { id: "team-1" } }),
   useUsersByIdsQuery: () => uploadersQueryResult,
 }));

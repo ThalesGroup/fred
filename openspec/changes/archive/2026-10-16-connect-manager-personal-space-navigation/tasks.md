@@ -29,9 +29,9 @@ organization context. This change covers personal navigation and creation eligib
 
 ## Verification and review evidence
 
-- Generated contracts: `make -C apps/frontend update-fred-manager-api`.
-- Offline manager: `make -C apps/fred-manager test`, 36 unit + 5 OpenAPI tests pass.
-- Frontend focused Vitest: HomeNavPanel, HomePage and fredManagerApi, 23 tests pass.
+- Generated contracts: `make -C apps/frontend update-control-plane-api`.
+- Offline manager: `make -C apps/control-plane test`, 36 unit + 5 OpenAPI tests pass.
+- Frontend focused Vitest: HomeNavPanel, HomePage and controlPlaneApi, 23 tests pass.
   Includes delayed account change, delayed/failed/stale membership refresh and no 401 replay.
 - Full root `make code-quality` and manager `make code-quality` pass. Initial
   formatting failures were corrected before the passing runs.
@@ -58,7 +58,7 @@ organization context. This change covers personal navigation and creation eligib
 - Dedicated arc42 pass follows implementation review. No applied SQL migration edited,
   no data reset, no push of this new lot. The preceding organization commit was pushed
   as explicitly requested.
-- Final real OIDC browser and integration run: `make -C apps/fred-manager test-browser`
+- Final real OIDC browser and integration run: `make -C apps/control-plane test-browser`
   passes 1 browser + 70 integration tests. Initial post-refresh browser test reloaded
   before awaited navigation; it now waits for the resulting URL before reload.
   Screenshots at 1280x900 and 390x844 inspected in ignored frontend target directory.

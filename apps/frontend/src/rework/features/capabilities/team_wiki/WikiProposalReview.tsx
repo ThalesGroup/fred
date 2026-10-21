@@ -25,7 +25,7 @@ import Button from "@shared/atoms/Button/Button";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
-import { useWikiProposalQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useWikiProposalQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { diffStat, lineDiff } from "@rework/features/teamWiki/lineDiff";
 import type { CapabilityHitlRendererProps } from "../types";
 import styles from "./WikiProposalReview.module.css";

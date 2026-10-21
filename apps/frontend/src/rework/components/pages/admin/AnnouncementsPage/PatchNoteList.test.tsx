@@ -26,13 +26,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DndContextProps } from "@dnd-kit/core";
 import en from "../../../../../locales/en/translation.json";
 import fr from "../../../../../locales/fr/translation.json";
-import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Announcement } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const orderMock = vi.fn();
 const showError = vi.fn();
 const dnd = vi.hoisted(() => ({ props: null as null | DndContextProps }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useSetPatchNoteOrderMutation: () => [orderMock, { isLoading: false }],
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({

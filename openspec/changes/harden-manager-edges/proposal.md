@@ -1,6 +1,6 @@
 ## Why
 
-The 2026-10-19 fred-manager audit (issue #3092) found five edge behaviours that differ
+The 2026-10-19 control-plane audit (issue #3092) found five edge behaviours that differ
 from the Python stack or hide operational causes. Fred's rule for this reconstruction
 is behaviour parity with Python, with no new feature.
 
@@ -19,12 +19,12 @@ is behaviour parity with Python, with no new feature.
 ### New Capabilities
 
 ### Modified Capabilities
-- `fred-manager-provisioning`: role subjects are validated before writes; revocation
+- `control-plane-provisioning`: role subjects are validated before writes; revocation
   audit reports only removed roles.
 - `document-storage`: transfers survive a graceful stop; storage failures are diagnosable.
 
 ## Impact
 
-`apps/fred-manager` (serve shutdown, role routes, audit emission, object store,
+`apps/control-plane` (serve shutdown, role routes, audit emission, object store,
 CLI import), chart deployment template/values/schema for the termination grace
 period, arc42 operations and security chapters, the branch migration note.

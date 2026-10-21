@@ -30,11 +30,11 @@ import { useFrontendProperties } from "../../../../../../hooks/useFrontendProper
 import {
   useMarketplaceAgentQuery,
   useUnpublishAgentMutation,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type {
   MarketplaceAgentDetail,
   MarketplaceAgentSummary,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { marketplaceErrorView } from "../../../TeamAgentsPage/agentMarketplace.ts";
 import styles from "./MarketplaceAgentDialog.module.css";
 

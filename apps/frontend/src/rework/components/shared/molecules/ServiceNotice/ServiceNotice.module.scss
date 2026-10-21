@@ -47,6 +47,13 @@
   gap: var(--spacing-2xs);
 }
 
+.action {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: auto;
+  padding-left: var(--spacing-m);
+}
+
 .title {
   color: var(--on-surface);
   font: var(--font-body-medium-emphasized);
@@ -55,4 +62,14 @@
 .description {
   color: var(--on-surface-muted);
   font: var(--font-body-medium);
+}
+
+.serviceNotice[data-color="info"] {
+  background: var(--info-container);
+
+  .icon,
+  .title,
+  .description {
+    color: var(--on-info-container);
+  }
 }

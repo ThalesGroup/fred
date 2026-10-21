@@ -25,7 +25,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import en from "../../../../../locales/en/translation.json";
 import fr from "../../../../../locales/fr/translation.json";
-import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Announcement } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const announcementMock = vi.fn();
 const announceMock = vi.fn();
@@ -35,7 +35,7 @@ const confirmMock = vi.fn();
 const showError = vi.fn();
 const showSuccess = vi.fn();
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePatchNoteAnnouncementQuery: () => announcementMock(),
   useAnnouncePatchNotesMutation: () => [announceMock, { isLoading: false }],
   useWithdrawPatchNoteAnnouncementMutation: () => [withdrawMock, { isLoading: false }],

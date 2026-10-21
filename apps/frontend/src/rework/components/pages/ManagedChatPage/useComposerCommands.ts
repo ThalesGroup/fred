@@ -27,7 +27,7 @@ import {
   useGetAgentInstanceSkillsQuery,
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   assemblePromptTurn,
   findCommandWords,

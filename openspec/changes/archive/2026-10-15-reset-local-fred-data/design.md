@@ -1,6 +1,6 @@
 ## Context
 
-The factory separates generic lifecycle commands from product-owned hooks. Fred has a `fred-app` release and optional `fred-manager` release. Both use database `fred`; the factory PostgreSQL instance also hosts Keycloak, OpenFGA and Temporal. Python SQL migrations run as Helm hook Jobs, not merely when deployments restart.
+The factory separates generic lifecycle commands from product-owned hooks. Fred has a `fred-app` release and optional `control-plane` release. Both use database `fred`; the factory PostgreSQL instance also hosts Keycloak, OpenFGA and Temporal. Python SQL migrations run as Helm hook Jobs, not merely when deployments restart.
 
 ## Goals / Non-Goals
 

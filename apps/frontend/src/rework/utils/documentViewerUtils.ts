@@ -145,7 +145,7 @@ export function documentPdfSourceUrl(
   fileName: string | null | undefined,
   manager = false,
 ): string {
-  if (manager) return `/fred-manager/v1/documents/${encodeURIComponent(documentUid)}/preview?artifact=native`;
+  if (manager) return `/control-plane/v1/documents/${encodeURIComponent(documentUid)}/preview?artifact=native`;
   const route = isPdfFile(fileName) ? "stream" : "pdf";
   return `/knowledge-flow/v1/raw_content/${route}/${documentUid}`;
 }

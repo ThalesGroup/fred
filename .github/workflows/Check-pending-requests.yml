@@ -153,7 +153,7 @@ jobs:
             fred-core:
               - 'libs/fred-core/**'
             control-plane:
-              - 'apps/control-plane-backend/**'
+              - 'apps/control-plane/**'
             fred-sdk:
               - 'libs/fred-sdk/**'
             fred-runtime:
@@ -217,8 +217,6 @@ jobs:
              "triggers": ["fred-core", "fred-pod"]},
             {"name": "knowledge-flow-backend", "directory": "apps/knowledge-flow-backend", "needs-pandoc": true, "integration-target": "",
              "triggers": ["knowledge-flow", "fred-core", "fred-pod"]},
-            {"name": "control-plane-backend", "directory": "apps/control-plane-backend", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["control-plane", "fred-core", "fred-sdk", "fred-pod"]},
             {"name": "fred-sdk", "directory": "libs/fred-sdk", "needs-pandoc": false, "integration-target": "",
              "triggers": ["fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-runtime", "directory": "libs/fred-runtime", "needs-pandoc": false, "integration-target": "",
@@ -251,7 +249,7 @@ jobs:
             {"name": "knowledge-flow", "backend-directory": "apps/knowledge-flow-backend", "make-target": "update-knowledge-flow-api",
              "slice-path": "apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts",
              "triggers": ["openapi-codegen", "knowledge-flow-client", "knowledge-flow", "fred-core", "fred-pod"]},
-            {"name": "control-plane", "backend-directory": "apps/control-plane-backend", "make-target": "update-control-plane-api",
+            {"name": "control-plane", "backend-directory": "apps/control-plane", "make-target": "update-control-plane-api",
              "slice-path": "apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts",
              "triggers": ["openapi-codegen", "control-plane-client", "control-plane", "fred-core", "fred-sdk", "fred-pod"]}
           ]
@@ -299,6 +297,7 @@ jobs:
           make ${{ matrix.check }}
         env:
           UV: uv
+          PROTOC: /usr/bin/protoc
 
   backend-tests:
     runs-on: ubuntu-24.04
@@ -337,6 +336,7 @@ jobs:
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv
+          PROTOC: /usr/bin/protoc
 
       - name: Test Knowledge Flow without Chroma
         if: matrix.name == 'knowledge-flow-backend'
@@ -365,6 +365,7 @@ jobs:
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv
+          PROTOC: /usr/bin/protoc
 
   frontend-package-checks:
     runs-on: ubuntu-24.04
@@ -679,33 +680,6 @@ jobs:
           cd apps/knowledge-flow-backend/
           timeout 30s make run || true
 
-  # Job to check control-plane backend
-  control-plane-backend-checks:
-    runs-on: ubuntu-24.04
-    needs: detect-changes
-    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'control-plane-backend')
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Setup Python environment
-        uses: ./.github/actions/setup-python-env
-        with:
-          working-directory: apps/control-plane-backend
-
-      - name: Check route security
-        run: |
-          cd apps/control-plane-backend/
-          make check-route-security
-
-      - name: Test backend startup
-        run: |
-          cd apps/control-plane-backend/
-          timeout 30s make run || true
-
   # Job to check OpenAPI spec drift when a backend or its generated client changes
   openapi-drift-check:
     runs-on: ubuntu-24.04
@@ -729,9 +703,20 @@ jobs:
           node-version: "22.13.0"
 
       - name: Setup backend dependencies
+        if: matrix.name != 'control-plane'
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.backend-directory }}
+
+      - name: Setup Rust toolchain
+        if: matrix.name == 'control-plane'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.0'
+
+      - name: Install protobuf compiler
+        if: matrix.name == 'control-plane'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
 
       - name: Backup current slice
         run: cp -f ${{ matrix.slice-path }} /tmp/openapi-backup.ts 2>/dev/null || true
@@ -742,6 +727,7 @@ jobs:
           make ${{ matrix.make-target }}
         env:
           UV: uv
+          PROTOC: /usr/bin/protoc
 
       - name: Check for drift
         run: |

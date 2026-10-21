@@ -18,7 +18,7 @@
 // Keycloak) so both paths share one frame reader and one context-merge rule and
 // cannot drift apart when runtime event handling changes.
 
-import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ExecutionPreparation } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { RuntimeContext } from "../../../slices/runtime/runtimeOpenApi";
 
 /**

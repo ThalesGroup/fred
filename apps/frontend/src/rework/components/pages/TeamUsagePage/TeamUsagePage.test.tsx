@@ -21,7 +21,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { TeamPermission, TeamWithPermissions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamPermission, TeamWithPermissions } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   selected: {
@@ -74,7 +74,7 @@ vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({
   default: () => <div data-testid="time-range-selector" />,
 }));
 
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useUserTokenUsageOverTimeQuery: h.neutralQuery,
   useUserTokenUsageByAgentQuery: h.neutralQuery,
   useUserTokenUsageByModelQuery: h.neutralQuery,

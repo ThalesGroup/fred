@@ -39,7 +39,7 @@ import {
   useTopAgentsByConversationsQuery,
   useTopTeamsBySessionsQuery,
   useUniqueUsersTotalQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import SkillUsageTable from "@shared/molecules/SkillUsageTable/SkillUsageTable";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";

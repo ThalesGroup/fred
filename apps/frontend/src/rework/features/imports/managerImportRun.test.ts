@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
-import type { UploadReceipt } from "../../../slices/fredManager/fredManagerOpenApi";
+import type { UploadReceipt } from "../../../slices/controlPlane/controlPlaneOpenApi";
 const identity = vi.hoisted(() => ({ uid: "", expired: false }));
 vi.mock("../../../security/KeycloakService", () => ({
   KeyCloakService: {
@@ -16,7 +16,7 @@ vi.mock("../../../security/KeycloakService", () => ({
   },
 }));
 vi.mock("../../../common/platformAccess", () => ({ handlePlatformAccessDenial: vi.fn() }));
-import { enhancedFredManagerApi as api } from "../../../slices/fredManager/fredManagerApiEnhancements";
+import { enhancedControlPlaneApi as api } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   runManagerImport,
   managerImportsSnapshot,

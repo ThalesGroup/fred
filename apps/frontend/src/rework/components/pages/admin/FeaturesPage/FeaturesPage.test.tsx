@@ -18,7 +18,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityEnablementItem, Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   applicationsEnabled: false,
@@ -51,7 +51,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => h.list,
   useListAllTeamsQuery: (arg: unknown) => {
     h.allTeamsArg = arg;

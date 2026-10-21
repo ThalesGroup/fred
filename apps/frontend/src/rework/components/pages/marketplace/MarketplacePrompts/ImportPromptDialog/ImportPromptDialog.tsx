@@ -15,7 +15,7 @@
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import CopyToTeamsDialog from "@shared/organisms/CopyToTeamsDialog/CopyToTeamsDialog.tsx";
-import { usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 interface ImportPromptDialogProps {
   open: boolean;

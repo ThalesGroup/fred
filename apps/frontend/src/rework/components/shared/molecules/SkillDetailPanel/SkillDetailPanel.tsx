@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 import { useTranslation } from "react-i18next";
-import type { SkillDetail } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { SkillDetail } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import Button from "@shared/atoms/Button/Button";

@@ -19,7 +19,7 @@
 import { useEffect } from "react";
 import { useDispatch, useSelector, useStore } from "react-redux";
 import type { ThunkDispatch, UnknownAction } from "@reduxjs/toolkit";
-import { controlPlaneApi } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { legacyControlPlaneApi } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { knowledgeFlowApi, type TaskSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { selectActiveTasks, taskSnapshotsReceived } from "./taskSlice";
 import { taskBackendFor, type TaskBackend } from "./taskKinds";
@@ -115,7 +115,7 @@ async function readBatch(
   const options = { subscribe: false, forceRefetch: true };
   const request =
     backend === "control-plane"
-      ? dispatch(controlPlaneApi.endpoints.listTasksControlPlaneV1TasksGet.initiate(args, options))
+      ? dispatch(legacyControlPlaneApi.endpoints.listTasksControlPlaneV1TasksGet.initiate(args, options))
       : dispatch(knowledgeFlowApi.endpoints.listTasksKnowledgeFlowV1TasksGet.initiate(args, options));
   loop.abort = () => request.abort();
   // Without a limit, one hung request would hold up every later round.

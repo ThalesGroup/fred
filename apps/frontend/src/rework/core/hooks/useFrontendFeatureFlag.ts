@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useFrontendBootstrap } from "../../../hooks/useFrontendBootstrap.ts";
-import type { FrontendFeatureFlags } from "../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { FrontendFeatureFlags } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 
 /** Only control-plane-declared frontend flags can be requested by UI code. */
 export type FrontendFeatureFlagName = keyof FrontendFeatureFlags;

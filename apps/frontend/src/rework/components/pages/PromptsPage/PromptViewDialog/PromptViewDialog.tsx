@@ -22,7 +22,7 @@ import { useTranslation } from "react-i18next";
 import {
   type PromptCategorySummary,
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PromptViewDialog.module.scss";
 
 /** Minimal prompt shape the read-only view can render without a team fetch. */

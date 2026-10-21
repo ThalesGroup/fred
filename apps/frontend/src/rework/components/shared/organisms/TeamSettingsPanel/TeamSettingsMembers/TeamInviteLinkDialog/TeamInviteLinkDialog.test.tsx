@@ -21,7 +21,7 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock("../../../../../../../common/platformAccess", () => ({
   platformPath: (path: string) => `/${path.replace(/^\//, "")}`,
 }));
-vi.mock("../../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useTeamJoinLinkQuery: () => ({ data: h.state, isFetching: false, isError: false }),
   useSetTeamJoinLinkMutation: () => [h.setEnabled, { isLoading: false }],
   useRegenerateTeamJoinLinkMutation: () => [h.regenerate, { isLoading: false }],

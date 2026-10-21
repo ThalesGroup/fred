@@ -6666,7 +6666,7 @@
                           "type": "string"
                         },
                         "audience": {
-                          "default": "fred-manager",
+                          "default": "control-plane",
                           "title": "Audience",
                           "type": "string"
                         },
@@ -11959,7 +11959,7 @@
                           "type": "string"
                         },
                         "audience": {
-                          "default": "fred-manager",
+                          "default": "control-plane",
                           "title": "Audience",
                           "type": "string"
                         },
@@ -17194,7 +17194,7 @@
                           "type": "string"
                         },
                         "audience": {
-                          "default": "fred-manager",
+                          "default": "control-plane",
                           "title": "Audience",
                           "type": "string"
                         },
@@ -22254,7 +22254,7 @@
                           "type": "string"
                         },
                         "audience": {
-                          "default": "fred-manager",
+                          "default": "control-plane",
                           "title": "Audience",
                           "type": "string"
                         },
@@ -27314,7 +27314,7 @@
                           "type": "string"
                         },
                         "audience": {
-                          "default": "fred-manager",
+                          "default": "control-plane",
                           "title": "Audience",
                           "type": "string"
                         },
@@ -30472,11 +30472,11 @@
                               "type": "integer"
                             },
                             "task_queue": {
-                              "default": "fred-manager-lifecycle",
+                              "default": "control-plane-lifecycle",
                               "type": "string"
                             },
                             "workflow_id_prefix": {
-                              "default": "fred-manager-lifecycle",
+                              "default": "control-plane-lifecycle",
                               "type": "string"
                             }
                           },
@@ -30626,82 +30626,60 @@
                             "limits": {
                               "additionalProperties": false,
                               "properties": {
-                                "cleanup_backlog_bytes": {
-                                  "default": 1073741824,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
-                                "cleanup_batch": {
-                                  "default": 100,
+                                "artifacts": {
+                                  "default": 2000,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "cleanup_interval_seconds": {
-                                  "default": 30,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "downloads": {
-                                  "default": 8,
+                                "batch": {
+                                  "default": 20,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "file_bytes": {
-                                  "default": 104857600,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "idle_seconds": {
-                                  "default": 30,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "organization_bytes": {
-                                  "default": 5368709120,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
-                                "personal_bytes": {
-                                  "default": 5368709120,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
-                                "receipt_retention_days": {
-                                  "default": 7,
+                                "chunks": {
+                                  "default": 100000,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "s3_seconds": {
-                                  "default": 120,
+                                "derived_bytes": {
+                                  "default": 21474836480,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "execution_seconds": {
+                                  "default": 86400,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "generations": {
+                                  "default": 32,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "output_bytes": {
+                                  "default": 536870912,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "pending": {
+                                  "default": 1000,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "poll_seconds": {
+                                  "default": 5,
                                   "format": "int64",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "team_bytes": {
-                                  "default": 5368709120,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
-                                "temp_bytes": {
-                                  "default": 838860800,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "transfer_seconds": {
-                                  "default": 300,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "uploads": {
-                                  "default": 8,
+                                "queue_seconds": {
+                                  "default": 3600,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
@@ -30733,11 +30711,11 @@
                                   "type": "integer"
                                 },
                                 "task_queue": {
-                                  "default": "fred-manager-lifecycle",
+                                  "default": "control-plane-lifecycle",
                                   "type": "string"
                                 },
                                 "workflow_id_prefix": {
-                                  "default": "fred-manager-lifecycle",
+                                  "default": "control-plane-lifecycle",
                                   "type": "string"
                                 }
                               },
@@ -32204,11 +32182,11 @@
                               "type": "integer"
                             },
                             "task_queue": {
-                              "default": "fred-manager-lifecycle",
+                              "default": "control-plane-lifecycle",
                               "type": "string"
                             },
                             "workflow_id_prefix": {
-                              "default": "fred-manager-lifecycle",
+                              "default": "control-plane-lifecycle",
                               "type": "string"
                             }
                           },
@@ -32358,82 +32336,60 @@
                             "limits": {
                               "additionalProperties": false,
                               "properties": {
-                                "cleanup_backlog_bytes": {
-                                  "default": 1073741824,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
-                                "cleanup_batch": {
-                                  "default": 100,
+                                "artifacts": {
+                                  "default": 2000,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "cleanup_interval_seconds": {
-                                  "default": 30,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "downloads": {
-                                  "default": 8,
+                                "batch": {
+                                  "default": 20,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "file_bytes": {
-                                  "default": 104857600,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "idle_seconds": {
-                                  "default": 30,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "organization_bytes": {
-                                  "default": 5368709120,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
-                                "personal_bytes": {
-                                  "default": 5368709120,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
-                                "receipt_retention_days": {
-                                  "default": 7,
+                                "chunks": {
+                                  "default": 100000,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "s3_seconds": {
-                                  "default": 120,
+                                "derived_bytes": {
+                                  "default": 21474836480,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "execution_seconds": {
+                                  "default": 86400,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "generations": {
+                                  "default": 32,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "output_bytes": {
+                                  "default": 536870912,
+                                  "format": "int64",
+                                  "type": "integer"
+                                },
+                                "pending": {
+                                  "default": 1000,
+                                  "format": "int32",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "poll_seconds": {
+                                  "default": 5,
                                   "format": "int64",
                                   "minimum": 0,
                                   "type": "integer"
                                 },
-                                "team_bytes": {
-                                  "default": 5368709120,
-                                  "format": "int64",
-                                  "type": "integer"
-                                },
-                                "temp_bytes": {
-                                  "default": 838860800,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "transfer_seconds": {
-                                  "default": 300,
-                                  "format": "int64",
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                "uploads": {
-                                  "default": 8,
+                                "queue_seconds": {
+                                  "default": 3600,
                                   "format": "int32",
                                   "minimum": 0,
                                   "type": "integer"
@@ -32465,11 +32421,11 @@
                                   "type": "integer"
                                 },
                                 "task_queue": {
-                                  "default": "fred-manager-lifecycle",
+                                  "default": "control-plane-lifecycle",
                                   "type": "string"
                                 },
                                 "workflow_id_prefix": {
-                                  "default": "fred-manager-lifecycle",
+                                  "default": "control-plane-lifecycle",
                                   "type": "string"
                                 }
                               },

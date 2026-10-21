@@ -14,7 +14,7 @@
 
 import { useMemo } from "react";
 import { mapTeamPermissions, type TeamCapabilities } from "./teamCapabilities";
-import type { TeamWithPermissions } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamWithPermissions } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /**
  * Turn a `TeamWithPermissions` you already hold (from `useGetTeamQuery`,

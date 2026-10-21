@@ -8,7 +8,7 @@ import FileDropzone from "@shared/molecules/FileDropzone/FileDropzone";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
-import { useImportBlueprintMutation } from "../../../../../slices/fredManager/fredManagerApiEnhancements";
+import { useImportBlueprintMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./ProvisioningPage.module.css";
 
 export default function ProvisioningPage() {

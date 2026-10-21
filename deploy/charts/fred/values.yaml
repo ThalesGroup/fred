@@ -1050,7 +1050,7 @@ applications:
         value: "http://knowledge-flow-backend:8000"
       # Manager/control-plane upstreams default to the release namespace's full
       # service DNS name in the Deployment template, even when env is replaced.
-      # Set FRONTEND_FRED_MANAGER_UPSTREAM / FRONTEND_CONTROL_PLANE_UPSTREAM here
+      # Set FRONTEND_CONTROL_PLANE_UPSTREAM here
       # or in extraEnvVars to override them (for example with a custom DNS domain).
       # Applications this deployment serves, as seen by the frontend gateway.
       # These are the SERVER-SIDE addresses nginx proxies to; the browser only
@@ -1924,7 +1924,7 @@ applications:
     migration: &manager-migration
       enabled: false
       scaleDown: false
-      command: [fred-manager]
+      command: [control-plane]
       args: [migrate]
     rollingUpdate: &manager-rolling-update
       maxSurge: 1
@@ -2063,7 +2063,7 @@ applications:
         - http://your.host:80
         rebac:
           api_url: http://openfga:8080
-          store_name: fred-manager
+          store_name: control-plane
       storage:
         postgres:
           host: postgres
@@ -2080,8 +2080,8 @@ applications:
           temporal:
             host: temporal:7233
             namespace: default
-            task_queue: fred-manager-lifecycle
-            workflow_id_prefix: fred-manager-lifecycle
+            task_queue: control-plane-lifecycle
+            workflow_id_prefix: control-plane-lifecycle
             connect_timeout_seconds: 5
             rpc_timeout_seconds: 10
     resources:
@@ -2091,7 +2091,7 @@ applications:
       limits:
         memory: 512Mi
   control-plane-worker:
-    enabled: true
+    enabled: false
     applicationName: control-plane-worker
     deployment: *manager-deployment
     replicaCount: 1
@@ -2105,7 +2105,7 @@ applications:
     command:
       enabled: true
       data:
-      - fred-manager
+      - control-plane
       - worker
     env: *manager-env
     extraEnvVars: []

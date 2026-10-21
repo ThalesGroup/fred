@@ -5,7 +5,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ImportBlueprintApiResponse } from "../../../../../slices/fredManager/fredManagerOpenApi";
+import type { ImportBlueprintApiResponse } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 const h = vi.hoisted(() => ({
   access: { isAdmin: true, isLoading: false, isFetching: false, isError: false, refetch: vi.fn() },
   result: {
@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => h.access }));
-vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useImportBlueprintMutation: () => [h.submit, h.result],
 }));
 import ProvisioningPage from "./ProvisioningPage";

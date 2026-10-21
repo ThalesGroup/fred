@@ -86,12 +86,12 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [probe.nameCheck],
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [probe.quotaPrecheck],
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
 }));
 
-vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
-  enhancedFredManagerApi: {
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  enhancedControlPlaneApi: {
     endpoints: { preflight: { initiate: (payload: unknown) => ({ type: "managerPreflight", payload }) } },
   },
 }));

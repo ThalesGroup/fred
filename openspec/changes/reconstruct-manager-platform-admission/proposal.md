@@ -19,7 +19,7 @@ None.
 ### Modified Capabilities
 
 - `platform-access-control`: preserve the established admission behavior through manager entry points and affected consumers.
-- `fred-manager-provisioning`: integrate admission with explicit organization attachment and existing scoped authority, without synthesizing undeclared grants.
+- `control-plane-provisioning`: integrate admission with explicit organization attachment and existing scoped authority, without synthesizing undeclared grants.
 
 ## Impact
 

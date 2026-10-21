@@ -26,7 +26,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Announcement } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const listMock = vi.fn();
 const createMock = vi.fn();
@@ -40,7 +40,7 @@ const refetchMock = vi.fn();
 const seenMock = vi.fn();
 const historyMock = vi.fn();
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useAnnouncementsQuery: () => listMock(),
   useCreateAnnouncementMutation: () => [createMock, { isLoading: false }],
   useUpdateAnnouncementMutation: () => [updateMock, { isLoading: false }],

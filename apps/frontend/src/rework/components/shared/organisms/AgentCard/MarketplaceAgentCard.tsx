@@ -21,7 +21,7 @@ import AgentMarketplaceBar, {
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import type { MarketplaceAgentSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { MarketplaceAgentSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import styles from "./AgentCard.module.scss";
 
 export interface MarketplaceAgentCardProps {

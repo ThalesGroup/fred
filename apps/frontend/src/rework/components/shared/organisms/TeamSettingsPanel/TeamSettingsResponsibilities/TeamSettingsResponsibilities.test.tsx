@@ -36,7 +36,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
   useAcceptTeamAdminCharterMutation: () => [h.accept, { isLoading: false }],
   useGetTeamAdminCharterAcceptanceQuery: (_arg: unknown, options: { skip: boolean }) => {
     h.skipped = options.skip;

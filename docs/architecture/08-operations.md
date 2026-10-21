@@ -1,88 +1,51 @@
 # 8. Operations
 
-## Configuration, secrets and identity provisioning
+## Deployment and configuration
 
-The Fred chart holds application defaults. Instance values select service addresses
-and reference existing Secrets. The manager configuration schema is generated from
-its Rust configuration types and embedded in the chart schema. API and worker mount
-the same manager configuration and lifecycle catalog; changes to either input roll
-both processes. Credentials remain environment references: the API receives its
-identity client and bootstrap secrets, while the worker needs SQL and OpenFGA access.
+The checkout-owned [k3d profile](../../deploy/k3d/README.md) deploys
+`control-plane-backend`, `knowledge-flow-worker` and `frontend` in the secondary
+cluster. The deployment factory supplies infrastructure and the generic application
+build/import/sync sequence. The frontend forwards `/control-plane/v1` to port 8222.
 
-## Deployment topology and environments
+Rust configuration is validated against its generated schema. Credentials are
+references to Secrets, never literal values in application configuration.
+`control-plane serve` supervises HTTP, original-storage cleanup, the processing
+outbox and lifecycle work in one process. Knowledge Flow runs its Temporal worker.
+There is no separate `control-plane worker` command in this runtime.
 
-The default Fred release has five deployments: `control-plane-backend` and
-`control-plane-worker` run the Rust manager, `knowledge-flow-backend` and
-`knowledge-flow-worker` run Knowledge Flow, and `frontend` serves the existing UI.
-Each API/worker pair shares its backend image. The Python control-plane and agent
-runtime do not run. Existing UI requests for unimplemented APIs fail at request time.
+## Ingestion preparation
 
-The unchanged deployment factory builds the Fred checkout and synchronizes its
-`fred-app` release. The chart retains the standard control-plane service name,
-port and identity client. Existing manager state remains in database `fred`,
-OpenFGA store `fred-manager` and lifecycle queue/prefix `fred-manager-lifecycle`.
-The frontend keeps the public `/fred-manager/v1` contract and forwards it to the
-control-plane API. The factory's common Temporal host/namespace configure lifecycle
-work; the lifecycle queue and workflow prefix remain manager-owned.
+The prepare hook reads the rendered worker configuration and exports the processing
+contract from the built worker image. It provisions the required storage and service
+identities and the OpenSearch pipeline. OpenSearch index permissions use the
+configured `manager_processing.vector_store.index` and, when enabled, the configured
+KPI index. Permission targets must be concrete index names; wildcards are refused
+before any provisioning. The document index name is independent of the backend name.
 
-A pre-install/pre-upgrade hook applies the embedded baseline SQL schema using only the
-database connection. API startup also verifies/applies it, and refuses a schema or
-OpenFGA model that differs from the binary's. An upgrade
-replaces the former manager-named workloads within the same Fred release. The chart
-refuses a separately owned manager deployment; retiring that release is an explicit
-operator action. Application rollout is not atomic. A failed sync is retried with
-the same checkout and command, retaining infrastructure, credentials and data.
+The hook does not infer resources from a component-name prefix. The worker uses the
+same rendered configuration as the permission setup. The local profile selects
+`document-vectors`, separately from Swift's retrieval index.
 
-## Background work and scheduling
+## SQL migrations and recovery
 
-`fred-manager worker` runs the manager-owned Temporal lifecycle schedule on its
-own queue. SQL receipts are the durable work source; acceptance has no Temporal
-RPC. The worker polls due operations, applies bounded cleanup activities and
-retains incomplete work for later sweeps. HTTP startup does not connect to Temporal.
-The same supervised process runs the optional processing outbox independently of
-lifecycle enablement. It delivers existing KF workflows, reconciles acknowledgments
-and expires work; disabling admission still drains accepted attempts.
-[Manager operations](A3-manager-operations.md#space-deletion-lifecycle) defines
-configuration, activation, progress and recovery.
+The pre-install/pre-upgrade Job invokes `control-plane migrate`, applying the
+embedded, numbered SQLx migration chain. API startup checks versions and checksums;
+it never modifies the schema. Applied migrations are immutable. See the
+[SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) and
+[SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution).
 
-Original-storage cleanup runs inside API processes, using SQL leases and bounded
-S3 inventory pages. It has no Temporal dependency. Optional `storage.content`
-configuration enables a dedicated bucket namespace and a bounded temporary volume
-on the API only. The default deployment leaves content storage unconfigured;
-folder browsing stays available. The [storage operations reference](A3-manager-operations.md#original-storage)
-defines provider validation, limits, secrets and restore ordering.
+SQL and its matching object namespace form one backup unit. Restore suspends
+uploads and cleanup until both are consistent. Application deployment does not
+migrate existing Knowledge Flow documents or rename persisted resources.
 
-## Logs, audit, metrics and diagnostics
+The Rust ingestion profile does not support application data reset. The reset
+helper rejects this configuration before mutation; its Swift erasure contract
+must not be widened to include Rust document resources. Recreating a disposable
+secondary installation is a separate, explicit operator action.
 
-## Migration, backup and recovery
+## Logs and lifecycle
 
-Manager does not migrate Knowledge Flow documents; data from an existing Fred
-installation is the concern of a separate migration application. SQL and the
-matching object namespace form one
-backup unit; restore suspends uploads and cleanup until both are consistent. The
-[migration note](../swift/ops/migrations/rust-fred-manager.md) defines activation
-and rollback constraints.
-
-On a dedicated local k3d, the factory's `make k3d-app-reset DIR=<fred checkout>`
-previews a Fred data reset; `CONFIRM=reset` executes it. The product-owned
-[reset hook](../../deploy/k3d/reset_data.py) retains Keycloak accounts, credentials,
-installed images and infrastructure. It clears Fred data and authorization together,
-including manager consent and bootstrap state, and removes pending Temporal work.
-The same account therefore repeats CGU acceptance and platform bootstrap; importing
-the bundle recreates spaces and grants while reusing existing Keycloak identities.
-
-The hook recognizes the integrated five-process release and the previous split
-composition. It refuses other applications and unsupported storage configurations. It
-stops producers before deletion, replays installed SQL migrations and waits for
-service readiness before reporting success. A partial failure leaves Fred stopped
-and retains original replica counts for retry; it provides no data rollback.
-For a changed manager baseline/model, `K3D_RESET_FOR_UPGRADE=1` skips installed
-application migrations and leaves Fred stopped for the target release. It recreates
-validated local manager buckets before returning. Known manager derived/index
-resources are cleared with the SQL state; external storage or Temporal configuration
-is refused before deletion, even when processing admission is disabled.
-This local reset is separate from production backup and recovery procedures.
-
-## Implementation references
-
-[Manager configuration, security audit and deployment](A3-manager-operations.md).
+Lifecycle and ingestion use SQL receipts and bounded cleanup/reconciliation.
+Disabling new ingestion does not discard accepted work. See the
+[operations reference](A3-manager-operations.md) for logging, credentials,
+retention and failure handling.

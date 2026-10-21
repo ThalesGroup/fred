@@ -144,14 +144,16 @@ class ManagedIngestionService(IngestionService):
 
 
 async def manager_service(source: str | None, stage: Stage, *, file=None):
+    context = ApplicationContext.get_instance()
+    settings = context.configuration.manager_processing
     if source is None or not source.startswith("manager:"):
+        if settings is not None and settings.enabled:
+            raise exceptions.ApplicationError("manager worker requires a manager document source", non_retryable=True)
         return None
     try:
         _, installation, operation = source.split(":")
         installation = UUID(installation)
         operation = UUID(operation)
-        context = ApplicationContext.get_instance()
-        settings = context.configuration.manager_processing
         if settings is None or not settings.enabled:
             raise ValueError("manager processing disabled")
         info = activity.info()

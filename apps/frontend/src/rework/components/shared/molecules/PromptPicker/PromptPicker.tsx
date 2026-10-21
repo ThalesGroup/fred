@@ -19,7 +19,7 @@ import { useTranslation } from "react-i18next";
 import type {
   ContextPromptSummary,
   PromptCategorySummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
 import styles from "./PromptPicker.module.css";
 

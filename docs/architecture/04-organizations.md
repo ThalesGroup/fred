@@ -11,7 +11,7 @@ person's business context, not a space selector or a login preference.
 
 | Concept | Meaning |
 | --- | --- |
-| Identity | The authenticated Keycloak subject, not an email domain or a browser parameter. |
+| Identity | The authenticated UID from the configured identity provider, not an email domain or a browser parameter. |
 | Organization | The unique organization containing the person's committed direct space roles, including owner and admin roles. |
 | Team and project | Selectable workspaces inside that organization, subject to their own permissions. |
 | Personal space | A private workspace managed by the same organization; attachment does not create it. |
@@ -103,7 +103,10 @@ space's authority; read and scope probes use immutable space identifiers.
 
 The platform registry exposes active organizations, independently of content
 membership, in pages of at most 100 names/identifiers. Only admitted platform owners
-can list or create them. HTTP creation resolves the exact existing owner/admin
+can list or create them. The form searches candidates after two characters and
+lets the owner select each contact independently. Keycloak searches the realm;
+the local OIDC directory searches personal profiles already observed during
+authenticated onboarding, before or after consent. HTTP creation resolves the exact existing owner/admin
 usernames and writes those two direct roles, with no implicit member grant. One
 account may hold both roles. Name uniqueness and each nominee's single organization
 attachment are rechecked under the platform lock before guarded publication.

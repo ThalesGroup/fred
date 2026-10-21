@@ -20,7 +20,7 @@ import type {
   ManagedAgentInstanceSummary,
   MarketplacePromptSummary,
   PromptSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 
 /** Max results shown per group (Agents / Teams / Prompts). */
 export const HOME_SEARCH_GROUP_CAP = 5;

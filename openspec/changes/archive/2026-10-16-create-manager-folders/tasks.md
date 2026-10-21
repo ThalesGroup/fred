@@ -49,7 +49,7 @@ role contracts; this is not approval of the whole historical branch or deploymen
 - Root `make code-quality` passes across all modules, including frontend TypeScript,
   Prettier and ESLint.
 - Manager Clippy, Rustfmt and model consistency pass. Generated client refreshed
-  with `make update-fred-manager-api`; DTO output remains unchanged.
+  with `make update-control-plane-api`; DTO output remains unchanged.
 - Architecture generated blocks and all Mermaid renders pass after correcting a
   sequence-label semicolon. Migration check passes with existing seven branch notes.
 - The first browser attempts failed before the feature on cold Vite graph loading;

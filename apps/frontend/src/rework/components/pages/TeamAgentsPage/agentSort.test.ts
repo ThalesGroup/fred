@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ManagedAgentInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { sortAgents } from "./agentSort";
 
 // --- helpers ---------------------------------------------------------------

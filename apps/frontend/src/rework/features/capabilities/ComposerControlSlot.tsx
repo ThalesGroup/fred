@@ -26,7 +26,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatControlDescriptor } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import { COMPOSER_CHIP_WIDGETS } from "./ReasoningChip";

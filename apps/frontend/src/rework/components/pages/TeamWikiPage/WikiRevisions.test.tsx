@@ -48,7 +48,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError, showSuccess: vi.fn() }),
 }));
 
-import { enhancedControlPlaneApi } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { enhancedControlPlaneApi } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { WikiRevisions } from "./WikiRevisions";
 
 interface FakeRevision {
@@ -69,7 +69,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-describe("WikiRevisions — against the real controlPlaneApi store", () => {
+describe("WikiRevisions — against the real legacyControlPlaneApi store", () => {
   let allRevisions: FakeRevision[];
   let restoreShouldFail: boolean;
   let revisionsGetCount: number;

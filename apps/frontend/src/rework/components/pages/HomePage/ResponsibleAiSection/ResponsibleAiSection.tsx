@@ -25,7 +25,7 @@ import {
   useBulkDeleteMySessionsMutation,
   useMyInactiveSessionsQuery,
   useUserTokenUsageOverTimeQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { HomePeriod } from "../HomePage.tsx";
 import { formatCompactTokens, homePeriodRange } from "../homePeriod.ts";

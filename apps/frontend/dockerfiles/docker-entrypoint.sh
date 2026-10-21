@@ -44,8 +44,6 @@ set -eu
 # tune it. Layout and variables: apps/frontend/README.md, "Theme overlay".
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
-: "${FRONTEND_FRED_MANAGER_UPSTREAM:=http://control-plane-backend:8222}"
-: "${FRONTEND_FRED_MANAGER_API_PREFIX:=/control-plane}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
 : "${FRONTEND_EVALUATION_UPSTREAM:=http://fred-evaluation-backend}"
 : "${FRONTEND_CLIENT_MAX_BODY_SIZE:=150m}"
@@ -191,7 +189,6 @@ map $request_uri $fred_log_route {
     ~^/fred/agents/v2(?:/|[?]|$) agent;
     ~^/knowledge-flow(?:/|[?]|$) knowledge-flow;
     ~^/control-plane(?:/|[?]|$) control-plane;
-    ~^/fred-manager(?:/|[?]|$) fred-manager;
     ~^/evaluation(?:/|[?]|$) evaluation;
     ~^/apps(?:/|[?]|$) application-ui;
     ~^/app-services(?:/|[?]|$) application-service;
@@ -231,31 +228,20 @@ server {
     }
 
     location /knowledge-flow/ {
-        proxy_pass ${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM};
+        set \$fred_knowledge_flow_upstream ${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM};
+        proxy_pass \$fred_knowledge_flow_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    location /fred-manager/ {
-        # Keep generated manager routes stable while the deployment uses control-plane.
-        set \$fred_manager_upstream ${FRONTEND_FRED_MANAGER_UPSTREAM};
-        rewrite ^/fred-manager/(.*)$ ${FRONTEND_FRED_MANAGER_API_PREFIX}/\$1 break;
-        proxy_pass \$fred_manager_upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 3600;
-        proxy_send_timeout 3600;
     }
 
     location /control-plane/ {
         set \$fred_control_plane_upstream ${FRONTEND_CONTROL_PLANE_UPSTREAM};
         proxy_pass \$fred_control_plane_upstream;
+        proxy_read_timeout 3600;
+        proxy_send_timeout 3600;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -428,7 +414,25 @@ cat <<'EOF'
         try_files $uri =404;
     }
 
+    # Hashed bundles never change, so cache them for good; a missing one must
+    # 404, not fall back to index.html, which the browser rejects as a module.
+    location ^~ /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+
+        # ^~ skips the \.mjs$ location below, and the pdf.js worker lives here.
+        location ~ \.mjs$ {
+            try_files $uri =404;
+            default_type application/javascript;
+            types {
+                application/javascript                       mjs;
+            }
+        }
+    }
+
+    # index.html names the current chunks; a cached copy points at a past deploy.
     location / {
+        add_header Cache-Control "no-cache";
         try_files $uri /index.html;
     }
 

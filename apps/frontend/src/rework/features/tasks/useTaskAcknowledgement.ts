@@ -14,7 +14,7 @@
 
 import { useState } from "react";
 import { useDispatch, useStore } from "react-redux";
-import { useAcknowledgeTaskMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useAcknowledgeTaskMutation } from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { taskBackendFor } from "./taskKinds";
 import { taskAcknowledged, type TasksState } from "./taskSlice";

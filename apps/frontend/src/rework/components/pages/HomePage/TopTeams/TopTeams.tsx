@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
-import { useUserTopTeamsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useUserTopTeamsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { HomePeriod } from "../HomePage.tsx";
 import { homePeriodRange } from "../homePeriod.ts";

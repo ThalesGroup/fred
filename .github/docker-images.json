@@ -51,8 +51,8 @@
     },
     {
       "name": "control-plane-backend",
-      "context": "apps/fred-manager",
-      "dockerfile": "apps/fred-manager/dockerfiles/Dockerfile-prod",
+      "context": "apps/control-plane",
+      "dockerfile": "apps/control-plane/dockerfiles/Dockerfile-prod",
       "build_args": "",
       "publish": true
     },
@@ -113,10 +113,6 @@
     {
       "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-dev",
       "reason": "Stale: puts scripts/ at /app/scripts and the project at /app/knowledge-flow-backend, so the Makefile include ../../scripts/makefiles/config/INFO-knowledge-flow.mk misses and make dev fails. It also lays fred-core out at /app/fred-core while pyproject.toml resolves it at ../../libs/fred-core. Delete or repair, then move it to images."
-    },
-    {
-      "dockerfile": "apps/control-plane-backend/dockerfiles/Dockerfile-prod",
-      "reason": "The reconstruction branch builds the control-plane-backend image from Rust fred-manager. Python source remains for reconstruction reference, but is not published under that image name."
     }
   ]
 }

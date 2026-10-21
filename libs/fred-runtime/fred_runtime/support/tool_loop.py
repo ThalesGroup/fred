@@ -41,6 +41,8 @@ from typing import Any, Dict, List
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
+from .thinking import extract_thinking_text, is_thinking_block
+
 logger = logging.getLogger(__name__)
 
 
@@ -271,6 +273,9 @@ def _message_char_len(message: Any) -> int:
         for block in content:
             if isinstance(block, str):
                 total += len(block)
+            elif is_thinking_block(block):
+                # Replayed natively for Mistral, so it counts toward the budget.
+                total += len(extract_thinking_text(block))
             elif isinstance(block, dict):
                 text = block.get("text")
                 if isinstance(text, str):

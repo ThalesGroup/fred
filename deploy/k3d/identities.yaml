@@ -1,0 +1,4 @@
+clients:
+  - id: knowledge-flow-worker
+    secret: KEYCLOAK_MANAGER_WORKER_CLIENT_SECRET
+    grants: []

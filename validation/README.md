@@ -3,7 +3,7 @@
 This is **not** a test of the deployment-factory itself. It is a small pytest app,
 now living inside the `fred` monorepo itself (`validation/`, a sibling of `apps/`
 and `libs/`), that logs in **as the real users** defined in
-[`../apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/users.json`](../apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/users.json)
+[`../apps/control-plane/tests/fixtures/import_export/demo_provisioning/users.json`](../apps/control-plane/tests/fixtures/import_export/demo_provisioning/users.json)
 (alice, bob, phil, ...) and asserts the **authorization matrix** expected by the
 no-grant runtime authorization model.
 
@@ -15,7 +15,7 @@ the chosen environment before running it.
 It reads the user/role/team matrix straight from that fixture, so there is **no
 drift**: change the users there and the assertions follow. That same fixture is
 also the checked-in source for `make build-demo-bundle` (in
-`apps/control-plane-backend`), the zip an operator uploads via Admin > Migration
+`apps/control-plane`), the zip an operator uploads via Admin > Migration
 to actually provision the users/teams/roles this suite expects to find.
 
 On a fresh Swift stack, the suite **verifies** (never provisions) the
@@ -76,7 +76,7 @@ This is the current black-box release-validation mode.
    OpenFGA, OpenSearch, Temporal and the other backing services.
 2. Start the Fred applications manually from the `swift` checkout, in separate
    terminals, using their `configuration_prod.yaml`:
-   - `apps/control-plane-backend`
+   - `apps/control-plane`
    - `apps/fred-agents`
    - `apps/knowledge-flow` / worker if the tested flow needs it
    - `apps/frontend` if you want to validate the browser-facing proxy path
@@ -141,7 +141,7 @@ remains future work.
 | `FRED_USER_PASSWORD` | `Azerty123_` | Fallback password, used only for a user the fixture has no per-user password for (each of the 15 fixture users normally carries its own `password` field - see `factory_config.FactoryUser.password`) |
 | `FRED_CONTROL_PLANE_URL` | `http://localhost:8222/control-plane/v1` | Control-plane API base. In localhost auth/isolation mode this is the direct control-plane app, not the runtime/frontend origin. |
 | `FRED_RUNTIME_PUBLIC_BASE` | `http://localhost:8000` | Public origin used to resolve ingress-relative runtime URLs returned by `prepare-execution`, e.g. direct `fred-agents` or the frontend origin for proxy-path validation. |
-| `FRED_CONFIG_PATH` | `../apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/users.json` | Source of truth for users/roles |
+| `FRED_CONFIG_PATH` | `../apps/control-plane/tests/fixtures/import_export/demo_provisioning/users.json` | Source of truth for users/roles |
 | `FRED_TEST_TEAM` | `fredlab` | Collaborative team used for isolation checks |
 | `FRED_TEST_AGENT_ID` | `fred.github.test_assistant` | Public no-LLM agent used for deterministic runtime execution |
 | `FRED_KNOWLEDGE_FLOW_URL` | `http://localhost:8111/knowledge-flow/v1` | knowledge-flow-backend base, started manually like the other apps. Required by `test_document_access.py`; checked lazily, not at session start. |
@@ -448,8 +448,10 @@ injection is performed against the shared deployment.
 
 ## Folder inventory and deletion
 
-`scenarios/test_folder_inventory.py` covers the known-folder part of
-[#2845](https://github.com/ThalesGroup/fred/issues/2845). The default case creates
+`scenarios/test_folder_inventory.py` covers
+[#2845](https://github.com/ThalesGroup/fred/issues/2845). The tabular case uploads
+one team CSV and checks that discovery (team-scoped and unscoped), description and a
+SQL query all reach it. The folder case creates
 three processed documents, checks the folder detail and paginated listing, then
 deletes the folder. Store audit counts and the team's storage counter must first
 increase by the fixture's exact contribution, then return to their baseline.
@@ -458,17 +460,25 @@ read-only store audits, the demo editor, ingestion/embeddings, and an otherwise
 idle local deployment: concurrent imports/deletions invalidate the count checks.
 No Test Assistant or chat model is required for this focused campaign.
 
+This campaign does not call the label endpoints and therefore does not validate
+PostgreSQL label filtering. The separate fred-core
+`fred_core/tests/integration/test_postgres_document_store_sql.py` suite executes
+all three label queries against a real PostgreSQL instance. SQLite service tests
+cover controlled stale-write races with an OpenFGA double; those are not live
+OpenFGA integration evidence.
+
 ```bash
 make integration-test-k3d VALIDATION_ARGS="scenarios/test_folder_inventory.py"
 
-# Explicitly create 1,001 extra readable documents plus 20 processed target docs:
+# Explicitly create the large background corpora (1,001 for the folder case,
+# 3,000 for the tabular case):
 FRED_VALIDATION_LARGE_CORPUS=1 make integration-test-k3d \
   VALIDATION_ARGS="scenarios/test_folder_inventory.py"
 ```
 
-The large case is skipped by default. It uploads the background corpus in batches
-of 50 through `/upload-documents`, without scheduling embeddings for it. It then
-checks the small target folder amid more than 1,000 readable documents. Allow time
+The large cases are skipped by default. They upload the background corpus in batches
+of 50 through `/upload-documents`, without scheduling embeddings for it. They then
+check the small target folder, or the CSV, amid more than 1,000 readable documents. Allow time
 for upload, authorization, store audits and cleanup; this is a correctness campaign,
 not a latency benchmark. Use only a disposable local test deployment with sufficient
 quota. The ordering of a real OpenFGA ListObjects result is not guaranteed; the

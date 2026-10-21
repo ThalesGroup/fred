@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { ApplicationSummary } from "../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { ApplicationSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { applicationFrameTarget, parseApplicationFrameMessage } from "./applicationHost.ts";
 
 function summary(uiPrefix: string): ApplicationSummary {

@@ -20,7 +20,7 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { TeamWithPermissions } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import TeamInviteLinkDialog from "./TeamInviteLinkDialog/TeamInviteLinkDialog.tsx";
 import { getConfig } from "../../../../../../common/config";

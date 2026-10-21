@@ -20,7 +20,7 @@ import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx"
 import { splitDuration } from "@shared/molecules/ScheduleField/ScheduleField.tsx";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { KnowledgeBaseInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { KnowledgeBaseInstanceSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 // Share the agent card layout; document navigation uses the standard Button
 // appearance rather than the animated conversation action.
 import styles from "../AgentCard/AgentCard.module.scss";

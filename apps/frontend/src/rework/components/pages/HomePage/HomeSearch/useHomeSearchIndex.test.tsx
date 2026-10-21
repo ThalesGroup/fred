@@ -5,7 +5,7 @@
 import { act, Component, useState, type PropsWithChildren } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   bootstrap: { data: undefined as { available_teams: Team[] } | undefined, isLoading: false },
@@ -13,7 +13,7 @@ const h = vi.hoisted(() => ({
   agents: vi.fn(() => ({ unwrap: () => Promise.reject(new Error("unavailable")) })),
   prompts: vi.fn(() => ({ unwrap: () => Promise.reject(new Error("unavailable")) })),
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery: () => ({
     ...h.bootstrap,
     isFetching: h.bootstrap.isLoading,
@@ -22,7 +22,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery: () => ({ data: undefined }),
   useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery: () => [h.prompts],
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useLazyTeamAgentInstancesQuery: () => [h.agents],
 }));
 // Keep both the real search hook and the real bootstrap adapter: mocking the

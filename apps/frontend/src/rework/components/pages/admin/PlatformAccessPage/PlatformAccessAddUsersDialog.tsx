@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import AddPeopleDialog from "@shared/organisms/AddPeopleDialog/AddPeopleDialog";
-import type { PlatformAccessUser } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { usePlatformAccessUsersQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { PlatformAccessUser } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { usePlatformAccessUsersQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 
 const PAGE_SIZE = 25;
 

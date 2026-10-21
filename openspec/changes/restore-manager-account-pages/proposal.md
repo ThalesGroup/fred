@@ -21,7 +21,7 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: extend the existing admitted account journey with the shared profile, preferences, legal pages and release notes, retaining manager authority and no implicit membership.
+- `control-plane-provisioning`: extend the existing admitted account journey with the shared profile, preferences, legal pages and release notes, retaining manager authority and no implicit membership.
 
 ## Impact
 

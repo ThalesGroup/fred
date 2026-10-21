@@ -39,7 +39,7 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: extend the imported-person journey with existing
+- `control-plane-provisioning`: extend the imported-person journey with existing
   personal-space navigation and current-authority reuse of that space.
 
 ## Impact

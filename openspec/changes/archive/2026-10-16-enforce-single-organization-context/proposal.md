@@ -24,7 +24,7 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: unique organization attachment and implicit home context.
+- `control-plane-provisioning`: unique organization attachment and implicit home context.
 
 ## Impact
 

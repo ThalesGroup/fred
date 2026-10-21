@@ -22,12 +22,12 @@ import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstr
 import {
   useImportMarketplaceAgentMutation,
   useMarketplaceAgentImportTargetsQuery,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type {
   AgentCopyCapability,
   AgentCopyResult,
   MarketplaceAgentSummary,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { marketplaceErrorView } from "../../../TeamAgentsPage/agentMarketplace.ts";
 import styles from "./ImportAgentDialog.module.css";
 

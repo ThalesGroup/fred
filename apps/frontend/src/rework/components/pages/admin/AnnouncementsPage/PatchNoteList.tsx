@@ -42,8 +42,8 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
-import { useSetPatchNoteOrderMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useSetPatchNoteOrderMutation } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { Announcement } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { RowActions } from "./RowControls";
 import styles from "./PatchNoteList.module.css";
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useEffect } from "react";
-import { useMySpacesQuery } from "../../../../../../slices/fredManager/fredManagerApiEnhancements";
+import { useMySpacesQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -41,7 +41,7 @@ import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 import {
   useKnowledgeBaseDefinitionsQuery,
   useWikiAvailabilityQuery,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.

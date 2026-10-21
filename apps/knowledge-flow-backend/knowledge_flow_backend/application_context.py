@@ -515,6 +515,8 @@ class ApplicationContext:
         """
         Lazily create and cache a single async Postgres Engine for all the postgres async stores.
         """
+        if self.configuration.manager_processing and self.configuration.manager_processing.enabled:
+            raise RuntimeError("Manager processing uses the manager API, not the legacy SQL stores")
         if self._pg_async_engine is None:
             self._pg_async_engine = self._init_pg_async_engine()
         return self._pg_async_engine
@@ -1070,8 +1072,10 @@ class ApplicationContext:
                 except Exception as e:
                     logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                     raise ValueError("Invalid Keycloak URL") from e
-            # Only the refusal names the variable; secret names stay out of the log.
-            if not os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"):
+            # Manager-processing workers use their dedicated client credentials,
+            # validated by ManagerClient, rather than the legacy KF API identity.
+            manager_processing = self.configuration.manager_processing
+            if not (manager_processing and manager_processing.enabled) and not os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"):
                 raise ValueError("Missing required environment variable: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
 
         rebac_cfg = self.configuration.security.rebac

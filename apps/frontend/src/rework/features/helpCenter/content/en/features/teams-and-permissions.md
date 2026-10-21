@@ -79,6 +79,21 @@ administrator.** The initial administrators are named explicitly at creation
 time. The separation is deliberate: creating a team belongs to platform
 administration, running one belongs to the team.
 
+## The team description
+
+Every team has a **description**: a few sentences stating what the team wants
+to achieve with AI. It is required when the team is created (20 to 500
+characters) and appears on the team's card in the marketplace, so that
+everyone understands what the team is for.
+
+A team **Admin** can rewrite it at any time in the team's **Settings**, but
+cannot leave it empty.
+
+A team created before descriptions became required shows "Description to be
+completed by the team administrator." until one is written. Its Admins see a
+reminder on the team's home page and in its settings; the reminder disappears
+as soon as the description is saved.
+
 ## Team settings
 
 The **Settings** page gathers what governs the team. Access to each section

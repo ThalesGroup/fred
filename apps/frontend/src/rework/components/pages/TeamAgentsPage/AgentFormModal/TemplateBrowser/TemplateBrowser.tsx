@@ -15,7 +15,7 @@
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { AgentTemplateSummary } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { TemplateCard } from "../TemplateCard/TemplateCard.tsx";
 import styles from "./TemplateBrowser.module.css";
 

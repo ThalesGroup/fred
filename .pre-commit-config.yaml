@@ -27,12 +27,6 @@ repos:
       # Check each affected project as a whole using its existing baseline.
       # Explicit filenames would override the project's configured include list.
       - id: basedpyright
-        name: type-check-control-plane-backend
-        files: ^apps/control-plane-backend/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
-        types: [file]
-        pass_filenames: false
-        args: ["--project", "apps/control-plane-backend", "--baseline-file", "apps/control-plane-backend/.baseline/basedpyright-baseline.json"]
-      - id: basedpyright
         name: type-check-fred-agents
         files: ^apps/fred-agents/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
         types: [file]

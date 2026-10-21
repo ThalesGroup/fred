@@ -1,0 +1,61 @@
+# control-plane on the host, against the local stack of fred-deployment-factory.
+# Secrets come from config/.env.
+
+app:
+  gcu_version: v1
+  name: Control Plane
+  base_url: /control-plane/v1
+  address: 0.0.0.0
+  port: 8222
+  log_level: info
+  log_format: text
+  # One-time root platform-admin bootstrap secret, from config/.env.
+  bootstrap_token_env_var: FRED_BOOTSTRAP_TOKEN
+
+security:
+  profile: c3
+  m2m:
+    enabled: true
+    client_id: control-plane
+    secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
+    realm_url: http://localhost:8080/realms/app
+  user:
+    enabled: true
+    realm_url: http://localhost:8080/realms/app
+    client_id: app
+  authorized_origins:
+    - http://localhost:5173
+  rebac:
+    type: openfga
+    api_url: "http://localhost:9080"
+    store_name: control-plane
+
+storage:
+  # Enable after provisioning a bucket without versioning, Object Lock or lifecycle.
+  # content:
+  #   endpoint: http://localhost:8333
+  #   allow_insecure: true
+  #   bucket: app-content-documents
+  #   access_key_env_var: FRED_CONTENT_ACCESS_KEY
+  #   secret_key_env_var: FRED_CONTENT_SECRET_KEY
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: fred
+
+policies:
+  purge_catalog_path: ./config/lifecycle_policy_catalog.yaml
+
+scheduler:
+  lifecycle:
+    enabled: false
+    sweep_interval: PT10M
+    batch_size: 100
+    temporal:
+      host: localhost:7233
+      namespace: default
+      task_queue: control-plane-lifecycle
+      workflow_id_prefix: control-plane-lifecycle
+      connect_timeout_seconds: 5
+      rpc_timeout_seconds: 10

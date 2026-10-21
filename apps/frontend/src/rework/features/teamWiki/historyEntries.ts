@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { WikiRevisionSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiRevisionSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /**
  * A page's history as a timeline of events rather than a list of versions.

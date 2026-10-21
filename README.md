@@ -69,7 +69,7 @@ It is built around three platform applications and a publishable SDK stack:
 
 | Layer      | Package                                                     | Role                                                                                  |
 | ---------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Platform   | `apps/control-plane-backend`                                | Teams, sessions, agent enrollment, product APIs, `ExecutionGrant` issuance            |
+| Platform   | `apps/control-plane`                                | Teams, sessions, agent enrollment, product APIs, `ExecutionGrant` issuance            |
 | Platform   | `apps/knowledge-flow-backend`                               | Document ingestion, vectorization, retrieval                                          |
 | Platform   | `frontend`                                                  | React chat UI (SSE streaming, rich markdown, math, Mermaid) and agent management UI   |
 | Agent pods | `apps/fred-agents`                                          | First-party agent pod — the reference implementation and production execution surface |
@@ -207,7 +207,7 @@ graph TD
     subgraph FredComponents["Fred Components"]
       style FredComponents fill:#b0e57c,stroke:#333,stroke-width:2px  %% Green Color
         FredAgents["apps/fred-agents"]
-        ControlPlane["apps/control-plane-backend"]
+        ControlPlane["apps/control-plane"]
         Knowledge["knowledge-flow-backend"]
         Frontend["frontend"]
     end
@@ -284,7 +284,7 @@ When you open Fred's VS Code workspace, VS Code will load these folders:
 
 - `fred` – repo-wide files and scripts
 - `apps/fred-agents` – first-party agent pod
-- `apps/control-plane-backend` – control plane backend
+- `apps/control-plane` – control plane backend
 - `knowledge-flow-backend` – knowledge flow backend
 - `libs/fred-core`, `libs/fred-sdk`, `libs/fred-runtime` – shared libraries
 - `frontend` – React UI
@@ -336,14 +336,14 @@ All backends rely on `.env` files for secrets and `configuration.yaml` / `models
 
 - fred-agents pod: `apps/fred-agents/config/.env`, `configuration.yaml`, and `models_catalog.yaml`
 - Knowledge Flow backend: `apps/knowledge-flow-backend/config/.env` and `configuration.yaml`
-- Control Plane backend: `apps/control-plane-backend/config/.env` and `configuration.yaml`
+- Control Plane backend: `apps/control-plane/config/.env` and `configuration.yaml`
 
 1. **Copy the templates (skip if they already exist).**
 
    ```bash
    cp apps/fred-agents/config/.env.template apps/fred-agents/config/.env
    cp apps/knowledge-flow-backend/config/.env.template apps/knowledge-flow-backend/config/.env
-   cp apps/control-plane-backend/config/.env.template apps/control-plane-backend/config/.env
+   cp apps/control-plane/config/.env.template apps/control-plane/config/.env
    ```
 
 2. **Edit the `.env` files** to set the API keys, base URLs, and deployment names that match your model provider.
@@ -546,7 +546,7 @@ cd apps/fred-agents && make run
 
 ```bash
 # control-plane backend
-cd apps/control-plane-backend && make run
+cd apps/control-plane && make run
 ```
 
 ```bash
@@ -577,8 +577,8 @@ make k3d-app APP=fred DIR=<this checkout>   # build this checkout, deploy it; re
 
 Create the operator-owned `fred-model-credentials` Secret with key `OPENAI_API_KEY`
 first, as described by the factory. This checkout builds three images and deploys
-five processes in `fred-app`: manager API/worker, Knowledge Flow API/worker and frontend.
-The factory's ordinary `swift` branch is sufficient: Rust manager supplies the
+three processes in `fred-app`: control-plane, Knowledge Flow worker and frontend.
+The factory's ordinary `swift` branch is sufficient: Rust control-plane supplies the
 `control-plane-backend` image and runs under the standard control-plane deployment
 names. No manager-specific factory overlay is needed. Existing manager data and
 credentials are retained; a separately owned manager release must be retired
@@ -626,7 +626,7 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 | ---------------------- | ------------------------------ | --------------------------------------------------------------------------------- |
 | Frontend UI            | `./frontend`                   | React chat UI (SSE streaming, rich markdown/math/Mermaid) and agent management UI |
 | Knowledge Flow backend | `./apps/knowledge-flow-backend` | Document ingestion, vectorization, and retrieval                                  |
-| Control Plane backend  | `./apps/control-plane-backend` | Teams, users, agent enrollment, session metadata, `ExecutionGrant` issuance       |
+| Control Plane backend  | `./apps/control-plane` | Teams, users, agent enrollment, session metadata, `ExecutionGrant` issuance       |
 
 **Agent pods:**
 
@@ -672,11 +672,11 @@ sequence.
 | ------------------------------------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------- |
 | `apps/fred-agents/config/.env`                         | Secrets (API keys, passwords). Not committed to Git.          | Copy `.env.template` to `.env` and fill in any missing values. |
 | `apps/knowledge-flow-backend/config/.env`                   | Same as above                                                 | Same as above                                                  |
-| `apps/control-plane-backend/config/.env`               | Same as above                                                 | Same as above                                                  |
+| `apps/control-plane/config/.env`               | Same as above                                                 | Same as above                                                  |
 | `apps/fred-agents/config/models_catalog.yaml`          | Chat profiles, local default/agent overrides, provider settings. | Edit profiles and set `default_profile_by_capability.chat`.    |
 | `apps/fred-agents/config/configuration.yaml`           | Pod runtime settings (base URL, feature flags, MCP catalog).  | -                                                              |
 | `apps/knowledge-flow-backend/config/configuration.yaml`     | Chat/embedding/vision model settings, ingestion options.      | -                                                              |
-| `apps/control-plane-backend/config/configuration.yaml` | Team/user policy settings, runtime catalog sources.           | -                                                              |
+| `apps/control-plane/config/configuration.yaml` | Team/user policy settings, runtime catalog sources.           | -                                                              |
 
 ### Supported Model Providers
 

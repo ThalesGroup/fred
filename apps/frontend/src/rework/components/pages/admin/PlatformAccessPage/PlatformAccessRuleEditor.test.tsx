@@ -3,8 +3,8 @@
 import { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import type { PlatformAccessState } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import type { AdmissionSource } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PlatformAccessState } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { AdmissionSource } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 const hooks = vi.hoisted(() => ({
   preview: vi.fn(),
   save: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserName: () => "me", GetUserId: () => "me-id" },
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePlatformAccessOwnClaimsQuery: () => ({
     data: {
       claims: {

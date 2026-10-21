@@ -11,10 +11,9 @@ on:
       - swift
     # Pull requests only: a base-branch push still checks every schema.
     paths:
-      - 'apps/control-plane-backend/**'
       - 'apps/knowledge-flow-backend/**'
       - 'apps/fred-agents/**'
-      - 'apps/fred-manager/**'
+      - 'apps/control-plane/**'
       - 'libs/fred-*/**'
       - 'libs/capabilities/**'
       - 'deploy/charts/**'
@@ -39,9 +38,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - app: control-plane-backend
-            dir: apps/control-plane-backend
-            uv_args: --extra dev
           - app: knowledge-flow-backend
             dir: apps/knowledge-flow-backend
             uv_args: --extra dev
@@ -73,8 +69,8 @@ jobs:
         run: make check-config-files
         working-directory: ${{ matrix.dir }}
 
-  check-manager-config:
-    name: "fred-manager configuration schema"
+  check-control-plane-config:
+    name: "control-plane configuration schema"
     runs-on: ubuntu-latest
     container: rust:1.99.0-slim-trixie
     steps:
@@ -82,13 +78,13 @@ jobs:
       - name: Install protobuf compiler
         run: apt-get update && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev
       - name: Verify the configuration schema against the Rust types
-        working-directory: apps/fred-manager
+        working-directory: apps/control-plane
         run: cargo test --locked --test openapi configuration_schema_is_generated_offline_and_matches_the_chart_input
 
   check-chart-schema:
     name: "Helm chart values schema"
     runs-on: ubuntu-latest
-    needs: [check-config, check-manager-config]
+    needs: [check-config, check-control-plane-config]
     steps:
       - uses: actions/checkout@v4
 

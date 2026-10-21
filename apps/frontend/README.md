@@ -1,7 +1,7 @@
 # Fred Frontend
 
 On `chore/rust-rebac`, the [manager first-user journey](#manager-provisioning)
-requires fred-manager while preserving the complete existing UI. Non-migrated
+requires control-plane while preserving the complete existing UI. Non-migrated
 features keep their existing service calls and ordinary loading/error states.
 
 Fred frontend is a node React/Typescript application. It uses vite.js.
@@ -29,7 +29,7 @@ make docker-run
 ```
 
 The production container serves static assets with nginx and now proxies
-`/fred/agents/v2`, `/knowledge-flow`, `/control-plane` and `/fred-manager` to backend
+`/fred/agents/v2`, `/knowledge-flow`, `/control-plane` to backend
 upstreams.
 The image defaults are cluster-friendly service DNS names
 (`fred-agents`, `knowledge-flow-backend:8000`, and `control-plane-backend:8222`
@@ -44,9 +44,7 @@ make docker-run \
   FRONTEND_DOCKER_NETWORK=fred-shared-network \
   FRONTEND_AGENTIC_UPSTREAM=http://fred-agents \
   FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://knowledge-flow-backend:8111 \
-  FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222 \
-  FRONTEND_FRED_MANAGER_UPSTREAM=http://control-plane-backend:8222 \
-  FRONTEND_FRED_MANAGER_API_PREFIX=/control-plane
+  FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222
 ```
 
 Production nginx writes escaped JSON access events to stdout: event time, status-derived
@@ -186,7 +184,7 @@ The frontend reads two configuration surfaces during startup:
 | Surface                            | Owner                                           | Purpose                                                                                                                                                                                |
 | ---------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/config.json`                     | frontend static asset / Helm frontend ConfigMap | Router base path, backend URLs, and static branding `properties` such as `siteDisplayName`, `siteTitle`, logos, favicons, agent nicknames, support links, and default avatars/banners. |
-| `/fred-manager/v1/frontend/config` | fred-manager                                    | Public pre-auth runtime settings derived from backend config: `user_auth` and `gcu_version`.                                                                                           |
+| `/control-plane/v1/frontend/config` | control-plane                                    | Public pre-auth runtime settings derived from backend config: `user_auth` and `gcu_version`.                                                                                           |
 
 Authenticated manager state comes from `/me/onboarding`, then `/me` and
 `/me/spaces` after consent. The former control-plane product bootstrap is not
@@ -552,20 +550,15 @@ failure. The browser test starts without a prepared root, simulates unavailable
 non-migrated services and switches accounts in the same browser.
 
 ```sh
-make update-fred-manager-api       # offline Rust OpenAPI + generated RTK client
+make update-control-plane-api       # offline Rust OpenAPI + generated RTK client
 make install-test-browser         # install Chromium once
 make test-provisioning-browser    # isolated real import journey and integration suite
 ```
 
 Browser-test prerequisites and isolation are documented in the
-[manager README](../fred-manager/README.md#import-through-the-frontend).
-For interactive development, Vite proxies `/fred-manager` to `http://localhost:8400`;
-`VITE_BACKEND_URL_FRED_MANAGER` overrides this target. Production nginx uses
-`FRONTEND_FRED_MANAGER_UPSTREAM` (default `http://control-plane-backend:8222`)
-and rewrites the public prefix to `FRONTEND_FRED_MANAGER_API_PREFIX`
-(default `/control-plane`). It resolves that service at request time,
-so nginx can start before manager DNS is available. The application itself
-requires manager and shows an explicit reload action when startup configuration
-is unavailable. `make docker-run`
-uses `http://host.docker.internal:8400` and prefix `/fred-manager` by default.
-Browser calls retain `/fred-manager/v1` and the bearer header in both cases.
+[manager README](../control-plane/README.md#import-through-the-frontend).
+For interactive development, Vite proxies `/control-plane` to `http://localhost:8222`;
+`VITE_BACKEND_URL_CONTROL_PLANE` overrides this target. Production nginx uses
+`FRONTEND_CONTROL_PLANE_UPSTREAM` (default `http://control-plane-backend:8222`).
+It resolves that service at request time. Browser calls retain `/control-plane/v1`
+and the bearer header in both cases.

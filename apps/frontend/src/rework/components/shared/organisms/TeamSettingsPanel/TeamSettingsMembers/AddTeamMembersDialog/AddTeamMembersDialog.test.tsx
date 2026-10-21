@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TeamWithPermissions, UserSummary } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamWithPermissions, UserSummary } from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -41,7 +41,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: h.showError, showWarn: vi.fn(), showInfo: vi.fn() }),
 }));
 
-vi.mock("../../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useAddTeamMemberMutation: () => [h.addTeamMember],
   useGrantTeamMemberRoleMutation: () => [h.grantTeamMemberRole],
   useSearchCandidateTeamMembersQuery: () => ({ data: h.candidates }),
@@ -114,7 +114,7 @@ function selectCandidate(user: UserSummary) {
     nativeInputValueSetter.call(input, user.username);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  const option = Array.from(portal().querySelectorAll('[role="option"]')).find((o) =>
+  const option = Array.from(document.querySelectorAll('[role="option"]')).find((o) =>
     o.textContent?.includes(user.username!),
   );
   click(option ?? null);

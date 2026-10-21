@@ -1,7 +1,3 @@
-{{- $legacy := lookup "apps/v1" "Deployment" .Release.Namespace "fred-manager" }}
-{{- if and $legacy (ne (index ($legacy.metadata.annotations | default dict) "meta.helm.sh/release-name") .Release.Name) }}
-{{- fail "A separate fred-manager deployment still exists. Retire its application release explicitly before deploying the Rust control-plane; preserve infrastructure and data." }}
-{{- end }}
 {{- include "fred.validate-ingestion-worker-roles" $ }}
 {{- range $name, $rawApp := .Values.applications }}
   {{- $app := deepCopy $rawApp }}

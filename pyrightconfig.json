@@ -3,17 +3,12 @@
 {
   "include": [
     "agentic-backend/agentic_backend",
-    "apps/control-plane-backend/control_plane_backend",
     "apps/knowledge-flow-backend/knowledge_flow_backend"
   ],
   "reportMissingTypeStubs": false,
   "executionEnvironments": [
     {
       "root": "agentic-backend",
-      "typeCheckingMode": "basic"
-    },
-    {
-      "root": "apps/control-plane-backend",
       "typeCheckingMode": "basic"
     },
     {

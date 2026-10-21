@@ -42,7 +42,7 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
   useApiErrorToast: () => ({ notifyApiError: h.notifyApiError }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePlatformRolesQuery: () => ({
     data: { holders: [], caller_is_bootstrap_root: true },
     isLoading: false,
@@ -136,7 +136,7 @@ describe("PlatformRolesPage grant", () => {
     act(() => input().blur());
     act(() => input().focus());
 
-    const options = Array.from(container.querySelectorAll('[role="option"]')).map((option) => option.textContent);
+    const options = Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent);
     expect(options).toEqual(["Bob Durand (bob)", "Carol Diaz (carol)"]);
   });
 });

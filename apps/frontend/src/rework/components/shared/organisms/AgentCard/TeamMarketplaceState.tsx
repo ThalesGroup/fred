@@ -21,7 +21,7 @@ import AgentMarketplaceBar, {
 } from "@shared/molecules/AgentMarketplaceBar/AgentMarketplaceBar.tsx";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { AgentMarketplaceState } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { AgentMarketplaceState } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import styles from "./AgentCard.module.scss";
 
 const REMOVAL_REASONS = ["deactivated", "suspended", "switch_off", "team_private", "removed_by_platform_admin"];

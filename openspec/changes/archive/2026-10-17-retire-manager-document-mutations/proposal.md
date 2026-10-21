@@ -17,7 +17,7 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: expose only implemented document reads in the provisioned Resources journey; keep API startup independent of Temporal.
+- `control-plane-provisioning`: expose only implemented document reads in the provisioned Resources journey; keep API startup independent of Temporal.
 
 ## Impact
 

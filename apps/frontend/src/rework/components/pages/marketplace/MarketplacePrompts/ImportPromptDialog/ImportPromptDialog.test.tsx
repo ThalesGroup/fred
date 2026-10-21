@@ -47,7 +47,7 @@ vi.mock("../../../../../../hooks/useFrontendBootstrap", () => ({
     ],
   }),
 }));
-vi.mock("../../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation: () => [
     (arg: unknown) => {
       importCalls.push(arg);

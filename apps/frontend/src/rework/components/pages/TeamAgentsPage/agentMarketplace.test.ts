@@ -18,7 +18,7 @@ import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
   TeamWithPermissions,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { agentFileCapabilities, marketplaceErrorView, publishAvailability } from "./agentMarketplace";
 
 const t = ((key: string, opts?: Record<string, unknown>) =>

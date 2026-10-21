@@ -20,7 +20,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import type { UiTheme } from "../../../../app/uiThemes.ts";
-import type { Me, MySpace } from "../../../../slices/fredManager/fredManagerOpenApi.ts";
+import type { Me, MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 const state = vi.hoisted(() => ({
   spaces: [] as MySpace[],
@@ -66,7 +66,7 @@ vi.mock("../../../../security/KeycloakService.ts", () => ({
 vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ siteTitle: "Fred", siteSubtitle: "" }),
 }));
-vi.mock("../../../../slices/fredManager/fredManagerApiEnhancements.ts", () => ({
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
   useMeQuery: () => state,
   useMySpacesQuery: () => ({
     currentData: state.spaces,

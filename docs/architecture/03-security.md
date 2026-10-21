@@ -2,7 +2,7 @@
 
 ## Identity, consent and authority are separate
 
-In the organization/team/project journey, Keycloak authenticates the person,
+In the organization/team/project journey, the configured Keycloak or OIDC provider authenticates the person,
 PostgreSQL records their personal terms-of-use (CGU) acceptance and OpenFGA decides
 their rights.
 A valid login is not consent; consent is not a role; platform ownership is
@@ -15,8 +15,8 @@ manager authority, not a universal replacement for every Python security boundar
 | --- | --- |
 | Token | `Authorization: Bearer`, RS256 only, key chosen by `kid` among the realm's signing keys |
 | Endpoints | Keycloak: `<realm>/protocol/openid-connect/certs`; OIDC: discovery, issuer must match the configured one |
-| Identity | `sub` is the user id and the OpenFGA subject; roles from `resource_access.<client_id>.roles` or `roles_claim`; client from `azp` or `client_id`; service account recognised by case-insensitive `preferred_username = service-account-<client>` together with matching `client_id` or `clientId` |
-| OIDC subjects | A non-UUID `sub` becomes `uuid5(NAMESPACE_URL, "<issuer>#<sub>")`; an empty `sub` is refused |
+| Identity | The configured UID claim (default `sub`) identifies the user and OpenFGA subject; roles from `resource_access.<client_id>.roles` or `roles_claim`; client from `azp` or `client_id`; service account recognised by case-insensitive `preferred_username = service-account-<client>` together with matching `client_id` or `clientId` |
+| OIDC subjects | A non-UUID configured UID becomes `uuid5(NAMESPACE_URL, "<realm_url>#<identity>")`; an empty UID is refused |
 | Strict mode | `profile: c3`, or `FRED_STRICT_ISSUER` / `FRED_STRICT_AUDIENCE`: exact issuer (user and m2m realms), audience `audience` or `client_id` |
 | Times | `exp` and an integer `iat` required, `iat` not in the future, `exp - iat` at most `FRED_JWT_MAX_LIFETIME_SECONDS` (3600), leeway `FRED_JWT_CLOCK_SKEW` (0) |
 | Key cache | Keys kept 300 s; an unknown `kid` refetches at most once per 30 s, failures included, one fetch at a time, cached keys readable meanwhile; tokens are verified on every request |
@@ -50,7 +50,7 @@ deployed together; replacing text requires a version change.
 `POST /gcu {version}` accepts only the caller's own human credential and the active
 version. A stale version returns 409. Changing the displayed version reloads the
 text and resets its reading state. Repeating acceptance of the same version keeps
-its original timestamp. The [SQL record](A2-manager-contracts.md#fred-manager-schema)
+its original timestamp. The [SQL record](A2-manager-contracts.md#control-plane-sql-catalogue)
 contains subject, version and server timestamp, without roles or membership.
 
 The server checks consent before business HTTP operations, bootstrap and authenticated
@@ -95,8 +95,7 @@ always keeps one (I15).
 ## Roles, permissions and ReBAC
 
 The [action/role matrix](03a-action-role-matrix.md) enumerates every manager HTTP
-action, operator entry point and evaluable permission, including additional gates
-and verified differences from Python. The following explains the security model.
+action, operator entry point and evaluable permission, including additional gates. The following explains the security model.
 
 Roles are cumulative and granted on one space. Member grants content read; editor
 grants content read and write. Analyst grants content read and the capabilities
@@ -178,10 +177,11 @@ at reservation and publication. A revocation committed during object IO prevents
 publication. Receipts belong to the initiating actor and also require current space
 read authority; an administrator receives no implicit receipt access.
 
-Object keys contain opaque namespace/attempt identifiers, never user paths. Downloads
+Object keys use document UUIDs and a validated filename, not user-supplied paths. Downloads
 use manager authentication and attachment/octet-stream/nosniff headers. MIME and
 filename metadata are not trusted for execution or rendering. The autonomous cleanup
-loop retains no user token: SQL journal and published rows constrain its deletions.
+loop retains no user token: SQL journal, published rows and the durable `fred-installation` object marker
+constrain its deletions; only strict document `input` keys are candidates.
 The [document chapter](05-documents.md) describes that state machine.
 
 ## Processing authority and publication
@@ -197,8 +197,14 @@ verification. Failed-stage fencing remains possible after actor revocation.
 
 Previews use current reader authority, allowlisted manifest paths, bounded streams,
 private/no-store and nosniff headers. Browser rendering suppresses remote embeds
-and active content. The worker's object credentials cover the separate derived
-bucket; original bytes are obtained through manager. Workflow histories and safe
+and active content. The worker's object credentials cover only `output` paths in
+the shared documents bucket; original bytes are obtained through manager. The
+manager API writes `input` and reads both zones. Its lifecycle/dispatch worker
+has no object-store credential. The factory uses separate auxiliary credentials
+for KF objects/filesystem and a scoped OpenSearch account. Local SeaweedFS IAM
+object rules reject bucket requests carrying a forged `prefix`; its worker list
+permission requires an output prefix. Provider enforcement is part of deployment,
+not inferred from application path validation. Workflow histories and safe
 public errors carry no bearer tokens, storage secrets or provider diagnostics.
 
 ## Service identities

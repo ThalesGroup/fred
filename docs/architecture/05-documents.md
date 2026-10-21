@@ -64,7 +64,8 @@ and never above 100 MiB. It streams to a private temporary file with bounded
 concurrency, idle and total deadlines, while measuring actual bytes and SHA-256.
 The filename is NFC-normalized, case-sensitive and 1..255 Unicode scalar values;
 path separators and controls are refused. Filename and reported MIME type are
-metadata, never an object key or a trusted content type.
+metadata. The filename is the last object-key component; the complete UTF-8 key
+is limited to 1,024 bytes. Neither filename nor MIME is a trusted content type.
 
 One SQL transaction reserves the destination name and bytes in `document_upload`.
 Personal and organization spaces have their own quota; a team and its projects
@@ -72,41 +73,38 @@ share the team's quota. Published bytes plus pending reservations count toward
 the limit. A name conflict returns 409 without overwriting an existing original.
 Concurrent requests cannot overdraw shared quota or claim the same name.
 
-After commit, manager writes a new opaque object with `If-None-Match: *` and checks
+After commit, manager writes a new immutable object with `If-None-Match: *` and checks
 its complete bytes, length and SHA-256 by reading it back. Only then can the second
 guarded transaction publish its `document` row and terminal `stored` receipt.
 Publication failure leaves no visible document. Originals are immutable (I25).
 
 ## Physical object layout
 
-Manager does **not** use the legacy Knowledge Flow S3 layout. The unchanged
-Temporal workflow contract does not imply storage compatibility. For an S3-backed
-legacy KF store and a manager installation, the layouts are:
+Manager preserves Swift's documents bucket convention and document-local
+`input`/`output` roots. The configured bucket is the full name, not the base name:
 
 ```text
-Legacy KF:
-  <content_storage.bucket_name>-documents/
-    <legacy_document_uid>/input/<original_filename>
-    <legacy_document_uid>/output/<relative_artifact_path>
-  <content_storage.bucket_name>-objects/
-    <key chosen by an object-store consumer>
-
-Manager originals:
-  <storage.content.bucket>/
-    <storage.content.prefix>/<installation_id>/<document_id>
-
-Manager derived artifacts:
-  <scheduler.processing.derived.bucket>/
-    <scheduler.processing.derived.prefix>/
-      <installation_id>/<organization_id>/<space_id>/<document_id>/
-        <processing_id>/<generation_id>/<relative_artifact_path>
+<content_storage.bucket_name>-documents/  # app-content-documents in k3d
+  <document_id>/input/<original_filename>
+  <document_id>/output/<installation_id>/<processing_id>/<generation_id>/<artifact>
+<content_storage.bucket_name>-objects/    # unchanged auxiliary store
+  <key chosen by an object-store consumer>
 ```
 
-`installation_id` is the persisted `document_storage.namespace`. The original's
-document UUID is also its internal upload journal ID; the browser's request key
-is different. Read `document.object_key` rather than reconstructing it from a
-filename. The original bucket and derived bucket are separate; configured names,
-endpoints and prefixes are recorded in `document_storage`.
+Original and derived configurations require the same endpoint, bucket and prefix.
+An optional single-label `prefix` precedes both document roots; the factory uses
+an empty prefix. `installation_id` is the persisted `document_storage.namespace`.
+The original also carries S3 metadata `fred-installation=<installation_id>`:
+cleanup never deletes an unknown or foreign installation's object. The document
+UUID is also its internal upload journal ID; the browser request key is different.
+Read `document.object_key` for the exact key. SQL records the storage binding and
+refuses changed coordinates at startup. Existing Swift metadata is not imported
+merely by pointing manager at its bucket.
+
+Generation directories below `output` are the justified layout difference:
+retries and stale activities cannot overwrite the published artifacts. A new
+attempt restores the preceding stage by replacing the final generation segment.
+Original paths and the bucket name need no rename for this layout.
 
 `TSN`, `fredlab` and `ArxivAi` are display names, never S3 path components. The
 folder UUID/path lives in PostgreSQL and the worker descriptor, not the object
@@ -114,9 +112,9 @@ key. Derived generations isolate activity attempts. Their manifests live in
 `document_processing.generations` and the published `document_processing.manifest`;
 there is no required S3 `manifest.json`. Artifact presence alone is not publication.
 
-The source definitions are [original keys](../../apps/fred-manager/src/documents/mod.rs)
-and [upload identity](../../apps/fred-manager/src/documents/upload.rs),
-[derived prefixes](../../apps/fred-manager/src/processing/store.rs), and
+The source definitions are [original keys](../../apps/control-plane/src/documents/mod.rs)
+and [upload identity](../../apps/control-plane/src/documents/upload.rs),
+[derived prefixes](../../apps/control-plane/src/processing/store.rs), and
 [legacy MinIO storage](../../apps/knowledge-flow-backend/knowledge_flow_backend/core/stores/content/minio_content_store.py).
 The [document journey](02a-document-journey.md) gives a PDF example and read-only
 inspection steps.

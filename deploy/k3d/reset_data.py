@@ -11,7 +11,6 @@ import subprocess
 import sys
 from urllib.parse import quote
 
-MANAGER_APPS = {"fred-manager", "fred-manager-worker"}
 APPS = {
     "control-plane-backend",
     "control-plane-worker",
@@ -19,7 +18,7 @@ APPS = {
     "knowledge-flow-worker",
     "fred-agents",
     "frontend",
-} | MANAGER_APPS
+}
 INFRA = {
     "postgres",
     "keycloak",
@@ -50,13 +49,6 @@ BUCKETS = {
 }
 INDEXES = {"vector-index-mistral", "app-logs-index"}
 RELEASE = "meta.helm.sh/release-name"
-
-
-def manager_configuration(name, config):
-    return name in MANAGER_APPS or (
-        name in {"control-plane-backend", "control-plane-worker"}
-        and config.get("security", {}).get("rebac", {}).get("store_name") == "fred-manager"
-    )
 
 
 class Refused(RuntimeError):
@@ -197,9 +189,10 @@ class Reset:
                 "autoscaling is unsupported",
             )
             c = app["configuration"]
-            manager = manager_configuration(name, c)
-            if manager and name == "control-plane-worker":
-                c = values["applications"]["control-plane-backend"]["configuration"]
+            require(
+                c.get("security", {}).get("rebac", {}).get("type") == "openfga" and not c.get("manager_processing"),
+                "Reset is not supported for the Rust control-plane ingestion profile",
+            )
             pg = c["storage"]["postgres"]
             require(
                 pg.get("host") == "postgres"
@@ -210,66 +203,29 @@ class Reset:
             )
             fga = c["security"]["rebac"]
             require(
-                (manager or fga.get("type") == "openfga")
+                fga.get("type") == "openfga"
                 and fga.get("api_url") in ("http://openfga:9080", "http://openfga:9080/")
-                and fga.get("store_name", "fred") == ("fred-manager" if manager else "fred")
+                and fga.get("store_name", "fred") == "fred"
                 and not fga.get("store_id")
                 and not fga.get("authorization_model_id")
                 and fga.get("create_store_if_needed", True)
                 and fga.get("sync_schema_on_init", True),
                 "custom OpenFGA storage is unsupported",
             )
-            if not manager:
-                temporal = c.get("scheduler", {}).get("temporal", {})
-                require(
-                    temporal.get("host") == "temporal:7233" and temporal.get("namespace", "default") == "default",
-                    "custom Temporal storage is unsupported",
-                )
-            if manager:
-                connection = c.get("scheduler", {}).get("temporal", {})
-                require(
-                    connection.get("host", "temporal:7233") == "temporal:7233"
-                    and connection.get("namespace", "default") == "default",
-                    "custom lifecycle Temporal storage is unsupported",
-                )
-                lifecycle = c.get("scheduler", {}).get("lifecycle", {}).get("temporal", {})
-                require(
-                    lifecycle.get("host", "temporal:7233") == "temporal:7233"
-                    and lifecycle.get("namespace", "default") == "default",
-                    "custom lifecycle Temporal storage is unsupported",
-                )
+            temporal = c.get("scheduler", {}).get("temporal", {})
+            require(
+                temporal.get("host") == "temporal:7233" and temporal.get("namespace", "default") == "default",
+                "custom Temporal storage is unsupported",
+            )
             storage = c["storage"]
-            if manager:
-                content = storage.get("content")
-                if content:
-                    self.local_bucket(content, "fred-manager-originals")
-                processing = c.get("scheduler", {}).get("processing")
-                if processing:
-                    temporal = processing.get("temporal", {})
-                    require(
-                        temporal.get("host") == "temporal:7233"
-                        and temporal.get("namespace", "default") == "default",
-                        "custom processing Temporal storage is unsupported",
-                    )
-                    self.local_bucket(processing["derived"], "fred-manager-derived")
-            if name.startswith("knowledge-flow"):
-                processing = c.get("manager_processing")
-                if processing:
-                    self.local_bucket(processing, "fred-manager-derived")
-                    require(
-                        processing["vector_store"] == {"type": "opensearch", "index": "fred-manager-vectors"},
-                        "custom manager vector store is unsupported",
-                    )
-                    self.indexes.add("fred-manager-vectors")
-            if not manager:
-                require(
-                    storage["opensearch"]["host"] == "https://opensearch:9200",
-                    "custom OpenSearch host is unsupported",
-                )
-                require(
-                    storage["log_store"] == {"type": "opensearch", "index": "app-logs-index"},
-                    "custom log store is unsupported",
-                )
+            require(
+                storage["opensearch"]["host"] == "https://opensearch:9200",
+                "custom OpenSearch host is unsupported",
+            )
+            require(
+                storage["log_store"] == {"type": "opensearch", "index": "app-logs-index"},
+                "custom log store is unsupported",
+            )
             if name.startswith("knowledge-flow"):
                 for key in ("metadata_store", "tag_store", "resource_store"):
                     require(
@@ -292,7 +248,7 @@ class Reset:
                         and s["bucket_name"] == bucket,
                         f"custom {key} is unsupported",
                     )
-            elif name.startswith("control-plane") and not manager:
+            elif name.startswith("control-plane"):
                 s = storage["content_storage"]
                 require(
                     s["type"] == "minio"
@@ -309,14 +265,6 @@ class Reset:
                     "custom runtime storage is unsupported",
                 )
 
-    def local_bucket(self, config, expected):
-        require(
-            config.get("endpoint") == "http://seaweedfs:8333"
-            and config.get("bucket") == expected,
-            "custom manager content storage is unsupported",
-        )
-        self.allowed_buckets.add(expected)
-
     def stores(self):
         stores, token = [], ""
         while True:
@@ -332,11 +280,7 @@ class Reset:
             token = next_token
         require(
             all(
-                s["name"] in ("fred", "fred-manager")
-                or re.fullmatch(
-                    r"fred-manager-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}",
-                    s["name"],
-                )
+                s["name"] == "fred"
                 for s in stores
             ),
             "other OpenFGA stores are present",
@@ -374,7 +318,7 @@ class Reset:
                 continue
             require(
                 r["namespace"] == self.namespace
-                and r["name"] in ("fred-stack", "fred-app", "fred-manager")
+                and r["name"] in ("fred-stack", "fred-app")
                 and r["status"] == "deployed",
                 "other applications or incomplete Helm operations are present",
             )
@@ -395,7 +339,7 @@ class Reset:
                 )
                 continue
             name = meta["name"]
-            expected = {"fred-app", "fred-manager"} if name in MANAGER_APPS else {"fred-app"} if name in APPS else {"fred-stack"}
+            expected = {"fred-app"} if name in APPS else {"fred-stack"}
             require(
                 meta["namespace"] == self.namespace
                 and name in APPS | INFRA
@@ -403,18 +347,7 @@ class Reset:
                 "other applications or unknown deployments are present",
             )
             self.deployments[name] = d
-        integrated = any(
-            self.deployments[n]["metadata"]["annotations"][RELEASE] == "fred-app"
-            for n in MANAGER_APPS & self.deployments.keys()
-        )
-        rust_control_plane = manager_configuration(
-            "control-plane-backend",
-            self.values("fred-app").get("applications", {}).get("control-plane-backend", {}).get("configuration", {}),
-        )
-        required_apps = (
-            MANAGER_APPS | {"frontend", "knowledge-flow-backend", "knowledge-flow-worker"}
-            if integrated else APPS - MANAGER_APPS - ({"fred-agents"} if rust_control_plane else set())
-        )
+        required_apps = APPS
         require(
             required_apps | INFRA <= self.deployments.keys(),
             "required local services are missing",
@@ -608,13 +541,7 @@ class Reset:
             if db in ("fred", "data"):
                 self.sql("CREATE EXTENSION vector;", db)
 
-    def initialize_buckets(self):
-        # Manager validates pre-provisioned buckets before accepting any traffic.
-        for bucket in sorted(self.allowed_buckets - BUCKETS):
-            self.http("files", "/buckets/" + quote(bucket, safe="") + "/", "POST")
-
     def initialize(self):
-        self.initialize_buckets()
         self.http("fga", "/stores", "POST", body={"name": "fred"})
         self.scale("temporal", self.state["replicas"]["temporal"])
         self.wait_ready("temporal")

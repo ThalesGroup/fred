@@ -14,7 +14,7 @@
 
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@hooks/crossSessionRefresh.ts";
 import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
-import { useTeamApplicationsQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import { useTeamApplicationsQuery } from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
 
 /** One bounded, team-keyed subscription shared by the sidebar and app pages. */
 export function useTeamApplications(teamId: string | undefined, skip = false) {

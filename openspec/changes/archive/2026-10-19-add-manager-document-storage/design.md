@@ -14,7 +14,7 @@ Do not replace their control-plane service/image/configuration contract.
 | Removal | Python metadata/quota removal and best-effort remote cleanup have separate failure boundaries | Folder/space deletion rejects document-bearing targets |
 | Configuration | Python supports several stores, ingestion modes and quotas | Typed manager storage currently configures PostgreSQL; legacy config fields do not enable content storage |
 
-Source anchors: `apps/fred-manager/src/{api,db,domain,spaces,error,config}.rs`,
+Source anchors: `apps/control-plane/src/{api,db,domain,spaces,error,config}.rs`,
 its migrations and lifecycle module; `DocumentWorkspace.tsx`,
 `DocumentUploadDrawer.tsx`, `importRun.ts` and `unfinishedImports.ts` under
 `apps/frontend/src/rework`; `docs/architecture/05-documents.md` and `09-quality.md`.

@@ -22,7 +22,7 @@ vi.mock("react-router-dom", () => ({
 vi.mock("../../../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserFullName: () => state.user },
 }));
-vi.mock("../../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMeQuery: () => ({ data: { user_id: state.user } }),
   useMySpacesQuery: () => {
     const data = [

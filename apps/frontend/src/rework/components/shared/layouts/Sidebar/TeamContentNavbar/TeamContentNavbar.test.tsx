@@ -41,7 +41,7 @@ const h = vi.hoisted(() => ({
   userPictureUrl: undefined as string | undefined,
 }));
 
-vi.mock("../../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMySpacesQuery: () => ({ currentData: [], isError: false }),
 }));
 
@@ -101,7 +101,7 @@ vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false 
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
 }));
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useKnowledgeBaseDefinitionsQuery: (args: unknown, options: unknown) => {
     h.knowledgeBasesQuery(args, options);
     return { ...h.knowledgeBases, refetch: h.refetchKnowledgeBases };

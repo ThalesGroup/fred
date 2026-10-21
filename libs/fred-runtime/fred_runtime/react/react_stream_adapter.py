@@ -59,7 +59,7 @@ from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_stream_event,
     sum_token_usage,
 )
-from fred_runtime.support.thinking import content_to_text
+from fred_runtime.support.thinking import content_to_text, is_payloadless_block
 
 # Re-exported for react_langchain_adapter.py, which imports these from this
 # module rather than from runtime_support.model_metadata directly.
@@ -261,6 +261,7 @@ def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
         and all(
             recovery_text_fragment(block) is not None
             or is_tool_call_recovery_reference_block(block)
+            or is_payloadless_block(block)
             or (isinstance(block, dict) and block.get("type") == "thinking")
             for block in chunk.content
         )

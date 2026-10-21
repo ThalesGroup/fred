@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
-import type { WikiPageDetail, WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiPageDetail, WikiPageSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { ancestorsOf } from "@rework/features/teamWiki/wikiTree";
 import { formatDateTime } from "@rework/utils/formatDateTime";
 import styles from "./WikiArticle.module.css";

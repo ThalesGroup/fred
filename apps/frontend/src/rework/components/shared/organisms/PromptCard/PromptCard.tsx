@@ -17,7 +17,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { OptionModel } from "@models/Option.model.ts";
-import { type PromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { type PromptSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { useTranslation } from "react-i18next";
 import styles from "./PromptCard.module.scss";
 

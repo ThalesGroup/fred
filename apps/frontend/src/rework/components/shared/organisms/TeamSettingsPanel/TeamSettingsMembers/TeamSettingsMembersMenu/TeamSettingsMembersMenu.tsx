@@ -20,11 +20,11 @@ import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { KeyCloakService } from "../../../../../../../security/KeycloakService";
-import { TeamWithPermissions } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { TeamWithPermissions } from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   useListTeamMembersQuery,
   useRemoveTeamMemberMutation,
-} from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 
 interface TeamSettingsMembersMenuProps {
   team: TeamWithPermissions;

@@ -87,7 +87,7 @@ class DocumentSimilarityCapability(
     manifest = CapabilityManifest(
         id="document_similarity",
         # Pre-GA: version stays 0.1.0 while the platform has not shipped.
-        version="0.1.0",
+        version="0.1.1",
         name="capability.document_similarity.name",
         description="capability.document_similarity.description",
         icon="sync_alt",

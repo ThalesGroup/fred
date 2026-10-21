@@ -16,7 +16,7 @@ import type {
   FrontendBootstrap,
   FrontendConfig,
   UserSummary,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { runStep, SkipStep } from "../step";
 import type { Reporter } from "../types";
 

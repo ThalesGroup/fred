@@ -1,6 +1,6 @@
 # Action and role matrix
 
-This reference describes the implemented **fred-manager Rust** contract on the
+This reference describes the implemented **control-plane Rust** contract on the
 organization/team/project model. It covers every registered HTTP operation,
 operator entry points and every permission accepted by the authorization API.
 It does not assert that the corresponding Python surfaces use the same rules.
@@ -22,8 +22,8 @@ caller's unique organization to match the target. Roles do not bypass admission.
 to read its Resources. Organization context is derived from committed spaces and
 OpenFGA direct grants, never selected by a request URL or a token group.
 
-The HTTP prefix below is `/fred-manager/v1`. Route registration is generated in
-[manager contracts](A2-manager-contracts.md#fred-manager-http-surface).
+The HTTP prefix below is `/control-plane/v1`. Route registration is generated in
+[manager contracts](A2-manager-contracts.md#control-plane-http-surface).
 
 ## Role scope and inheritance
 
@@ -197,53 +197,24 @@ OpenFGA model; that implication is not a stored grant of every role.
 | --- | --- |
 | `create-org <name> <admin-user>` | Shell/configuration access and DB/FGA/Keycloak credentials; no bearer or platform-owner Check. Verifies initial person's IAM existence and organization compatibility, creates organization and initial owner/admin/member grants. |
 | `import-provisioning ... --token-file ...` | Authenticated bearer, CGU, platform owner and compatible directory; same provisioning engine as HTTP. |
-| `serve` | Operator access starts configured services and SQL migrations; HTTP startup does not connect to Temporal. |
+| `serve` | Verifies the SQL schema, then supervises HTTP and background tasks, including Temporal connections. |
+| `migrate` | Applies embedded SQLx migrations using database credentials only. |
 | `generate-openapi` | Offline schema generation, no service credentials needed. |
 | `--help` / `-h` | Local command help. |
 
-Document storage and folder operations make no Temporal call. The separate space
-lifecycle worker owns the Temporal connection.
-
-## Differences from the Python contract
-
-The two implementations use different models. These are verified differences in
-the current code, not a statement that role names are interchangeable or that the
-team has approved each semantic change. Space deletion uses the explicitly approved
-platform-owner capability; local space roles confer no deletion authority.
-
-| Concern | Python contract | Manager Rust contract |
-| --- | --- | --- |
-| Platform admission | Configurable platform-access filtering and admission sources | Verified personal issuer credential and CGU; no evaluation of the Python admission policy |
-| Space deletion | Technical team deletion is synchronous; member removal queues conversations separately | Platform owner retires a complete space scope; Rust Temporal cleans SQL/OpenFGA after retention |
-| Admin and corpus read | `team_admin` implies team membership and reads team-owned tags | `admin` alone grants no content read |
-| Hierarchical authority | No equivalent organization/team/project inheritance tree | `editor`, `admin`, `analyst` descend through non-personal spaces |
-| Team creation | `platform_admin` or `team_manager` | Organization admin; no `team_manager` role |
-| Platform ownership | Bootstrap root alone manages platform admins; root is protected | Every platform owner manages owners; root can be revoked while another owner remains |
-| Admin activation | A configured active administrator charter not yet accepted produces a pending admin; otherwise activation is immediate | Admin grant is active immediately; personal CGU is a distinct gate |
-| Removal of final elevated role | Keeps a direct team-member grant | Removes the exact grant; no implicit demotion; dependency/last-admin protections apply |
-| Space names | Team create/rename trims names after enforcing 1..180 characters | Creation/import use 1..180 characters, reject blanks and controls, and preserve spelling including outer spaces; existing import name matching remains exact |
-| Folder/document rights | Tag owner/editor/viewer grants and parent inheritance | One content authority per owning space; no folder/document-specific grants |
-| Nested folder creation | Parent update authority can suffice without team-editor role | Write on the owning space is always required |
-| Personal folder creation | Personal tag branch has no personal-space entitlement check | Personal space is first created under explicit eligibility; its editor grant authorizes folders |
-| Synchronized folders | Child creation is refused in synchronized trees | Folder model carries no synchronization state |
-| Original import | Upload-only and upload/process flows, with replacement options and processing task contracts | Creation-only immutable original, actor-owned upload receipt and space quota; no ingestion dispatch |
+Document storage and folder operations make no Temporal call. Lifecycle background tasks inside `control-plane serve` own their Temporal connection.
 
 ## Evidence and maintenance
 
-The matrices are checked against [the model](../../apps/fred-manager/openfga/model.fga),
-[typed permissions](../../apps/fred-manager/src/roles.rs),
-[HTTP handlers](../../apps/fred-manager/src/api.rs),
-[original storage](../../apps/fred-manager/src/documents/http.rs),
-[space governance](../../apps/fred-manager/src/spaces.rs),
-[platform governance](../../apps/fred-manager/src/platform.rs), and
-[operator commands](../../apps/fred-manager/src/main.rs).
+The matrices are checked against [the model](../../apps/control-plane/openfga/model.fga),
+[typed permissions](../../apps/control-plane/src/roles.rs),
+[HTTP handlers](../../apps/control-plane/src/api.rs),
+[original storage](../../apps/control-plane/src/documents/http.rs),
+[space governance](../../apps/control-plane/src/spaces.rs),
+[platform governance](../../apps/control-plane/src/platform.rs), and
+[operator commands](../../apps/control-plane/src/main.rs).
 Role truth tables, ancestor behavior, private isolation and revocation are exercised
-by [manager integration tests](../../apps/fred-manager/tests/integration.rs) and
-[resource contract tests](../../apps/fred-manager/tests/support/resource_browsing.rs).
+by [manager integration tests](../../apps/control-plane/tests/integration.rs) and
+[resource contract tests](../../apps/control-plane/tests/support/resource_browsing.rs).
 
-Python comparison sources: [OpenFGA model](../../libs/fred-core/fred_core/security/rebac/schema.fga),
-[tag creation](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/tag/tag_service.py),
-[platform roles](../../apps/control-plane-backend/control_plane_backend/users/platform_roles.py),
-[team service](../../apps/control-plane-backend/control_plane_backend/teams/service.py), and
-[ReBAC contract](../swift/platform/REBAC.md). Changes to any authority boundary update
-this matrix and the relevant regression tests in the same commit.
+Changes to an authority boundary update this matrix and its regression tests.

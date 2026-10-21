@@ -19,7 +19,7 @@ import { rowForProfile, teamModelRows } from "@rework/features/capabilities/team
 import {
   useAvailableModelProfilesQuery,
   useTeamRoutingPolicyQuery,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./RecommendedModelField.module.css";
 
 const TEAM_DEFAULT = "";

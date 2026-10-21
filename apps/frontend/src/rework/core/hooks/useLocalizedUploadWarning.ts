@@ -15,7 +15,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendBootstrap } from "../../../hooks/useFrontendBootstrap";
-import type { UploadWarning } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { UploadWarning } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 type LocalizedUploadWarning = {
   uploadWarning: UploadWarning | null;

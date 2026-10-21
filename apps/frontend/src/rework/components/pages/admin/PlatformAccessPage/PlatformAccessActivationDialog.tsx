@@ -12,7 +12,7 @@ import {
   usePlatformAccessActivationPreviewQuery,
   usePlatformAccessStateQuery,
   usePlatformAccessT0Query,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
 
 export default function PlatformAccessActivationDialog({

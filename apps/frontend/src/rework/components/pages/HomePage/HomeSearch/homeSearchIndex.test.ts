@@ -17,7 +17,7 @@ import type {
   ManagedAgentInstanceSummary,
   MarketplacePromptSummary,
   PromptSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { filterHomeSearch, HOME_SEARCH_GROUP_CAP, type SearchSources, unifyPrompts } from "./homeSearchIndex";
 
 const agent = (id: string, name: string, role = "", description = ""): ManagedAgentInstanceSummary =>

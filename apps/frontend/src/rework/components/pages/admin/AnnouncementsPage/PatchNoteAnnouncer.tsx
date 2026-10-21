@@ -26,8 +26,8 @@ import {
   usePatchNoteAnnouncementQuery,
   useUsersByIdsQuery,
   useWithdrawPatchNoteAnnouncementMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { Announcement } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PatchNoteAnnouncer.module.css";
 
 const KEYS = "rework.announcements.patchNote.announce";

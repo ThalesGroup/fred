@@ -135,8 +135,6 @@ run-docker: ## Run the built image in a container, proxying backend calls to ser
 		-e FRONTEND_AGENTIC_UPSTREAM=$(FRONTEND_AGENTIC_UPSTREAM) \
 		-e FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=$(FRONTEND_KNOWLEDGE_FLOW_UPSTREAM) \
 		-e FRONTEND_CONTROL_PLANE_UPSTREAM=$(FRONTEND_CONTROL_PLANE_UPSTREAM) \
-		-e FRONTEND_FRED_MANAGER_UPSTREAM=$(FRONTEND_FRED_MANAGER_UPSTREAM) \
-		-e FRONTEND_FRED_MANAGER_API_PREFIX=$(FRONTEND_FRED_MANAGER_API_PREFIX) \
 		-e FRONTEND_ENABLE_APPLICATIONS=$(FRONTEND_ENABLE_APPLICATIONS) \
 		-e FRONTEND_APPLICATIONS_JSON='$(FRONTEND_APPLICATIONS_JSON_VALUE)' \
 		-p $(FRONTEND_HOST_PORT):$(FRONTEND_CONTAINER_PORT) \
@@ -217,7 +215,7 @@ install-test-browser: check-node node_modules ## Install Chromium for automated 
 	npx --no-install playwright install chromium
 
 test-provisioning-browser: check-node node_modules ## Test provisioning through the UI with disposable real manager dependencies
-	$(MAKE) -C ../fred-manager test-browser
+	$(MAKE) -C ../control-plane test-browser
 
 ##@ API client generation
 
@@ -226,7 +224,7 @@ test-provisioning-browser: check-node node_modules ## Test provisioning through 
 # after changing a backend controller or model, and commit the regenerated
 # *OpenApi.ts alongside the backend change.
 .PHONY: update-all-apis
-update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api update-fred-manager-api ## Regenerate the API client for ALL backends at once
+update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api ## Regenerate the API client for ALL backends at once
 	@echo "All backend API clients regenerated"
 
 .PHONY: update-knowledge-flow-api
@@ -236,13 +234,6 @@ update-knowledge-flow-api: check-node node_modules ## Regenerate the API client 
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx --no-install @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
-.PHONY: update-control-plane-api
-update-control-plane-api: check-node node_modules ## Regenerate the API client for the control-plane backend only
-	@echo "🔧 Generating control-plane backend OpenAPI specification..."
-	cd ../control-plane-backend && make generate-openapi
-	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
-	npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
-
 .PHONY: update-runtime-api
 update-runtime-api: check-node node_modules ## Regenerate the API client for fred-runtime only
 	@echo "🔧 Generating fred-runtime OpenAPI specification..."
@@ -250,10 +241,10 @@ update-runtime-api: check-node node_modules ## Regenerate the API client for fre
 	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
 	npx --no-install @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
 
-.PHONY: update-fred-manager-api
-update-fred-manager-api: check-node node_modules ## Regenerate the fred-manager API client and types
-	$(MAKE) -C ../fred-manager generate-openapi
-	npx --no-install @rtk-query/codegen-openapi src/slices/fredManager/fredManagerOpenApiConfig.json
+.PHONY: update-control-plane-api
+update-control-plane-api: check-node node_modules ## Regenerate the control-plane API client and types
+	$(MAKE) -C ../control-plane generate-openapi
+	npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 
 # Per-capability client (AGENT-CAPABILITY-RFC §9.1, #1979): each capability's
 # router has its OWN OpenAPI document (dumped by the runtime CLI) and its OWN
@@ -320,8 +311,6 @@ FRONTEND_CONTAINER_PORT ?= 8080
 FRONTEND_AGENTIC_UPSTREAM ?= http://host.docker.internal:8000
 FRONTEND_KNOWLEDGE_FLOW_UPSTREAM ?= http://host.docker.internal:8111
 FRONTEND_CONTROL_PLANE_UPSTREAM ?= http://host.docker.internal:8222
-FRONTEND_FRED_MANAGER_UPSTREAM ?= http://host.docker.internal:8400
-FRONTEND_FRED_MANAGER_API_PREFIX ?= /fred-manager
 FRONTEND_ENABLE_APPLICATIONS ?= false
 FRONTEND_APPLICATIONS_JSON ?= []
 # Shell-compatible .env files quote JSON to protect it while sourcing. GNU make

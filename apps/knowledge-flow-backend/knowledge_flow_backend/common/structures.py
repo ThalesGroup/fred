@@ -324,10 +324,11 @@ class ManagerProcessingConfig(BaseModel):
     """Workload identity and isolated persistence for manager-owned documents."""
 
     model_config = ConfigDict(extra="forbid")
+    # Enabled workers accept manager jobs exclusively and do not use legacy SQL.
     enabled: bool = False
     url: str
     issuer: str
-    audience: str = "fred-manager"
+    audience: str = "control-plane"
     client_id: str = "knowledge-flow-worker"
     client_secret_env: str = "MANAGER_WORKER_CLIENT_SECRET"
     endpoint: str
@@ -1173,7 +1174,6 @@ class Configuration(BaseModel):
                     raise ValueError("manager and legacy vector namespaces must differ")
         if isinstance(self.content_storage, MinioStorageConfig) and manager.bucket in {
             self.content_storage.bucket_name,
-            f"{self.content_storage.bucket_name}-documents",
             f"{self.content_storage.bucket_name}-objects",
         }:
             raise ValueError("manager and legacy content buckets must differ")

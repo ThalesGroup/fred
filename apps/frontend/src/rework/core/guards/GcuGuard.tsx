@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import GcuPage from "@components/pages/GcuPage/GcuPage";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
 import Button from "@shared/atoms/Button/Button";
-import { useOnboardingStatusQuery } from "../../../slices/fredManager/fredManagerApiEnhancements";
+import { useOnboardingStatusQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useRefetchOnWindowFocus } from "../hooks/crossSessionRefresh";
 
 export default function GcuGuard({ children }: PropsWithChildren) {

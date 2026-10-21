@@ -39,8 +39,8 @@ import {
   useListAllTeamsQuery,
   useSetCapabilityDefaultOnMutation,
   useSetModelReasoningMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";

@@ -64,7 +64,7 @@ const NO_SKILLS = { supported: false, skills: [] };
 let skillsPending = false;
 let skillsFailed = false;
 
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetAgentInstanceSkillsQuery: () => ({
     currentData: skillsPending ? undefined : (skillCatalog ?? NO_SKILLS),
     isError: skillsFailed,

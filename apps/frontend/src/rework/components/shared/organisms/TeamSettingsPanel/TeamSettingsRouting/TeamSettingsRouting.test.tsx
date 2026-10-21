@@ -25,7 +25,7 @@ import type {
   DisableImpact,
   TeamRoutingPolicy,
   TeamWithPermissions,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -55,7 +55,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError, showWarn: h.showWarn }),
 }));
 
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useTeamRoutingPolicyQuery: () => ({
     data: h.policy,
     isLoading: false,

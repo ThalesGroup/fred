@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { TeamPermission, UserTeamRelation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamPermission, UserTeamRelation } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /**
  * One boolean per `TeamPermission` the backend can grant on a team
@@ -48,7 +48,7 @@ export type TeamCapabilities = {
 /**
  * `Record<TeamPermission, ...>` deliberately requires every member of the
  * generated `TeamPermission` union as a key. If the backend adds, renames, or
- * removes a team capability, `controlPlaneOpenApi.ts` regenerates and this
+ * removes a team capability, `legacyControlPlaneOpenApi.ts` regenerates and this
  * map fails to compile until it's updated — a missing capability becomes a
  * build error, not a gap only a manual audit finds.
  */

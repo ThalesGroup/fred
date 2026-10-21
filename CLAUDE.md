@@ -306,7 +306,7 @@ Apply the documentation checklist at the same time:
 | RFC-backed item finished, no open questions left                 | Fold the durable what/why into the relevant compact doc, trim the RFC to whatever (if anything) is still open, close the GitHub issue |
 | OpenSpec change complete, no open tasks left                      | Add final verification evidence and `openspec archive` it; also update the relevant compact doc only if the change crosses more than one capability; close the GitHub issue |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
-| `apps/fred-manager` changed                                       | Update `docs/architecture/` in the same commit; mark invariant tests `// Proves: I<n>`; `make -C docs/architecture check` |
+| `apps/control-plane` changed                                       | Update `docs/architecture/` in the same commit; mark invariant tests `// Proves: I<n>`; `make -C docs/architecture check` |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
 | Hot-path code touched (LLM/tool call site, KPI/log emission, per-turn agent loop, shared client/cache) | Run the `fred-performance-reviewer` skill; if a new metric/label was added, confirm it's Grafana-visible per `OBSERVABILITY-AND-AUDIT.md` |
 

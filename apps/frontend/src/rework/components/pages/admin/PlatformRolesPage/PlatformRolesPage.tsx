@@ -30,12 +30,12 @@ import {
   useListUsersQuery,
   usePlatformRolesQuery,
   useRevokePlatformRoleMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type {
   PlatformRoleHolder,
   PlatformRoleRelation,
   UserSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PlatformRolesPage.module.css";
 
 const displayName = (user: UserSummary) => userDisplayName(user.id, user);

@@ -25,9 +25,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
   processingEnabled: false,
-  processing: {} as Record<string, import("../../../../../slices/fredManager/fredManagerOpenApi").Summary>,
+  processing: {} as Record<string, import("../../../../../slices/controlPlane/controlPlaneOpenApi").Summary>,
   starts: vi.fn().mockResolvedValue({}),
-  documents: [] as import("../../../../../slices/fredManager/fredManagerOpenApi").Document[],
+  documents: [] as import("../../../../../slices/controlPlane/controlPlaneOpenApi").Document[],
   drawerProps: [] as Record<string, unknown>[],
   folders: [] as {
     id: string;
@@ -50,7 +50,7 @@ const probe = vi.hoisted(() => ({
   confirm: undefined as undefined | { message: string; onConfirm: () => Promise<void> },
   legacyRequests: [] as string[],
 }));
-vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useLazyListFoldersQuery: () => [vi.fn()],
   useEntriesQuery: (query: Record<string, unknown>) => {
     probe.query = query;
@@ -166,7 +166,7 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
   }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: { id: "team-1" } }),
   useUsersByIdsQuery: () => ({ data: [] }),
 }));

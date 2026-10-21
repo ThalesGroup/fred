@@ -23,13 +23,13 @@ import {
   TeamMember,
   TeamWithPermissions,
   UserTeamRelation,
-} from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   useGrantTeamMemberRoleMutation,
   useListTeamMembersQuery,
   useRemoveTeamMemberMutation,
   useRevokeTeamMemberRoleMutation,
-} from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { canAdministerTeamRole } from "@hooks/teamCapabilities.ts";
 

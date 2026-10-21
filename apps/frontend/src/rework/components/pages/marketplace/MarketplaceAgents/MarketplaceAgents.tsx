@@ -28,8 +28,8 @@ import {
   useLikeMarketplaceAgentMutation,
   useMarketplaceAgentsQuery,
   useUnlikeMarketplaceAgentMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { MarketplaceAgentSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { MarketplaceAgentSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import ImportAgentDialog from "./ImportAgentDialog/ImportAgentDialog.tsx";
 import MarketplaceAgentDialog from "./MarketplaceAgentDialog/MarketplaceAgentDialog.tsx";
 import styles from "./MarketplaceAgents.module.scss";

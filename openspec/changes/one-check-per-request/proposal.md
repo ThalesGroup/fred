@@ -22,13 +22,13 @@ failure with 500 or 503. Decided in the 2026-10-19 audit (issue #3092).
 ### New Capabilities
 
 ### Modified Capabilities
-- `fred-manager-provisioning`: business access no longer resolves an organization
+- `control-plane-provisioning`: business access no longer resolves an organization
   context per request; folder parents outside the space return 404.
 - `document-storage`: storage authorization is the owning space's Check alone.
 
 ## Impact
 
-`apps/fred-manager` authorization helpers (`api.rs`, `spaces.rs`, `documents/`),
+`apps/control-plane` authorization helpers (`api.rs`, `spaces.rs`, `documents/`),
 request-budget tests and fixtures, arc42 security/matrix/quality cost tables and
 journeys. No API path, payload or UI change; one status code changes for foreign
 document targets (404 → 403).

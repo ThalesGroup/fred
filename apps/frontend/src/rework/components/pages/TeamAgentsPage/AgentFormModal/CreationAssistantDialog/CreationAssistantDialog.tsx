@@ -22,11 +22,11 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useDraftAgentMutation } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useDraftAgentMutation } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type {
   AgentDraftResult,
   CapabilityCatalogEntry,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   type AppliedDraft,
   availableRecommendedIds,

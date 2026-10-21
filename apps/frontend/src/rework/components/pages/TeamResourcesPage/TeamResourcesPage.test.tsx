@@ -47,7 +47,7 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1" }) }));
 vi.mock("../../../../security/KeycloakService.ts", () => ({ KeyCloakService: { GetUserId: () => "u-1" } }));
-vi.mock("../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useSummaryQuery: () => ({
     currentData:
       probe.team?.max_resources_storage_size == null
@@ -68,7 +68,7 @@ vi.mock("../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
     currentData: [{ id: "team-1", personal_owner: probe.isPersonalTeam ? "admin" : null }],
   }),
 }));
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({
     data: probe.team,
     isUninitialized: probe.teamUninitialized,

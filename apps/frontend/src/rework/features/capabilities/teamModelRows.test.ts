@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { AvailableModelProfile } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AvailableModelProfile } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { rowForProfile, teamModelRows } from "./teamModelRows";
 
 const GPT = "model__openai__gpt-5";

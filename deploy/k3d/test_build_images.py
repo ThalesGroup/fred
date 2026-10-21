@@ -1,5 +1,6 @@
 import importlib.machinery
 import importlib.util
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -25,8 +26,8 @@ class BuildImagesTests(unittest.TestCase):
             def capture(command: list[str], **kwargs: object) -> str:
                 if command[0] == "make":
                     app = Path(command[command.index("-C") + 1]).name
-                    return f"localhost:5000/fred/{'control-plane-backend' if app == 'fred-manager' else app}:dev\n"
-                return "sha256:" + "a" * 64
+                    return f"localhost:5000/fred/{'control-plane-backend' if app == 'control-plane' else app}:dev\n"
+                return json.dumps([{"RootFS": {"Type": "layers", "Layers": ["sha256:" + "a" * 64]}, "Config": {}, "Os": "linux", "Architecture": "amd64"}])
 
             with (
                 patch.object(module.subprocess, "check_output", side_effect=capture),
@@ -41,13 +42,13 @@ class BuildImagesTests(unittest.TestCase):
                 module.build(root, output)
             self.assertEqual(before, (output / "images.yaml").read_text())
             applications = json.loads(before)["applications"]
-            self.assertEqual(len(applications), 5)
-            for api, worker in (("knowledge-flow-backend", "knowledge-flow-worker"), ("control-plane-backend", "control-plane-worker")):
+            self.assertEqual(len(applications), 4)
+            for api, worker in (("knowledge-flow-backend", "knowledge-flow-worker"),):
                 self.assertEqual(
                     applications[api], applications[worker]
                 )
             self.assertEqual(
-                applications["frontend"]["image"]["tag"], "k3d-aaaaaaaaaaaa"
+                applications["frontend"]["image"]["tag"], "k3d-" + hashlib.sha256(json.dumps({"rootfs": {"Type": "layers", "Layers": ["sha256:" + "a" * 64]}, "config": {}, "os": "linux", "architecture": "amd64", "variant": ""}, sort_keys=True).encode()).hexdigest()[:16]
             )
             self.assertEqual(len((output / "images.txt").read_text().splitlines()), 3)
             builds = [
@@ -56,7 +57,7 @@ class BuildImagesTests(unittest.TestCase):
                 if "docker-build" in call.args[0]
             ]
             self.assertEqual(len(builds), 6)
-            self.assertEqual(builds[0][3], str(root / "apps/fred-manager"))
+            self.assertEqual(builds[0][3], str(root / "apps/control-plane"))
 
     def test_failed_build_does_not_publish_partial_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

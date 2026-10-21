@@ -30,13 +30,13 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: platform and organization owners replace platform
+- `control-plane-provisioning`: platform and organization owners replace platform
   admin and team manager.
 
 ## Impact
 
 Tracking: [#3092](https://github.com/ThalesGroup/fred/issues/3092). Applies after
-`move-space-tree-to-openfga`. Code: `apps/fred-manager` (model, roles, bootstrap,
+`move-space-tree-to-openfga`. Code: `apps/control-plane` (model, roles, bootstrap,
 platform and space services, importer, CLI), regenerated frontend manager client,
 the frontend's manager platform-authority hook and role labels. Docs: arc42 chapters
 2, 3, 4, 9 and A1-A3, manager README, migration note. A local reset is required.

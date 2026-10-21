@@ -23,7 +23,7 @@ import {
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
-} from "../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   useCreateTagMutation,
   useDeleteTagMutation,

@@ -36,7 +36,7 @@ const admission = vi.hoisted(() => ({
   pages: [] as any[],
 }));
 vi.mock("./config", () => ({ getConfig: () => ({ platform_access_enabled: true }) }));
-vi.mock("../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useLazyPlatformAccessStatusQuery: () => [admission.trigger],
 }));
 vi.mock("./platformAccess", async (original) => ({

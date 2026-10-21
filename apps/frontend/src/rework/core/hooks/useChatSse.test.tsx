@@ -104,7 +104,7 @@ function mockMutationResult<T>(promise: Promise<T>): Promise<T> & { unwrap: () =
   return result;
 }
 
-vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   usePrepareAgentExecutionMutation: () => [
     (args: unknown) => {
       prepareExecutionCalls.push(args);

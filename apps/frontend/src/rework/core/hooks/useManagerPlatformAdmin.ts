@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { useMeQuery } from "../../../slices/fredManager/fredManagerApiEnhancements";
+import { useMeQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 /** Manager authority is independent of the control-plane's bootstrap roles. */
 export function useManagerPlatformAdmin(skip = false) {

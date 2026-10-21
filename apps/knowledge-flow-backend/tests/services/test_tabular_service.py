@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import resource
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,7 +23,7 @@ from types import SimpleNamespace
 
 import duckdb
 import pytest
-from fred_core import KeycloakUser, RebacDisabledResult
+from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, TagPermission, is_service_agent
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents.document_structures import (
@@ -36,6 +37,7 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
+from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
@@ -76,8 +78,25 @@ def _metadata(
         identity=Identity(document_name=file_name, document_uid=document_uid, title=file_name),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
         file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
-        tags=Tagging(tag_ids=tag_ids or [], tag_names=tag_names or []),
+        tags=Tagging(tag_ids=_library_of(document_uid) if tag_ids is None else tag_ids, tag_names=tag_names or []),
     )
+
+
+def _rows_store(rows: list[DocumentMetadata]) -> SimpleNamespace:
+    """Uid and folder lookups over fixed rows, for resolver-level tests."""
+
+    async def by_uids(uids):
+        return [row for row in rows if row.document_uid in uids]
+
+    async def in_tags(tag_ids):
+        return [row for row in rows if set(row.tags.tag_ids or []) & set(tag_ids)]
+
+    return SimpleNamespace(get_metadata_by_uids=by_uids, metadata_in_tags=in_tags)
+
+
+def _library_of(document_uid: str) -> list[str]:
+    """A folder per test document: ReBAC grants documents through folders only."""
+    return [f"lib-{document_uid}"]
 
 
 async def _ingest_csv(
@@ -168,7 +187,7 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str, extra_tab
         identity=Identity(document_name=f"{document_uid}.xlsx", document_uid=document_uid, title=document_uid),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
         file=FileInfo(file_type=FileType.XLSX),
-        tags=Tagging(tag_ids=[], tag_names=[]),
+        tags=Tagging(tag_ids=_library_of(document_uid), tag_names=[]),
     )
 
     output_dir = tmp_path / f"{document_uid}-output"
@@ -183,15 +202,22 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str, extra_tab
 
 
 class _FakeRebac:
-    def __init__(self, readable_document_uids: set[str]):
+    """Keep folder discovery separate from authoritative document permissions."""
+
+    def __init__(self, readable_document_uids: set[str], readable_tag_ids: set[str] | None = None):
         self.readable_document_uids = readable_document_uids
+        self.readable_tag_ids = {tag for uid in readable_document_uids for tag in _library_of(uid)} if readable_tag_ids is None else readable_tag_ids
+        self.checked_document_uids: list[str] = []
 
     async def lookup_user_resources(self, user, permission):
-        del user, permission
-        return [SimpleNamespace(id=document_uid) for document_uid in sorted(self.readable_document_uids)]
+        del user
+        assert permission is TagPermission.READ, f"readable {permission.__class__.__name__} must not be enumerated"
+        return [SimpleNamespace(id=tag_id) for tag_id in sorted(self.readable_tag_ids)]
 
     async def has_user_permission(self, user, permission, resource_id):
-        del user, permission
+        del user
+        assert permission is DocumentPermission.READ
+        self.checked_document_uids.append(resource_id)
         return resource_id in self.readable_document_uids
 
 
@@ -239,14 +265,19 @@ class _FakeTagService:
         self.personal_scope = personal_scope or set()
 
     async def list_authorized_tags_ids(self, user, owner_filter, team_id):
-        del user
+        """Like `TagService`: scope folders are narrowed to readable ones, except
+        for the evaluation worker, which reads its team's folders."""
         if owner_filter is None:
             return set(self.readable_tag_ids)
         if owner_filter == OwnerFilter.TEAM:
             if not team_id:
                 raise MissingTeamIdError("team_id is required when owner_filter is 'team'")
-            return set(self.team_scopes.get(team_id, set()))
-        return set(self.personal_scope)
+            scope = set(self.team_scopes.get(team_id, set()))
+        else:
+            scope = set(self.personal_scope)
+        if is_service_agent(user) and not holds_caller_role(user):
+            return scope if owner_filter == OwnerFilter.TEAM else set()
+        return scope & self.readable_tag_ids
 
 
 class _TrackingMetadataStore(BaseMetadataStore):
@@ -254,8 +285,8 @@ class _TrackingMetadataStore(BaseMetadataStore):
     Delegate wrapper that records targeted vs full metadata reads.
 
     Why this exists:
-    - Tabular authorization should use one uid-targeted metadata lookup once
-      ReBAC has already narrowed the readable document set.
+    - Tabular authorization should read the documents of the authorized
+      folders in one targeted query, never the whole metadata table.
 
     How to use:
     - Wrap the real metadata store, assign it to `service.metadata_store`, then
@@ -268,12 +299,17 @@ class _TrackingMetadataStore(BaseMetadataStore):
     def __init__(self, delegate) -> None:
         self._delegate = delegate
         self.get_all_metadata_calls = 0
+        self.metadata_in_tags_calls: list[list[str]] = []
         self.get_metadata_by_uids_calls: list[list[str]] = []
         self.get_metadata_by_uid_calls: list[str] = []
 
     async def get_all_metadata(self, filters: dict, session=None):
         self.get_all_metadata_calls += 1
         return await self._delegate.get_all_metadata(filters, session=session)
+
+    async def metadata_in_tags(self, tag_ids: list[str], session=None):
+        self.metadata_in_tags_calls.append(sorted(tag_ids))
+        return await self._delegate.metadata_in_tags(tag_ids, session=session)
 
     async def get_metadata_by_uids(self, document_uids: list[str], session=None):
         self.get_metadata_by_uids_calls.append(list(document_uids))
@@ -1275,7 +1311,7 @@ async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_
 
     assert [dataset.document_uid for dataset in datasets] == ["doc-visible"]
     assert tracking_store.get_all_metadata_calls == 0
-    assert tracking_store.get_metadata_by_uids_calls == [["doc-visible"]]
+    assert tracking_store.metadata_in_tags_calls == [["lib-doc-visible"]]
 
 
 @pytest.mark.asyncio
@@ -2338,7 +2374,7 @@ async def test_document_discovery_unions_scoped_sources(tmp_path, metadata_store
     await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="other-session", file_name="private.csv", content="city,amount\nRome,30\n", uploaded_by="u-1")
     await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="other-user", file_name="foreign.csv", content="city,amount\nBerlin,40\n", uploaded_by="u-2")
     service = TabularService()
-    service.rebac = _FakeRebacDisabled() if rebac_disabled else _FakeRebac({"corpus"})
+    service.rebac = _FakeRebacDisabled() if rebac_disabled else _FakeRebac({"corpus"}, readable_tag_ids={"finance"})
     scope = dict(attachment_uids=["attached", "attached", "other-user", "missing"], include_session_scope=session, include_corpus_scope=corpus)
     documents = await service.list_documents(_user(), **scope)
     expected = ({"attached"} if session else set()) | ({"corpus"} if corpus else set())
@@ -2373,14 +2409,12 @@ async def test_document_discovery_unions_scoped_sources(tmp_path, metadata_store
 async def test_corpus_selection_union_remains_inside_owner_scope(monkeypatch, libraries, documents, expected):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     service.rebac = _FakeRebac({"doc-A", "doc-B", "outside-owner"})
     rows = [_metadata(document_uid=uid, file_name=uid + ".csv", tag_ids=[tag]) for uid, tag in [("doc-A", "lib-A"), ("doc-B", "lib-B"), ("outside-owner", "lib-foreign")]]
-    service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=rows))
+    service.metadata_store = _rows_store(rows)
     service._resolve_scope_tag_ids = AsyncMock(return_value={"lib-A", "lib-B"})
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
     datasets = await service._resolve_authorized_datasets(
         _user(), include_session_scope=False, owner_filter=OwnerFilter.TEAM, team_id="team-1", document_library_tags_ids=libraries, corpus_document_uids=documents
     )
@@ -2391,14 +2425,12 @@ async def test_corpus_selection_union_remains_inside_owner_scope(monkeypatch, li
 async def test_scoped_inventory_excludes_unready_legacy_and_removed_attachments(monkeypatch):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     rows = [_attachment_metadata(document_uid=uid, file_name=uid + ".csv", uploaded_by=owner) for uid, owner in [("ready", "u-1"), ("unready", "u-1"), ("legacy", "u-1"), ("foreign", "u-2")]]
     rows[0].mark_stage_done(ProcessingStage.SQL_INDEXED)
     rows[3].mark_stage_done(ProcessingStage.SQL_INDEXED)
     service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=rows))
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: None if metadata.document_uid == "legacy" else object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: None if metadata.document_uid == "legacy" else object())
     requested = [row.document_uid for row in rows]
     datasets = await service._resolve_authorized_datasets(_user(), include_corpus_scope=False, attachment_uids=requested)
     assert [dataset.metadata.document_uid for dataset in datasets] == ["ready"]
@@ -2411,12 +2443,122 @@ async def test_scoped_inventory_excludes_unready_legacy_and_removed_attachments(
 async def test_corpus_grant_does_not_replace_attachment_ownership(monkeypatch):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     service.rebac = _FakeRebac({"foreign"})
     foreign = _attachment_metadata(document_uid="foreign", file_name="private.csv", uploaded_by="u-2")
-    service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=[foreign]))
+    service.metadata_store = _rows_store([foreign])
     service._resolve_scope_tag_ids = AsyncMock(return_value=None)
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
     assert await service._resolve_authorized_datasets(_user(), attachment_uids=["foreign"]) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("readable_documents", [1500, 3000])
+async def test_workbook_past_the_first_thousand_readable_documents_stays_usable(tmp_path, metadata_store, readable_documents):
+    """OpenFGA's plain document inventory stops at 1,000 objects; the target sorts
+    after them and must stay listable, describable, queryable and searchable."""
+    ApplicationContext.get_instance().get_content_store().clear()
+    for index in range(readable_documents - 1):
+        await metadata_store.save_metadata(_metadata(document_uid=f"doc-{index:05}", file_name=f"note-{index}.txt", tag_ids=["team-lib"]))
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="zz-target", file_name="sales.csv", content="city,amount\nParis,10\n", tag_ids=["team-lib"])
+
+    service = TabularService()
+    service.rebac = _FakeRebac({"zz-target"}, readable_tag_ids={"team-lib"})
+    service.tag_service = _FakeTagService(readable_tag_ids={"team-lib"}, team_scopes={"team-a": {"team-lib"}})
+
+    for scope in ({"owner_filter": OwnerFilter.TEAM, "team_id": "team-a"}, {}):
+        assert [document.document_uid for document in await service.list_documents(_user(), **scope)] == ["zz-target"]
+        [description] = await service.describe_documents(_user(), ["zz-target"], **scope)
+        alias = description.tables[0].query_alias
+        result = await service.query_read(_user(), request=TabularQueryRequest(sql=f'SELECT SUM(amount) AS total FROM "{alias}"', dataset_uids=["zz-target"], **scope))
+        assert result.rows == [{"total": 10}]
+        search = await service.search_values(_user(), request=TabularSearchRequest(keyword="Paris", **scope))
+        assert [match.document_uid for match in search.matches] == ["zz-target"]
+    assert service.rebac.checked_document_uids == ["zz-target"] * 8
+
+
+_CANDIDATE_SCOPES = [
+    pytest.param({}, id="unscoped"),
+    pytest.param({"owner_filter": OwnerFilter.TEAM, "team_id": "team-a"}, id="team"),
+    pytest.param({"owner_filter": OwnerFilter.PERSONAL}, id="personal"),
+    pytest.param({"document_library_tags_ids": ["shared-library"]}, id="library"),
+    pytest.param({"corpus_document_uids": ["denied"]}, id="selected-document"),
+    pytest.param({"corpus_document_uids": [], "document_library_tags_ids": ["shared-library"]}, id="selected-library-union"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", _CANDIDATE_SCOPES)
+async def test_tabular_stored_membership_does_not_override_document_denial(tmp_path, metadata_store, scope):
+    """A failed parent write can leave readable-folder membership in SQL only."""
+    ApplicationContext.get_instance().get_content_store().clear()
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="denied",
+        file_name="confidential.csv",
+        content="secret,amount\nPRIVATE,10\n",
+        tag_ids=["shared-library"],
+    )
+    service = TabularService()
+    service.rebac = _FakeRebac(set(), readable_tag_ids={"shared-library"})
+    service.tag_service = _FakeTagService(readable_tag_ids={"shared-library"}, team_scopes={"team-a": {"shared-library"}}, personal_scope={"shared-library"})
+
+    assert await service.list_documents(_user(), **scope) == []
+    with pytest.raises(PermissionError, match="denied"):
+        await service.describe_documents(_user(), ["denied"], **scope)
+    with pytest.raises(PermissionError, match="denied"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT * FROM confidential", dataset_uids=["denied"], **scope))
+    with pytest.raises(PermissionError, match="denied"):
+        await service.search_values(_user(), request=TabularSearchRequest(keyword="PRIVATE", dataset_uids=["denied"], **scope))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", _CANDIDATE_SCOPES)
+async def test_tabular_candidate_authorization_failure_propagates(monkeypatch, scope):
+    from unittest.mock import AsyncMock
+
+    service = object.__new__(TabularService)
+    service.metadata_store = _rows_store([_metadata(document_uid="denied", file_name="confidential.csv", tag_ids=["shared-library"])])
+    service.rebac = _FakeRebac(set(), readable_tag_ids={"shared-library"})
+    service.rebac.has_user_permission = AsyncMock(side_effect=RuntimeError("authorization unavailable"))
+    service.tag_service = _FakeTagService(readable_tag_ids={"shared-library"}, team_scopes={"team-a": {"shared-library"}}, personal_scope={"shared-library"})
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
+
+    with pytest.raises(RuntimeError, match="authorization unavailable"):
+        await service._resolve_authorized_datasets(_user(), include_session_scope=False, **scope)
+
+
+@pytest.mark.asyncio
+async def test_tabular_checks_each_workbook_once_with_bounded_concurrency(monkeypatch):
+    rows = [_metadata(document_uid=f"workbook-{index}", file_name=f"workbook-{index}.xlsx", tag_ids=["shared-library"]) for index in range(23)]
+    non_tabular = _metadata(document_uid="plain-document", file_name="note.txt", tag_ids=["shared-library"])
+    service = object.__new__(TabularService)
+    service.metadata_store = _rows_store([*rows, non_tabular])
+    rebac = _FakeRebac({row.document_uid for row in rows}, readable_tag_ids={"shared-library"})
+    service.rebac = rebac
+    active = peak = 0
+    check = rebac.has_user_permission
+
+    async def slow_check(user, permission, resource_id):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            await asyncio.sleep(0)
+            return await check(user, permission, resource_id)
+        finally:
+            active -= 1
+
+    rebac.has_user_permission = slow_check
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: None)
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.tabular.service.read_tabular_multi_artifact",
+        lambda metadata: None if metadata.document_uid == "plain-document" else SimpleNamespace(tables=[SimpleNamespace(query_alias=f"{metadata.document_uid}_{index}") for index in range(2)]),
+    )
+
+    datasets = await service._resolve_authorized_datasets(_user(), include_session_scope=False)
+
+    assert len(datasets) == 46
+    assert sorted(rebac.checked_document_uids) == sorted(row.document_uid for row in rows)
+    assert 1 < peak <= 10

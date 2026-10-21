@@ -19,7 +19,7 @@
 import { describe, expect, it } from "vitest";
 import { buildChatTurnControlRegistry, resolveChatTurnControls } from "./chatTurnControlRegistry";
 import type { CapabilityChatTurnControlProps, CapabilityUiPlugin } from "./types";
-import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatControlDescriptor } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 function StubControl(_props: CapabilityChatTurnControlProps) {
   return <div />;

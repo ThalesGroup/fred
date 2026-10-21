@@ -53,7 +53,7 @@ pending and stored documents must prevent destructive folder/space deletion.
 
 ## Impact
 
-`apps/fred-manager`: document service/API, PostgreSQL migration, S3 SDK, typed
+`apps/control-plane`: document service/API, PostgreSQL migration, S3 SDK, typed
 configuration, lifecycle coordination, storage reconciliation and tests.
 `apps/frontend`: generated manager client and existing Resources/import consumers.
 The current control-plane deployment contract must carry the new content-store

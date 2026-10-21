@@ -16,7 +16,7 @@ import { KeyboardEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import { useBootstrapPlatformAdminMutation } from "../../../../slices/fredManager/fredManagerApiEnhancements";
+import { useBootstrapPlatformAdminMutation } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./BootstrapPage.module.css";
 
 /** Mirrors the backend's `BootstrapPlatformAdminRequest.token` `min_length=16`. */

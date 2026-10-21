@@ -9,12 +9,12 @@ export async function documentStorageJourney({ page, context, bearer, origin, sp
   const calls = [];
   let uploads = 0;
   page.on("response", (r) => {
-    if (r.url().includes("/fred-manager/v1/"))
+    if (r.url().includes("/control-plane/v1/"))
       calls.push([r.request().method(), new URL(r.url()).pathname, r.status()]);
   });
   const observe = (request) => {
     const url = new URL(request.url());
-    if (request.method() === "POST" && /^\/fred-manager\/v1\/folders\/[^/]+\/documents$/.test(url.pathname)) uploads++;
+    if (request.method() === "POST" && /^\/control-plane\/v1\/folders\/[^/]+\/documents$/.test(url.pathname)) uploads++;
     // The unchanged application shell probes its global task feed on navigation.
     // Those unavailable status reads do not dispatch document processing.
     if (request.method() === "GET" && url.pathname.endsWith("/tasks")) return;
@@ -75,7 +75,7 @@ export async function documentStorageJourney({ page, context, bearer, origin, sp
       }
       return response;
     };
-  }, `/fred-manager/v1/folders/${folder.id}/documents`);
+  }, `/control-plane/v1/folders/${folder.id}/documents`);
   const drawer = await select([file]);
   await drawer.getByRole("button", { name: /^Import/ }).click();
   try {
@@ -91,7 +91,7 @@ export async function documentStorageJourney({ page, context, bearer, origin, sp
   await page.getByRole("button", { name: "Home", exact: true }).click();
   const recovered = page.waitForResponse(
     (r) =>
-      r.request().method() === "GET" && new URL(r.url()).pathname === `/fred-manager/v1/document-uploads/${requestKey}`,
+      r.request().method() === "GET" && new URL(r.url()).pathname === `/control-plane/v1/document-uploads/${requestKey}`,
   );
   release();
   const recovery = await recovered;
@@ -129,7 +129,7 @@ export async function documentStorageJourney({ page, context, bearer, origin, sp
   await conflicts.getByRole("button", { name: /^Import/ }).click();
   await expect(documentRow("second.txt")).toBeVisible();
   const response = await context.request.get(
-    `${origin}/fred-manager/v1/spaces/${space}/entries?parent_id=${folder.id}`,
+    `${origin}/control-plane/v1/spaces/${space}/entries?parent_id=${folder.id}`,
     { headers: { Authorization: bearer } },
   );
   assert.equal(response.status(), 200);

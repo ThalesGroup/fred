@@ -20,7 +20,7 @@ import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import PromptViewDialog, { type PromptViewDetail } from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
-import { useLazyGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useLazyGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   filterHomeSearch,
   flattenResults,

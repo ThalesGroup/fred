@@ -27,6 +27,11 @@
   padding: var(--spacing-m);
 }
 
+/* Same inset as the header below it, without doubling the gap between them. */
+.descriptionReminder {
+  padding: var(--spacing-m) var(--spacing-m) 0;
+}
+
 /* Fixed width: PageHeader sizes its actions to their content, so a percentage
    width here resolved after that sizing and pushed the toolbar onto two lines. */
 .searchBar {

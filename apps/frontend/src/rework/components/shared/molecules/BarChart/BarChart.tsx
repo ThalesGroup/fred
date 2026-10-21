@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import type { LabelValuePoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { LabelValuePoint } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./BarChart.module.scss";
 
 function useCssVars(ref: React.RefObject<HTMLElement | null>, ...names: string[]) {

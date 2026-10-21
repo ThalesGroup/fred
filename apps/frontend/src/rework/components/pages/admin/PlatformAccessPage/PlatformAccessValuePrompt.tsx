@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 import styles from "./PlatformAccessPage.module.css";
 import Select from "@shared/molecules/Select/Select";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
-import type { PlatformAccessCondition } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { PlatformAccessCondition } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 
 export default function PlatformAccessValuePrompt({
   claim,

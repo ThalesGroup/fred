@@ -25,7 +25,7 @@ def deployments(docs):
 class ManagerChartTests(unittest.TestCase):
     def assert_manager_upstreams(self, apps, namespace):
         env = apps["frontend"]["spec"]["template"]["spec"]["containers"][0]["env"]
-        for name in ("FRONTEND_FRED_MANAGER_UPSTREAM", "FRONTEND_CONTROL_PLANE_UPSTREAM"):
+        for name in ("FRONTEND_CONTROL_PLANE_UPSTREAM",):
             self.assertEqual([entry for entry in env if entry["name"] == name], [
                 {"name": name, "value": f"http://control-plane-backend.{namespace}.svc.cluster.local:8222"}
             ])
@@ -41,20 +41,17 @@ class ManagerChartTests(unittest.TestCase):
                 )), namespace)
 
     def test_explicit_manager_upstream_overrides_are_preserved_without_duplicates(self):
-        apps = deployments(render(
-            "applications.frontend.env[0].name=FRONTEND_FRED_MANAGER_UPSTREAM",
-            "applications.frontend.env[0].value=http://external-api.example:8222",
-            "applications.frontend.extraEnvVars[0].name=FRONTEND_CONTROL_PLANE_UPSTREAM",
-            "applications.frontend.extraEnvVars[0].valueFrom.configMapKeyRef.name=upstreams",
-            "applications.frontend.extraEnvVars[0].valueFrom.configMapKeyRef.key=control-plane",
-        ))
-        env = apps["frontend"]["spec"]["template"]["spec"]["containers"][0]["env"]
-        self.assertEqual([e for e in env if e["name"] == "FRONTEND_FRED_MANAGER_UPSTREAM"], [
-            {"name": "FRONTEND_FRED_MANAGER_UPSTREAM", "value": "http://external-api.example:8222"}
-        ])
-        self.assertEqual([e for e in env if e["name"] == "FRONTEND_CONTROL_PLANE_UPSTREAM"], [
-            {"name": "FRONTEND_CONTROL_PLANE_UPSTREAM", "valueFrom": {"configMapKeyRef": {"name": "upstreams", "key": "control-plane"}}}
-        ])
+        for field, value, expected in (
+            ("env", ["value=http://external-api.example:8222"], {"value": "http://external-api.example:8222"}),
+            ("extraEnvVars", ["valueFrom.configMapKeyRef.name=upstreams", "valueFrom.configMapKeyRef.key=control-plane"],
+             {"valueFrom": {"configMapKeyRef": {"name": "upstreams", "key": "control-plane"}}}),
+        ):
+            settings = [f"applications.frontend.{field}[0].name=FRONTEND_CONTROL_PLANE_UPSTREAM"]
+            settings.extend(f"applications.frontend.{field}[0].{item}" for item in value)
+            apps = deployments(render(*settings))
+            env = apps["frontend"]["spec"]["template"]["spec"]["containers"][0]["env"]
+            self.assertEqual([entry for entry in env if entry["name"] == "FRONTEND_CONTROL_PLANE_UPSTREAM"],
+                             [{"name": "FRONTEND_CONTROL_PLANE_UPSTREAM", **expected}])
 
     def test_default_topology_and_images(self):
         docs = render()
@@ -84,7 +81,7 @@ class ManagerChartTests(unittest.TestCase):
         temporal = config["scheduler"]["lifecycle"]["temporal"]
         self.assertEqual(temporal["host"], "custom:7233")
         self.assertEqual(temporal["namespace"], "custom")
-        self.assertEqual(temporal["task_queue"], "fred-manager-lifecycle")
+        self.assertEqual(temporal["task_queue"], "control-plane-lifecycle")
 
     def test_document_storage_spool_is_bounded_and_credentials_stay_references(self):
         docs = render(values=CHART / "examples/document-storage.yaml")
@@ -93,7 +90,7 @@ class ManagerChartTests(unittest.TestCase):
         spool = next(v for v in pod["volumes"] if v["name"] == "manager-document-spool")
         self.assertEqual(spool["emptyDir"]["sizeLimit"], "838860800")
         container = pod["containers"][0]
-        self.assertIn({"name": "manager-document-spool", "mountPath": "/tmp/fred-manager-uploads"}, container["volumeMounts"])
+        self.assertIn({"name": "manager-document-spool", "mountPath": "/tmp/control-plane-uploads"}, container["volumeMounts"])
         secret = next(e for e in container["env"] if e["name"] == "FRED_CONTENT_SECRET_KEY")
         self.assertEqual(secret["valueFrom"]["secretKeyRef"]["name"], "manager-document-storage")
         worker = apps["control-plane-worker"]["spec"]["template"]["spec"]
@@ -110,18 +107,18 @@ class ManagerChartTests(unittest.TestCase):
         self.assertEqual(set(apps), {"control-plane-backend", "control-plane-worker", "knowledge-flow-backend", "knowledge-flow-worker", "frontend"})
         job = next(d for d in docs if d["kind"] == "Job" and d["metadata"]["name"].startswith("control-plane-backend-migration"))
         container = job["spec"]["template"]["spec"]["containers"][0]
-        self.assertEqual(container["command"] + container["args"], ["fred-manager", "migrate"])
+        self.assertEqual(container["command"] + container["args"], ["control-plane", "migrate"])
         self.assertNotIn("volumeMounts", container)
         self.assertFalse(any(d["kind"] == "Job" and d["metadata"]["name"].startswith("control-plane-backend-scale-down") for d in docs))
         configmap = next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "control-plane-backend-back")
         config = yaml.safe_load(configmap["data"]["configuration.yaml"])
-        self.assertEqual(config["security"]["rebac"]["store_name"], "fred-manager")
+        self.assertEqual(config["security"]["rebac"]["store_name"], "control-plane")
         self.assertEqual(config["security"]["m2m"]["client_id"], "control-plane")
         self.assertEqual(config["security"]["m2m"]["secret_env_var"], "KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET")
         self.assertEqual(config["app"]["port"], 8222)
         self.assertEqual(config["app"]["base_url"], "/control-plane/v1")
         self.assertEqual(config["storage"]["postgres"]["database"], "fred")
-        self.assertEqual(config["scheduler"]["lifecycle"]["temporal"]["workflow_id_prefix"], "fred-manager-lifecycle")
+        self.assertEqual(config["scheduler"]["lifecycle"]["temporal"]["workflow_id_prefix"], "control-plane-lifecycle")
 
 
 if __name__ == "__main__":

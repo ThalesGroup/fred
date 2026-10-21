@@ -34,7 +34,7 @@ vi.mock("./actions", async (importOriginal) => ({
   streamAgentTurn: h.stream,
 }));
 vi.mock("../../../security/KeycloakService", () => ({ KeyCloakService: { GetUserId: () => "synthetic-user" } }));
-vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   ...Object.fromEntries(
     [
       "useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation",

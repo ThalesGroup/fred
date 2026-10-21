@@ -14,7 +14,7 @@ import { platformPath } from "../../../../../common/platformAccess";
 import type {
   PlatformAccessTeam,
   PlatformEnrollmentLinkInfo,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   usePlatformEnrollmentLinksQuery,
   usePlatformEnrollmentJoinersQuery,
@@ -23,7 +23,7 @@ import {
   useRevokePlatformLinkMutation,
   useDeleteInactivePlatformLinksMutation,
   usePlatformAccessTeamsQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
 
 type LinkStatusFilter = Exclude<PlatformEnrollmentLinkInfo["status"], "suspended"> | "all";

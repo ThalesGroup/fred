@@ -1,0 +1,33 @@
+## 1. Confirm the deployment boundary
+
+- [ ] 1.1 Finalize the complete profile, companion factory changes and acceptance criteria before implementation. The developer confirmed Swift bucket naming and document-local input/output roots on 2026-10-21; do not reopen that choice. This does not authorize a data migration/reset or settle the remaining provider-enforcement design.
+- [ ] 1.2 Establish the exact Fred/factory revisions and isolate this lot from the staged merge; verify the selected topic branch and changed paths before any commit.
+- [ ] 1.3 Establish the production GCS/S3NS API, identities and protection requirements from operator evidence; resolve input/output access and listing enforcement in the Swift layout before implementation acceptance. If direct credentials cannot enforce the target matrix, prepare the alternative access design for review. Record that no rename/split is required; scope legacy SQL/identity/manifest import separately.
+
+## 2. Provision identities and assemble the profile
+
+- [ ] 2.1 Align manager configuration and key generation with the configured Swift documents bucket and document input/output roots, retaining immutable processing generations. Replace the Rust/KF bucket-exclusion checks and exclusive-namespace cleanup assumptions with path isolation and durable ownership checks. Test filename safety, predecessor restore, late-write cleanup after receipt expiry, preservation of unknown/foreign objects and refusal of conflicting SQL bindings. Keep shared-bucket reset fail-closed.
+- [ ] 2.2 Provision the dedicated local fixture with the Swift bucket convention and reviewed application identities. Replace inherited KF S3/OpenSearch administrator access; isolate or disable incompatible legacy expiry/repair jobs. Verify allowed/denied object/index operations with every mounted credential, including bucket configuration reads, without claiming untested GCS/S3NS parity.
+- [ ] 2.3 Provision the existing dedicated worker identity contract through bounded factory support; verify issuer/audience/client/service-account claims and rejection of browser/foreign workload tokens without exposing credentials.
+- [ ] 2.4 Assemble the complete factory ingestion profile, correct portable chart examples and omit S3 credentials from the manager worker; verify the actual factory + local chart + profile render retains SQL/FGA/identity/model references, expected queues, storage coordinates and all five deployments.
+- [ ] 2.5 Integrate the existing contract exporter with the selected KF image/effective configuration and ordinary ConfigMap rollout; verify missing and stale contract rejection, image/configuration provenance and regeneration after a profile change.
+- [ ] 2.6 Set explicit upload, activity, output and temporary-storage budgets; verify the resource calculation includes every simultaneously served role and that limits agree between manager, KF and Kubernetes.
+
+## 3. Make the layout observable and validate the journey
+
+- [ ] 3.1 Add the `deploy/k3d/` operator entry point and update the existing factory guide, arc42 document journey/storage/security/operations chapters and Rust migration note; verify links and commands describe the implemented profile, exact storage access and local production differences without duplicating canonical key formulas.
+- [ ] 3.2 Give the developer the exact prerequisite/validation/deployment commands and perform the first developer-driven PDF journey; record source SHA-256, document/processing/generation IDs, SQL publication, exact S3 keys, vectors, File/Raw previews and successful original download with KF HTTP ingestion unused.
+- [ ] 3.3 Verify retry, interrupted worker, stale generation and unavailable dependency behavior on dedicated fixtures; confirm original preservation, durable progress, eventual abandoned-output cleanup and local reset preflight without executing a destructive reset.
+- [ ] 3.4 Audit transfer and timeout costs with the actual fixture and configured activity concurrency; record measured versus inferred calls/bytes, queue/stage latency, workspace peaks and the 30-second KF callback versus manager verification deadline boundary. Run a larger concurrent campaign only with its concrete fixture and load accepted by the developer.
+
+## 4. Review and close out
+
+- [ ] 4.1 Group relevant rendering/configuration/storage-policy tests and required quality checks after manual validation: manager `make test`, `make test-integration`, `make code-quality`, affected KF/factory checks, `make -C docs/architecture check` and strict OpenSpec validation; record exact results and exclusions.
+- [ ] 4.2 Obtain independent review of the completed ingestion deployment across performance, security and operations using the applicable repository review procedures; fix every actionable finding with regression coverage and obtain correction review before readiness.
+- [ ] 4.3 Reconcile the arc42 dossier and this change with observed behavior, commit only the accepted reviewed lot, and record evidence under issue #3180 when authorized; sync specs and archive after all acceptance completes. Do not push or reset without explicit authorization.
+
+## Planning evidence
+
+Independent read-only reviewer `review_ingestion_storage` inspected Fred HEAD `8d3b66e7dd721beab2a46a29afc336188a458984` (merge-base `c32c3069db80c4590af730b93ff4b9c2eb04c2d5` against `origin/swift`) and the local factory. Coverage: original/derived access and lifecycle, manager/KF contracts, example merges, capacity multipliers, local reset and corresponding arc42 sections. The reviewer rendered the real factory values with both examples successfully, then confirmed that list replacement removes essential credentials. The scoped-credential, complete-profile and resource tasks above incorporate those findings. A possible callback-timeout/verification mismatch is untested and belongs to task 3.4. No live deployment, runtime tests, benchmark, full-manager audit or full-PR review was performed. This evidence does not mark implementation or deployment acceptance complete.
+
+The same independent reviewer checked the Swift-alignment decision against `origin/swift` at `19709b017f7bff35e254df3242f38f6e5b0edd02` and the unchanged manager HEAD. Findings incorporated above: matching MinIO/GCS naming, destructive exclusive-namespace cleanup assumptions, late-write ownership retention, predecessor generation-directory assumptions, KF's bucket-exclusion validation, legacy maintenance coexistence, native GCS/ADC versus S3 client compatibility, and GCS listing-permission limits. This was a source/documentation feasibility review, not a runtime security or migration validation.

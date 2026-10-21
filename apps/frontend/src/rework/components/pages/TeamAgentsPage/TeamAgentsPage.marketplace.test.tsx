@@ -22,7 +22,7 @@ import type {
   ManagedAgentInstanceSummary,
   TeamPermission,
   TeamWithPermissions,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -72,7 +72,7 @@ vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
   }),
 }));
 
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: h.team }),
   useUsersByIdsQuery: () => ({ data: [] }),
   usePublishAgentMutation: () => [h.publish, { isLoading: false }],
@@ -80,7 +80,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useDismissAgentMarketplaceRemovalMutation: () => [h.dismiss, { isLoading: false }],
 }));
 
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => ({
     data: h.instances,
     isLoading: false,

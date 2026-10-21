@@ -21,7 +21,7 @@ import {
   type ManagedAgentInstanceSummary,
   useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./CopyAgentDialog.module.scss";
 
 interface CopyAgentDialogProps {

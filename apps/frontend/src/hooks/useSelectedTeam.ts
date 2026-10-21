@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import { useParams } from "react-router-dom";
-import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
-import type { TeamWithPermissions } from "../slices/controlPlane/controlPlaneOpenApi";
+import { useGetTeamQuery } from "../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { TeamWithPermissions } from "../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import { useFrontendBootstrap } from "./useFrontendBootstrap.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";

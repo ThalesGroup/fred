@@ -15,7 +15,7 @@
 import { type PropsWithChildren } from "react";
 import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
-import { useOnboardingStatusQuery } from "../../../slices/fredManager/fredManagerApiEnhancements";
+import { useOnboardingStatusQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 /** GcuGuard owns status loading/errors and keeps this guard behind personal consent. */
 export default function BootstrapGuard({ children }: PropsWithChildren) {

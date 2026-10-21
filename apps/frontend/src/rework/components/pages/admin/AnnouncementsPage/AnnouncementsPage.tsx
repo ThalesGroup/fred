@@ -30,8 +30,8 @@ import {
   useDeleteAnnouncementMutation,
   useSetAnnouncementEnabledMutation,
   useUpdateAnnouncementMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { Announcement, AnnouncementWriteRequest } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { Announcement, AnnouncementWriteRequest } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import ActivationHistory from "./ActivationHistory";
 import AnnouncementEditorDialog from "./AnnouncementEditorDialog";
 import PatchNoteAnnouncer from "./PatchNoteAnnouncer";

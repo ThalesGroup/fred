@@ -15,7 +15,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
-import { useUserTopAgentsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useUserTopAgentsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { HomePeriod } from "../HomePage.tsx";
 import { homePeriodRange } from "../homePeriod.ts";

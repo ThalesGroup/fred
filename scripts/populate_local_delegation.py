@@ -15,7 +15,7 @@ Uses the existing agentic client credentials, never Keycloak admin credentials,
 and checks that the minted token satisfies each application's delegation block:
 the delegation caller role at the configured claim, the delegation audience, a
 realm issuer and, where a block sets service_accounts_only, the service-account
-markers. Writes config/.delegation.local.json for the three applications; each
+markers. Writes config/.delegation.local.json for the Python applications; each
 switches on one direction of that application's own YAML delegation block,
 act_for_people for the caller and accept_delegated_calls for the receivers, and
 keeps every other setting. Local make run and make run-worker load it; rerun after recreating
@@ -38,7 +38,7 @@ import yaml
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parent.parent
-APPS = ("control-plane-backend", "knowledge-flow-backend", "fred-agents")
+APPS = ("knowledge-flow-backend", "fred-agents")
 CALLER_APP = "fred-agents"
 CONFIG = "config/configuration_prod.yaml"
 # Keep in step with fred_pod.security.delegation.DelegationConfig's defaults.

@@ -17,7 +17,7 @@ import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButto
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Switch from "@shared/atoms/Switch/Switch";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
-import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Announcement } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 export interface RowControlsProps {
   announcement: Announcement;

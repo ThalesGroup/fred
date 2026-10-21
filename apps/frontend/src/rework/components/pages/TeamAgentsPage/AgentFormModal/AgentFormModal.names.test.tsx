@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -34,7 +34,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 // Model reads are outside these form interaction tests; keep them isolated from Redux.
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
   useTeamRoutingPolicyQuery: () => ({ currentData: undefined, isError: false }),
   useAvailableModelProfilesQuery: () => ({ currentData: undefined, isError: false }),
 }));
@@ -50,7 +50,7 @@ vi.mock("@shared/organisms/SettingsModal/SettingsModal.tsx", () => ({
   ),
 }));
 // These form-only tests have no Redux provider; model selection is outside their scope.
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
   useTeamRoutingPolicyQuery: () => ({ currentData: undefined }),
   useAvailableModelProfilesQuery: () => ({ currentData: undefined }),
 }));

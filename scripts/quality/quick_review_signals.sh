@@ -145,11 +145,6 @@ printf '%s\n' "${touched_files[@]}" \
   | rg -n '(^docs/swift/(rfc|backlog|data|tracks|platform)/|^docs/swift/(STATUS|WORKPLAN|README)\.md$|CLAUDE\.md$|AGENTS\.md$)' \
   || printf 'No docs, tracking, or assistant-governance files detected in touched paths.\n'
 
-section "Temporary Swift-Specific Residue Check: Control-Plane Self-Test Harness Files"
-git ls-files 'apps/control-plane-backend/**' \
-  | rg -n '(^|/)(self_test|knowledge_flow_client)' \
-  || printf 'No control-plane backend self-test harness files found.\n'
-
 section "Rework Hand-Rolled Fetches Against Generated-Client Prefixes"
 # Flags raw fetch("/<prefix>/...") calls under apps/frontend/src/rework where the
 # matching backend already has a generated RTK Query client (knowledgeFlowOpenApi.ts,

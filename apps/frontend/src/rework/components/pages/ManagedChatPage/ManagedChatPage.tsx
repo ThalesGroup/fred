@@ -69,13 +69,13 @@ import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import {
   useEffectiveChatModelQuery,
   useGetTeamQuery,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import {
   useGetAgentInstanceSkillDetailQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   type ContextPromptSummary,
   type ManagedAgentInstanceSummary,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import Icon from "@shared/atoms/Icon/Icon";

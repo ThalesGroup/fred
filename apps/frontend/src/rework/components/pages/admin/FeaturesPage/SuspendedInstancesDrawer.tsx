@@ -22,7 +22,7 @@
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityEnablementItem, Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { capabilityLabel } from "./capabilityEnablement";
 import styles from "./SuspendedInstancesDrawer.module.css";
 

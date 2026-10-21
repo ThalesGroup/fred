@@ -28,7 +28,7 @@ import {
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { MAX_HOLD_MINUTES } from "../../../../features/pipeline/types";
 import { useAuthzProbeRun } from "../../../../features/pipeline/useAuthzProbeRun";
-import { useListUsersQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useListUsersQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { StepReportPanel } from "./StepReportPanel";

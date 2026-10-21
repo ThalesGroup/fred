@@ -10,7 +10,7 @@ live run. Domain rules remain in [Documents and knowledge](05-documents.md).
 
 Use an installation with manager original storage, processing, its dispatcher,
 Temporal and the KF workers configured according to the
-[activation guide](../swift/ops/migrations/rust-fred-manager.md#optional-document-processing).
+[activation guide](../swift/ops/migrations/rust-control-plane.md#optional-document-processing).
 For the OpenSearch checkpoints, the KF `manager_processing.vector_store` must
 select OpenSearch and its dedicated index. Another configured vector backend
 does not write these chunks to OpenSearch.
@@ -18,7 +18,7 @@ does not write these chunks to OpenSearch.
 Priya's authenticated subject, current CGU acceptance, unique TSN attachment and
 fredlab `can_write` permission are prerequisites. Admin alone does not grant
 content write access. The repository's
-[demo provisioning fixture](../../apps/fred-manager/tests/fixtures/import_export/demo_provisioning/organizations.json)
+[demo provisioning fixture](../../apps/control-plane/tests/fixtures/import_export/demo_provisioning/organizations.json)
 places Priya in **Demo**, and its fredlab team also belongs to Demo. Do not mistake
 that fixture for this TSN scenario or give Priya a second organization to reproduce
 it. Confirm the actual identity and placement before beginning; see
@@ -41,7 +41,7 @@ checkpoint. Names alone are insufficient to join stores.
 | `G` | Published generation UUID, `document_processing.manifest.generation` |
 
 API paths below are relative to the deployment's manager API base. The browser
-uses the `/fred-manager/v1` proxy; worker configuration can use a different mounted
+uses the `/control-plane/v1` proxy; worker configuration can use a different mounted
 base. Capture the actual network requests rather than substituting a KF URL.
 
 ## Follow the document
@@ -99,8 +99,8 @@ There is one new `folder` row, no document, no S3 object and no vector.
 OpenFGA evaluates authority on `space:S`; no `folder:F` tuple is created.
 The organization's technical guard revision changes on a successful mutation.
 
-Read [create_folder and authorized_write](../../apps/fred-manager/src/spaces.rs)
-and the [HTTP handler](../../apps/fred-manager/src/api.rs).
+Read [create_folder and authorized_write](../../apps/control-plane/src/spaces.rs)
+and the [HTTP handler](../../apps/control-plane/src/api.rs).
 
 ### 2. Transfer and store the original
 
@@ -110,15 +110,15 @@ and quota without reserving either. The actual multipart upload carries `K` and
 SHA-256. A guarded transaction reserves `paper.pdf` and its bytes in
 `document_upload(status='pending')`; fredlab is the quota owner in this scenario.
 
-Manager writes and reads back the opaque original object. A second guarded
+Manager writes and reads back the original object in the [document layout](05-documents.md#physical-object-layout). A second guarded
 transaction inserts `document(id=D, space_id=S, folder_id=F)`, marks the receipt
 `stored`, and creates `document_processing(id=P, status='pending', stage='queued')`.
 These three changes commit together. An omitted profile creates no processing
 attempt. `stored` means the original is durable, not that extraction is finished.
 The dispatcher can advance processing before the upload response is received.
 
-Read [upload, reserve and publish](../../apps/fred-manager/src/documents/upload.rs)
-and [processing admission](../../apps/fred-manager/src/processing/store.rs).
+Read [upload, reserve and publish](../../apps/control-plane/src/documents/upload.rs)
+and [processing admission](../../apps/control-plane/src/processing/store.rs).
 
 ### 3. Deliver the existing worker contract
 
@@ -135,8 +135,8 @@ persistence adapter. This requires a KF worker with that adapter; it does not me
 an older, unmodified worker understands manager storage. The adapter's authenticated
 HTTP callbacks are a separate contract from the unchanged Temporal input.
 
-Read [submission](../../apps/fred-manager/src/processing/worker_contract.rs),
-[dispatch](../../apps/fred-manager/src/processing/dispatch.rs) and
+Read [submission](../../apps/control-plane/src/processing/worker_contract.rs),
+[dispatch](../../apps/control-plane/src/processing/dispatch.rs) and
 [manager adapter](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/service.py).
 
 ### 4. Extract, chunk and index
@@ -155,15 +155,17 @@ uses the original; a derived `native.pdf` is not required for this PDF journey.
 
 Each vector ID is `UUIDv5(generation UUID, decimal ordinal string)`. The worker
 journals planned IDs before writes and reads back persisted chunks before creating
-`chunks.jsonl`. Chunk metadata includes `document_uid=D`, `chunk_uid` and
-`manager_installation`, `manager_organization`, `manager_space`,
-`manager_processing`, `manager_generation`.
+`chunks.jsonl`. Chunk metadata uses the existing Swift fields, including
+`document_uid=D` and `chunk_uid`; there are no manager-specific metadata fields.
+The OpenSearch adapter and mapping are unchanged. The current adapter receives
+`folder_id` and `folder_path` in its descriptor but does not copy them into chunk
+metadata. Join `D` back to SQL to establish ArxivAi placement. Filter the index by
+`metadata.document_uid`, then match chunk IDs to the published `chunks.jsonl`.
+A document filter alone can also return staged generations.
 
-The current adapter receives `folder_id` and `folder_path` in its descriptor but
-does not copy them into chunk metadata. Join `D` back to the SQL document/folder
-to establish ArxivAi placement. OpenSearch stores the `manager_*` values in
-`_source`; its default mapping does not index them. Filter by the indexed
-`metadata.document_uid`, then inspect generation values in the returned source.
+The separate `document-vectors` index prevents legacy retrieval from exposing
+staged manager chunks or applying legacy ACLs to manager documents. Generation
+UUID-based IDs fence stale writes without changing the Swift chunk schema.
 
 Read [scoped pipeline and vectors](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/persistence.py),
 [artifact persistence](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/artifacts.py)
@@ -181,8 +183,8 @@ objects or vectors can exist before SQL publication. Manager outputs remain
 separate from the legacy KF catalog and search/chat retrieval. No new per-document
 OpenFGA grant, legacy tag, legacy metadata-catalog row or legacy task is created.
 
-Read [publication](../../apps/fred-manager/src/processing/publication.rs) and
-[preview](../../apps/fred-manager/src/processing/preview.rs). The exact bucket/key
+Read [publication](../../apps/control-plane/src/processing/publication.rs) and
+[preview](../../apps/control-plane/src/processing/preview.rs). The exact bucket/key
 comparison with `swift` is in [physical object layout](05-documents.md#physical-object-layout).
 
 ## Observe the same identities in every store
@@ -242,7 +244,7 @@ with the existing OpenFGA inspection client or HTTP API:
 Follow every nonempty `continuation_token` when reading tuples. For the simple
 direct-role setup, Priya has `member` on TSN and `editor` on fredlab. An inherited
 editor grant is also valid; use Check to establish effective authority. The
-[model](../../apps/fred-manager/openfga/model.fga) has no folder/document types.
+[model](../../apps/control-plane/openfga/model.fga) has no folder/document types.
 Content mutations change guard versions, not the number of content-role tuples.
 
 ### S3: original bytes and published artifacts

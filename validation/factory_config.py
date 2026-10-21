@@ -15,9 +15,9 @@
 
 """
 Source of truth for the validation suite: parses
-../apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/users.json
+../apps/control-plane/tests/fixtures/import_export/demo_provisioning/users.json
 (the same checked-in fixture used to build the demo-provisioning bundle uploaded via
-Admin > Migration - see apps/control-plane-backend/Makefile's `build-demo-bundle`)
+Admin > Migration - see apps/control-plane/Makefile's `build-demo-bundle`)
 into a typed user/role/team matrix, plus the env-configurable endpoints. Imported by
 both conftest.py and the tests so there is no fragile `import conftest`.
 """
@@ -54,14 +54,14 @@ KF_URL = os.getenv("FRED_KNOWLEDGE_FLOW_URL", "http://localhost:8111/knowledge-f
 # cross-repo env-var indirection needed for this file. This is the single source
 # of truth for the 15 demo users, checked into git and also used to build the
 # `make build-demo-bundle` zip uploaded via Admin > Migration (see
-# apps/control-plane-backend/Makefile and PLATFORM-IMPORT-RFC.md Part A).
+# apps/control-plane/Makefile and PLATFORM-IMPORT-RFC.md Part A).
 CONFIG_PATH = Path(
     os.getenv(
         "FRED_CONFIG_PATH",
         str(
             Path(__file__).parent.parent
             / "apps"
-            / "control-plane-backend"
+            / "control-plane"
             / "tests"
             / "fixtures"
             / "import_export"
@@ -156,7 +156,7 @@ class FactoryUser:
 def load_users() -> dict[str, FactoryUser]:
     # JSON is valid YAML: the fixture is `users.json`, a plain top-level list of
     # user entries (not wrapped in a `users:` key like the old configuration.yaml
-    # was) - see apps/control-plane-backend/tests/fixtures/import_export/
+    # was) - see apps/control-plane/tests/fixtures/import_export/
     # demo_provisioning/users.json and its BundleUserEntry schema.
     raw: list[dict[str, Any]] = yaml.safe_load(CONFIG_PATH.read_text())
     out: dict[str, FactoryUser] = {}

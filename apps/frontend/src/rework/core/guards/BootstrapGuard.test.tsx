@@ -18,7 +18,7 @@ import BootstrapGuard from "./BootstrapGuard";
 
 const mockStatus = vi.fn();
 
-vi.mock("../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOnboardingStatusQuery: () => ({ data: mockStatus() }),
 }));
 vi.mock("@shared/layouts/MainLayout/MainLayout", () => ({ default: ({ children }) => children }));

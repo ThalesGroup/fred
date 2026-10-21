@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import type { PromptCategorySummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { PromptCategorySummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import styles from "./CategoryPicker.module.scss";
 
 interface CategoryPickerProps {

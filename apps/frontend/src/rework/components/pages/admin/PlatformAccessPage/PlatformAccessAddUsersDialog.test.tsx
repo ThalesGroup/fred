@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { PlatformAccessUser } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PlatformAccessUser } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const state = vi.hoisted(() => ({
   users: [] as PlatformAccessUser[],
@@ -17,7 +17,7 @@ vi.mock("react-i18next", () => ({
     t: (key: string, options?: Record<string, unknown>) => (options ? `${key} ${JSON.stringify(options)}` : key),
   }),
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePlatformAccessUsersQuery: (args: unknown, options: { skip: boolean }) => {
     state.query(args, options);
     if (options.skip) return { isFetching: false, isError: false };
@@ -65,7 +65,7 @@ const search = (value: string) => {
   type(value);
   act(() => vi.advanceTimersByTime(300));
 };
-const options = () => [...portal().querySelectorAll<HTMLElement>('[role="option"]')];
+const options = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
 const option = (text: string) => options().find((node) => node.textContent?.includes(text))!;
 const button = (text: string) => [...portal().querySelectorAll("button")].find((node) => node.textContent === text)!;
 const confirm = () => button("rework.platformAccess.addDialog.confirm");
@@ -103,7 +103,7 @@ it("searches all known users after a pause, from two characters, one bounded pag
   type(" al");
   type(" ali ");
   expect(state.query.mock.calls.every(([, options]) => options.skip)).toBe(true);
-  expect(portal().textContent).toContain("rework.platformAccess.addDialog.searching");
+  expect(document.body.textContent).toContain("rework.platformAccess.addDialog.searching");
   act(() => vi.advanceTimersByTime(300));
   // No exceptionsOnly: the dialog looks among every known user, not only the whitelist.
   expect(state.query.mock.lastCall).toEqual([{ offset: 0, limit: 25, query: "ali" }, { skip: false }]);
@@ -171,17 +171,17 @@ it("tells searching, no match and a failed search apart, never showing an earlie
   state.fetching = true;
   search("alz");
   expect(options()).toHaveLength(0);
-  expect(portal().textContent).toContain("rework.platformAccess.addDialog.searching");
+  expect(document.body.textContent).toContain("rework.platformAccess.addDialog.searching");
   state.fetching = false;
   state.users = [];
   search("alzz");
-  expect(portal().textContent).toContain("rework.platformAccess.addDialog.noMatch");
+  expect(document.body.textContent).toContain("rework.platformAccess.addDialog.noMatch");
   state.error = true;
   search("alzzz");
-  expect(portal().textContent).toContain("rework.platformAccess.addDialog.searchFailed");
+  expect(document.body.textContent).toContain("rework.platformAccess.addDialog.searchFailed");
   state.error = { status: 422, data: { detail: "platform_access_search_too_broad" } };
   search("alzzzz");
-  expect(portal().textContent).toContain("rework.platformAccess.addDialog.searchTooBroad");
+  expect(document.body.textContent).toContain("rework.platformAccess.addDialog.searchTooBroad");
   // Typing again hides the previous answer until the new one arrives.
   state.error = false;
   state.users = [alice];

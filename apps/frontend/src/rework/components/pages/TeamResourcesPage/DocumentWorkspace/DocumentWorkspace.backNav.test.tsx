@@ -72,7 +72,7 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: { id: "team-1" } }),
   useUsersByIdsQuery: () => ({ data: [] }),
 }));

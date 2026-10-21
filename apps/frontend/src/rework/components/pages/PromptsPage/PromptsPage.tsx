@@ -50,7 +50,7 @@ import {
   usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation,
   usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PromptsPage.module.scss";
 
 type FormState = {

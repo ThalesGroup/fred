@@ -15,7 +15,7 @@
 // Sort orders for the team agents list. Kept out of the page for the same
 // reason as the search predicate: testable without mounting the container.
 
-import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ManagedAgentInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 export type AgentSortValue = "name" | "created_at:desc" | "updated_at:desc";
 

@@ -11,8 +11,8 @@ import {
   useImportPlatformT0Mutation,
   usePlatformAccessStateQuery,
   usePlatformAccessT0Query,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { RefreshPlatformT0 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { RefreshPlatformT0 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PlatformAccessPage.module.css";
 
 export default function PlatformAccessT0RefreshDialog({ onClose }: { onClose: () => void }) {

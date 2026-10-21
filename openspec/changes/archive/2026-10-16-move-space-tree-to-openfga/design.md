@@ -4,7 +4,7 @@ Decisions taken with the developer on 2026-10-15: the tree lives only in OpenFGA
 admin, editor and analyst descend, member does not; a personal space has no parent
 and inherits neither rights nor agents; a person must be a member of a team before
 holding a project role; an agent's envelope is its execution space and ancestors,
-narrowed by organization/team/project switches. Only fred-manager changes now.
+narrowed by organization/team/project switches. Only control-plane changes now.
 
 ## Decisions
 

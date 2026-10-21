@@ -8,11 +8,11 @@ One ordinary k3d command and no special factory branch. Preserve UI and persiste
 
 ## Decisions
 
-1. Keep control-plane-backend/control-plane-worker as deployment names and the control-plane-backend image repository. Build that image from apps/fred-manager in both local build and CI. Remove the separate manager image publication entry and standalone application keys.
+1. Keep control-plane-backend/control-plane-worker as deployment names and the control-plane-backend image repository. Build that image from apps/control-plane in both local build and CI. Remove the separate manager image publication entry and standalone application keys.
 2. Replace the two Python chart application blocks with Rust commands, mounts, probes and configuration. Reuse the existing control-plane Keycloak client and Secret key. Manager schema validates consumed fields; legacy factory fields for unreconstructed capabilities remain accepted but do not grant those capabilities.
 3. Keep the public manager route used by generated slices. The frontend gateway forwards it to the control-plane service under its configured API prefix. Factory bootstrap guidance continues to use the control-plane route.
 4. Honor factory migration enablement using a database-only Rust migration command and the embedded SQL migrations. Disable the Python scale-down hook. It must need neither mounted release ConfigMaps nor Keycloak/OpenFGA credentials.
-5. Preserve database/schema, OpenFGA store fred-manager, lifecycle queue/prefix fred-manager-lifecycle and bootstrap/consent data. Forward shared scheduler.temporal connection settings to lifecycle configuration at the chart boundary. API and worker consume the same configuration/catalogue and restart together on changes.
+5. Preserve database/schema, OpenFGA store control-plane, lifecycle queue/prefix control-plane-lifecycle and bootstrap/consent data. Forward shared scheduler.temporal connection settings to lifecycle configuration at the chart boundary. API and worker consume the same configuration/catalogue and restart together on changes.
 6. Helm replaces old manager-named resources in the same fred-app release. A still-independent manager release must be explicitly retired by its operator first; reject coexistence when detected rather than deleting another release automatically. No product build hook may mutate the cluster.
 
 ## Risks / Trade-offs

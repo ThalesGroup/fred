@@ -99,8 +99,8 @@ The broad browser journey reaches personal opening but fails its existing Agents
 page mobile-width assertion before the document segment; focused document mode
 uses the same disposable real services and preserves that broad assertion.
 
-Browser acceptance: `FRED_MANAGER_BROWSER_DOCUMENTS_ONLY=1 make -C
-apps/fred-manager test-browser` passes the complete document journey with real
+Browser acceptance: `CONTROL_PLANE_BROWSER_DOCUMENTS_ONLY=1 make -C
+apps/control-plane test-browser` passes the complete document journey with real
 OIDC/PostgreSQL/OpenFGA/SeaweedFS. It uploads a 106,496-byte original, simulates a
 lost response after server publication, observes the UI's stored receipt lookup
 without a second upload, leaves/reloads Resources, downloads identical bytes and

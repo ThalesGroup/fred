@@ -22,13 +22,13 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import TagInput from "@shared/molecules/TagInput/TagInput.tsx";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { ManagedAgentFieldSpec } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import {
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./TuningFieldRenderer.module.css";
 

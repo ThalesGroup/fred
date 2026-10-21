@@ -13,7 +13,7 @@ import {
   useRegenerateTeamJoinLinkMutation,
   useSetTeamJoinLinkMutation,
   useTeamJoinLinkQuery,
-} from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./TeamInviteLinkDialog.module.scss";
 
 interface TeamInviteLinkDialogProps {

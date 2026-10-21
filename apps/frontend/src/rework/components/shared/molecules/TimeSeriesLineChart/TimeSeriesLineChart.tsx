@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import type { TimeSeriesPoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TimeSeriesPoint } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./TimeSeriesLineChart.module.scss";
 
 function useCssVars(ref: React.RefObject<HTMLElement | null>, ...names: string[]) {

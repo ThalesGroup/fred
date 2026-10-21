@@ -34,7 +34,7 @@ import {
   type ImportNameConflicts,
   type QuotaPrecheckResponse,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useGetTeamQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
 import { importPanelOpenRequested } from "../../../../features/tasks/taskSlice";
 import {
@@ -61,7 +61,7 @@ import {
   type ImportConflict,
   type UploadGroup,
 } from "./importConflicts";
-import { enhancedFredManagerApi as managerApi } from "../../../../../slices/fredManager/fredManagerApiEnhancements";
+import { enhancedControlPlaneApi as managerApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { runManagerImport, type ManagerDispatch } from "../../../../features/imports/managerImportRun";
 import styles from "./DocumentUploadDrawer.module.css";
 

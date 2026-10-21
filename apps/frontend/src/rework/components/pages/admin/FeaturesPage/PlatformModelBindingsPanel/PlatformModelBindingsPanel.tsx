@@ -45,8 +45,8 @@ import {
   useDeletePlatformModelBindingMutation,
   usePlatformModelBindingQuery,
   useSetPlatformModelBindingMutation,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { ModelBinding, ModelBindingSettings } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { ModelBinding, ModelBindingSettings } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PlatformModelBindingsPanel.module.css";
 
 interface PlatformModelBindingsPanelProps {

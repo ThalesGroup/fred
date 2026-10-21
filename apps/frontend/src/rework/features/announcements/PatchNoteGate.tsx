@@ -18,7 +18,7 @@
 
 import { useState } from "react";
 import { PatchNoteDialog, type PatchNote } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
-import { useMarkPatchNoteAnnouncementSeenMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useMarkPatchNoteAnnouncementSeenMutation } from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { usePatchNoteHistory } from "./usePatchNoteHistory";
 
 export default function PatchNoteGate() {

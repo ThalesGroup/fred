@@ -54,7 +54,7 @@ OpenAPI/RTK clients, Helm values/schema and arc42 derived blocks are regenerated
 - Manager offline verification: 45 unit tests and 10 OpenAPI tests pass.
   Full disposable integration reports 103 passing tests (102 exercised cases;
   the separately opt-in journey returns early in this command). The journey also
-  passes separately with `FRED_MANAGER_IT_PROCESSING=1` and
+  passes separately with `CONTROL_PLANE_IT_PROCESSING=1` and
   `INTEGRATION_POSTGRES_IMAGE=pgvector/pgvector:pg15` (395.28 seconds).
 - KF: 365 scheduler/adapter/pipeline/Excel/tabular tests pass; the subsequent
   adapter boundary additions pass 36 focused tests. Faults cover original

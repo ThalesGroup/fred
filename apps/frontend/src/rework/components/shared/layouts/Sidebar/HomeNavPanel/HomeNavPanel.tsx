@@ -24,7 +24,7 @@ import {
   useMySpacesQuery,
   useMeQuery,
   useCreatePersonalSpaceMutation,
-} from "../../../../../../slices/fredManager/fredManagerApiEnhancements";
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
 import TeamSortSelect, { type TeamSortOption } from "./TeamSortSelect.tsx";
 import { getTeamRecency, getTeamSortMode, setTeamSortMode, type TeamSortMode } from "@shared/utils/teamRecency.ts";

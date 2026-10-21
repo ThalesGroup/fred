@@ -25,7 +25,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AnnouncementBanner, { HIDE_TRANSITION_MS } from "./AnnouncementBanner";
-import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Announcement } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),

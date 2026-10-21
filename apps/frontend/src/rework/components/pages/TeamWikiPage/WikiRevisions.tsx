@@ -20,12 +20,12 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
-import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   useRestoreWikiRevisionMutation,
   useUsersByIdsQuery,
   useWikiRevisionsQuery,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useApiErrorToast } from "@rework/core/hooks/useApiErrorToast";
 import { useClickOutside } from "@shared/hooks/UseClickOutside";
 import { userDisplayName } from "@rework/core/utils/userDisplayName";

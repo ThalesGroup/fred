@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   MarketplaceSettings,
   TeamMarketplaceSettings,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -45,7 +45,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showWarn: vi.fn(), showInfo: vi.fn() }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useMarketplaceSettingsQuery: () => ({ data: h.settings, isLoading: false, isError: false }),
   useSetMarketplaceDefaultMutation: () => [h.setDefault, { isLoading: false }],
   useSetTeamMarketplaceSettingsMutation: () => [h.setTeam, { isLoading: false }],

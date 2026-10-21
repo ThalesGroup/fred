@@ -27,7 +27,7 @@ import {
   usePlatformUiSettingsQuery,
   useSetPlatformUiSettingsMutation,
   useUsersByIdsQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./UiSettingsPage.module.css";
 
 const SWATCHES = ["primary", "secondary", "tertiary"] as const;

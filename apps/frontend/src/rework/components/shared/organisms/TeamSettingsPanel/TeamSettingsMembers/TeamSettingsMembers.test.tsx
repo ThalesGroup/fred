@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import type { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamWithPermissions } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var

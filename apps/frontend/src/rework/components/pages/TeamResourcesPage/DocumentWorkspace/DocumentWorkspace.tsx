@@ -71,7 +71,7 @@ import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOn
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
 import { downloadManyAsZip } from "../../../../../utils/downloadUtils.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import { useGetTeamQuery, useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useGetTeamQuery, useUsersByIdsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
@@ -107,14 +107,14 @@ import {
   useCreateFolderMutation,
   useRenameFolderMutation,
   useDeleteFolderMutation,
-} from "../../../../../slices/fredManager/fredManagerApiEnhancements";
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   presentManagerDocument,
   managerProcessingErrors,
   downloadManagerDocument,
   type ResourceDocument,
 } from "../../../../features/imports/managerDocuments";
-import type { Folder } from "../../../../../slices/fredManager/fredManagerOpenApi";
+import type { Folder } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 // Presentation nodes retain the original renderer. Manager metadata is never a KF tag:
 // no tag id is synthesized and document operations cannot consume these nodes.

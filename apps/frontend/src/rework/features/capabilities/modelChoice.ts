@@ -16,7 +16,7 @@ import type {
   ChatControlDescriptor,
   EffectiveChatModel,
   SelectableChatModel,
-} from "../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /** The agent's recommended model among the selectable ones: the row of the resolved model. */
 export function recommendedModelRow(effective: EffectiveChatModel | undefined): SelectableChatModel | undefined {

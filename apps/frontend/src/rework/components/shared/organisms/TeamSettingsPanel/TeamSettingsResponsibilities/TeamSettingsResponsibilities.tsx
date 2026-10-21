@@ -18,7 +18,7 @@ import TeamAdminCharterContent from "@shared/molecules/TeamAdminCharterContent/T
 import {
   useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceQuery,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
 import styles from "./TeamSettingsResponsibilities.module.scss";
 
 interface TeamSettingsResponsibilitiesProps {

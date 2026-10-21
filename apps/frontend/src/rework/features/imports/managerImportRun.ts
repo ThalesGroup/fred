@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { KeyCloakService } from "../../../security/KeycloakService";
-import { enhancedFredManagerApi as api } from "../../../slices/fredManager/fredManagerApiEnhancements";
-import type { UploadReceipt, Profile, Summary } from "../../../slices/fredManager/fredManagerOpenApi";
+import { enhancedControlPlaneApi as api } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { UploadReceipt, Profile, Summary } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { store } from "../../../common/store";
 
 export type ManagerDispatch = typeof store.dispatch;

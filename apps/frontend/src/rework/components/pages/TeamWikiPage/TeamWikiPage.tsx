@@ -45,9 +45,9 @@ import {
   useWriteWikiPageMutation,
   useWriteWikiRulesMutation,
   useUsersByIdsQuery,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
-import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiPageSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { WikiArticle } from "./WikiArticle";
 // Split out: the editor pulls MDXEditor and the whole lexical graph, and it is
 // only ever rendered in edit mode — a static import put all of it in the chunk

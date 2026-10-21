@@ -37,10 +37,10 @@ class SelectionTest(unittest.TestCase):
     def test_manager_publishes_the_control_plane_image(self):
         manifest = json.loads((Path(__file__).resolve().parents[2] / ".github/docker-images.json").read_text())
         images = {entry["name"]: entry for entry in manifest["images"]}
-        self.assertNotIn("fred-manager", images)
-        self.assertEqual(images["control-plane-backend"]["context"], "apps/fred-manager")
-        self.assertEqual(images["control-plane-backend"]["dockerfile"], "apps/fred-manager/dockerfiles/Dockerfile-prod")
-        self.assertIn("control-plane-backend", built("apps/fred-manager/src/main.rs"))
+        self.assertNotIn("control-plane", images)
+        self.assertEqual(images["control-plane-backend"]["context"], "apps/control-plane")
+        self.assertEqual(images["control-plane-backend"]["dockerfile"], "apps/control-plane/dockerfiles/Dockerfile-prod")
+        self.assertIn("control-plane-backend", built("apps/control-plane/src/main.rs"))
 
     def test_frontend_application_builds_only_frontend(self):
         self.assertEqual(built("apps/frontend/src/App.tsx", "apps/frontend/package-lock.json"), {"frontend"})
@@ -53,7 +53,6 @@ class SelectionTest(unittest.TestCase):
             "libs/fred-sdk/fred_sdk/x.py",
             "libs/fred-runtime/pyproject.toml",
             "libs/capabilities/fred-capability-documents/a.py",
-            "apps/control-plane-backend/control_plane_backend/a.py",
             "apps/fred-agents/dockerfiles/Dockerfile-prod",
         ):
             self.assertEqual(built(path), ALL - {KF, "knowledge-flow-backend-pymupdf"}, path)

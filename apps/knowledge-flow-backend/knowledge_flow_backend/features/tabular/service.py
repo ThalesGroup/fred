@@ -27,7 +27,7 @@ from typing import Literal
 
 import duckdb
 import pandas as pd
-from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, is_service_agent
+from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, TagPermission, is_service_agent
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from fred_core.security.delegation import holds_caller_role
@@ -913,32 +913,14 @@ class TabularService:
 
         lookups = []
         if include_corpus_scope:
-            lookups.extend(
-                [
-                    self.rebac.lookup_user_resources(user, DocumentPermission.READ),
-                    self._resolve_scope_tag_ids(user, document_library_tags_ids=None if corpus_document_uids is not None else document_library_tags_ids, owner_filter=owner_filter, team_id=team_id),
-                ]
+            lookups.append(
+                self._resolve_corpus_documents(user, document_library_tags_ids=document_library_tags_ids, owner_filter=owner_filter, team_id=team_id, corpus_document_uids=corpus_document_uids)
             )
         if include_session_scope and attachment_uids:
             lookups.append(self._resolve_owned_attachment_datasets(user, list(dict.fromkeys(attachment_uids))))
         results = await asyncio.gather(*lookups)
-        authorized_document_ref, scoped_tag_ids = results[:2] if include_corpus_scope else ([], None)
+        visible_documents, scoped_tag_ids = results[0] if include_corpus_scope else ([], None)
         owned = results[-1] if include_session_scope and attachment_uids else {}
-
-        if isinstance(authorized_document_ref, RebacDisabledResult):
-            # Tagless fast-ingest documents require uploader authorization, even
-            # when corpus ReBAC is disabled.
-            visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
-        elif include_corpus_scope and is_service_agent(user) and not holds_caller_role(user):
-            # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
-            # the evaluation worker holds no per-user document relations by design, so the
-            # per-user READ lookup above is always empty and would zero out every dataset.
-            # Authorize via the team-scoped tag set instead; fail closed without one.
-            tag_documents = await asyncio.gather(*(self.metadata_store.get_metadata_in_tag(tag_id) for tag_id in scoped_tag_ids or ()))
-            visible_documents = [metadata for documents in tag_documents for metadata in documents]
-        else:
-            authorized_ids = [document.id for document in authorized_document_ref]
-            visible_documents = await self.metadata_store.get_metadata_by_uids(authorized_ids) if authorized_ids else []
 
         resolved_datasets: list[ResolvedDataset] = []
         used_aliases: set[str] = set()
@@ -997,6 +979,18 @@ class TabularService:
                         query_alias=claimed_alias,
                     )
                 )
+
+        # Stored folder membership supplies candidates, not document permission.
+        # Check only tabular documents, once per workbook, before exposing tables.
+        # Evaluation workers retain their existing team-folder authorization.
+        if not (scoped_tag_ids is not None and is_service_agent(user) and not holds_caller_role(user)):
+            candidate_uids = list(dict.fromkeys(dataset.metadata.document_uid for dataset in resolved_datasets))
+            readable_uids: set[str] = set()
+            for start in range(0, len(candidate_uids), 10):
+                batch = candidate_uids[start : start + 10]
+                permissions = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in batch))
+                readable_uids.update(uid for uid, allowed in zip(batch, permissions) if allowed)
+            resolved_datasets = [dataset for dataset in resolved_datasets if dataset.metadata.document_uid in readable_uids]
 
         if include_session_scope and attachment_uids:
             corpus_uids = {dataset.metadata.document_uid for dataset in resolved_datasets}
@@ -1146,6 +1140,45 @@ class TabularService:
             if datasets:
                 resolved[metadata.document_uid] = datasets
         return resolved
+
+    async def _resolve_corpus_documents(
+        self,
+        user: KeycloakUser,
+        *,
+        document_library_tags_ids: list[str] | None,
+        owner_filter: OwnerFilter | None,
+        team_id: str | None,
+        corpus_document_uids: list[str] | None,
+    ) -> tuple[list[DocumentMetadata], set[str] | None]:
+        """Corpus candidates and the active scope's authorized tag ids.
+
+        Stored folder membership narrows discovery without enumerating readable
+        documents. The dataset resolver checks tabular candidates individually."""
+
+        scoped_tag_ids = await self._resolve_scope_tag_ids(
+            user, document_library_tags_ids=None if corpus_document_uids is not None else document_library_tags_ids, owner_filter=owner_filter, team_id=team_id
+        )
+        authorized_tag_ids = scoped_tag_ids
+        if authorized_tag_ids is None:
+            readable_tags = await self.rebac.lookup_user_resources(user, TagPermission.READ)
+            if isinstance(readable_tags, RebacDisabledResult):
+                # Tagless fast-ingest documents require uploader authorization, even
+                # when corpus ReBAC is disabled.
+                return [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids], None
+            if is_service_agent(user) and not holds_caller_role(user):
+                # The evaluation worker reads only a supplied team's folders.
+                return [], None
+            authorized_tag_ids = {tag.id for tag in readable_tags}
+
+        if corpus_document_uids is None:
+            return await self.metadata_store.metadata_in_tags(list(authorized_tag_ids)), scoped_tag_ids
+        selected_tag_ids = authorized_tag_ids.intersection(document_library_tags_ids or [])
+        explicit, selected = await asyncio.gather(
+            self.metadata_store.get_metadata_by_uids(corpus_document_uids),
+            self.metadata_store.metadata_in_tags(list(selected_tag_ids)),
+        )
+        by_uid = {metadata.document_uid: metadata for metadata in [*explicit, *selected] if authorized_tag_ids.intersection(metadata.tags.tag_ids or [])}
+        return list(by_uid.values()), scoped_tag_ids
 
     async def _resolve_scope_tag_ids(
         self,

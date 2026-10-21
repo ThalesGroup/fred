@@ -18,8 +18,8 @@ Usage:
     python generate_config_schema.py <module.ClassName> <output.json>
 
 Example:
-    python generate_config_schema.py control_plane_backend.config.models.Configuration \
-        apps/control-plane-backend/config/schema/configuration.schema.json
+    python generate_config_schema.py knowledge_flow_backend.config.models.Configuration \
+        apps/knowledge-flow-backend/config/schema/configuration.schema.json
 """
 
 import importlib

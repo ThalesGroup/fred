@@ -20,7 +20,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ManagedAgentInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ManagedAgentInstanceSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -56,7 +56,7 @@ vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
     ],
   }),
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery: () => ({
     data: {
       targets: [

@@ -23,7 +23,7 @@
 
 ## Verification evidence (2026-10-15)
 
-- `apps/fred-manager`: `make test` (unit, OpenAPI) pass; `make test-integration` 52 passed
+- `apps/control-plane`: `make test` (unit, OpenAPI) pass; `make test-integration` 52 passed
   against disposable Postgres 15.12 and OpenFGA v1.15.1; `make code-quality` (clippy
   `-D warnings`, rustfmt, model check) pass.
 - New integration tests: `descending_roles_reach_projects_and_member_stays_local`,
@@ -38,7 +38,7 @@
 - Deleted with the cutover: `offline_cutover_preserves_roles_and_pins_the_published_store`,
   `cutover_rejects_invalid_source_and_replays_ambiguous_copies`,
   `cutover_rejects_changed_permissions_and_inconsistent_hierarchy`.
-- Frontend: regenerated `fredManagerOpenApi.ts`; `tsc --noEmit`, vitest on manager slice,
+- Frontend: regenerated `controlPlaneOpenApi.ts`; `tsc --noEmit`, vitest on manager slice,
   Home and sidebar, prettier pass. `make test-provisioning-browser` (real Keycloak and
   Chromium) not run.
 - `make -C docs/architecture generate` and `check` pass; `openspec validate --strict` passes;

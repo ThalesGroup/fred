@@ -8,7 +8,7 @@ MERMAID_IMAGE   ?= minlag/mermaid-cli:11.17.0
 ROOT            := $(realpath ../..)
 
 # One entity-relationship diagram per component, from its migrations.
-ER_COMPONENTS   ?= fred-manager
+ER_COMPONENTS   ?= control-plane
 
 .DEFAULT_GOAL := help
 

@@ -11,7 +11,7 @@ Non-goals: document upload/processing, admission reconstruction, SQL migration, 
 
 - Remove routes and schemas rather than disabled stubs: unknown paths return 404; removed methods on the retained document GET path return 405. No mutation or workflow dispatch occurs.
 - Share one API state after removing ingestion. Keep existing route grouping and middleware semantics; no authority/model changes or extra FGA calls.
-- Delete the ingestion configuration and optional-body codegen workaround. Lifecycle retains its own Temporal configuration and dedicated `fred-manager-` queue. Remove only the comparison to the now-absent manager ingestion queue.
+- Delete the ingestion configuration and optional-body codegen workaround. Lifecycle retains its own Temporal configuration and dedicated `control-plane-` queue. Remove only the comparison to the now-absent manager ingestion queue.
 - Retain SQL document metadata and fixture helpers, metadata reads and authorization probes. Existing data is not purged. Delete unused production mutation/storage helpers when no retained consumer needs them.
 - Keep k3d reset preflight aligned with lifecycle-only manager configuration while preserving host/namespace restrictions for every backend.
 - Regenerate OpenAPI/client and assert the removed operations are absent. Exercise the real API with Temporal unreachable, as well as the existing worker restart test.

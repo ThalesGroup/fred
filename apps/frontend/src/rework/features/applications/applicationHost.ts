@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ApplicationSummary } from "../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { ApplicationSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 
 export {
   ACCEPTED_APP_PROTOCOL_VERSIONS,
+  BINARY_BODIES_CAPABILITY,
   FRED_APP_PROTOCOL_VERSION,
   parseApplicationFrameMessage,
 } from "./applicationProtocol.ts";

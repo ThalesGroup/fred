@@ -1,9 +1,11 @@
-# Merge after document-storage.yaml and the deployment's existing values.
-# Provision the dedicated derived bucket, Secret and exported contract ConfigMap
-# as described in docs/swift/ops/migrations/rust-fred-manager.md.
+# Configuration fragment, not a complete deployment overlay. Helm replaces lists:
+# preserve every SQL/FGA/identity/model entry and volume already in your deployment.
+# See deploy/k3d/ for the complete factory profile and contract preparation.
+# Use the same Swift documents bucket as document-storage.yaml; grant only output
+# writes to the worker and input writes plus input/output reads to the API.
 applications:
   control-plane-backend:
-    extraEnvVars: &processing-manager-env
+    extraEnvVars:
       - name: FRED_CONTENT_ACCESS_KEY
         valueFrom:
           secretKeyRef: {name: manager-document-storage, key: access-key}
@@ -16,10 +18,10 @@ applications:
       - name: MANAGER_DERIVED_SECRET_KEY
         valueFrom:
           secretKeyRef: {name: manager-processing, key: secret-key}
-    extraVolumes: &processing-contract-volumes
+    extraVolumes:
       - name: processing-contract
         configMap: {name: manager-processing-contract}
-    extraVolumeMounts: &processing-contract-mounts
+    extraVolumeMounts:
       - name: processing-contract
         mountPath: /app/processing-contract
         readOnly: true
@@ -34,18 +36,15 @@ applications:
             task_queue: ingestion
           worker:
             issuer: https://identity.example.test/realms/app
-            audience: fred-manager
+            audience: control-plane
             client_id: knowledge-flow-worker
           derived:
             endpoint: https://s3.example.test
-            bucket: fred-manager-derived
-            prefix: fred-manager
+            bucket: app-content-documents
+            prefix: ""
             access_key_env_var: MANAGER_DERIVED_ACCESS_KEY
             secret_key_env_var: MANAGER_DERIVED_SECRET_KEY
-  control-plane-worker:
-    extraEnvVars: *processing-manager-env
-    extraVolumes: *processing-contract-volumes
-    extraVolumeMounts: *processing-contract-mounts
+  # control-plane-worker retains its SQL/FGA environment; no S3 secret or contract mount.
   knowledge-flow-worker:
     extraEnvVars:
       - name: MANAGER_WORKER_CLIENT_SECRET
@@ -65,20 +64,23 @@ applications:
           host: temporal:7233
           namespace: default
           task_queue: ingestion
+          ingestion_max_concurrent_activities: 1
+      app:
+        pdf_render_ttl_days: 0
       manager_processing:
         enabled: true
         url: https://manager.example.test/control-plane/v1
         issuer: https://identity.example.test/realms/app
-        audience: fred-manager
+        audience: control-plane
         client_id: knowledge-flow-worker
         endpoint: https://s3.example.test
-        bucket: fred-manager-derived
+        bucket: app-content-documents
         vector_store:
           type: opensearch
-          index: fred-manager-vectors
+          index: document-vectors
         temporary_bytes: 1073741824
     resources:
       requests:
-        ephemeral-storage: 4Gi
+        ephemeral-storage: 5Gi
       limits:
         ephemeral-storage: 8Gi

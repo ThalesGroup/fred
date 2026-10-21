@@ -22,7 +22,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   MarketplaceAgentDetail,
   MarketplaceAgentSummary,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -53,7 +53,7 @@ vi.mock("@hooks/useUserCapabilities.ts", () => ({
 vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentIconName: "smart_toy" }),
 }));
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useMarketplaceAgentQuery: () => ({ data: h.detail, isError: false, refetch: h.refetch }),
   useUnpublishAgentMutation: () => [
     (arg: unknown) => {

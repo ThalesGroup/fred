@@ -18,7 +18,7 @@
 // a deployment configuring nothing renders nothing anywhere.
 
 import { describe, expect, it } from "vitest";
-import type { UploadWarning } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { UploadWarning } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { resolveUploadWarningMessage } from "./useLocalizedUploadWarning";
 import { uploadWarningSignature } from "./useUploadWarningAcknowledgement";
 

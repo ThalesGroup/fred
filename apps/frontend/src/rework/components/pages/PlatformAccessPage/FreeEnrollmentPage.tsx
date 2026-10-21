@@ -13,7 +13,7 @@ import {
   useAcceptFreeCguMutation,
   useEnrollFreeTeamMutation,
   useRecordFreeOpeningMutation,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import PlatformAccessCard from "./PlatformAccessCard";
 import styles from "./PlatformAccessCard.module.css";
 import PlatformAccessError from "./PlatformAccessError";

@@ -27,7 +27,7 @@ import {
 } from "../../core/utils/runtimeStream";
 import { buildComposerRuntimeContext } from "../../components/pages/ManagedChatPage/runtimeContextBuilder";
 import { runtimeExecuteStreamPath } from "../../core/utils/runtimeExecutionUrl";
-import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ExecutionPreparation } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { RuntimeExecuteRequest } from "../../../slices/runtime/runtimeOpenApi";
 import { MAX_HOLD_SECONDS, type AgentTurnResult } from "./types";
 import type { CapturedCredential } from "./sessionCredential";

@@ -28,16 +28,16 @@ import SearchField from "@shared/molecules/SearchField/SearchField.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type {
   CapabilityEnablementItem,
   ManagedAgentFieldSpec,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   useDisableTeamCapabilityMutation,
   useEnableTeamCapabilityMutation,
   useSetCapabilityPersonalScopeMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
 import { TuningFieldRenderer } from "../../TeamAgentsPage/AgentFormModal/TuningFieldRenderer.tsx";
 import styles from "./CapabilityTeamMatrixDrawer.module.css";

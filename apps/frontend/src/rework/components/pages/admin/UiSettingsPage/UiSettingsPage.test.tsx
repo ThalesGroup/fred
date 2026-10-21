@@ -46,7 +46,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePlatformUiSettingsQuery: () => h.settings,
   useSetPlatformUiSettingsMutation: () => [h.save, { isLoading: false }],
   useUsersByIdsQuery: () => ({ data: [] }),

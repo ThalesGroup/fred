@@ -25,7 +25,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityEnablementItem, Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer";
 
 vi.mock("react-i18next", () => ({
@@ -42,7 +42,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useEnableTeamCapabilityMutation: () => [vi.fn(), { isLoading: false }],
   useDisableTeamCapabilityMutation: () => [vi.fn(), { isLoading: false }],
   useSetCapabilityPersonalScopeMutation: () => [vi.fn(), { isLoading: false }],

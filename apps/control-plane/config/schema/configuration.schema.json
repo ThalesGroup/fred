@@ -1,0 +1,683 @@
+{
+  "$defs": {
+    "AppConfig": {
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "base_url": {
+          "type": "string"
+        },
+        "bootstrap_token_env_var": {
+          "description": "Root-bootstrap secret, read from this environment variable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gcu_version": {
+          "description": "Active terms version; null disables consent gating.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "log_format": {
+          "$ref": "#/$defs/LogFormat",
+          "description": "`json` (one object per stdout line) or `text`, as the Python APIs' `app.log_format`."
+        },
+        "log_level": {
+          "type": "string"
+        },
+        "port": {
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "base_url",
+        "port"
+      ],
+      "type": "object"
+    },
+    "ClaimsConfig": {
+      "properties": {
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "family_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "given_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "username": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Configuration": {
+      "properties": {
+        "app": {
+          "$ref": "#/$defs/AppConfig"
+        },
+        "policies": {
+          "$ref": "#/$defs/Policies"
+        },
+        "scheduler": {
+          "$ref": "#/$defs/SchedulerConfig"
+        },
+        "security": {
+          "$ref": "#/$defs/SecurityConfig"
+        },
+        "storage": {
+          "$ref": "#/$defs/StorageConfig"
+        }
+      },
+      "required": [
+        "app",
+        "security",
+        "storage",
+        "scheduler"
+      ],
+      "type": "object"
+    },
+    "ContentConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "access_key_env_var": {
+          "type": "string"
+        },
+        "allow_insecure": {
+          "type": "boolean"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "cleanup_enabled": {
+          "description": "Disable admission and cleanup while restoring a database/storage pair.",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "force_path_style": {
+          "type": "boolean"
+        },
+        "limits": {
+          "$ref": "#/$defs/ContentLimits"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        },
+        "secret_key_env_var": {
+          "type": "string"
+        },
+        "temp_dir": {
+          "type": "string"
+        },
+        "uploads_enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "endpoint",
+        "bucket"
+      ],
+      "type": "object"
+    },
+    "ContentLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "cleanup_backlog_bytes": {
+          "default": 1073741824,
+          "format": "int64",
+          "type": "integer"
+        },
+        "cleanup_batch": {
+          "default": 100,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cleanup_interval_seconds": {
+          "default": 30,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "downloads": {
+          "default": 8,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file_bytes": {
+          "default": 104857600,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "idle_seconds": {
+          "default": 30,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "organization_bytes": {
+          "default": 5368709120,
+          "format": "int64",
+          "type": "integer"
+        },
+        "personal_bytes": {
+          "default": 5368709120,
+          "format": "int64",
+          "type": "integer"
+        },
+        "receipt_retention_days": {
+          "default": 7,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "s3_seconds": {
+          "default": 120,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "team_bytes": {
+          "default": 5368709120,
+          "format": "int64",
+          "type": "integer"
+        },
+        "temp_bytes": {
+          "default": 838860800,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "transfer_seconds": {
+          "default": 300,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "uploads": {
+          "default": 8,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "DirectoryDelegation": {
+      "description": "Only identity classification is needed here, not delegated grant acceptance.\nThese are the existing Python security.delegation claim settings.",
+      "properties": {
+        "audience": {
+          "default": "fred-delegation",
+          "type": "string"
+        },
+        "caller_role": {
+          "default": "delegation_caller",
+          "type": "string"
+        },
+        "caller_roles_claim": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "DirectoryKind": {
+      "enum": [
+        "keycloak",
+        "local"
+      ],
+      "type": "string"
+    },
+    "LifecycleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_size": {
+          "default": 100,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "sweep_interval": {
+          "default": "PT10M",
+          "type": "string"
+        },
+        "temporal": {
+          "$ref": "#/$defs/TemporalConfig",
+          "default": {
+            "connect_timeout_seconds": 5,
+            "host": "localhost:7233",
+            "namespace": "default",
+            "rpc_timeout_seconds": 10,
+            "task_queue": "control-plane-lifecycle",
+            "workflow_id_prefix": "control-plane-lifecycle"
+          }
+        }
+      },
+      "type": "object"
+    },
+    "LogFormat": {
+      "enum": [
+        "json",
+        "text"
+      ],
+      "type": "string"
+    },
+    "M2mConfig": {
+      "description": "Issuer plus outbound directory credentials, used only when `enabled`.",
+      "properties": {
+        "client_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "realm_url": {
+          "type": "string"
+        },
+        "secret_env_var": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "realm_url",
+        "enabled"
+      ],
+      "type": "object"
+    },
+    "Policies": {
+      "additionalProperties": false,
+      "properties": {
+        "purge_catalog_path": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PostgresConfig": {
+      "properties": {
+        "database": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "database",
+        "username"
+      ],
+      "type": "object"
+    },
+    "ProcessingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "derived": {
+          "$ref": "#/$defs/ContentConfig"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "limits": {
+          "$ref": "#/$defs/ProcessingLimits"
+        },
+        "temporal": {
+          "$ref": "#/$defs/TemporalConfig"
+        },
+        "worker": {
+          "$ref": "#/$defs/WorkerIdentity"
+        },
+        "worker_contract_file": {
+          "description": "Generated by KF features.scheduler.export_contract from the deployed KF configuration.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "temporal",
+        "worker_contract_file",
+        "worker",
+        "derived"
+      ],
+      "type": "object"
+    },
+    "ProcessingLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "artifacts": {
+          "default": 2000,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "batch": {
+          "default": 20,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "chunks": {
+          "default": 100000,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "derived_bytes": {
+          "default": 21474836480,
+          "format": "int64",
+          "type": "integer"
+        },
+        "execution_seconds": {
+          "default": 86400,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "generations": {
+          "default": 32,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_bytes": {
+          "default": 536870912,
+          "format": "int64",
+          "type": "integer"
+        },
+        "pending": {
+          "default": 1000,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "poll_seconds": {
+          "default": 5,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queue_seconds": {
+          "default": 3600,
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "RebacConfig": {
+      "properties": {
+        "api_url": {
+          "type": "string"
+        },
+        "create_store_if_needed": {
+          "type": "boolean"
+        },
+        "store_name": {
+          "description": "Never fred's own store: syncing this model there would replace fred's.",
+          "type": "string"
+        },
+        "sync_schema_on_init": {
+          "type": "boolean"
+        },
+        "timeout_millisec": {
+          "format": "int64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "token_env_var": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "api_url"
+      ],
+      "type": "object"
+    },
+    "SchedulerConfig": {
+      "properties": {
+        "lifecycle": {
+          "$ref": "#/$defs/LifecycleConfig"
+        },
+        "processing": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ProcessingConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SecurityConfig": {
+      "properties": {
+        "authorized_origins": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "delegation": {
+          "$ref": "#/$defs/DirectoryDelegation"
+        },
+        "m2m": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/M2mConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rebac": {
+          "$ref": "#/$defs/RebacConfig"
+        },
+        "user": {
+          "$ref": "#/$defs/UserConfig"
+        },
+        "user_directory": {
+          "$ref": "#/$defs/DirectoryKind"
+        }
+      },
+      "required": [
+        "user",
+        "rebac"
+      ],
+      "type": "object"
+    },
+    "StorageConfig": {
+      "properties": {
+        "content": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ContentConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "postgres": {
+          "$ref": "#/$defs/PostgresConfig"
+        }
+      },
+      "required": [
+        "postgres"
+      ],
+      "type": "object"
+    },
+    "TemporalConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "connect_timeout_seconds": {
+          "default": 5,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "host": {
+          "default": "localhost:7233",
+          "type": "string"
+        },
+        "namespace": {
+          "default": "default",
+          "type": "string"
+        },
+        "rpc_timeout_seconds": {
+          "default": 10,
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task_queue": {
+          "default": "control-plane-lifecycle",
+          "type": "string"
+        },
+        "workflow_id_prefix": {
+          "default": "control-plane-lifecycle",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "UserConfig": {
+      "properties": {
+        "audience": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claims": {
+          "$ref": "#/$defs/ClaimsConfig"
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "jwks_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "realm_url": {
+          "type": "string"
+        },
+        "roles_claim": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "realm_url",
+        "client_id"
+      ],
+      "type": "object"
+    },
+    "WorkerIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "audience": {
+          "type": "string"
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "issuer": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "issuer",
+        "audience",
+        "client_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/Configuration",
+  "$schema": "https://json-schema.org/draft-07/schema#"
+}

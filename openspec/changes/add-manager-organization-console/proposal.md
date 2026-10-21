@@ -18,7 +18,7 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: platform organization registry/creation and dedicated platform navigation within Fred.
+- `control-plane-provisioning`: platform organization registry/creation and dedicated platform navigation within Fred.
 
 ## Impact
 

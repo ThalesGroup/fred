@@ -15,8 +15,25 @@
 import styles from "./Autocomplete.module.scss";
 import TextInput, { TextInputProps } from "@shared/atoms/TextInput/TextInput.tsx";
 import Menu from "@shared/molecules/Menu/Menu.tsx";
-import { KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useState } from "react";
+import {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { OptionModel } from "@models/Option.model.ts";
+import { uiPortalRoot } from "@shared/utils/Portal.tsx";
+import { viewportHeight } from "@shared/utils/viewport.ts";
+
+// Gap between the field and the popover (matches --spacing-3xs).
+const MENU_GAP = 4;
+// Vertical room (px) required below the field before the menu flips upward.
+const MIN_MENU_SPACE = 240;
 
 interface AutocompleteProps<T> {
   textInput: TextInputProps;
@@ -57,8 +74,42 @@ export default function Autocomplete<T>({
   // stomping on the user's own up/down navigation mid-browse.
   const [activeIndex, setActiveIndex] = useState(0);
   const baseId = useId();
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const isOpen = isFocused && !dismissed && queryValue.trim().length >= minQueryLength;
+
+  // The menu is portaled (like Select's) so a scrollable ancestor such as a
+  // Dialog body cannot clip it; it is anchored to the field with `fixed`.
+  const updatePosition = useCallback(() => {
+    const anchor = containerRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const spaceBelow = viewportHeight() - rect.bottom;
+    const openUp = spaceBelow < MIN_MENU_SPACE && rect.top > spaceBelow;
+    setPopoverStyle({
+      position: "fixed",
+      left: rect.left,
+      minWidth: rect.width,
+      ...(openUp ? { bottom: viewportHeight() - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isOpen) updatePosition();
+  }, [isOpen, updatePosition]);
+
+  // Follow the field when any ancestor scrolls (capture) or the window resizes.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = () => updatePosition();
+    window.addEventListener("scroll", handler, true);
+    window.addEventListener("resize", handler);
+    return () => {
+      window.removeEventListener("scroll", handler, true);
+      window.removeEventListener("resize", handler);
+    };
+  }, [isOpen, updatePosition]);
 
   // Close on Escape.
   useEffect(() => {
@@ -123,7 +174,7 @@ export default function Autocomplete<T>({
   const activeOptionId = activeOption ? `${baseId}-opt-${activeOption.key}` : undefined;
 
   return (
-    <div className={styles["autocomplete-container"]} data-open={isOpen}>
+    <div className={styles["autocomplete-container"]} ref={containerRef} data-open={isOpen}>
       <TextInput
         compact={true}
         {...textInput}
@@ -143,15 +194,19 @@ export default function Autocomplete<T>({
         aria-activedescendant={activeOptionId}
         value={queryValue}
       />
-      <div id={`${baseId}-menu`} className={styles["menu-popover"]} role="presentation">
-        <Menu
-          options={options}
-          baseId={baseId}
-          activeId={activeOptionId}
-          noOptionsMessage={noOptionsMessage}
-          onChange={(v) => selectOption(v)}
-        />
-      </div>
+      {isOpen &&
+        createPortal(
+          <div id={`${baseId}-menu`} className={styles["menu-popover"]} role="presentation" style={popoverStyle}>
+            <Menu
+              options={options}
+              baseId={baseId}
+              activeId={activeOptionId}
+              noOptionsMessage={noOptionsMessage}
+              onChange={(v) => selectOption(v)}
+            />
+          </div>,
+          uiPortalRoot(containerRef.current),
+        )}
     </div>
   );
 }

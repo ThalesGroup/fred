@@ -17,7 +17,7 @@
 # dependencies = ["jsonschema>=4.0,<5", "pyyaml>=6.0"]
 # ///
 
-"""Prepare complete local identity-provider configs from the existing examples."""
+"""Prepare Python backend local identity-provider configs from the existing examples."""
 
 from __future__ import annotations
 
@@ -30,11 +30,10 @@ from uuid import UUID
 import jsonschema
 import yaml
 
-APPLICATIONS = ("control-plane-backend", "knowledge-flow-backend", "fred-agents")
+APPLICATIONS = ("knowledge-flow-backend", "fred-agents")
 DEFAULT_PROFILES = ("keycloak", "generic_oidc", "mock_oidc")
 PROFILES = (*DEFAULT_PROFILES, "entra")
 ENTRA_CLIENTS = {
-    "control-plane-backend": "control_plane_client",
     "knowledge-flow-backend": "knowledge_flow_client",
     "fred-agents": "runtime_client",
 }
@@ -89,12 +88,6 @@ def prepare(
         jsonschema.validate(config, schema)
         output = output_dir.resolve() / profile / f"configuration_{application}.yaml"
         pending.append((output, yaml.safe_dump(config, sort_keys=False)))
-        if application == "control-plane-backend":
-            catalog = Path(config["policies"]["purge_catalog_path"])
-            if not catalog.is_absolute():
-                pending.append(
-                    (output.parent / catalog, (config_dir / catalog).read_text())
-                )
     # Validate all applications before publishing any configuration.
     for output, payload in pending:
         output.parent.mkdir(parents=True, exist_ok=True)

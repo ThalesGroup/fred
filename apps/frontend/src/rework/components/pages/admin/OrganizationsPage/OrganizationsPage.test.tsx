@@ -20,12 +20,25 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string, args?: { name: string }) => (args?.name ? `${key} ${args.name}` : key) }),
 }));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => h.access }));
-vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOrganizationRegistryQuery: (args, options) => {
     h.query(args, options);
     return h.registry;
   },
   useCreateOrganizationMutation: () => [h.submit, h.result],
+  useSearchOrganizationCandidatesQuery: ({ query }, { skip }) => ({
+    currentData: skip ? undefined : [{ id: query, username: query, first_name: query, last_name: "" }],
+    isFetching: false,
+    isError: false,
+  }),
+}));
+vi.mock("@shared/molecules/Autocomplete/Autocomplete", () => ({
+  default: ({ textInput, onFieldValueChange, options, onSelect }) => (
+    <div>
+      <input {...textInput} onChange={(event) => onFieldValueChange(event.target.value)} />
+      {options.map((option) => <button type="button" key={option.key} onClick={() => onSelect(option.value)}>Select {option.key}</button>)}
+    </div>
+  ),
 }));
 import OrganizationsPage from "./OrganizationsPage";
 let host: HTMLDivElement;
@@ -59,6 +72,11 @@ function fill() {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(inputs[i], value);
       inputs[i].dispatchEvent(new Event("input", { bubbles: true }));
     });
+  });
+  act(() => {
+    for (const label of ["Select owner", "Select admin"]) {
+      [...host.querySelectorAll("button")].find((button) => button.textContent === label)!.click();
+    }
   });
 }
 function submit() {

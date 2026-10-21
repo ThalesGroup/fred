@@ -169,7 +169,7 @@ vi.mock("../../../../hooks/useFrontendProperties", () => ({
 vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
 }));
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: fetchedTeam.current }),
   // #2387 — the composer's model label. Undefined here: this file covers the
   // chat-input policy wiring, and the label's own behaviour is covered in
@@ -207,7 +207,7 @@ const previewResult = vi.hoisted(() => ({
   error: undefined as unknown,
   refetch: vi.fn(),
 }));
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetAgentInstanceSkillsQuery: () => ({
     currentData: {
       supported: true,

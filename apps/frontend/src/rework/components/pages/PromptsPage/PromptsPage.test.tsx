@@ -111,7 +111,7 @@ const createCalls: unknown[] = [];
 let createRejectsWith: unknown = null;
 let deleteRejectsWith: unknown = null;
 
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery: () => ({
     data: [PROMPT_SUMMARY, PROMPT_B_SUMMARY],
     isLoading: false,

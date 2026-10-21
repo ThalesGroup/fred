@@ -26,8 +26,8 @@ import {
   useDeleteKnowledgeBaseMutation,
   useKnowledgeBaseDefinitionsQuery,
   useKnowledgeBasesQuery,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
-import { KnowledgeBaseInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
+import { KnowledgeBaseInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import KnowledgeBaseFormModal from "./KnowledgeBaseFormModal/KnowledgeBaseFormModal.tsx";
 import styles from "./TeamKnowledgeBasesPage.module.css";
 

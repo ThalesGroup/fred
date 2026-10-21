@@ -20,7 +20,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -37,7 +37,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useJoinTeamMutation: () => [h.joinTeam, { isLoading: h.isJoining }],
 }));
 
@@ -95,7 +95,7 @@ function baseTeam(overrides: Partial<Team>): Team {
 describe("TeamCard joining_mode rendering", () => {
   it("OPEN + not a member: shows the join button and calls joinTeam on click", () => {
     const onJoined = vi.fn();
-    render(<TeamCard team={baseTeam({ joining_mode: "open" })} withDescription={false} onJoined={onJoined} />);
+    render(<TeamCard team={baseTeam({ joining_mode: "open" })} onJoined={onJoined} />);
 
     const button = container.querySelector("button");
     expect(button).not.toBeNull();
@@ -110,31 +110,21 @@ describe("TeamCard joining_mode rendering", () => {
 
   it("INVITE_ONLY + public with reachable admins: no button, shows the invite-only label", () => {
     // Formerly a prefilled mailto button; the marketplace no longer offers one.
-    render(
-      <TeamCard
-        team={baseTeam({ joining_mode: "invite_only", visibility: "public", admins: [admin] })}
-        withDescription={false}
-      />,
-    );
+    render(<TeamCard team={baseTeam({ joining_mode: "invite_only", visibility: "public", admins: [admin] })} />);
 
     expect(container.querySelector("button")).toBeNull();
     expect(container.textContent).toContain("rework.teamCard.inviteOnly");
   });
 
   it("INVITE_ONLY + private: no button, shows the invite-only label", () => {
-    render(
-      <TeamCard
-        team={baseTeam({ joining_mode: "invite_only", visibility: "private", admins: [admin] })}
-        withDescription={false}
-      />,
-    );
+    render(<TeamCard team={baseTeam({ joining_mode: "invite_only", visibility: "private", admins: [admin] })} />);
 
     expect(container.querySelector("button")).toBeNull();
     expect(container.textContent).toContain("rework.teamCard.inviteOnly");
   });
 
   it("already a member: no join button or label regardless of joining_mode", () => {
-    render(<TeamCard team={baseTeam({ joining_mode: "open", is_member: true })} withDescription={false} />);
+    render(<TeamCard team={baseTeam({ joining_mode: "open", is_member: true })} />);
 
     expect(container.querySelector("button")).toBeNull();
     expect(container.textContent).not.toContain("rework.teamCard.join");
@@ -145,15 +135,35 @@ describe("TeamCard admin avatars", () => {
   it("shows an admin's picture and falls back to initials for an admin without one", () => {
     const withPicture = { ...admin, avatar_image_url: "https://objects.test/ay.webp" };
     const withoutPicture = { id: "u-2", first_name: "Bea", last_name: "Two" };
-    render(
-      <TeamCard
-        team={baseTeam({ joining_mode: "invite_only", admins: [withPicture, withoutPicture] })}
-        withDescription={false}
-      />,
-    );
+    render(<TeamCard team={baseTeam({ joining_mode: "invite_only", admins: [withPicture, withoutPicture] })} />);
 
     const images = Array.from(container.querySelectorAll("img")).map((img) => img.getAttribute("src"));
     expect(images).toContain("https://objects.test/ay.webp");
     expect(container.textContent).toContain("BT");
+  });
+});
+
+describe("TeamCard description", () => {
+  it("shows the description on a member's card as well as a discover card", () => {
+    render(<TeamCard team={baseTeam({ is_member: true, description: "Prepare board meeting briefs." })} />);
+    expect(container.textContent).toContain("Prepare board meeting briefs.");
+    act(() => root.unmount());
+    container.remove();
+
+    render(<TeamCard team={baseTeam({ is_member: false, description: "Answer internal IT questions." })} />);
+    expect(container.textContent).toContain("Answer internal IT questions.");
+  });
+
+  it("shows the translated text instead of the stored placeholder", () => {
+    render(
+      <TeamCard
+        team={baseTeam({
+          description: "Description à compléter par l'administrateur de l'équipe.",
+          description_is_placeholder: true,
+        })}
+      />,
+    );
+    expect(container.textContent).toContain("rework.teamDescription.placeholderDisplay");
+    expect(container.textContent).not.toContain("Description à compléter");
   });
 });

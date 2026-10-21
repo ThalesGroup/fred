@@ -104,7 +104,7 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: { id: "team-1" } }),
   useUsersByIdsQuery: () => ({ data: [] }),
 }));
@@ -222,7 +222,7 @@ async function clickRemoveButtonFor(label: string) {
 }
 
 async function clickSuggestion(label: string) {
-  const option = [...dialog().querySelectorAll('[role="option"]')].find((el) => el.textContent?.includes(label));
+  const option = [...document.querySelectorAll('[role="option"]')].find((el) => el.textContent?.includes(label));
   if (!option) throw new Error(`suggestion "${label}" not rendered`);
   await act(async () => {
     option.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -240,7 +240,7 @@ function closeModal() {
 }
 
 function suggestionTexts(): (string | null)[] {
-  return [...dialog().querySelectorAll('[role="option"]')].map((el) => el.textContent);
+  return [...document.querySelectorAll('[role="option"]')].map((el) => el.textContent);
 }
 
 describe("DocumentWorkspace — manage a document's labels", () => {

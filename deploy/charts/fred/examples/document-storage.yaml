@@ -1,5 +1,6 @@
-# Merge after the deployment's existing values. Provision the dedicated bucket
-# and Secret independently; this overlay contains references, never credentials.
+# Configuration fragment, not a complete deployment overlay. Helm replaces lists:
+# append these extraEnvVars to the existing SQL/FGA/identity entries. See deploy/k3d/
+# for the complete factory profile. Provision the Swift documents bucket and Secret.
 applications:
   control-plane-backend:
     extraEnvVars:
@@ -13,19 +14,19 @@ applications:
       storage:
         content:
           endpoint: https://s3.example.test
-          bucket: fred-manager-originals
+          bucket: app-content-documents
           region: us-east-1
-          prefix: fred-manager
+          prefix: ""
           access_key_env_var: FRED_CONTENT_ACCESS_KEY
           secret_key_env_var: FRED_CONTENT_SECRET_KEY
-          temp_dir: /tmp/fred-manager-uploads
+          temp_dir: /tmp/control-plane-uploads
           uploads_enabled: true
           cleanup_enabled: true
           limits:
             file_bytes: 104857600
-            uploads: 8
+            uploads: 4
             downloads: 8
-            temp_bytes: 838860800
+            temp_bytes: 419430400
             idle_seconds: 30
             transfer_seconds: 300
             s3_seconds: 120

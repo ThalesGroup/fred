@@ -21,7 +21,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ManagedAgentFieldSpec } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { TuningFieldRenderer } from "./TuningFieldRenderer";
 
 declare global {
@@ -46,7 +46,7 @@ vi.mock("react-i18next", () => {
 });
 
 // One context prompt → the library exists (hasLibrary), so auto-open logic applies.
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({
     data: [{ id: "p1", name: "Prompt 1", scope: "team" }],
   }),

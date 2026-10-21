@@ -14,7 +14,7 @@
 
 import { describe, it, expect } from "vitest";
 import { canEditTeamContent, mapTeamPermissions, type TeamCapabilities } from "./teamCapabilities";
-import type { TeamPermission, UserTeamRelation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamPermission, UserTeamRelation } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 // Every `TeamPermission` the generated client currently knows about, paired
 // with the flag it must turn on and nothing else. If the backend adds a

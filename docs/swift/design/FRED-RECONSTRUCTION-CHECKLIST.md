@@ -32,7 +32,7 @@ to reconcile with the agreed model, not a reason to copy implicit enrollment.
 | Privacy, audit and operations | Personal data export/erasure/retention, role and consent audit, health/metrics, backups/restore, schema migration, deployment/CI, secret rotation | Fred security/logging contracts, deployment chart/factory, GDPR and administration pages | Auditable effects, restore with consistent authority, rotation/restart, no leaked secrets |
 
 The complete existing UI is the reconstruction reference, as required by
-[the branch instructions](../../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac).
+[the branch instructions](../../../AGENTS.md#control-plane-reconstruction-on-chorerust-rebac).
 Keep its pages, routes, navigation, controls and styles while changing API/data
 bindings. Record unavailable manager contracts as backend gaps; do not remove or
 replace their UI. Organization information belongs only in the existing profile.
@@ -41,4 +41,4 @@ validate admission, authorization, success and error behavior for each lot.
 The content-administrator self-assignment rule requires an explicit decision before
 an editing UI relies on it. Measure OpenFGA query types,
 counts, pagination and driving cardinalities for each affected journey, as required
-by [the branch instructions](../../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac).
+by [the branch instructions](../../../AGENTS.md#control-plane-reconstruction-on-chorerust-rebac).

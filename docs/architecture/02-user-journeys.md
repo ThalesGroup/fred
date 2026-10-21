@@ -1,185 +1,134 @@
 # 2. User journeys
 
-Journeys explain architecture through observable actions. Each one names its
-execution context, the authority making each decision and the resulting state.
-Rules live in their domain chapters; this chapter shows their composition.
+This chapter follows the current browser journey from first login to creating a
+folder. It describes the Rust control-plane and the existing Fred frontend, using
+the local three-application profile. Uploading or processing a document is a
+separate [document journey](02a-document-journey.md).
 
 ## From an empty platform to an organization's first user
 
-Execution context: Fred's existing application, navigation and screens connected
-to fred-manager on `chore/rust-rebac`, using Keycloak, PostgreSQL and OpenFGA.
-After manager consent/bootstrap, ordinary organization users reach the complete
-existing Fred business UI. Platform owners reach the organization administration
-area. Manager owns onboarding, governance and membership/personal navigation. Other
-business pages retain their existing service calls and ordinary failure states.
-The shared navigation fills the available window height, with the account menu
-at its bottom; announcement banners occupy space above the business pages.
-
-| Step | What the person sees or does | Architectural effect |
-| --- | --- | --- |
-| 1. Open Fred | Sign in with a personal Keycloak account. | Public configuration identifies the login authority. The bearer identifies the caller; it grants no organization membership. |
-| 2. Accept the CGU | Read the active terms and explicitly accept. | Manager records that person's subject, version and time in SQL. No role or space is created. |
-| 3. Initialize administration | On an unclaimed platform, enter the deployment bootstrap secret. | Manager reserves this caller as root, writes platform ownership in OpenFGA and records completion. |
-| 4. Open the platform | Root reaches Organizations in the administration console, with Provisioning beside it and the shared account menu. | Platform governance grants no organization membership or content access. |
-| 5. Import the ZIP | Select the Make-generated bundle and read the completed report. | Manager uses its own Keycloak service identity to resolve/create users and reconciles declared organizations, teams, projects and direct roles. |
-| 6. Change accounts | Sign out, then sign in as an imported person. | The browser starts a fresh session; the previous person's data is not retained. |
-| 7. Enter the organization | Accept personal CGU and reach the usual Home dashboard; select a team or personal space using the existing navigation. Read the organization name in Profile. | Import has not accepted terms for this person. Manager resolves the unique organization from canonical roles. No organization selector, tenant URL parameter or personal-space creation is involved. |
+| Step | Person and action | Visible result | What is retained |
+| --- | --- | --- | --- |
+| 1. Sign in | A person authenticates with the configured identity provider. | Fred opens the admission journey. A login alone grants no space access. | In local-directory mode, the authenticated person's profile is recorded in `user_identity`; Keycloak directory mode reads the provider instead. |
+| 2. Accept terms | The person reads the displayed CGU and accepts the current version. | Fred continues admission. If terms cannot load, the protected journey remains closed. | `terms_acceptance` records this subject, version and acceptance time. No space or role is created. |
+| 3. Bootstrap | On an unclaimed platform, that person supplies the deployment bootstrap token. | The first platform owner reaches Organizations. A wrong token does not grant ownership. | `platform_bootstrap` records the claimant and completion; the actual platform-owner role is in OpenFGA. |
+| 4. Provision | The platform owner imports a provisioning ZIP defining accounts, an organization, teams and their explicit roles. | The report shows acknowledged creations and grants, or the failed phase. | Account identities, `space` rows and OpenFGA roles/placement. Import does not accept terms for anyone. |
+| 5. Change account | The owner signs out. A provisioned business user signs in and accepts their own CGU. | Home displays that person's accessible spaces. The organization name appears in Profile. | No automatic team, folder or personal space is created by login. |
+| 6. Choose a space | The user selects an accessible team, or opens their entitled personal space. | The existing space navigation opens. | Personal-space creation, when requested and allowed, creates a `space` row and its roles. Reopening reuses it. |
+| 7. Open Resources | The user opens Resources in that space. | The current directory lists its folders/documents, with loading, empty and error states. | Browsing creates nothing. |
+| 8. Create a folder | A user with write permission enters a folder name and confirms. | The dialog closes after success and the directory refreshes. | One `folder` row, in the selected space and optional parent folder. No object, vector or document-processing job is created. |
 
 ```mermaid
-sequenceDiagram
-    actor Root as First person
-    participant UI as Fred UI
-    participant KC as Keycloak
-    participant M as fred-manager
-    participant PG as PostgreSQL
-    participant FGA as OpenFGA
-    Root->>UI: Open Fred and sign in
-    UI->>KC: Personal authentication
-    KC-->>UI: Caller bearer
-    Root->>UI: Accept displayed CGU
-    UI->>M: Own bearer and terms version
-    M->>PG: Record personal consent
-    Root->>UI: Enter bootstrap secret
-    UI->>M: Own bearer and deployment secret
-    M->>PG: Reserve root claimant
-    M->>FGA: Grant platform ownership
-    M->>PG: Record bootstrap completion
-    Root->>UI: Import provisioning ZIP
-    UI->>M: ZIP and operator bearer
-    M->>KC: Resolve or create identities with service credentials
-    M->>PG: Reconcile declared spaces
-    M->>FGA: Apply declared direct roles
-    M-->>UI: Completed acknowledgment counts
+flowchart TD
+    login[Sign in] --> terms[Accept current terms]
+    terms --> owner[First platform owner: bootstrap]
+    owner --> provision[Import organization, teams and explicit roles]
+    provision --> change[Sign in as a business user]
+    change --> ownterms[Accept own terms]
+    ownterms --> space[Select a readable space]
+    space --> resources[Open Resources]
+    resources --> write{Write permission?}
+    write -- Yes --> folder[Create folder]
+    write -- No --> read[Browse only]
 ```
 
-The account menu displays the authenticated identity and allows logout even before
-CGU acceptance or bootstrap, including when admission is unavailable. After admission,
-Profile opens the existing `/settings` page even without an organization or space.
-It shows the signed-in identity and manager's effective platform roles, including
-`platform_owner`, with distinct loading, unavailable and empty-role states. The
-existing controls persist language, offered UI theme and light/dark/system mode
-in the browser. The same page links to CGU consultation (`/gcu`), privacy information
-(`/gdpr`) and shipped release notes (`/release-notes`). Consulting CGU does not
-record another acceptance; direct URLs pass through the same admission guards.
-The profile also reads the organization name from current manager memberships.
-The account menu exposes the configured external support link; business users also
-retain published patch-note history. Account/legal pages retain their standalone
-layout. Original business routes remain registered for ordinary users; platform
-owners are redirected from business URLs to Organizations.
+Bootstrap is a one-time operation. Once completed it is not reopened by changing
+the token or removing roles. An interrupted ownership grant can be retried only by
+its recorded claimant. Identity and logout remain accessible during admission; Profile opens after admission;
+a loading or unavailable admission response is not treated as permission.
 
-Unavailable configuration, onboarding state or legal text keeps the protected
-journey closed and offers retry. A wrong secret grants nothing. A completed
-bootstrap never opens again. Import failures show an error and repair/replay
-instructions: a failure does not imply rollback of remote effects.
-
-See [personal consent and bootstrap](03-security.md),
-[organizations and provisioning](04-organizations.md), and
-[automated journey acceptance](09-quality.md#provisioning-ui-acceptance).
-Deployment commands remain in the [manager README](../../apps/fred-manager/README.md).
+The platform owner has governance authority, not implicit content access. The
+current frontend directs platform owners to Organizations, including accounts
+that also carry business roles. The browser journey above therefore uses a
+separate business account after provisioning. This is the current navigation,
+not a claim that the platform-owner role authorizes document access.
 
 ## A platform owner creates an organization
 
-Organizations lists active organization names in cursor pages. The owner enters a
-name and the exact existing usernames of its owner and administrator, who may be
-the same person. Manager resolves those accounts and commits the organization with
-only the selected Owner and Admin grants. An unknown account, reserved name or
-attachment to another organization produces an error. Creating the organization
-gives the caller no membership and gives neither nominee content access or a
-personal space. The successful result refreshes the registry.
+An alternative to declaring an organization in the ZIP is the Organizations form:
 
-The platform sidebar contains Organizations and Provisioning, plus the shared
-account menu. It has no business navigation, including when the signed-in owner
-also holds organization/team roles. Direct business URLs return to Organizations.
-The registry reuses the existing team-administration table, form controls and styles.
+1. Enter the organization name.
+2. Search the Owner field by entering at least two characters, then select a
+   proposed account. Repeat for Administrator. The same account can be selected
+   for both roles; removing one selection does not clear the other.
+3. Submit. The form prevents duplicate submission while the request is pending.
+4. On success, Fred clears the form and refreshes the organization registry.
+   On failure it displays the error and does not automatically replay creation.
+
+The candidates come from the configured directory. In Keycloak mode, Fred searches
+accounts in the realm. In local-directory mode with an OIDC
+provider, Fred searches profiles previously observed after successful authentication;
+it does not enumerate accounts that have never signed in. Local snapshots exclude service and delegated identities. Keycloak candidate
+search returns the directory results without that additional local filtering. A search failure is not an empty successful search.
+The server resolves the selected usernames again when creating the organization.
+
+The name must contain 1..180 characters after trimming, without control characters.
+An existing or pending-deletion organization reserves its name. An unknown or
+ambiguous account, or a nominee already attached to another organization, prevents
+creation. The selected people receive only the organization's owner/admin roles:
+no implicit content membership, team, folder or personal space. The creator receives
+no additional role simply for submitting the form.
+
+Creating an organization alone is therefore not enough to create a folder. A
+business user also needs an accessible space and write permission. The current
+browser provisions teams/projects and their roles through the ZIP; their Rust
+creation API exists, but the frontend has no connected team/project creation form.
+See [organizations and roles](04-organizations.md) for those separate contracts.
+
+## Provisioning the business account
+
+The current ZIP format contains `manifest.json`, `users.json`,
+`organizations.json`, `teams.json` and `projects.json`. The projects array may be
+empty. The platform owner selects the ZIP on Provisioning and explicitly imports
+it. The [declaration contract](A2-manager-contracts.md#provisioning-declarations)
+defines required fields and limits.
+
+The current importer requires compatible Keycloak authentication and its service
+directory. It can create declared accounts; existing accounts keep their profile
+and password. Generic OIDC/local directory support for candidate search and
+organization creation does not extend to ZIP import. Direct roles
+are explicit: an administrator alone cannot read or write documents. Import never
+accepts another person's terms or creates their personal space implicitly.
+
+A successful import reports reconciled spaces and acknowledged grants. A failure
+can leave remote effects already completed; it does not promise rollback. Correct
+the reported cause before replaying. Replay preserves committed space identities
+and does not remove grants absent from the bundle.
 
 ## Priya opens her personal space
 
-After demo import and personal consent, Priya reaches the usual Home dashboard at `/home`. Her declared
-organization role includes `personal_space_creator`. The existing Personal space
-entry calls generated `POST /me/personal-space`, then refreshes `GET /me/spaces`
-before selecting the returned UUID. First opening returns 201; subsequent openings
-return 200 with the same UUID. Navigation opens `/team/<UUID>/agents`. The existing
-team sidebar exposes Agents, Resources, Prompts and the other original conditional
-entries; Home returns to the team list containing fredlab.
-The entry keeps its personal avatar, label and styling.
-Keyboard activation runs the command; pending state prevents duplicate submissions.
-Command or refresh failure shows an error and requires another deliberate action.
+A provisioned user with the organization role `personal_space_creator` and the
+required organization read access can open Personal space. The first successful
+opening creates it; later openings reuse its identity. Without entitlement and without an existing personal space, the
+entry is absent; new creation is refused by the server. Revoking creation entitlement
+does not by itself remove readable access to an existing personal space.
 
-Import, login and consent create no personal space. Bob has no creation entitlement
-in the demo, so no personal entry appears and the server refuses creation. Removing
-Priya's entitlement alone preserves reuse of her readable space. Removing editor
-is not repaired by opening; removing all personal read roles prevents opening,
-without replacement. Her organization retains revocation authority and no implicit
-private-space read. The opening command and membership refresh use manager. The ordinary pages
-keep their existing service consumers.
+The personal space belongs to the organization for governance but inherits no
+organization or team content rights. Opening it does not repair revoked roles.
+The existing space sidebar provides Resources. A business user may instead choose
+an ordinary team on Home if their roles allow it.
 
 ## Priya opens Resources
 
-Priya opens Resources from the unchanged personal/team sidebar. The existing
-corpus toolbar, table, breadcrumbs and dialogs display the selected space's manager
-folders. The two familiar creation controls remain in place; current write authority
-enables folder creation and document-panel access in the selected directory.
+Resources displays the selected space's current directory. The breadcrumb identifies
+the destination; opening a folder changes that destination. The existing creation
+controls open the folder-name dialog, at the root or inside the current folder.
 
-She creates a library, opens it and creates a subfolder. Refreshing preserves them.
-Renaming the library changes its label while the subfolder keeps its identity and
-location. Searching and sorting cover the current directory, with accurate folder
-counts and bounded pages. She confirms subtree deletion; a document or pending upload anywhere below
-it refuses the entire operation. A selection of several roots reports any partial
-failure. Creation, rename and deletion recheck authority on the server.
+| Rule | Observable behavior |
+| --- | --- |
+| Authority | Creating a folder requires current write permission on its space. Owner/admin alone is insufficient. The server checks permission again when submitted. |
+| Name | Surrounding whitespace is removed; 1..255 characters, no `/`, `\` or control characters. |
+| Uniqueness | A name must be unique in the same space and parent directory. The same name in another directory is a different folder. |
+| Parent | The parent must exist in the same space. A foreign-space parent is refused. |
+| Depth | At most 15 folder levels, counting a root folder as level one. |
+| Pending/error | Submission is disabled while pending. A failed creation displays an error; it is not automatically retried. |
+| Success | The directory refreshes. The folder remains after reload and can contain subfolders. |
 
-She opens the existing document drawer in a library, selects originals and imports
-them. Nonconflicting files start independently; a conflicting name requires skipping
-and never overwrites a document. Transfers continue while she navigates away; the
-import panel restores their state when she returns to Resources. It resolves a lost
-response from manager's durable receipt before
-offering a retry. After reload she finds the stored rows, their sizes and dates, and
-downloads an original through its existing menu. The downloaded bytes match the file.
+Creation stores a stable folder ID, its space, optional parent, name, UUID-based
+path and creation time. It creates no folder-specific role: content permissions
+come from the containing space. The display name is not a storage path. Creating
+an empty folder does not contact object storage, the vector index or Temporal.
 
-Statistics and quota come from manager. Priya chooses upload-only or, when enabled,
-upload-and-process with fast, medium or rich. Stored means the original is safe;
-processing has its own stage and outcome in the table and import panel. Manager
-sends processing through Temporal to the existing Knowledge Flow worker. A reader
-can browse, preview and download but cannot upload or start processing.
-
-On completion, Priya opens the existing File/Raw preview modes. A processing failure
-leaves the original downloadable; the retry action reuses it without file selection.
-Reload restores persisted progress and failures. Manager-derived outputs are isolated
-from the separate Knowledge Flow catalog and search/chat retrieval.
-See [content ownership](05-documents.md) for authority, recovery and storage limits.
-The [document journey](02a-document-journey.md) follows one PDF through these
-controls, SQL, OpenFGA, Temporal, S3 and the vector store, with observation checkpoints.
-
-## Joining and governing organizations, teams and projects
-
-Bob's TSN roles attach him to TSN; Priya's demo roles attach her to Demo. Each person
-enters their own organization after login and personal consent. Changing accounts
-clears the previous person's cached data. A second assignment is refused, whether
-requested through provisioning or direct role administration. An account without
-space roles has no team entry; platform governance remains independent.
-
-The [organization chapter](04-organizations.md#one-person-one-organization) defines
-attachment, workspace selection and the separate meanings of identity and permissions.
-
-## From a document upload to an authorized answer
-
-## Creating an agent and equipping it with capabilities
-
-## Running a conversation and inspecting its results
-
-## Evaluating, administering and operating the platform
-
-## An operator retires a space
-
-An authenticated platform owner who has accepted CGU calls `DELETE /spaces/{id}`
-for a project, team or organization. Manager returns 202 with a durable receipt.
-The scope immediately disappears from Priya's workspace lists; direct resource
-requests and mutations refuse it. Organization deletion includes personal spaces.
-An organization owner or team administrator alone cannot request this operation.
-The UI has no new deletion control.
-
-The operator follows `GET /deletions/{operation_id}`. After the configured delay,
-the separate worker removes folders, OpenFGA references and space rows. The receipt
-reports completion only after that cleanup. Repeating DELETE returns the same
-receipt, including after the target disappears. Document-bearing scopes and
-standalone personal-space requests are refused. The delay provides retention,
-not an undo window. See [lifecycle operation](A3-manager-operations.md#space-deletion-lifecycle).
+The [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) describes
+all tables; the [source map](../../apps/control-plane/src/README.md) locates the
+actual form, API handler, authorization and SQL code for each step.

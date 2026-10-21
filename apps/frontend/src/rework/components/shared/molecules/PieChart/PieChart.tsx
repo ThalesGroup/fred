@@ -14,7 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import type { LabelValuePoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { LabelValuePoint } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./PieChart.module.scss";
 
 function getCssVars(...names: string[]): Record<string, string> {

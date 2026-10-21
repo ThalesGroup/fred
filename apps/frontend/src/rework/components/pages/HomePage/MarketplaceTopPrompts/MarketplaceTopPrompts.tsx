@@ -20,7 +20,7 @@ import {
   useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
   useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
   usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { HomePeriod } from "../HomePage.tsx";
 import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
 import Sparkline from "../Sparkline/Sparkline.tsx";

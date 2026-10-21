@@ -16,7 +16,7 @@ import styles from "./TeamSelectionListItem.module.scss";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import type { TeamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
-import type { UserTeamRelation } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { UserTeamRelation } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { useTranslation } from "react-i18next";
 import { Link, type To } from "react-router-dom";
 
@@ -40,7 +40,7 @@ interface TeamSelectionListItemProps {
   name: string;
   /** The current user's folded roles on this team (from `Team.my_relations`).
    *  Ignored for the personal space (`personal`), which shows no role line. */
-  roles?: (UserTeamRelation | import("../../../../../slices/fredManager/fredManagerOpenApi").Role)[];
+  roles?: (UserTeamRelation | import("../../../../../slices/controlPlane/controlPlaneOpenApi").Role)[];
   /** Personal space: renders the user's initials avatar and hides the role line. */
   personal?: boolean;
   /** Team banner image, or the user's picture for the personal space; when

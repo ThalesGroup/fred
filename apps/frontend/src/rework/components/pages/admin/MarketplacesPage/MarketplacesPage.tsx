@@ -33,12 +33,12 @@ import {
   useMarketplaceSettingsQuery,
   useSetMarketplaceDefaultMutation,
   useSetTeamMarketplaceSettingsMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type {
   MarketplaceSettingsImpact,
   SetTeamMarketplaceSettingsRequest,
   TeamMarketplaceSettings,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
 import styles from "./MarketplacesPage.module.css";
 import {

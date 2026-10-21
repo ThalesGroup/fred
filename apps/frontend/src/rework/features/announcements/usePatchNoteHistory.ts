@@ -14,9 +14,9 @@
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { usePatchNoteHistoryQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { usePatchNoteHistoryQuery } from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { PatchNote } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
-import type { PatchNoteSnapshot } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PatchNoteSnapshot } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { resolveAnnouncementText } from "./announcementText";
 
 /**

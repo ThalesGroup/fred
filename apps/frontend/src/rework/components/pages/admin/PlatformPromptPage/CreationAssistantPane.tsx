@@ -30,7 +30,7 @@ import {
   useResetCreationAssistantPromptMutation,
   useSetCreationAssistantSettingsMutation,
   useUsersByIdsQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./PlatformPromptPage.module.css";
 import {
   normalizeReasoningEffort,

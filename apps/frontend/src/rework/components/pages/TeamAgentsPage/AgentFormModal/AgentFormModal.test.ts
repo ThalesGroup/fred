@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   draftTargets,
   buildAgentFormSubmitPayload,

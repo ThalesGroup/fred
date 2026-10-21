@@ -23,7 +23,7 @@ const state = vi.hoisted(() => ({ version: "v1" as string | null, accepted: "v1"
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@components/pages/GcuPage/GcuPage", () => ({ default: () => <div>Accept terms</div> }));
 vi.mock("@shared/layouts/MainLayout/MainLayout", () => ({ default: ({ children }) => children }));
-vi.mock("../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOnboardingStatusQuery: () => ({
     data: { gcu_version: state.version, acceptance: { version: state.accepted } },
     refetch: vi.fn(),

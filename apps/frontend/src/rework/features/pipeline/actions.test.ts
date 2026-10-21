@@ -15,7 +15,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentTurnExecutionError, AgentTurnRejectedError, isCredentialExpiryFailure, streamAgentTurn } from "./actions";
 import type { CapturedCredential } from "./sessionCredential";
-import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ExecutionPreparation } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const PREP = {
   execute_stream_url: "/runtime/agents-v2/agents/execute/stream",

@@ -64,7 +64,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
 }));
 
 const fetchManagerPreview = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve("manager markdown") })));
-vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useLazyPreviewQuery: () => [fetchManagerPreview],
 }));
 

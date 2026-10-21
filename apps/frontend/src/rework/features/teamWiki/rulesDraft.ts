@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { WikiPageDetail } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiPageDetail } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /**
  * What the editor opens on for the rules page.

@@ -20,7 +20,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ContextPromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ContextPromptSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -46,7 +46,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: (
     arg: { teamId: string },
     opts: { skip?: boolean },

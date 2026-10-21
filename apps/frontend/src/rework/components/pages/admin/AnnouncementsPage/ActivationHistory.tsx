@@ -30,8 +30,8 @@ import {
   useAnnouncementExposureHistoryQuery,
   useLazyPatchNotePackageQuery,
   useUsersByIdsQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { AnnouncementExposure } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { AnnouncementExposure } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./ActivationHistory.module.css";
 
 type ExposureKind = AnnouncementExposure["kind"];

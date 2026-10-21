@@ -1,0 +1,64 @@
+# SeaweedFS 4.29: object permissions must reject bucket requests with a forged
+# prefix query. Keep Null(s3:prefix) on every object Allow; test_ingestion_policy.py
+# exercises policy writes and bulk deletes as well as ordinary object access.
+- name: manager
+  content:
+    Version: '2012-10-17'
+    Statement:
+    - Effect: Allow
+      Action:
+      - s3:GetObject
+      Resource:
+      - arn:aws:s3:::app-content-documents/*
+      Condition:
+        'Null':
+          s3:prefix:
+          - 'true'
+    - Effect: Allow
+      Action:
+      - s3:PutObject
+      - s3:DeleteObject
+      Resource:
+      - arn:aws:s3:::app-content-documents/*/input/*
+      Condition:
+        'Null':
+          s3:prefix:
+          - 'true'
+    - Effect: Allow
+      Action:
+      - s3:ListBucket
+      Resource:
+      - arn:aws:s3:::app-content-documents
+      - arn:aws:s3:::app-content-documents/*
+    - Effect: Allow
+      Action:
+      - s3:GetBucketVersioning
+      - s3:GetLifecycleConfiguration
+      - s3:GetBucketObjectLockConfiguration
+      Resource:
+      - arn:aws:s3:::app-content-documents
+- name: kf
+  content:
+    Version: '2012-10-17'
+    Statement:
+    - Effect: Allow
+      Action:
+      - s3:GetObject
+      - s3:PutObject
+      - s3:DeleteObject
+      Resource:
+      - arn:aws:s3:::app-content-documents/*/output/*
+      Condition:
+        'Null':
+          s3:prefix:
+          - 'true'
+    - Effect: Allow
+      Action:
+      - s3:ListBucket
+      Resource:
+      - arn:aws:s3:::app-content-documents
+      - arn:aws:s3:::app-content-documents/*
+      Condition:
+        StringLike:
+          s3:prefix:
+          - '*/output/*'

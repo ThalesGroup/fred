@@ -97,16 +97,13 @@ assert_not_contains "${FRONTEND_DIR}/dockerfiles/Dockerfile-prod" 'apps/applicat
 
 config="${TEST_DIR}/fred.conf"
 
-# The public manager prefix maps to the control-plane role and resolves DNS at request time.
-FRONTEND_FRED_MANAGER_UPSTREAM=http://manager.invalid:8400 run_entrypoint "${config}" '[]' 'false'
-assert_contains "${config}" 'location /fred-manager/ {'
-assert_contains "${config}" 'set $fred_manager_upstream http://manager.invalid:8400;'
-assert_contains "${config}" 'proxy_pass $fred_manager_upstream;'
-assert_contains "${config}" 'rewrite ^/fred-manager/(.*)$ /control-plane/$1 break;'
-assert_contains "${config}" '~^/fred-manager(?:/|[?]|$) fred-manager;'
-FRONTEND_FRED_MANAGER_API_PREFIX=/fred-manager run_entrypoint "${config}" '[]' 'false'
-assert_contains "${config}" 'rewrite ^/fred-manager/(.*)$ /fred-manager/$1 break;'
-assert_contains "${config}" 'set $fred_manager_upstream http://control-plane-backend:8222;'
+# The control-plane prefix resolves DNS at request time.
+FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane.invalid:8222 run_entrypoint "${config}" '[]' 'false'
+assert_contains "${config}" 'location /control-plane/ {'
+assert_contains "${config}" 'set $fred_control_plane_upstream http://control-plane.invalid:8222;'
+assert_contains "${config}" 'proxy_pass $fred_control_plane_upstream;'
+run_entrypoint "${config}" '[]' 'false'
+assert_contains "${config}" 'set $fred_control_plane_upstream http://control-plane-backend:8222;'
 
 # The kill switch defaults off, returns 404 for both namespaces, and never
 # inspects the registration list.

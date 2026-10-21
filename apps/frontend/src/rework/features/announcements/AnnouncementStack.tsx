@@ -28,8 +28,8 @@ import { useCallback, useMemo, useState } from "react";
 import AnnouncementBanner from "@shared/molecules/AnnouncementBanner/AnnouncementBanner";
 import { SEVERITY_RANK, type Severity } from "@shared/utils/severity";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import { useActiveAnnouncementsQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { Announcement } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { useActiveAnnouncementsQuery } from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { Announcement } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { dismissalKey, isDismissedIn, markDismissed, readDismissedSet } from "./announcementDismissal";
 import styles from "./AnnouncementStack.module.css";
 

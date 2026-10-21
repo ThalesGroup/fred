@@ -36,7 +36,7 @@ interface PackedClient {
   onContext(listener: (context: { theme?: "light" | "dark"; locale: string }) => void): () => void;
   navigate(path: string, options?: { replace?: boolean }): void;
   openChat(sessionId?: string | null): void;
-  request(path: string, init?: { method?: string; body?: string; timeoutMs?: number }): Promise<Response>;
+  request(path: string, init?: { method?: string; body?: string | Blob; timeoutMs?: number }): Promise<Response>;
   dispose(): void;
 }
 
@@ -97,7 +97,7 @@ vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
 }));
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi.ts", async (importOriginal) => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => [
     () => ({ unwrap: () => Promise.resolve([]) }),
@@ -389,5 +389,34 @@ liveIntegration("packed SDK live context with the production FRED host page", ()
     await rerender();
     expect(contexts).toHaveLength(3);
     expect(connected.client.context).toMatchObject({ theme: "dark", locale: "fr" });
+  });
+
+  it("uploads and downloads exact bytes, and still reads JSON from a binary response", async () => {
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00, 0x80]);
+    h.request.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "exports"
+          ? new Response(bytes, { headers: { "content-type": "application/vnd.ms-excel" } })
+          : new Response('{"é":1}', { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    const connected = await connectPackedSdk();
+    const upload = new Blob([bytes], { type: "application/octet-stream" });
+
+    const download = connected.client.request("exports", { method: "POST", body: upload });
+    await flush();
+    await flush();
+    const response = await download;
+
+    const [, init] = h.request.mock.calls[0] as [string, RequestInit];
+    expect(new Uint8Array(await (init.body as Blob).arrayBuffer())).toEqual(bytes);
+    expect((init.body as Blob).type).toBe("application/octet-stream");
+    expect(response.headers.get("content-type")).toBe("application/vnd.ms-excel");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+
+    const json = connected.client.request("items");
+    await flush();
+    await flush();
+    expect(await (await json).json()).toEqual({ é: 1 });
   });
 });

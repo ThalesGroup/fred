@@ -19,7 +19,7 @@ import type {
   AgentDraftResult,
   ManagedAgentFieldSpec,
   CapabilityCatalogEntry,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { applyPackToggle, type CapabilitySelectionState, derivePackChecked } from "../toolPackLogic";
 import { CAP_DOCUMENT_ACCESS, TOOL_PACK_SECTIONS } from "../toolPacks";
 

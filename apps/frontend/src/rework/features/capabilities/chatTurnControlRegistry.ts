@@ -26,7 +26,7 @@
 // as part renderers and side panels (a frontend build older than a pod must
 // never crash on a new widget id).
 
-import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatControlDescriptor } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { capabilityUiPlugins } from "./index";
 import { stockChatTurnControlKit } from "./stockKit";
 import type { CapabilityChatTurnControl, CapabilityUiPlugin } from "./types";

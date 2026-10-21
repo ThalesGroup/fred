@@ -55,6 +55,7 @@ with a compatible `fred-runtime` version.
 | `Service <release>-agent-pod` | ClusterIP `service.port`, to the pod's `configuration.app.port` |
 | `ConfigMap <release>-agent-pod-config` | `configuration.yaml` and `extraConfigFiles`, mounted under `/app/config/` |
 | `Ingress` | only with `ingress.enabled`, on `configuration.app.base_url` |
+| `HTTPRoute` | only with `httpRoute.enabled`, on `configuration.app.base_url` |
 | `Secret <release>-agent-pod-secret` | only with `secret.create: true` |
 
 ## Prerequisites
@@ -109,11 +110,36 @@ Secrets the platform already owns (`valueFrom.secretKeyRef`), under other key na
 | --- | --- | --- |
 | `extraConfigFiles` | `{}` | other files under `/app/config/` (`models_catalog.yaml`...); a file left out stays the image's |
 | `configuration.observability.kpi.prometheus` | not exposed | with `enabled: true` and `address: 0.0.0.0`, the chart opens `port` (9000 by default) and annotates the pod for scraping; it refuses a loopback address, the library's default |
-| `ingress` | off | browser route on `base_url`; Fred's own Ingress usually carries it already |
+| `ingress` | off | browser route on `base_url` through an Ingress |
+| `httpRoute` | off | browser route on `base_url` through a Gateway API HTTPRoute |
 | `service.port` | `80` | |
 | `replicaCount`, `resources` | `1`, see `values.yaml` | |
 | `extraVolumes`, `extraVolumeMounts` | `[]` | e.g. a CA bundle |
 | `imagePullSecrets` | `[]` | for a private registry |
+
+### Gateway API HTTPRoute
+
+Enable a browser route when the pod and Fred use a shared Gateway, including when they
+run in separate namespaces. The Gateway listener must accept routes from the pod's
+namespace, and its hostname must match the browser-facing Fred host.
+
+```yaml
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: public-gateway
+      namespace: envoy-gateway-system
+      sectionName: https
+  hostnames:
+    - app.example.com
+  requestTimeout: 300s
+```
+
+`parentRefs` and `hostnames` are required when enabled. The chart matches
+`configuration.app.base_url`, forwards to its own Service, and uses the optional
+`requestTimeout` for long-running streams. Set Fred's `runtime_catalog_sources`
+`ingress_prefix` to that same base URL; the installation notes print the entry.
+The HTTPRoute remains disabled unless selected in the values file.
 
 ## Register in Fred
 

@@ -1102,7 +1102,7 @@
           "type": "string"
         },
         "audience": {
-          "default": "fred-manager",
+          "default": "control-plane",
           "title": "Audience",
           "type": "string"
         },

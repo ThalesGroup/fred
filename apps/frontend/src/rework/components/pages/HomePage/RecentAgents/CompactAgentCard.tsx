@@ -16,7 +16,7 @@ import { Link } from "react-router-dom";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import type { ManagedAgentInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { ManagedAgentInstanceSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import styles from "./CompactAgentCard.module.scss";
 
 interface CompactAgentCardProps {

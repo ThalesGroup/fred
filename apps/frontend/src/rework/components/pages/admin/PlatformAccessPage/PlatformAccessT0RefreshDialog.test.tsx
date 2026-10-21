@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { RefreshPlatformT0 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { RefreshPlatformT0 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 const state = vi.hoisted(() => ({
   complete: true,
   filtering: false,
@@ -18,7 +18,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showSuccess: state.success }) }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePlatformAccessStateQuery: () => ({
     data: { revision: 3, filtering_enabled: state.filtering },
     isFetching: false,

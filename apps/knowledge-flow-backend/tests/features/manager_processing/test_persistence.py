@@ -66,7 +66,7 @@ def journal(monkeypatch):
 
 
 def test_export_uses_the_existing_temporal_models():
-    fixture = Path(__file__).resolve().parents[4] / "fred-manager/tests/fixtures/processing/worker-contract.json"
+    fixture = Path(__file__).resolve().parents[4] / "control-plane/tests/fixtures/processing/worker-contract.json"
     contract = json.loads(fixture.read_text())
     assert contract["workflow"] == "ProcessPush"
     assert contract["schema"] == PipelineDefinition.model_json_schema()
@@ -151,10 +151,9 @@ def test_actual_opensearch_resplit_preserves_concurrent_generation_scopes(descri
         body = {"code": "3210", "type": "invalid_request_prompt", "raw_status_code": 400}
 
     def write(documents, ids):
-        scope = documents[0].metadata["manager_generation"]
         observer = vector_write_observer.get()
-        assert str(observer.descriptor.generation) == scope
-        assert all(doc.metadata["manager_generation"] == scope for doc in documents)
+        scope = str(observer.descriptor.generation)
+        assert all(not any(key.startswith("manager_") for key in doc.metadata) for doc in documents)
         if scope not in initial:
             initial.add(scope)
             rendezvous.wait(timeout=5)
@@ -273,7 +272,7 @@ def test_extraction_child_freezes_profile_before_context_and_requires_office_pre
     from knowledge_flow_backend.features.manager_processing import artifacts, persistence
     from knowledge_flow_backend.features.scheduler import extraction_process
 
-    fixture = Path(__file__).resolve().parents[4] / "fred-manager/tests/fixtures/processing/worker-contract.json"
+    fixture = Path(__file__).resolve().parents[4] / "control-plane/tests/fixtures/processing/worker-contract.json"
     profile = json.loads(fixture.read_text())["processor_profiles"]["fast"]
     descriptor = descriptor.model_copy(update={"profile_settings": profile, "file": {"input_activity_timeout_seconds": 60}})
     configuration = SimpleNamespace(processing=SimpleNamespace(profiles=SimpleNamespace(fast=None)), manager_processing=SimpleNamespace(enabled=True))
@@ -420,7 +419,7 @@ def test_parent_capacity_failure_is_non_retryable_even_with_worker_retry_policy(
         wrapper = RuntimeError("output conversion failed")
         wrapper.__cause__ = error
         error = wrapper
-    contract = json.loads((Path(__file__).resolve().parents[4] / "fred-manager/tests/fixtures/processing/worker-contract.json").read_text())
+    contract = json.loads((Path(__file__).resolve().parents[4] / "control-plane/tests/fixtures/processing/worker-contract.json").read_text())
     assert contract["profiles"]["fast"]["retry_maximum_attempts"] > 1
     with pytest.raises(ApplicationError) as caught:
         raise_permanent_failure(error)
@@ -541,7 +540,9 @@ def test_configuration_refuses_shared_vector_and_content_namespaces(kind, field)
     with pytest.raises(ValueError, match="vector namespaces must differ"):
         config.isolate_manager_processing()
     setattr(manager.vector_store, field, "derived")
-    for bucket in ("legacy", "legacy-documents", "legacy-objects"):
+    manager.bucket = "legacy-documents"
+    assert config.isolate_manager_processing() is config
+    for bucket in ("legacy", "legacy-objects"):
         manager.bucket = bucket
         with pytest.raises(ValueError, match="content buckets must differ"):
             config.isolate_manager_processing()

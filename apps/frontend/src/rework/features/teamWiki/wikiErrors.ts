@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { WikiConflictResponse } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiConflictResponse } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 export interface StaleWrite {
   currentContentMd: string;

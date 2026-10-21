@@ -25,7 +25,7 @@ import {
   hasNativePreview,
   isTabularFile,
 } from "../../../../utils/documentViewerUtils";
-import { useLazyPreviewQuery } from "../../../../../slices/fredManager/fredManagerApiEnhancements";
+import { useLazyPreviewQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./DocumentViewer.module.css";
 import { ManagerPreviewImage } from "./ManagerPreviewImage";
 

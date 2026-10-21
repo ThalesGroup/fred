@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
-import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiPageSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { buildWikiTree, canHaveChild, visibleNodes } from "@rework/features/teamWiki/wikiTree";
 import styles from "./WikiTree.module.css";
 

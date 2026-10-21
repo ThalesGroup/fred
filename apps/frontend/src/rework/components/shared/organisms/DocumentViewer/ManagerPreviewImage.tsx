@@ -43,7 +43,7 @@ export function ManagerPreviewImage({ documentUid, src, alt }: { documentUid: st
       await KeyCloakService.ensureFreshToken(30);
       if (actor !== managerActor() || controller.signal.aborted) return;
       const response = await fetch(
-        `/fred-manager/v1/documents/${encodeURIComponent(documentUid)}/preview?artifact=${encodeURIComponent(path)}`,
+        `/control-plane/v1/documents/${encodeURIComponent(documentUid)}/preview?artifact=${encodeURIComponent(path)}`,
         {
           headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),

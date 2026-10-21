@@ -29,7 +29,7 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { SEVERITY_ICONS, type Severity } from "@shared/utils/severity";
 import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
-import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Announcement } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./AnnouncementBanner.module.css";
 
 // Must match the transition duration in AnnouncementBanner.module.css

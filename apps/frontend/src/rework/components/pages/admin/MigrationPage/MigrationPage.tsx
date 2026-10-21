@@ -28,8 +28,8 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import {
   usePlatformStatsQuery,
   useResetPlatformMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { TeamStats } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { TeamStats } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { selectVisibleTasks, taskRegistered } from "../../../../features/tasks/taskSlice";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";

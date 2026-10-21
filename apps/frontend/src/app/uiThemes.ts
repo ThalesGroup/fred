@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { localStorageKey } from "../hooks/useLocalStorageState.ts";
-import type { FrontendUiThemes } from "../slices/controlPlane/controlPlaneOpenApi";
+import type { FrontendUiThemes } from "../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /**
  * UI theme catalog (palette, font, radii; each has a light and a dark mode).

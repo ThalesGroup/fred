@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { WikiRevisionSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiRevisionSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { historyEntries } from "./historyEntries";
 
 const revision = (over: Partial<WikiRevisionSummary> & { revision_id: string }): WikiRevisionSummary => ({

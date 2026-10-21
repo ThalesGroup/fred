@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import type { TFunction } from "i18next";
-import type { LabelValuePoint } from "../../slices/controlPlane/controlPlaneOpenApi";
+import type { LabelValuePoint } from "../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 // Mirrors `CREATION_ASSISTANT_LABEL` in control-plane kpi/presets/common.py:
 // the by-agent bucket for creation assistant calls, which have no agent.

@@ -14,7 +14,7 @@
 
 import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import type { ImportLaunchResponse, TaskTarget } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ImportLaunchResponse, TaskTarget } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 export interface PlatformImportLaunch {
   taskId: string;

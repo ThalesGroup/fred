@@ -33,13 +33,13 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: role inheritance, OpenFGA-owned hierarchy, personal
+- `control-plane-provisioning`: role inheritance, OpenFGA-owned hierarchy, personal
   spaces without inheritance, scope levels.
 
 ## Impact
 
 Tracking: [#3092](https://github.com/ThalesGroup/fred/issues/3092). Code:
-`apps/fred-manager` (model, migration, space services, importer, HTTP handlers,
+`apps/control-plane` (model, migration, space services, importer, HTTP handlers,
 startup), regenerated OpenAPI and frontend manager client. Docs: arc42 chapters
 3, 4, 9 and references A1-A3, manager README, migration note. Frontend behavior and
 Python services are unchanged.

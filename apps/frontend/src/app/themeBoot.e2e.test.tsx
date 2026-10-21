@@ -21,7 +21,7 @@ import { runInNewContext } from "node:vm";
 import { act, useContext, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-vi.mock("../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useFrontendConfigQuery: () => ({ data: undefined, refetch: () => {} }),
 }));
 

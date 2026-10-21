@@ -23,7 +23,7 @@ import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { managerTypeStats } from "../../../features/imports/managerDocuments";
-import { useMySpacesQuery, useSummaryQuery } from "../../../../slices/fredManager/fredManagerApiEnhancements";
+import { useMySpacesQuery, useSummaryQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";

@@ -25,13 +25,13 @@ import {
   useCreateKnowledgeBaseMutation,
   useKnowledgeBaseDefinitionsQuery,
   useKnowledgeBaseFieldsQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
 import type {
   KnowledgeBaseInstanceCreate,
   KnowledgeBaseInstanceFields,
   KnowledgeBaseInstanceSummary,
   ManagedAgentFieldSpec,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import ScheduleField, { type IntervalScheduleValue } from "@shared/molecules/ScheduleField/ScheduleField.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { TuningFieldRenderer } from "../../TeamAgentsPage/AgentFormModal/TuningFieldRenderer";

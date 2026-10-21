@@ -1,0 +1,7 @@
+{{- /* Retain shared instance settings without the worker's legacy storage backends.
+Helm deep-merges maps: changing type alone would keep incompatible MinIO fields. */ -}}
+{{- $base := readFile (printf "%s/k3d-apps/fred/values.yaml" (requiredEnv "K3D_FACTORY_ROOT")) | fromYaml -}}
+{{- $worker := index $base.applications "knowledge-flow-worker" -}}
+{{- $_ := unset $worker.configuration "content_storage" -}}
+{{- $_ := unset $worker.configuration "filesystem" -}}
+{{ $base | toYaml }}

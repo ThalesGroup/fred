@@ -17,7 +17,7 @@ import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
   TeamWithPermissions,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 export type PublishBlockedReason = "templateNotPublic" | "teamPrivate" | "quotaReached";
 

@@ -32,7 +32,7 @@ import {
   useGetTeamQuery,
   usePublishAgentMutation,
   useUnpublishAgentMutation,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { type AgentFormPayload, default as AgentFormModal } from "./AgentFormModal/AgentFormModal.tsx";
 import CopyAgentDialog from "./CopyAgentDialog/CopyAgentDialog.tsx";
@@ -61,7 +61,8 @@ import {
 } from "./agentNames.ts";
 import { getStoredAgentSort, sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
-import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import TeamDescriptionReminder from "@shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx";
+import { useUsersByIdsQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import {
   type CreateAgentInstanceRequest,
   type ManagedAgentInstanceSummary,
@@ -74,7 +75,7 @@ import {
   usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./TeamAgentsPage.module.css";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
@@ -172,6 +173,7 @@ export default function TeamAgentsPage() {
     canUpdateAgents: canManageAgents,
     canPublishMarketplaceAgents: canPublish,
     canUnpublishMarketplaceAgents: canUnpublish,
+    canUpdateInfo,
   } = useTeamCapabilities(team);
 
   const {
@@ -598,6 +600,11 @@ export default function TeamAgentsPage() {
 
   return (
     <div className={styles.teamAgentContainer}>
+      {team?.description_is_placeholder && canUpdateInfo && (
+        <div className={styles.descriptionReminder}>
+          <TeamDescriptionReminder team={team} withSettingsLink />
+        </div>
+      )}
       {hasAgents && !templatesUnavailable && (
         <div className={styles.title}>
           <PageHeader

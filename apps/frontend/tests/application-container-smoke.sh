@@ -151,7 +151,6 @@ start_frontend() {
         -e "FRONTEND_AGENTIC_UPSTREAM=http://${upstream}:8080" \
         -e "FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://${upstream}:8080" \
         -e "FRONTEND_CONTROL_PLANE_UPSTREAM=http://${upstream}:8080" \
-        -e "FRONTEND_FRED_MANAGER_UPSTREAM=${4:-http://fred-manager:8400}" \
         -e "FRONTEND_EVALUATION_UPSTREAM=http://${upstream}:8080" \
         -e "FRONTEND_ENABLE_APPLICATIONS=${enabled}" \
         -e "FRONTEND_APPLICATIONS_JSON=${registrations}" \
@@ -208,7 +207,7 @@ frontend_port=$(wait_for_shell "${frontend}")
 # The public manager path reaches the Rust control-plane with query, multipart body and bearer.
 manager_status=$(curl -sS -D "${test_directory}/manager-headers" -o /dev/null -w '%{http_code}' \
     -H 'Authorization: Bearer smoke-manager' -F 'file=manager-zip-probe' \
-    "http://127.0.0.1:${frontend_port}/fred-manager/v1/import-export/import?probe=a%20b")
+    "http://127.0.0.1:${frontend_port}/control-plane/v1/import-export/import?probe=a%20b")
 [ "${manager_status}" = "204" ]
 grep -i -F 'X-Smoke-Request-Uri: /control-plane/v1/import-export/import?probe=a%20b' "${test_directory}/manager-headers" >/dev/null
 grep -i -F 'X-Smoke-Method: POST' "${test_directory}/manager-headers" >/dev/null
@@ -458,7 +457,6 @@ if docker run --rm \
     -e "FRONTEND_AGENTIC_UPSTREAM=http://${upstream}:8080" \
     -e "FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://${upstream}:8080" \
     -e "FRONTEND_CONTROL_PLANE_UPSTREAM=http://${upstream}:8080" \
-        -e "FRONTEND_FRED_MANAGER_UPSTREAM=${4:-http://fred-manager:8400}" \
     -e "FRONTEND_EVALUATION_UPSTREAM=http://${upstream}:8080" \
     -e 'FRONTEND_ENABLE_APPLICATIONS=true' \
     -e 'FRONTEND_APPLICATIONS_JSON=[{"app_id":"required-app","ui_upstream":"http://ui.invalid","service_required":true}]' \

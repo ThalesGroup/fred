@@ -17,7 +17,7 @@
 
 A chapter marks a generated block like this, the body being rewritten by `generate`:
 
-    <!-- generated: include apps/fred-manager/openfga/model.fga text -->
+    <!-- generated: include apps/control-plane/openfga/model.fga text -->
     ...
     <!-- end generated -->
 
@@ -47,7 +47,7 @@ BLOCK = re.compile(
 INVARIANT_ROW = re.compile(r"^\| (I\d+) \|", re.M)
 PROVES = re.compile(r"//\s*Proves:\s*([I\d, ]+)\n(?:\s*#\[[^\n]*\]\n)*\s*(?:pub )?(?:async )?fn (\w+)")
 # Rust sources that may prove an invariant; extend as components are ported.
-TEST_SOURCES = ["apps/fred-manager/src", "apps/fred-manager/tests"]
+TEST_SOURCES = ["apps/control-plane/src", "apps/control-plane/tests"]
 
 
 def chapters() -> list[Path]:

@@ -19,7 +19,7 @@ import {
   useUserAgentsUsedTotalQuery,
   useUserMessagesTotalQuery,
   useUserSessionsTotalQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { HomePeriod } from "../HomePage.tsx";
 import { homePeriodRange } from "../homePeriod.ts";
 import styles from "./ActivityKpis.module.scss";

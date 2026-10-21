@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { TeamMarketplaceSettings } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamMarketplaceSettings } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /** A team's position on the publication switch: its own override, or Default. */
 export type PublishingChoice = "disabled" | "default" | "enabled";

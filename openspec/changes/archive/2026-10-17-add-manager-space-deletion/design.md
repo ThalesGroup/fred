@@ -72,7 +72,7 @@ Preserve current `scheduler.temporal` as the ingestion connection/queue. Add `sc
 
 ### 4. Separate Rust worker and bounded sweep
 
-Add `fred-manager worker` and `make run-worker`, using the same binary/image/config conventions as `serve`. The worker loads the published FGA store/model and initialized SQL schema; it must not bootstrap users or migrate authorization independently. Add the matching worker deployment to the manager overlay, a distinct command, configuration mounts, health/readiness and graceful shutdown. No service/ingress or directory client secret is needed for the worker.
+Add `control-plane worker` and `make run-worker`, using the same binary/image/config conventions as `serve`. The worker loads the published FGA store/model and initialized SQL schema; it must not bootstrap users or migrate authorization independently. Add the matching worker deployment to the manager overlay, a distinct command, configuration mounts, health/readiness and graceful shutdown. No service/ingress or directory client secret is needed for the worker.
 
 Use `temporalio-sdk`, macros and workflow crates pinned to the existing 1.0.0 family. The official [Rust quickstart](https://github.com/temporalio/documentation/blob/main/docs/develop/rust/quickstart.mdx) documents the matching crates; [worker APIs](https://docs.rs/temporalio-sdk/1.0.0/temporalio_sdk/) provide workflow/activity registration. Do not introduce an SDK fork or a homegrown workflow engine.
 

@@ -1,7 +1,7 @@
-# Reference: manager operations
+# Reference: control-plane operations
 
 Configuration, diagnostics and runtime topology of manager within Fred's shared
-infrastructure. Developer commands also live in the [component README](../../apps/fred-manager/README.md).
+infrastructure. Developer commands also live in the [component README](../../apps/control-plane/README.md).
 
 ## Logging
 
@@ -9,8 +9,8 @@ Structured stdout, in the format shared by Fred's services.
 
 | `app.log_format` | Output |
 | --- | --- |
-| `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`fred-manager`), `service_role` (`api` or `worker`), `category`, `logging.googleapis.com/sourceLocation` (`file`, `line`, `function` = module path), `process`, `thread` |
-| `text` | `<rfc3339> <SEVERITY> fred-manager/<logger> <message> key=value ...`, no wrapping, colors only on a terminal without `NO_COLOR` |
+| `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`control-plane`), `service_role` (`api` or `worker`), `category`, `logging.googleapis.com/sourceLocation` (`file`, `line`, `function` = module path), `process`, `thread` |
+| `text` | `<rfc3339> <SEVERITY> control-plane/<logger> <message> key=value ...`, no wrapping, colors only on a terminal without `NO_COLOR` |
 
 - Event fields and request context are top-level and never replace core fields.
   Fields named `token`, `access_token`, `refresh_token`, `id_token`, `authorization`,
@@ -34,7 +34,7 @@ Structured stdout, in the format shared by Fred's services.
   Repeating an existing acceptance emits no new event.
 - A single global filter applies the severity rules; a suppressed dependency probe
   cannot suppress the next application event. A fatal error after startup is one
-  ERROR event, `fred-manager stopped`.
+  ERROR event, `control-plane stopped`.
 
 
 ## Errors
@@ -84,7 +84,7 @@ not bypass content or ordinary space-administration checks.
 
 Upgrade all manager role writers together; an old writer can still create conflicting
 data. There is no SQL/FGA schema migration for this rule. Deployment and rollback
-steps are in the [migration note](../swift/ops/migrations/rust-fred-manager.md).
+steps are in the [migration note](../swift/ops/migrations/rust-control-plane.md).
 
 ## Configuration
 
@@ -96,23 +96,23 @@ secrets only and never overrides the process environment.
 | --- | --- |
 | `FRED_POSTGRES_PASSWORD` | process or `.env` |
 | `OPENFGA_API_TOKEN` | the variable `security.rebac.token_env_var` names |
-| `KEYCLOAK_FRED_MANAGER_CLIENT_SECRET` (host default), `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` (chart) | the variable `security.m2m.secret_env_var` names |
+| `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` (host default), `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` (chart) | the variable `security.m2m.secret_env_var` names |
 | `FRED_BOOTSTRAP_TOKEN` | the variable `app.bootstrap_token_env_var` names |
 | `FRED_CONTENT_ACCESS_KEY`, `FRED_CONTENT_SECRET_KEY` | variables named by `storage.content.access_key_env_var` and `secret_key_env_var`, when content is configured |
 
 Local reference configuration:
 
-<!-- generated: include apps/fred-manager/config/configuration.yaml yaml -->
+<!-- generated: include apps/control-plane/config/configuration.yaml yaml -->
 ```yaml
-# fred-manager on the host, against the local stack of fred-deployment-factory.
+# control-plane on the host, against the local stack of fred-deployment-factory.
 # Secrets come from config/.env.
 
 app:
   gcu_version: v1
-  name: Fred Manager
-  base_url: /fred-manager/v1
+  name: Control Plane
+  base_url: /control-plane/v1
   address: 0.0.0.0
-  port: 8400
+  port: 8222
   log_level: info
   log_format: text
   # One-time root platform-admin bootstrap secret, from config/.env.
@@ -122,8 +122,8 @@ security:
   profile: c3
   m2m:
     enabled: true
-    client_id: fred-manager
-    secret_env_var: KEYCLOAK_FRED_MANAGER_CLIENT_SECRET
+    client_id: control-plane
+    secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
     realm_url: http://localhost:8080/realms/app
   user:
     enabled: true
@@ -134,14 +134,14 @@ security:
   rebac:
     type: openfga
     api_url: "http://localhost:9080"
-    store_name: fred-manager
+    store_name: control-plane
 
 storage:
   # Enable after provisioning a bucket without versioning, Object Lock or lifecycle.
   # content:
   #   endpoint: http://localhost:8333
   #   allow_insecure: true
-  #   bucket: fred-manager-originals
+  #   bucket: app-content-documents
   #   access_key_env_var: FRED_CONTENT_ACCESS_KEY
   #   secret_key_env_var: FRED_CONTENT_SECRET_KEY
   postgres:
@@ -161,8 +161,8 @@ scheduler:
     temporal:
       host: localhost:7233
       namespace: default
-      task_queue: fred-manager-lifecycle
-      workflow_id_prefix: fred-manager-lifecycle
+      task_queue: control-plane-lifecycle
+      workflow_id_prefix: control-plane-lifecycle
       connect_timeout_seconds: 5
       rpc_timeout_seconds: 10
 ```
@@ -209,15 +209,15 @@ as compensation. `create-org` retains its operator/database trust boundary.
 
 ## Deployment topology
 
-Both stories run against the infrastructure of fred-deployment-factory. fred-manager
-creates its tables (sqlx migrations) and its OpenFGA store at startup; the Keycloak
+Both stories run against the infrastructure of fred-deployment-factory. control-plane
+requires its SQL migrations to be applied before startup and initializes its
+OpenFGA store at startup; the Keycloak
 realm starts empty.
 
 ```mermaid
 flowchart LR
     subgraph host [Developer host]
         run["make run<br/>config/configuration.yaml<br/>config/.env"]
-        worker["make run-worker"]
         browser["browser"]
     end
     subgraph infra [docker-up or k3d-up]
@@ -229,30 +229,28 @@ flowchart LR
     subgraph cluster [k3d namespace fred]
         pod["release fred-app<br/>ConfigMap control-plane-backend-back<br/>Secret control-plane-backend-env"]
         secrets[["fred-secrets"]]
-        traefik["Traefik :8088<br/>/fred-manager"]
+        traefik["Traefik :8088<br/>/control-plane"]
     end
     run --> pg & kc & fga
-    worker --> pg & fga & tmp
+    run --> tmp
     browser --> traefik --> pod
     secrets -. "POSTGRES_FRED_PASSWORD,<br/>OPENFGA_API_TOKEN,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET" .-> pod
 ```
 
 | | Host run | k3d release |
 | --- | --- | --- |
-| Start | `make run` in `apps/fred-manager` | `make k3d-app APP=fred DIR=../fred` in the factory |
+| Start | `make run` in `apps/control-plane` | `make k3d-app APP=fred DIR=../fred` in the factory |
 | Configuration | `config/configuration.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `control-plane-backend-back`, `log_format: json` |
 | Secrets | `config/.env` | `fred-secrets`, as `extraEnvVars` |
 | Addresses | `localhost` ports | `postgres`, `openfga:9080`, `temporal:7233`, `keycloak:8080` |
 | Token issuer accepted | `http://localhost:8080/realms/app` | `http://keycloak:8080/realms/app` (hosts entry `127.0.0.1 keycloak`) |
-| Public URL | `http://localhost:8400/fred-manager/v1` | `http://localhost:8088/fred-manager/v1` |
+| Public URL | `http://localhost:8222/control-plane/v1` | `http://localhost:8088/control-plane/v1` |
 | Bootstrap secret | `FRED_BOOTSTRAP_TOKEN` in `.env` | `CONTROL_PLANE_BOOTSTRAP_TOKEN` of `fred-secrets`, generated with the cluster |
 
-Manager API and worker are ordinary applications in Fred's chart (`deploy/charts/fred`)
-and release `fred-app`, alongside Knowledge Flow API/worker and frontend. The chart
-validates manager configuration through its generated schema. `generate-config-schema`
-runs offline from the same Rust configuration types; `make generate-chart-schema`
-embeds that schema with the other application contracts. The manager API owns the
-shared configuration/catalog mounts and both manager rollout checksums cover them.
+The local profile runs the control-plane API and background tasks in one deployment,
+with Knowledge Flow worker and frontend. The chart validates control-plane
+configuration through its generated Rust schema. `generate-config-schema` runs
+offline; `make generate-chart-schema` embeds the application contracts.
 
 The image (`dockerfiles/Dockerfile-prod`) builds the release binary with `protoc` and
 `libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations and the OpenFGA
@@ -264,23 +262,94 @@ configuration uses `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` from `fred-secrets`.
 A host process keeps its own `security.m2m.client_id` and `secret_env_var` settings;
 when reusing this client, configure both settings and supply its secret in `.env`.
 
-In the chart, manager runs as `control-plane-backend` and `control-plane-worker`
-using the `control-plane-backend` image built from `apps/fred-manager`. API port
-8222 serves `/control-plane/v1`. The migration hook invokes `fred-manager migrate`
-with `DATABASE_URL` alone; it accepts PostgreSQL URLs including the factory's
-`postgresql+asyncpg` scheme. It applies the same embedded migrations as API startup,
-without loading identity, authorization or runtime configuration. Both processes
-mount the API configuration/catalog. The factory's `scheduler.temporal` host and
-namespace feed the lifecycle connection without changing its queue or prefix.
+The local profile runs `control-plane-backend` using the image built from
+`apps/control-plane`. Port 8222 serves `/control-plane/v1`. The migration hook
+invokes `control-plane migrate` with `DATABASE_URL` alone, including the factory's
+`postgresql+asyncpg` scheme. It applies SQL migrations without loading identity,
+authorization or runtime configuration. API startup verifies migration versions
+and checksums without applying them.
+
+## SQLx schema evolution
+
+The [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) identifies
+the control-plane tables and their responsibilities. Ordered files in
+[`apps/control-plane/migrations`](../../apps/control-plane/migrations) are the
+schema source of truth. SQLx embeds them in the Rust binary and records applied
+versions and checksums in `_sqlx_migrations`.
+
+`0001_manager_schema.sql` defines the initial schema; `0002_user_identity.sql`
+adds the local identity directory and its index without altering existing tables.
+A fresh installation applies the whole chain; an existing installation applies
+only pending files. Applied files are immutable, including comments and whitespace.
+The historical reset comment in `0001` is superseded by this policy and remains in
+place only to preserve the deployed checksum. Do not repair a changed file by
+editing the database's stored checksum.
+
+The `control-plane migrate` command connects using `DATABASE_URL` without loading
+the application configuration. When enabled, the chart's pre-install/pre-upgrade
+migration Job executes it before rolling the application. The secondary k3d
+factory profile enables that Job. The base chart defaults the Job to disabled.
+API pool initialization calls the read-only `db::require_initialized` check. It
+requires the exact embedded migration versions and checksums, with no incomplete
+migration. An empty, older, newer or checksum-mismatched history prevents startup;
+the error directs the operator to the migration Job/command or history inspection.
+The API does not create tables or update migration history. `create-org` uses the
+same pool check; provisioning import also verifies initialization without migration.
+SQLx serializes the explicit migration runner with database locking.
+
+Outside Kubernetes, set `DATABASE_URL` for the target database and run
+`control-plane migrate` before starting the API. This separates schema execution
+from normal application startup; database privilege separation is not enforced by
+this code change. Exact history matching also means restarting an older binary
+after applying a newer migration is refused, even for an additive migration.
+
+A schema change adds the next numbered SQL file. Back up the target database
+before applying it; rebuild the Rust image so that the file is embedded, then
+redeploy through the existing application command. Additive changes can preserve
+compatibility with the previous running application. Data transformations,
+constraint changes and destructive DDL need their own explicit deployment and
+recovery procedure: neither SQLx history nor rolling back an image restores lost
+data. OpenFGA model publication has its separate lifecycle below; an additive SQL
+migration does not require resetting its store.
+
+These read-only queries inspect an installation without reading user profiles or
+document contents. Run them in the configured control-plane database (`fred` in
+the local profile):
+
+```sql
+SELECT version, description, installed_on, success,
+       encode(checksum, 'hex') AS checksum
+FROM public._sqlx_migrations
+ORDER BY version;
+
+SELECT tablename
+FROM pg_catalog.pg_tables
+WHERE schemaname = 'public'
+ORDER BY tablename;
+
+SELECT table_name, ordinal_position, column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+ORDER BY table_name, ordinal_position;
+```
+
+Checksums establish migration-file identity, not absence of manual schema drift.
+For a schema audit, also inspect actual columns, constraints, indexes and triggers.
+The diagram generator creates a temporary PostgreSQL database, applies the SQL
+files and runs tbls; it does not connect to the application's database or export
+its data. Regenerate the diagram after each schema change with
+`make -C docs/architecture er`, and update its generated block in the contracts
+reference through the dossier generator.
 
 ## Running provisioning
 
-Start the compatible service once to initialize SQL migrations and the extended FGA
-model, then accept CGU and complete root bootstrap in the UI. CLI import itself never migrates SQL, creates a store
+Apply SQL migrations with the migration Job or `control-plane migrate`, then start
+the compatible service to initialize the extended FGA model. Accept CGU and
+complete root bootstrap in the UI. CLI import itself never migrates SQL, creates a store
 or synchronizes a model. It needs Postgres, OpenFGA and Keycloak; it does not need the
 HTTP server or Temporal to remain running. It loads the published store/model IDs.
 
-From `apps/fred-manager`, with the directory client configured and an operator access
+From `apps/control-plane`, with the directory client configured and an operator access
 token in a private file:
 
 ```sh
@@ -292,7 +361,7 @@ make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/
 ZIP library and atomically replaces its output. `DEMO_PROVISIONING_FIXTURE_DIR`
 and `DEMO_BUNDLE_FILE` override source/output paths, including paths with spaces;
 no running service is needed. HTTP clients submit the same ZIP as multipart `file`
-to `/fred-manager/v1/import-export/import` on the running server.
+to `/control-plane/v1/import-export/import` on the running server.
 
 The bearer must identify a current platform owner, who may declare any platform role
 and organization owners.
@@ -302,21 +371,21 @@ import; replay after expiry uses a fresh operator token.
 
 ## Frontend routing
 
-The frontend uses same-origin `/fred-manager/v1` requests. Vite resolves the
-`/fred-manager` prefix before its broad `/fred` rule and proxies to
-`VITE_BACKEND_URL_FRED_MANAGER`, default `http://localhost:8400`. Production nginx
-forwards `/fred-manager/` to `FRONTEND_FRED_MANAGER_UPSTREAM`, default
+The frontend uses same-origin `/control-plane/v1` requests. Vite resolves the
+`/control-plane` prefix before its broad `/fred` rule and proxies to
+`VITE_BACKEND_URL_CONTROL_PLANE`, default `http://localhost:8222`. Production nginx
+forwards `/control-plane/` to `FRONTEND_CONTROL_PLANE_UPSTREAM`, default
 `http://control-plane-backend:8222`, replacing the prefix with
-`FRONTEND_FRED_MANAGER_API_PREFIX` (default `/control-plane`). Direct
+`FRONTEND_CONTROL_PLANE_API_PREFIX` (default `/control-plane`). Direct
 `/control-plane/` calls reach the same API. Read/send timeouts are 3600 seconds;
 DNS resolves at request time. Local frontend `make docker-run` uses
-`http://host.docker.internal:8400` and prefix `/fred-manager` for a host manager.
+`http://host.docker.internal:8222` and prefix `/control-plane` for a host manager.
 On Kubernetes, the chart supplies `control-plane-backend.<namespace>.svc.cluster.local:8222`
 for both manager and control-plane upstreams: nginx's request-time resolver does
 not apply the pod's DNS search domains. These defaults survive replacement of the
 frontend environment list by instance values. Explicit upstream entries in `env`
 or `extraEnvVars` override them, including for a custom cluster DNS domain.
-Access logs retain the bounded `fred-manager` route family without paths, tokens
+Access logs retain the bounded `control-plane` route family without paths, tokens
 or upload contents. UI components and generated API paths are unchanged.
 
 ## Authorization store publication
@@ -353,17 +422,14 @@ days, hours, minutes and seconds; unsupported fields, calendar/fractional durati
 empty match lists and overflows fail validation. Accepted deadlines never change
 when a catalog is reloaded.
 
-`make run-worker` starts the separate process. Fred's chart deploys
-`control-plane-worker` from the same image, with the API's config/catalog mounts,
-SQL/FGA secrets and `/healthz` probes, without ingress or a Service. Local
-`k3d-app-reset` recognizes the integrated release and the earlier standalone manager,
-validates configurations, stops producers before erasure and restores their original replicas. Its logs use
-`service_role: worker`. Acceptance and completion emit `space.deletion.accepted`
+`control-plane serve` supervises lifecycle tasks in the same process as HTTP and
+the processing dispatcher. Acceptance and completion emit `space.deletion.accepted`
 and `space.deletion.completed` on `fred.security.audit` after SQL commit.
+Application data reset is unsupported for this Rust ingestion profile.
 
 The manager-owned schedule defaults to PT10M and 100 candidates (range 1..5000),
 skips overlap and reconciles idempotently at startup. Queue and workflow prefix
-must begin with `fred-manager-`. Connect/RPC
+must begin with `control-plane-`. Connect/RPC
 timeouts default to 5/10 seconds. Sweep cadence, backlog and outages add latency;
 due time is an earliest cleanup time. Disabling every worker prevents cleanup and
 pauses its schedule when Temporal is reachable. Settings load at process startup.
@@ -421,7 +487,8 @@ fixture; arbitrary S3-compatible services are not assumed equivalent.
 
 The database binds endpoint, bucket, prefix and a generated namespace UUID. Changed
 coordinates refuse startup; a fresh database uses a new namespace and never adopts
-old keys. The SDK uses one shared client, at most two attempts and finite connect,
+old keys. Originals carry that namespace in `fred-installation` metadata; cleanup
+skips unknown/foreign objects and all non-input paths in the shared bucket. The SDK uses one shared client, at most two attempts and finite connect,
 operation and streaming deadlines. It verifies complete content after conditional
 Put, including an ambiguous acknowledgment; provider errors expose no credentials.
 
@@ -440,8 +507,8 @@ Journal delete attempts back off exponentially up to one hour; inventory retries
 independently on periodic scans. Contended organization expiration is deferred 30 s. Inventory cursor, incomplete orphan bytes and last
 completion are durable in `document_storage`. The persisted journal and inventory
 row expose cleanup backlog for SQL inspection;
-journal Delete failures emit INFO with `outcome=retry`, inventory Delete failures
-accumulate `orphan_bytes`, and interrupted sweeps emit WARN before later retries.
+journal HEAD/Delete failures emit INFO with `outcome=retry`, inventory HEAD/Delete failures
+conservatively accumulate `orphan_bytes` without blocking subsequent keys, and interrupted sweeps emit WARN before later retries.
 Failed, cleaned receipts expire after seven days by default; successful receipts
 preserve idempotency. Reconciliation uses no Temporal or ingestion service.
 
@@ -451,25 +518,25 @@ active with cleanup suspended. Re-enable after validating namespace and original
 Restoring only SQL can lose bytes; restoring only objects lets cleanup remove keys
 without matching metadata. The ordinary local reset does not migrate content.
 Migration and rollback constraints are in the
-[migration note](../swift/ops/migrations/rust-fred-manager.md).
+[migration note](../swift/ops/migrations/rust-control-plane.md).
 
 
 ## Document processing
 
 `scheduler.processing` configures manager admission, the existing KF Temporal
-namespace/queue, exported worker contract, allowed service identity and separate
-S3 derived bucket. `manager_processing` configures KF callbacks, credentials,
+namespace/queue, exported worker contract, allowed service identity and the shared
+S3 documents bucket. `manager_processing` configures KF callbacks, credentials,
 separate durable vectors and per-activity temporary capacity. Settings are validated
 at API and worker startup, including when new admissions are disabled. The existing
 worker image supplies LibreOffice. The [processing overlay](../../deploy/charts/fred/examples/document-processing.yaml)
-and [migration procedure](../swift/ops/migrations/rust-fred-manager.md#optional-document-processing)
+and [migration procedure](../swift/ops/migrations/rust-control-plane.md#optional-document-processing)
 define provisioning, export, rollout and draining.
 
 The dispatcher uses bounded batches and leases, with no Temporal RPC under a SQL
 lock. Namespace retention must exceed the accepted queue horizon. An uncertain
 start is reconciled by workflow identity; missing acknowledged history cannot
 create another execution. Queue/execution expiry produces a durable safe failure.
-The worker health server and dispatch loop are supervised together.
+HTTP, lifecycle work and the dispatch loop are supervised together by `control-plane serve`.
 
 Each attempt bounds output bytes, artifact count, chunks and generations. Stage
 claims reserve derived capacity; cleanup releases abandoned reservations only after
@@ -492,3 +559,29 @@ until active attempts and abandoned cleanup finish. Restore manager SQL, origina
 and derived objects and matching vector stores together, with writers stopped.
 Changing worker code or policy requires compatible deployment or draining; frozen
 policy does not pin the installed Python implementation.
+
+
+## Complete local ingestion profile
+
+The [k3d entry point](../../deploy/k3d/README.md) uses the factory's complete
+`manager-ingestion.yaml` profile, including retained SQL/FGA/identity/model
+references. Its prepare hook renders the effective worker configuration, exports
+from the selected image without service secrets and applies the contract ConfigMap.
+The image ID, configuration and export determine a digest recorded on the
+ConfigMap and manager pod template. Profile/image changes regenerate it and roll
+the API. Export failure stops deployment. This is deployment provenance, not a
+runtime comparison with the installed Python code; incompatible changes require
+draining.
+
+The profile allows four 100 MiB uploads with 400 MiB admitted spool and a 2 GiB
+API ephemeral limit. KF serves four worker roles, each limited to one activity;
+four 1 GiB workspaces plus overhead fit its 8 GiB ephemeral limit (5 GiB request).
+Its memory request/limit is 2/6 GiB. Converter peaks remain workload-dependent.
+Legacy PDF expiry is disabled. Legacy corpus repair/deletion must not operate on
+manager documents; the auxiliary KF credential cannot read, list or mutate document
+objects. It can inspect bucket existence/location for the existing adapters' startup.
+Application data reset is unsupported for this Rust profile.
+
+Local deviations include single replicas, HTTP inside the cluster, a self-signed
+OpenSearch certificate and local static Secrets. The object adapter uses the S3
+API; these settings make no native GCS/Workload Identity compatibility claim.

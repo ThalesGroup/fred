@@ -13,7 +13,6 @@ on:
       - develop
     # Pull requests only: a base-branch push still checks every Alembic tree.
     paths:
-      - 'apps/control-plane-backend/**'
       - 'apps/knowledge-flow-backend/**'
       - 'libs/fred-*/**'
       - 'libs/capabilities/**'
@@ -49,10 +48,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies (control-plane-backend)
-        run: uv sync
-        working-directory: apps/control-plane-backend
-
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
         working-directory: apps/knowledge-flow-backend
@@ -83,10 +78,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies (control-plane-backend)
-        run: uv sync
-        working-directory: apps/control-plane-backend
-
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
         working-directory: apps/knowledge-flow-backend
@@ -116,10 +107,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-
-      - name: Install dependencies (control-plane-backend)
-        run: uv sync
-        working-directory: apps/control-plane-backend
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync

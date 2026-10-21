@@ -42,7 +42,7 @@ None. Extend the existing document lifecycle capability.
 
 ## Impact
 
-`apps/fred-manager` document routes/models/storage, scheduler and schema;
+`apps/control-plane` document routes/models/storage, scheduler and schema;
 `apps/knowledge-flow-backend` activity dependencies and processor persistence seams, preserving ProcessPush and PipelineDefinition/FileToProcess unchanged;
 generated frontend clients and existing Resources/import/preview bindings;
 factory identities, Fred chart configuration/schemas and local configuration;

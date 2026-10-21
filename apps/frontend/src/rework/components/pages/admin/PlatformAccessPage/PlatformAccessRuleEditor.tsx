@@ -16,12 +16,12 @@ import type {
   PlatformAccessPolicy,
   PlatformAccessPolicyPreview,
   PlatformAccessState,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   usePlatformAccessUsersQuery,
   usePreviewPlatformPolicyMutation,
   useSavePlatformPolicyMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
 import styles from "./PlatformAccessPage.module.css";
 import PlatformAccessClaimPicker from "./PlatformAccessClaimPicker";

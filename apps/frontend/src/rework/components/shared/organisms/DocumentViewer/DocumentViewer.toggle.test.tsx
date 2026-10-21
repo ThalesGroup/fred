@@ -30,7 +30,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const fetchManagerPreview = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve("manager markdown") })));
-vi.mock("../../../../../slices/fredManager/fredManagerApiEnhancements", () => ({
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useLazyPreviewQuery: () => [fetchManagerPreview],
 }));
 

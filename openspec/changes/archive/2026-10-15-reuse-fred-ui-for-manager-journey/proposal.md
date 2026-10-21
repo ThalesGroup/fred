@@ -2,7 +2,7 @@
 
 The Rust first-user journey replaces Fred's application entry with a parallel
 `ManagerApp` navigation. This makes incremental reconstruction diverge from the
-product UI instead of connecting its existing screens to fred-manager.
+product UI instead of connecting its existing screens to control-plane.
 
 ## What Changes
 
@@ -26,7 +26,7 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: use Fred's existing UI for the bounded first-user
+- `control-plane-provisioning`: use Fred's existing UI for the bounded first-user
   journey instead of an independent manager shell.
 
 ## Impact

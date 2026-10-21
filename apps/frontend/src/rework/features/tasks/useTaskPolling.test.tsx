@@ -47,7 +47,7 @@ vi.mock("../../../security/KeycloakService", () => ({
 }));
 
 import { knowledgeFlowApi } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { controlPlaneApi } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { legacyControlPlaneApi } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { taskRegistered, taskSlice, uploadHandedOff, uploadStarted } from "./taskSlice";
 import { POLL_INTERVAL_MS, READ_TIMEOUT_MS, useTaskPolling } from "./useTaskPolling";
 import { ImportPanel } from "@shared/organisms/ImportPanel/ImportPanel";
@@ -58,9 +58,9 @@ const makeStore = () =>
     reducer: {
       tasks: taskSlice.reducer,
       [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
-      [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
+      [legacyControlPlaneApi.reducerPath]: legacyControlPlaneApi.reducer,
     },
-    middleware: (getDefault) => getDefault().concat(knowledgeFlowApi.middleware, controlPlaneApi.middleware),
+    middleware: (getDefault) => getDefault().concat(knowledgeFlowApi.middleware, legacyControlPlaneApi.middleware),
   });
 
 // ── The fake server ─────────────────────────────────────────────────────────

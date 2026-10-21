@@ -11,24 +11,47 @@ Read the journeys first, then follow the relevant domain chapter.
 | [2. User journeys](02-user-journeys.md) | How do the architectural rules work together in practice? |
 | [Document journey: Priya ingests a PDF](02a-document-journey.md) | What happens to one document, and how do we inspect each store? |
 | [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
-| [Action and role matrix](03a-action-role-matrix.md) | Exactly which actions does each role allow, at which scope, and how does Rust differ from Python? |
+| [Action and role matrix](03a-action-role-matrix.md) | Exactly which actions does each role allow, at which scope, and with which additional conditions? |
 | [4. Organizations and provisioning](04-organizations.md) | How are people, spaces and their relationships organized? |
 | [5. Documents and knowledge](05-documents.md) | How does knowledge enter, circulate and leave Fred? |
-| [6. Agents and conversations](06-agents.md) | How does a conversation become an agent execution? |
-| [7. Capabilities and integrations](07-capabilities.md) | How do agents acquire tools and interact with other systems? |
 | [8. Operations](08-operations.md) | How is Fred configured, deployed and observed? |
 | [9. Quality and invariants](09-quality.md) | Which guarantees are proved, and what do they cost? |
 
-Empty sections define the editorial structure only. They make no implementation
-claim. Populated sections name their execution context: in particular, the
-organization/team/project journey uses Fred's existing UI connected to manager on this branch. A rule
-implemented there does not imply that every Python product surface uses it.
+The primary reading path is the user journey through folder creation, followed by
+organizations/security and the SQL catalogue. The document-ingestion journey is
+separate. The dossier describes code behavior, not proof that the current build has
+passed its tests or that Dimi has validated every screen.
+
+## Find a function
+
+| Question | Canonical explanation | Implementation entry |
+| --- | --- | --- |
+| Login, CGU, first platform owner | [Journey](02-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user), [Security](03-security.md) | [Source map](../../apps/control-plane/src/README.md) rows authentication, CGU, bootstrap |
+| Organization owner/admin selection and creation | [Organization creation](02-user-journeys.md#a-platform-owner-creates-an-organization), [Organizations](04-organizations.md#platform-organization-administration) | Source map rows directory and organizations |
+| Import accounts, teams and roles | [Provisioning journey](02-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
+| Who can enter a space or create a folder? | [Resources journey](02-user-journeys.md#priya-opens-resources), [Action/role matrix](03a-action-role-matrix.md) | Source map rows spaces, folders and roles |
+| Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [OpenFGA model](A2-manager-contracts.md#openfga-model) | `migrations/`, `db.rs`, `openfga/model.fga` in the source map |
+| API endpoints and frontend bindings | [Generated routes](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
+| Startup, SQL migration or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution) | Source map rows startup/migrations and local profile |
+| Upload/process a PDF | [Separate document journey](02a-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
+
+Follow this map before searching historical OpenSpec changes or Swift documentation.
+For an audit, trace the named UI consumer through the handler, authorization and
+persistence; record discrepancies rather than treating prose or a test name as proof.
+
+## Separate work history
+
+Outside this dossier, the internal [working journal](../WORKING-JOURNAL.md) indexes the functions explored
+with Dimi, observed failures, focused changes, explicit manual validation and
+pending architecture updates. Read it when resuming this work. It records work
+in progress, not verified architecture.
 
 ## Technical references
 
 Exact implementation detail is available without making it the main reading path:
-[manager runtime](A1-manager-runtime.md), [schemas and contracts](A2-manager-contracts.md),
-and [manager operations](A3-manager-operations.md). Generated blocks remain tied to
+[control-plane runtime](A1-manager-runtime.md), [schemas and contracts](A2-manager-contracts.md),
+the [SQL table catalogue](A2-manager-contracts.md#control-plane-sql-catalogue),
+and [control-plane operations](A3-manager-operations.md). Generated blocks remain tied to
 source code; they are references, not another handwritten API specification.
 
 ## Keeping one useful account
@@ -45,12 +68,11 @@ source code; they are references, not another handwritten API specification.
 - Run `make -C docs/architecture generate` after source changes and
   `make -C docs/architecture check` to verify sources, proofs and diagrams.
 
-The [branch workflow](../../AGENTS.md#fred-manager-reconstruction-on-chorerust-rebac)
-sets review and commit requirements. New domain chapters start with headings;
-verified explanations replace the headings' empty bodies as their scope is documented.
+The [branch workflow](../../AGENTS.md#control-plane-reconstruction-on-chorerust-rebac)
+sets review and commit requirements. Only documented behavior belongs in the reading path.
 
 For a repeatable independent review of the Rust reconstruction, use
-[`audit-fred-manager`](../../.agents/skills/audit-fred-manager/SKILL.md). It checks
-implemented manager behavior against this dossier and affected Fred contracts,
+[`audit-control-plane`](../../.agents/skills/audit-control-plane/SKILL.md). It checks
+implemented control-plane behavior against this dossier and affected Fred contracts,
 with explicit coverage and exclusions. It does not audit the whole platform or
 treat future migration features as defects.

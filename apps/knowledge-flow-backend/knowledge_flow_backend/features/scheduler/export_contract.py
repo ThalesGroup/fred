@@ -5,7 +5,12 @@
 Run with CONFIG_FILE/ENV_FILE used by KF. The export contains no credentials.
 """
 
+import argparse
 import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import yaml
 
 from knowledge_flow_backend.common.config_loader import load_configuration
 from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
@@ -22,4 +27,17 @@ def export(config):
 
 
 if __name__ == "__main__":
-    print(json.dumps(export(load_configuration()), indent=2))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--configuration", type=Path, help="Export policy from a rendered worker YAML without loading service credentials")
+    args = parser.parse_args()
+    if args.configuration:
+        from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig
+
+        values = yaml.safe_load(args.configuration.read_text())
+        config = SimpleNamespace(
+            processing=ProcessingConfig.model_validate(values.get("processing", {})),
+            scheduler=SchedulerConfig.model_validate(values["scheduler"]),
+        )
+    else:
+        config = load_configuration()
+    print(json.dumps(export(config), indent=2))

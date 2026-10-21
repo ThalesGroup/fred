@@ -40,19 +40,19 @@ FRED_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 WORKTREE_BASE = FRED_ROOT.parent
 PORT_RANGE = (9300, 9999)
 
-PYTHON_SERVICES = ["fred-agents", "knowledge-flow-backend", "control-plane-backend"]
-ALL_SERVICES = [*PYTHON_SERVICES, "frontend"]
+BACKEND_SERVICES = ["fred-agents", "knowledge-flow-backend", "control-plane"]
+ALL_SERVICES = [*BACKEND_SERVICES, "frontend"]
 SERVICE_DIRS = {
     "fred-agents": Path("apps/fred-agents"),
     "knowledge-flow-backend": Path("apps/knowledge-flow-backend"),
-    "control-plane-backend": Path("apps/control-plane-backend"),
+    "control-plane": Path("apps/control-plane"),
     "frontend": Path("apps/frontend"),
 }
 
 DEFAULT_PORTS = {
     "fred-agents": 8000,
     "knowledge-flow-backend": 8111,
-    "control-plane-backend": 8222,
+    "control-plane": 8222,
     "frontend": 5173,
 }
 
@@ -387,7 +387,7 @@ def patch_launch_json(wt: Path, ports: dict[str, int]) -> None:
     clean = re.sub(r",\s*([}\]])", r"\1", content)
     launch = json.loads(clean)
 
-    port_map = {str(DEFAULT_PORTS[svc]): str(ports[svc]) for svc in PYTHON_SERVICES}
+    port_map = {str(DEFAULT_PORTS[svc]): str(ports[svc]) for svc in BACKEND_SERVICES}
 
     for config in launch.get("configurations", []):
         args = config.get("args", [])
@@ -429,7 +429,7 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None
                             f"VITE_PORT={ports['frontend']} "
                             f"VITE_BACKEND_URL=http://localhost:{ports['fred-agents']} "
                             f"VITE_BACKEND_URL_KNOWLEDGE=http://localhost:{ports['knowledge-flow-backend']} "
-                            f"VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:{ports['control-plane-backend']}"
+                            f"VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:{ports['control-plane']}"
                         )
                         task["args"][i] = arg.replace("make run", f"{frontend_env} make run")
 
@@ -454,10 +454,9 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None
 # variants are listed — patching only the prod one leaves the default dev task pointing
 # at the main checkout's ports.
 INTER_SERVICE_CONFIGS = [
-    *[f"{service_dir(svc)}/config/configuration.yaml" for svc in PYTHON_SERVICES],
-    *[f"{service_dir(svc)}/config/configuration_prod.yaml" for svc in PYTHON_SERVICES],
+    *[f"{service_dir(svc)}/config/configuration.yaml" for svc in BACKEND_SERVICES],
+    *[f"{service_dir(svc)}/config/configuration_prod.yaml" for svc in BACKEND_SERVICES],
     "apps/knowledge-flow-backend/config/configuration_worker.yaml",
-    "apps/control-plane-backend/config/configuration_worker.yaml",
 ]
 
 
@@ -495,7 +494,7 @@ def read_ports_md(wt: Path) -> dict[str, int]:
     service_patterns = {
         "fred-agents": r"Fred Agents\s*\|\s*(\d+)",
         "knowledge-flow-backend": r"Knowledge Flow Backend\s*\|\s*(\d+)",
-        "control-plane-backend": r"Control Plane Backend\s*\|\s*(\d+)",
+        "control-plane": r"Control Plane Backend\s*\|\s*(\d+)",
         "frontend": r"Frontend\s*\|\s*(\d+)",
     }
     ports: dict[str, int] = {}
@@ -671,7 +670,7 @@ def generate_ports_md(branch: str, ports: dict[str, int]) -> str:
         |-------------------------|-------|--------------------------------------------------------------|
         | Fred Agents             | {ports["fred-agents"]} | http://localhost:{ports["fred-agents"]}/agentic/v1/docs                 |
         | Knowledge Flow Backend  | {ports["knowledge-flow-backend"]} | http://localhost:{ports["knowledge-flow-backend"]}/knowledge-flow/v1/docs       |
-        | Control Plane Backend   | {ports["control-plane-backend"]} | http://localhost:{ports["control-plane-backend"]}/control-plane/v1/docs         |
+        | Control Plane Backend   | {ports["control-plane"]} | http://localhost:{ports["control-plane"]}/control-plane/v1/docs         |
         | Frontend                | {ports["frontend"]} | http://localhost:{ports["frontend"]}                                     |
     """)
 
@@ -812,7 +811,7 @@ def create(
 
     # Copy .env files
     step("Copying .env files...")
-    for svc in PYTHON_SERVICES:
+    for svc in BACKEND_SERVICES:
         relative_dir = service_dir(svc)
         src = FRED_ROOT / relative_dir / "config" / ".env"
         dst = wt / relative_dir / "config" / ".env"
@@ -862,7 +861,7 @@ def create(
     click.echo(f"  {click.style('Dir:', bold=True)}      {wt}")
     click.echo(f"  {click.style('Agents:', bold=True)}   " + click.style(f"http://localhost:{ports['fred-agents']}/agentic/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('KF:', bold=True)}        " + click.style(f"http://localhost:{ports['knowledge-flow-backend']}/knowledge-flow/v1/docs", fg="cyan"))
-    click.echo(f"  {click.style('CP:', bold=True)}        " + click.style(f"http://localhost:{ports['control-plane-backend']}/control-plane/v1/docs", fg="cyan"))
+    click.echo(f"  {click.style('CP:', bold=True)}        " + click.style(f"http://localhost:{ports['control-plane']}/control-plane/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('Frontend:', bold=True)} " + click.style(f"http://localhost:{ports['frontend']}", fg="cyan"))
     click.echo()
     click.echo(f"  {click.style('▶', fg='yellow')} Ctrl+Shift+P › Tasks: Run Task › " + click.style(f"All Services (wt: {branch})", fg="yellow"))

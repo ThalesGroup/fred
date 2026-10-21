@@ -19,8 +19,8 @@ import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import {
   useLazyTeamAgentInstancesQuery,
   useUserRecentAgentsQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { ManagedAgentInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import type { ManagedAgentInstanceSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import CompactAgentCard from "./CompactAgentCard.tsx";
 import styles from "./RecentAgents.module.scss";

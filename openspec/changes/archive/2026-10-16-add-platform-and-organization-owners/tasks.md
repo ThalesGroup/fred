@@ -22,7 +22,7 @@
 
 ## Verification evidence (2026-10-15)
 
-- `apps/fred-manager`: `make test` pass; `make test-integration` 53 passed against disposable
+- `apps/control-plane`: `make test` pass; `make test-integration` 53 passed against disposable
   Postgres 15.12 and OpenFGA v1.15.1; `make code-quality` pass.
 - New or rewritten tests: `organization_owners_name_admins_and_read_nothing`,
   `platform_owners_manage_each_other_and_keep_one`, `teams_are_created_by_organization_admins_only`,
@@ -63,7 +63,7 @@
 - Manager: `make test` passes (35 unit + 5 OpenAPI); `make test-integration` passes
   (58 tests with disposable PostgreSQL, OpenFGA and real Keycloak); manager
   `make code-quality` passes. Generated frontend contract refreshed with
-  `make -C apps/frontend update-fred-manager-api`.
+  `make -C apps/frontend update-control-plane-api`.
 - Root `make code-quality` passes; 18 focused frontend tests pass (manager slice,
   provisioning page, CGU and bootstrap guards). Architecture generation/check and
   migration-note checks pass. The current capability and both deltas validate strictly.

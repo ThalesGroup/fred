@@ -488,6 +488,11 @@ operations:
     review_status: approved
     required_permission: can_delete_team
   - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}/registry
+    review_status: approved
+    required_permission: can_edit_team_registry # platform_admin only; name, description and admin diff, audited (team.registry.edited)
+  - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/join
     review_status: approved

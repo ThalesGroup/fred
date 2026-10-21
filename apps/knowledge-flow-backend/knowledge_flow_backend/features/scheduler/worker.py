@@ -120,6 +120,7 @@ def _build_worker(
     role: IngestionWorkerRole,
     workflow_task_concurrency: int,
     activity_concurrency: int,
+    manager_processing: bool = False,
 ) -> Worker:
     """One Temporal worker for one role, registering only what that role runs."""
     is_common = role is IngestionWorkerRole.common
@@ -142,11 +143,17 @@ def _build_worker(
             activity_concurrency,
         )
 
+    workflows = _COMMON_WORKFLOWS if is_common else []
+    activities = _COMMON_ACTIVITIES if is_common else _EXTRACTION_ACTIVITIES
+    if manager_processing:
+        workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess] if is_common else []
+        activities = [get_push_file_metadata, output_process] if is_common else [push_input_process]
+
     return Worker(
         client=client,
         task_queue=queue,
-        workflows=_COMMON_WORKFLOWS if is_common else [],
-        activities=_COMMON_ACTIVITIES if is_common else _EXTRACTION_ACTIVITIES,
+        workflows=workflows,
+        activities=activities,
         # Sync activities run in threads; one pool per role keeps a saturated
         # extraction role from starving the common one in a multi-role process.
         activity_executor=concurrent.futures.ThreadPoolExecutor(max_workers=activity_concurrency),
@@ -171,6 +178,7 @@ async def run_worker(
     max_concurrent_workflow_tasks: int = 1,
     max_concurrent_activities: int = 1,
     pdf_render_ttl_days: int = 30,
+    manager_processing: bool = False,
 ):
     """
     Connect to Temporal and start one worker per configured role.
@@ -195,6 +203,8 @@ async def run_worker(
         max_concurrent_activities (int): Max concurrent activity tasks per role.
         pdf_render_ttl_days (int): Lifetime of cached PDF renders; drives the
             nightly expiry Schedule (0 removes it).
+        manager_processing (bool): Register only manager push processing, without
+            legacy SQL activities or PDF expiry scheduling.
     """
     from knowledge_flow_backend.features.scheduler.fault_injection import read_ingestion_fault
 
@@ -214,7 +224,9 @@ async def run_worker(
 
     # The Schedule always targets the common queue, which is where its workflow is
     # registered, so an extraction role has nothing to post and nothing to move.
-    if IngestionWorkerRole.common in active_roles:
+    if manager_processing:
+        logger.info("[SCHEDULER] Manager processing: push activities and manager cleanup, without legacy SQL or PDF expiry")
+    elif IngestionWorkerRole.common in active_roles:
         # Housekeeping must never keep ingestion from starting: log and carry on.
         try:
             await sync_pdf_render_expiry_schedule(client, config, pdf_render_ttl_days)
@@ -230,6 +242,7 @@ async def run_worker(
             role=role,
             workflow_task_concurrency=workflow_task_concurrency,
             activity_concurrency=activity_concurrency,
+            manager_processing=manager_processing,
         )
         for role in active_roles
     ]

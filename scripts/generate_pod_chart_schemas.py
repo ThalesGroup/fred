@@ -75,6 +75,9 @@ _SERVICE_MONITOR = _obj(
 def _pod_props(configuration: dict) -> dict:
     """What both pod charts share: the image, the pod, its credentials and its file."""
     return {
+        # Helm passes `global` to every subchart: without it, a chart that depends
+        # on this one fails validation.
+        "global": _OBJECT_FREE,
         "image": _IMAGE,
         "imagePullSecrets": _arr(_obj({"name": _STRING})),
         "nameOverride": _STRING,
@@ -121,6 +124,27 @@ def agent_pod(configuration: dict) -> dict:
                     "enabled": _BOOL,
                     "className": _STRING,
                     "host": _STRING,
+                    "annotations": _OBJECT_FREE,
+                }
+            ),
+            "httpRoute": _obj(
+                {
+                    "enabled": _BOOL,
+                    "parentRefs": _arr(
+                        _obj(
+                            {
+                                "group": _STRING,
+                                "kind": _STRING,
+                                "name": {"type": "string", "minLength": 1},
+                                "namespace": _STRING,
+                                "sectionName": _STRING,
+                                "port": _INT,
+                            },
+                            required=["name"],
+                        )
+                    ),
+                    "hostnames": _arr({"type": "string", "minLength": 1}),
+                    "requestTimeout": _STRING,
                     "annotations": _OBJECT_FREE,
                 }
             ),

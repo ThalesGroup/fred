@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { WikiPageDetail } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiPageDetail } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { rulesDraft } from "./rulesDraft";
 
 const TEMPLATE = "## Vocabulary\n";

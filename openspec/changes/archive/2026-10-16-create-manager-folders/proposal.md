@@ -18,7 +18,7 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: extend the authenticated resource journey with folder creation.
+- `control-plane-provisioning`: extend the authenticated resource journey with folder creation.
 
 ## Impact
 

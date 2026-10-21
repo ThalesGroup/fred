@@ -50,7 +50,7 @@ import {
   type MigrationDetail,
   type MigrationResult,
   type TaskSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { useListTasksKnowledgeFlowV1TasksGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import styles from "./TaskActivity.module.css";
 

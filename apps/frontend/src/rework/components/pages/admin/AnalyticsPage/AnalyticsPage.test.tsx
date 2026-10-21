@@ -88,7 +88,7 @@ vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({
   default: () => <div data-testid="time-range-selector" />,
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useActiveUsersOverTimeQuery: h.neutralQuery,
   useUniqueUsersTotalQuery: h.neutralQuery,
   useSessionsOverTimeQuery: h.neutralQuery,

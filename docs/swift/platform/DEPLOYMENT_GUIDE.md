@@ -552,7 +552,7 @@ Current recommendation: set `log_store: opensearch` wherever log exploration via
 From `fred-deployment-factory`, run `make k3d-app-reset DIR=<fred checkout>` for a
 read-only preview, then add `CONFIRM=reset` to erase Fred's local data. This reuses
 installed images and retains Keycloak accounts and the infrastructure. It includes
-fred-manager when installed. Other applications and custom storage configurations
+control-plane when installed. Other applications and custom storage configurations
 are refused. Stop host-side Fred processes first; refresh the browser afterwards.
 The factory's `docs/LOCAL-DEVELOPMENT.md` describes the data scope and failure retry.
 Use `make k3d-app` separately to deploy code changes; reset does not build the checkout.

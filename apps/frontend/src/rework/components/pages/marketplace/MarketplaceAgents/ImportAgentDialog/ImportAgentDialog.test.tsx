@@ -19,7 +19,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MarketplaceAgentSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { MarketplaceAgentSummary } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -69,7 +69,7 @@ vi.mock("../../../../../../hooks/useFrontendBootstrap", () => ({
     ],
   }),
 }));
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useMarketplaceAgentImportTargetsQuery: () => h.targetsQuery,
   useImportMarketplaceAgentMutation: () => [
     (arg: unknown) => {

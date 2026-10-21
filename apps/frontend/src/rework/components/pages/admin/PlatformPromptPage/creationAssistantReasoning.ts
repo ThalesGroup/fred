@@ -15,7 +15,7 @@
 import type {
   CreationAssistantModelOption,
   CreationAssistantSettings,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 export type ReasoningEffort = NonNullable<CreationAssistantSettings["reasoning_effort"]>;
 type ReasoningLevel = Exclude<ReasoningEffort, "off">;

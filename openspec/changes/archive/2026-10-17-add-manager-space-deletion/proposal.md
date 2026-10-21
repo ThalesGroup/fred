@@ -1,6 +1,6 @@
 ## Why
 
-Fred-manager needs a recoverable space-deletion lifecycle before document and conversation cleanup is added. An authenticated API must retire a space immediately, while a separate Rust Temporal worker removes its existing SQL/OpenFGA state after a governed delay, without losing the information needed after partial failure.
+Control-plane needs a recoverable space-deletion lifecycle before document and conversation cleanup is added. An authenticated API must retire a space immediately, while a separate Rust Temporal worker removes its existing SQL/OpenFGA state after a governed delay, without losing the information needed after partial failure.
 
 ## What Changes
 
@@ -20,11 +20,11 @@ None. Extend the existing manager capability rather than introduce a parallel ow
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: add the space-deletion lifecycle and permit immutable hierarchy links to be removed only by its authorized cleanup.
+- `control-plane-provisioning`: add the space-deletion lifecycle and permit immutable hierarchy links to be removed only by its authorized cleanup.
 
 ## Impact
 
-- `apps/fred-manager`: lifecycle module, API, configuration, CLI/worker entry point, new SQL migration, OpenFGA capability and bounded tuple cleanup, existing space/provisioning consumers, tests and deployment overlay.
+- `apps/control-plane`: lifecycle module, API, configuration, CLI/worker entry point, new SQL migration, OpenFGA capability and bounded tuple cleanup, existing space/provisioning consumers, tests and deployment overlay.
 - `apps/frontend`: regenerate the manager client; no page, control or interaction changes.
 - `docs/architecture`: journeys, action/role matrix, ownership, operations, runtime/configuration references and measured request budgets in the implementation commit.
 - Temporal Rust worker crates aligned with the existing pinned 1.0.0 client/common family; no Python service replacement or data migration in this lot.

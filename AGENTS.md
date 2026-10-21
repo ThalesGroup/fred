@@ -28,6 +28,48 @@ Conflict resolution order:
 
 If a conflict cannot be resolved using this order, ask before changing files.
 
+## Incremental collaboration - default working mode
+
+Work in small, focused code increments that the developer can read and control.
+Implement the requested adaptation, keeping the code simple, clear and robust,
+then present the relevant diff and explain the concrete behavior. Do not expand
+an implementation request into a general readiness or verification campaign.
+
+The developer owns tests and quality validation. Unless explicitly requested,
+do not launch tests, code-quality commands, audits, independent reviewer agents,
+benchmarks, builds or deployments, and do not add a testing campaign to the lot.
+Do not repeatedly ask permission to run them; hand back the code for review.
+Read the code and affected callers as needed to implement the change correctly.
+Flag a concrete unresolved issue briefly instead of widening the task.
+
+Existing OpenSpec, RFC and arc42 documents inform implementation; they do not
+automatically require new planning artifacts, approval gates or a documentation
+campaign for each increment. Use those workflows when the developer asks for
+them. A request to implement code alone does not request PR readiness, a commit,
+a push or publication. State accurately which validation was not performed.
+
+This working mode takes precedence over the automatic workflow, verification,
+review and close-out requirements below and in legacy guidance or skills.
+
+## Locating reconstruction code and documentation
+
+For a question about the reconstructed user journey, start with the
+[arc42 question map](docs/architecture/README.md#find-a-function), then the
+[control-plane source map](apps/control-plane/src/README.md). They point to the
+current UI consumers, Rust owners, SQL migrations and focused evidence. Historical
+OpenSpec changes and Swift documents are comparison material, not proof of current
+Rust behavior. Do not describe an API-only operation as an available UI journey.
+
+## Functional reconstruction continuity
+
+When continuing Dimi's incremental Rust reconstruction, first read
+[`docs/WORKING-JOURNAL.md`](docs/WORKING-JOURNAL.md).
+Update its indexed feature records after each meaningful step: observations,
+focused changes, explicit user validation, pending architecture updates and next
+step. Preserve the existing frontend, including nonfunctional screens, unless
+Dimi requests a specific adaptation. Update architecture chapters on request;
+do not confuse an implemented change with a validated user journey.
+
 ## OpenSpec - team choice, under evaluation
 
 OpenSpec is the team's chosen default for substantial development, and remains
@@ -114,10 +156,10 @@ set of related files has changed. During implementation, run only the narrow
 check needed to resolve a concrete risk. Honor a developer's request for manual
 feature validation before running tests.
 
-## fred-manager reconstruction on chore/rust-rebac
+## control-plane reconstruction on chore/rust-rebac
 
 For a reconstruction audit, use
-[`audit-fred-manager`](.agents/skills/audit-fred-manager/SKILL.md). It scopes the
+[`audit-control-plane`](.agents/skills/audit-control-plane/SKILL.md). It scopes the
 independent review to implemented manager responsibilities, affected consumers and
 arc42 conformity. It does not claim full-Fred or full-PR readiness. The generic
 branch review below remains applicable to a full PR readiness request.
@@ -161,19 +203,26 @@ Each step is one clean, tested and documented commit on this branch. Do not
 push without the developer's explicit agreement. Obtain independent review,
 fix every actionable finding with a regression test, and have the corrections
 reviewed before closing the step. Tests proving an architecture invariant
-carry `// Proves: I<n>`. Until the first production release, manager keeps no backward
-compatibility: its SQL schema is one baseline migration edited in place, its OpenFGA
-model is replaced rather than upgraded, and an existing local installation is reset.
+carry `// Proves: I<n>`. Applied SQL migrations are immutable, including comments
+and whitespace: SQLx checks their checksums. Add each schema evolution as the next
+numbered SQL file in `apps/control-plane/migrations/`. Preserve existing data;
+prefer additive changes and describe any required data transformation before applying
+it. Never alter `_sqlx_migrations` checksums to bypass validation. Before changing an
+existing installation, inspect its migration history and take a backup. A fresh
+installation applies the complete migration chain. Historical reset instructions
+in the immutable first migration are superseded by this policy.
+Before the first production release, the OpenFGA model is still replaced rather
+than upgraded; this separate policy does not require resetting SQL for additive changes.
 
 After implementation and the review/correction passes, perform a dedicated
 documentation pass over the arc42 dossier in `docs/architecture/`. Every
-fred-manager change updates the relevant dossier chapters in the same commit.
+control-plane change updates the relevant dossier chapters in the same commit.
 Describe only implemented behavior in the present tense: no progress, plans,
 status, or lists of missing features. Planning belongs in OpenSpec. Regenerate
 derived blocks instead of copying code into prose.
 
 Before committing, run `make test`, `make test-integration` and
-`make code-quality` in `apps/fred-manager`, plus
+`make code-quality` in `apps/control-plane`, plus
 `make -C docs/architecture check` from the repository root. Validate OpenSpec
 artifacts when the step changes them.
 

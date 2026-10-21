@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { AgentTemplateSummary } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import styles from "./TemplateCard.module.css";
 
 type TemplateCardProps = {

@@ -32,7 +32,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -60,7 +60,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => ({ data: { items: h.items }, isLoading: false, isError: false }),
   useListAllTeamsQuery: () => ({ data: [], isLoading: false, isError: false }),
   useSetCapabilityDefaultOnMutation: () => [

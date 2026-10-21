@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { AgentCopyResult, ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AgentCopyResult, ManagedAgentInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { duplicateCopyArgs, duplicateWarning } from "./duplicateAgent";
 
 describe("duplicateCopyArgs", () => {

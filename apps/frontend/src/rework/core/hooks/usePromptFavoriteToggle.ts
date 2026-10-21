@@ -18,7 +18,7 @@ import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import {
   useAddPromptFavoriteMutation,
   useRemovePromptFavoriteMutation,
-} from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 
 /** Stars or unstars a prompt of `teamId` for the caller. The listings update
  *  at once (optimistic cache patch); a failure puts the star back and says so. */

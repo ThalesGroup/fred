@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { AvailableModelProfile } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AvailableModelProfile } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { modelLabel } from "./ReasoningChip";
 
 export interface TeamModelRow {

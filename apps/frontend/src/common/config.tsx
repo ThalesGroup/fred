@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { createKeycloakInstance } from "../security/KeycloakService";
-import type { FrontendConfig } from "../slices/fredManager/fredManagerOpenApi";
+import type { FrontendConfig } from "../slices/controlPlane/controlPlaneOpenApi";
 import {
   cachePlatformUiThemes,
   setCustomUiThemes,
@@ -23,7 +23,7 @@ import {
 } from "../app/uiThemes.ts";
 
 /** Public pre-auth manager configuration. */
-const FRONTEND_CONFIG_URL = "/fred-manager/v1/frontend/config";
+const FRONTEND_CONFIG_URL = "/control-plane/v1/frontend/config";
 
 /** Authentication settings needed before login. */
 export interface UserAuthConfig {

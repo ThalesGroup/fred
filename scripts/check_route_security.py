@@ -35,7 +35,6 @@ def setup_backend_environment(backend_dir: Path) -> Path:
     app_dir_options = [
         backend_dir / "agentic_backend",
         backend_dir / "knowledge_flow_backend",
-        backend_dir / "control_plane_backend",
     ]
     
     app_dir = None

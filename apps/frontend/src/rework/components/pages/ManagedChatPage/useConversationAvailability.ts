@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 
 export function useConversationAvailability(

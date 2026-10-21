@@ -1,6 +1,6 @@
 ## Why
 
-The provisioning browser journey starts with a pre-granted root and mocked control-plane shell reads. A fresh user cannot complete the agreed first journey entirely through fred-manager. This slice implements the developer-approved sequence under #3092.
+The provisioning browser journey starts with a pre-granted root and mocked control-plane shell reads. A fresh user cannot complete the agreed first journey entirely through control-plane. This slice implements the developer-approved sequence under #3092.
 
 ## What Changes
 
@@ -16,7 +16,7 @@ The provisioning browser journey starts with a pre-granted root and mocked contr
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: fresh-platform onboarding and real browser acceptance before provisioning.
+- `control-plane-provisioning`: fresh-platform onboarding and real browser acceptance before provisioning.
 
 ## Impact
 

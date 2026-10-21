@@ -14,7 +14,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FrontendFeatureFlags } from "../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { FrontendFeatureFlags } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 
 const h = vi.hoisted(() => ({
   bootstrap: undefined as { feature_flags: FrontendFeatureFlags } | undefined,

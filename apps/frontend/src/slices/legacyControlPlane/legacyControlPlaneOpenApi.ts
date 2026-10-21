@@ -1,0 +1,6226 @@
+import { legacyControlPlaneApi as api } from "./legacyControlPlaneApi";
+const injectedRtkApi = api.injectEndpoints({
+  endpoints: (build) => ({
+    healthzControlPlaneV1HealthzGet: build.query<
+      HealthzControlPlaneV1HealthzGetApiResponse,
+      HealthzControlPlaneV1HealthzGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/healthz` }),
+    }),
+    readyControlPlaneV1ReadyGet: build.query<ReadyControlPlaneV1ReadyGetApiResponse, ReadyControlPlaneV1ReadyGetApiArg>(
+      {
+        query: () => ({ url: `/control-plane/v1/ready` }),
+      },
+    ),
+    getPurgePolicySummaryControlPlaneV1PoliciesPurgeGet: build.query<
+      GetPurgePolicySummaryControlPlaneV1PoliciesPurgeGetApiResponse,
+      GetPurgePolicySummaryControlPlaneV1PoliciesPurgeGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/policies/purge` }),
+    }),
+    resolvePurgeControlPlaneV1PoliciesPurgeResolvePost: build.mutation<
+      ResolvePurgeControlPlaneV1PoliciesPurgeResolvePostApiResponse,
+      ResolvePurgeControlPlaneV1PoliciesPurgeResolvePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/policies/purge/resolve`,
+        method: "POST",
+        body: queryArg.policyResolutionRequest,
+      }),
+    }),
+    triggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePost: build.mutation<
+      TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiResponse,
+      TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/lifecycle/run-once`,
+        method: "POST",
+        body: queryArg.lifecycleManagerInput,
+      }),
+    }),
+    getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: build.query<
+      GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiResponse,
+      GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access` }),
+    }),
+    setPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatch: build.mutation<
+      SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiResponse,
+      SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access`,
+        method: "PATCH",
+        body: queryArg.setPlatformFiltering,
+      }),
+    }),
+    previewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGet: build.query<
+      PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiResponse,
+      PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/activation-preview` }),
+    }),
+    getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: build.query<
+      GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse,
+      GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/own-claims` }),
+    }),
+    previewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPost: build.mutation<
+      PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiResponse,
+      PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/policy-preview`,
+        method: "POST",
+        body: queryArg.platformAccessPolicy,
+      }),
+    }),
+    savePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPut: build.mutation<
+      SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiResponse,
+      SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/policy`,
+        method: "PUT",
+        body: queryArg.setPlatformAccessPolicy,
+      }),
+    }),
+    listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: build.query<
+      ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiResponse,
+      ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          query: queryArg.query,
+          exceptions_only: queryArg.exceptionsOnly,
+        },
+      }),
+    }),
+    grantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPost: build.mutation<
+      GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse,
+      GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users`,
+        method: "POST",
+        body: queryArg.grantPlatformAccessUsers,
+      }),
+    }),
+    grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: build.mutation<
+      GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse,
+      GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/admin/platform/access/users/${queryArg.userId}`, method: "PUT" }),
+    }),
+    revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: build.mutation<
+      RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiResponse,
+      RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/${queryArg.userId}`,
+        method: "DELETE",
+      }),
+    }),
+    previewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGet: build.query<
+      PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiResponse,
+      PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/t0-preview`,
+        params: {
+          refresh_mode: queryArg.refreshMode,
+        },
+      }),
+    }),
+    importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: build.mutation<
+      ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiResponse,
+      ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/t0-import`,
+        method: "POST",
+        body: queryArg.body,
+      }),
+    }),
+    listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet: build.query<
+      ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiResponse,
+      ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/teams` }),
+    }),
+    setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: build.mutation<
+      SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiResponse,
+      SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}`,
+        method: "PATCH",
+        body: queryArg.setPlatformAccessTeam,
+      }),
+    }),
+    generatePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPost: build.mutation<
+      GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiResponse,
+      GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-link`,
+        method: "POST",
+        body: queryArg.createPlatformEnrollmentLink,
+      }),
+    }),
+    listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: build.query<
+      ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiResponse,
+      ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          status: queryArg.status,
+        },
+      }),
+    }),
+    listPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGet:
+      build.query<
+        ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiResponse,
+        ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}/joiners`,
+          params: {
+            offset: queryArg.offset,
+            limit: queryArg.limit,
+          },
+        }),
+      }),
+    deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete:
+      build.mutation<
+        DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse,
+        DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/inactive`,
+          method: "DELETE",
+        }),
+      }),
+    revealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPost:
+      build.mutation<
+        RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiResponse,
+        RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}/reveal`,
+          method: "POST",
+        }),
+      }),
+    revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: build.mutation<
+      RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiResponse,
+      RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-links/${queryArg.linkId}`,
+        method: "DELETE",
+      }),
+    }),
+    getTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGet: build.query<
+      GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiResponse,
+      GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join-link` }),
+    }),
+    setTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPut: build.mutation<
+      SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiResponse,
+      SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/join-link`,
+        method: "PUT",
+        body: queryArg.setTeamJoinLink,
+      }),
+    }),
+    regenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePost: build.mutation<
+      RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiResponse,
+      RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join-link/regenerate`, method: "POST" }),
+    }),
+    getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: build.query<
+      GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse,
+      GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/platform-access/status` }),
+    }),
+    previewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGet: build.query<
+      PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiResponse,
+      PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/platform-access/free/${queryArg.token}` }),
+    }),
+    recordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPost: build.mutation<
+      RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiResponse,
+      RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform-access/free/${queryArg.token}/opening`,
+        method: "POST",
+      }),
+    }),
+    acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: build.mutation<
+      AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiResponse,
+      AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform-access/free/${queryArg.token}/gcu`,
+        method: "POST",
+        body: queryArg.acceptFreeEnrollmentCgu,
+      }),
+    }),
+    enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: build.mutation<
+      EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiResponse,
+      EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/platform-access/free/${queryArg.token}/enroll`, method: "POST" }),
+    }),
+    listUsersControlPlaneV1UsersGet: build.query<
+      ListUsersControlPlaneV1UsersGetApiResponse,
+      ListUsersControlPlaneV1UsersGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users` }),
+    }),
+    createUserControlPlaneV1UsersPost: build.mutation<
+      CreateUserControlPlaneV1UsersPostApiResponse,
+      CreateUserControlPlaneV1UsersPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/users`, method: "POST", body: queryArg.createUserRequest }),
+    }),
+    getUsersByIdsControlPlaneV1UsersByIdsGet: build.query<
+      GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse,
+      GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/by-ids`,
+        params: {
+          ids: queryArg.ids,
+        },
+      }),
+    }),
+    listPlatformRolesControlPlaneV1UsersPlatformRolesGet: build.query<
+      ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiResponse,
+      ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/platform-roles` }),
+    }),
+    grantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPost: build.mutation<
+      GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiResponse,
+      GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/${queryArg.userId}/platform-roles`,
+        method: "POST",
+        body: queryArg.grantPlatformRoleRequest,
+      }),
+    }),
+    revokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDelete: build.mutation<
+      RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiResponse,
+      RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/${queryArg.userId}/platform-roles/${queryArg.relation}`,
+        method: "DELETE",
+      }),
+    }),
+    deleteUserControlPlaneV1UsersUserIdDelete: build.mutation<
+      DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse,
+      DeleteUserControlPlaneV1UsersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/users/${queryArg.userId}`, method: "DELETE" }),
+    }),
+    uploadMyAvatarControlPlaneV1UsersMeAvatarPost: build.mutation<
+      UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiResponse,
+      UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/me/avatar`,
+        method: "POST",
+        body: queryArg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost,
+      }),
+    }),
+    deleteMyAvatarControlPlaneV1UsersMeAvatarDelete: build.mutation<
+      DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse,
+      DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/me/avatar`, method: "DELETE" }),
+    }),
+    getUserDetailsControlPlaneV1UserGet: build.query<
+      GetUserDetailsControlPlaneV1UserGetApiResponse,
+      GetUserDetailsControlPlaneV1UserGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/user` }),
+    }),
+    validateGcuControlPlaneV1GcuPost: build.mutation<
+      ValidateGcuControlPlaneV1GcuPostApiResponse,
+      ValidateGcuControlPlaneV1GcuPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/gcu`, method: "POST" }),
+    }),
+    listTeamsControlPlaneV1TeamsGet: build.query<
+      ListTeamsControlPlaneV1TeamsGetApiResponse,
+      ListTeamsControlPlaneV1TeamsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/teams` }),
+    }),
+    createTeamControlPlaneV1TeamsPost: build.mutation<
+      CreateTeamControlPlaneV1TeamsPostApiResponse,
+      CreateTeamControlPlaneV1TeamsPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams`, method: "POST", body: queryArg.createTeamRequest }),
+    }),
+    listAllTeamsControlPlaneV1TeamsAllGet: build.query<
+      ListAllTeamsControlPlaneV1TeamsAllGetApiResponse,
+      ListAllTeamsControlPlaneV1TeamsAllGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/all`,
+        params: {
+          include_membership: queryArg.includeMembership,
+        },
+      }),
+    }),
+    searchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGet: build.query<
+      SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse,
+      SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/candidate-admins`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
+    getTeamControlPlaneV1TeamsTeamIdGet: build.query<
+      GetTeamControlPlaneV1TeamsTeamIdGetApiResponse,
+      GetTeamControlPlaneV1TeamsTeamIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}` }),
+    }),
+    updateTeamControlPlaneV1TeamsTeamIdPatch: build.mutation<
+      UpdateTeamControlPlaneV1TeamsTeamIdPatchApiResponse,
+      UpdateTeamControlPlaneV1TeamsTeamIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}`,
+        method: "PATCH",
+        body: queryArg.updateTeamRequest,
+      }),
+    }),
+    deleteTeamControlPlaneV1TeamsTeamIdDelete: build.mutation<
+      DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse,
+      DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}`, method: "DELETE" }),
+    }),
+    editTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatch: build.mutation<
+      EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiResponse,
+      EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/registry`,
+        method: "PATCH",
+        body: queryArg.editTeamRegistryRequest,
+      }),
+    }),
+    joinTeamControlPlaneV1TeamsTeamIdJoinPost: build.mutation<
+      JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse,
+      JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/join`, method: "POST" }),
+    }),
+    rescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPost: build.mutation<
+      RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse,
+      RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/rescue-admin`,
+        method: "POST",
+        body: queryArg.rescueTeamAdminRequest,
+      }),
+    }),
+    getDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGet: build.query<
+      GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiResponse,
+      GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/default-teams` }),
+    }),
+    setDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut: build.mutation<
+      SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiResponse,
+      SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/default-teams`,
+        method: "PUT",
+        body: queryArg.setDefaultTeamsForNewUsersRequest,
+      }),
+    }),
+    getTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGet: build.query<
+      GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiResponse,
+      GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter` }),
+    }),
+    acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: build.mutation<
+      AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse,
+      AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter`, method: "POST" }),
+    }),
+    uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: build.mutation<
+      UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse,
+      UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/avatar`,
+        method: "POST",
+        body: queryArg.bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost,
+      }),
+    }),
+    listTeamMembersControlPlaneV1TeamsTeamIdMembersGet: build.query<
+      ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiResponse,
+      ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/members` }),
+    }),
+    addTeamMemberControlPlaneV1TeamsTeamIdMembersPost: build.mutation<
+      AddTeamMemberControlPlaneV1TeamsTeamIdMembersPostApiResponse,
+      AddTeamMemberControlPlaneV1TeamsTeamIdMembersPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/members`,
+        method: "POST",
+        body: queryArg.addTeamMemberRequest,
+      }),
+    }),
+    searchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGet: build.query<
+      SearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetApiResponse,
+      SearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/candidate-members`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
+    removeTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDelete: build.mutation<
+      RemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteApiResponse,
+      RemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/members/${queryArg.userId}`,
+        method: "DELETE",
+      }),
+    }),
+    grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: build.mutation<
+      GrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostApiResponse,
+      GrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/members/${queryArg.userId}/roles`,
+        method: "POST",
+        body: queryArg.grantTeamMemberRoleRequest,
+      }),
+    }),
+    revokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDelete: build.mutation<
+      RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteApiResponse,
+      RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/members/${queryArg.userId}/roles/${queryArg.relation}`,
+        method: "DELETE",
+      }),
+    }),
+    getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: build.query<
+      GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiResponse,
+      GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/applications` }),
+    }),
+    getFrontendBootstrapControlPlaneV1FrontendBootstrapGet: build.query<
+      GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse,
+      GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/frontend/bootstrap` }),
+    }),
+    getFrontendConfigControlPlaneV1FrontendConfigGet: build.query<
+      GetFrontendConfigControlPlaneV1FrontendConfigGetApiResponse,
+      GetFrontendConfigControlPlaneV1FrontendConfigGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/frontend/config` }),
+    }),
+    getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: build.query<
+      GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse,
+      GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-templates`,
+        params: {
+          include_non_public: queryArg.includeNonPublic,
+        },
+      }),
+    }),
+    getTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGet: build.query<
+      GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiResponse,
+      GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances` }),
+    }),
+    postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: build.mutation<
+      PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiResponse,
+      PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances`,
+        method: "POST",
+        body: queryArg.createAgentInstanceRequest,
+      }),
+    }),
+    postDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPost: build.mutation<
+      PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiResponse,
+      PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-templates/${queryArg.templateId}/draft-agent`,
+        method: "POST",
+        body: queryArg.agentDraftRequest,
+      }),
+    }),
+    getCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGet: build.query<
+      GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiResponse,
+      GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/creation-assistant/settings` }),
+    }),
+    patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: build.mutation<
+      PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiResponse,
+      PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}`,
+        method: "PATCH",
+        body: queryArg.updateAgentInstanceRequest,
+      }),
+    }),
+    deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: build.mutation<
+      DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiResponse,
+      DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}`,
+        method: "DELETE",
+      }),
+    }),
+    postTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: build.mutation<
+      PostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostApiResponse,
+      PostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/with-assets`,
+        method: "POST",
+        body: queryArg.bodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost,
+      }),
+    }),
+    patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch:
+      build.mutation<
+        PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchApiResponse,
+        PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/with-assets`,
+          method: "PATCH",
+          body: queryArg.bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch,
+        }),
+      }),
+    getAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGet: build.query<
+      GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse,
+      GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/copy-targets`,
+      }),
+    }),
+    postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: build.mutation<
+      PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiResponse,
+      PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/copy`,
+        method: "POST",
+        body: queryArg.agentCopyRequest,
+      }),
+    }),
+    getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet: build.query<
+      GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse,
+      GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts` }),
+    }),
+    postTeamPromptControlPlaneV1TeamsTeamIdPromptsPost: build.mutation<
+      PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiResponse,
+      PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts`,
+        method: "POST",
+        body: queryArg.createPromptRequest,
+      }),
+    }),
+    getTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGet: build.query<
+      GetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetApiResponse,
+      GetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompt-commands` }),
+    }),
+    getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet: build.query<
+      GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiResponse,
+      GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/context` }),
+    }),
+    getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet: build.query<
+      GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiResponse,
+      GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}` }),
+    }),
+    putTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPut: build.mutation<
+      PutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutApiResponse,
+      PutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}`,
+        method: "PUT",
+        body: queryArg.updatePromptRequest,
+      }),
+    }),
+    deleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDelete: build.mutation<
+      DeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteApiResponse,
+      DeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}`,
+        method: "DELETE",
+      }),
+    }),
+    patchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatch: build.mutation<
+      PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiResponse,
+      PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}`,
+        method: "PATCH",
+        body: queryArg.promptScoreUpdateRequest,
+      }),
+    }),
+    postRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePost: build.mutation<
+      PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiResponse,
+      PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/use`,
+        method: "POST",
+      }),
+    }),
+    addTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePut: build.mutation<
+      AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiResponse,
+      AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/favorite`,
+        method: "PUT",
+      }),
+    }),
+    removeTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDelete: build.mutation<
+      RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiResponse,
+      RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/favorite`,
+        method: "DELETE",
+      }),
+    }),
+    postPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost: build.mutation<
+      PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiResponse,
+      PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/promote`,
+        method: "POST",
+        body: queryArg.promptPromoteRequest,
+      }),
+    }),
+    postPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPost: build.mutation<
+      PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiResponse,
+      PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/publish`,
+        method: "POST",
+      }),
+    }),
+    postUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPost: build.mutation<
+      PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiResponse,
+      PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/unpublish`,
+        method: "POST",
+      }),
+    }),
+    getMarketplacePromptsControlPlaneV1MarketplacePromptsGet: build.query<
+      GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiResponse,
+      GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/marketplace/prompts` }),
+    }),
+    getMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGet: build.query<
+      GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiResponse,
+      GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}` }),
+    }),
+    postMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePost: build.mutation<
+      PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiResponse,
+      PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}/use`, method: "POST" }),
+    }),
+    postMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPost: build.mutation<
+      PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiResponse,
+      PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}/import`,
+        method: "POST",
+        body: queryArg.marketplaceImportRequest,
+      }),
+    }),
+    getTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGet: build.query<
+      GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiResponse,
+      GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompt-categories` }),
+    }),
+    postTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPost: build.mutation<
+      PostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostApiResponse,
+      PostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompt-categories`,
+        method: "POST",
+        body: queryArg.createPromptCategoryRequest,
+      }),
+    }),
+    putTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPut: build.mutation<
+      PutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutApiResponse,
+      PutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompt-categories/${queryArg.categoryId}`,
+        method: "PUT",
+        body: queryArg.updatePromptCategoryRequest,
+      }),
+    }),
+    deleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDelete: build.mutation<
+      DeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteApiResponse,
+      DeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompt-categories/${queryArg.categoryId}`,
+        method: "DELETE",
+      }),
+    }),
+    getTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGet: build.query<
+      GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiResponse,
+      GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/runtime`,
+      }),
+    }),
+    postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost: build.mutation<
+      PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiResponse,
+      PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions`,
+        method: "POST",
+        body: queryArg.createSessionRequest,
+      }),
+    }),
+    getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: build.query<
+      GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse,
+      GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
+    }),
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
+      GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
+      GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/inactive-sessions`,
+        params: {
+          inactive_days: queryArg.inactiveDays,
+        },
+      }),
+    }),
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: build.mutation<
+      PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse,
+      PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/sessions/bulk-delete`,
+        method: "POST",
+        body: queryArg.bulkDeleteSessionsRequest,
+      }),
+    }),
+    getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet: build.query<
+      GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse,
+      GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}` }),
+    }),
+    patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: build.mutation<
+      PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiResponse,
+      PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}`,
+        method: "PATCH",
+        body: queryArg.updateSessionRequest,
+      }),
+    }),
+    deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: build.mutation<
+      DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiResponse,
+      DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}`,
+        method: "DELETE",
+      }),
+    }),
+    getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: build.query<
+      GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse,
+      GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments`,
+      }),
+    }),
+    postTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPost: build.mutation<
+      PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiResponse,
+      PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments`,
+        method: "POST",
+        body: queryArg.createSessionAttachmentRequest,
+      }),
+    }),
+    deleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDelete: build.mutation<
+      DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiResponse,
+      DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments/${queryArg.attachmentId}`,
+        method: "DELETE",
+      }),
+    }),
+    postPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPost:
+      build.mutation<
+        PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiResponse,
+        PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/runtimes/${queryArg.runtimeId}/agents/${queryArg.agentId}/prepare-execution`,
+          method: "POST",
+          params: {
+            person: queryArg.person,
+            run: queryArg.run,
+            agent: queryArg.agent,
+          },
+        }),
+      }),
+    getAgentInstanceSkills: build.query<GetAgentInstanceSkillsApiResponse, GetAgentInstanceSkillsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/skills`,
+      }),
+    }),
+    getAgentInstanceSkillDetail: build.query<GetAgentInstanceSkillDetailApiResponse, GetAgentInstanceSkillDetailApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/skills/${queryArg.skillName}`,
+        }),
+      },
+    ),
+    prepareAgentExecution: build.mutation<PrepareAgentExecutionApiResponse, PrepareAgentExecutionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
+        method: "POST",
+        params: {
+          session_id: queryArg.sessionId,
+          agent_model_override: queryArg.agentModelOverride,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    bootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPost: build.mutation<
+      BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse,
+      BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/bootstrap/platform-admin`,
+        method: "POST",
+        body: queryArg.bootstrapPlatformAdminRequest,
+      }),
+    }),
+    getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: build.query<
+      GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse,
+      GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/capabilities` }),
+    }),
+    getCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGet: build.query<
+      GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetApiResponse,
+      GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/revoke-impact`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: build.mutation<
+      PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse,
+      PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}`,
+        method: "PUT",
+        body: queryArg.enableTeamCapabilityRequest,
+      }),
+    }),
+    deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: build.mutation<
+      DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiResponse,
+      DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}`,
+        method: "DELETE",
+        params: {
+          mode: queryArg.mode,
+        },
+      }),
+    }),
+    putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: build.mutation<
+      PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiResponse,
+      PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/default-on`,
+        method: "PUT",
+        body: queryArg.setCapabilityDefaultOnRequest,
+      }),
+    }),
+    putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: build.mutation<
+      PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutApiResponse,
+      PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/personal-scope`,
+        method: "PUT",
+        body: queryArg.setCapabilityPersonalScopeRequest,
+      }),
+    }),
+    patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: build.mutation<
+      PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiResponse,
+      PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/reasoning`,
+        method: "PATCH",
+        body: queryArg.setModelReasoningRequest,
+      }),
+    }),
+    publishKnowledgeBaseDefinition: build.mutation<
+      PublishKnowledgeBaseDefinitionApiResponse,
+      PublishKnowledgeBaseDefinitionApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.name}`,
+        method: "PUT",
+        body: queryArg.knowledgeBasePublicationRequest,
+      }),
+    }),
+    listKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGet: build.query<
+      ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiResponse,
+      ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGet: build.query<
+      GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiResponse,
+      GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/fields`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    listKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGet: build.query<
+      ListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetApiResponse,
+      ListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/instances`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    createKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPost: build.mutation<
+      CreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostApiResponse,
+      CreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/instances`,
+        method: "POST",
+        body: queryArg.knowledgeBaseInstanceCreate,
+      }),
+    }),
+    getKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGet: build.query<
+      GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiResponse,
+      GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/knowledge-bases/instances/${queryArg.instanceId}` }),
+    }),
+    deleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDelete: build.mutation<
+      DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiResponse,
+      DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/instances/${queryArg.instanceId}`,
+        method: "DELETE",
+      }),
+    }),
+    getKnowledgeBaseRunContext: build.query<GetKnowledgeBaseRunContextApiResponse, GetKnowledgeBaseRunContextApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
+      }),
+    }),
+    getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
+      GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse,
+      GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy` }),
+    }),
+    updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: build.mutation<
+      UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiResponse,
+      UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy`,
+        method: "PATCH",
+        body: queryArg.updateTeamRoutingPolicyRequest,
+      }),
+    }),
+    getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: build.query<
+      GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiResponse,
+      GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
+    }),
+    getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: build.query<
+      GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse,
+      GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/effective-chat-model`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+        },
+      }),
+    }),
+    getRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGet: build.query<
+      GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiResponse,
+      GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/disable-impact`,
+        params: {
+          capability_id: queryArg.capabilityId,
+        },
+      }),
+    }),
+    getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: build.query<
+      GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse,
+      GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings` }),
+    }),
+    putPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPut: build.mutation<
+      PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiResponse,
+      PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/model-bindings`,
+        method: "PUT",
+        body: queryArg.setPlatformModelBindingRequest,
+      }),
+    }),
+    deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: build.mutation<
+      DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse,
+      DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings`, method: "DELETE" }),
+    }),
+    wikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGet: build.query<
+      WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiResponse,
+      WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/availability` }),
+    }),
+    listPagesControlPlaneV1TeamsTeamIdWikiPagesGet: build.query<
+      ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiResponse,
+      ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages` }),
+    }),
+    createPageControlPlaneV1TeamsTeamIdWikiPagesPost: build.mutation<
+      CreatePageControlPlaneV1TeamsTeamIdWikiPagesPostApiResponse,
+      CreatePageControlPlaneV1TeamsTeamIdWikiPagesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages`,
+        method: "POST",
+        body: queryArg.createWikiPageRequest,
+      }),
+    }),
+    readRulesControlPlaneV1TeamsTeamIdWikiRulesGet: build.query<
+      ReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetApiResponse,
+      ReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/rules` }),
+    }),
+    writeRulesControlPlaneV1TeamsTeamIdWikiRulesPut: build.mutation<
+      WriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutApiResponse,
+      WriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/rules`,
+        method: "PUT",
+        body: queryArg.updateWikiRulesRequest,
+      }),
+    }),
+    readPageControlPlaneV1TeamsTeamIdWikiPagesSlugGet: build.query<
+      ReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetApiResponse,
+      ReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.slug}` }),
+    }),
+    writePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPut: build.mutation<
+      WritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutApiResponse,
+      WritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/content`,
+        method: "PUT",
+        body: queryArg.updateWikiPageContentRequest,
+      }),
+    }),
+    patchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatch: build.mutation<
+      PatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchApiResponse,
+      PatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}`,
+        method: "PATCH",
+        body: queryArg.updateWikiPageMetadataRequest,
+      }),
+    }),
+    deletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDelete: build.mutation<
+      DeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteApiResponse,
+      DeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}`,
+        method: "DELETE",
+      }),
+    }),
+    setReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPost: build.mutation<
+      SetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostApiResponse,
+      SetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/review`,
+        method: "POST",
+        body: queryArg.setNeedsReviewRequest,
+      }),
+    }),
+    listRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGet: build.query<
+      ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiResponse,
+      ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/revisions`,
+        params: {
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    restoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePost: build.mutation<
+      RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiResponse,
+      RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/revisions/${queryArg.revisionId}/restore`,
+        method: "POST",
+      }),
+    }),
+    proposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePost: build.mutation<
+      ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiResponse,
+      ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/page`,
+        method: "POST",
+        body: queryArg.proposePageRequest,
+      }),
+    }),
+    proposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPost: build.mutation<
+      ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiResponse,
+      ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/edit`,
+        method: "POST",
+        body: queryArg.proposeEditRequest,
+      }),
+    }),
+    readProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGet: build.query<
+      ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiResponse,
+      ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/${queryArg.proposalId}`,
+      }),
+    }),
+    publishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPost: build.mutation<
+      PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiResponse,
+      PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/${queryArg.proposalId}/publish`,
+        method: "POST",
+      }),
+    }),
+    getPlatformPromptControlPlaneV1AdminPlatformPromptGet: build.query<
+      GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse,
+      GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/prompt` }),
+    }),
+    putPlatformPromptControlPlaneV1AdminPlatformPromptPut: build.mutation<
+      PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiResponse,
+      PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/prompt`,
+        method: "PUT",
+        body: queryArg.setPlatformPromptRequest,
+      }),
+    }),
+    getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: build.query<
+      GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse,
+      GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
+    }),
+    getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: build.query<
+      GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiResponse,
+      GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant` }),
+    }),
+    putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: build.mutation<
+      PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiResponse,
+      PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/creation-assistant`,
+        method: "PUT",
+        body: queryArg.setCreationAssistantSettingsRequest,
+      }),
+    }),
+    deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: build.mutation<
+      DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse,
+      DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant`, method: "DELETE" }),
+    }),
+    getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
+      GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
+      GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/ui-settings` }),
+    }),
+    putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: build.mutation<
+      PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResponse,
+      PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/ui-settings`,
+        method: "PUT",
+        body: queryArg.setPlatformUiSettingsRequest,
+      }),
+    }),
+    getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: build.query<
+      GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse,
+      GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/marketplace-settings` }),
+    }),
+    previewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGet: build.query<
+      PreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetApiResponse,
+      PreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/marketplace-settings/default/impact`,
+        params: {
+          agents_publishing_enabled: queryArg.agentsPublishingEnabled,
+        },
+      }),
+    }),
+    setMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPut: build.mutation<
+      SetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutApiResponse,
+      SetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/marketplace-settings/default`,
+        method: "PUT",
+        body: queryArg.setAgentsMarketplaceDefaultRequest,
+      }),
+    }),
+    previewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGet: build.query<
+      PreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetApiResponse,
+      PreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/teams/${queryArg.teamId}/marketplace-settings/impact`,
+        params: {
+          agents_publishing_enabled: queryArg.agentsPublishingEnabled,
+        },
+      }),
+    }),
+    setTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPut: build.mutation<
+      SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutApiResponse,
+      SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/teams/${queryArg.teamId}/marketplace-settings`,
+        method: "PUT",
+        body: queryArg.setTeamMarketplaceSettingsRequest,
+      }),
+    }),
+    postAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPost: build.mutation<
+      PostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostApiResponse,
+      PostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/publish`,
+        method: "POST",
+        body: queryArg.publishAgentRequest,
+      }),
+    }),
+    postAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPost: build.mutation<
+      PostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostApiResponse,
+      PostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/unpublish`,
+        method: "POST",
+        body: queryArg.unpublishAgentRequest,
+      }),
+    }),
+    postAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPost:
+      build.mutation<
+        PostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostApiResponse,
+        PostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/marketplace-dismiss`,
+          method: "POST",
+        }),
+      }),
+    getMarketplaceAgentsControlPlaneV1MarketplaceAgentsGet: build.query<
+      GetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetApiResponse,
+      GetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/marketplace/agents`,
+        params: {
+          q: queryArg.q,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGet: build.query<
+      GetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetApiResponse,
+      GetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}` }),
+    }),
+    putMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePut: build.mutation<
+      PutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutApiResponse,
+      PutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}/like`, method: "PUT" }),
+    }),
+    deleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDelete: build.mutation<
+      DeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteApiResponse,
+      DeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}/like`, method: "DELETE" }),
+    }),
+    getMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGet: build.query<
+      GetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetApiResponse,
+      GetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}/import-targets` }),
+    }),
+    postMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPost: build.mutation<
+      PostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostApiResponse,
+      PostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/marketplace/agents/${queryArg.entryId}/import`,
+        method: "POST",
+        body: queryArg.marketplaceAgentImportRequest,
+      }),
+    }),
+    getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: build.query<
+      GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse,
+      GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/announcements/active` }),
+    }),
+    getPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGet: build.query<
+      GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiResponse,
+      GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/announcements/patch-notes` }),
+    }),
+    markPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPut: build.mutation<
+      MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiResponse,
+      MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/announcements/patch-note-announcements/${queryArg.announcementId}/seen`,
+        method: "PUT",
+      }),
+    }),
+    setPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPut: build.mutation<
+      SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiResponse,
+      SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/order`,
+        method: "PUT",
+        body: queryArg.patchNoteOrderRequest,
+      }),
+    }),
+    getPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGet: build.query<
+      GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiResponse,
+      GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement` }),
+    }),
+    announcePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPost: build.mutation<
+      AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiResponse,
+      AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement`,
+        method: "POST",
+        body: queryArg.patchNoteAnnounceRequest,
+      }),
+    }),
+    withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: build.mutation<
+      WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiResponse,
+      WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiArg
+    >({
+      query: () => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcement`,
+        method: "DELETE",
+      }),
+    }),
+    getPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGet: build.query<
+      GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiResponse,
+      GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/patch-notes/announcements/${queryArg.announcementId}`,
+      }),
+    }),
+    listExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: build.query<
+      ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse,
+      ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/announcements/activation-history` }),
+    }),
+    listAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGet: build.query<
+      ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse,
+      ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/announcements` }),
+    }),
+    createAnnouncementControlPlaneV1AdminPlatformAnnouncementsPost: build.mutation<
+      CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiResponse,
+      CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements`,
+        method: "POST",
+        body: queryArg.announcementWriteRequest,
+      }),
+    }),
+    updateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPut: build.mutation<
+      UpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutApiResponse,
+      UpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/${queryArg.announcementId}`,
+        method: "PUT",
+        body: queryArg.announcementWriteRequest,
+      }),
+    }),
+    deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: build.mutation<
+      DeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteApiResponse,
+      DeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/${queryArg.announcementId}`,
+        method: "DELETE",
+      }),
+    }),
+    setAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPut: build.mutation<
+      SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutApiResponse,
+      SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/${queryArg.announcementId}/enabled`,
+        method: "PUT",
+        body: queryArg.setAnnouncementEnabledRequest,
+      }),
+    }),
+    startTaskControlPlaneV1TasksPost: build.mutation<
+      StartTaskControlPlaneV1TasksPostApiResponse,
+      StartTaskControlPlaneV1TasksPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks`, method: "POST", body: queryArg.body }),
+    }),
+    listTasksControlPlaneV1TasksGet: build.query<
+      ListTasksControlPlaneV1TasksGetApiResponse,
+      ListTasksControlPlaneV1TasksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/tasks`,
+        params: {
+          scope: queryArg.scope,
+          team_id: queryArg.teamId,
+          kind: queryArg.kind,
+          state: queryArg.state,
+          task_id: queryArg.taskId,
+        },
+      }),
+    }),
+    streamTaskEventsControlPlaneV1TasksTaskIdEventsGet: build.query<
+      StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiResponse,
+      StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/events` }),
+    }),
+    cancelTaskControlPlaneV1TasksTaskIdCancelPost: build.mutation<
+      CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse,
+      CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/cancel`, method: "POST" }),
+    }),
+    acknowledgeTaskControlPlaneV1TasksTaskIdAckPost: build.mutation<
+      AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiResponse,
+      AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/ack`, method: "POST" }),
+    }),
+    handlerControlPlaneV1KpiPresetsSkillUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSkillUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/skill_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserSkillUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_skill_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsActiveUsersOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/active_users_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUniqueUsersTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/unique_users_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsSessionsOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/sessions_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsMessagesOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/messages_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsSessionsByScopeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/sessions_by_scope`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationsPerUserGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversations_per_user`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationDepthGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversation_depth`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentsPerUserGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_per_user`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationsPerUserTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversations_per_user_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationDepthTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversation_depth_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentsPerUserTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_per_user_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTopTeamsBySessionsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/top_teams_by_sessions`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agent_prompt_length_distribution`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTopAgentsByConversationsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/top_agents_by_conversations`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsDocumentsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/documents_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserSessionsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_sessions_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserMessagesTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_messages_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_agents_used_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTopAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_top_agents`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTopTeamsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_top_teams`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserRecentAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_recent_agents`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_token_usage_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_token_usage_by_agent`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTokenUsageByModelGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_token_usage_by_model`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTokenUsageOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/token_usage_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTokenUsageByAgentGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/token_usage_by_agent`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTokenUsageByModelGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/token_usage_by_model`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsCreationAssistantUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/creation_assistant_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsStorageByTeamGet: build.query<
+      HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/storage_by_team`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsWebResearchSummaryGet: build.query<
+      HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/web_research_summary`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    createCampaignControlPlaneV1EvaluationCampaignsPost: build.mutation<
+      CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse,
+      CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns`,
+        method: "POST",
+        body: queryArg.createEvaluationCampaignRequest,
+      }),
+    }),
+    listCampaignsControlPlaneV1EvaluationCampaignsGet: build.query<
+      ListCampaignsControlPlaneV1EvaluationCampaignsGetApiResponse,
+      ListCampaignsControlPlaneV1EvaluationCampaignsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getCampaignControlPlaneV1EvaluationCampaignsCampaignIdGet: build.query<
+      GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiResponse,
+      GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}` }),
+    }),
+    listCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGet: build.query<
+      ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiResponse,
+      ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}/cases`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    getCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGet: build.query<
+      GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiResponse,
+      GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}/cases/${queryArg.caseId}`,
+      }),
+    }),
+    importSnapshotControlPlaneV1ImportExportImportPost: build.mutation<
+      ImportSnapshotControlPlaneV1ImportExportImportPostApiResponse,
+      ImportSnapshotControlPlaneV1ImportExportImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/import-export/import`,
+        method: "POST",
+        body: queryArg.bodyImportSnapshotControlPlaneV1ImportExportImportPost,
+      }),
+    }),
+    exportSnapshotControlPlaneV1ImportExportExportGet: build.query<
+      ExportSnapshotControlPlaneV1ImportExportExportGetApiResponse,
+      ExportSnapshotControlPlaneV1ImportExportExportGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/export` }),
+    }),
+    platformStatsControlPlaneV1ImportExportStatsGet: build.query<
+      PlatformStatsControlPlaneV1ImportExportStatsGetApiResponse,
+      PlatformStatsControlPlaneV1ImportExportStatsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/stats` }),
+    }),
+    resetPlatformDataControlPlaneV1ImportExportResetPost: build.mutation<
+      ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse,
+      ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/reset`, method: "POST" }),
+    }),
+  }),
+  overrideExisting: false,
+});
+export { injectedRtkApi as legacyControlPlaneApi };
+export type HealthzControlPlaneV1HealthzGetApiResponse = /** status 200 Successful Response */ HealthResponse;
+export type HealthzControlPlaneV1HealthzGetApiArg = void;
+export type ReadyControlPlaneV1ReadyGetApiResponse = /** status 200 Successful Response */ ReadyResponse;
+export type ReadyControlPlaneV1ReadyGetApiArg = void;
+export type GetPurgePolicySummaryControlPlaneV1PoliciesPurgeGetApiResponse =
+  /** status 200 Successful Response */ PolicySummaryResponse;
+export type GetPurgePolicySummaryControlPlaneV1PoliciesPurgeGetApiArg = void;
+export type ResolvePurgeControlPlaneV1PoliciesPurgeResolvePostApiResponse =
+  /** status 200 Successful Response */ PolicyEvaluationResult;
+export type ResolvePurgeControlPlaneV1PoliciesPurgeResolvePostApiArg = {
+  policyResolutionRequest: PolicyResolutionRequest;
+};
+export type TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiResponse =
+  /** status 200 Successful Response */ WorkflowStartResponse;
+export type TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiArg = {
+  lifecycleManagerInput: LifecycleManagerInput;
+};
+export type GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiArg = void;
+export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg = {
+  setPlatformFiltering: SetPlatformFiltering;
+};
+export type PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessActivationPreview;
+export type PreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetApiArg = void;
+export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessOwnClaims;
+export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg = void;
+export type PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiResponse =
+  /** status 200 Successful Response */ PlatformAccessPolicyPreview;
+export type PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiArg = {
+  platformAccessPolicy: PlatformAccessPolicy;
+};
+export type SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiArg = {
+  setPlatformAccessPolicy: SetPlatformAccessPolicy;
+};
+export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessUsersPage;
+export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiArg = {
+  offset?: number;
+  limit?: number;
+  query?: string;
+  /** Only users holding an individual exception. */
+  exceptionsOnly?: boolean;
+};
+export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
+export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
+  grantPlatformAccessUsers: GrantPlatformAccessUsers;
+};
+export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse = unknown;
+export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg = {
+  userId: string;
+};
+export type RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiResponse = unknown;
+export type RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiArg = {
+  userId: string;
+};
+export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiResponse =
+  /** status 200 Successful Response */ PlatformT0Preview;
+export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg = {
+  refreshMode?: ("preserve_removals" | "include_removed") | null;
+};
+export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiResponse =
+  /** status 200 Successful Response */ PlatformT0Preview;
+export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg = {
+  body: RefreshPlatformT0 | null;
+};
+export type ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessTeam[];
+export type ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiArg = void;
+export type SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiResponse =
+  /** status 200 Successful Response */ PlatformAccessTeam;
+export type SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiArg = {
+  teamId: string;
+  setPlatformAccessTeam: SetPlatformAccessTeam;
+};
+export type GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLink;
+export type GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiArg = {
+  teamId: string;
+  createPlatformEnrollmentLink: CreatePlatformEnrollmentLink;
+};
+export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLinksPage;
+export type ListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetApiArg = {
+  teamId: string;
+  offset?: number;
+  limit?: number;
+  status?: ("active" | "suspended" | "expired" | "revoked") | null;
+};
+export type ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentJoinersPage;
+export type ListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetApiArg =
+  {
+    teamId: string;
+    linkId: string;
+    offset?: number;
+    limit?: number;
+  };
+export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiResponse =
+  /** status 200 Successful Response */ DeletedPlatformEnrollmentLinks;
+export type DeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteApiArg =
+  {
+    teamId: string;
+  };
+export type RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLink;
+export type RevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostApiArg =
+  {
+    teamId: string;
+    linkId: string;
+  };
+export type RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiResponse =
+  unknown;
+export type RevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteApiArg =
+  {
+    teamId: string;
+    linkId: string;
+  };
+export type GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type GetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetApiArg = {
+  teamId: string;
+};
+export type SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type SetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutApiArg = {
+  teamId: string;
+  setTeamJoinLink: SetTeamJoinLink;
+};
+export type RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiResponse =
+  /** status 200 Successful Response */ TeamJoinLink;
+export type RegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostApiArg = {
+  teamId: string;
+};
+export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessStatus;
+export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg = void;
+export type PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiResponse =
+  /** status 200 Successful Response */ FreeEnrollmentPreview;
+export type PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiArg = {
+  token: string;
+};
+export type RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiResponse = unknown;
+export type RecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostApiArg = {
+  token: string;
+};
+export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiResponse = unknown;
+export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiArg = {
+  token: string;
+  acceptFreeEnrollmentCgu: AcceptFreeEnrollmentCgu;
+};
+export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiResponse =
+  /** status 200 Successful Response */ EnrollmentResult;
+export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiArg = {
+  token: string;
+};
+export type ListUsersControlPlaneV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
+export type ListUsersControlPlaneV1UsersGetApiArg = void;
+export type CreateUserControlPlaneV1UsersPostApiResponse = /** status 201 Successful Response */ UserSummary;
+export type CreateUserControlPlaneV1UsersPostApiArg = {
+  createUserRequest: CreateUserRequest;
+};
+export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse = /** status 200 Successful Response */ UserSummary[];
+export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg = {
+  ids: string[];
+};
+export type ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiResponse =
+  /** status 200 Successful Response */ PlatformRolesResponse;
+export type ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiArg = void;
+export type GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiResponse = unknown;
+export type GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiArg = {
+  userId: string;
+  grantPlatformRoleRequest: GrantPlatformRoleRequest;
+};
+export type RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiResponse = unknown;
+export type RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiArg = {
+  userId: string;
+  relation: PlatformRoleRelation;
+};
+export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
+export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
+  userId: string;
+};
+export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiResponse = unknown;
+export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg = {
+  bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost;
+};
+export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse = unknown;
+export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg = void;
+export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ UserDetails;
+export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
+export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Successful Response */ any;
+export type ValidateGcuControlPlaneV1GcuPostApiArg = void;
+export type ListTeamsControlPlaneV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
+export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
+export type CreateTeamControlPlaneV1TeamsPostApiResponse = /** status 201 Successful Response */ TeamWithPermissions;
+export type CreateTeamControlPlaneV1TeamsPostApiArg = {
+  createTeamRequest: CreateTeamRequest;
+};
+export type ListAllTeamsControlPlaneV1TeamsAllGetApiResponse = /** status 200 Successful Response */ Team[];
+export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = {
+  /** false skips the per-team ReBAC reads: admins, membership and member_count are left unset. For pickers that only need ids and names. */
+  includeMembership?: boolean;
+};
+export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse =
+  /** status 200 Successful Response */ UserSummary[];
+export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg = {
+  query: string;
+};
+export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
+export type GetTeamControlPlaneV1TeamsTeamIdGetApiArg = {
+  teamId: string;
+};
+export type UpdateTeamControlPlaneV1TeamsTeamIdPatchApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
+export type UpdateTeamControlPlaneV1TeamsTeamIdPatchApiArg = {
+  teamId: string;
+  updateTeamRequest: UpdateTeamRequest;
+};
+export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse = unknown;
+export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg = {
+  teamId: string;
+};
+export type EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
+export type EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiArg = {
+  teamId: string;
+  editTeamRegistryRequest: EditTeamRegistryRequest;
+};
+export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
+export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiArg = {
+  teamId: string;
+};
+export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse = unknown;
+export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
+  teamId: string;
+  rescueTeamAdminRequest: RescueTeamAdminRequest;
+};
+export type GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiResponse =
+  /** status 200 Successful Response */ DefaultTeamForNewUsers[];
+export type GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiArg = void;
+export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiResponse = unknown;
+export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg = {
+  setDefaultTeamsForNewUsersRequest: SetDefaultTeamsForNewUsersRequest;
+};
+export type GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterAcceptance | null;
+export type GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiArg = void;
+export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterAcceptance;
+export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg = void;
+export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
+export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
+  teamId: string;
+  bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost;
+};
+export type ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiResponse =
+  /** status 200 Successful Response */ TeamMember[];
+export type ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiArg = {
+  teamId: string;
+};
+export type AddTeamMemberControlPlaneV1TeamsTeamIdMembersPostApiResponse = unknown;
+export type AddTeamMemberControlPlaneV1TeamsTeamIdMembersPostApiArg = {
+  teamId: string;
+  addTeamMemberRequest: AddTeamMemberRequest;
+};
+export type SearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetApiResponse =
+  /** status 200 Successful Response */ UserSummary[];
+export type SearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetApiArg = {
+  teamId: string;
+  query: string;
+};
+export type RemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteApiResponse =
+  /** status 202 Successful Response */ RemoveTeamMemberResponse;
+export type RemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteApiArg = {
+  teamId: string;
+  userId: string;
+};
+export type GrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostApiResponse = unknown;
+export type GrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostApiArg = {
+  teamId: string;
+  userId: string;
+  grantTeamMemberRoleRequest: GrantTeamMemberRoleRequest;
+};
+export type RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteApiResponse = unknown;
+export type RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteApiArg = {
+  teamId: string;
+  userId: string;
+  relation: UserTeamRelation;
+};
+export type GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiResponse =
+  /** status 200 Successful Response */ ApplicationList;
+export type GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiArg = {
+  teamId: string;
+};
+export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse =
+  /** status 200 Successful Response */ FrontendBootstrap;
+export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg = void;
+export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiResponse =
+  /** status 200 Successful Response */ FrontendConfig;
+export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiArg = void;
+export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse =
+  /** status 200 Successful Response */ AgentTemplateSummary[];
+export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg = {
+  teamId: string;
+  includeNonPublic?: boolean;
+};
+export type GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary[];
+export type GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiArg = {
+  teamId: string;
+};
+export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiResponse =
+  /** status 201 Successful Response */ ManagedAgentInstanceSummary;
+export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiArg = {
+  teamId: string;
+  createAgentInstanceRequest: CreateAgentInstanceRequest;
+};
+export type PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiResponse =
+  /** status 200 Successful Response */ AgentDraftResult;
+export type PostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostApiArg = {
+  teamId: string;
+  templateId: string;
+  agentDraftRequest: AgentDraftRequest;
+};
+export type GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantRuntimeSettings;
+export type GetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetApiArg = {
+  teamId: string;
+};
+export type PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary;
+export type PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  updateAgentInstanceRequest: UpdateAgentInstanceRequest;
+};
+export type DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiResponse = unknown;
+export type DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type PostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostApiResponse =
+  /** status 201 Successful Response */ ManagedAgentInstanceSummary;
+export type PostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostApiArg = {
+  teamId: string;
+  bodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: BodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost;
+};
+export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary;
+export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
+    bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch;
+  };
+export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse =
+  /** status 200 Successful Response */ AgentCopyTargetsResponse;
+export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiResponse =
+  /** status 200 Successful Response */ AgentCopyResponse;
+export type PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  agentCopyRequest: AgentCopyRequest;
+};
+export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse =
+  /** status 200 Successful Response */ PromptSummary[];
+export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg = {
+  teamId: string;
+};
+export type PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiResponse =
+  /** status 201 Successful Response */ PromptSummary;
+export type PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiArg = {
+  teamId: string;
+  createPromptRequest: CreatePromptRequest;
+};
+export type GetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetApiResponse =
+  /** status 200 Successful Response */ PromptCommandSummary[];
+export type GetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetApiArg = {
+  teamId: string;
+};
+export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiResponse =
+  /** status 200 Successful Response */ ContextPromptSummary[];
+export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg = {
+  teamId: string;
+};
+export type GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiResponse =
+  /** status 200 Successful Response */ PromptDetail;
+export type GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type PutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutApiArg = {
+  teamId: string;
+  promptId: string;
+  updatePromptRequest: UpdatePromptRequest;
+};
+export type DeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteApiResponse = unknown;
+export type DeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiArg = {
+  teamId: string;
+  promptId: string;
+  promptScoreUpdateRequest: PromptScoreUpdateRequest;
+};
+export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiResponse = unknown;
+export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiResponse = unknown;
+export type AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiResponse = unknown;
+export type RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiResponse =
+  /** status 201 Successful Response */ PromptSummary;
+export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiArg = {
+  teamId: string;
+  promptId: string;
+  promptPromoteRequest: PromptPromoteRequest;
+};
+export type PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiResponse =
+  /** status 200 Successful Response */ MarketplacePromptSummary[];
+export type GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiArg = void;
+export type GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiResponse =
+  /** status 200 Successful Response */ MarketplacePromptDetail;
+export type GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiArg = {
+  promptId: string;
+};
+export type PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiResponse = unknown;
+export type PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiArg = {
+  promptId: string;
+};
+export type PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiResponse =
+  /** status 200 Successful Response */ MarketplaceImportResponse;
+export type PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiArg = {
+  promptId: string;
+  marketplaceImportRequest: MarketplaceImportRequest;
+};
+export type GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiResponse =
+  /** status 200 Successful Response */ PromptCategorySummary[];
+export type GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiArg = {
+  teamId: string;
+};
+export type PostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostApiResponse =
+  /** status 201 Successful Response */ PromptCategorySummary;
+export type PostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostApiArg = {
+  teamId: string;
+  createPromptCategoryRequest: CreatePromptCategoryRequest;
+};
+export type PutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutApiResponse =
+  /** status 200 Successful Response */ PromptCategorySummary;
+export type PutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutApiArg = {
+  teamId: string;
+  categoryId: string;
+  updatePromptCategoryRequest: UpdatePromptCategoryRequest;
+};
+export type DeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteApiResponse = unknown;
+export type DeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteApiArg = {
+  teamId: string;
+  categoryId: string;
+};
+export type GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiResponse =
+  /** status 200 Successful Response */ ManagedAgentRuntimeBinding;
+export type GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiResponse =
+  /** status 201 Successful Response */ SessionListItem;
+export type PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiArg = {
+  teamId: string;
+  createSessionRequest: CreateSessionRequest;
+};
+export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
+  /** status 200 Successful Response */ SessionListItem[];
+export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
+  teamId: string;
+};
+export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
+  /** status 200 Successful Response */ InactiveSessionsResponse;
+export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
+  inactiveDays?: number;
+};
+export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse =
+  /** status 200 Successful Response */ BulkDeleteSessionsResponse;
+export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg = {
+  bulkDeleteSessionsRequest: BulkDeleteSessionsRequest;
+};
+export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse =
+  /** status 200 Successful Response */ SessionDetails;
+export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiResponse =
+  /** status 200 Successful Response */ SessionListItem;
+export type PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiArg = {
+  teamId: string;
+  sessionId: string;
+  updateSessionRequest: UpdateSessionRequest;
+};
+export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiResponse = unknown;
+export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =
+  /** status 200 Successful Response */ SessionAttachmentSummary[];
+export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiResponse =
+  /** status 201 Successful Response */ SessionAttachmentSummary;
+export type PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiArg = {
+  teamId: string;
+  sessionId: string;
+  createSessionAttachmentRequest: CreateSessionAttachmentRequest;
+};
+export type DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiResponse =
+  unknown;
+export type DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiArg = {
+  teamId: string;
+  sessionId: string;
+  attachmentId: string;
+};
+export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiResponse =
+  /** status 200 Successful Response */ RuntimeAgentExecutionPreparation;
+export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiArg =
+  {
+    teamId: string;
+    runtimeId: string;
+    agentId: string;
+    person?: string | null;
+    run?: string | null;
+    agent?: string | null;
+  };
+export type GetAgentInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetAgentInstanceSkillsApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type GetAgentInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
+export type GetAgentInstanceSkillDetailApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  skillName: string;
+};
+export type PrepareAgentExecutionApiResponse = /** status 200 Successful Response */ ExecutionPreparation;
+export type PrepareAgentExecutionApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  sessionId?: string | null;
+  agentModelOverride?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
+  /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
+export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
+  bootstrapPlatformAdminRequest: BootstrapPlatformAdminRequest;
+};
+export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse =
+  /** status 200 Successful Response */ CapabilityEnablementList;
+export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg = void;
+export type GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetApiResponse =
+  /** status 200 Successful Response */ CapabilityImpactPreview;
+export type GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetApiArg = {
+  capabilityId: string;
+  /** Preview one team's disable. Omit for a platform-wide default-off preview. */
+  teamId?: string | null;
+};
+export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse =
+  /** status 200 Successful Response */ TeamCapabilityEnablementResult;
+export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg = {
+  capabilityId: string;
+  teamId: string;
+  enableTeamCapabilityRequest: EnableTeamCapabilityRequest;
+};
+export type DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiResponse =
+  /** status 200 Successful Response */ TeamCapabilityEnablementResult;
+export type DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiArg = {
+  capabilityId: string;
+  teamId: string;
+  /** `disable` writes an explicit opt-out (tri-state 'disabled'); `default` clears both the grant and the opt-out so the platform default applies (tri-state 'default'). Both suspend dependent instances when the team loses access. */
+  mode?: "disable" | "default";
+};
+export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiResponse =
+  /** status 200 Successful Response */ CapabilityDefaultOnResult;
+export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiArg = {
+  capabilityId: string;
+  setCapabilityDefaultOnRequest: SetCapabilityDefaultOnRequest;
+};
+export type PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutApiResponse =
+  /** status 200 Successful Response */ CapabilityPersonalScopeResult;
+export type PutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutApiArg = {
+  capabilityId: string;
+  setCapabilityPersonalScopeRequest: SetCapabilityPersonalScopeRequest;
+};
+export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiResponse =
+  /** status 200 Successful Response */ ModelReasoningResult;
+export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiArg = {
+  capabilityId: string;
+  setModelReasoningRequest: SetModelReasoningRequest;
+};
+export type PublishKnowledgeBaseDefinitionApiResponse =
+  /** status 200 Successful Response */ KnowledgeBasePublicationResult;
+export type PublishKnowledgeBaseDefinitionApiArg = {
+  name: string;
+  knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
+};
+export type ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseDefinitionChoice[];
+export type ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiArg = {
+  teamId: string;
+};
+export type GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseInstanceFields;
+export type GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiArg = {
+  definitionId: string;
+  teamId: string;
+};
+export type ListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseInstanceSummary[];
+export type ListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetApiArg = {
+  teamId: string;
+};
+export type CreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostApiResponse =
+  /** status 201 Successful Response */ KnowledgeBaseInstanceSummary;
+export type CreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostApiArg = {
+  knowledgeBaseInstanceCreate: KnowledgeBaseInstanceCreate;
+};
+export type GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseInstanceSummary;
+export type GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiArg = {
+  instanceId: string;
+};
+export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiResponse = unknown;
+export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg = {
+  instanceId: string;
+};
+export type GetKnowledgeBaseRunContextApiResponse = /** status 200 Successful Response */ KnowledgeBaseRunContext;
+export type GetKnowledgeBaseRunContextApiArg = {
+  definitionId: string;
+  instanceId: string;
+  runId: string;
+};
+export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
+  /** status 200 Successful Response */ TeamRoutingPolicy;
+export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
+  teamId: string;
+};
+export type UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiResponse =
+  /** status 200 Successful Response */ TeamRoutingPolicy;
+export type UpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchApiArg = {
+  teamId: string;
+  updateTeamRoutingPolicyRequest: UpdateTeamRoutingPolicyRequest;
+};
+export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiResponse =
+  /** status 200 Successful Response */ AvailableModelProfileList;
+export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
+  teamId: string;
+};
+export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse =
+  /** status 200 Successful Response */ EffectiveChatModel;
+export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiResponse =
+  /** status 200 Successful Response */ DisableImpact;
+export type GetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetApiArg = {
+  teamId: string;
+  capabilityId: string;
+};
+export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg = void;
+export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiArg = {
+  setPlatformModelBindingRequest: SetPlatformModelBindingRequest;
+};
+export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg = void;
+export type WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiResponse =
+  /** status 200 Successful Response */ WikiAvailability;
+export type WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiArg = {
+  teamId: string;
+};
+export type ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiResponse =
+  /** status 200 Successful Response */ WikiPageTree;
+export type ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiArg = {
+  teamId: string;
+};
+export type CreatePageControlPlaneV1TeamsTeamIdWikiPagesPostApiResponse =
+  /** status 201 Successful Response */ WikiPageDetail;
+export type CreatePageControlPlaneV1TeamsTeamIdWikiPagesPostApiArg = {
+  teamId: string;
+  createWikiPageRequest: CreateWikiPageRequest;
+};
+export type ReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type ReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetApiArg = {
+  teamId: string;
+};
+export type WriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type WriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutApiArg = {
+  teamId: string;
+  updateWikiRulesRequest: UpdateWikiRulesRequest;
+};
+export type ReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type ReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetApiArg = {
+  teamId: string;
+  slug: string;
+};
+export type WritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type WritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutApiArg = {
+  teamId: string;
+  pageId: string;
+  updateWikiPageContentRequest: UpdateWikiPageContentRequest;
+};
+export type PatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchApiResponse =
+  /** status 200 Successful Response */ WikiPageSummary;
+export type PatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchApiArg = {
+  teamId: string;
+  pageId: string;
+  updateWikiPageMetadataRequest: UpdateWikiPageMetadataRequest;
+};
+export type DeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteApiResponse = unknown;
+export type DeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteApiArg = {
+  teamId: string;
+  pageId: string;
+};
+export type SetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostApiResponse =
+  /** status 200 Successful Response */ WikiPageSummary;
+export type SetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostApiArg = {
+  teamId: string;
+  pageId: string;
+  setNeedsReviewRequest: SetNeedsReviewRequest;
+};
+export type ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiResponse =
+  /** status 200 Successful Response */ WikiRevisionList;
+export type ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiArg = {
+  teamId: string;
+  pageId: string;
+  /** From a previous response's `next_cursor`, to fetch older revisions. */
+  cursor?: string | null;
+};
+export type RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiArg = {
+  teamId: string;
+  pageId: string;
+  revisionId: string;
+};
+export type ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiResponse =
+  /** status 201 Successful Response */ WikiProposal;
+export type ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiArg = {
+  teamId: string;
+  proposePageRequest: ProposePageRequest;
+};
+export type ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiResponse =
+  /** status 201 Successful Response */ WikiProposal;
+export type ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiArg = {
+  teamId: string;
+  proposeEditRequest: ProposeEditRequest;
+};
+export type ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiResponse =
+  /** status 200 Successful Response */ WikiProposal;
+export type ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiArg = {
+  teamId: string;
+  proposalId: string;
+};
+export type PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiArg = {
+  teamId: string;
+  proposalId: string;
+};
+export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse =
+  /** status 200 Successful Response */ PlatformPrompt;
+export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg = void;
+export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiResponse =
+  /** status 200 Successful Response */ PlatformPrompt;
+export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
+  setPlatformPromptRequest: SetPlatformPromptRequest;
+};
+export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
+  /** status 200 Successful Response */ PlatformInstructions;
+export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
+export type GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type GetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetApiArg = void;
+export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutApiArg = {
+  setCreationAssistantSettingsRequest: SetCreationAssistantSettingsRequest;
+};
+export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse =
+  /** status 200 Successful Response */ CreationAssistantSettings;
+export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg = void;
+export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
+  /** status 200 Successful Response */ PlatformUiSettings;
+export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
+export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResponse =
+  /** status 200 Successful Response */ PlatformUiSettings;
+export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg = {
+  setPlatformUiSettingsRequest: SetPlatformUiSettingsRequest;
+};
+export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettings;
+export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiArg = void;
+export type PreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettingsImpact;
+export type PreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetApiArg = {
+  agentsPublishingEnabled: boolean;
+};
+export type SetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettingsUpdateResult;
+export type SetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutApiArg = {
+  setAgentsMarketplaceDefaultRequest: SetAgentsMarketplaceDefaultRequest;
+};
+export type PreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettingsImpact;
+export type PreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetApiArg = {
+  teamId: string;
+  agentsPublishingEnabled?: boolean | null;
+};
+export type SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutApiResponse =
+  /** status 200 Successful Response */ MarketplaceSettingsUpdateResult;
+export type SetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutApiArg = {
+  teamId: string;
+  setTeamMarketplaceSettingsRequest: SetTeamMarketplaceSettingsRequest;
+};
+export type PostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostApiResponse =
+  /** status 200 Successful Response */ AgentMarketplaceState;
+export type PostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  publishAgentRequest: PublishAgentRequest;
+};
+export type PostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostApiResponse = unknown;
+export type PostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  unpublishAgentRequest: UnpublishAgentRequest;
+};
+export type PostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostApiResponse =
+  unknown;
+export type PostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
+  };
+export type GetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentSummary[];
+export type GetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetApiArg = {
+  q?: string | null;
+  teamId?: string | null;
+};
+export type GetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentDetail;
+export type GetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetApiArg = {
+  entryId: string;
+};
+export type PutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentSummary;
+export type PutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutApiArg = {
+  entryId: string;
+};
+export type DeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentSummary;
+export type DeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteApiArg = {
+  entryId: string;
+};
+export type GetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentImportTargetsResponse;
+export type GetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetApiArg = {
+  entryId: string;
+};
+export type PostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostApiResponse =
+  /** status 200 Successful Response */ MarketplaceAgentImportResponse;
+export type PostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostApiArg = {
+  entryId: string;
+  marketplaceAgentImportRequest: MarketplaceAgentImportRequest;
+};
+export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
+  /** status 200 Successful Response */ Announcement[];
+export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
+export type GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteHistory;
+export type GetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetApiArg = void;
+export type MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiResponse =
+  unknown;
+export type MarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutApiArg =
+  {
+    announcementId: string;
+  };
+export type SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiResponse = unknown;
+export type SetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutApiArg = {
+  patchNoteOrderRequest: PatchNoteOrderRequest;
+};
+export type GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteAnnouncement | null;
+export type GetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetApiArg = void;
+export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiResponse =
+  /** status 201 Successful Response */ PatchNoteAnnouncement;
+export type AnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostApiArg = {
+  patchNoteAnnounceRequest: PatchNoteAnnounceRequest;
+};
+export type WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiResponse =
+  unknown;
+export type WithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteApiArg =
+  void;
+export type GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiResponse =
+  /** status 200 Successful Response */ PatchNoteSnapshot[];
+export type GetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetApiArg =
+  {
+    announcementId: string;
+  };
+export type ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiResponse =
+  /** status 200 Successful Response */ AnnouncementExposure[];
+export type ListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetApiArg = void;
+export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse =
+  /** status 200 Successful Response */ Announcement[];
+export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg = void;
+export type CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiResponse =
+  /** status 201 Successful Response */ Announcement;
+export type CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiArg = {
+  announcementWriteRequest: AnnouncementWriteRequest;
+};
+export type UpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutApiResponse =
+  /** status 200 Successful Response */ Announcement;
+export type UpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutApiArg = {
+  announcementId: string;
+  announcementWriteRequest: AnnouncementWriteRequest;
+};
+export type DeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteApiResponse = unknown;
+export type DeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteApiArg = {
+  announcementId: string;
+};
+export type SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutApiResponse =
+  /** status 200 Successful Response */ Announcement;
+export type SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutApiArg = {
+  announcementId: string;
+  setAnnouncementEnabledRequest: SetAnnouncementEnabledRequest;
+};
+export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
+export type StartTaskControlPlaneV1TasksPostApiArg = {
+  body:
+    | ({
+        kind: "ingestion";
+      } & StartIngestionRequest)
+    | ({
+        kind: "evaluation";
+      } & StartEvaluationRequest)
+    | ({
+        kind: "migration";
+      } & StartMigrationRequest)
+    | ({
+        kind: "erasure";
+      } & StartErasureRequest);
+};
+export type ListTasksControlPlaneV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
+export type ListTasksControlPlaneV1TasksGetApiArg = {
+  scope?: string;
+  teamId?: string | null;
+  kind?: string | null;
+  state?: string | null;
+  /** With scope=user: these of the caller's tasks, in any state (1 to 50). */
+  taskId?: string[] | null;
+};
+export type StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiResponse = /** status 200 Successful Response */ any;
+export type StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiArg = {
+  taskId: string;
+};
+export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse = /** status 202 Successful Response */ {
+  [key: string]: any;
+};
+export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
+  taskId: string;
+};
+export type AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiResponse =
+  /** status 200 Successful Response */ AcknowledgeTaskResponse;
+export type AcknowledgeTaskControlPlaneV1TasksTaskIdAckPostApiArg = {
+  taskId: string;
+};
+export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiResponse =
+  /** status 200 Successful Response */ SkillUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse =
+  /** status 200 Successful Response */ SkillUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarResponse;
+export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse =
+  /** status 200 Successful Response */ MultiSeriesTimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse =
+  /** status 200 Successful Response */ UserTopAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse =
+  /** status 200 Successful Response */ UserRecentAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse =
+  /** status 200 Successful Response */ CreationAssistantUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse =
+  /** status 200 Successful Response */ TeamStorageResponse;
+export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiResponse =
+  /** status 200 Successful Response */ WebResearchSummaryResponse;
+export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
+  /** status 202 Successful Response */ CampaignCreatedResponse;
+export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg = {
+  createEvaluationCampaignRequest: CreateEvaluationCampaignRequest;
+};
+export type ListCampaignsControlPlaneV1EvaluationCampaignsGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCampaignListResponse;
+export type ListCampaignsControlPlaneV1EvaluationCampaignsGetApiArg = {
+  teamId: string;
+};
+export type GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCampaignResponse;
+export type GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiArg = {
+  campaignId: string;
+};
+export type ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCaseListResponse;
+export type ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiArg = {
+  campaignId: string;
+  offset?: number;
+  limit?: number;
+};
+export type GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCaseResponse;
+export type GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiArg = {
+  campaignId: string;
+  caseId: string;
+};
+export type ImportSnapshotControlPlaneV1ImportExportImportPostApiResponse =
+  /** status 202 Successful Response */ ImportLaunchResponse;
+export type ImportSnapshotControlPlaneV1ImportExportImportPostApiArg = {
+  bodyImportSnapshotControlPlaneV1ImportExportImportPost: BodyImportSnapshotControlPlaneV1ImportExportImportPost;
+};
+export type ExportSnapshotControlPlaneV1ImportExportExportGetApiResponse = /** status 200 Successful Response */ any;
+export type ExportSnapshotControlPlaneV1ImportExportExportGetApiArg = void;
+export type PlatformStatsControlPlaneV1ImportExportStatsGetApiResponse =
+  /** status 200 Successful Response */ PlatformStats;
+export type PlatformStatsControlPlaneV1ImportExportStatsGetApiArg = void;
+export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse =
+  /** status 202 Successful Response */ ResetLaunchResponse;
+export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg = void;
+export type HealthResponse = {
+  status?: "ok";
+  service?: "control-plane";
+};
+export type ReadyResponse = {
+  status?: "ready";
+  service?: "control-plane";
+  scheduler_enabled: boolean;
+  loaded_config_file?: string | null;
+  loaded_env_file?: string | null;
+};
+export type PurgeMode = "deferred_delete" | "immediate_delete";
+export type PolicySummaryResponse = {
+  mode: PurgeMode;
+  retention: string;
+  retention_seconds: number;
+  cancel_on_rejoin: boolean;
+  matched_rule_id?: string | null;
+  matched_rule_specificity?: number;
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
+  default_rule_count: number;
+  catalog_path: string;
+};
+export type PolicyEvaluationResult = {
+  mode: PurgeMode;
+  retention: string;
+  retention_seconds: number;
+  cancel_on_rejoin: boolean;
+  matched_rule_id?: string | null;
+  matched_rule_specificity?: number;
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
+};
+export type ValidationError = {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+  input?: any;
+  ctx?: object;
+};
+export type HttpValidationError = {
+  detail?: ValidationError[];
+};
+export type LifecycleTrigger = "member_removed" | "member_rejoined" | "user_deleted";
+export type PolicyResolutionRequest = {
+  team_id?: string | null;
+  trigger?: LifecycleTrigger;
+};
+export type SchedulerBackend = "temporal" | "memory";
+export type WikiProposalLifecycleResult = {
+  scanned?: number;
+  rejected?: number;
+  dry_run_actions?: number;
+};
+export type LifecycleManagerResult = {
+  scanned?: number;
+  deleted?: number;
+  dry_run_actions?: number;
+  wiki_proposals?: WikiProposalLifecycleResult;
+};
+export type WorkflowStartResponse = {
+  status?: "queued" | "completed";
+  backend: SchedulerBackend;
+  workflow_id?: string | null;
+  run_id?: string | null;
+  result?: LifecycleManagerResult | null;
+};
+export type LifecycleManagerInput = {
+  dry_run?: boolean;
+  batch_size?: number;
+};
+export type PlatformAccessCondition = {
+  claim: string[];
+  operator: "equals" | "not_equals" | "contains" | "not_contains" | "regex";
+  value: string;
+  case_sensitive?: boolean;
+};
+export type PlatformAccessPolicy = {
+  mode?: "allow" | "block";
+  combination?: "all" | "any";
+  conditions: PlatformAccessCondition[];
+};
+export type PlatformAccessState = {
+  filtering_enabled: boolean;
+  t0_completed_at: string | null;
+  policy: PlatformAccessPolicy | null;
+  revision: number;
+  has_admission_sources: boolean;
+};
+export type SetPlatformFiltering = {
+  filtering_enabled: boolean;
+  expected_revision?: number | null;
+};
+export type AdmissionSource = {
+  kind: "admin" | "attribute" | "manual" | "t0" | "team" | "free";
+  team_id?: string | null;
+  team_name?: string | null;
+  granted_by?: string | null;
+  granted_at?: string | null;
+};
+export type PlatformAccessActivationUser = {
+  user_id: string;
+  username: string | null;
+  email: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  sources: AdmissionSource[];
+  outcome: "allowed" | "blocked" | "unknown";
+};
+export type PlatformAccessActivationPreview = {
+  users: PlatformAccessActivationUser[];
+  allowed: number;
+  blocked: number;
+  unknown: number;
+  revision: number;
+  checked_at: string;
+};
+export type JsonValue = any;
+export type PlatformAccessOwnClaims = {
+  claims: {
+    [key: string]: JsonValue;
+  };
+  selectable_paths: string[][];
+  truncated: boolean;
+};
+export type PlatformAccessPolicyPreview = {
+  matched: boolean;
+  admitted: boolean;
+  conditions: ("matched" | "not_matching" | "missing" | "incompatible" | "timeout" | "unavailable")[];
+};
+export type SetPlatformAccessPolicy = {
+  expected_revision: number;
+  policy: PlatformAccessPolicy;
+};
+export type PlatformAccessUser = {
+  user_id: string;
+  username: string | null;
+  email: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  sources: AdmissionSource[];
+};
+export type PlatformAccessUsersPage = {
+  items: PlatformAccessUser[];
+  total: number;
+};
+export type GrantPlatformAccessUsers = {
+  user_ids: string[];
+};
+export type PlatformT0Preview = {
+  candidates: number;
+  matching: number;
+  completed_at: string | null;
+  revision?: number;
+  removal_history_complete?: boolean;
+  removed_skipped?: number;
+  imported_count?: number | null;
+};
+export type RefreshPlatformT0 = {
+  mode: "preserve_removals" | "include_removed";
+  expected_revision: number;
+  expected_completed_at: string;
+};
+export type PlatformAccessTeam = {
+  team_id: string;
+  name: string | null;
+  allowed: boolean;
+  free: boolean;
+};
+export type SetPlatformAccessTeam = {
+  allowed: boolean;
+  free: boolean;
+};
+export type PlatformEnrollmentLink = {
+  token: string;
+};
+export type CreatePlatformEnrollmentLink = {
+  note?: string | null;
+  expires_at?: string | null;
+};
+export type PlatformEnrollmentLinkInfo = {
+  id: string;
+  note: string | null;
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  status: "active" | "suspended" | "expired" | "revoked";
+  opening_count: number;
+  last_opened_at: string | null;
+  recoverable: boolean;
+};
+export type PlatformEnrollmentLinksPage = {
+  items: PlatformEnrollmentLinkInfo[];
+  total: number;
+  inactive_count: number;
+};
+export type PlatformEnrollmentJoiner = {
+  user_id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  joined_at: string;
+  deleted: boolean;
+};
+export type PlatformEnrollmentJoinersPage = {
+  items: PlatformEnrollmentJoiner[];
+  total: number;
+};
+export type DeletedPlatformEnrollmentLinks = {
+  deleted_count: number;
+};
+export type TeamJoinLink = {
+  enabled: boolean;
+  token?: string | null;
+};
+export type SetTeamJoinLink = {
+  enabled: boolean;
+};
+export type PlatformAccessStatus = {
+  admitted: boolean;
+  cgu_required: boolean;
+};
+export type FreeEnrollmentPreview = {
+  team_name: string;
+  cgu_required: boolean;
+};
+export type AcceptFreeEnrollmentCgu = {
+  version: string;
+};
+export type EnrollmentResult = {
+  admitted: boolean;
+  cgu_required: boolean;
+  team_id?: string | null;
+};
+export type UserSummary = {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  username?: string | null;
+  email?: string | null;
+  avatar_image_url?: string | null;
+};
+export type CreateUserRequest = {
+  username: string;
+  email: string;
+  password: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  enabled?: boolean;
+};
+export type PlatformRoleRelation =
+  | "platform_admin"
+  | "platform_observer"
+  | "team_manager"
+  | "feature_manager"
+  | "prompt_editor";
+export type PlatformRoleHolder = {
+  user: UserSummary;
+  relations: PlatformRoleRelation[];
+  is_bootstrap_root?: boolean;
+};
+export type PlatformRolesResponse = {
+  holders: PlatformRoleHolder[];
+  caller_is_bootstrap_root: boolean;
+};
+export type GrantPlatformRoleRequest = {
+  relation: PlatformRoleRelation;
+};
+export type BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost = {
+  /** Profile picture file (max 5MB, JPEG/PNG/WebP) */
+  file: string;
+};
+export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
+export type JoiningMode = "open" | "invite_only";
+export type TeamVisibility = "public" | "private";
+export type TeamPermission =
+  | "can_read"
+  | "can_update_info"
+  | "can_update_resources"
+  | "can_update_agents"
+  | "can_read_members"
+  | "can_administer_members"
+  | "can_administer_editors"
+  | "can_administer_analysts"
+  | "can_administer_admins"
+  | "can_publish_marketplace_agents"
+  | "can_unpublish_marketplace_agents"
+  | "can_read_conversations"
+  | "can_use_team_agents"
+  | "can_use_team_applications"
+  | "can_use_team_knowledge_bases"
+  | "can_access_files"
+  | "can_run_evaluations"
+  | "can_manage_evaluation_corpus"
+  | "can_read_conversations_for_evaluation";
+export type RetentionFieldView = {
+  platform_max?: string | null;
+  team_value?: string | null;
+  effective?: string | null;
+  source: "platform" | "team";
+  would_exceed?: boolean;
+};
+export type TeamRetentionView = {
+  team_delete_grace: RetentionFieldView;
+  max_idle: RetentionFieldView;
+};
+export type TeamMarketplaceView = {
+  agents_publishing_enabled: boolean;
+  agents_publish_quota: number;
+  published_count: number;
+};
+export type TeamWithPermissions = {
+  id: string;
+  name: string;
+  member_count?: number | null;
+  admins?: UserSummary[];
+  pending_admin_ids?: string[];
+  is_member?: boolean;
+  my_relations?: UserTeamRelation[];
+  description?: string | null;
+  description_is_placeholder?: boolean;
+  joining_mode?: JoiningMode;
+  visibility?: TeamVisibility;
+  avatar_image_url?: string | null;
+  max_resources_storage_size?: number | null;
+  current_resources_storage_size?: number | null;
+  permissions?: TeamPermission[];
+  retention?: TeamRetentionView | null;
+  marketplace?: TeamMarketplaceView | null;
+};
+export type UserDetails = {
+  cguValidated: string | null;
+  personalTeam: TeamWithPermissions;
+  currentUser?: UserSummary | null;
+};
+export type Team = {
+  id: string;
+  name: string;
+  member_count?: number | null;
+  admins?: UserSummary[];
+  pending_admin_ids?: string[];
+  is_member?: boolean;
+  my_relations?: UserTeamRelation[];
+  description?: string | null;
+  description_is_placeholder?: boolean;
+  joining_mode?: JoiningMode;
+  visibility?: TeamVisibility;
+  avatar_image_url?: string | null;
+  max_resources_storage_size?: number | null;
+  current_resources_storage_size?: number | null;
+};
+export type CreateTeamRequest = {
+  name: string;
+  description: string;
+  initial_team_admin_ids: string[];
+};
+export type UpdateTeamRequest = {
+  name?: string | null;
+  description?: string | null;
+  joining_mode?: JoiningMode | null;
+  visibility?: TeamVisibility | null;
+  avatar_image_url?: string | null;
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
+};
+export type EditTeamRegistryRequest = {
+  name?: string | null;
+  description?: string | null;
+  add_admin_ids?: string[];
+  remove_admin_ids?: string[];
+};
+export type RescueTeamAdminRequest = {
+  user_id: string;
+};
+export type DefaultTeamForNewUsers = {
+  team_id: string;
+  name: string;
+};
+export type SetDefaultTeamsForNewUsersRequest = {
+  team_ids: string[];
+};
+export type TeamAdminCharterAcceptance = {
+  accepted_at: string;
+};
+export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
+  /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
+  file: string;
+};
+export type TeamMember = {
+  type?: "user";
+  relations: UserTeamRelation[];
+  user: UserSummary;
+};
+export type AddTeamMemberRequest = {
+  user_id: string;
+  relation: UserTeamRelation;
+};
+export type RemoveTeamMemberResponse = {
+  status?: "accepted";
+  team_id: string;
+  user_id: string;
+  sessions_enqueued: number;
+  scheduled_delete_at: string;
+  policy_mode: string;
+  retention_seconds: number;
+  matched_rule_id?: string | null;
+};
+export type GrantTeamMemberRoleRequest = {
+  relation: UserTeamRelation;
+};
+export type ApplicationSummary = {
+  id: string;
+  version: string;
+  /** Locale to display name */
+  name: {
+    [key: string]: string;
+  };
+  /** Locale to description */
+  description: {
+    [key: string]: string;
+  };
+  icon: string;
+  /** Browser-facing prefix the application frame loads. A path when the application UI is served from Fred's origin, an absolute http(s) URL when it is not. */
+  ui_prefix: string;
+};
+export type ApplicationList = {
+  schema_version: "1";
+  items: ApplicationSummary[];
+};
+export type FrontendFeatureFlags = {
+  /** Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled. */
+  enableApplications?: boolean;
+  /** Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone. */
+  enableInformationSystems?: boolean;
+};
+export type PermissionSummary = {
+  /** OpenFGA-derived org-level roles the caller EFFECTIVELY holds — the single source of truth for gating admin UI surfaces, never Keycloak roles. Union-resolved, so a platform_admin holds every role here; that is deliberately unlike `GET /users/platform-roles`, which reports directly-granted tuples only because those are what a revoke can actually delete. */
+  platform_roles?: PlatformRoleRelation[];
+};
+export type UploadWarning = {
+  /** Visual severity variant of the banner. */
+  severity?: "info" | "warning" | "error" | "success";
+  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
+  messages?: {
+    [key: string]: string;
+  };
+};
+export type FrontendBootstrap = {
+  current_user: UserSummary;
+  active_team: TeamWithPermissions;
+  available_teams?: Team[];
+  gcu_version?: string | null;
+  team_admin_charter_enabled: boolean;
+  feature_flags: FrontendFeatureFlags;
+  permissions: PermissionSummary;
+  /** Deployer-configured banner for upload surfaces (document upload drawer, chat attachments), from `platform.frontend.upload_warning` (MIGR-01.01). `None` when the deployment configures none — the frontend then renders nothing. Deliberately on the authenticated bootstrap, not the pre-auth `FrontendConfig`: upload surfaces only render post-auth, and `FrontendConfig` stays minimal. */
+  upload_warning?: UploadWarning | null;
+};
+export type FrontendUserAuthConfig = {
+  enabled: boolean;
+  realm_url?: string | null;
+  client_id?: string | null;
+  provider?: string;
+  scope?: string | null;
+  user_directory?: string;
+  uid_claim?: string;
+  roles_claim?: string[] | null;
+};
+export type FrontendUiThemes = {
+  default_theme?: string | null;
+  hidden_themes?: string[];
+};
+export type FrontendConfig = {
+  platform_access_enabled?: boolean;
+  user_auth: FrontendUserAuthConfig;
+  gcu_version?: string | null;
+  /** Whether POST /bootstrap/platform-admin (AUTHZ-07) has ever succeeded on this deployment. True once the durable PlatformBootstrapStore marker is set, permanently — never re-derived from live OpenFGA state, so removing every platform_admin relation later does not flip this back to False (same rationale as BootstrapAlreadyCompletedError). Not sensitive: it reveals only 'has anyone ever bootstrapped this instance', never who, never the secret, never any identity — safe on this public/unauthenticated surface, same as gcu_version. */
+  root_bootstrap_completed: boolean;
+  /** The authoritative frontend gating decision for BootstrapGuard — true only when `security.user.enabled AND security.rebac.enabled AND NOT root_bootstrap_completed`. Deliberately distinct from `root_bootstrap_completed`, which stays the truthful durable historical marker and is never reinterpreted: on deployments where user authentication or ReBAC is disabled, `root_bootstrap_completed` is still False on a fresh database even though `POST /bootstrap/platform-admin` deliberately refuses with 503 there, so the frontend must not treat 'not completed' alone as 'must show the bootstrap page'. The frontend must gate on this field, not re-derive the ReBAC/auth predicate itself. */
+  root_bootstrap_required: boolean;
+  /** Platform UI theme settings, omitted when never saved. Public on purpose: the frontend resolves the theme before its first paint, before authentication. Theme ids only, no admin-authored content. */
+  ui_themes?: FrontendUiThemes | null;
+};
+export type ManagedAgentUiHints = {
+  multiline?: boolean;
+  max_lines?: number;
+  placeholder?: string | null;
+  markdown?: boolean;
+  textarea?: boolean;
+  group?: string | null;
+  hide?: boolean;
+  widget?: string | null;
+  visible_when?: string | null;
+  advanced?: boolean;
+};
+export type ManagedAgentFieldSpec = {
+  key: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
+  required?: boolean;
+  default?: any | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
+  enum?: string[] | null;
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;
+  item_type?: string | null;
+  ui?: ManagedAgentUiHints;
+};
+export type UiHints = {
+  multiline?: boolean;
+  max_lines?: number;
+  placeholder?: string | null;
+  markdown?: boolean;
+  textarea?: boolean;
+  group?: string | null;
+  hide?: boolean;
+  /** Names a frontend form widget to render this field instead of the type-derived default input. Resolved first against the owning capability plugin's `configWidgets` (custom widgets, AGENT-CAPABILITY-RFC §9 item 4, #1903), then against stock widgets — known stock ids: 'document_libraries' (library/document tree picker for an array of library tag ids). Unknown ids fall back to the default input, so older frontends degrade gracefully. */
+  widget?: string | null;
+  /** Key of a sibling field in the same form: this field is only shown while that sibling's effective value (current input or its declared default) is truthy. Display-only — the value is kept, and backends must not rely on the field being hidden. */
+  visible_when?: string | null;
+  /** Renders the field inside the form's collapsed 'Advanced settings' disclosure instead of the main section. Display-only. */
+  advanced?: boolean;
+};
+export type FieldSpec = {
+  key: string;
+  type:
+    | "string"
+    | "text"
+    | "text-multiline"
+    | "number"
+    | "integer"
+    | "boolean"
+    | "select"
+    | "array"
+    | "object"
+    | "prompt"
+    | "secret"
+    | "url";
+  title: string;
+  description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
+  required?: boolean;
+  default?:
+    | string
+    | number
+    | number
+    | boolean
+    | (string | number | number | boolean)[]
+    | {
+        [key: string]: string | number | number | boolean;
+      }
+    | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
+  enum?: string[] | null;
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;
+  item_type?:
+    | (
+        | "string"
+        | "text"
+        | "text-multiline"
+        | "number"
+        | "integer"
+        | "boolean"
+        | "select"
+        | "array"
+        | "object"
+        | "prompt"
+        | "secret"
+        | "url"
+      )
+    | null;
+  ui?: UiHints;
+  scope_private?: boolean | null;
+};
+export type AssetSlot = {
+  key: string;
+  accepted_types: string[];
+  min_count?: number;
+  max_count?: number | null;
+};
+export type TeamScopePolicy = "default_on" | "admin_gated";
+export type CapabilityCatalogEntry = {
+  id: string;
+  runtime_id?: string | null;
+  source_id?: string | null;
+  version: string;
+  public_version?: string | null;
+  /** i18n key */
+  name: string;
+  /** i18n key */
+  description: string;
+  /** Material Symbols name; see CapabilityManifest.icon */
+  icon: string;
+  config_fields?: FieldSpec[];
+  team_settings_fields?: FieldSpec[];
+  assets?: AssetSlot[];
+  team_scope?: TeamScopePolicy;
+  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
+  execution_models?: ("react" | "graph")[];
+  route_base_url?: string | null;
+  default_capability_ids?: string[];
+  model_profile_ids?: string[];
+  model_chat_profile_ids?: string[];
+  model_thinking_profile_ids?: string[];
+  model_reasoning_efforts?: {
+    [key: string]: ("low" | "medium" | "high")[];
+  };
+  model_display_name?: string | null;
+};
+export type AgentTemplateSummary = {
+  template_id: string;
+  source_runtime_id: string;
+  source_agent_id: string;
+  display_name: string;
+  description: string;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
+  category: string;
+  tags?: string[];
+  capabilities?: string[];
+  team_instantiable?: boolean;
+  status?: "available" | "unavailable";
+  /** Tunable field descriptors declared by the template. The frontend renders these dynamically at enrollment time. Empty when the template declares no tunable fields. */
+  default_tuning_fields?: ManagedAgentFieldSpec[];
+  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. For a template with `supports_capabilities=False` it lists only the capabilities included with the agent. */
+  available_capabilities?: CapabilityCatalogEntry[];
+  /** Whether this template genuinely participates in capability selection, unfiltered by the team's can_use grants — unlike available_capabilities, which an empty team grant also empties. False means the agent offers no free selection: every entry of available_capabilities is included with it, always active and configurable, and a submitted selection is ignored. */
+  supports_capabilities?: boolean;
+  /** Capability ids this template activates by default (RFC AGENT-CAPABILITY §2), verbatim from the pod's `definition.default_mcp_servers` — MCP-derived and native ids alike. Unlike `available_capabilities` this list is NOT filtered by the team's `can_use`: intersect the two client-side to get the defaults a team may actually activate. The agent-creation form uses it to pre-tick a new instance's capabilities so a template's declared defaults are not silently dropped by an explicit empty selection.
+    
+    Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
+  default_capability_ids?: string[];
+};
+export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
+export type AgentMarketplaceState = {
+  /** `removed` after an automatic or platform admin removal (shown until hidden); `dismissed` after a removal by the team or Hide. */
+  state: "published" | "removed" | "dismissed";
+  /** Entry version, sent back as `expected_version` by publish and unpublish. */
+  version: number;
+  /** Date of the current publication. */
+  published_at: string;
+  /** The agent changed since the published snapshot was taken. */
+  modified?: boolean;
+  removed_reason?: string | null;
+  /** Optional reason given by a platform admin. */
+  removed_message?: string | null;
+  removed_at?: string | null;
+  like_count?: number;
+  import_count?: number;
+};
+export type ManagedAgentInstanceSummary = {
+  agent_instance_id: string;
+  team_id: string;
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  /** Short one-line summary of what this agent does, distinct from the longer `description` — shown on the agent card so a teammate can recall the agent's purpose without reading the full description. Server-set to `display_name` at enrollment until independently edited (#2076). */
+  role: string;
+  /** User-authored intended-use statement (purpose, target/impacted users, data handled, outputs, error impact) captured in the agent form's Engagement tab, used to screen for platform/organization risk (#2105). Empty for agents enrolled before #2105 until independently edited — required at creation and enforced by the agent edit form on save, but omittable on `UpdateAgentInstanceRequest` (like `role`) so partial updates such as the enable/disable toggle are unaffected. */
+  usage_statement?: string;
+  /** Chat profile this agent's new conversations start on. Null follows the team default. */
+  recommended_chat_profile_id?: string | null;
+  status: "enabled" | "disabled";
+  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
+  suspension_reason?: SuspensionReason | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: string | null;
+  /** Uid of the last user who edited the instance (#1952). Server-authoritative and read-only; null when the instance was never user-edited (seed/startup saves have no acting user). */
+  updated_by?: string | null;
+  /** Current user-set values for this instance's tunable fields. Keyed by ManagedAgentFieldSpec.key. Empty when no fields have been customised. */
+  tuning_field_values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+  /** Capability activation policy for this instance (#1974). Null means inherit the template default selection; [] means no capabilities; a non-empty list means exactly that set. */
+  selected_capability_ids?: string[] | null;
+  /** Per-capability stored config envelopes ({'schema_version', 'config'}) keyed by capability id, as validated by the pod at save time. The edit form re-renders the capability's config_fields from the inner 'config' object. */
+  capability_config?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+  /** ok when the pod is reachable at listing time; unavailable when the pod cannot be contacted. */
+  runtime_status?: "ok" | "unavailable";
+  /** Non-empty when stored MCP server IDs are absent from the live pod catalog. Admin must delete and recreate the instance to resolve. */
+  catalog_warnings?: string[];
+  /** Null when the agent was never published. Members who are not editors or team admin only get a `published` state, never `modified` nor a removal. */
+  marketplace?: AgentMarketplaceState | null;
+};
+export type CreateAgentInstanceRequest = {
+  /** Composite template identity: '{source_runtime_id}:{source_agent_id}'. Obtained from GET /teams/{team_id}/agent-templates. */
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  /** Optional short one-line summary of what this agent does. Defaults to `display_name` when omitted (#2076). */
+  role?: string | null;
+  /** Required intended-use statement (purpose, target/impacted users, data handled, outputs, error impact) — used to screen for platform/organization risk (#2105). Hard-required at creation, unlike the optional `role`. */
+  usage_statement: string;
+  /** Optional initial values for the template's tunable fields. Keys must match ManagedAgentFieldSpec.key values from the template. Unknown keys are ignored. Known values are validated against the declared field type and constraints. */
+  tuning_field_values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  } | null;
+  /** Optional capability activation policy (#1974). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. IDs not advertised by the template's source pod are rejected with HTTP 422. */
+  capability_ids?: string[] | null;
+  /** Optional per-capability configuration values keyed by capability id (the capability's config_fields values). Each selected capability's slice is round-tripped to the source pod for validation; the pod-returned stored envelope is persisted verbatim. Values for unselected capabilities are ignored. */
+  capability_config_values?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  } | null;
+  /** Optional recommended chat profile. Must be a chat profile the team can use and has not disabled, served by the template's pod (else 422). Null follows the team default. */
+  recommended_chat_profile_id?: string | null;
+};
+export type AgentDraftResult = {
+  name?: string | null;
+  role?: string | null;
+  /** One sentence; None when the model gave none. */
+  description?: string | null;
+  system_prompt: string;
+  /** Recommended capabilities, always a subset of the request's. */
+  capability_ids?: string[];
+};
+export type AgentDraftCapabilityCandidate = {
+  id: string;
+  name: string;
+  description?: string;
+};
+export type AgentDraftRequest = {
+  /** The user's own words: role, mission, audience, constraints. */
+  description: string;
+  /** UI language (BCP 47, e.g. 'fr', 'en'); the prompt is written in it. */
+  language?: string;
+  agent_name?: string | null;
+  agent_role?: string | null;
+  capabilities?: AgentDraftCapabilityCandidate[];
+};
+export type CreationAssistantRuntimeSettings = {
+  creation_assistant_prompt?: string | null;
+  /** Chat profile; one unknown to the pod uses the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's own call. The pod clamps it to the profile: any non-'off' value means on for an on/off profile, the nearest declared level otherwise. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
+};
+export type UpdateAgentInstanceRequest = {
+  display_name?: string | null;
+  description?: string | null;
+  /** Short one-line summary of what this agent does. Omit to leave the current role unchanged (#2076). */
+  role?: string | null;
+  /** Intended-use statement (#2105). Omit to leave the current value unchanged — same convention as `role`, so partial updates like the enable/disable toggle (which PATCHes only `status`) are not forced to resupply it. The agent edit form always submits it (enforced client-side, same as `display_name`), so in practice every full-form save keeps this current, including for agents enrolled before #2105 whose stored value starts out empty. */
+  usage_statement?: string | null;
+  /** Set to 'enabled' or 'disabled' to toggle the instance. None leaves the current status unchanged. */
+  status?: ("enabled" | "disabled") | null;
+  /** Replaces the stored field values for this instance. Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. Unknown keys are ignored. Known values are validated against the declared field type and constraints. Omit the field to leave existing values unchanged; pass null to clear the stored agent tuning values. */
+  tuning_field_values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  } | null;
+  /** Replaces the capability activation policy (#1974). Omit to leave the current selection unchanged; pass null to reset to the template default; pass [] to deactivate all capabilities; pass a non-empty list to activate exactly that set. IDs not advertised by the source pod are rejected with HTTP 422. */
+  capability_ids?: string[] | null;
+  /** Replaces the per-capability configuration values (keyed by capability id). Omit to keep the stored configs; pass null to reset every selected capability to its defaults. Each selected capability's effective config is re-validated by the source pod and the returned stored envelope is persisted verbatim. */
+  capability_config_values?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  } | null;
+  /** Recommended chat profile. Omit to leave it unchanged; pass null to follow the team default. Validated like on create. */
+  recommended_chat_profile_id?: string | null;
+};
+export type BodyPostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost = {
+  /** CreateAgentInstanceRequest as a JSON object string */
+  request: string;
+  /** One '{capability_id}:{slot_key}' reference per uploaded file, aligned by index with asset_files. */
+  asset_slots?: string[];
+  asset_files?: string[];
+};
+export type BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch =
+  {
+    /** UpdateAgentInstanceRequest as a JSON object string */
+    request: string;
+    /** One '{capability_id}:{slot_key}' reference per uploaded file, aligned by index with asset_files. */
+    asset_slots?: string[];
+    asset_files?: string[];
+  };
+export type AgentCopyCapability = {
+  id: string;
+  /** i18n key of the capability's display name. */
+  name: string;
+};
+export type AgentCopyTarget = {
+  team_id: string;
+  template_enabled: boolean;
+  missing_capabilities?: AgentCopyCapability[];
+};
+export type AgentCopyTargetsResponse = {
+  targets: AgentCopyTarget[];
+};
+export type AgentCopyNotice = {
+  capability: AgentCopyCapability;
+  message: string;
+};
+export type AgentCopyResult = {
+  team_id: string;
+  agent?: ManagedAgentInstanceSummary | null;
+  /** Capabilities left out: not usable in the destination, or rejected there. */
+  dropped_capabilities?: AgentCopyCapability[];
+  /** What an editor must redo in the destination, per capability. */
+  notices?: AgentCopyNotice[];
+  error?: string | null;
+  /** Stable code of the failure, e.g. `agent_name_conflict` for a duplicate under a taken name. */
+  error_code?: string | null;
+};
+export type AgentCopyResponse = {
+  results: AgentCopyResult[];
+};
+export type AgentCopyRequest = {
+  target_team_ids: string[];
+  display_name?: string | null;
+  /** Caller's UI language, picking the word of a renamed copy (`copie`/`copy`); English when absent. */
+  locale?: ("fr" | "en") | null;
+};
+export type PromptSummary = {
+  id: string;
+  name: string;
+  command?: string | null;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  created_by?: string | null;
+  version?: number;
+  published?: boolean;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_favorite?: boolean;
+};
+export type CreatePromptRequest = {
+  name: string;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text: string;
+  /** Optional slug identifying this prompt for invocation from the chat composer. Lowercase ASCII letters, digits, '-' and '_'. Unique per team. Empty or whitespace-only input is stored as no command. */
+  command?: string | null;
+};
+export type PromptCommandSummary = {
+  prompt_id: string;
+  command: string;
+  name: string;
+  description?: string | null;
+  emoji?: string | null;
+};
+export type ContextPromptSummary = {
+  id: string;
+  name: string;
+  description?: string | null;
+  scope: "personal" | "team";
+  category_id?: string | null;
+  version: number;
+  session_count: number;
+  score?: number | null;
+  is_favorite?: boolean;
+};
+export type PromptDetail = {
+  id: string;
+  name: string;
+  command?: string | null;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  created_by?: string | null;
+  version?: number;
+  published?: boolean;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_favorite?: boolean;
+  team_id: string;
+  text: string;
+};
+export type UpdatePromptRequest = {
+  name: string;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text: string;
+  /** Optional slug identifying this prompt for invocation from the chat composer. Lowercase ASCII letters, digits, '-' and '_'. Unique per team. Empty or whitespace-only input is stored as no command. */
+  command?: string | null;
+};
+export type PromptScoreUpdateRequest = {
+  score: number;
+};
+export type PromptPromoteRequest = {
+  target_team_id: string;
+};
+export type MarketplacePromptSummary = {
+  id: string;
+  name: string;
+  command?: string | null;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  created_by?: string | null;
+  version?: number;
+  published?: boolean;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_favorite?: boolean;
+  team_id: string;
+  team_name: string;
+};
+export type MarketplacePromptDetail = {
+  id: string;
+  name: string;
+  command?: string | null;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  created_by?: string | null;
+  version?: number;
+  published?: boolean;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_favorite?: boolean;
+  team_id: string;
+  text: string;
+  team_name: string;
+};
+export type MarketplaceImportResult = {
+  team_id: string;
+  prompt?: PromptSummary | null;
+  error?: string | null;
+  error_code?: string | null;
+};
+export type MarketplaceImportResponse = {
+  results: MarketplaceImportResult[];
+};
+export type MarketplaceImportRequest = {
+  target_team_ids: string[];
+};
+export type PromptCategorySummary = {
+  id: string;
+  team_id: string;
+  name: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type CreatePromptCategoryRequest = {
+  name: string;
+};
+export type UpdatePromptCategoryRequest = {
+  name: string;
+};
+export type ManagedAgentTuning = {
+  role: string;
+  description: string;
+  /** User-authored statement of the intended use case for this agent instance (purpose, target users/impacted parties, data handled, outputs, error impact) — used to screen for platform/organization risk (#2105). Defaults to '' so pre-#2105 rows without this key in their stored tuning_json still deserialize; the product-facing requiredness is enforced by the API layer (CreateAgentInstanceRequest and the agent form), not by this default. */
+  usage_statement?: string;
+  tags?: string[];
+  fields?: ManagedAgentFieldSpec[];
+  /** Chat profile this instance's conversations start on, above the team default. None follows the team default, including later changes. Validated on write against the team's usable and enabled models on the instance's pod; the pod re-checks it every turn. Legacy `reasoning_enabled` / `reasoning_default_on` keys in stored rows are ignored. */
+  recommended_chat_profile_id?: string | null;
+  /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */
+  selected_capability_ids?: string[] | null;
+  /** Per-capability stored config keyed by capability id. Each slice is the pod-validated {'schema_version', 'config'} envelope returned by the pod's validate-config round-trip, persisted VERBATIM — opaque to control-plane; the pod is the schema authority (RFC §3.8). Asset binaries never appear here — only KF storage keys. */
+  capability_config?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+  /** User-set agent tuning values keyed by ManagedAgentFieldSpec.key. Only keys present in `fields` are stored. Frozen snapshot — not re-merged when the template evolves. */
+  values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+};
+export type ModelBindingSettings = {
+  base_url?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_tenant_id?: string | null;
+  project?: string | null;
+  location?: string | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  top_p?: number | null;
+  max_retries?: number | null;
+  streaming?: boolean | null;
+  stream_usage?: boolean | null;
+  request_timeout?: number | null;
+  reasoning_effort?: string | null;
+};
+export type ModelBinding = {
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  name: string;
+  settings?: ModelBindingSettings;
+};
+export type ManagedAgentRuntimeBinding = {
+  agent_instance_id: string;
+  template_agent_id: string;
+  display_name: string;
+  owner_scope?: "team";
+  owner_user_id?: string | null;
+  owner_team_id: string;
+  enabled?: boolean;
+  tuning: ManagedAgentTuning;
+  team_capability_settings?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+  reasoning_enabled_model_ids?: string[];
+  team_disabled_model_ids?: string[];
+  platform_chat_model_binding?: ModelBinding | null;
+  platform_prompt?: string | null;
+};
+export type SessionListItem = {
+  session_id: string;
+  team_id: string;
+  agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
+  title?: string | null;
+  /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
+  context_prompt_ids?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type CreateSessionRequest = {
+  /** Frontend-generated UUID. Must not contain ':', which pods reserve to name graph threads. */
+  session_id: string;
+  agent_instance_id?: string | null;
+  title?: string | null;
+};
+export type InactiveSessionItem = {
+  session_id: string;
+  team_id: string;
+  title?: string | null;
+  agent_name?: string | null;
+  updated_at?: string | null;
+};
+export type InactiveSessionsResponse = {
+  sessions: InactiveSessionItem[];
+};
+export type BulkDeleteSessionsResponse = {
+  deleted: string[];
+  failed: string[];
+};
+export type BulkDeleteSessionRef = {
+  session_id: string;
+  team_id: string;
+};
+export type BulkDeleteSessionsRequest = {
+  sessions: BulkDeleteSessionRef[];
+};
+export type SessionDetails = {
+  session_id: string;
+  team_id: string;
+  agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
+  title?: string | null;
+  /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
+  context_prompt_ids?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+  agent_deleted?: boolean;
+  /** Browser-facing history URL, independent of agent execution availability. */
+  messages_url?: string | null;
+};
+export type UpdateSessionRequest = {
+  /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */
+  updated_at?: string | null;
+  /** Human-readable session title shown in the sidebar. */
+  title?: string | null;
+  /** Full ordered replacement set of prompt-library ids to attach as chat context (personal/team prompt UUIDs or 'default:{category}'). The server diffs against the current set: removed ids are detached, new ids attached, order rewritten. An empty list clears the context. Omit the field entirely to leave the context unchanged (e.g. on a freshness-only PATCH); a present null is treated as a clear. */
+  context_prompt_ids?: string[] | null;
+};
+export type SessionAttachmentSummary = {
+  attachment_id: string;
+  name: string;
+  mime?: string | null;
+  size_bytes?: number | null;
+  summary_md: string;
+  document_uid?: string | null;
+  storage_key?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type CreateSessionAttachmentRequest = {
+  attachment_id: string;
+  name: string;
+  mime?: string | null;
+  size_bytes?: number | null;
+  summary_md: string;
+  document_uid?: string | null;
+  storage_key?: string | null;
+};
+export type RuntimeAgentExecutionPreparation = {
+  runtime_id: string;
+  agent_id: string;
+  team_id: string;
+  /** Ingress-relative URL for POST /agents/evaluate. */
+  evaluate_url: string;
+};
+export type SkillSummary = {
+  name: string;
+  description: string;
+  argument_hint?: string | null;
+};
+export type SkillCatalog = {
+  supported?: boolean;
+  revision?: string;
+  skills?: SkillSummary[];
+};
+export type SkillDetail = {
+  skill: SkillSummary;
+  revision: string;
+  content: string;
+};
+export type ChatControlDescriptor = {
+  capability_id: string;
+  widget: string;
+  params?: {
+    [key: string]: any;
+  } | null;
+};
+export type ExecutionPreparation = {
+  agent_instance_id: string;
+  team_id: string;
+  runtime_id: string;
+  execution_transport?: "sse";
+  /** Ingress-relative URL for non-streaming execution. */
+  execute_url: string;
+  /** Ingress-relative URL for SSE streaming execution. */
+  execute_stream_url: string;
+  /** RFC 6570 Level 1 URI Template for runtime history. Example: /runtime/agents-v2/agents/sessions/{session_id}/messages */
+  messages_url_template: string;
+  supports_streaming?: boolean;
+  supports_hitl?: boolean;
+  supports_ui_parts?: boolean;
+  /** Maximum Unicode code points accepted in one submitted chat message, as advertised by the selected runtime pod. Null when an older runtime does not publish the policy. */
+  max_chat_input_chars?: number | null;
+  /** Computed chat-time composer controls for this instance (CAPAB-01 #1976, RFC §3.3/§3.7), evaluated per capability on the pod at session prep and flattened in capability-registration then returned-list order. Supersedes the retired `effective_chat_options`: the composer resolves each `widget` id against the owning capability's plugin registry (§9) and silently skips unknown ids. Never persisted — a cache-aside projection of stored config. */
+  chat_controls?: ChatControlDescriptor[];
+  runtime_display_name?: string | null;
+  max_session_idle_seconds?: number | null;
+  /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
+  context_prompt_text?: string | null;
+  /** Ingress-relative base URL of each selected capability's auto-mounted router, keyed by capability id (AGENT-CAPABILITY-RFC §9.1, #1979). The instance-bound (in-session) counterpart of the template catalog's route_base_url: the frontend calls these pod routes directly (no proxy), with the same bearer it already uses for execution. */
+  capability_base_urls?: {
+    [key: string]: string;
+  };
+  /** Team's default chat model profile id, resolved from its stored TeamRoutingPolicy at session prep (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05, #2118). Null when the team has no routing policy — the runtime then uses its own deployment default. The frontend folds this onto RuntimeContext exactly like context_prompt_text (same three-hop channel, same 'resolved once per session, not re-fetched per turn' contract). */
+  chat_default_profile_id?: string | null;
+  /** User-level chat profile for this call only, set solely from the evaluator's `agent_model_override`. Forwarded as `RuntimeContext.chat_profile_id`; the pod re-validates it. */
+  chat_profile_id?: string | null;
+  /** kind="model" capability ids whose reasoning a platform admin has switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). Resolved once here at session prep and folded onto RuntimeContext by the frontend, exactly like chat_default_profile_id — the same three-hop channel, deliberately not a per-turn lookup. GLOBAL, not per team: an activation ('does this model run with reasoning'), not a permission — per-team model access is untouched (§5.1). **Empty means no model reasons** (§5.6, off by default); the runtime strips the reasoning settings for every model absent from this list at client construction (§5.6.2). */
+  reasoning_enabled_model_ids?: string[];
+};
+export type BootstrapPlatformAdminResponse = {
+  /** Keycloak sub granted platform_admin — always the calling JWT's own sub, never an arbitrary third party (RFC Part 8, §42.2). */
+  user_id: string;
+  username: string;
+};
+export type BootstrapPlatformAdminRequest = {
+  /** The one-time root-bootstrap secret. */
+  token: string;
+};
+export type ImpactedInstanceSummary = {
+  agent_instance_id: string;
+  team_id: string;
+  display_name: string;
+};
+export type CapabilityEnablementItem = {
+  id: string;
+  runtime_id?: string | null;
+  source_id?: string | null;
+  /** i18n key */
+  name: string;
+  /** Stored-config schema version. */
+  version: string;
+  /** Shown to a human; absent when the kind has none. */
+  public_version?: string | null;
+  icon: string;
+  team_scope: TeamScopePolicy;
+  /** Whether the platform-wide default_on marker is set. */
+  default_on: boolean;
+  /** Teams carrying an explicit `enabled` grant. */
+  enabled_team_ids?: string[];
+  /** Teams carrying an explicit `disabled` opt-out (the tri-state 'disabled' position). For a default_on capability it also subtracts from the inherited roster. */
+  disabled_team_ids?: string[];
+  /** Platform-wide team count — the denominator for a default_on capability's inherited access. Counts every team in the org, not just the ones the calling admin belongs to. */
+  total_team_count?: number;
+  /** Platform-wide personal-space count (= realm user count; one personal space per user) — the denominator for personal-class access (RFC §8.4), as total_team_count is for default_on. */
+  total_personal_space_count?: number;
+  /** Personal-space class position (RFC §8.4): `enabled` = usable by all personal spaces (`personal_on` tuple present); `disabled` = blocked for all personal spaces (`personal_disabled` present); `default` = neither, personal spaces follow `default_on` like any team. */
+  personal_scope?: "enabled" | "disabled" | "default";
+  /** The enable-with-settings form (rendered like config fields). */
+  team_settings_fields?: FieldSpec[];
+  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app": a control-plane projection of one installed Fred application. "knowledge_base": a control-plane projection of one published Knowledge Base definition — same enablement shape as an application, on its own ReBAC type so no capability or application grant can make one usable. */
+  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
+  /** For a `kind="agent"` row: the template's default tool/MCP capability ids (RFC §8.6 `depends_on` gate, GitHub #2004 item 5). Enabling the agent for a team 409s unless each of these is already usable by that team - exposed so the admin UI can disable the grant up front and explain why (GitHub #2408). Always empty for `kind="tool"`/`"model"`. */
+  default_capability_ids?: string[];
+  /** Agent instances this capability breaks AT REST, across every team (#1975 health). DERIVED per request — `suspension_reason` records why an instance is suspended, never which capability did it, so an instance broken by capa1 while also selecting capa2 must not count against capa2. An instance is counted when it selects this capability AND its team lacks `can_use` on it OR its pod no longer advertises it. */
+  suspended_instances?: number;
+  /** Instances selecting this capability whose runtime pod was unreachable, so their health is UNKNOWN rather than broken. Kept separate from `suspended_instances`: the reconciliation sweep skips an unreachable pod rather than suspending on a transient outage (#1975, RFC §3.9), and this count reports the same way. */
+  health_unknown_instances?: number;
+  /** The agents behind `suspended_instances`, named for the health-column drill-down (which agents, in which team). Same derivation as the count — one entry per (instance, this capability) the instance is broken by at rest. Empty for a healthy capability; carries `team_id` so the admin surface can group by team. */
+  suspended_instance_details?: ImpactedInstanceSummary[];
+  /** For a `kind="model"` row: the models_catalog.yaml profile ids of this model that declare `supports_thinking` (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.3). Always empty for other kinds. **The admin row renders a reasoning control only when this is non-empty** — aptitude is not an administrator's choice, nobody can make a model reason that cannot. */
+  thinking_profile_ids?: string[];
+  /** Whether this model's thinking-capable profiles may run with reasoning on, platform-wide (REASON-01 §5). GLOBAL, with no subject: an activation, not a permission — per-team model access remains the untouched ReBAC `can_use` axis (§5.1/§5.4). No stored row means `false` (§5.6): enabling a model and enabling its reasoning are two separate admin actions, in that order. */
+  reasoning_enabled?: boolean;
+  /** For a `kind="model"` row: the ops-authored `model_display_name` from models_catalog.yaml, carried verbatim. `name` is the wire model value, which several models on one gateway can share, so the admin label prefers this when set. Display only. */
+  model_display_name?: string | null;
+};
+export type CapabilityEnablementList = {
+  items?: CapabilityEnablementItem[];
+};
+export type CapabilityImpactPreview = {
+  capability_id: string;
+  /** Agents that work today and would be suspended by this change. Excludes agents already broken by this capability — revoking it again does not newly break them. */
+  suspended_instances?: number;
+  /** Selecting instances whose pod is unreachable (impact unknown). */
+  health_unknown_instances?: number;
+  /** Of the agents that would be suspended, those published to the marketplace: suspension removes them from it. */
+  published_instances?: number;
+  /** The affected agents, for the admin drill-down. */
+  instances?: ImpactedInstanceSummary[];
+};
+export type TeamCapabilityEnablementResult = {
+  capability_id: string;
+  team_id: string;
+  enabled: boolean;
+  settings?: {
+    [key: string]: any;
+  };
+  /** Dependent agent instances suspended by this change (#1975). */
+  suspended_instances?: number;
+  /** Dependent agent instances whose suspension this GRANT cleared (#1975). Only availability suspensions are cleared; an instance still missing another capability stays suspended, and a `capability_config_invalid` one is never touched here (RFC §3.9). */
+  revived_instances?: number;
+};
+export type EnableTeamCapabilityRequest = {
+  settings?: {
+    [key: string]: any;
+  };
+};
+export type CapabilityDefaultOnResult = {
+  capability_id: string;
+  default_on: boolean;
+  suspended_instances?: number;
+  /** Dependent instances revived by turning default-on ON (#1975). */
+  revived_instances?: number;
+  /** True when switching this model OFF also switched its reasoning off (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5.7). Reported so the admin sees the second state change instead of discovering it later in the row. */
+  reasoning_disabled?: boolean;
+};
+export type SetCapabilityDefaultOnRequest = {
+  default_on: boolean;
+};
+export type CapabilityPersonalScopeResult = {
+  capability_id: string;
+  scope: "enabled" | "disabled" | "default";
+  /** Dependent PERSONAL-space instances suspended by this change (#1975). */
+  suspended_instances?: number;
+  /** Dependent PERSONAL-space instances whose suspension this GRANT cleared (#1975). Only availability suspensions are cleared; an instance still missing another capability stays suspended, and a `capability_config_invalid` one is never touched here (RFC §3.9). */
+  revived_instances?: number;
+};
+export type SetCapabilityPersonalScopeRequest = {
+  scope: "enabled" | "disabled" | "default";
+};
+export type ModelReasoningResult = {
+  capability_id: string;
+  reasoning_enabled: boolean;
+};
+export type SetModelReasoningRequest = {
+  reasoning_enabled: boolean;
+};
+export type KnowledgeBasePublicationResult = {
+  id: string;
+  prefix: string;
+  version: string;
+};
+export type KnowledgeBasePublicationRequest = {
+  prefix: string;
+  version: string;
+  name: string;
+  description: string;
+  configuration_fields?: FieldSpec[];
+};
+export type KnowledgeBaseDefinitionChoice = {
+  definition_id: string;
+  name: string;
+  description?: string;
+};
+export type KnowledgeBaseInstanceFields = {
+  configuration_fields?: FieldSpec[];
+};
+export type IntervalSchedule = {
+  type?: "interval";
+  /** Seconds between two occurrences. */
+  every_seconds: number;
+};
+export type KnowledgeBaseInstanceSummary = {
+  id: string;
+  definition_id: string;
+  definition_name: string;
+  team_id: string;
+  library_id: string;
+  library_name: string;
+  schedule: {
+    type: "interval";
+  } & IntervalSchedule;
+  suspended: boolean;
+  configuration?: {
+    [key: string]: any;
+  };
+  created_at: string;
+  updated_at: string;
+};
+export type KnowledgeBaseInstanceCreate = {
+  definition_id: string;
+  team_id: string;
+  folder_name: string;
+  schedule: {
+    type: "interval";
+  } & IntervalSchedule;
+  suspended?: boolean;
+  configuration?: {
+    [key: string]: any;
+  };
+};
+export type KnowledgeBaseRunContext = {
+  definition_id: string;
+  instance_id: string;
+  team_id: string;
+  run_id: string;
+  library_id: string;
+  configuration?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+};
+export type TeamRoutingPolicy = {
+  team_id: string;
+  version: number;
+  chat_default_profile_id?: string | null;
+  /** Model capability ids the team disabled for its members. */
+  disabled_model_ids?: string[];
+  /** Model capability ids whose composer reasoning row starts OFF. Every other reasoning-enabled model starts ON. */
+  reasoning_default_off_model_ids?: string[];
+};
+export type UpdateTeamRoutingPolicyRequest = {
+  chat_default_profile_id?: string | null;
+  disabled_model_ids?: string[];
+  reasoning_default_off_model_ids?: string[];
+  /** The `version` the client last read (0 before any write). When set and the stored version differs, the write is refused with 409 so a concurrent edit is not overwritten. */
+  expected_version?: number | null;
+};
+export type AvailableModelProfile = {
+  profile_id: string;
+  capability_id: string;
+  /** i18n key, same as CapabilityCatalogEntry.name */
+  name: string;
+  /** Ops-authored model display name, when the pod catalog has one. */
+  display_name?: string | null;
+  /** Whether a platform admin enabled reasoning for this model: only then can the team set a reasoning default for it. */
+  reasoning_available?: boolean;
+};
+export type AvailableModelProfileList = {
+  profiles?: AvailableModelProfile[];
+  /** The profile shown as the team's Default: the stored team default, else the pod default of the team's pods when they agree. Its model cannot be disabled. */
+  effective_default_profile_id?: string | null;
+};
+export type SelectableChatModel = {
+  /** Choice key sent as `chat_profile_id`. */
+  profile_id: string;
+  capability_id: string;
+  name: string;
+  display_name?: string | null;
+  /** Reasoning enabled platform-wide for this model. */
+  reasoning_enabled?: boolean;
+  /** The team's starting reasoning state for this model. */
+  reasoning_default_on?: boolean;
+};
+export type EffectiveChatModel = {
+  /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
+  name?: string | null;
+  /** The ops-authored `model_display_name` for this model, when the pod catalog names one. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
+  display_name?: string | null;
+  /** The `(provider, name)`-keyed `kind="model"` capability id, so the caller can join this against team enablement and the models admin view. `None` for an unresolved model. */
+  capability_id?: string | null;
+  /** False when the resolved model is not `can_use`-enabled for this team, in which case the turn fails before the LLM call (`ModelNotUsableError`). Reported rather than hidden so the composer can say WHY a turn will fail instead of letting the user discover an opaque error — the same diagnosability rule REASON-01 §8 applies to the reasoning control. Always True for a platform binding, which bypasses team enablement by design: the operator is the authority on what is reachable. */
+  enabled_for_team?: boolean;
+  /** Whether reasoning actually runs on THIS model — i.e. whether a platform admin switched its reasoning on (REASON-01 §5). The composer must not offer the reasoning toggle when this is False: `RoutedChatModelFactory` STRIPS the reasoning settings for a model absent from `reasoning_enabled_model_ids` (§5.6.2), so the toggle would be inert and the turn would silently not reason.
+    
+    Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
+  reasoning_enabled?: boolean;
+  /** Models a member may pick for this agent: chat models served by the instance's pod, `can_use` for the team and not team-disabled. Empty when the choice is locked or the pod is unreachable. */
+  selectable_models?: SelectableChatModel[];
+  /** True when a platform binding or a pod per-agent override fixes the model, so no choice is offered. */
+  choice_locked?: boolean;
+};
+export type DisableImpactAgent = {
+  agent_instance_id: string;
+  display_name: string;
+};
+export type DisableImpact = {
+  agents?: DisableImpactAgent[];
+};
+export type PlatformModelBinding = {
+  model_capability?: "chat";
+  binding?: ModelBinding | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetPlatformModelBindingRequest = {
+  binding: ModelBinding;
+};
+export type WikiAvailability = {
+  enabled: boolean;
+};
+export type WikiPageSummary = {
+  page_id: string;
+  slug: string;
+  title: string;
+  /** "page", or "rules" for the reserved rules page. */
+  kind: string;
+  parent_page_id?: string | null;
+  position?: number;
+  /** An agent wrote the current revision and no editor has cleared the mark yet. This is the editors' review queue. */
+  needs_review?: boolean;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type WikiPageTree = {
+  pages?: WikiPageSummary[];
+};
+export type WikiPageDetail = {
+  page: WikiPageSummary;
+  content_md?: string;
+  revision_id?: string | null;
+  author_kind?: string;
+};
+export type CreateWikiPageRequest = {
+  title: string;
+  content_md?: string;
+  parent_page_id?: string | null;
+  position?: number;
+};
+export type WikiConflictResponse = {
+  detail: string;
+  current_revision_id: string;
+  current_content_md: string;
+};
+export type UpdateWikiRulesRequest = {
+  content_md: string;
+  base_revision_id?: string | null;
+};
+export type UpdateWikiPageContentRequest = {
+  content_md: string;
+  /** The revision the author started from — read it from the page first. The write is refused with 409 if the page has moved on since, so the last writer cannot silently erase the one before. Omitting it on a page that already has a revision is refused the same way: there is no unconditional overwrite. */
+  base_revision_id?: string | null;
+};
+export type UpdateWikiPageMetadataRequest = {
+  title?: string | null;
+  parent_page_id?: string | null;
+  move_to_root?: boolean;
+  position?: number | null;
+};
+export type SetNeedsReviewRequest = {
+  needs_review: boolean;
+  /** The revision displayed when this decision was made — read it from the page first. Refused with 409 if the page has moved on since, so a validation can never certify text the reviewer did not actually see. */
+  base_revision_id: string;
+};
+export type WikiRevisionSummary = {
+  revision_id: string;
+  status: string;
+  author_user_id: string;
+  /** "human" or "agent". */
+  author_kind: string;
+  agent_instance_id?: string | null;
+  session_id?: string | null;
+  created_at?: string | null;
+  /** When an editor cleared the review mark while this revision was published. The history shows it as its own entry: the person who validates an agent's text is not always the one it was written for. */
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+};
+export type WikiRevisionList = {
+  revisions?: WikiRevisionSummary[];
+  /** Revision id to its Markdown, so the history view can diff without one request per revision. Pages are capped at 100000 characters, which bounds this. */
+  contents?: {
+    [key: string]: string;
+  };
+  /** Opaque; pass back as `cursor` to fetch the next, older page. Null when `revisions` already reaches the oldest one. Not a frozen snapshot: a proposal keeps its original `created_at` when later approved, so approving one whose timestamp falls in a page already fetched will not surface it by continuing — reopen history from the top (omit `cursor`) to see it. */
+  next_cursor?: string | null;
+};
+export type WikiProposal = {
+  proposal_id: string;
+  kind: "page" | "edit";
+  title: string;
+  slug?: string | null;
+  parent_slug?: string | null;
+  content_md: string;
+  current_content_md?: string;
+  created_at?: string | null;
+  author_user_id?: string;
+  agent_instance_id?: string | null;
+};
+export type ProposePageRequest = {
+  title: string;
+  content_md: string;
+  parent_slug?: string | null;
+  agent_instance_id?: string | null;
+  session_id?: string | null;
+};
+export type ProposeEditRequest = {
+  slug: string;
+  content_md: string;
+  /** The revision_id a prior read of this page returned. Refused with 409 when it no longer matches the page's current revision — read the page again and redo the edit against the current text. There is no unconditional proposal: a stale or fabricated base is refused rather than silently rebased onto whatever is current. */
+  base_revision_id: string;
+  agent_instance_id?: string | null;
+  session_id?: string | null;
+};
+export type PlatformPrompt = {
+  /** The platform prompt text currently in force. When `is_default` is true this is the pod-shipped default (the `platform_prompt` field of the pod's `config/platform_prompt.json`), which is what agents actually receive until an admin saves something; when it is false this is the saved value, and an empty string then means an admin deliberately suppressed the block. */
+  text: string;
+  /** True when no row has ever been saved, i.e. `text` is the pod's default rather than an admin's own. The admin UI uses this to say 'this is the default, save to adopt it' rather than presenting it as a stored value — and to keep Save enabled on an untouched default, since adopting it verbatim is a real state change. */
+  is_default: boolean;
+  /** True when `is_default` is true AND no runtime pod could be reached to report its default, so `text` is empty for lack of an answer rather than because the default is empty. The UI must say so instead of showing a blank editor that looks like a real default. Always false when a row exists — the stored value needs no pod. */
+  source_unavailable?: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetPlatformPromptRequest = {
+  /** Replaces the stored platform prompt wholesale. Saving an empty string is meaningful and supported: it suppresses the block for every agent, and does NOT restore the pod-shipped default. */
+  text: string;
+};
+export type PlatformInstructions = {
+  /** Markdown rendered verbatim as the second block of every agent's system prompt, immediately under the platform prompt. Empty when `source_unavailable` is true. */
+  text: string;
+  /** True when no runtime pod could be reached to report its shipped instructions. `text` is then empty for lack of an answer, not because agents receive no instructions — the UI must distinguish the two rather than render an empty read-only panel. */
+  source_unavailable?: boolean;
+};
+export type CreationAssistantModelOption = {
+  profile_id: string;
+  /** Catalog model name, for display. */
+  name: string;
+  /** True when this profile declares `supports_thinking` and has a reasoning effort the pod can send. */
+  supports_reasoning?: boolean;
+  /** Selectable reasoning levels, weakest first; empty for an on/off profile (or one that cannot reason). */
+  reasoning_efforts?: ("low" | "medium" | "high")[];
+};
+export type CreationAssistantSettings = {
+  /** The meta-prompt in force: the saved override, or the pod default when `is_default` is true (empty if no pod could be reached). */
+  text: string;
+  /** The pod's built-in meta-prompt; None when no pod answered. */
+  default_text?: string | null;
+  /** Date of the last edit of the built-in meta-prompt; None for an older or unreachable pod. */
+  default_revised_at?: string | null;
+  /** True when an override is saved and the built-in meta-prompt was revised on a later date. The admin UI shows it as a warning. */
+  default_changed_since_override?: boolean;
+  /** True when no override is saved. */
+  is_default: boolean;
+  /** True when no runtime pod could report its built-in meta-prompt. */
+  source_unavailable?: boolean;
+  /** True when `text` lacks the `{language}` placeholder. Saving is allowed; the admin UI shows it as a warning. */
+  missing_language_placeholder?: boolean;
+  /** Chat profile the creation assistant uses; None = the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's own call. Any non-'off' value means on for an on/off profile; a level the profile does not offer is clamped by the pod to the nearest one. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
+  /** The pods' default chat profile, when every reachable pod names the same one; tells the UI which reasoning control the platform default offers. */
+  default_model_profile_id?: string | null;
+  /** Chat profiles every enabled pod advertises; empty when none answered. */
+  model_options?: CreationAssistantModelOption[];
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetCreationAssistantSettingsRequest = {
+  /** Meta-prompt override; None keeps the pod's built-in text. */
+  text?: string | null;
+  /** One of `model_options`; None uses the pod default. */
+  model_profile_id?: string | null;
+  /** Reasoning of the assistant's call; clamped to the model by the pod. */
+  reasoning_effort?: "off" | "low" | "medium" | "high";
+};
+export type PlatformUiSettings = {
+  /** Theme new users get, or null to use the frontend's own default. */
+  default_theme?: string | null;
+  /** Theme ids withdrawn from the users' choice. */
+  hidden_themes?: string[];
+  updated_by?: string | null;
+  /** Null when the settings were never saved. */
+  updated_at?: string | null;
+};
+export type SetPlatformUiSettingsRequest = {
+  default_theme?: string | null;
+  hidden_themes?: string[];
+};
+export type AgentsMarketplaceDefault = {
+  agents_publishing_enabled: boolean;
+  agents_publish_quota: number;
+  updated_by?: string | null;
+  /** Null while the built-in defaults apply. */
+  updated_at?: string | null;
+};
+export type TeamMarketplaceSettings = {
+  team_id: string;
+  team_name: string;
+  /** Null when the team follows the default. */
+  agents_publishing_enabled_override?: boolean | null;
+  /** Null when the team follows the default. */
+  agents_publish_quota_override?: number | null;
+  agents_publishing_enabled: boolean;
+  agents_publish_quota: number;
+  published_count: number;
+};
+export type MarketplaceSettings = {
+  default: AgentsMarketplaceDefault;
+  teams: TeamMarketplaceSettings[];
+};
+export type MarketplaceSettingsImpact = {
+  affected_team_ids?: string[];
+  removed_published_agents?: number;
+};
+export type MarketplaceSettingsUpdateResult = {
+  settings: MarketplaceSettings;
+  impact: MarketplaceSettingsImpact;
+};
+export type SetAgentsMarketplaceDefaultRequest = {
+  agents_publishing_enabled: boolean;
+  agents_publish_quota: number;
+};
+export type SetTeamMarketplaceSettingsRequest = {
+  agents_publishing_enabled: boolean | null;
+  agents_publish_quota: number | null;
+};
+export type PublishAgentRequest = {
+  /** The entry version the card shows (`marketplace.version`); absent for a first publication. A mismatch answers 409. */
+  expected_version?: number | null;
+};
+export type UnpublishAgentRequest = {
+  expected_version: number;
+  /** Free text shown to the team; accepted from a platform admin only. */
+  reason?: string | null;
+};
+export type MarketplaceAgentSummary = {
+  entry_id: string;
+  team_id: string;
+  /** The publishing team's current name. */
+  team_name?: string | null;
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  role: string;
+  version: number;
+  first_published_at: string;
+  /** Date of the current version. */
+  published_at: string;
+  like_count?: number;
+  import_count?: number;
+  liked_by_me?: boolean;
+};
+export type MarketplaceAgentCapability = {
+  id: string;
+  name: string;
+  description?: string | null;
+};
+export type MarketplaceAgentFile = {
+  capability_id: string;
+  filename: string;
+  size: number;
+};
+export type MarketplaceAgentDetail = {
+  entry_id: string;
+  team_id: string;
+  /** The publishing team's current name. */
+  team_name?: string | null;
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  role: string;
+  version: number;
+  first_published_at: string;
+  /** Date of the current version. */
+  published_at: string;
+  like_count?: number;
+  import_count?: number;
+  liked_by_me?: boolean;
+  /** The published agent, addressed by a platform admin's removal. */
+  agent_instance_id: string;
+  /** Likes given on the current version. */
+  likes_since_update?: number;
+  usage_statement?: string;
+  tuning_field_values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+  capabilities?: MarketplaceAgentCapability[];
+  files?: MarketplaceAgentFile[];
+};
+export type MarketplaceAgentImportTargetsResponse = {
+  targets: AgentCopyTarget[];
+};
+export type MarketplaceAgentImportResponse = {
+  results: AgentCopyResult[];
+};
+export type MarketplaceAgentImportRequest = {
+  target_team_ids: string[];
+  /** Caller's UI language, picking the word of a renamed copy (`copie`/`copy`); English when absent. */
+  locale?: ("fr" | "en") | null;
+};
+export type Announcement = {
+  id: string;
+  /** `banner` or `patch_note`. Fixed at creation. */
+  kind: "banner" | "patch_note";
+  severity: "info" | "warning" | "error" | "success";
+  /** Locale → title map. The frontend resolves it against the viewer's locale and falls back to 'en'. */
+  title: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map rendered inside the banner itself. */
+  description_short: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map. For a banner, the more-info dialog (empty for every locale means no more-info action). For a patch note, its body. */
+  description_long: {
+    [key: string]: string;
+  };
+  /** Banner: whether it is delivered to users right now. Patch note: whether the next announcement includes it; users never read this row. */
+  enabled: boolean;
+  /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
+  dismissible: boolean;
+  /** The edition a banner's browser-side close is keyed on, so a bump shows it again to everyone who had closed it. Not used by patch notes. */
+  content_version: number;
+  /** Patch note only: its place in the administrator's order, 1 at the top. Null for a banner. */
+  position?: number | null;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+};
+export type PatchNoteSnapshot = {
+  /** The patch note it was taken from; may be deleted. */
+  id: string;
+  /** Locale → plain-text title map. */
+  title: {
+    [key: string]: string;
+  };
+  /** Locale → markdown body map. */
+  description_long: {
+    [key: string]: string;
+  };
+};
+export type PatchNoteHistory = {
+  /** The package of the announcement in effect, in its order. Empty when none is in effect. */
+  patch_notes: PatchNoteSnapshot[];
+  /** Set when an announcement is in effect and the caller has not recorded it as seen: the client opens the dialog, then records this id. */
+  pending_announcement_id?: string | null;
+};
+export type PatchNoteOrderRequest = {
+  /** Every patch note's id, exactly once; anything else is refused. */
+  ids: string[];
+};
+export type PatchNoteAnnouncement = {
+  id: string;
+  announced_at: string;
+  /** Uid of the administrator who announced. */
+  announced_by?: string | null;
+};
+export type PatchNoteAnnounceRequest = {
+  /** The ids of the included patch notes, in order, as the confirmation listed them. Refused with `409` unless they are exactly the currently included ones, in that order, and at most 10. */
+  ids: string[];
+};
+export type AnnouncementExposure = {
+  /** For a patch-note line: the announcement's id. */
+  id: string;
+  kind: "banner" | "patch_note";
+  /** The banner, or the first patch note of the package. May name an announcement that has since been deleted. */
+  announcement_id: string;
+  /** Locale → title when the exposure started: the banner's, or the first patch note's. */
+  label: {
+    [key: string]: string;
+  };
+  /** The banner's severity when it was enabled; null for patch notes. */
+  severity?: ("info" | "warning" | "error" | "success") | null;
+  /** How many patch notes the package holds. Null for a banner, and for an older patch-note line that kept no package: only a non-null value means the package can be read. */
+  note_count?: number | null;
+  /** When users started seeing it. */
+  activated_at: string;
+  /** When the banner was disabled or deleted, or the announcement replaced or withdrawn. Null while users still see it. */
+  deactivated_at?: string | null;
+  /** Uid of the administrator who started it. */
+  actor_uid?: string | null;
+};
+export type AnnouncementWriteRequest = {
+  /** `banner` or `patch_note`. An update cannot change it. */
+  kind?: "banner" | "patch_note";
+  /** Banner only; a patch note is stored as `info`. */
+  severity: "info" | "warning" | "error" | "success";
+  /** Locale → plain-text title map. Both kinds need at least one non-empty locale; a patch note needs a title in exactly the locales that have a body. */
+  title: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map shown in the banner. A banner needs at least one non-empty locale; a patch note has none. */
+  description_short: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map. For a banner, the optional more-info dialog. For a patch note, its body: at least one non-empty locale. */
+  description_long?: {
+    [key: string]: string;
+  };
+  /** Create disabled by default so an admin can draft in peace. */
+  enabled?: boolean;
+  /** Banner only; a patch note is always dismissible. */
+  dismissible?: boolean;
+};
+export type SetAnnouncementEnabledRequest = {
+  enabled: boolean;
+};
+export type StartTaskResponse = {
+  task_id: string;
+};
+export type IngestionProcessingProfile = "fast" | "medium" | "rich";
+export type StartIngestionParams = {
+  resource_ids: string[];
+  profile?: IngestionProcessingProfile;
+};
+export type StartIngestionRequest = {
+  kind?: "ingestion";
+  params: StartIngestionParams;
+};
+export type StartEvaluationParams = {
+  campaign_id: string;
+};
+export type StartEvaluationRequest = {
+  kind?: "evaluation";
+  params: StartEvaluationParams;
+};
+export type StartMigrationRequest = {
+  kind?: "migration";
+};
+export type ErasureReason = "user_deleted" | "member_removed" | "idle_expired";
+export type StartErasureRequest = {
+  kind?: "erasure";
+  reason: ErasureReason;
+};
+export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
+export type TaskTarget = {
+  type: string;
+  id: string;
+  label: string;
+};
+export type IngestionDetail = {
+  processed: number;
+  total: number;
+  failed: number;
+  preview: number;
+  vectorized: number;
+  sql_indexed: number;
+};
+export type EvaluationDetail = {
+  campaign_id: string;
+  completed: number;
+  total: number;
+  passed: number;
+  failed: number;
+  execution_errors: number;
+  scoring_errors: number;
+};
+export type TaskLogDetail = {
+  level: "info" | "warn" | "error";
+  message: string;
+};
+export type MigrationResult = {
+  import_id: string;
+  source_platform: string;
+  identities_created?: number;
+  users_processed?: number;
+  users_skipped?: string[];
+  teams_imported?: number;
+  teams_skipped?: number;
+  teams_provisioned?: number;
+  team_roles_granted?: number;
+  team_roles_skipped?: number;
+  platform_roles_granted?: number;
+  agents_imported?: number;
+  agents_skipped?: number;
+  agents_gap?: number;
+  tags_imported?: number;
+  tags_skipped?: number;
+  docs_imported?: number;
+  docs_skipped?: number;
+  warnings?: string[];
+};
+export type MigrationDetail = {
+  step_id: string;
+  processed: number;
+  total: number;
+  failed: number;
+  result?: MigrationResult | null;
+};
+export type ErasureDetail = {
+  reason?: ErasureReason | null;
+  stores_ok?: number;
+  stores_total?: number;
+  attempts?: number;
+};
+export type TaskSummary = {
+  task_id: string;
+  kind: string;
+  state: TaskState;
+  progress?: number | null;
+  step?: string | null;
+  error?: string | null;
+  target?: TaskTarget | null;
+  created_by?: string | null;
+  team_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  scheduled_for?: string | null;
+  detail?: IngestionDetail | EvaluationDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
+};
+export type TaskListResponse = {
+  tasks: TaskSummary[];
+};
+export type AcknowledgeTaskResponse = {
+  task_id: string;
+  acknowledged_at: string;
+  acknowledged_by: string | null;
+};
+export type SkillUsageRow = {
+  skill_name: string;
+  user_count: number;
+  model_count: number;
+  total: number;
+};
+export type SkillUsageResponse = {
+  rows: SkillUsageRow[];
+  since: string;
+  until: string;
+  truncated?: boolean;
+};
+export type TimeSeriesPoint = {
+  date: string;
+  value: number;
+  co2e_grams?: number | null;
+  kwh?: number | null;
+  cost_usd?: number | null;
+};
+export type TimeSeriesResponse = {
+  rows: TimeSeriesPoint[];
+  since: string;
+  until: string;
+  interval: string;
+  window?: string | null;
+};
+export type ScalarResponse = {
+  value: number;
+  since: string;
+  until: string;
+};
+export type LabelValuePoint = {
+  label: string;
+  value: number;
+  co2e_grams?: number | null;
+  kwh?: number | null;
+  cost_usd?: number | null;
+};
+export type LabelValueResponse = {
+  rows: LabelValuePoint[];
+  since: string;
+  until: string;
+};
+export type DistributionResponse = {
+  rows: LabelValuePoint[];
+  median?: number | null;
+  since: string;
+  until: string;
+};
+export type ScalarWithDeltaResponse = {
+  value?: number | null;
+  delta?: number | null;
+  unavailable?: boolean;
+  since: string;
+  until: string;
+};
+export type MultiSeriesPoint = {
+  date: string;
+  values: {
+    [key: string]: number;
+  };
+};
+export type MultiSeriesTimeSeriesResponse = {
+  rows: MultiSeriesPoint[];
+  series: string[];
+  since: string;
+  until: string;
+  interval: string;
+};
+export type UserTopAgentRow = {
+  agent_instance_id: string;
+  agent_name: string;
+  team_id?: string | null;
+  value: number;
+};
+export type UserTopAgentsResponse = {
+  rows: UserTopAgentRow[];
+  since: string;
+  until: string;
+};
+export type UserRecentAgentRow = {
+  agent_instance_id: string;
+  agent_name: string;
+  team_id?: string | null;
+  last_used: string;
+};
+export type UserRecentAgentsResponse = {
+  rows: UserRecentAgentRow[];
+  since: string;
+  until: string;
+};
+export type CreationAssistantUsageResponse = {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  drafts: number;
+  since: string;
+  until: string;
+};
+export type TeamStorageRow = {
+  team_id: string;
+  label: string;
+  used_bytes: number;
+  quota_bytes?: number | null;
+};
+export type TeamStorageResponse = {
+  rows: TeamStorageRow[];
+  since: string;
+  until: string;
+};
+export type WebResearchSummaryResponse = {
+  tool_calls: number;
+  searches: number;
+  fetches: number;
+  billable_searches: number;
+  estimated_cost_usd: number;
+  blocked: number;
+  saturated: number;
+  failed: number;
+  unique_users: number;
+  p95_ms: number | null;
+  by_reason: LabelValuePoint[];
+  since: string;
+  until: string;
+};
+export type CampaignCreatedResponse = {
+  campaign_id: string;
+  task_id: string | null;
+  state: string;
+};
+export type ManagedInstanceTarget = {
+  kind: "managed_instance";
+  agent_instance_id: string;
+};
+export type RuntimeAgentTarget = {
+  kind: "runtime_agent";
+  runtime_id: string;
+  agent_id: string;
+};
+export type EvaluationCaseInput = {
+  external_id?: string | null;
+  input: string;
+  expected_output?: string | null;
+  tags?: string[];
+};
+export type EvaluationDataset = {
+  name: string;
+  version?: string | null;
+  cases: EvaluationCaseInput[];
+};
+export type EvaluationExecutionOptions = {
+  max_concurrency?: number;
+  case_timeout_seconds?: number;
+};
+export type CreateEvaluationCampaignRequest = {
+  name: string;
+  team_id: string;
+  target: ManagedInstanceTarget | RuntimeAgentTarget;
+  dataset: EvaluationDataset;
+  profile?: string;
+  judge_profile_id: string;
+  execution?: EvaluationExecutionOptions;
+};
+export type EvaluationCampaignResponse = {
+  schema_version?: "1";
+  campaign_id: string;
+  task_id: string | null;
+  name: string;
+  team_id: string;
+  created_by: string;
+  target: ManagedInstanceTarget | RuntimeAgentTarget;
+  dataset_name: string;
+  dataset_version: string | null;
+  profile: string;
+  judge_profile_id: string;
+  operational_state: string;
+  verdict: string;
+  total_cases: number;
+  completed_cases: number;
+  passed_cases: number;
+  failed_cases: number;
+  execution_error_cases: number;
+  scoring_error_cases: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type EvaluationCampaignListResponse = {
+  campaigns: EvaluationCampaignResponse[];
+  total: number;
+};
+export type EvaluationMetricResultResponse = {
+  name: string;
+  provider: string;
+  score: number | null;
+  threshold: number | null;
+  verdict: "passed" | "failed" | "skipped" | "error";
+  explanation: string | null;
+  error: string | null;
+};
+export type EvaluationCaseResponse = {
+  case_id: string;
+  campaign_id: string;
+  external_id: string | null;
+  status: string;
+  outcome: string | null;
+  verdict: string;
+  input: string;
+  expected_output: string | null;
+  actual_output: string | null;
+  profile: string | null;
+  latency_ms: number | null;
+  execution_error: string | null;
+  scoring_errors: string[];
+  metrics: EvaluationMetricResultResponse[];
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type EvaluationCaseListResponse = {
+  cases: EvaluationCaseResponse[];
+  total: number;
+};
+export type ImportLaunchResponse = {
+  task_id: string;
+  import_id: string;
+  target: TaskTarget;
+};
+export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
+  file: string;
+  label?: string | null;
+};
+export type TeamStats = {
+  team_id: string;
+  name: string;
+  admins: number;
+  editors: number;
+  analysts: number;
+  members: number;
+  total_members: number;
+  agents: number;
+  prompts: number;
+};
+export type PlatformStats = {
+  teams: number;
+  distinct_users: number;
+  total_agents: number;
+  total_prompts: number;
+  per_team: TeamStats[];
+};
+export type ResetLaunchResponse = {
+  task_id: string;
+};
+export const {
+  useHealthzControlPlaneV1HealthzGetQuery,
+  useLazyHealthzControlPlaneV1HealthzGetQuery,
+  useReadyControlPlaneV1ReadyGetQuery,
+  useLazyReadyControlPlaneV1ReadyGetQuery,
+  useGetPurgePolicySummaryControlPlaneV1PoliciesPurgeGetQuery,
+  useLazyGetPurgePolicySummaryControlPlaneV1PoliciesPurgeGetQuery,
+  useResolvePurgeControlPlaneV1PoliciesPurgeResolvePostMutation,
+  useTriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostMutation,
+  useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
+  useLazyGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
+  useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation,
+  usePreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery,
+  useLazyPreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery,
+  useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
+  useLazyGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
+  usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation,
+  useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation,
+  useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
+  useLazyListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
+  useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation,
+  useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation,
+  useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation,
+  usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,
+  useLazyPreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,
+  useImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostMutation,
+  useListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery,
+  useLazyListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery,
+  useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation,
+  useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation,
+  useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useLazyListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery,
+  useListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery,
+  useLazyListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery,
+  useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation,
+  useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation,
+  useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation,
+  useGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery,
+  useLazyGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery,
+  useSetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutMutation,
+  useRegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostMutation,
+  useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
+  useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
+  usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
+  useLazyPreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
+  useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation,
+  useAcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostMutation,
+  useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation,
+  useListUsersControlPlaneV1UsersGetQuery,
+  useLazyListUsersControlPlaneV1UsersGetQuery,
+  useCreateUserControlPlaneV1UsersPostMutation,
+  useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
+  useLazyGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
+  useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery,
+  useLazyListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery,
+  useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation,
+  useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation,
+  useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
+  useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation,
+  useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation,
+  useGetUserDetailsControlPlaneV1UserGetQuery,
+  useLazyGetUserDetailsControlPlaneV1UserGetQuery,
+  useValidateGcuControlPlaneV1GcuPostMutation,
+  useListTeamsControlPlaneV1TeamsGetQuery,
+  useLazyListTeamsControlPlaneV1TeamsGetQuery,
+  useCreateTeamControlPlaneV1TeamsPostMutation,
+  useListAllTeamsControlPlaneV1TeamsAllGetQuery,
+  useLazyListAllTeamsControlPlaneV1TeamsAllGetQuery,
+  useSearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
+  useLazySearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
+  useGetTeamControlPlaneV1TeamsTeamIdGetQuery,
+  useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
+  useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
+  useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
+  useEditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchMutation,
+  useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
+  useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
+  useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
+  useLazyGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
+  useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation,
+  useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery,
+  useLazyGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery,
+  useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation,
+  useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
+  useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
+  useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
+  useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation,
+  useSearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetQuery,
+  useLazySearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetQuery,
+  useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation,
+  useGrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostMutation,
+  useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation,
+  useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery,
+  useLazyGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery,
+  useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
+  useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
+  useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
+  useLazyGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
+  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
+  useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
+  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
+  usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
+  usePostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostMutation,
+  useGetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetQuery,
+  useLazyGetCreationAssistantRuntimeSettingsControlPlaneV1TeamsTeamIdCreationAssistantSettingsGetQuery,
+  usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
+  useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
+  usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
+  usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
+  useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
+  useLazyGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
+  usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
+  useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
+  useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
+  usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
+  useLazyGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
+  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
+  useLazyGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
+  useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
+  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
+  usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
+  useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
+  usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
+  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
+  useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation,
+  useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation,
+  usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
+  usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation,
+  usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
+  useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
+  useLazyGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
+  useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
+  useLazyGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
+  usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
+  usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation,
+  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
+  useLazyGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
+  usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation,
+  usePutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutMutation,
+  useDeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteMutation,
+  useGetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetQuery,
+  useLazyGetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetQuery,
+  usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
+  useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
+  useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,
+  useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
+  useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
+  usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
+  useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
+  useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
+  useLazyGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
+  usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
+  useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
+  usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
+  useGetAgentInstanceSkillsQuery,
+  useLazyGetAgentInstanceSkillsQuery,
+  useGetAgentInstanceSkillDetailQuery,
+  useLazyGetAgentInstanceSkillDetailQuery,
+  usePrepareAgentExecutionMutation,
+  useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
+  useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
+  useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
+  useGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,
+  useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,
+  usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation,
+  useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation,
+  usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
+  usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
+  usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
+  usePublishKnowledgeBaseDefinitionMutation,
+  useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
+  useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
+  useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
+  useLazyGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
+  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery,
+  useLazyListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery,
+  useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation,
+  useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
+  useLazyGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
+  useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation,
+  useGetKnowledgeBaseRunContextQuery,
+  useLazyGetKnowledgeBaseRunContextQuery,
+  useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
+  useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
+  useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
+  useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
+  useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
+  useGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
+  useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
+  useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
+  useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
+  usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
+  useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation,
+  useWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery,
+  useLazyWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery,
+  useListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery,
+  useLazyListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery,
+  useCreatePageControlPlaneV1TeamsTeamIdWikiPagesPostMutation,
+  useReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetQuery,
+  useLazyReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetQuery,
+  useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation,
+  useReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetQuery,
+  useLazyReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetQuery,
+  useWritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutMutation,
+  usePatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchMutation,
+  useDeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteMutation,
+  useSetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostMutation,
+  useListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetQuery,
+  useLazyListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetQuery,
+  useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation,
+  useProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostMutation,
+  useProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostMutation,
+  useReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetQuery,
+  useLazyReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetQuery,
+  usePublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostMutation,
+  useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
+  useLazyGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
+  usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
+  useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
+  useLazyGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
+  usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation,
+  useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation,
+  useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
+  useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
+  usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
+  useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
+  useLazyGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
+  usePreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,
+  useLazyPreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,
+  useSetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutMutation,
+  usePreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetQuery,
+  useLazyPreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetQuery,
+  useSetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutMutation,
+  usePostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostMutation,
+  usePostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostMutation,
+  usePostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostMutation,
+  useGetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetQuery,
+  useLazyGetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetQuery,
+  useGetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetQuery,
+  useLazyGetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetQuery,
+  usePutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutMutation,
+  useDeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteMutation,
+  useGetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetQuery,
+  useLazyGetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetQuery,
+  usePostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostMutation,
+  useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
+  useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
+  useGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery,
+  useLazyGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery,
+  useMarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutMutation,
+  useSetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutMutation,
+  useGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery,
+  useLazyGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery,
+  useAnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostMutation,
+  useWithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteMutation,
+  useGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery,
+  useLazyGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery,
+  useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
+  useLazyListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery,
+  useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
+  useLazyListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
+  useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation,
+  useUpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutMutation,
+  useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation,
+  useSetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutMutation,
+  useStartTaskControlPlaneV1TasksPostMutation,
+  useListTasksControlPlaneV1TasksGetQuery,
+  useLazyListTasksControlPlaneV1TasksGetQuery,
+  useStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
+  useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
+  useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
+  useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation,
+  useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
+  useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
+  useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
+  useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
+  useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,
+  useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
+  useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
+  useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
+  useGetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetQuery,
+  useLazyGetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetQuery,
+  useListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetQuery,
+  useLazyListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetQuery,
+  useGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
+  useLazyGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
+  useImportSnapshotControlPlaneV1ImportExportImportPostMutation,
+  useExportSnapshotControlPlaneV1ImportExportExportGetQuery,
+  useLazyExportSnapshotControlPlaneV1ImportExportExportGetQuery,
+  usePlatformStatsControlPlaneV1ImportExportStatsGetQuery,
+  useLazyPlatformStatsControlPlaneV1ImportExportStatsGetQuery,
+  useResetPlatformDataControlPlaneV1ImportExportResetPostMutation,
+} = injectedRtkApi;

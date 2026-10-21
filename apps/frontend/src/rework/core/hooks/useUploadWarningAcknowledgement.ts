@@ -14,7 +14,7 @@
 
 import { useCallback } from "react";
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
-import type { UploadWarning } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { UploadWarning } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { useLocalizedUploadWarning } from "./useLocalizedUploadWarning";
 
 type UploadWarningAcknowledgement = {

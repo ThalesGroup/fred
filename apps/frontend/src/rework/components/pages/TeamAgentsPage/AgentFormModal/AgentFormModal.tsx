@@ -20,12 +20,12 @@ import { useFrontendProperties } from "../../../../../hooks/useFrontendPropertie
 import {
   useAvailableModelProfilesQuery,
   useTeamRoutingPolicyQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
 import type {
   AgentTemplateSummary,
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import { CreationAssistantDialog } from "./CreationAssistantDialog/CreationAssistantDialog.tsx";
 import {

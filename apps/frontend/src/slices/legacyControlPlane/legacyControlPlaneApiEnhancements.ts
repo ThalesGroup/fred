@@ -1,0 +1,1208 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// NOT GENERATED. Safe to edit.
+import {
+  legacyControlPlaneApi as api,
+  MarketplaceAgentSummary,
+  UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg,
+  UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg,
+} from "./legacyControlPlaneOpenApi";
+
+type FavoriteArg = { teamId: string; promptId: string };
+type FavoriteLifecycle = {
+  dispatch: (action: unknown) => unknown;
+  queryFulfilled: Promise<unknown>;
+};
+
+/** Flips the star in both prompt listings at once, and back if the call fails. */
+async function patchFavorite({ teamId, promptId }: FavoriteArg, favorite: boolean, lifecycle: FavoriteLifecycle) {
+  const flip = (draft: { id: string; is_favorite?: boolean }[]) => {
+    const prompt = draft.find((p) => p.id === promptId);
+    if (prompt) prompt.is_favorite = favorite;
+  };
+  const patches = [
+    lifecycle.dispatch(api.util.updateQueryData("getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet", { teamId }, flip)),
+    lifecycle.dispatch(
+      api.util.updateQueryData("getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet", { teamId }, flip),
+    ),
+  ] as { undo: () => void }[];
+  try {
+    await lifecycle.queryFulfilled;
+  } catch {
+    patches.forEach((patch) => patch.undo());
+  }
+}
+
+type LikeLifecycle = {
+  dispatch: (action: unknown) => unknown;
+  getState: () => unknown;
+  queryFulfilled: Promise<{ data: MarketplaceAgentSummary }>;
+};
+
+/** Writes the like answer (the full entry) into every cached listing, so the
+ * heart and count are current before the next click instead of after a refetch. */
+async function patchLike(lifecycle: LikeLifecycle) {
+  let entry: MarketplaceAgentSummary;
+  try {
+    entry = (await lifecycle.queryFulfilled).data;
+  } catch {
+    return;
+  }
+  const endpoint = "getMarketplaceAgentsControlPlaneV1MarketplaceAgentsGet" as const;
+  const state = lifecycle.getState() as Parameters<typeof api.util.selectCachedArgsForQuery>[0];
+  for (const args of api.util.selectCachedArgsForQuery(state, endpoint)) {
+    lifecycle.dispatch(
+      api.util.updateQueryData(endpoint, args, (draft) => {
+        const index = draft.findIndex((agent) => agent.entry_id === entry.entry_id);
+        if (index >= 0) draft[index] = entry;
+      }),
+    );
+  }
+}
+
+export const enhancedControlPlaneApi = api.enhanceEndpoints({
+  addTagTypes: [
+    "ControlPlaneTeam",
+    "ControlPlaneTeamMember",
+    "ControlPlaneUser",
+    "ControlPlaneSession",
+    "ControlPlaneSessionAttachment",
+    "ControlPlaneCapability",
+    "ControlPlaneRoutingPolicy",
+    "ControlPlanePrompt",
+    "ControlPlaneAgentInstance",
+    "ControlPlanePlatformModelBinding",
+    "ControlPlanePlatformPrompt",
+    "ControlPlaneCreationAssistantSettings",
+    "ControlPlanePlatformUiSettings",
+    "ControlPlaneMarketplaceSettings",
+    "ControlPlaneAgentMarketplace",
+    "ControlPlanePlatformDefaultTeams",
+    "ControlPlanePlatformRole",
+    "ControlPlaneTeamWiki",
+    "ControlPlaneKnowledgeBase",
+    "PlatformAccess",
+    "PlatformAccessLinks",
+    "TeamJoinLink",
+    "PlatformAccessJoiners",
+    "ControlPlaneAnnouncement",
+  ],
+  endpoints: {
+    validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
+    getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
+    getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: { keepUnusedDataFor: 0 },
+    savePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPut: { invalidatesTags: ["PlatformAccess"] },
+    listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: { providesTags: ["PlatformAccess"] },
+    previewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGet: { providesTags: ["PlatformAccess"] },
+    listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet: { providesTags: ["PlatformAccess"] },
+    getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: { providesTags: ["PlatformAccess"] },
+    previewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGet: { providesTags: ["PlatformAccess"] },
+    setPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatch: { invalidatesTags: ["PlatformAccess"] },
+    grantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPost: { invalidatesTags: ["PlatformAccess"] },
+    grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: { invalidatesTags: ["PlatformAccess"] },
+    revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: { invalidatesTags: ["PlatformAccess"] },
+    importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: { invalidatesTags: ["PlatformAccess"] },
+    setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: {
+      invalidatesTags: ["PlatformAccess", "PlatformAccessLinks"],
+    },
+    generatePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPost: {
+      invalidatesTags: ["PlatformAccessLinks"],
+    },
+    listPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGet: {
+      providesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
+    },
+    listPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGet: {
+      providesTags: (_result, _error, arg) => [{ type: "PlatformAccessJoiners", id: arg.linkId }],
+    },
+    deleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDelete: {
+      invalidatesTags: (_result, _error, arg) => [{ type: "PlatformAccessLinks", id: arg.teamId }],
+    },
+    revokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDelete: {
+      invalidatesTags: ["PlatformAccessLinks"],
+    },
+    // One join link per team; both mutations return the new state.
+    getTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGet: {
+      providesTags: (_result, _error, arg) => [{ type: "TeamJoinLink", id: arg.teamId }],
+      keepUnusedDataFor: 0,
+    },
+    setTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPut: {
+      invalidatesTags: (_result, _error, arg) => [{ type: "TeamJoinLink", id: arg.teamId }],
+    },
+    regenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePost: {
+      invalidatesTags: (_result, _error, arg) => [{ type: "TeamJoinLink", id: arg.teamId }],
+    },
+    recordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPost: {
+      invalidatesTags: ["PlatformAccessLinks"],
+    },
+    acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: { invalidatesTags: ["PlatformAccess"] },
+    enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: {
+      invalidatesTags: ["PlatformAccess", "ControlPlaneTeam", "ControlPlaneTeamMember", "PlatformAccessJoiners"],
+    },
+
+    // Platform announcements. Both reads share one LIST tag: an admin mutation
+    // must refresh the admin table AND the banner stack behind it, since the
+    // admin is looking at the same app the banner renders in.
+    getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    listAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    createAnnouncementControlPlaneV1AdminPlatformAnnouncementsPost: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    updateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    setAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    // The activation history, the users' patch-note history and the current
+    // announcement all move with admin mutations, so they ride the LIST tag.
+    listExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    getPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    getPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    setPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    announcePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPost: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
+    // carries a page's content and its history.
+    //
+    // The page read is addressed by slug but tagged by `page_id` off the RESULT:
+    // every mutation knows the page id and none of them knows the slug, so
+    // tagging by slug would leave a write unable to invalidate the very page it
+    // just changed — the article would keep rendering pre-save text and, with
+    // it, a stale `revision_id`, which makes the NEXT save conflict every time.
+    listPagesControlPlaneV1TeamsTeamIdWikiPagesGet: {
+      providesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki" as const, id: `TREE-${arg.teamId}` }],
+    },
+    wikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
+    readPageControlPlaneV1TeamsTeamIdWikiPagesSlugGet: {
+      providesTags: (result, _e, arg) =>
+        result
+          ? [{ type: "ControlPlaneTeamWiki" as const, id: `PAGE-${arg.teamId}-${result.page.page_id}` }]
+          : [{ type: "ControlPlaneTeamWiki" as const, id: `TREE-${arg.teamId}` }],
+    },
+    readRulesControlPlaneV1TeamsTeamIdWikiRulesGet: {
+      providesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki" as const, id: `RULES-${arg.teamId}` }],
+    },
+    listRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGet: {
+      providesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki" as const, id: `HISTORY-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    // Writes invalidate the whole team's wiki: a rename or a move changes the
+    // tree, a restore changes content and history, and the payloads do not
+    // carry enough to invalidate more precisely without guessing.
+    createPageControlPlaneV1TeamsTeamIdWikiPagesPost: {
+      invalidatesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` }],
+    },
+    writePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPut: {
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+        { type: "ControlPlaneTeamWiki", id: `HISTORY-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    // A rename changes the title the ARTICLE renders, not only the tree row.
+    patchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatch: {
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    deletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDelete: {
+      invalidatesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` }],
+    },
+    // The review chip lives on the article as well as in the tree, and a
+    // validation is its own entry in the history panel — without this tag
+    // the panel kept showing the version list from before it.
+    setReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPost: {
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+        { type: "ControlPlaneTeamWiki", id: `HISTORY-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    restoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePost: {
+      // `RULES-` too: the history panel and its restore button are offered on
+      // the rules page like any other, and that page is cached under its own
+      // tag. Without it the article kept rendering pre-restore text AND a
+      // stale revision id, which made the next save conflict every time.
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+        { type: "ControlPlaneTeamWiki", id: `HISTORY-${arg.teamId}-${arg.pageId}` },
+        { type: "ControlPlaneTeamWiki", id: `RULES-${arg.teamId}` },
+      ],
+    },
+    writeRulesControlPlaneV1TeamsTeamIdWikiRulesPut: {
+      // The rules page's history is keyed by its page id, which the request
+      // args do not carry — read it off the RESULT instead, like the `PAGE-`
+      // tag above does.
+      invalidatesTags: (result, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `RULES-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        ...(result
+          ? [{ type: "ControlPlaneTeamWiki" as const, id: `HISTORY-${arg.teamId}-${result.page.page_id}` }]
+          : []),
+      ],
+    },
+    // #2148: bootstrap's `available_teams`/`active_team` are the same team
+    // rows `listTeams`/`getTeam` expose — tag them the same way so every
+    // existing team mutation (join, add/remove member, grant/revoke role,
+    // create/update) invalidates bootstrap's cache entry too, now that
+    // bootstrap no longer forces a refetch on every mount.
+    getFrontendBootstrapControlPlaneV1FrontendBootstrapGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...(result.available_teams ?? []).map((team) => ({
+                type: "ControlPlaneTeam" as const,
+                id: team.id,
+              })),
+              { type: "ControlPlaneTeam" as const, id: result.active_team.id },
+              { type: "ControlPlaneTeam" as const, id: "LIST" },
+              { type: "ControlPlaneUser" as const, id: "ME" },
+            ]
+          : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
+    },
+    // Accepting the charter turns the caller's pending_team_admin relations into
+    // team_admin, so every team projection must be read again.
+    acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: {
+      invalidatesTags: ["ControlPlaneTeam"],
+    },
+    // Read again by the same acceptance, alongside the team projections.
+    getTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGet: {
+      providesTags: ["ControlPlaneTeam"],
+    },
+    // Admin capabilities dashboard (CAPAB-01 / #1981). Every enablement mutation
+    // re-reads the aggregated catalog so scope/enabled-team state stays truthful.
+    getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
+    // The team application catalog is another projection of capability
+    // enablement. Reusing the LIST tag makes a local admin toggle remove or add
+    // an open app immediately; focus + bounded polling cover other sessions.
+    getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
+    // Enablement changes agent state, marketplace entries and usable models.
+    putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+      ],
+    },
+    deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+      ],
+    },
+    putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
+      invalidatesTags: [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: "ALL" },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        "ControlPlaneTeam",
+        "ControlPlaneRoutingPolicy",
+      ],
+    },
+    putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: {
+      invalidatesTags: [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: "ALL" },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        "ControlPlaneTeam",
+        "ControlPlaneRoutingPolicy",
+      ],
+    },
+    // Reasoning availability shows in every team's Models section and composer.
+    patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: {
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }, "ControlPlaneRoutingPolicy"],
+    },
+    getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
+    },
+    getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet: {
+      providesTags: (result, _error, arg) => [
+        { type: "ControlPlaneSession", id: arg.sessionId },
+        ...(result?.agent_instance_id
+          ? [{ type: "ControlPlaneAgentInstance" as const, id: result.agent_instance_id }]
+          : []),
+      ],
+    },
+    postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneSession", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneSession", id: arg.createSessionRequest.session_id },
+      ],
+    },
+    deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+    },
+    // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
+      providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
+    },
+    // Every space it deleted from, not just the inactive list: the team sidebar
+    // reads `LIST-<teamId>`, so without these the cleanup leaves ghost rows a
+    // user can still click (landing on an empty conversation) until the list's
+    // own 30s poll catches up. The single-session delete above already does it.
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneSession", id: "INACTIVE" },
+        ...[...new Set(arg.bulkDeleteSessionsRequest.sessions.map((s) => s.team_id))].map((teamId) => ({
+          type: "ControlPlaneSession" as const,
+          id: `LIST-${teamId}`,
+        })),
+      ],
+    },
+    patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+    },
+    getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((attachment) => ({
+                type: "ControlPlaneSessionAttachment" as const,
+                id: `${arg.sessionId}-${attachment.attachment_id}`,
+              })),
+              { type: "ControlPlaneSessionAttachment" as const, id: `LIST-${arg.sessionId}` },
+            ]
+          : [{ type: "ControlPlaneSessionAttachment" as const, id: `LIST-${arg.sessionId}` }],
+    },
+    postTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSessionAttachment", id: `LIST-${arg.sessionId}` }],
+    },
+    deleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneSessionAttachment", id: `${arg.sessionId}-${arg.attachmentId}` },
+        { type: "ControlPlaneSessionAttachment", id: `LIST-${arg.sessionId}` },
+      ],
+    },
+    listUsersControlPlaneV1UsersGet: {
+      providesTags: [{ type: "ControlPlaneUser", id: "LIST" }],
+    },
+    getUsersByIdsControlPlaneV1UsersByIdsGet: {
+      providesTags: (result) => (result ?? []).map((user) => ({ type: "ControlPlaneUser" as const, id: user.id })),
+    },
+    // The caller's id is not in the mutation args, so every user entry is read
+    // again; team lists carry admin pictures too.
+    uploadMyAvatarControlPlaneV1UsersMeAvatarPost: {
+      query: (queryArg: UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg) => {
+        const formData = new FormData();
+        formData.append("file", queryArg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost.file);
+
+        return {
+          url: `/control-plane/v1/users/me/avatar`,
+          method: "POST",
+          body: formData,
+        };
+      },
+      invalidatesTags: ["ControlPlaneUser", { type: "ControlPlaneTeam", id: "LIST" }],
+    },
+    deleteMyAvatarControlPlaneV1UsersMeAvatarDelete: {
+      invalidatesTags: ["ControlPlaneUser", { type: "ControlPlaneTeam", id: "LIST" }],
+    },
+    // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405). The
+    // holders table is one aggregate, so a single LIST tag: every grant/revoke
+    // re-reads it — including the root badge and caller flag.
+    listPlatformRolesControlPlaneV1UsersPlatformRolesGet: {
+      providesTags: [{ type: "ControlPlanePlatformRole" as const, id: "LIST" }],
+    },
+    grantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPost: {
+      invalidatesTags: [{ type: "ControlPlanePlatformRole", id: "LIST" }],
+    },
+    revokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDelete: {
+      invalidatesTags: [{ type: "ControlPlanePlatformRole", id: "LIST" }],
+    },
+    listTeamsControlPlaneV1TeamsGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((team) => ({ type: "ControlPlaneTeam" as const, id: team.id })),
+              { type: "ControlPlaneTeam" as const, id: "LIST" },
+            ]
+          : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
+    },
+    listAllTeamsControlPlaneV1TeamsAllGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((team) => ({ type: "ControlPlaneTeam" as const, id: team.id })),
+              { type: "ControlPlaneTeam" as const, id: "LIST" },
+            ]
+          : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
+    },
+    getTeamControlPlaneV1TeamsTeamIdGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneTeam", id: arg.teamId }],
+    },
+    // A deleted team's published agents leave the marketplace with it.
+    deleteTeamControlPlaneV1TeamsTeamIdDelete: {
+      invalidatesTags: [
+        { type: "ControlPlaneTeam", id: "LIST" },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+      ],
+    },
+    createTeamControlPlaneV1TeamsPost: {
+      invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }, "PlatformAccess"],
+    },
+    // Platform-wide default teams for new users: replaced as a whole, one LIST tag.
+    getDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGet: {
+      providesTags: [{ type: "ControlPlanePlatformDefaultTeams" as const, id: "LIST" }],
+    },
+    setDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformDefaultTeams", id: "LIST" }],
+    },
+    updateTeamControlPlaneV1TeamsTeamIdPatch: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+        // A rename changes the names the default-teams query echoes.
+        { type: "ControlPlanePlatformDefaultTeams", id: "LIST" },
+        // Going private removes the team's agents from the marketplace.
+        ...(arg.updateTeamRequest.visibility
+          ? [
+              { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
+            ]
+          : []),
+      ],
+    },
+    // Platform admin edit: name, description and admins of any team.
+    // Same tags as the per-role routes it replaces in one save, plus the registry list.
+    editTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatch: {
+      invalidatesTags: (_, __, { teamId, editTeamRegistryRequest: body }) => [
+        "PlatformAccess",
+        { type: "ControlPlaneTeam", id: teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+        { type: "ControlPlaneTeamMember", id: `LIST-${teamId}` },
+        ...[...(body.add_admin_ids ?? []), ...(body.remove_admin_ids ?? [])].map((userId) => ({
+          type: "ControlPlaneTeamMember" as const,
+          id: `${teamId}-${userId}`,
+        })),
+        { type: "ControlPlanePlatformDefaultTeams", id: "LIST" },
+      ],
+    },
+    // TEAM-09: self-service join — same tags as updateTeam so the marketplace
+    // list (yourTeams/otherTeams split) and this team's own cache entry both
+    // refresh with the caller now a member.
+    joinTeamControlPlaneV1TeamsTeamIdJoinPost: {
+      invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+      ],
+    },
+    uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: {
+      query: (queryArg: UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg) => {
+        const formData = new FormData();
+        formData.append("file", queryArg.bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost.file);
+
+        return {
+          url: `/control-plane/v1/teams/${queryArg.teamId}/avatar`,
+          method: "POST",
+          body: formData,
+        };
+      },
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+      ],
+    },
+    listTeamMembersControlPlaneV1TeamsTeamIdMembersGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((member) => ({
+                type: "ControlPlaneTeamMember" as const,
+                id: `${arg.teamId}-${member.user.id}`,
+              })),
+              { type: "ControlPlaneTeamMember" as const, id: `LIST-${arg.teamId}` },
+            ]
+          : [{ type: "ControlPlaneTeamMember" as const, id: `LIST-${arg.teamId}` }],
+    },
+    addTeamMemberControlPlaneV1TeamsTeamIdMembersPost: {
+      invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+      ],
+    },
+    grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: {
+      invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
+        { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+      ],
+    },
+    revokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDelete: {
+      invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
+        { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+      ],
+    },
+    removeTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
+        { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+      ],
+    },
+    // Agent templates' `available_capabilities` is what the agent edit
+    // form's "Capacités incluses" indicators read to decide whether a
+    // capability is available (green) or missing (red). This query carried
+    // no tags at all, so an admin enabling/disabling a capability never
+    // refreshed it — the cached list just sat there (up to
+    // `keepUnusedDataFor`, since `legacyControlPlaneApi` has no
+    // refetchOnMount/Focus either) showing capabilities as missing that had
+    // just been turned on, until a full page reload wiped the whole store.
+    // Tagging it the same way the admin catalog query is tagged closes that
+    // gap for every consumer, not just the agent form (evaluation run
+    // creation reads the same field from the same query).
+    getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
+    // Agent instances. `legacyControlPlaneApi` has no refetchOnMount/Focus, so a
+    // cached list only refreshes through tags. The managed chat reads this
+    // list for the agent's display name and capability set, so without these
+    // tags an edit (rename, capability change, avatar) left the chat showing
+    // the pre-edit agent until the cache expired — the same failure the prompt
+    // selector had. Per-id tags cover edits/deletes of a specific instance;
+    // the LIST tag covers creates.
+    getTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((instance) => ({
+                type: "ControlPlaneAgentInstance" as const,
+                id: instance.agent_instance_id,
+              })),
+              { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+            ]
+          : [
+              { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+            ],
+    },
+    postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+    },
+    postTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+    },
+    patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        // Deactivation removes a published agent: the team's published count moves.
+        ...(arg.updateAgentInstanceRequest.status
+          ? [
+              { type: "ControlPlaneTeam" as const, id: arg.teamId },
+              { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
+            ]
+          : []),
+        // The recommended model may change, and the composer names it.
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+      ],
+    },
+    patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        // The recommended model may change, and the composer names it.
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+      ],
+    },
+    deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+      ],
+    },
+    // A copy lands in every target team: refresh each team's list it reached.
+    postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: {
+      invalidatesTags: (result) =>
+        (result?.results ?? [])
+          .filter((r) => r.agent)
+          .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
+    },
+    // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
+    // route needs no team — so it invalidates the whole type rather than one
+    // team's list: the alternative is passing a team id the API never asked for.
+    listKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
+    listKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneKnowledgeBase" as const, id: `LIST-${arg.teamId}` }],
+    },
+    createKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneKnowledgeBase", id: `LIST-${arg.knowledgeBaseInstanceCreate.team_id}` },
+      ],
+    },
+    deleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDelete: {
+      invalidatesTags: () => [{ type: "ControlPlaneKnowledgeBase" }],
+    },
+    // Prompt library (PROMPT-09 follow-up, #2174): the single-prompt detail
+    // query is shared by both the edit form and PromptViewDialog — without
+    // tag invalidation, saving a prompt never refreshed that cached detail,
+    // so the view dialog kept showing the pre-edit category/text forever.
+    getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((prompt) => ({ type: "ControlPlanePrompt" as const, id: prompt.id })),
+              { type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` },
+            ]
+          : [{ type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` }],
+    },
+    // The chat composer's command list. Shares the team's LIST tag, so
+    // authoring or clearing a command on the prompts page refreshes the menu
+    // instead of leaving a command that resolves to nothing.
+    getTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` }],
+    },
+    getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
+    },
+    // The composer's prompt selector reads this aggregated (personal + team)
+    // list. Provide per-prompt tags so editing a prompt in the library (which
+    // invalidates ControlPlanePrompt/<id>) refreshes the selector instead of
+    // serving the pre-edit name/description from cache — works for both
+    // personal- and team-scoped prompts since the tag is keyed by prompt id,
+    // not scope. The LIST tag covers team-scope adds/removes.
+    getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((prompt) => ({ type: "ControlPlanePrompt" as const, id: prompt.id })),
+              { type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` },
+            ]
+          : [{ type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` }],
+    },
+    postTeamPromptControlPlaneV1TeamsTeamIdPromptsPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` }],
+    },
+    putTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPut: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+      ],
+    },
+    deleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        // A deleted prompt (published or not) must also leave the community list.
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    // Patched in place rather than invalidated: a refetch of every listing per
+    // star click would flicker when several are clicked in a row.
+    addTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePut: {
+      onQueryStarted: (arg, lifecycle) => patchFavorite(arg, true, lifecycle),
+    },
+    removeTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDelete: {
+      onQueryStarted: (arg, lifecycle) => patchFavorite(arg, false, lifecycle),
+    },
+    // Prompts marketplace (PROMPT-06). The community listing is a live view of
+    // published team rows, so it shares the ControlPlanePrompt tag family: the
+    // shared "MARKETPLACE" id refreshes it, while per-prompt ids keep the team
+    // library and composer picker consistent when a prompt is (un)published.
+    getMarketplacePromptsControlPlaneV1MarketplacePromptsGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((prompt) => ({ type: "ControlPlanePrompt" as const, id: prompt.id })),
+              { type: "ControlPlanePrompt" as const, id: "MARKETPLACE" },
+            ]
+          : [{ type: "ControlPlanePrompt" as const, id: "MARKETPLACE" }],
+    },
+    getMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
+    },
+    postPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    postUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    // Recording a use bumps the shared counter; refresh the community list so
+    // its "most-used first" ordering and counters reflect the new value.
+    postMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePost: {
+      invalidatesTags: () => [{ type: "ControlPlanePrompt", id: "MARKETPLACE" }],
+    },
+    // Import copies the prompt (by value) into each target team's library.
+    postMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPost: {
+      invalidatesTags: (_, __, arg) =>
+        arg.marketplaceImportRequest.target_team_ids.map((teamId) => ({
+          type: "ControlPlanePrompt" as const,
+          id: `LIST-${teamId}`,
+        })),
+    },
+    // Team routing policy (TEAM-05, #2118).
+    getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
+    },
+    // A disable clears agents' recommended models, which the agent list shows.
+    // The response goes straight into the cache so switches never snap back.
+    updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+      onQueryStarted: async ({ teamId }, { dispatch, queryFulfilled }) => {
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(
+            api.util.updateQueryData(
+              "getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet",
+              { teamId },
+              () => data,
+            ),
+          );
+        } catch {
+          // The caller reports the failed write.
+        }
+      },
+    },
+    // Its effective default follows the stored policy, so a save refetches it.
+    getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
+    },
+    // The composer's model label (#2387). Tagged under the same
+    // ControlPlaneRoutingPolicy/teamId entity the policy read and write already
+    // use, so saving a routing policy refetches it: without that, the composer
+    // would keep naming the previous model until a reload — the exact kind of
+    // stale label this issue exists to remove.
+    getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
+    },
+    // Platform-wide chat model binding — chat-only, at most one binding ever
+    // exists, so a single LIST tag covers it, same shape as the admin
+    // capabilities catalog above.
+    getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: {
+      providesTags: [{ type: "ControlPlanePlatformModelBinding" as const, id: "LIST" }],
+    },
+    putPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
+    },
+    deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: {
+      invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
+    },
+    // Platform-wide platform prompt — a single row, so one LIST tag covers it,
+    // same shape as the platform model binding above.
+    getPlatformPromptControlPlaneV1AdminPlatformPromptGet: {
+      providesTags: [{ type: "ControlPlanePlatformPrompt" as const, id: "LIST" }],
+    },
+    putPlatformPromptControlPlaneV1AdminPlatformPromptPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
+    },
+    // Creation assistant settings (meta-prompt override, model): one row too.
+    getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: {
+      providesTags: [
+        { type: "ControlPlaneCreationAssistantSettings" as const, id: "LIST" },
+        { type: "ControlPlaneCapability" as const, id: "LIST" },
+      ],
+    },
+    putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: {
+      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
+    },
+    deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: {
+      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
+    },
+    getFrontendConfigControlPlaneV1FrontendConfigGet: {
+      providesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
+    },
+    // Platform UI theme settings: a single row, one LIST tag.
+    getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: {
+      providesTags: [{ type: "ControlPlanePlatformUiSettings" as const, id: "LIST" }],
+    },
+    putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
+    },
+    // Agents marketplace settings: a switch-off removes published agents (listing
+    // and card states) and changes every team's effective settings.
+    getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: {
+      providesTags: [{ type: "ControlPlaneMarketplaceSettings" as const, id: "LIST" }],
+    },
+    setMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPut: {
+      invalidatesTags: [
+        { type: "ControlPlaneMarketplaceSettings", id: "LIST" },
+        "ControlPlaneTeam",
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: "ALL" },
+      ],
+    },
+    setTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPut: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneMarketplaceSettings", id: "LIST" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+    },
+    // Agents marketplace: publishing changes the team's card states, published
+    // count (TeamWithPermissions, admin page) and the marketplace listing.
+    postAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneAgentMarketplace", id: "DETAIL" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneMarketplaceSettings", id: "LIST" },
+      ],
+    },
+    postAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlaneAgentMarketplace", id: "DETAIL" },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneMarketplaceSettings", id: "LIST" },
+      ],
+    },
+    postAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+    },
+    getMarketplaceAgentsControlPlaneV1MarketplaceAgentsGet: {
+      providesTags: [{ type: "ControlPlaneAgentMarketplace" as const, id: "LIST" }],
+    },
+    getMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGet: {
+      // "DETAIL" too: publish/unpublish only know the agent, not the entry id.
+      providesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentMarketplace" as const, id: arg.entryId },
+        { type: "ControlPlaneAgentMarketplace" as const, id: "DETAIL" },
+      ],
+    },
+    // The listing is patched from the answer; only the detail refetches.
+    putMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePut: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentMarketplace", id: arg.entryId }],
+      onQueryStarted: (_, lifecycle) => patchLike(lifecycle),
+    },
+    deleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDelete: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentMarketplace", id: arg.entryId }],
+      onQueryStarted: (_, lifecycle) => patchLike(lifecycle),
+    },
+    // An import lands in every target team and counts on the entry.
+    postMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPost: {
+      invalidatesTags: (result, __, arg) => [
+        { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
+        { type: "ControlPlaneAgentMarketplace" as const, id: arg.entryId },
+        ...(result?.results ?? [])
+          .filter((r) => r.agent)
+          .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
+      ],
+    },
+    // Read-only and shipped with the platform: it can only change on deploy, so
+    // it carries no cache tag — nothing in this app can invalidate it.
+    getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: {},
+  },
+});
+
+export const {
+  useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery: useFrontendConfigQuery,
+  useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
+  useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:
+    useRemovePromptFavoriteMutation,
+  // A team's Knowledge Bases: what fills a library, and how often.
+  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: useKnowledgeBasesQuery,
+  useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery: useKnowledgeBaseQuery,
+  useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation: useCreateKnowledgeBaseMutation,
+  useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation:
+    useDeleteKnowledgeBaseMutation,
+  useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery: useKnowledgeBaseDefinitionsQuery,
+  useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery: useKnowledgeBaseFieldsQuery,
+  useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
+  // Creation assistant: drafts an agent from a plain description; nothing is saved.
+  usePostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostMutation: useDraftAgentMutation,
+  // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
+  useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
+  useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation: useGrantPlatformRoleMutation,
+  useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation: useRevokePlatformRoleMutation,
+  // Batch uid → display-name resolution for audit fields (#1952).
+  useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery: useUsersByIdsQuery,
+  useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
+  useListAllTeamsControlPlaneV1TeamsAllGetQuery: useListAllTeamsQuery,
+  useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
+  useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
+  useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery: useDefaultTeamsForNewUsersQuery,
+  useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation:
+    useSetDefaultTeamsForNewUsersMutation,
+  useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
+  useEditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchMutation: useEditTeamRegistryMutation,
+  useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
+  useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
+  useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation: useUploadUserAvatarMutation,
+  useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation: useDeleteUserAvatarMutation,
+  useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
+  useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,
+  useSearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery: useSearchCandidateTeamAdminsQuery,
+  useSearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetQuery: useSearchCandidateTeamMembersQuery,
+  useLazySearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetQuery:
+    useLazySearchCandidateTeamMembersQuery,
+  useGrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostMutation: useGrantTeamMemberRoleMutation,
+  useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation:
+    useRevokeTeamMemberRoleMutation,
+  useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation: useRemoveTeamMemberMutation,
+  // Team routing policy (TEAM-05, #2118).
+  useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery: useTeamRoutingPolicyQuery,
+  useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation: useUpdateTeamRoutingPolicyMutation,
+  // Routing-policy picker option set (#2167).
+  useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery:
+    useAvailableModelProfilesQuery,
+  // The model a chat turn will actually route to — the composer label (#2387).
+  useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
+  useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery:
+    useLazyDisableImpactQuery,
+  useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
+  useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery: useMessagesOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery: useSessionsByScopeQuery,
+  // Engagement distributions (#2426) — histogram rows + a median, both fed to
+  // the Engagement section of the admin analytics page.
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery: useConversationsPerUserQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery: useConversationDepthQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery: useAgentsPerUserQuery,
+  // Engagement trends (#2428) — the same three medians, recomputed per bucket
+  // over a trailing window the response carries in `window`.
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery: useConversationsPerUserTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery: useConversationDepthTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery: useAgentsPerUserTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery: useTopTeamsBySessionsQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery: useAgentsTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
+  useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
+  // Home dashboard "Votre activité" — self-scoped scalar+delta presets (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery: useUserSessionsTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery: useUserMessagesTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery: useUserAgentsUsedTotalQuery,
+  // Home dashboard leaderboard — top agents / top teams (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery: useUserTopAgentsQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery: useUserTopTeamsQuery,
+  // Home dashboard — most recently used agents, newest first (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery: useUserRecentAgentsQuery,
+  // Lazy agent-instances fetch — the recent-agents preset returns only ids, so
+  // the Home tiles resolve each to its full instance across its (variable) team.
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: useLazyTeamAgentInstancesQuery,
+  // Home cleanup tool — inactive conversations across spaces + bulk delete (#2298).
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery: useMyInactiveSessionsQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation: useBulkDeleteMySessionsMutation,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,
+  // Platform-wide or team-scoped token usage (OBSERV-02 v3, F1/F2) — same
+  // shape as the user_-prefixed personal presets above, different scope.
+  useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery: useTokenUsageOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
+  useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
+  useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery: useCreationAssistantUsageQuery,
+  useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
+  useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery: useWebResearchSummaryQuery,
+  // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
+  useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
+  usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
+  useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
+  // Admin capabilities dashboard (CAPAB-01 / #1981).
+  useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
+  // Team-scoped native applications catalog.
+  useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery: useTeamApplicationsQuery,
+  usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:
+    useEnableTeamCapabilityMutation,
+  useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation:
+    useDisableTeamCapabilityMutation,
+  usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation:
+    useSetCapabilityDefaultOnMutation,
+  usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation:
+    useSetCapabilityPersonalScopeMutation,
+  // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
+  usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation:
+    useSetModelReasoningMutation,
+  // Fired on demand from the disable-confirmation dialog (lazy — not on render).
+  useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery:
+    useLazyCapabilityRevokeImpactQuery,
+  // Platform-wide chat model binding — chat-only.
+  useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery: usePlatformModelBindingQuery,
+  usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,
+  useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
+    useDeletePlatformModelBindingMutation,
+  // Platform-wide platform prompt — the first block of every agent's system prompt.
+  useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
+  usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
+  // Creation assistant settings (meta-prompt override + reset, model).
+  useGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery:
+    useCreationAssistantSettingsQuery,
+  usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation:
+    useSetCreationAssistantSettingsMutation,
+  useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation:
+    useResetCreationAssistantPromptMutation,
+  // Platform UI theme settings (default theme, hidden themes).
+  useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
+  usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,
+  // Agents marketplace settings (admin "Marketplaces" page).
+  useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery: useMarketplaceSettingsQuery,
+  useLazyPreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery:
+    useLazyMarketplaceDefaultImpactQuery,
+  useSetMarketplaceDefaultControlPlaneV1AdminMarketplaceSettingsDefaultPutMutation: useSetMarketplaceDefaultMutation,
+  useLazyPreviewTeamMarketplaceSettingsChangeControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsImpactGetQuery:
+    useLazyTeamMarketplaceSettingsImpactQuery,
+  useSetTeamMarketplaceSettingsControlPlaneV1AdminTeamsTeamIdMarketplaceSettingsPutMutation:
+    useSetTeamMarketplaceSettingsMutation,
+  // Agents marketplace: publication from the team card, listing, likes, import.
+  usePostAgentPublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPublishPostMutation: usePublishAgentMutation,
+  usePostAgentUnpublishControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdUnpublishPostMutation:
+    useUnpublishAgentMutation,
+  usePostAgentMarketplaceDismissControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdMarketplaceDismissPostMutation:
+    useDismissAgentMarketplaceRemovalMutation,
+  useGetMarketplaceAgentsControlPlaneV1MarketplaceAgentsGetQuery: useMarketplaceAgentsQuery,
+  useGetMarketplaceAgentControlPlaneV1MarketplaceAgentsEntryIdGetQuery: useMarketplaceAgentQuery,
+  usePutMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikePutMutation: useLikeMarketplaceAgentMutation,
+  useDeleteMarketplaceAgentLikeControlPlaneV1MarketplaceAgentsEntryIdLikeDeleteMutation:
+    useUnlikeMarketplaceAgentMutation,
+  useGetMarketplaceAgentImportTargetsControlPlaneV1MarketplaceAgentsEntryIdImportTargetsGetQuery:
+    useMarketplaceAgentImportTargetsQuery,
+  usePostMarketplaceAgentImportControlPlaneV1MarketplaceAgentsEntryIdImportPostMutation:
+    useImportMarketplaceAgentMutation,
+  // Read-only platform operating instructions, shown under the editable prompt.
+  useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
+  // Team wiki (WIKI-01/02), and whether the team has one at all (WIKI-03).
+  useWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery: useWikiAvailabilityQuery,
+  // Agent proposals (WIKI-04): read by the approval card to show the diff.
+  useReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetQuery: useWikiProposalQuery,
+  useListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery: useWikiPagesQuery,
+  useReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetQuery: useWikiPageQuery,
+  useReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetQuery: useWikiRulesQuery,
+  useListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetQuery: useWikiRevisionsQuery,
+  useCreatePageControlPlaneV1TeamsTeamIdWikiPagesPostMutation: useCreateWikiPageMutation,
+  useWritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutMutation: useWriteWikiPageMutation,
+  usePatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchMutation: usePatchWikiPageMutation,
+  useDeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteMutation: useDeleteWikiPageMutation,
+  useSetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostMutation: useSetWikiReviewMarkMutation,
+  useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation:
+    useRestoreWikiRevisionMutation,
+  useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation: useWriteWikiRulesMutation,
+  // Platform announcements: the admin CRUD, plus the delivery read the banner
+  // stack subscribes to. The stack drives its own refresh through
+  // `crossSessionRefreshOptions` — this app never calls `setupListeners`, so
+  // RTK's own `refetchOnFocus` would be inert.
+  useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery: useActiveAnnouncementsQuery,
+  useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery: useAnnouncementsQuery,
+  useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation: useCreateAnnouncementMutation,
+  useUpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutMutation: useUpdateAnnouncementMutation,
+  useSetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutMutation:
+    useSetAnnouncementEnabledMutation,
+  useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation:
+    useDeleteAnnouncementMutation,
+  useGetPatchNoteHistoryControlPlaneV1AnnouncementsPatchNotesGetQuery: usePatchNoteHistoryQuery,
+  useMarkPatchNoteAnnouncementSeenControlPlaneV1AnnouncementsPatchNoteAnnouncementsAnnouncementIdSeenPutMutation:
+    useMarkPatchNoteAnnouncementSeenMutation,
+  useSetPatchNoteOrderControlPlaneV1AdminPlatformAnnouncementsPatchNotesOrderPutMutation: useSetPatchNoteOrderMutation,
+  useGetPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementGetQuery:
+    usePatchNoteAnnouncementQuery,
+  useAnnouncePatchNotesControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementPostMutation:
+    useAnnouncePatchNotesMutation,
+  useWithdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDeleteMutation:
+    useWithdrawPatchNoteAnnouncementMutation,
+  useLazyGetPatchNotePackageControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementsAnnouncementIdGetQuery:
+    useLazyPatchNotePackageQuery,
+  useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
+    useAnnouncementExposureHistoryQuery,
+  // Team administrator charter acceptance.
+  useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
+  useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
+  useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery: usePlatformAccessStateQuery,
+  useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery: usePlatformAccessUsersQuery,
+  usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery: usePlatformAccessT0Query,
+  useListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery: usePlatformAccessTeamsQuery,
+  useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery: usePlatformAccessStatusQuery,
+  useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery: useLazyPlatformAccessStatusQuery,
+  usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery: useFreeEnrollmentPreviewQuery,
+  useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation: useSetPlatformFilteringMutation,
+  useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation: useGrantPlatformUserMutation,
+  useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation: useGrantPlatformUsersMutation,
+  useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation: useRevokePlatformUserMutation,
+  useImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostMutation: useImportPlatformT0Mutation,
+  useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation: useSetPlatformTeamMutation,
+  useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation:
+    useGeneratePlatformLinkMutation,
+  useAcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostMutation: useAcceptFreeCguMutation,
+  useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation: useEnrollFreeTeamMutation,
+  usePreviewPlatformAccessActivationControlPlaneV1AdminPlatformAccessActivationPreviewGetQuery:
+    usePlatformAccessActivationPreviewQuery,
+  useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery: usePlatformAccessOwnClaimsQuery,
+  usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation:
+    usePreviewPlatformPolicyMutation,
+  useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation: useSavePlatformPolicyMutation,
+  useListPlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksGetQuery:
+    usePlatformEnrollmentLinksQuery,
+  useListPlatformEnrollmentJoinersControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdJoinersGetQuery:
+    usePlatformEnrollmentJoinersQuery,
+  useRevealPlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdRevealPostMutation:
+    useRevealPlatformLinkMutation,
+  useRevokePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksLinkIdDeleteMutation:
+    useRevokePlatformLinkMutation,
+  useDeleteInactivePlatformEnrollmentLinksControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinksInactiveDeleteMutation:
+    useDeleteInactivePlatformLinksMutation,
+  useRecordFreeEnrollmentOpeningControlPlaneV1PlatformAccessFreeTokenOpeningPostMutation: useRecordFreeOpeningMutation,
+  useGetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkGetQuery: useTeamJoinLinkQuery,
+  useSetTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkPutMutation: useSetTeamJoinLinkMutation,
+  useRegenerateTeamJoinLinkControlPlaneV1TeamsTeamIdJoinLinkRegeneratePostMutation: useRegenerateTeamJoinLinkMutation,
+} = enhancedControlPlaneApi;

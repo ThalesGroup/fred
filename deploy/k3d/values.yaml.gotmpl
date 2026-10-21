@@ -1,0 +1,178 @@
+# Complete Rust control-plane ingestion overlay owned by this checkout.
+# make k3d-app ENV=secondary APP=fred DIR=../fred
+# prepare exports the selected worker's contract and provisions application identities.
+
+# secret: lists replace the instance lists, so retain every required dependency.
+x-postgres: &postgres
+  name: FRED_POSTGRES_PASSWORD
+  valueFrom: {secretKeyRef: {name: fred-secrets, key: POSTGRES_FRED_PASSWORD}}
+x-fga: &fga
+  name: OPENFGA_API_TOKEN
+  valueFrom: {secretKeyRef: {name: fred-secrets, key: OPENFGA_API_TOKEN}}
+x-model: &model
+  name: OPENAI_API_KEY
+  valueFrom: {secretKeyRef: {name: fred-model-credentials, key: OPENAI_API_KEY}}
+applications:
+  frontend:
+    # posture: use baked branding, without infrastructure credentials in the gateway.
+    extraEnvVars:
+      - name: FRONTEND_CONTROL_PLANE_UPSTREAM
+        value: http://control-plane-backend.{{ requiredEnv "K3D_NAMESPACE" }}.svc.cluster.local:8222
+    ingress:
+      hosts:
+        - host: ""
+          paths:
+            - {path: /, pathType: Prefix, service: {name: frontend, port: 80}}
+            - {path: /control-plane, pathType: Prefix, service: {name: control-plane-backend, port: 8222}}
+
+  fred-agents:
+    enabled: false
+
+  control-plane-backend:
+    # Keep the standard chart resource name; the executable is control-plane.
+    applicationName: control-plane-backend
+    command: {enabled: true, data: [control-plane, serve]}
+    serviceAccount:
+      name: control-plane-backend
+    ingress:
+      enabled: false
+    volumes:
+      - name: manager-catalog
+        configMap: {name: control-plane-backend-catalog}
+      - name: manager-config
+        configMap: {name: control-plane-backend-back}
+      - name: manager-env
+        secret: {secretName: control-plane-backend-env}
+    volumeMounts:
+      - {name: manager-catalog, mountPath: /app/config/lifecycle_policy_catalog.yaml, subPath: lifecycle_policy_catalog.yaml}
+      - {name: manager-config, mountPath: /app/config/configuration.yaml, subPath: configuration.yaml}
+      - {name: manager-env, mountPath: /app/config/.env, subPath: .env}
+    extraEnvVars:
+      - *postgres
+      - *fga
+      - name: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
+        valueFrom: {secretKeyRef: {name: fred-secrets, key: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET}}
+      - name: FRED_BOOTSTRAP_TOKEN
+        valueFrom: {secretKeyRef: {name: fred-secrets, key: CONTROL_PLANE_BOOTSTRAP_TOKEN}}
+      - name: FRED_CONTENT_ACCESS_KEY
+        value: fred-document-manager
+      - name: FRED_CONTENT_SECRET_KEY
+        valueFrom: {secretKeyRef: {name: fred-ingestion, key: manager-s3-secret}}
+    extraVolumes:
+      - name: processing-contract
+        configMap: {name: manager-processing-contract}
+    extraVolumeMounts:
+      - name: processing-contract
+        mountPath: /app/processing-contract
+        readOnly: true
+    resources:
+      requests: {cpu: "250m", memory: 256Mi, ephemeral-storage: 1Gi}
+      limits: {cpu: "2", memory: 1Gi, ephemeral-storage: 2Gi}
+    configuration:
+      storage:
+        content:
+          # address/choice: the Swift documents bucket and input/output roots.
+          endpoint: http://seaweedfs:8333
+          bucket: app-content-documents
+          prefix: ""
+          allow_insecure: true
+          limits:
+            file_bytes: 104857600
+            uploads: 4
+            downloads: 8
+            temp_bytes: 419430400
+            s3_seconds: 120
+            transfer_seconds: 300
+      scheduler:
+        processing:
+          enabled: true
+          worker_contract_file: /app/processing-contract/worker-contract.json
+          temporal: {host: "temporal:7233", namespace: default, task_queue: manager-ingestion}
+          worker:
+            issuer: {{ requiredEnv "K3D_REALM_URL" | quote }}
+            audience: control-plane
+            client_id: knowledge-flow-worker
+          derived:
+            endpoint: http://seaweedfs:8333
+            bucket: app-content-documents
+            prefix: ""
+            allow_insecure: true
+            access_key_env_var: FRED_CONTENT_ACCESS_KEY
+            secret_key_env_var: FRED_CONTENT_SECRET_KEY
+          limits:
+            pending: 100
+            output_bytes: 536870912
+            derived_bytes: 5368709120
+            artifacts: 2000
+            chunks: 100000
+            generations: 32
+
+  control-plane-worker:
+    enabled: false
+
+  knowledge-flow-backend:
+    enabled: false
+    migration: {enabled: false}
+
+  knowledge-flow-worker:
+    # This worker has no SQL, OpenFGA or legacy KF service credentials.
+    extraEnvVars:
+      - *model
+      - name: COLUMNS
+        value: "250"
+      # Retain the node CA trust configured by the shared KF values.
+      - name: SSL_CERT_FILE
+        value: /etc/fred/node-ca/ca-certificates.crt
+      - name: OPENSEARCH_PASSWORD
+        valueFrom: {secretKeyRef: {name: fred-ingestion, key: opensearch-password}}
+      - name: MANAGER_WORKER_CLIENT_SECRET
+        valueFrom: {secretKeyRef: {name: fred-secrets, key: KEYCLOAK_MANAGER_WORKER_CLIENT_SECRET}}
+      - name: MANAGER_DERIVED_ACCESS_KEY
+        value: fred-document-processor
+      - name: MANAGER_DERIVED_SECRET_KEY
+        valueFrom: {secretKeyRef: {name: fred-ingestion, key: processor-s3-secret}}
+    volumes:
+      - name: knowledge-flow-worker-vol
+        configMap: {name: knowledge-flow-worker-back}
+      - name: knowledge-flow-worker-env-vol
+        secret: {secretName: knowledge-flow-worker-env}
+    resources:
+      # sizing: four roles x one activity x 1 GiB workspace, plus process overhead.
+      requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 5Gi}
+      limits: {cpu: "4", memory: 6Gi, ephemeral-storage: 8Gi}
+    configuration:
+      app:
+        pdf_render_ttl_days: 0
+      observability:
+        kpi:
+          opensearch: {enabled: true, index: kpi-index}
+      # Required by the shared configuration model, unused by manager activities.
+      # Remote originals and outputs use manager_processing below.
+      content_storage: {type: local, root_path: /tmp/manager-processing}
+      filesystem: {type: local, root: /tmp/manager-processing}
+      storage:
+        opensearch:
+          username: fred-kf-ingestion
+      scheduler:
+        enabled: true
+        backend: temporal
+        temporal:
+          host: temporal:7233
+          namespace: default
+          task_queue: manager-ingestion
+          ingestion_max_concurrent_activities: 1
+      manager_processing:
+        enabled: true
+        url: http://control-plane-backend:8222/control-plane/v1
+        issuer: {{ requiredEnv "K3D_REALM_URL" | quote }}
+        audience: control-plane
+        client_id: knowledge-flow-worker
+        endpoint: http://seaweedfs:8333
+        bucket: app-content-documents
+        allow_insecure: true
+        temporary_bytes: 1073741824
+        vector_store:
+          type: opensearch
+          # choice: Swift mapping; isolated until readers enforce manager publication/ReBAC.
+          index: document-vectors
+          bulk_size: 1000

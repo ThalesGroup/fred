@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+: "${K3D_FACTORY_ROOT:?Run through fred-deployment-factory}"
+# Retain the existing read-only check for the operator-provided model credential.
+"$K3D_FACTORY_ROOT/k3d-apps/fred/prepare"
+exec python3 "$(dirname "$0")/prepare_ingestion.py"

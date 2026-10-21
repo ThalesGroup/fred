@@ -21,7 +21,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AvailableModelProfileList,
   TeamRoutingPolicy,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -42,7 +42,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useTeamRoutingPolicyQuery: () => ({ currentData: h.policy }),
   useAvailableModelProfilesQuery: (args: { teamId: string }) => {
     h.availableQueryArgs = args;

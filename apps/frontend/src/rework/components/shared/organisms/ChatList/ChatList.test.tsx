@@ -39,7 +39,7 @@ vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: vi.fn() }),
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => ({
     data: sessions,
     isLoading: false,

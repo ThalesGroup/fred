@@ -17,7 +17,7 @@ import {
   type FrontendBootstrap,
   type Team,
   type TeamWithPermissions,
-} from "../slices/controlPlane/controlPlaneOpenApi";
+} from "../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 export type FrontendBootstrapState = {
   bootstrap?: FrontendBootstrap;
@@ -56,7 +56,7 @@ export function useFrontendBootstrap(skip = false): FrontendBootstrapState {
   // enrichment behind this endpoint does one OpenFGA `Read` plus one
   // Keycloak lookup per team, and this hook mounts on nearly every page.
   // RTK Query's own cache (backed by `providesTags`/`invalidatesTags` on
-  // this endpoint and every team mutation, see controlPlaneApiEnhancements.ts)
+  // this endpoint and every team mutation, see legacyControlPlaneApiEnhancements.ts)
   // keeps this fresh for changes made in this session.
   //
   // PR #2160 review (Codex, P1): `MainNavBar` keeps this query

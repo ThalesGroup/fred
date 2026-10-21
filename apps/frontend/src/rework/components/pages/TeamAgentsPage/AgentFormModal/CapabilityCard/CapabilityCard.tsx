@@ -18,7 +18,7 @@ import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Fragment, type PropsWithChildren, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { configWidgetFor } from "../../../../../features/capabilities/configWidgetRegistry.ts";
-import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
 import styles from "./CapabilityCard.module.css";
 

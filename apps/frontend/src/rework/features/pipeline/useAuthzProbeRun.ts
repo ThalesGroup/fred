@@ -20,7 +20,7 @@ import { loginWithPassword } from "./keycloakDirectGrant";
 import type { StepReport } from "./types";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { isPersonalTeamId } from "../../components/shared/utils/teamId";
-import type { PermissionSummary, Team } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PermissionSummary, Team } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 interface TeamWithPermissionsResponse {
   permissions?: string[];

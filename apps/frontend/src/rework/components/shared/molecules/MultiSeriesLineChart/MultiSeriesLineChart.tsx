@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import type { MultiSeriesPoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { MultiSeriesPoint } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./MultiSeriesLineChart.module.scss";
 
 // Distinct palette — works on both light and dark surfaces. Exported so other

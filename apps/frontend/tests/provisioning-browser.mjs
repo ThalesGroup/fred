@@ -11,13 +11,13 @@ import JSZip from "jszip";
 import { documentStorageJourney } from "./document-storage-browser.mjs";
 import { assertAccountAtBottom } from "./assert-app-layout.mjs";
 
-const manager = process.env.FRED_MANAGER_BROWSER_URL;
-const realm = process.env.FRED_MANAGER_BROWSER_REALM;
-const bundle = process.env.FRED_MANAGER_BROWSER_BUNDLE;
-const port = Number(process.env.FRED_MANAGER_BROWSER_PORT);
+const manager = process.env.CONTROL_PLANE_BROWSER_URL;
+const realm = process.env.CONTROL_PLANE_BROWSER_REALM;
+const bundle = process.env.CONTROL_PLANE_BROWSER_BUNDLE;
+const port = Number(process.env.CONTROL_PLANE_BROWSER_PORT);
 assert(manager && realm && bundle && port, "Run make test-provisioning-browser to create isolated services");
 for (const url of [manager, realm]) assert.equal(new URL(url).hostname, "127.0.0.1");
-process.env.VITE_BACKEND_URL_FRED_MANAGER = manager;
+process.env.VITE_BACKEND_URL_CONTROL_PLANE = manager;
 const { createServer } = await import("vite");
 const server = await createServer({
   cacheDir: `node_modules/.vite-browser-${port}`,
@@ -42,7 +42,7 @@ async function login(username, password, path = "/admin/provisioning") {
     });
   });
   if (username === "root")
-    await context.route("**/fred-manager/v1/frontend/config", (route) => route.abort(), { times: 1 });
+    await context.route("**/control-plane/v1/frontend/config", (route) => route.abort(), { times: 1 });
   const page = await context.newPage();
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("requestfailed", (request) => {
@@ -51,7 +51,7 @@ async function login(username, password, path = "/admin/provisioning") {
   });
   let bearer;
   page.on("request", (request) => {
-    if (request.url() === `${origin}/fred-manager/v1/me/onboarding`) bearer = request.headers().authorization;
+    if (request.url() === `${origin}/control-plane/v1/me/onboarding`) bearer = request.headers().authorization;
   });
   await page.goto(origin + path);
   if (username === "root") {
@@ -64,7 +64,7 @@ async function login(username, password, path = "/admin/provisioning") {
   await expect.poll(() => bearer).toMatch(/^Bearer /);
   const before = await get(context, bearer, "/me/onboarding");
   assert.equal(before.acceptance, null, "Import must not accept terms for anyone");
-  const denied = await context.request.get(`${origin}/fred-manager/v1/me/spaces`, {
+  const denied = await context.request.get(`${origin}/control-plane/v1/me/spaces`, {
     headers: { Authorization: bearer },
   });
   assert.equal(denied.status(), 403);
@@ -99,7 +99,7 @@ async function login(username, password, path = "/admin/provisioning") {
     await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
     await expect(page.getByText("This bootstrap secret is not valid. Please try again.")).toBeVisible();
     await expect(secret).toHaveValue("");
-    await secret.fill(process.env.FRED_MANAGER_TEST_BOOTSTRAP_TOKEN);
+    await secret.fill(process.env.CONTROL_PLANE_TEST_BOOTSTRAP_TOKEN);
     await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
     await expect(page.getByText("You are now the platform administrator, root.")).toBeVisible();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -158,7 +158,7 @@ async function assertAccountPages({ page, context, bearer }, owner) {
   const spacesBefore = await get(context, bearer, "/me/spaces");
   let consentWrites = 0;
   const trackConsent = (request) => {
-    if (request.url() === `${origin}/fred-manager/v1/gcu` && request.method() === "POST") consentWrites++;
+    if (request.url() === `${origin}/control-plane/v1/gcu` && request.method() === "POST") consentWrites++;
   };
   page.on("request", trackConsent);
   const viewport = page.viewportSize();
@@ -242,7 +242,7 @@ async function assertAccountPages({ page, context, bearer }, owner) {
 
 async function importFile(page, file, expectedStatus = 200) {
   await page.locator('input[type="file"]').setInputFiles(file);
-  const response = page.waitForResponse((r) => r.url() === `${origin}/fred-manager/v1/import-export/import`);
+  const response = page.waitForResponse((r) => r.url() === `${origin}/control-plane/v1/import-export/import`);
   await page.getByRole("button", { name: "Import the bundle", exact: true }).click();
   const result = await response;
   assert.equal(result.status(), expectedStatus);
@@ -264,7 +264,7 @@ async function importFile(page, file, expectedStatus = 200) {
 }
 
 async function get(context, bearer, path) {
-  const response = await context.request.get(`${origin}/fred-manager/v1${path}`, {
+  const response = await context.request.get(`${origin}/control-plane/v1${path}`, {
     headers: { Authorization: bearer },
   });
   assert.equal(response.status(), 200);
@@ -277,7 +277,7 @@ try {
   await server.waitForRequestsIdle();
   browser = await chromium.launch({ headless: true });
   const root = await login("root", "it-root", "/admin");
-  if (process.env.FRED_MANAGER_BROWSER_DOCUMENTS_ONLY === "1") {
+  if (process.env.CONTROL_PLANE_BROWSER_DOCUMENTS_ONLY === "1") {
     await importFile(root.page, bundle);
     const priya = await login("priya", "Azerty123_", "/home");
     const opening = priya.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));
@@ -313,7 +313,7 @@ try {
       reached = resolve;
     });
     await root.page.route(
-      "**/fred-manager/v1/import-export/import",
+      "**/control-plane/v1/import-export/import",
       async (route) => {
         reached();
         await held;
@@ -341,7 +341,7 @@ try {
 
     // The same public builder produces a variant containing a project.
     const fixture = resolve(dirname(bundle), "project-fixture");
-    await cp("../fred-manager/tests/fixtures/import_export/demo_provisioning", fixture, { recursive: true });
+    await cp("../control-plane/tests/fixtures/import_export/demo_provisioning", fixture, { recursive: true });
     await writeFile(
       `${fixture}/projects.json`,
       JSON.stringify([
@@ -349,7 +349,7 @@ try {
       ]),
     );
     const projectZip = resolve(dirname(bundle), "project.zip");
-    execFileSync("make", ["-C", "../fred-manager", "build-demo-bundle"], {
+    execFileSync("make", ["-C", "../control-plane", "build-demo-bundle"], {
       env: { ...process.env, DEMO_PROVISIONING_FIXTURE_DIR: fixture, DEMO_BUNDLE_FILE: projectZip },
       stdio: "pipe",
     });
@@ -377,7 +377,7 @@ try {
     // Switch identities in the same browser, exercising logout and fresh Redux state.
     let bobBearer;
     root.page.on("request", (request) => {
-      if (request.url() === `${origin}/fred-manager/v1/me`) bobBearer = request.headers().authorization;
+      if (request.url() === `${origin}/control-plane/v1/me`) bobBearer = request.headers().authorization;
     });
     await logout(root.page);
     await root.page.locator("#username").fill("bob");
@@ -426,7 +426,7 @@ try {
     assert.deepEqual([...project.roles].sort(), ["admin", "editor", "member"]);
     assert.deepEqual(project.inherited_roles, ["editor"]);
     assert.deepEqual(north.roles, ["editor"]);
-    const denied = await bob.context.request.post(`${origin}/fred-manager/v1/import-export/import`, {
+    const denied = await bob.context.request.post(`${origin}/control-plane/v1/import-export/import`, {
       headers: { Authorization: bob.bearer },
       multipart: { file: { name: "demo.zip", mimeType: "application/zip", buffer: await readFile(bundle) } },
     });
@@ -441,7 +441,7 @@ try {
     // Explicit eligibility: Bob has no entry and the real command denies creation.
     await bob.page.goto(origin + "/home");
     await expect(bob.page.getByRole("button", { name: "Personal space", exact: true })).toHaveCount(0);
-    const bobOpen = await bob.context.request.post(`${origin}/fred-manager/v1/me/personal-space`, {
+    const bobOpen = await bob.context.request.post(`${origin}/control-plane/v1/me/personal-space`, {
       headers: { Authorization: bob.bearer },
       data: { organization_id: organization.id },
     });
@@ -462,7 +462,7 @@ try {
       enteredPersonal = resolve;
     });
     await priya.page.route(
-      "**/fred-manager/v1/me/personal-space",
+      "**/control-plane/v1/me/personal-space",
       async (route) => {
         personalCalls++;
         enteredPersonal();
@@ -509,7 +509,7 @@ try {
     await priya.page.getByRole("button", { name: "Home", exact: true }).click();
     // A transport refusal stays visible and requires a fresh deliberate action.
     await priya.page.route(
-      "**/fred-manager/v1/me/personal-space",
+      "**/control-plane/v1/me/personal-space",
       (route) =>
         route.fulfill({
           status: 401,

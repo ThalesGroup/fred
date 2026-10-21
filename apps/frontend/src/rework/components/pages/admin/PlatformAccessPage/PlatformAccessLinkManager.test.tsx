@@ -30,7 +30,7 @@ const hooks = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ frontend_basename: "/" }) }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePlatformAccessTeamsQuery: (...args: unknown[]) => {
     hooks.teamQuery(...args);
     return { data: hooks.teamFree === undefined ? undefined : [{ team_id: "demo", free: hooks.teamFree }] };

@@ -16,7 +16,7 @@
 			"path": "../apps/fred-agents"
 		},
 		{
-			"path": "../apps/control-plane-backend"
+			"path": "../apps/control-plane"
 		},
 		{
 			"path": "../apps/knowledge-flow-backend"
@@ -35,7 +35,7 @@
 		"files.exclude": {
 			"agentic-backend/": true,
 			"apps/fred-agents/": true,
-			"control-plane-backend/": true,
+			"control-plane/": true,
 			"knowledge-flow/": true,
 			"frontend/": true,
 			"../libs/fred-sdk/": true,

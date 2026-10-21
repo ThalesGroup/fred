@@ -16,7 +16,7 @@ import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import { UserTeamRelation } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { UserTeamRelation } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./TeamRoleChips.module.scss";
 
 // AUTHZ-06 (RFC Part 7 §37): one independently togglable chip per elevated

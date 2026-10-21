@@ -63,6 +63,11 @@ its CA bundle become `extraEnvVars`, `extraVolumes` and `extraVolumeMounts`.
 container command is the image's own (agent pods) or `run`/`publish` (Knowledge Bases);
 the metrics port is read from `configuration.observability.kpi.prometheus`.
 
+**Gateway API exposure is opt-in.** The agent-pod chart keeps Ingress support and adds an
+HTTPRoute using the existing canonical base path and Service. Operators supply Gateway
+parent references and hostnames, with an optional request timeout for streaming. The
+route is absent by default, so current releases are unchanged.
+
 **Applications get a contract, not a chart.** Only the UI half of an application has a fixed
 shape; the service is the provider's code, with its own workers, migrations, databases or
 agents (the evaluator has a Temporal worker and migrations, review-board its own agents). A

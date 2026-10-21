@@ -35,7 +35,6 @@ from prometheus_client import start_http_server
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.config_loader import load_configuration
 from knowledge_flow_backend.features.scheduler.worker import run_worker
-from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
 logger = logging.getLogger(__name__)
 
@@ -56,17 +55,19 @@ def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> l
         return []
 
     kpi_writer = app_context.get_kpi_writer()
-    return [
-        asyncio.create_task(emit_process_kpis(interval_s, kpi_writer)),
-        asyncio.create_task(
-            emit_sql_pool_kpis(
-                interval_s,
-                kpi_writer,
-                app_context.get_pg_async_engine(),
-                pool_name="knowledge-flow-postgres",
+    tasks = [asyncio.create_task(emit_process_kpis(interval_s, kpi_writer))]
+    if not (configuration.manager_processing and configuration.manager_processing.enabled):
+        tasks.append(
+            asyncio.create_task(
+                emit_sql_pool_kpis(
+                    interval_s,
+                    kpi_writer,
+                    app_context.get_pg_async_engine(),
+                    pool_name="knowledge-flow-postgres",
+                )
             )
-        ),
-    ]
+        )
+    return tasks
 
 
 async def main() -> None:
@@ -104,18 +105,18 @@ async def main() -> None:
     if scheduler_backend != SchedulerBackend.TEMPORAL:
         raise ValueError(f"Scheduler backend '{scheduler_backend}' not supported; expected 'temporal'.")
 
-    # #2314: same startup schema guard as the API lifespan (main.py) — the
-    # worker deploys and restarts independently, its activities write the same
-    # tables, and nothing creates tables at runtime anymore. Without this it
-    # would boot green against an unmigrated database and burn Temporal
-    # retries on UndefinedTableError mid-task instead of failing here.
-    await require_tables(
-        app_context.get_pg_async_engine(),
-        sorted(REQUIRED_TABLES),
-        component="knowledge-flow-worker",
-        migrate_command="make db-upgrade (apps/knowledge-flow-backend)",
-        version_table="alembic_version_knowledge_flow",
-    )
+    manager_processing = bool(configuration.manager_processing and configuration.manager_processing.enabled)
+    if not manager_processing:
+        from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
+
+        # Legacy activities own SQL metadata/tasks; manager activities use its API.
+        await require_tables(
+            app_context.get_pg_async_engine(),
+            sorted(REQUIRED_TABLES),
+            component="knowledge-flow-worker",
+            migrate_command="make db-upgrade (apps/knowledge-flow-backend)",
+            version_table="alembic_version_knowledge_flow",
+        )
 
     # Unlike the API entrypoints, the Temporal worker has no FastAPI app to pass
     # to `Instrumentator().instrument(app)`. We still expose Prometheus metrics
@@ -138,6 +139,7 @@ async def main() -> None:
             max_concurrent_workflow_tasks=configuration.scheduler.temporal.ingestion_max_concurrent_workflow_tasks,
             max_concurrent_activities=configuration.scheduler.temporal.ingestion_max_concurrent_activities,
             pdf_render_ttl_days=configuration.app.pdf_render_ttl_days,
+            manager_processing=manager_processing,
         )
     finally:
         for task in kpi_tasks:

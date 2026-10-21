@@ -25,7 +25,7 @@ import {
   usePlatformPromptQuery,
   useSetPlatformPromptMutation,
   useUsersByIdsQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./PlatformPromptPage.module.css";
 
 // Mirrors `PLATFORM_PROMPT_MAX_CHARS` in the backend's

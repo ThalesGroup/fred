@@ -1,9 +1,9 @@
-# Reference: manager schemas and contracts
+# Reference: control-plane schemas and contracts
 
 Exact source-derived references for the organization/team/project implementation.
 Read [Security](03-security.md) and [Organizations](04-organizations.md) for meaning.
 
-## fred-manager HTTP surface
+## control-plane HTTP surface
 
 Health and frontend configuration are public. Other routes require a bearer token
 ([security](03-security.md)); business routes also require current personal CGU acceptance
@@ -13,81 +13,126 @@ returns 409 for contradictory attachments. No organization request parameter
 selects a tenant. Business authorization probes return `allowed: false` for a missing or
 foreign context, and 409 for ambiguity.
 
-<!-- generated: routes apps/fred-manager/src/api.rs /fred-manager/v1 -->
+<!-- generated: routes apps/control-plane/src/api.rs /control-plane/v1 -->
 | Method | Path | Handler |
 | --- | --- | --- |
-| GET | `/fred-manager/v1/admin/organizations` | `organization_registry` |
-| POST | `/fred-manager/v1/admin/organizations` | `create_organization` |
-| GET | `/fred-manager/v1/admin/teams` | `team_registry` |
-| POST | `/fred-manager/v1/authorize/document` | `authorize_document` |
-| POST | `/fred-manager/v1/authorize/platform` | `authorize_platform` |
-| POST | `/fred-manager/v1/authorize/scope` | `authorize_scope` |
-| POST | `/fred-manager/v1/authorize/space` | `authorize_space` |
-| POST | `/fred-manager/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
-| GET | `/fred-manager/v1/deletions/{operation_id}` | `deletion_status` |
-| POST | `/fred-manager/v1/folders` | `create_folder` |
-| DELETE | `/fred-manager/v1/folders/{id}` | `delete_folder` |
-| PATCH | `/fred-manager/v1/folders/{id}` | `rename_folder` |
-| GET | `/fred-manager/v1/frontend/config` | `frontend_config` |
-| POST | `/fred-manager/v1/gcu` | `accept_terms` |
-| GET | `/fred-manager/v1/healthz` | `health` |
-| POST | `/fred-manager/v1/import-export/import` | `import_blueprint` |
-| GET | `/fred-manager/v1/me` | `me` |
-| GET | `/fred-manager/v1/me/onboarding` | `onboarding_status` |
-| POST | `/fred-manager/v1/me/personal-space` | `create_personal_space` |
-| GET | `/fred-manager/v1/me/spaces` | `my_spaces` |
-| POST | `/fred-manager/v1/spaces` | `create_space` |
-| DELETE | `/fred-manager/v1/spaces/{id}` | `delete_space` |
-| GET | `/fred-manager/v1/spaces/{id}/folders` | `list_folders` |
-| DELETE | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `revoke` |
-| PUT | `/fred-manager/v1/spaces/{id}/roles/{role}/{user}` | `grant` |
-| GET | `/fred-manager/v1/users/platform-roles` | `list_platform_roles` |
-| DELETE | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `revoke_platform_role` |
-| PUT | `/fred-manager/v1/users/{user}/platform-roles/{role}` | `grant_platform_role` |
+| GET | `/control-plane/v1/admin/organizations` | `organization_registry` |
+| POST | `/control-plane/v1/admin/organizations` | `create_organization` |
+| GET | `/control-plane/v1/admin/organizations/candidates` | `search_organization_candidates` |
+| GET | `/control-plane/v1/admin/teams` | `team_registry` |
+| POST | `/control-plane/v1/authorize/document` | `authorize_document` |
+| POST | `/control-plane/v1/authorize/platform` | `authorize_platform` |
+| POST | `/control-plane/v1/authorize/scope` | `authorize_scope` |
+| POST | `/control-plane/v1/authorize/space` | `authorize_space` |
+| POST | `/control-plane/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
+| GET | `/control-plane/v1/deletions/{operation_id}` | `deletion_status` |
+| POST | `/control-plane/v1/folders` | `create_folder` |
+| DELETE | `/control-plane/v1/folders/{id}` | `delete_folder` |
+| PATCH | `/control-plane/v1/folders/{id}` | `rename_folder` |
+| GET | `/control-plane/v1/frontend/config` | `frontend_config` |
+| POST | `/control-plane/v1/gcu` | `accept_terms` |
+| GET | `/control-plane/v1/healthz` | `health` |
+| POST | `/control-plane/v1/import-export/import` | `import_blueprint` |
+| GET | `/control-plane/v1/me` | `me` |
+| GET | `/control-plane/v1/me/onboarding` | `onboarding_status` |
+| POST | `/control-plane/v1/me/personal-space` | `create_personal_space` |
+| GET | `/control-plane/v1/me/spaces` | `my_spaces` |
+| POST | `/control-plane/v1/spaces` | `create_space` |
+| DELETE | `/control-plane/v1/spaces/{id}` | `delete_space` |
+| GET | `/control-plane/v1/spaces/{id}/folders` | `list_folders` |
+| DELETE | `/control-plane/v1/spaces/{id}/roles/{role}/{user}` | `revoke` |
+| PUT | `/control-plane/v1/spaces/{id}/roles/{role}/{user}` | `grant` |
+| GET | `/control-plane/v1/users/platform-roles` | `list_platform_roles` |
+| DELETE | `/control-plane/v1/users/{user}/platform-roles/{role}` | `revoke_platform_role` |
+| PUT | `/control-plane/v1/users/{user}/platform-roles/{role}` | `grant_platform_role` |
 <!-- end generated -->
 
 
 Original-storage routes use the same router/OpenAPI registration mechanism:
 
-<!-- generated: routes apps/fred-manager/src/documents/http.rs /fred-manager/v1 -->
+<!-- generated: routes apps/control-plane/src/documents/http.rs /control-plane/v1 -->
 | Method | Path | Handler |
 | --- | --- | --- |
-| GET | `/fred-manager/v1/document-uploads/{id}` | `receipt` |
-| PUT | `/fred-manager/v1/document-uploads/{id}/acknowledgment` | `acknowledge` |
-| GET | `/fred-manager/v1/documents/{id}/content` | `content` |
-| POST | `/fred-manager/v1/folders/{id}/documents` | `upload` |
-| POST | `/fred-manager/v1/folders/{id}/documents/preflight` | `preflight` |
-| GET | `/fred-manager/v1/spaces/{id}/document-uploads` | `receipts` |
-| GET | `/fred-manager/v1/spaces/{id}/entries` | `entries` |
-| GET | `/fred-manager/v1/spaces/{id}/storage` | `summary` |
+| GET | `/control-plane/v1/document-uploads/{id}` | `receipt` |
+| PUT | `/control-plane/v1/document-uploads/{id}/acknowledgment` | `acknowledge` |
+| GET | `/control-plane/v1/documents/{id}/content` | `content` |
+| POST | `/control-plane/v1/folders/{id}/documents` | `upload` |
+| POST | `/control-plane/v1/folders/{id}/documents/preflight` | `preflight` |
+| GET | `/control-plane/v1/spaces/{id}/document-uploads` | `receipts` |
+| GET | `/control-plane/v1/spaces/{id}/entries` | `entries` |
+| GET | `/control-plane/v1/spaces/{id}/storage` | `summary` |
 <!-- end generated -->
 
 Processing routes share the same generated OpenAPI mechanism. `/documents` routes
 use personal admission and space authority; `/document-processing` routes use the
 strict service-account protocol, then operation and actor checks.
 
-<!-- generated: routes apps/fred-manager/src/processing/http.rs /fred-manager/v1 -->
+<!-- generated: routes apps/control-plane/src/processing/http.rs /control-plane/v1 -->
 | Method | Path | Handler |
 | --- | --- | --- |
-| GET | `/fred-manager/v1/document-processing/cleanup` | `cleanup` |
-| POST | `/fred-manager/v1/document-processing/cleanup` | `cleaned` |
-| POST | `/fred-manager/v1/document-processing/{id}/abandon` | `abandon` |
-| POST | `/fred-manager/v1/document-processing/{id}/claim` | `claim` |
-| POST | `/fred-manager/v1/document-processing/{id}/commit` | `commit` |
-| GET | `/fred-manager/v1/document-processing/{id}/original` | `original` |
-| POST | `/fred-manager/v1/document-processing/{id}/vectors` | `vectors` |
-| GET | `/fred-manager/v1/document-processing/{id}/work` | `work` |
-| GET | `/fred-manager/v1/documents/{id}/preview` | `preview` |
-| GET | `/fred-manager/v1/documents/{id}/processing` | `history` |
-| POST | `/fred-manager/v1/documents/{id}/processing` | `start` |
+| GET | `/control-plane/v1/document-processing/cleanup` | `cleanup` |
+| POST | `/control-plane/v1/document-processing/cleanup` | `cleaned` |
+| POST | `/control-plane/v1/document-processing/{id}/abandon` | `abandon` |
+| POST | `/control-plane/v1/document-processing/{id}/claim` | `claim` |
+| POST | `/control-plane/v1/document-processing/{id}/commit` | `commit` |
+| GET | `/control-plane/v1/document-processing/{id}/original` | `original` |
+| POST | `/control-plane/v1/document-processing/{id}/vectors` | `vectors` |
+| GET | `/control-plane/v1/document-processing/{id}/work` | `work` |
+| GET | `/control-plane/v1/documents/{id}/preview` | `preview` |
+| GET | `/control-plane/v1/documents/{id}/processing` | `history` |
+| POST | `/control-plane/v1/documents/{id}/processing` | `start` |
 <!-- end generated -->
 
-## fred-manager schema
+## Control-plane SQL catalogue
 
-Generated by tbls from `apps/fred-manager/migrations` (`make er`). The tables live in
-the `fred` database, created at startup by one sqlx migration.
+This catalogue covers the Rust control-plane's PostgreSQL tables. In the local k3d
+configuration they live in database `fred`, schema `public`. It does not describe
+the private schemas of Keycloak, Temporal, OpenFGA or other Fred services.
 
-<!-- generated: mermaid docs/architecture/generated/fred-manager.er.mmd -->
+The source of truth is the ordered SQL migration chain:
+
+| Migration | Responsibility |
+| --- | --- |
+| [0001_manager_schema.sql](../../apps/control-plane/migrations/0001_manager_schema.sql) | Space and document metadata, operational receipts, bootstrap, consent and installation bindings; constraints, indexes and triggers. |
+| [0002_user_identity.sql](../../apps/control-plane/migrations/0002_user_identity.sql) | Local authenticated identity profiles and their username index. |
+
+Together they define the current schema: eleven application tables, plus SQLx's
+own `_sqlx_migrations` history table. The diagram below is generated by tbls from
+all migration files (`make -C docs/architecture er`), not maintained by hand.
+SQLx creates its history table itself; it is outside that generated diagram.
+
+### Table responsibilities
+
+| Table | Key and responsibility | Lifecycle and ownership |
+| --- | --- | --- |
+| `space` | UUID `id`; organization, team or project identity, name and optional personal owner. | Control-plane owns the row. Organization/team/project parent links, membership and roles live in OpenFGA. `deletion_id` marks scheduled cleanup. |
+| `folder` | UUID `id`; named folder, containing space, optional parent folder and UUID-based path. | Control-plane owns the hierarchy. Placement is immutable; folder and parent must belong to the same space. |
+| `document` | UUID `id`; name, MIME type, size, SHA-256, creator, object key and quota owner. | Metadata for a stored original. The bytes live in object storage, not PostgreSQL. Placement is immutable. |
+| `space_deletion` | UUID `id`, unique `target_id`; durable deletion request, policy, deadlines, status and progress counters. | API and lifecycle worker share operational state. Target identifiers deliberately have no foreign keys so the receipt can survive target removal. |
+| `document_upload` | UUID `id`, unique `(actor, request_key)`; upload reservation and receipt, object key, completion, retry and cleanup state. | Control-plane owns upload idempotency and reservations. Target space/folder IDs are historical references without foreign keys; the resulting document and retry predecessor have SQL links. |
+| `document_processing` | UUID `id`, unique `(actor, request_key)` and `workflow_id`; processing attempt, delivery lease, profile, generations, result and cleanup state. | Control-plane records processing orchestration. The document and space have SQL references. JSONB fields contain the submitted contract, settings and artifact metadata, not canonical authorization. |
+| `document_storage` | Boolean singleton; installation namespace, original/derived storage locations, inventory counters, cursor and lease. | Installation-wide storage binding and inventory progress, independent of any individual upload. |
+| `platform_bootstrap` | Boolean singleton; claimant, claim time and OpenFGA grant completion time. | Durable bootstrap receipt. `granted_at IS NULL` distinguishes an unfinished claim from a completed grant. This is not the platform-owner role store. |
+| `authorization_store` | Boolean singleton; configured/source/active OpenFGA store and published model ID. | Pins the installation's initialized authorization store/model. It contains no grants or permission matrix. |
+| `terms_acceptance` | Text `user_id`; accepted terms version and timestamp. | Consent belongs to the authenticated subject independently of directory profiles and space membership. |
+| `user_identity` | UUID `id`; username, email, first/last names and last observation time. | Local-directory profiles observed after authentication, including generic OIDC users. No passwords, bearer tokens or grants. Usernames are intentionally not unique; exact lookup rejects ambiguous matches. |
+| `_sqlx_migrations` | Migration `version`; description, installation time, success, checksum and execution time. | Owned by SQLx. Records which immutable migration files were applied; application code must not rewrite its checksums. |
+
+### Physical relationships
+
+The diagram represents SQL foreign keys. Absence of an edge is meaningful:
+OpenFGA owns the space tree and user-role relationships. Subject identifiers such
+as `actor`, `created_by`, `completed_by` and `terms_acceptance.user_id` do not
+reference `user_identity`: Keycloak directory mode does not require local profile
+rows. Do not add such foreign keys as an apparent completeness fix.
+
+`document.folder_id` is nullable for a document at the space root, whereas an upload
+reservation requires a folder. The self-reference on `folder` also allows a null
+parent for a root folder. The generated composite-FK edges do not express that
+nullability precisely; the SQL declarations and these rules define it. Deletion order must respect SQL foreign keys; the
+`document_upload.retry_of` reference explicitly uses `ON DELETE SET NULL`.
+
+<!-- generated: mermaid docs/architecture/generated/control-plane.er.mmd -->
 ```mermaid
 erDiagram
 
@@ -247,6 +292,14 @@ erDiagram
   bigint reserved_bytes
   timestamp_with_time_zone cleanup_due_at
 }
+"user_identity" {
+  uuid id
+  text username
+  text email
+  text first_name
+  text last_name
+  timestamp_with_time_zone last_seen_at
+}
 ```
 <!-- end generated -->
 
@@ -259,9 +312,32 @@ What the schema enforces by itself:
 | Unique organization names | unique index on `name` where `kind = 'organization'` |
 | A document's folder is in the document's space | composite foreign key `(folder_id, space_id)` |
 | A sub-folder is in its parent's space | composite foreign key `(parent_id, space_id)` |
-| A document-bearing folder subtree cannot be deleted | document foreign key refuses the atomic subtree DELETE with 409 |
+| A document-bearing folder subtree cannot be deleted | document foreign key refuses deletion while referenced; the API maps that conflict to HTTP 409 |
 | Placement never changes | `before update` triggers on `space` kind and owner, `folder`, `document` |
-| One root bootstrap, ever | `platform_bootstrap` single row (`singleton` key) |
+| At most one bootstrap marker | `platform_bootstrap` single row (`singleton` key); permanent closure and claimant-only retry are enforced by the bootstrap code |
+
+### Constraints and operational indexes
+
+Primary keys and unique constraints create their own indexes. The additional
+indexes support the actual traversal, quota and retry paths:
+
+| Area | Constraints and indexes |
+| --- | --- |
+| Spaces | `space_organization_name` makes organization names unique. `space_deletion_manifest` indexes rows participating in deletion. Personal ownership is allowed only on a team. |
+| Folders and documents | Composite foreign keys keep folders/documents in their containing space. `UNIQUE NULLS NOT DISTINCT` prevents duplicate sibling names, including at the root. Placement triggers prevent moves. |
+| Original documents | Size is between 0 and 104857600 bytes (100 MiB); SHA-256 is 64 lowercase hexadecimal characters. Object keys are unique. `document_quota_owner` includes sizes for quota accounting. |
+| Deletion receipts | Deadline cannot precede request time; completion timestamp agrees with status. `space_deletion_due` selects unfinished work; `space_deletion_overlap` supports overlap detection. |
+| Upload receipts | Status is `pending`, `stored` or `failed`; stored status requires a document, and pending status has no completion timestamp. Partial indexes protect active names and index active quota, unacknowledged receipts, cleanup and expiration. |
+| Processing attempts | One active and one successful attempt per document are enforced by partial unique indexes. Additional indexes cover history, delivery and cleanup. Checks bound counters and the generations array (at most 64). Triggers verify the original's space/digest and prevent changes to processing identity or terminal outcome. |
+| Pending uploads | Delete triggers on `space` and `folder` refuse removal while pending uploads reference them, despite those historical IDs having no foreign keys. |
+| Installation state | `platform_bootstrap`, `authorization_store` and `document_storage` admit only the singleton key `true`. |
+| Consent and identities | Terms versions have length 1..128. `user_identity_username` indexes `(username, id)` without imposing username uniqueness. |
+
+SQL constraints do not replace OpenFGA checks or application mutation locks.
+In particular, sibling space names and membership eligibility are not SQL foreign
+keys. See [security](03-security.md) and [organizations](04-organizations.md).
+For deployment and schema inspection, see
+[SQLx schema evolution](A3-manager-operations.md#sqlx-schema-evolution).
 
 Manager enforces under the organization lock, after reading links: a team's parent
 is an organization and a project's parent a non-personal team; sibling names are
@@ -283,7 +359,9 @@ no roles. Startup pins those IDs without selecting an arbitrary newer model or
 falling back to the source. A published model that differs from the binary's model
 is refused. Empty initialization publishes
 a fresh store only after its initialization writes succeed; existing state without a
-matching publication is refused. User IDs are Keycloak subjects.
+matching publication is refused. User IDs are the configured authenticated UID. In generic OIDC mode a non-UUID
+identity is normalized to UUIDv5 from the configured realm URL and identity; UUID
+identities are retained (see `auth.rs`).
 
 Each organization and the platform has a `guard` object with an immutable
 `initialized` sentinel and one random `version` revision. A mutation captures its
@@ -293,7 +371,7 @@ role delta. Missing revisions roll back the complete Write. Unknown outcomes end
 the attempt; replay captures fresh revisions and reauthorizes. Role insertions
 remain idempotent. Guard relations imply no permission.
 
-<!-- generated: include apps/fred-manager/openfga/model.fga text -->
+<!-- generated: include apps/control-plane/openfga/model.fga text -->
 ```text
 model
   schema 1.1
@@ -321,7 +399,7 @@ type platform
 
 # The space tree lives here only, written once at creation. A personal space has no
 # parent; `organization` records who manages it and grants nothing.
-# A role on a space requires a direct content role on its parent (enforced by fred-manager).
+# A role on a space requires a direct content role on its parent (enforced by control-plane).
 type space
   relations
     define parent: [space]

@@ -20,7 +20,7 @@ import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.t
 import {
   useAcceptTermsMutation,
   useOnboardingStatusQuery,
-} from "../../../../slices/fredManager/fredManagerApiEnhancements";
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { useLegalMarkdownState } from "@hooks/useLegalMarkdown.ts";
 import styles from "./GcuPage.module.css";

@@ -194,9 +194,9 @@ def _platform_admin_username() -> str:
 # below. Team/role (and, since Part A of PLATFORM-IMPORT-RFC.md, identity) provisioning
 # is owned by control-plane's platform-import feature, not by this suite.
 _PROVISIONING_HOWTO = (
-    "run `cd apps/control-plane-backend && make build-demo-bundle` then upload the "
+    "run `cd apps/control-plane && make build-demo-bundle` then upload the "
     "resulting zip via Admin -> Migration, using the fixture at "
-    "apps/control-plane-backend/tests/fixtures/import_export/demo_provisioning/"
+    "apps/control-plane/tests/fixtures/import_export/demo_provisioning/"
 )
 
 

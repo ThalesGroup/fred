@@ -100,3 +100,27 @@ Section 6 evidence (2026-09-28): each task's tests fail with its production chan
 - [x] Preserve the bounded `account_status_unavailable` 503 and denial header during managed binding resolution; retain generic handling for unrelated upstream failures.
 
 Review regression evidence (2026-09-26): 88 focused tests passed; the complete runtime suite passed 1,563 tests (11 optional-dependency skips, 16 integration cases deselected). After replacing the binding-test double with HTTPX MockTransport for type compatibility, all 29 outbound credential-path tests passed again. Independent correctness and hot-path review found no actionable issue. Root `make code-quality` passed across all modules. These checks close only the two review regressions above, not the remaining deployment acceptance tasks.
+
+## 7. Recover a mistaken document identifier (#3184)
+
+Scope confirmed by the developer on 2026-10-20: implement the smallest direct document-read correction on PR #3181; defer tool identifier ergonomics and preserve security stops. This section does not reopen or claim completion of other pending deployment tasks.
+
+- [x] 7.1 Opt only the document markdown fetch into recoverable 403 `permission_refused` handling. Verify that wrong-name and inaccessible-UID requests return failures without content, while other calls, missing/unknown causes, account refusal/unavailability and residual 401s remain terminal with no extra request or credential fallback.
+- [x] 7.2 Reuse the document capability's existing recovery result with bounded UID guidance. Verify through the runtime binding that a failed filename call is visible to the next model step and a corrected UID succeeds in the same run; exclude raw upstream text and retain wrapped run-stop propagation.
+- [x] 7.3 Run focused document/delegation suites and independent correctness/security and hot-path review. The developer explicitly waived a full test/code-quality rerun on 2026-10-20 to prioritize the k3d retest. Update the compact delegation contract and the PR migration note, reconcile this delta, commit and push the verified block, recording exact evidence and exclusions here or in the PR.
+- [ ] 7.4 Rebuild the runtime from this checkout and repeat the NOVA-DOC k3d scenario with the existing corpus. Record actual document recovery, output-file inspection and remaining semantic failures separately; do not claim the full scenario passes from the focused regression alone.
+
+Section 7 evidence (2026-10-20): 103 focused cases passed across document recovery,
+outbound credentials, read scope, error redaction, capability reading and the
+compiled ReAct model loop. The loop uses the real adapter, delegated provider and
+capability with HTTPX MockTransport and a scripted model: the next model call
+receives recovery guidance and a corrected UID succeeds with exactly two HTTP
+requests. Independent review of the delta from `575d222539b29f2b312b0a87743003ce7786f47a`
+found one P2: URL-shaped arguments could extend recovery to other routes. The
+single-segment guard and ten regression cases were independently re-reviewed;
+no actionable finding remains in this correction. No new I/O, retries, locks or
+authorization calls are added. Changed-file Ruff checks, strict OpenSpec validation
+and whitespace checks passed. Full suites and root quality were not rerun at the
+developer's request. This is not a new full-PR review or live Deep/NOVA-DOC proof;
+the previously reviewed folder-access correction and production-scale load were
+outside this delta review.

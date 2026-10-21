@@ -43,7 +43,7 @@ const calls = {
   delete: [] as { teamId: string; categoryId: string }[],
 };
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation: () => [
     (args: (typeof calls.create)[number]) => {
       calls.create.push(args);

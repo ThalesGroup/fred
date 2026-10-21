@@ -17,7 +17,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
-import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { CreationAssistantDialog } from "./CreationAssistantDialog";
 import promptEditorStyles from "@shared/molecules/PromptEditor/PromptEditor.module.css";
 
@@ -39,7 +39,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 const generate = vi.fn();
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useDraftAgentMutation: () => [generate],
 }));
 

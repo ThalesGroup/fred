@@ -26,11 +26,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Announcement } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Announcement } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const queryMock = vi.fn();
 
-vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useActiveAnnouncementsQuery: (...args: unknown[]) => queryMock(...args),
 }));
 vi.mock("react-i18next", () => ({

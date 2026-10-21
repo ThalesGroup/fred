@@ -12,7 +12,7 @@ organization/project context: [#2921](https://github.com/ThalesGroup/fred/issues
 For `chore/rust-rebac`, the accepted conversation design is recorded here for
 future integration. The implemented organization/team/project and role foundation
 is described in [Fred architecture](../../../docs/architecture/README.md) and
-[manager provisioning](../../specs/fred-manager-provisioning/spec.md). This decision
+[manager provisioning](../../specs/control-plane-provisioning/spec.md). This decision
 does not start the broader Python conversion or claim that conversations use manager.
 
 ## What Changes

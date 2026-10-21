@@ -12,7 +12,7 @@
       "name": "manager-audience",
       "protocol": "openid-connect",
       "protocolMapper": "oidc-audience-mapper",
-      "config": {"included.custom.audience": "fred-manager", "access.token.claim": "true", "id.token.claim": "false"}
+      "config": {"included.custom.audience": "control-plane", "access.token.claim": "true", "id.token.claim": "false"}
     },
     {
       "name": "workload-client-id",

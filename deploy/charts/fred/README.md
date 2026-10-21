@@ -22,7 +22,7 @@ setting.
 | `knowledge-flow-worker-extraction-{fast,medium,rich}` | optional dedicated extraction workers | no |
 
 Python applications can run database migrations as Helm hook Jobs
-(`applications.<name>.migration.enabled`). The control-plane hook runs `fred-manager migrate` using only `DATABASE_URL`;
+(`applications.<name>.migration.enabled`). The control-plane hook runs `control-plane migrate` using only `DATABASE_URL`;
 manager also applies its SQL migrations at API startup.
 
 ## Requirements
@@ -50,7 +50,7 @@ The default chart runs three images, `ghcr.io/thalesgroup/fred-agent/<app>`:
 `control-plane-backend`, `knowledge-flow-backend` and `frontend`. Each API/worker pair uses
 its backend's image. The tag defaults to the chart's `appVersion`; set matching
 `applications.<app>.image.tag` values for each pair when overriding it.
-`deploy/k3d/build` builds these three images from the same checkout. The control-plane image is built from `apps/fred-manager`; the Python
+`deploy/k3d/build` builds these three images from the same checkout. The control-plane image is built from `apps/control-plane`; the Python
 control-plane image is not published by this checkout.
 
 ## Your values file
@@ -70,16 +70,15 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
   own contract: [Root bootstrap secret contract](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#root-bootstrap-secret-contract-authz-07).
 - **Gateway DNS.** The frontend's manager/control-plane upstream defaults use
   `control-plane-backend.<release namespace>.svc.cluster.local:8222`, even when
-  instance values replace `frontend.env`. Override `FRONTEND_FRED_MANAGER_UPSTREAM`
-  and `FRONTEND_CONTROL_PLANE_UPSTREAM` in `env` or `extraEnvVars` for another
+  instance values replace `frontend.env`. Override `FRONTEND_CONTROL_PLANE_UPSTREAM` in `env` or `extraEnvVars` for another
   address or DNS domain. Nginx's request-time resolver needs fully qualified names.
 
 The local k3d example in fred-deployment-factory applies
 [`k3d-apps/fred/values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/values.yaml)
 followed by built image tags and operator overrides. No manager-specific factory
 overlay or branch is required. The existing control-plane identity and Secret keys
-are reused; database `fred`, OpenFGA store `fred-manager` and lifecycle queue/prefix
-`fred-manager-lifecycle` remain unchanged. Common `scheduler.temporal.host` and
+are reused; database `fred`, OpenFGA store `control-plane` and lifecycle queue/prefix
+`control-plane-lifecycle` remain unchanged. Common `scheduler.temporal.host` and
 `namespace` settings on the API feed its shared lifecycle connection.
 The security profile (`c3`) is described in
 [Security profiles & classification tiers](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#security-profiles--classification-tiers).
@@ -110,7 +109,7 @@ Register in the realm, accept the active terms in Fred and enter the bootstrap
 secret requested by the UI to become platform owner. The manager API reads the
 secret named by `app.bootstrap_token_env_var`; k3d keeps the existing
 `fred-secrets/CONTROL_PLANE_BOOTSTRAP_TOKEN` key. Registration/bootstrap does not
-create organization membership. See the [manager guide](../../../apps/fred-manager/README.md).
+create organization membership. See the [manager guide](../../../apps/control-plane/README.md).
 
 ## Kubernetes tools in fred-agents
 

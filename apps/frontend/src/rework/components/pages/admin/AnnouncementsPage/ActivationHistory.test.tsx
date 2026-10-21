@@ -22,7 +22,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AnnouncementExposure } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AnnouncementExposure } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const historyMock = vi.fn();
 const usersMock = vi.fn();
@@ -31,7 +31,7 @@ const seenMock = vi.fn();
 const showError = vi.fn();
 const showInfo = vi.fn();
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useAnnouncementExposureHistoryQuery: () => historyMock(),
   useLazyPatchNotePackageQuery: () => [packageMock],
   useUsersByIdsQuery: (...args: unknown[]) => usersMock(...args),

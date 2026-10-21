@@ -95,7 +95,7 @@ vi.mock("../../TeamAgentsPage/AgentFormModal/TuningFieldRenderer", () => ({
   ),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
   useKnowledgeBaseDefinitionsQuery: () => ({
     data: probe.definitions,
     isLoading: probe.definitionsLoading,
@@ -114,7 +114,7 @@ import KnowledgeBaseFormModal, { buildCreatePayload, readInstanceValues } from "
 import type {
   KnowledgeBaseInstanceFields,
   KnowledgeBaseInstanceSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 
 let container: HTMLDivElement;
 let root: Root;

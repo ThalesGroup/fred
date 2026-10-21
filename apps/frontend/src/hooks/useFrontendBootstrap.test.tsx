@@ -38,7 +38,7 @@ const h = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery:
     h.useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
 }));

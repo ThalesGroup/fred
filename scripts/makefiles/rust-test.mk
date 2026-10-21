@@ -36,6 +36,6 @@ test-integration: dev ## Run integration tests against throwaway Postgres and Op
 	until docker exec $$pg psql -U postgres -h 127.0.0.1 -c 'select 1' >/dev/null 2>&1; do sleep 1; done; \
 	until curl -sf http://$$fga_addr/healthz >/dev/null; do sleep 1; done; \
 	echo "************ INTEGRATION TESTING ************"; \
-	FRED_MANAGER_IT_POSTGRES=postgres://postgres:it@$$pg_addr \
-	FRED_MANAGER_IT_OPENFGA=http://$$fga_addr \
+	CONTROL_PLANE_IT_POSTGRES=postgres://postgres:it@$$pg_addr \
+	CONTROL_PLANE_IT_OPENFGA=http://$$fga_addr \
 	$(CARGO) test $(CARGO_TEST_OPTS) --test integration -- --ignored

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { LabelValuePoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { LabelValuePoint } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import BarChart from "../BarChart/BarChart";
 
 interface HistogramChartProps {

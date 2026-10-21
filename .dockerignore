@@ -11,7 +11,7 @@
 **/*.pid
 
 # Ignore the per-project alembic.ini symlinks (NOT the real file at the repo root).
-# alembic.ini exists once, at the root; apps/control-plane-backend, apps/knowledge-flow-backend
+# alembic.ini exists once, at the root; apps/knowledge-flow-backend
 # and libs/fred-runtime each carry a symlink to it purely for local-dev ergonomics (so a bare
 # `alembic ...` works from the project directory). Kaniko copies symlinks verbatim instead of
 # resolving them, so letting one into the build context lands a DANGLING link in the image.

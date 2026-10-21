@@ -7,7 +7,7 @@ import type {
   PlatformAccessActivationUser,
   PlatformAccessTeam,
   PlatformAccessUser,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 const state = vi.hoisted(() => ({
   users: [
     {
@@ -63,7 +63,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: vi.fn(), showSuccess: state.success }),
 }));
 vi.mock("../../../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: true }) }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePlatformAccessStateQuery: () => ({
     refetch: state.refreshAuthority,
     isError: state.authorityError,

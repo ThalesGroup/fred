@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 import { expect, it } from "vitest";
-import type { FailureCode, Summary } from "../../../slices/fredManager/fredManagerOpenApi";
+import type { FailureCode, Summary } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { managerProcessingErrors, managerProcessingFailure } from "./managerDocuments";
 it("reports persisted manager failure stages without depending on the uploader task feed", () => {
   const processing: Summary = {

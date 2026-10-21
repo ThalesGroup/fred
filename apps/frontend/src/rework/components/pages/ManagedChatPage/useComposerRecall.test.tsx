@@ -38,7 +38,7 @@ const PROMPTS = [
   { prompt_id: "p-summary", name: "Résumé", command: "summary", description: "Résumer", emoji: null },
 ];
 
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ currentData: PROMPTS }),
   useGetAgentInstanceSkillsQuery: () => ({ currentData: { supported: true, skills: [] } }),
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [vi.fn()],

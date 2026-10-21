@@ -14,13 +14,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
-import { useLazyTeamAgentInstancesQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useLazyTeamAgentInstancesQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import {
   type ManagedAgentInstanceSummary,
   type PromptSummary,
   useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
   useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { type SearchSources, unifyPrompts } from "./homeSearchIndex.ts";
 
 /**

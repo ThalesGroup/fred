@@ -1,4 +1,4 @@
-# Reference: manager runtime
+# Reference: control-plane runtime
 
 This is the component-level reference behind the domain chapters. Its sequences
 and choices apply to manager; they are not a topology or execution contract for
@@ -12,13 +12,13 @@ flowchart LR
     client["Client<br/>browser application"]
     operator["Platform administrator<br/>CLI or HTTP ZIP import"]
     caller["Service acting for a user<br/>with the user's token"]
-    manager["fred-manager<br/>CLI and REST /fred-manager/v1"]
+    manager["control-plane<br/>CLI and REST /control-plane/v1"]
     keycloak["Keycloak<br/>realm app"]
-    openfga["OpenFGA<br/>store fred-manager"]
+    openfga["OpenFGA<br/>store control-plane"]
     postgres[("Postgres<br/>database fred")]
     objects[("S3<br/>original document namespace")]
     temporal["Temporal<br/>lifecycle and KF ingestion queues"]
-    worker["fred-manager worker"]
+    worker["Background tasks inside control-plane serve"]
     kf["Existing Knowledge Flow workers"]
     derived[("Isolated derived objects and vectors")]
 
@@ -30,6 +30,7 @@ flowchart LR
     manager -- "context reads, checks,<br/>role writes" --> openfga
     manager -- "consent, spaces, folders, documents" --> postgres
     manager -- "immutable originals, bounded inventory" --> objects
+    manager --> worker
     worker --> temporal
     worker --> postgres & openfga
     temporal --> kf
@@ -38,25 +39,25 @@ flowchart LR
     manager -- "verify and publish manifest" --> derived
 ```
 
-| Partner | What fred-manager uses | Contract |
+| Partner | What control-plane uses | Contract |
 | --- | --- | --- |
 | Keycloak | Access tokens, signing keys (JWKS), user lookup/creation with its own service account | [security](03-security.md), Authentication |
 | OpenFGA | `check`, `write`, `read` on its own store | [model and contracts](A2-manager-contracts.md), OpenFGA model |
 | Postgres | Its tables in the `fred` database | [model and contracts](A2-manager-contracts.md), Schema |
 | S3 | Conditional Put, verified Get, Delete and paginated List | [original storage](#original-storage) |
 | Temporal | Manager-owned lifecycle and delivery of existing KF ProcessPush | [lifecycle](#space-deletion-lifecycle) |
-| Clients | Public configuration and health; authenticated onboarding and business routes | [HTTP surface](A2-manager-contracts.md#fred-manager-http-surface) and [authentication](03-security.md#authentication) |
+| Clients | Public configuration and health; authenticated onboarding and business routes | [HTTP surface](A2-manager-contracts.md#control-plane-http-surface) and [authentication](03-security.md#authentication) |
 | Services acting for a user | `/authorize/document`, `/authorize/scope` | [runtime reference](A1-manager-runtime.md), Search scope |
 
 
-## fred-manager
+## control-plane
 
 A library crate (`src/lib.rs`) with a thin binary (`src/main.rs`): integration tests
 drive the library against real Postgres and OpenFGA.
 
 ```mermaid
 flowchart TB
-    main["main.rs<br/>serve, worker, create-org, import-provisioning"]
+    main["main.rs<br/>serve, migrate, create-org, import-provisioning"]
     config["config.rs<br/>configuration.yaml + secrets"]
     logging["logging.rs<br/>stdout format, request ids"]
     api["api.rs<br/>routes, handlers"]
@@ -116,8 +117,8 @@ routes with the shared `AppState`; the HTTP API has no Temporal client.
 The same `utoipa-axum` registrations build the runtime routers and OpenAPI paths.
 `utoipa::ToSchema` derives request/response schemas from the Rust DTOs. The binary's
 `generate-openapi` command runs before configuration and logging initialization;
-it emits the canonical `/fred-manager/v1` contract without constructing service state.
-The frontend generates `fredManagerOpenApi.ts` through its standard RTK codegen
+it emits the canonical `/control-plane/v1` contract without constructing service state.
+The frontend generates `controlPlaneOpenApi.ts` through its standard RTK codegen
 tool and registers the slice in the shared Redux store. A handwritten enhancement
 encodes provisioning and original-upload binary arguments as FormData; paths, methods and
 response types remain generated.
@@ -211,7 +212,7 @@ remaining tasks. No SQL or OpenFGA authority is written by those tasks.
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant M as fred-manager
+    participant M as control-plane
     participant KC as Keycloak
     participant PG as Postgres
     participant FGA as OpenFGA
@@ -248,7 +249,7 @@ and narrows to a folder with a `folder_path` prefix.
 ```mermaid
 sequenceDiagram
     participant S as Service acting for a user
-    participant M as fred-manager
+    participant M as control-plane
     participant PG as Postgres
     participant FGA as OpenFGA
     S->>M: POST /authorize/scope {space_id, levels?}, user's token
@@ -297,7 +298,7 @@ account changes and requires explicit retry on error.
 ```mermaid
 sequenceDiagram
     participant C as Caller
-    participant M as fred-manager
+    participant M as control-plane
     participant PG as Postgres
     participant FGA as OpenFGA
     C->>M: PUT /spaces/{id}/roles/{role}/{user}
@@ -331,7 +332,7 @@ advisory lock (I9).
 ```mermaid
 sequenceDiagram
     participant U as Caller
-    participant M as fred-manager
+    participant M as control-plane
     participant PG as Postgres
     participant FGA as OpenFGA
     U->>M: POST /bootstrap/platform-admin {token}
@@ -407,8 +408,11 @@ sequenceDiagram
 
 Publication failure leaves cleanup work in SQL. API reconciliation claims a bounded
 batch, expires abandoned reservations under their organization locks and deletes
-failed objects outside locks. A persisted prefix scan rechecks SQL before deleting
-unreferenced objects, including late writes after a previous cleanup. Competing
+failed objects outside locks. A persisted prefix scan filters input keys, rechecks
+SQL and requires the matching `fred-installation` metadata before deleting
+unreferenced originals, including late writes after a previous cleanup. Outputs
+and foreign objects are preserved; an inaccessible original defers its own cleanup.
+Competing
 replicas share the lease; a contended organization is deferred without starving
 other candidates. The loop neither publishes documents nor calls processing services.
 
@@ -465,7 +469,7 @@ implicit role.
 
 ## Authenticated provisioning import
 
-`fred-manager import-provisioning <bundle.zip> --token-file <path>` verifies the
+`control-plane import-provisioning <bundle.zip> --token-file <path>` verifies the
 operator bearer, connects to SQL without migrating and verifies migration
 versions/checksums. It loads the published FGA store/model and checks platform owner.
 Multipart `POST /import-export/import` checks the authenticated caller's platform
@@ -552,7 +556,7 @@ held SQL connection. No workflow is dispatched by the API.
 | D7 | Organization mutations hold a Postgres advisory lock and consume an OpenFGA guard captured before checks. | SQL locks alone cannot stop a remote write after cancellation. | Live callers serialize; stale remote writes fail atomically. |
 | D8 | Root bootstrap in two steps under one lock: reservation committed, then grant and completion. | No double promotion, no reopening. | A failed grant can only be finished by its claimant. |
 | D9 | Configuration, secrets and log output follow Fred's service conventions. | One way to operate every Fred service. | `sourceLocation.function` holds the module path. |
-| D10 | Shared infrastructure, own OpenFGA store. | No dedicated infrastructure to run. | Table names are unique in `fred`; `fred-manager` is the logical store name; SQL pins its active store/model IDs. |
+| D10 | Shared infrastructure, own OpenFGA store. | No dedicated infrastructure to run. | Table names are unique in `fred`; `control-plane` is the logical store name; SQL pins its active store/model IDs. |
 | D11 | Deployed with fred's chart as a separate release. | One chart for every Fred service. | The release references the chart without its `values.schema.json` ([operations reference](A3-manager-operations.md)). |
 | D12 | Owner is technical, on the platform and on organizations; admin, editor, analyst and member are business roles on every space. Admin and content roles remain orthogonal; a child role requires a direct parent content role. | Technical and business administration were confused under one word. | An organization owner names admins and reads nothing; analyst is a content role; revocation never adds a fallback role. |
 | D13 | Platform mutations, all direct space-role changes, organization creation and import share the platform lock/guard, before organization locks. | Different organization locks cannot prevent competing person assignments; stale remote writes also need a shared fence. | Attachments remain unique, at the cost of serializing role mutations across unrelated organizations. |
@@ -581,8 +585,8 @@ after navigation; pending deletions of the same UUID share one request.
 `lifecycle::store` accepts authenticated requests and owns durable receipts.
 `lifecycle::cleanup` executes one bounded SQL/OpenFGA batch; `lifecycle::worker`
 registers the deterministic `SpaceDeletionSweep` workflow and its activities.
-The worker loads the published schema/model; it performs no bootstrap, migration
-or directory initialization.
+Lifecycle tasks share the initialized application state of `control-plane serve`;
+they do not apply SQL migrations.
 
 ```mermaid
 sequenceDiagram
@@ -658,4 +662,4 @@ The Python export supplies the existing workflow JSON schema and profile policy.
 Rust validates and serializes that contract; workflow/activity names, argument
 shapes and registrations remain unchanged. Activity adapters select separate
 persistence only for manager sources. Queue routing and extraction supervision
-remain in the existing worker. HTTP startup has no Temporal connection.
+remain in the existing worker. The supervised background tasks establish their Temporal connections independently of HTTP serving.

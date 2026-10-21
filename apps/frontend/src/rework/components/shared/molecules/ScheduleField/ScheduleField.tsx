@@ -17,7 +17,7 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { IntervalSchedule } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type { IntervalSchedule } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import styles from "./ScheduleField.module.css";
 
 /** How often something recurs, edited as a duration.

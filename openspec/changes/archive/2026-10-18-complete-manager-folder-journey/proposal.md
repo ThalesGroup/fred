@@ -17,7 +17,7 @@ None.
 
 ### Modified Capabilities
 
-- `fred-manager-provisioning`: extend the implemented space-owned resource journey to complete folder management, preserving the original UI.
+- `control-plane-provisioning`: extend the implemented space-owned resource journey to complete folder management, preserving the original UI.
 
 ## Impact
 

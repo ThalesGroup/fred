@@ -32,8 +32,8 @@ import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useUpdateTeamMutation } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { TeamWithPermissions } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useUpdateTeamMutation } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 
 interface TeamSettingsRetentionProps {

@@ -37,6 +37,8 @@ from fred_sdk.contracts.models import AgentDefinition
 from fred_sdk.contracts.runtime import ChatModelFactoryPort
 from langchain_core.language_models.chat_models import BaseChatModel
 
+from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
+
 from .contracts import (
     ModelCapability,
     ModelNotUsableError,
@@ -294,8 +296,8 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         turn_requested = binding.runtime_context.reasoning is True
         if not platform_allows or not turn_requested:
             model_config = without_reasoning_settings(model_config)
-        model = self._provider.build_model(
-            model_config, capability=selection.capability
+        model = with_mistral_reasoning_replay(
+            self._provider.build_model(model_config, capability=selection.capability)
         )
         if not isinstance(model, BaseChatModel):
             raise TypeError(

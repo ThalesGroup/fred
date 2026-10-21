@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { AgentCopyResult, ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AgentCopyResult, ManagedAgentInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /** Duplicate is a server copy into the agent's own team under the chosen name,
  * so configuration files are recreated rather than lost. */

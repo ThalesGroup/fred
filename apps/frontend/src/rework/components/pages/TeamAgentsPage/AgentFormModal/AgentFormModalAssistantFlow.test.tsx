@@ -24,7 +24,7 @@ import type {
   AvailableModelProfileList,
   ManagedAgentInstanceSummary,
   TeamRoutingPolicy,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const draftAgent = vi.fn();
 const modelRead = vi.hoisted(() => ({
@@ -46,19 +46,19 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "agent" }),
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useDraftAgentMutation: () => [draftAgent],
   useUsersByIdsQuery: () => ({ data: [] }),
   useTeamRoutingPolicyQuery: () => ({ currentData: modelRead.policy }),
   useAvailableModelProfilesQuery: () => ({ currentData: modelRead.models, isError: modelRead.modelsError }),
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
   useDraftAgentMutation: () => [draftAgent],
   useUsersByIdsQuery: () => ({ data: [] }),
   useTeamRoutingPolicyQuery: () => ({ currentData: modelRead.policy }),
   useAvailableModelProfilesQuery: () => ({ currentData: modelRead.models, isError: modelRead.modelsError }),
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi.ts", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts", () => ({
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({ data: [] }),
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({ data: [] }),
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [vi.fn(), { isLoading: false }],

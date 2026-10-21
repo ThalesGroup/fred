@@ -15,7 +15,6 @@ spec.loader.exec_module(reset)
 
 
 def configuration(name):
-    manager = name in reset.MANAGER_APPS
     return {
         "storage": {
             "postgres": {"host": "postgres", "database": "fred", "username": "fred"},
@@ -46,14 +45,10 @@ def configuration(name):
             "rebac": {
                 "type": "openfga",
                 "api_url": "http://openfga:9080",
-                "store_name": "fred-manager" if manager else "fred",
+                "store_name": "fred",
             }
         },
-        "scheduler": (
-            {"lifecycle": {"temporal": {"host": "temporal:7233", "namespace": "default"}}}
-            if manager
-            else {"temporal": {"host": "temporal:7233", "namespace": "default"}}
-        ),
+        "scheduler": {"temporal": {"host": "temporal:7233", "namespace": "default"}},
     }
 
 
@@ -87,7 +82,7 @@ class FakeReset(reset.Reset):
             }
         }
         for name in sorted(reset.APPS | reset.INFRA):
-            release = "fred-manager" if name in reset.MANAGER_APPS else "fred-app" if name in reset.APPS else "fred-stack"
+            release = "fred-app" if name in reset.APPS else "fred-stack"
             self.resources["deployments"]["items"].append(
                 {
                     "metadata": {
@@ -134,10 +129,6 @@ class FakeReset(reset.Reset):
             {
                 "stores": [
                     {"id": "one", "name": "fred"},
-                    {
-                        "id": "two",
-                        "name": "fred-manager-8bd7b5ba-d75f-462f-b7e6-e85df773065b",
-                    },
                 ]
             }
         ]
@@ -155,7 +146,7 @@ class FakeReset(reset.Reset):
             return json.dumps(
                 [
                     {"name": n, "namespace": "fred", "status": "deployed"}
-                    for n in ("fred-stack", "fred-app", "fred-manager")
+                    for n in ("fred-stack", "fred-app")
                 ]
             )
         return "installed hooks"
@@ -213,13 +204,12 @@ class ResetTests(unittest.TestCase):
         self.assertFalse(any(c[0] == "http" and c[-1] != "GET" for c in self.r.calls))
         self.assertFalse(any(c[0] == "sql" and not c[-1].startswith("SELECT") for c in self.r.calls))
 
-    def test_real_manager_chart_configuration_accepts_typed_openfga(self):
-        import yaml
-        values = yaml.safe_load((Path(__file__).parents[1] / "charts/fred/values.yaml").read_text())
-        names = {"control-plane-backend", "control-plane-worker"}
-        for name in names:
-            values["applications"][name]["configuration"]["security"]["rebac"]["api_url"] = "http://openfga:9080"
-        reset.Reset().check_config(values, names)
+
+    def test_rust_ingestion_is_refused_before_mutation(self):
+        self.r.configs["knowledge-flow-worker"]["configuration"]["manager_processing"] = {"enabled": True}
+        with self.assertRaisesRegex(reset.Refused, "Reset is not supported"):
+            self.preflight()
+        self.assert_read_only()
 
     def test_preview_resolves_installed_hooks_without_mutation(self):
         self.preflight()
@@ -227,73 +217,11 @@ class ResetTests(unittest.TestCase):
         self.assert_read_only()
         self.assertFalse(self.r.state_file.exists())
 
-    def test_integrated_manager_composition_uses_one_python_migration(self):
-        retired = {"control-plane-backend", "control-plane-worker", "fred-agents"}
-        for kind in ("deployments", "replicasets", "pods"):
-            self.r.resources[kind]["items"] = [
-                item for item in self.r.resources[kind]["items"]
-                if not any(name in json.dumps(item) for name in retired)
-            ]
-        for deployment in self.r.resources["deployments"]["items"]:
-            if deployment["metadata"]["name"] in reset.MANAGER_APPS:
-                deployment["metadata"]["annotations"][reset.RELEASE] = "fred-app"
-        self.r.installed_jobs = [j for j in self.r.installed_jobs if j["metadata"]["name"].startswith("knowledge-flow")]
-        self.preflight()
-        self.assertEqual(len(self.r.jobs), 1)
-        self.assertTrue(reset.MANAGER_APPS <= self.r.state["replicas"].keys())
-        self.assertFalse(retired & self.r.state["replicas"].keys())
-        self.assert_read_only()
 
-    def test_rust_control_plane_uses_two_migrations_without_agents(self):
-        retired = reset.MANAGER_APPS | {"fred-agents"}
-        for kind in ("deployments", "replicasets", "pods"):
-            self.r.resources[kind]["items"] = [
-                item for item in self.r.resources[kind]["items"]
-                if not any(name in json.dumps(item) for name in retired)
-            ]
-        self.r.installed_jobs = [j for j in self.r.installed_jobs if not j["metadata"]["name"].startswith("fred-agents")]
-        for name in ("control-plane-backend", "control-plane-worker"):
-            self.r.configs[name]["configuration"] = configuration("fred-manager")
-        self.preflight()
-        self.assertEqual(len(self.r.jobs), 2)
-        self.assertEqual(set(self.r.state["replicas"]), (reset.APPS - retired) | {"temporal"})
-        self.assert_read_only()
-        self.r.configs["control-plane-backend"]["configuration"]["scheduler"]["temporal"] = {"host": "external:7233"}
-        with self.assertRaises(reset.Refused):
-            self.preflight()
 
-    def test_manager_worker_is_stopped_restored_and_optional(self):
-        self.preflight()
-        self.assertIn("fred-manager-worker", self.r.state["replicas"])
-        for kind in ("deployments", "replicasets", "pods"):
-            self.r.resources[kind]["items"] = [
-                item for item in self.r.resources[kind]["items"]
-                if not any(name in json.dumps(item) for name in reset.MANAGER_APPS)
-            ]
-        self.r.preflight()
-        self.assert_read_only()
 
-    def test_manager_reset_accepts_only_lifecycle_temporal_configuration(self):
-        for name in reset.MANAGER_APPS:
-            scheduler = self.r.configs[name]["configuration"]["scheduler"]
-            self.assertNotIn("temporal", scheduler)
-            self.assertIn("temporal", scheduler["lifecycle"])
-        self.preflight()
-        self.assert_read_only()
 
-    def test_manager_lifecycle_external_namespace_is_refused(self):
-        self.r.configs["fred-manager-worker"]["configuration"]["scheduler"]["lifecycle"]["temporal"]["namespace"] = "external"
-        with self.assertRaises(reset.Refused):
-            self.preflight()
-        self.assert_read_only()
 
-    def test_manager_worker_external_temporal_is_refused(self):
-        self.r.configs["fred-manager-worker"]["configuration"]["scheduler"]["lifecycle"] = {
-            "temporal": {"host": "external:7233"}
-        }
-        with self.assertRaises(reset.Refused):
-            self.preflight()
-        self.assert_read_only()
 
     def test_other_application_and_bare_pod_are_refused_before_mutation(self):
         for kind, resource in (
@@ -331,59 +259,10 @@ class ResetTests(unittest.TestCase):
                 self.preflight()
             self.assert_read_only()
 
-    def manager_processing(self):
-        for name in reset.MANAGER_APPS:
-            c = self.r.configs[name]["configuration"]
-            c["storage"]["content"] = {"endpoint": "http://seaweedfs:8333", "bucket": "fred-manager-originals"}
-            c["scheduler"]["processing"] = {
-                "enabled": False,
-                "temporal": {"host": "temporal:7233"},
-                "derived": {"endpoint": "http://seaweedfs:8333", "bucket": "fred-manager-derived"},
-            }
-        for name in ("knowledge-flow-backend", "knowledge-flow-worker"):
-            self.r.configs[name]["configuration"]["manager_processing"] = {
-                "enabled": False,
-                "endpoint": "http://seaweedfs:8333",
-                "bucket": "fred-manager-derived",
-                "vector_store": {"type": "opensearch", "index": "fred-manager-vectors"},
-            }
 
-    def test_manager_local_originals_derived_and_vectors_are_cleared(self):
-        self.manager_processing()
-        self.r.file_names += ["fred-manager-originals", "fred-manager-derived"]
-        self.preflight()
-        self.assert_read_only()
-        self.r.execute()
-        self.assertEqual(set(self.r.file_names), {"fred-manager-originals", "fred-manager-derived"})
-        self.assertIn(("http", "search", "/fred-manager-vectors", "DELETE"), self.r.calls)
 
-    def test_manager_external_storage_or_processing_is_refused_even_when_disabled(self):
-        for name, path, value in (
-            ("fred-manager", ["storage", "content", "endpoint"], "https://external"),
-            ("fred-manager", ["storage", "content", "bucket"], "foreign"),
-            ("fred-manager-worker", ["scheduler", "processing", "derived", "endpoint"], "https://external"),
-            ("fred-manager-worker", ["scheduler", "processing", "temporal", "host"], "external:7233"),
-            ("fred-manager-worker", ["scheduler", "processing", "temporal", "namespace"], "other"),
-            ("knowledge-flow-worker", ["manager_processing", "endpoint"], "https://external"),
-            ("knowledge-flow-worker", ["manager_processing", "bucket"], "foreign"),
-            ("knowledge-flow-worker", ["manager_processing", "vector_store", "index"], "foreign"),
-        ):
-            with self.subTest(name=name, path=path):
-                self.r = FakeReset()
-                self.manager_processing()
-                target = self.r.configs[name]["configuration"]
-                for key in path[:-1]:
-                    target = target[key]
-                target[path[-1]] = value
-                with self.assertRaises(reset.Refused):
-                    self.preflight()
-                self.assert_read_only()
 
-    def test_manager_bucket_without_matching_configuration_is_refused(self):
-        self.r.file_names += ["fred-manager-originals"]
-        with self.assertRaisesRegex(reset.Refused, "other content buckets"):
-            self.preflight()
-        self.assert_read_only()
+
 
     def test_upgrade_reset_never_reinstalls_old_baseline_or_model(self):
         self.r.for_upgrade = True
@@ -426,8 +305,8 @@ class ResetTests(unittest.TestCase):
         self.assertEqual(len(waits), len(reset.APPS) + 1)
         self.assertLess(max(waits), erasure)
         self.assertIn(("scale", "deployment/fred-agents", "--replicas=2"), calls)
-        self.assertIn(("scale", "deployment/fred-manager-worker", "--replicas=0"), calls)
-        self.assertIn(("scale", "deployment/fred-manager-worker", "--replicas=1"), calls)
+        self.assertIn(("scale", "deployment/control-plane-worker", "--replicas=0"), calls)
+        self.assertIn(("scale", "deployment/control-plane-worker", "--replicas=1"), calls)
         migrations = [i for i, c in enumerate(calls) if c[:2] == ("wait", "--for=condition=complete")]
         restore = next(i for i, c in enumerate(calls) if c[:3] == ("scale", "deployment/fred-agents", "--replicas=2"))
         self.assertLess(max(migrations), restore)

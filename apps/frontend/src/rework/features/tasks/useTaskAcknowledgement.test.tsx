@@ -33,7 +33,7 @@ vi.mock("../../../security/KeycloakService", () => ({
 }));
 
 import { knowledgeFlowApi } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { controlPlaneApi } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { legacyControlPlaneApi } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { taskRegistered, taskSlice, taskSnapshotsReceived } from "./taskSlice";
 import { useTaskAcknowledgement } from "./useTaskAcknowledgement";
 
@@ -42,9 +42,9 @@ const makeStore = () =>
     reducer: {
       tasks: taskSlice.reducer,
       [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
-      [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
+      [legacyControlPlaneApi.reducerPath]: legacyControlPlaneApi.reducer,
     },
-    middleware: (getDefault) => getDefault().concat(knowledgeFlowApi.middleware, controlPlaneApi.middleware),
+    middleware: (getDefault) => getDefault().concat(knowledgeFlowApi.middleware, legacyControlPlaneApi.middleware),
   });
 
 let store: ReturnType<typeof makeStore>;

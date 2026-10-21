@@ -24,7 +24,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PlatformModelBinding } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PlatformModelBinding } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -51,7 +51,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePlatformModelBindingQuery: () => ({ data: h.binding, isLoading: false, isError: false }),
   useSetPlatformModelBindingMutation: () => [h.setBinding, { isLoading: false }],
   useDeletePlatformModelBindingMutation: () => [h.deleteBinding, { isLoading: false }],

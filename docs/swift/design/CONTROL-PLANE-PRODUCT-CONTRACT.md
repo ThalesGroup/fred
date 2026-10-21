@@ -3151,12 +3151,12 @@ Parent and frame communicate only over `postMessage`, from the first message:
 
 ```text
 frame -> host : fred:ready { protocolVersion }
-host  -> frame: fred:context { protocolVersion, applicationId, context }
+host  -> frame: fred:context { protocolVersion, applicationId, context, capabilities? }
                 fred:route { subPath }
                 fred:response | fred:response-error { requestId, ... }
 frame -> host : fred:navigate { path, replace }
                 fred:open-chat { sessionId? }
-                fred:request { requestId, path, method, headers, body }
+                fred:request { requestId, path, method, headers, body, responseType? }
 ```
 
 The transport-neutral source of these protocol-`"1"` shapes, limits, pure parsers,
@@ -3171,10 +3171,14 @@ sub-path repeats—while request replies are settled only once by live request i
 
 The SDK adds client-side connection and request deadlines, a 16-request pending bound,
 local abort, and lifecycle disposal. These are local resource controls, not transferred
-cancellation or authorization. Its request API reconstructs buffered text/JSON
-`Response` objects, including inspectable HTTP errors and bodyless HEAD/204/205/304
-responses; it does not promise streams, binary bodies, remote cancellation, or
-automatic mutation retries. Host validation and all authority described below remain
+cancellation or authorization. Its request API reconstructs buffered `Response` objects,
+including inspectable HTTP errors and bodyless HEAD/204/205/304 responses. Bodies are
+text, or `Blob` both ways when the host announces `binary-bodies` in `capabilities`: the
+SDK then sends `Blob` and `FormData` (as a multipart `Blob`) bodies and sets
+`responseType: "blob"`, and the host answers that request with a `Blob`; it never sends
+one to a frame that did not ask. Upload size stays bounded by the gateway's
+`FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE`. The SDK does not promise streams, transfer
+progress, remote cancellation, or automatic mutation retries. Host validation and all authority described below remain
 mandatory for legacy and SDK clients alike.
 
 The host accepts a _set_ of protocol versions (currently `"1"`) because fork
@@ -4826,6 +4830,79 @@ take the first free `<name> (<word> <n>)`, n from 1, `<word>` from a fixed
 server map of the optional `locale` field of the copy and import bodies
 (`fr` → `copie`, `en` → `copy`; absent → `copy`). A platform import keeps `<name> (2)`, n from 2.
 The frontend sends its UI language (OpenSpec `agent-names`, `agent-copy`).
+
+## 66. Contract Notes — required team description (2026-10-12, #3067)
+
+**Rule.** A team's description states its objectives regarding its use of AI
+and is required: 20 to 500 characters once trimmed, stored trimmed. Personal
+spaces keep no description. The bounds, the placeholder and the pydantic type
+`TeamDescription` live in `fred_core.teams.metadata_store`.
+
+| Schema              | Field                        | Type                               | Notes                                                                                           |
+| ------------------- | ---------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `CreateTeamRequest` | `description`                | `string`, 20-500, **required**     | `POST /teams` answers 422 when missing or out of bounds; no team is created                      |
+| `UpdateTeamRequest` | `description`                | `string`, 20-500, optional         | Unset keeps the stored value; explicit `null`, blank or out of bounds is 422 (never cleared)     |
+| `Team`              | `description`                | `string \| null`                   | Unchanged; `null` only for personal spaces                                                      |
+| `Team`              | `description_is_placeholder` | `boolean`, default `false`         | `true` while the stored description is the placeholder; inherited by `TeamWithPermissions`      |
+
+**Breaking.** `CreateTeamRequest.description` is required and
+`UpdateTeamRequest.description` no longer clears the value. Only the Fred
+frontend and the platform importer call these routes.
+
+**Database.** `teammetadata.description` is `VARCHAR(500) NOT NULL` with the
+check `ck_teammetadata_description_min_length` (`length(trim(description)) >=
+20`). Migration `c9acb7dd3ad0` first gives every missing, blank or too-short
+description the placeholder « Description à compléter par l'administrateur de
+l'équipe. ».
+
+**Placeholder.** One frozen constant (`TEAM_DESCRIPTION_PLACEHOLDER`): changing
+its text needs a data migration. A platform import and the Knowledge Flow
+storage backfill use it instead of failing; the import report carries one
+warning, "N teams received a default description.". The frontend shows the
+placeholder translated and reminds team admins (`can_update_info`) on the
+team home and in team settings. Full behavior: OpenSpec `team-description`.
+
+## 67. Contract Notes — platform admin team editing (2026-10-16, #3145)
+
+**Route.** `PATCH /teams/{team_id}/registry`, gated on
+`organization#can_edit_team_registry` (`platform_admin` only; `team_manager`
+keeps `POST /teams` but not this). Body `EditTeamRegistryRequest`; response
+`TeamWithPermissions`, built without the caller's `can_read` (they need not be
+a member).
+
+| Field              | Type                         | Notes                                                                       |
+| ------------------ | ---------------------------- | --------------------------------------------------------------------------- |
+| `name`             | `string`, 1-180, optional    | Trimmed; its own name is a no-op; another team's name is 409                 |
+| `description`      | `string`, 20-500, optional   | Rules of §66; `null` is 422                                                 |
+| `add_admin_ids`    | `string[]`, default `[]`     | `team_admin`, or `pending_team_admin` until the charter is accepted (§54)    |
+| `remove_admin_ids` | `string[]`, default `[]`     | Drops `team_admin` and `pending_team_admin`; the user stays a team member    |
+
+A user in both lists is 422. Unknown team or personal space: 404. Admins move
+as a diff so pending nominations and concurrent team-admin changes survive.
+
+**Order.** Under the team role lock, every refusal comes before any write: the
+name pre-check, then a 409 when no active `team_admin` would remain (a sole
+replacement still owing the charter counts as none, with its own message).
+Relations are written, then the name and description; the residual rename
+race after the pre-check answers 409 with the admins already changed, as for
+`PATCH /teams/{team_id}`. Both routes share the rename helpers.
+
+**Audit.** One `team.registry.edited` event per edit that changed something:
+`actor_uid`, `team_id`, `changed_fields`, `admins_added`, `admins_removed`
+(ids only, as requested). An edit that fails after its admin changes were
+written still emits it, with empty `changed_fields`. REBAC.md "Team registry governance" records the authority; the
+OpenSpec spec `team-registry-administration` the scenarios.
+
+**Refusal codes.** The 409 bodies of `TeamAlreadyExistsError` and
+`TeamAdminConstraintError`, on every route that raises them, carry a stable
+`code` next to the English `detail`: `team_name_taken`, `team_last_admin`,
+`team_admin_pending_charter` (sole replacement still owing the charter). The
+admin Teams dialog maps them to its own localized messages.
+
+**Pending admins.** `Team.pending_admin_ids` (`string[]`, default `[]`) lists
+the ids in `admins` that still hold `pending_team_admin` only. Filled by the
+team listings that resolve membership (their `admins` include nominees);
+empty on the single-team projection, whose `admins` are accepted admins only.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 

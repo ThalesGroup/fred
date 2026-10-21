@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import type {
   CapabilityCatalogEntry,
   ManagedAgentFieldSpec,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { derivePackChecked } from "../toolPackLogic";
 import {
   CAP_DOCUMENT_ACCESS,
@@ -28,7 +28,7 @@ import {
   DOC_ACCESS_TEAM_DOCUMENTS,
   TOOL_PACK_SECTIONS,
 } from "../toolPacks";
-import type { AgentDraftResult } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AgentDraftResult } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   applyRecommendedCapabilities,
   availableRecommendedIds,

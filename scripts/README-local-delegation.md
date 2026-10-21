@@ -67,8 +67,6 @@ Run each command in a separate terminal from the Fred repository root, after
 preparing the existing per-app `.env` files and installing the usual dependencies:
 
 ```bash
-make -C apps/control-plane-backend run
-make -C apps/control-plane-backend run-worker
 make -C apps/knowledge-flow-backend run
 make -C apps/knowledge-flow-backend run-worker
 make -C apps/fred-agents run

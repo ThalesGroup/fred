@@ -23,7 +23,7 @@ import { localStorageKey } from "../hooks/useLocalStorageState";
 const h = vi.hoisted(() => ({ platform: null as null | { default_theme?: string | null; hidden_themes?: string[] } }));
 vi.mock("../common/config.tsx", () => ({ getPlatformUiThemes: () => h.platform }));
 
-vi.mock("../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useFrontendConfigQuery: () => ({ data: undefined, refetch: () => {} }),
 }));
 

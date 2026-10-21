@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ManagedAgentInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { freeAgentName, isAgentNameConflict, isAgentNameTaken, takenAgentNames } from "./agentNames";
 
 const agent = (id: string, name: string) =>

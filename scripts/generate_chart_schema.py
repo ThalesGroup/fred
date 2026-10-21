@@ -27,8 +27,7 @@ Usage (called automatically by python-config-schema.mk):
     python scripts/generate_chart_schema.py \\
         --fred-agents        apps/fred-agents/config/schema/configuration.schema.json \\
         --knowledge-flow     apps/knowledge-flow-backend/config/schema/configuration.schema.json \\
-        --control-plane      apps/control-plane-backend/config/schema/configuration.schema.json \\
-        --fred-manager       apps/fred-manager/config/schema/configuration.schema.json \\
+        --control-plane      apps/control-plane/config/schema/configuration.schema.json \\
         --output             deploy/charts/fred/values.schema.json
 """
 
@@ -507,8 +506,8 @@ _GLOBAL = _obj({
 # Assembly
 # ---------------------------------------------------------------------------
 
-def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path, manager_schema_path: Path) -> dict:
-    manager_config = _inline_refs(_load(manager_schema_path))
+def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> dict:
+    manager_config = _inline_refs(_load(cp_schema_path))
     fa_config = _inline_refs(_load(fa_schema_path))
     kf_config = _inline_refs(_load(kf_schema_path))
 
@@ -551,16 +550,15 @@ def main() -> None:
     parser.add_argument("--fred-agents", required=True, type=Path, metavar="SCHEMA")
     parser.add_argument("--knowledge-flow", required=True, type=Path, metavar="SCHEMA")
     parser.add_argument("--control-plane", required=True, type=Path, metavar="SCHEMA")
-    parser.add_argument("--fred-manager", required=True, type=Path, metavar="SCHEMA")
     parser.add_argument("--output", required=True, type=Path, metavar="OUTPUT")
     args = parser.parse_args()
 
-    for p in (args.fred_agents, args.knowledge_flow, args.control_plane, args.fred_manager):
+    for p in (args.fred_agents, args.knowledge_flow, args.control_plane):
         if not p.exists():
             print(f"ERROR: schema not found: {p}", file=sys.stderr)
             sys.exit(1)
 
-    schema = build(args.fred_agents, args.knowledge_flow, args.control_plane, args.fred_manager)
+    schema = build(args.fred_agents, args.knowledge_flow, args.control_plane)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w") as f:

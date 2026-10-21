@@ -71,8 +71,8 @@ import { MemoryRouter } from "react-router-dom";
 import GcuGuard from "@core/guards/GcuGuard";
 import BootstrapGuard from "@core/guards/BootstrapGuard";
 import { KeyCloakService } from "../security/KeycloakService";
-import { enhancedFredManagerApi as api } from "../slices/fredManager/fredManagerApiEnhancements";
-import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi";
+import { enhancedControlPlaneApi as api } from "../slices/controlPlane/controlPlaneApiEnhancements";
+import { legacyControlPlaneApi } from "../slices/legacyControlPlane/legacyControlPlaneApi";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 afterEach(() => {
@@ -100,8 +100,8 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
     },
   );
   const store = configureStore({
-    reducer: { [api.reducerPath]: api.reducer, [controlPlaneApi.reducerPath]: controlPlaneApi.reducer },
-    middleware: (defaults) => defaults().concat(api.middleware, controlPlaneApi.middleware),
+    reducer: { [api.reducerPath]: api.reducer, [legacyControlPlaneApi.reducerPath]: legacyControlPlaneApi.reducer },
+    middleware: (defaults) => defaults().concat(api.middleware, legacyControlPlaneApi.middleware),
   });
   const host = document.createElement("div");
   document.body.append(host);
@@ -127,7 +127,7 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
   } finally {
     act(() => root.unmount());
     store.dispatch(api.util.resetApiState());
-    store.dispatch(controlPlaneApi.util.resetApiState());
+    store.dispatch(legacyControlPlaneApi.util.resetApiState());
     host.remove();
   }
 }
@@ -149,9 +149,9 @@ it("keeps business queries unmounted until consent and root bootstrap are comple
     expect(host.textContent).toContain("Root bootstrap");
     expect(host.textContent).not.toContain("rework.gcu.validate");
     expect(state.calls).toEqual([
-      "/fred-manager/v1/me/onboarding",
-      "/fred-manager/v1/gcu",
-      "/fred-manager/v1/me/onboarding",
+      "/control-plane/v1/me/onboarding",
+      "/control-plane/v1/gcu",
+      "/control-plane/v1/me/onboarding",
     ]);
   });
 });
@@ -177,7 +177,7 @@ it("a stale consent submission never advances the journey or assumes success", a
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(host.textContent).not.toContain("Root bootstrap");
     expect(state.accepted).toBe(false);
-    expect(state.calls).toEqual(["/fred-manager/v1/me/onboarding", "/fred-manager/v1/gcu"]);
+    expect(state.calls).toEqual(["/control-plane/v1/me/onboarding", "/control-plane/v1/gcu"]);
   });
 });
 
@@ -195,7 +195,7 @@ it("refreshing the active version reloads the legal document before consent", as
     expect(host.textContent).toContain("Terms v2");
     expect(host.textContent).not.toContain("Terms v1");
     expect(state.accepted).toBe(false);
-    expect(state.calls).toEqual(["/fred-manager/v1/me/onboarding", "/fred-manager/v1/me/onboarding"]);
+    expect(state.calls).toEqual(["/control-plane/v1/me/onboarding", "/control-plane/v1/me/onboarding"]);
   });
 });
 
@@ -207,7 +207,7 @@ it("missing legal text exposes retry and never enables consent", async () => {
     const accept = [...host.querySelectorAll("button")].find((button) => button.textContent === "rework.gcu.validate")!;
     expect(accept.disabled).toBe(true);
     expect(host.textContent).not.toContain("Root bootstrap");
-    expect(state.calls).toEqual(["/fred-manager/v1/me/onboarding"]);
+    expect(state.calls).toEqual(["/control-plane/v1/me/onboarding"]);
   });
 });
 
@@ -216,7 +216,7 @@ it("allows disabled terms only after status confirms bootstrap completion", asyn
   state.bootstrap = false;
   await mounted(async (host) => {
     expect(host.textContent).toContain("Admitted");
-    expect(state.calls).toEqual(["/fred-manager/v1/me/onboarding"]);
+    expect(state.calls).toEqual(["/control-plane/v1/me/onboarding"]);
   });
 });
 
@@ -232,7 +232,7 @@ it.each(["terms", "bootstrap", "failure"])(
       expect(host.textContent).toContain("alice@example.test");
       await click(host, "rework.userSettings.disconnect");
       expect(KeyCloakService.CallLogout).toHaveBeenCalledOnce();
-      expect(state.calls).toEqual(["/fred-manager/v1/me/onboarding"]);
+      expect(state.calls).toEqual(["/control-plane/v1/me/onboarding"]);
     });
   },
 );

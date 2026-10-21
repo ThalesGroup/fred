@@ -15,7 +15,7 @@
 // Search predicate for the team agents list. Kept out of the page so it can be
 // tested without mounting a container full of RTK Query hooks.
 
-import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ManagedAgentInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 /** Fields the card shows, so the fields a search is expected to reach:
  * the name, the role rendered under it, and the description. */

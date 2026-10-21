@@ -30,7 +30,7 @@ import {
   useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
   usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
   usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
 import ImportPromptDialog from "./ImportPromptDialog/ImportPromptDialog.tsx";
 import styles from "./MarketplacePrompts.module.scss";

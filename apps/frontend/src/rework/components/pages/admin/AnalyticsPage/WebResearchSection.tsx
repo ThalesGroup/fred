@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import { useWebResearchSummaryQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useWebResearchSummaryQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import BarChart from "@shared/molecules/BarChart/BarChart";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";

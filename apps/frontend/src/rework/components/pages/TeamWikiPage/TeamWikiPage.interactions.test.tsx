@@ -64,7 +64,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: h.showError, showSuccess: vi.fn() }),
 }));
 
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useWikiPagesQuery: () => ({
     data: { pages: [{ page_id: "page-1", slug: "s", title: "S", kind: "page", parent_page_id: null }] },
     isLoading: false,

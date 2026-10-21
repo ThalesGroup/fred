@@ -1,0 +1,166 @@
+erDiagram
+
+"space" }o--o| "space_deletion" : "deletion_id"
+"folder" }o--|| "space" : "space_id"
+"folder" }o--|| "folder" : "parent_id, space_id"
+"document" }o--|| "space" : "quota_owner"
+"document" }o--|| "space" : "space_id"
+"document" }o--|| "folder" : "folder_id, space_id"
+"document_upload" |o--o| "document" : "document_id"
+"document_upload" |o--o| "document_upload" : "retry_of"
+"document_processing" }o--|| "space" : "space_id"
+"document_processing" }o--|| "document" : "document_id"
+"document_processing" |o--o| "document_processing" : "retry_of"
+
+"space_deletion" {
+  uuid id
+  uuid target_id
+  space_kind target_kind
+  uuid target_parent_id
+  uuid organization_id
+  text actor_subject
+  timestamp_with_time_zone requested_at
+  timestamp_with_time_zone due_at
+  text mode
+  text rule_id
+  text status
+  timestamp_with_time_zone last_visit
+  timestamp_with_time_zone completed_at
+  text error_code
+  bigint folders_deleted
+  bigint spaces_deleted
+}
+"space" {
+  uuid id
+  space_kind kind
+  text name
+  text personal_owner
+  timestamp_with_time_zone created_at
+  uuid deletion_id FK
+}
+"folder" {
+  uuid id
+  uuid space_id FK
+  uuid parent_id FK
+  text name
+  text path
+  timestamp_with_time_zone created_at
+}
+"document" {
+  uuid id
+  uuid space_id FK
+  uuid folder_id FK
+  text name
+  text mime
+  bigint size
+  text sha256
+  text created_by
+  timestamp_with_time_zone created_at
+  text object_key
+  uuid quota_owner FK
+}
+"platform_bootstrap" {
+  boolean singleton
+  text completed_by
+  timestamp_with_time_zone completed_at
+  timestamp_with_time_zone granted_at
+}
+"authorization_store" {
+  boolean singleton
+  text configured_store
+  text source_store
+  text active_store
+  text model_id
+}
+"terms_acceptance" {
+  text user_id
+  text version
+  timestamp_with_time_zone accepted_at
+}
+"document_storage" {
+  boolean singleton
+  uuid namespace
+  text endpoint
+  text bucket
+  text prefix
+  text inventory_cursor
+  bigint inventory_bytes
+  bigint orphan_bytes
+  text derived_endpoint
+  text derived_bucket
+  text derived_prefix
+  timestamp_with_time_zone inventory_completed_at
+  uuid lease_owner
+  timestamp_with_time_zone lease_until
+}
+"document_upload" {
+  uuid id
+  uuid request_key
+  text actor
+  uuid organization_id
+  uuid space_id
+  uuid folder_id
+  uuid quota_owner
+  text name
+  text mime
+  bigint size
+  text sha256
+  text object_key
+  text status
+  uuid document_id FK
+  text error_code
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  timestamp_with_time_zone completed_at
+  timestamp_with_time_zone acknowledged_at
+  uuid retry_of FK
+  uuid successor_key
+  text processing_profile
+  timestamp_with_time_zone cleanup_due_at
+  integer cleanup_attempts
+  timestamp_with_time_zone cleaned_at
+}
+"document_processing" {
+  uuid id
+  uuid request_key
+  text actor
+  uuid installation_id
+  uuid document_id FK
+  uuid organization_id
+  uuid space_id FK
+  text original_sha256
+  text profile
+  text status
+  text stage
+  bigint revision
+  text workflow_id
+  jsonb submission
+  text run_id
+  timestamp_with_time_zone first_dispatch_at
+  timestamp_with_time_zone delivered_at
+  timestamp_with_time_zone delivery_due_at
+  integer delivery_attempts
+  uuid dispatch_owner
+  timestamp_with_time_zone dispatch_until
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone deadline_at
+  timestamp_with_time_zone completed_at
+  text error_code
+  uuid retry_of FK
+  jsonb profile_settings
+  jsonb generations
+  jsonb manifest
+  bigint chunks
+  bigint vectors
+  bigint rows
+  bigint reserved_bytes
+  timestamp_with_time_zone cleanup_due_at
+}
+"user_identity" {
+  uuid id
+  text username
+  text email
+  text first_name
+  text last_name
+  timestamp_with_time_zone last_seen_at
+}

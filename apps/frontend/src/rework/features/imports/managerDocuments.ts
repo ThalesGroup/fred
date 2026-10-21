@@ -1,6 +1,6 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
-import type { Document, FailureCode, StorageSummary, Summary } from "../../../slices/fredManager/fredManagerOpenApi";
+import type { Document, FailureCode, StorageSummary, Summary } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { DocumentMetadata, ResourceTypeStatsEntry } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { handlePlatformAccessResponse } from "../../../common/platformAccess";
@@ -87,7 +87,7 @@ export async function downloadManagerDocument(document: Document): Promise<void>
   try {
     await KeyCloakService.ensureFreshToken(30);
     if (managerActor() !== actor) throw new Error("account_changed");
-    const response = await fetch(`/fred-manager/v1/documents/${encodeURIComponent(document.id)}/content`, {
+    const response = await fetch(`/control-plane/v1/documents/${encodeURIComponent(document.id)}/content`, {
       headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
       cache: "no-store",
       signal: AbortSignal.timeout(610_000),

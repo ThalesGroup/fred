@@ -99,7 +99,7 @@ vi.mock("../../../../features/pipeline/useAuthzProbeRun", () => ({
   }),
 }));
 
-vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useListUsersQuery: () => ({ data: [{ id: "u-2", username: h.otherAccount }] }),
 }));
 

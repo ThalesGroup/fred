@@ -24,12 +24,12 @@ import {
   TeamWithPermissions,
   UserSummary,
   UserTeamRelation,
-} from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   useAddTeamMemberMutation,
   useGrantTeamMemberRoleMutation,
   useSearchCandidateTeamMembersQuery,
-} from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 
 interface PendingMember {
   user: UserSummary;

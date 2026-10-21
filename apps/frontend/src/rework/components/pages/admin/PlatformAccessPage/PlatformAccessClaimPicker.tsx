@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
-import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import styles from "./PlatformAccessClaimPicker.module.css";
 import pageStyles from "./PlatformAccessPage.module.css";
 

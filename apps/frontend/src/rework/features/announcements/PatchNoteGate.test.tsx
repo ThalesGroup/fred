@@ -21,13 +21,13 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Announcement } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { Announcement } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const queryMock = vi.fn();
 const seenMock = vi.fn();
 let language = "en";
 
-vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   usePatchNoteHistoryQuery: (...args: unknown[]) => queryMock(...args),
   useMarkPatchNoteAnnouncementSeenMutation: () => [seenMock],
 }));

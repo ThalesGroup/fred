@@ -18,7 +18,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TaskSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TaskSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
   tasks: [] as TaskSummary[],
@@ -40,7 +40,7 @@ function mockListTasks(tasks: () => TaskSummary[]) {
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
   useListTasksControlPlaneV1TasksGetQuery: mockListTasks(() => h.tasks),
 }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({

@@ -47,7 +47,8 @@ export const createDynamicBaseQuery = (
     if (typeof args === "string") {
       return { url: args, cache: "no-store" };
     }
-    return { ...args, cache: "no-store" };
+    // OpenAPI can pass null for an omitted body; RTK Query dereferences null.toJSON.
+    return { ...args, body: args.body === null ? undefined : args.body, cache: "no-store" };
   };
 
   return async (args, api, extraOptions) => {

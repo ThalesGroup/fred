@@ -27,8 +27,8 @@ import type {
   CapabilityCatalogEntry,
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import { useUsersByIdsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";

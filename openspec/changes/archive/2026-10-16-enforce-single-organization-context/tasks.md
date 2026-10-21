@@ -33,15 +33,15 @@ performance validation claimed by the reviewers.
 
 ## Verification
 
-- make -C apps/fred-manager test: passed (offline Rust and OpenAPI tests).
-- make -C apps/fred-manager test-integration: passed, 65 integration tests on
+- make -C apps/control-plane test: passed (offline Rust and OpenAPI tests).
+- make -C apps/control-plane test-integration: passed, 65 integration tests on
   disposable PostgreSQL/OpenFGA/Keycloak and the existing Temporal fixture.
-- make -C apps/fred-manager code-quality: passed (clippy, rustfmt, model parity).
-- make -C apps/fred-manager test-browser: passed, one real OIDC browser journey
+- make -C apps/control-plane code-quality: passed (clippy, rustfmt, model parity).
+- make -C apps/control-plane test-browser: passed, one real OIDC browser journey
   plus 64 integration tests before the last post-preflight race regression was added.
   The subsequent 65-test integration run includes that regression. Browser output
   screenshots remain under ignored target paths; no manual validation is claimed.
-- make -C apps/frontend update-fred-manager-api: passed; response-error additions
+- make -C apps/frontend update-control-plane-api: passed; response-error additions
   change generated OpenAPI without changing successful RTK DTOs.
 - Focused HomePage and manager-slice Vitest: 15 passed; frontend typecheck passed.
 - Pagination fixture: 5 root roles, page size 2, context = 3 Reads; first member

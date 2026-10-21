@@ -23,7 +23,7 @@ const h = vi.hoisted(() => ({
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: () => ({ enabled: h.enabled, isLoading: false }),
 }));
-vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
   useTeamApplicationsQuery: (args: unknown, options: unknown) => h.query(args, options),
 }));
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { TeamMarketplaceSettings } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamMarketplaceSettings } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { choiceColor, overrideForChoice, parseQuota, publishingChoice, turnsTeamOff } from "./marketplaceSettings";
 
 const team = (override: boolean | null, effective: boolean): TeamMarketplaceSettings => ({
