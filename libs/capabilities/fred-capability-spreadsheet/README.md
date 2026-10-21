@@ -15,6 +15,8 @@ Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
   written as Excel formulas. Its label names the functions in the conversation
   language (`language`, `fr` by default): Total, Moyenne/Average, Min, Max,
   Nombre/Count.
+  A data row labelled like a total ("Total", "Sous-total"...) that repeats
+  or leaves empty the totals is kept, and the success result names it.
 - Computed columns: `compute: {op, left, right}` (`add`, `subtract`, `multiply`,
   `divide`) or `{op: "share_of_total", column}`, operands by header name or
   number, optional `round`; each row gets a formula (`=C2*1.2`,

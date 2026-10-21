@@ -25,7 +25,7 @@ import io
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, cast
@@ -444,6 +444,76 @@ def _matches(expected: list[Converted], values: list[float | None]) -> bool:
         if abs(number - value) > tolerance + 1e-12:
             return False
     return True
+
+
+_TOTAL_LABELS = frozenset(
+    (
+        "total",
+        "totaux",
+        "total général",
+        "total general",
+        "grand total",
+        "sum",
+        "somme",
+        "sous-total",
+        "sous total",
+        "subtotal",
+        "sub-total",
+    )
+)
+
+
+def manual_total_hints(prepared: PreparedWorkbook) -> list[str]:
+    """Name, once per sheet, a data row that repeats the automatic totals row.
+
+    The file is kept (a company may be called "Total"): the row counts only when
+    its total-column cells are all empty or equal what the totals row computes.
+    """
+
+    hints: list[str] = []
+    for sheet in prepared.sheets:
+        kept = [
+            i for i, c in enumerate(sheet.columns) if c.total and c.total != "count"
+        ]
+        if not any(column.total for column in sheet.columns):
+            continue
+        labelled = [
+            (i, label)
+            for i, row in enumerate(sheet.rows)
+            if (label := _total_label(row))
+        ]
+        if not labelled:
+            continue
+        skip = {i for i, _ in labelled}
+        others = replace(
+            sheet, rows=[r for i, r in enumerate(sheet.rows) if i not in skip]
+        )
+        expected = _preview_totals(others, prepared.language) or [None] * len(
+            sheet.columns
+        )
+        for index, label in labelled:
+            cells = [sheet.rows[index][i] for i in kept]
+            if all(v is None for v in cells) or _matches(
+                cells, [_number(expected[i]) for i in kept]
+            ):
+                hints.append(f"sheet '{sheet.name}', row {index + 2} ('{label}')")
+                break
+    return hints
+
+
+def _total_label(row: list[Converted]) -> str | None:
+    label = next((v for v in row if isinstance(v, str)), None)
+    if label is None:
+        return None
+    key = " ".join(label.lower().split()).rstrip(" :")
+    # "Total HT" counts, "TotalEnergies" does not.
+    if key in _TOTAL_LABELS or key.split(" ", 1)[0] in _TOTAL_LABELS:
+        return label.strip()
+    return None
+
+
+def _number(value: object) -> float | None:
+    return float(value) if isinstance(value, int | float) else None
 
 
 def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:

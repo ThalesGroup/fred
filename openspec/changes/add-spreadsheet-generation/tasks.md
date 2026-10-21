@@ -77,6 +77,11 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4f.1 Tool description: never compute derived columns yourself, declare them with `compute`; `share_of_total` example; a division by zero leaves the cell empty
 - [x] 4f.2 Cheap check after a successful build: a literal numeric column equal (within its own rounding) to add/subtract/multiply/divide of two earlier columns or the share of total of one, on at least 2 of the first 20 rows, is named in the success text with its `compute`; file kept; at most 12 numeric columns checked, 3 hints
 
+## 4g. Manual total row next to the automatic one (2026-10-21, owner feedback)
+
+- [x] 4g.1 Tool description: do not add your own total/subtotal row for columns that set `total`; the totals row is added automatically
+- [x] 4g.2 Cheap check after a successful build, never a rejection: a data row whose first text cell is a total-like label (total, totaux, total général, grand total, sum, somme, sous-total, subtotal; or one followed by a word) in a sheet with a `total` column, with its total-column cells empty or equal to the automatic totals over the other rows, is named in the success text (sheet, row); one per sheet; file kept; only a count is logged
+
 ## 5. Docs and release
 
 - [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
@@ -124,3 +129,7 @@ Live-session round 3, 2026-10-21 (session 1e3ef259, Deep agent on mistral-medium
 
 - Root cause of "no formula on Taux de réalisation / Part du total du réel": the stored `create_spreadsheet` call (session_history rank 2) sent no `compute` at all; every derived column was a literal (`-50, 0.9583, 0.1144`...). The model's reasoning says share of total "is not a column" so compute cannot express it, and that divide would fail on the 0 budget. Not a preview or formula-bar bug: no formula exists for those columns.
 - Package: `make test` 135 passed (new: the live rows name Écart → subtract, Taux → divide, Part → share_of_total; computed and independent columns get no hint; a single matching row or a copied operand is no derivation; the tool keeps the file and returns the note before "reply now"; description asserts the derived-column rule, `share_of_total` and the division-by-zero sentence); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
+
+Live-session round 3 follow-up, 2026-10-21 (session 1e3ef259): the model also sent its own "Total" row with empty values on top of `total: sum`, so the file held an empty "Total" row above the real totals row.
+
+- Package: `make test` 139 passed (new: an empty "Total" row named with sheet and row; filled "Total HT"/"Total TTC" rows equal to the totals named once per sheet; a "Total" row with other values, "TotalEnergies", and a sheet without `total` columns get no note; the tool keeps the file and returns the note before "reply now"; description asserts the no-own-total sentence); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
