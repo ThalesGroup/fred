@@ -22,6 +22,8 @@ import fred_runtime
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from fred_runtime import migrations
+from fred_runtime.__main__ import main
 from fred_runtime.migrations import RUNTIME_ALEMBIC_DIR, upgrade_sqlite_database
 
 
@@ -87,6 +89,87 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "agent_instance_id",
     }
     assert revision == ("e5f6a7b8c9d0",)  # pragma: allowlist secret
+
+
+@pytest.mark.parametrize(
+    ("locations", "expected"),
+    [
+        (
+            (("alpha", "/alpha"), ("beta", "/beta")),
+            ["/beta", "/alpha", str(RUNTIME_ALEMBIC_DIR)],
+        ),
+        ((), [str(RUNTIME_ALEMBIC_DIR)]),
+    ],
+)
+def test_combined_downgrade_reverses_upgrade_order(
+    monkeypatch: pytest.MonkeyPatch,
+    locations: tuple[tuple[str, str], ...],
+    expected: list[str],
+) -> None:
+    class Registry:
+        def discover(self) -> None:
+            pass
+
+        def migration_locations(self) -> tuple[tuple[str, str], ...]:
+            return locations
+
+    calls: list[str] = []
+    monkeypatch.setattr(migrations, "CapabilityRegistry", Registry)
+    monkeypatch.setattr(
+        migrations, "_downgrade", lambda location, *, label: calls.append(location)
+    )
+
+    result = migrations.run_all_downgrades()
+
+    assert calls == expected
+    assert result == [cap_id for cap_id, _ in reversed(locations)] + ["fred-runtime"]
+
+
+def test_combined_downgrade_stops_after_a_tree_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Registry:
+        def discover(self) -> None:
+            pass
+
+        def migration_locations(self) -> tuple[tuple[str, str], ...]:
+            return (("alpha", "/alpha"), ("beta", "/beta"))
+
+    calls: list[str] = []
+
+    def fail_on_alpha(location: str, *, label: str) -> None:
+        calls.append(location)
+        if location == "/alpha":
+            raise RuntimeError("downgrade failed")
+
+    monkeypatch.setattr(migrations, "CapabilityRegistry", Registry)
+    monkeypatch.setattr(migrations, "_downgrade", fail_on_alpha)
+
+    with pytest.raises(RuntimeError, match="downgrade failed"):
+        migrations.run_all_downgrades()
+
+    assert calls == ["/beta", "/alpha"]
+
+
+def test_downgrade_cli_accepts_only_one_revision(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        migrations,
+        "run_all_downgrades",
+        lambda: calls.append("called") or ["fred-runtime"],
+    )
+
+    for argv in (["downgrade"], ["downgrade", "base"]):
+        with pytest.raises(SystemExit) as error:
+            main(argv)
+        assert error.value.code == 2
+    assert calls == []
+
+    assert main(["downgrade", "-1"]) == 0
+    assert calls == ["called"]
+    assert "downgraded: fred-runtime" in capsys.readouterr().out
 
 
 def test_packaged_tree_is_not_excluded_from_the_docker_build_context() -> None:

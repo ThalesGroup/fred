@@ -24,12 +24,19 @@ include ../../scripts/makefiles/help.mk
 # (values.yaml `migration.command`). CONFIG_FILE selects the config, exactly as
 # for `run` (default ./config/configuration.yaml; `run-prod` exports the prod one).
 
+ALEMBIC_CONFIG_FILE ?=
+ALEMBIC_CONFIG_ENV = $(if $(strip $(ALEMBIC_CONFIG_FILE)),CONFIG_FILE=$(ALEMBIC_CONFIG_FILE),)
+
 # Auto-upgrade the database before starting, like the other backends.
 run-local: db-upgrade
 
 .PHONY: db-upgrade
 db-upgrade: dev ## apply all pending migrations (fred-runtime + every capability tree)
-	$(UV) run python -m fred_runtime migrate
+	$(ALEMBIC_CONFIG_ENV) $(UV) run python -m fred_runtime migrate
+
+.PHONY: db-downgrade
+db-downgrade: dev ## roll back one revision in every installed capability tree, then fred-runtime
+	$(ALEMBIC_CONFIG_ENV) $(UV) run python -m fred_runtime downgrade -1
 
 ##@ Docker
 

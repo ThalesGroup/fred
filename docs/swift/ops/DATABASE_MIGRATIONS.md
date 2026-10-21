@@ -82,7 +82,7 @@ Under the hood: `alembic upgrade head`.
 
 ## Downgrading a database
 
-Roll back the last migration:
+Roll back the last migration in a single-tree backend:
 
 ```bash
 make db-downgrade
@@ -90,10 +90,31 @@ make db-downgrade
 
 Under the hood: `alembic downgrade -1`.
 
-To roll back to a specific revision, use Alembic directly:
+`apps/fred-agents` uses the same Make target, but it has multiple independently
+versioned trees. Its `make db-downgrade` runs
+`python -m fred_runtime downgrade -1`: each installed capability tree moves
+back one revision in reverse discovery order, then fred-runtime moves back one
+revision. Run it from `apps/fred-agents` with the intended `CONFIG_FILE` or
+`ALEMBIC_CONFIG_FILE` (or `DATABASE_URL` for a throwaway database). The
+`libs/fred-runtime` Make target reaches only fred-runtime's own tree.
+
+Review every participating `downgrade()` script and take a suitable backup
+before using the combined command. The writable-document capability's initial
+revision drops its document table on downgrade; fred-runtime's retired demo
+table revision has an empty downgrade. A changed version row therefore does not
+prove that data or schema was restored. The command stops at the first failure,
+which can leave earlier trees downgraded and later trees untouched. Check every
+version table and affected schema before restarting writers. This command does
+not coordinate application rollback or other state; see the deployment
+rollback work tracked in issue #3112.
+
+To roll back to a specific revision, run Alembic from the package that owns
+that tree (`libs/fred-runtime` or the installed capability package). Do not
+run this command from `apps/fred-agents`, which has no single Alembic tree:
 
 ```bash
-CONFIG_FILE=./config/configuration_prod.yaml uv run alembic downgrade <revision_id>
+cd libs/fred-runtime
+CONFIG_FILE=/path/to/configuration_prod.yaml uv run alembic downgrade <revision_id>
 ```
 
 ## Viewing migration history

@@ -19,6 +19,8 @@ Commands:
 - `migrate` — upgrade fred-runtime's Alembic tree, then every installed
   capability's own tree (RFC §7.1). The Helm migration job points its
   `command`/`args` here so deploying the pod runs all migrations.
+- `downgrade -1` — move every installed capability tree back one revision,
+  then fred-runtime's tree.
 - `dump-openapi <capability_id>` — print one capability router's OpenAPI JSON
   (RFC §9.1), the `schemaFile` input for that capability's frontend codegen.
 """
@@ -36,6 +38,14 @@ def _cmd_migrate(_args: argparse.Namespace) -> int:
 
     upgraded = run_all_migrations()
     print(f"migrated: {', '.join(upgraded)}")
+    return 0
+
+
+def _cmd_downgrade(_args: argparse.Namespace) -> int:
+    from .migrations import run_all_downgrades
+
+    downgraded = run_all_downgrades()
+    print(f"downgraded: {', '.join(downgraded)}")
     return 0
 
 
@@ -66,6 +76,11 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("migrate", help="run fred-runtime + capability migrations")
 
+    downgrade = sub.add_parser(
+        "downgrade", help="roll back one revision in each installed migration tree"
+    )
+    downgrade.add_argument("revision", choices=["-1"], help="one revision back")
+
     dump = sub.add_parser(
         "dump-openapi", help="print one capability router's OpenAPI document"
     )
@@ -74,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "migrate":
         return _cmd_migrate(args)
+    if args.command == "downgrade":
+        return _cmd_downgrade(args)
     if args.command == "dump-openapi":
         return _cmd_dump_openapi(args)
     parser.error(f"unknown command: {args.command}")

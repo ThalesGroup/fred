@@ -27,6 +27,7 @@ Why this module exists:
 
 How to use:
 - `python -m fred_runtime migrate` (see `fred_runtime.__main__`)
+- `python -m fred_runtime downgrade -1` reverses one revision per installed tree
 - the Helm migration job overrides its `command`/`args` to that CLI, so
   deploying the pod applies both fred-runtime's and every installed
   capability's migrations in one hook
@@ -61,6 +62,19 @@ def _upgrade(script_location: str, *, label: str) -> None:
     logger.info("[MIGRATE] %s at head", label)
 
 
+def _downgrade(script_location: str, *, label: str) -> None:
+    """Run ``alembic downgrade -1`` against one script tree."""
+
+    from alembic import command
+    from alembic.config import Config
+
+    logger.info("[MIGRATE] downgrading %s (%s)", label, script_location)
+    cfg = Config()
+    cfg.set_main_option("script_location", script_location)
+    command.downgrade(cfg, "-1")
+    logger.info("[MIGRATE] downgraded %s by one revision", label)
+
+
 def run_all_migrations() -> list[str]:
     """
     Upgrade fred-runtime's tree, then every installed capability's tree.
@@ -85,6 +99,22 @@ def run_all_migrations() -> list[str]:
 
     logger.info("[MIGRATE] complete: %s", ", ".join(upgraded))
     return upgraded
+
+
+def run_all_downgrades() -> list[str]:
+    """Downgrade installed capability trees in reverse order, then runtime."""
+
+    registry = CapabilityRegistry()
+    registry.discover()
+    downgraded: list[str] = []
+    for cap_id, location in reversed(registry.migration_locations()):
+        _downgrade(location, label=f"capability '{cap_id}'")
+        downgraded.append(cap_id)
+
+    _downgrade(str(RUNTIME_ALEMBIC_DIR), label="fred-runtime")
+    downgraded.append("fred-runtime")
+    logger.info("[MIGRATE] downgrade complete: %s", ", ".join(downgraded))
+    return downgraded
 
 
 def upgrade_sqlite_database(sqlite_path: str | Path) -> None:
