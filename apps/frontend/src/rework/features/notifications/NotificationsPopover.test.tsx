@@ -13,7 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // What these pin: opening marks seen up to the newest listed notification, and
 // only from an answer fetched for this opening; a click marks read and follows
 // the link; delete and clear all call their routes; the empty state; load more
@@ -74,7 +73,10 @@ function notification(id: string, overrides: Partial<NotificationItem> = {}): No
 const FRESH = Number.MAX_SAFE_INTEGER;
 
 /** One answer per page: the first page has no `before`. */
-function pages(byCursor: Record<string, { items: NotificationItem[]; next_cursor?: string | null }>, fetchedAt = FRESH) {
+function pages(
+  byCursor: Record<string, { items: NotificationItem[]; next_cursor?: string | null }>,
+  fetchedAt = FRESH,
+) {
   listMock.mockImplementation((args: { before?: string }) => {
     const data = byCursor[args.before ?? "first"];
     return { data, isSuccess: true, isError: false, isFetching: false, fulfilledTimeStamp: fetchedAt };

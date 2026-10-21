@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // What these pin: each slice-1 type renders its own title, body and "Open the
 // agent" button from the payload snapshot, in the viewer's locale; a handled
 // notification trades its buttons for who handled it; a type this version does
@@ -122,9 +121,7 @@ describe("renderNotification", () => {
       instances.en.t,
     );
 
-    expect(rendered.body).toBe(
-      "Léa D. changed “RFP writer”. Republish it to update the marketplace version.",
-    );
+    expect(rendered.body).toBe("Léa D. changed “RFP writer”. Republish it to update the marketplace version.");
   });
 
   it("shows who handled it instead of the buttons", () => {

@@ -13,7 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // What these pin: the badge shows the unseen count and disappears at zero, the
 // count is in the bell's accessible name; the summary polls every 15 s only
 // while the tab is visible and catches up at once when it returns; a tab opened
@@ -69,7 +68,7 @@ function setVisibility(next: DocumentVisibilityState) {
 // Everything but the bell's icon ligature: the badge, when there is one.
 const badgeText = (el: Element) => el.textContent?.replace("notifications", "");
 const bell = (el: Element) => el.querySelector<HTMLButtonElement>("button[aria-haspopup]")!;
-const lastOptions = () => summaryMock.mock.calls.at(-1)![1] as { skip: boolean; pollingInterval: number };
+const lastOptions = () => summaryMock.mock.lastCall![1] as { skip: boolean; pollingInterval: number };
 
 beforeEach(() => {
   visibility = "visible";

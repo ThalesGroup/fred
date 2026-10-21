@@ -13,7 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // What these pin: an unread tile says so to sighted and screen-reader users
 // alike; a click on the tile opens it, a click on a button or on delete does
 // not; a handled tile shows who handled it and no buttons.
