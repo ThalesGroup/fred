@@ -18,15 +18,18 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import threading
 from importlib.metadata import entry_points
 
 import pytest
 from fred_capability_spreadsheet import capability
 from fred_capability_spreadsheet.capability import (
+    PREVIEW_CONTENT_TYPE,
     TOOL_NAME,
     XLSX_CONTENT_TYPE,
     SpreadsheetCapability,
+    SpreadsheetPreviewPart,
 )
 from fred_runtime.capabilities.assembly import build_capability_agent_block
 from fred_runtime.capabilities.registry import CapabilityRegistry
@@ -49,22 +52,23 @@ from openpyxl import load_workbook
 
 
 class FakeWorkspace(WorkspaceFsPort):
-    def __init__(self, fail: bool = False) -> None:
+    def __init__(self, fail: bool = False, fail_suffix: str | None = None) -> None:
         self.writes: list[tuple[str, bytes, str | None, str | None]] = []
         self.fail = fail
+        self.fail_suffix = fail_suffix
 
     def bind(self, binding: BoundRuntimeContext) -> None:
         del binding
 
     async def write(self, path, content, *, content_type=None, title=None):
-        if self.fail:
+        if self.fail or (self.fail_suffix and path.endswith(self.fail_suffix)):
             raise OSError("storage down")
         self.writes.append((path, content, content_type, title))
         return PublishedArtifact(
             key=f"teams/t/{path}",
             file_name=path.rsplit("/", 1)[-1],
             size=len(content),
-            href="https://fred.test/download/1",
+            href=f"https://fred.test/download/{path}",
             document_uid="doc-1",
             mime=content_type,
             title=title,
@@ -121,14 +125,14 @@ def test_entry_point_is_declared():
     )
 
 
-def test_manifest_is_tool_only_admin_gated_and_graph_compatible():
+def test_manifest_is_admin_gated_graph_compatible_with_a_preview_pane():
     manifest = SpreadsheetCapability.manifest
     assert manifest.id == "spreadsheet"
     assert manifest.icon == "table_chart"
     assert manifest.team_scope == TeamScopePolicy.ADMIN_GATED
     assert manifest.execution_models == ("react", "graph")
-    assert manifest.chat_parts == []
-    assert manifest.side_panels == []
+    assert manifest.chat_parts == [SpreadsheetPreviewPart]
+    assert [panel.widget for panel in manifest.side_panels] == ["spreadsheet_pane"]
     assert manifest.router is None
     assert manifest.tables == []
     assert manifest.config_fields == []
@@ -155,7 +159,7 @@ def test_graph_assembly_exposes_the_tool():
 
 
 @pytest.mark.asyncio
-async def test_writes_xlsx_and_returns_download_chip():
+async def test_writes_xlsx_and_preview_and_returns_the_preview_card():
     workspace = FakeWorkspace()
     content, artifact = await _tool(workspace)(**ARGS)
 
@@ -165,14 +169,49 @@ async def test_writes_xlsx_and_returns_download_chip():
     assert path.startswith("spreadsheets/s-1/Q3 budget-") and path.endswith(".xlsx")
     assert content_type == XLSX_CONTENT_TYPE
     assert title == "Q3 budget.xlsx"
+    ws = load_workbook(io.BytesIO(data))["Budget"]
+    assert ws["B4"].value == "=SUM(B2:B3)"
+
+    (preview_path, preview, preview_type, _) = workspace.writes[1]
+    assert preview_path == path.removesuffix(".xlsx") + ".preview.json"
+    assert preview_type == PREVIEW_CONTENT_TYPE
+    assert json.loads(preview)["sheets"][0]["totals"] == ["Total", 1550.5]
+
+    (part,) = artifact.ui_parts
+    assert isinstance(part, SpreadsheetPreviewPart)
+    assert part.type == "spreadsheet_preview"
+    assert part.preview_id == f"teams/t/{path}"
+    assert part.file_name == part.title == "Q3 budget.xlsx"
+    assert part.xlsx_download_url == f"https://fred.test/download/{path}"
+    assert part.preview_url == f"https://fred.test/download/{preview_path}"
+
+
+@pytest.mark.asyncio
+async def test_preview_upload_failure_falls_back_to_the_download_chip():
+    workspace = FakeWorkspace(fail_suffix=".preview.json")
+    _content, artifact = await _tool(workspace)(**ARGS)
+
+    assert artifact.is_error is False
+    (path, *_rest) = workspace.writes[0]
     (link,) = artifact.ui_parts
     assert isinstance(link, LinkPart)
     assert link.kind == LinkKind.download
-    assert link.href == "https://fred.test/download/1"
+    assert link.href == f"https://fred.test/download/{path}"
     assert link.file_name == "Q3 budget.xlsx"
     assert link.mime == XLSX_CONTENT_TYPE
-    ws = load_workbook(io.BytesIO(data))["Budget"]
-    assert ws["B4"].value == "=SUM(B2:B3)"
+
+
+@pytest.mark.asyncio
+async def test_preview_build_failure_falls_back_to_the_download_chip(monkeypatch):
+    def broken_preview(request):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(capability, "build_preview", broken_preview)
+    workspace = FakeWorkspace()
+    _content, artifact = await _tool(workspace)(**ARGS)
+
+    assert len(workspace.writes) == 1
+    assert isinstance(artifact.ui_parts[0], LinkPart)
 
 
 @pytest.mark.asyncio
@@ -215,7 +254,7 @@ async def test_tool_call_through_langchain_keeps_the_artifact():
         .tools(_ctx(workspace))[0]
         .ainvoke({"type": "tool_call", "id": "call-1", "name": TOOL_NAME, "args": ARGS})
     )
-    assert message.artifact.ui_parts[0].kind == LinkKind.download
+    assert message.artifact.ui_parts[0].type == "spreadsheet_preview"
 
 
 @pytest.mark.asyncio
@@ -244,4 +283,4 @@ async def test_concurrent_builds_are_bounded_and_fail_fast(monkeypatch):
     results = await asyncio.gather(*running)
     assert all(result[1].is_error is False for result in results)
     assert capability._active_builds == 0
-    assert len(workspace.writes) == bound
+    assert len(workspace.writes) == 2 * bound  # each file plus its preview

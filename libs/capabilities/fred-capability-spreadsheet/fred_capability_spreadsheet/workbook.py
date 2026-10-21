@@ -22,6 +22,7 @@ CPU-bound: callers run it in a worker thread.
 from __future__ import annotations
 
 import io
+import json
 import math
 import re
 from datetime import date, datetime
@@ -40,6 +41,7 @@ MAX_ROWS = 5_000
 MAX_CELLS = 50_000
 MAX_CELL_CHARS = 2_000
 MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+MAX_PREVIEW_ROWS = 500
 
 ColumnType = Literal["text", "number", "integer", "percent", "currency", "date"]
 TotalKind = Literal["sum", "average", "min", "max", "count"]
@@ -174,6 +176,89 @@ def build_workbook(request: CreateSpreadsheetInput) -> bytes:
             f"{MAX_OUTPUT_BYTES // (1024 * 1024)} MB). Split it or reduce the data."
         )
     return data
+
+
+def build_preview(request: CreateSpreadsheetInput) -> bytes:
+    """Return the chat preview of an already validated request, as UTF-8 JSON.
+
+    Display only: typed values, the decimals each number format shows, the first
+    `MAX_PREVIEW_ROWS` rows per sheet and computed totals (the file keeps formulas).
+    """
+
+    sheets = [_preview_sheet(sheet) for sheet in request.sheets]
+    payload = {"version": 1, "sheets": sheets}
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+
+
+def _preview_sheet(sheet: SheetSpec) -> dict[str, object]:
+    columns: list[dict[str, object]] = []
+    values: list[list[str | int | float | None]] = []
+    for row in sheet.rows:
+        values.append(
+            [
+                _preview_value(_convert(raw, column.type, column.header))
+                for column, raw in zip(sheet.columns, row, strict=True)
+            ]
+        )
+    for index, column in enumerate(sheet.columns):
+        entry: dict[str, object] = {"header": column.header, "type": column.type}
+        if column.type not in ("text", "date"):
+            fmt = _number_format(column, sheet.rows, index)
+            entry["decimals"] = _format_decimals(fmt)
+        if column.currency and column.type == "currency":
+            entry["currency"] = column.currency
+        if column.total:
+            entry["total"] = column.total
+        columns.append(entry)
+    return {
+        "name": sheet.name,
+        "columns": columns,
+        "rows": values[:MAX_PREVIEW_ROWS],
+        "row_count": len(values),
+        "totals": _preview_totals(sheet.columns, values),
+    }
+
+
+def _preview_value(value: str | float | date | None) -> str | float | None:
+    return value.isoformat() if isinstance(value, date) else value
+
+
+def _format_decimals(fmt: str) -> int:
+    if "." not in fmt:
+        return 0
+    tail = fmt.split(".", 1)[1]
+    return len(tail) - len(tail.lstrip("0"))
+
+
+def _preview_totals(
+    columns: list[ColumnSpec], rows: list[list[str | int | float | None]]
+) -> list[str | int | float | None] | None:
+    # Same placement as `_write_totals`; values mirror the Excel functions.
+    if not rows or not any(column.total for column in columns):
+        return None
+    label_index = next(
+        (i for i, c in enumerate(columns) if c.type == "text" and not c.total), None
+    )
+    totals: list[str | int | float | None] = [None] * len(columns)
+    if label_index is not None:
+        totals[label_index] = "Total"
+    for index, column in enumerate(columns):
+        present = [row[index] for row in rows if row[index] is not None]
+        if column.total == "count":
+            totals[index] = len(present)
+            continue
+        if not column.total:
+            continue
+        numbers = [float(value) for value in present if isinstance(value, int | float)]
+        if column.total == "sum":
+            totals[index] = math.fsum(numbers)
+        elif column.total == "average":
+            totals[index] = math.fsum(numbers) / len(numbers) if numbers else None
+        elif column.total == "min":
+            totals[index] = min(numbers, default=0)
+        else:
+            totals[index] = max(numbers, default=0)
+    return totals
 
 
 def _check_structure(request: CreateSpreadsheetInput) -> None:
