@@ -48,6 +48,11 @@ SPREADSHEET_CAPABILITY_ID = "spreadsheet"
 TOOL_NAME = "create_spreadsheet"
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
+# Per-pod bound on concurrent workbook builds so a burst cannot exhaust the
+# shared to_thread pool; over the bound we fail fast, never queue (as PPT Filler).
+MAX_CONCURRENT_BUILDS = 4
+_active_builds = 0
+
 _TOOL_DESCRIPTION = (
     "Create an Excel file (.xlsx) the user can download. Call this tool whenever "
     "the user asks, in any wording or language, for an Excel file, a spreadsheet, "
@@ -86,11 +91,20 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 "The Excel file could not be created: file output is not available "
                 "on this platform. Tell the user; do not retry."
             )
+        global _active_builds
+        if _active_builds >= MAX_CONCURRENT_BUILDS:
+            return _error(
+                "The server is busy creating other Excel files right now. "
+                "Please try again in a moment."
+            )
+        _active_builds += 1
         try:
             content = await asyncio.to_thread(build_workbook, request)
         except SpreadsheetInputError as exc:
             logger.info("[SPREADSHEET] rejected input: %s", exc)
             return _error(f"No file was written. {exc}")
+        finally:
+            _active_builds -= 1
 
         base_name = sanitize_file_name(request.file_name)
         output_file_name = f"{base_name}.xlsx"
