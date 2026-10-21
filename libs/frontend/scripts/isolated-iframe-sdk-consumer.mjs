@@ -85,7 +85,7 @@ export async function assertIframeSdkConsumerFixture(root = fixtureRoot) {
   assert.equal(manifest.dependencies, undefined);
   assert.deepEqual(manifest.devDependencies, {
     typescript: "5.9.3",
-    vite: "6.4.3",
+    vite: "6.4.4",
   });
   const lock = JSON.parse(
     await readFile(path.join(root, "package-lock.json"), "utf8"),
