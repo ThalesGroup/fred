@@ -88,6 +88,13 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4h.2 Chart-like arguments (top level or per sheet) are ignored, not rejected (the schema already ignores unknown fields); a hidden flag adds the chart note to the success text before "reply now"
 - [x] 4h.3 Help Center en/fr "Generate an Excel file": one sentence that charts are not available yet
 
+## 4i. Final review fixes (2026-10-21)
+
+- [x] 4i.1 `round` on a large value no longer overflows `Decimal` (unhandled tool error before)
+- [x] 4i.2 A `number` computed column with `round` shows that many decimals in the file and the preview
+- [x] 4i.3 An identical repeat call returns the first success text, notes included
+- [x] 4i.4 Leaked-row check ignores text with a `[` before the `]` (`Écran 27", 2 ports [HDMI]`)
+
 ## 5. Docs and release
 
 - [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
