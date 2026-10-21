@@ -101,6 +101,18 @@ FORMULA_REJECTED = (
     "on the column for a per-row calculation (add, subtract, multiply, divide, "
     "share_of_total), and set `total` on the column for sums/averages."
 )
+# A `"` inside a text value that closed it early: the rest of the row (and often
+# the next row's start) lands in this cell, e.g. 'Loyer", 1200, null], ['.
+_LEAKED_ROW = re.compile(
+    r'"\s*,\s*(?:null|true|false|-?\d|")[^\]]*\](?:\s*,\s*\[|\s*\]*\s*$)'
+)
+LEAKED_ROW_REJECTED = (
+    "this text holds other cells' JSON (values, null, brackets): a quote closed "
+    "the text early and shifted the row. Resend the rows with one plain value "
+    "per cell, without escaped quotes around values."
+)
+# Placeholder for the Excel row number in the preview's per-column formula.
+ROW_PLACEHOLDER = "{row}"
 COMPUTE_OPS = ("add", "subtract", "multiply", "divide", "share_of_total")
 _OP_ALIASES = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide"}
 _OP_SYMBOLS = {"add": "+", "subtract": "-", "multiply": "*", "divide": "/"}
@@ -562,7 +574,7 @@ def _operand_value(
     return float(cast(int | float, value))
 
 
-def _formula(plan: ComputePlan, row: int, last_row: int) -> str:
+def _formula(plan: ComputePlan, row: int | str, last_row: int) -> str:
     def ref(operand: Operand) -> str:
         if operand.column is not None:
             return f"{get_column_letter(operand.column + 1)}{row}"
@@ -582,10 +594,19 @@ def _formula(plan: ComputePlan, row: int, last_row: int) -> str:
     return "=" + expr
 
 
+def _total_formula(column: ColumnSpec, index: int, last_row: int) -> str:
+    letter = get_column_letter(index + 1)
+    function = _TOTAL_FUNCTIONS[cast(str, column.total)]
+    if column.total == "count" and column.type in ("text", "date"):
+        function = "COUNTA" if column.type == "text" else "COUNT"
+    return f"={function}({letter}2:{letter}{last_row})"
+
+
 def _preview_sheet(sheet: PreparedSheet, language: Language) -> dict[str, object]:
     columns: list[dict[str, object]] = []
-    for column, header, fmt in zip(
-        sheet.columns, sheet.headers, sheet.formats, strict=True
+    last_row = len(sheet.rows) + 1
+    for index, (column, header, fmt, plan) in enumerate(
+        zip(sheet.columns, sheet.headers, sheet.formats, sheet.computes, strict=True)
     ):
         entry: dict[str, object] = {"header": header, "type": column.type}
         if column.type not in ("text", "date"):
@@ -594,6 +615,11 @@ def _preview_sheet(sheet: PreparedSheet, language: Language) -> dict[str, object
             entry["currency"] = column.currency
         if column.total:
             entry["total"] = column.total
+            if sheet.rows:
+                entry["total_formula"] = _total_formula(column, index, last_row)
+        if plan is not None:
+            # One template per column; the viewer puts the row number in.
+            entry["formula"] = _formula(plan, ROW_PLACEHOLDER, last_row)
         columns.append(entry)
     values = [
         [_preview_value(value) for value in row]
@@ -807,14 +833,10 @@ def _write_totals(
     for index, column in enumerate(columns):
         if not column.total:
             continue
-        letter = get_column_letter(index + 1)
-        function = _TOTAL_FUNCTIONS[column.total]
-        if column.total == "count" and column.type in ("text", "date"):
-            function = "COUNTA" if column.type == "text" else "COUNT"
         cell = ws.cell(
             row=total_row,
             column=index + 1,
-            value=f"={function}({letter}2:{letter}{last_row})",
+            value=_total_formula(column, index, last_row),
         )
         cell.font = _HEADER_FONT
         if column.total == "count":
@@ -882,6 +904,8 @@ def _convert(raw: CellValue, column_type: str, where: str) -> Converted:
         and (column_type != "text" or _FORMULA_LIKE.match(raw.strip()))
     ):
         raise SpreadsheetInputError(f"{where}: {raw!r}: {FORMULA_REJECTED}")
+    if isinstance(raw, str) and _LEAKED_ROW.search(raw):
+        raise SpreadsheetInputError(f"{where}: {raw!r}: {LEAKED_ROW_REJECTED}")
     try:
         if column_type == "text":
             return _strip_illegal(_to_text(raw)) or None
