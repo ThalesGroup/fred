@@ -697,6 +697,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
+name = "control-plane"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aws-sdk-s3",
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "dotenvy",
+ "flate2",
+ "futures",
+ "jsonwebtoken",
+ "percent-encoding",
+ "prost",
+ "reqwest",
+ "rsa",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "temporalio-client",
+ "temporalio-common",
+ "temporalio-macros",
+ "temporalio-sdk",
+ "temporalio-workflow",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http 0.7.0",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-normalization",
+ "utoipa",
+ "utoipa-axum",
+ "uuid",
+ "zip",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1275,47 +1316,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8878864ba14bb86e818a412bfd6f18f9eabd4ec0f008a28e8f7eb61db532fcf9"
 dependencies = [
  "futures-core",
-]
-
-[[package]]
-name = "control-plane"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aws-sdk-s3",
- "axum",
- "base64 0.23.1",
- "chrono",
- "dotenvy",
- "flate2",
- "futures",
- "jsonwebtoken",
- "percent-encoding",
- "prost",
- "reqwest",
- "rsa",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "sha2 0.10.9",
- "sqlx",
- "tempfile",
- "temporalio-client",
- "temporalio-common",
- "temporalio-macros",
- "temporalio-sdk",
- "temporalio-workflow",
- "thiserror",
- "tokio",
- "tower",
- "tower-http 0.7.0",
- "tracing",
- "tracing-subscriber",
- "unicode-normalization",
- "utoipa",
- "utoipa-axum",
- "uuid",
- "zip",
 ]
 
 [[package]]
