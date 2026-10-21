@@ -32,6 +32,7 @@ from fred_capability_spreadsheet.workbook import (
     SpreadsheetInputError,
     build_preview,
     build_workbook,
+    derived_column_hints,
     prepare,
     sanitize_file_name,
 )
@@ -836,3 +837,63 @@ def test_preview_total_formulas_cover_every_row_and_count_kinds():
     last = MAX_PREVIEW_ROWS + 4
     assert columns[0]["total_formula"] == f"=COUNTA(A2:A{last})"
     assert columns[1]["total_formula"] == f"=SUM(B2:B{last})"
+
+
+# --- literal derived columns ---------------------------------------------------
+
+# The live-test request: every derived column sent as rounded literals.
+_BUDGET_COLUMNS = [
+    {"header": "Poste"},
+    {"header": "Budget", "type": "currency", "total": "sum"},
+    {"header": "Réel", "type": "currency", "total": "sum"},
+    {"header": "Écart", "type": "currency", "total": "sum"},
+    {"header": "Taux de réalisation", "type": "percent"},
+    {"header": "Part du total du réel", "type": "percent", "total": "sum"},
+]
+_BUDGET_ROWS = [
+    ["Loyer", 1200, 1150, -50, 0.9583, 0.1144],
+    ["Salaires", 8000, 8400, 400, 1.05, 0.8358],
+    ["Matériel", 0, 500, 500, None, 0.0498],
+]
+
+
+def _hints(*sheets: dict[str, Any]) -> list[str]:
+    return derived_column_hints(prepare(_request(*sheets)))
+
+
+def test_literal_difference_ratio_and_share_are_named_with_their_compute():
+    hints = _hints(_sheet(columns=_BUDGET_COLUMNS, rows=_BUDGET_ROWS))
+
+    assert hints == [
+        "'Écart' -> compute {op: 'subtract', left: 'Réel', right: 'Budget'}",
+        "'Taux de réalisation' -> compute {op: 'divide', left: 'Réel', right: 'Budget'}",
+        "'Part du total du réel' -> compute {op: 'share_of_total', column: 'Réel'}",
+    ]
+
+
+def test_computed_and_independent_columns_get_no_hint():
+    columns = [
+        {"header": "Item"},
+        {"header": "Qty", "type": "integer"},
+        {"header": "Price", "type": "currency"},
+        {
+            "header": "Amount",
+            "type": "currency",
+            "compute": {"op": "*", "left": "Qty", "right": "Price"},
+        },
+        {"header": "Weight", "type": "number"},
+    ]
+    rows = [["a", 2, 10, None, 3.7], ["b", 3, 15, None, 1.2], ["c", 1, 7, None, 9]]
+
+    assert _hints(_sheet(columns=columns, rows=rows)) == []
+
+
+def test_a_single_matching_row_or_a_copied_column_is_no_derivation():
+    columns = [
+        {"header": "A", "type": "number"},
+        {"header": "Zero", "type": "number"},
+        {"header": "B", "type": "number"},
+    ]
+
+    assert _hints(_sheet(columns=columns, rows=[[4, 0, 4], [5, 0, 5]])) == []
+    assert _hints(_sheet(columns=columns, rows=[[4, 1, 3], [5, 0, None]])) == []
