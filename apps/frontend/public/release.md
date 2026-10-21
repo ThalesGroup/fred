@@ -1,3 +1,27 @@
+**v3.8.0** - 2026-10-20
+
+- **Summary**
+
+  Platform administrators can create and edit teams from the administration page, and every team now has a description. Agents find documents and spreadsheets more reliably in large libraries. Agent pod installations can use a Gateway API route supplied by their Helm chart.
+
+- **Features**
+
+  - Create and edit teams, descriptions, and team administrators from platform administration (#3067, #3145)
+
+- **Improvements**
+
+  - Install agent and Knowledge Base pods through a parent Helm chart (#3182)
+  - Configure an agent pod's Gateway API route through its Helm chart (#3187)
+
+- **Bug Fixes**
+
+  - Agents find and read documents and spreadsheets reliably in large libraries, with recovery from incorrect document references (#2845)
+  - Complete the initial platform access import without a request error (#3176)
+
+- **Deployment note**
+
+  Apply the control-plane database migration before upgrading services. Deployments with a pinned authorization model must publish the updated model first. Gateway route activation is optional; existing documents need no re-ingestion.
+
 **v3.7.1** - 2026-10-19
 
 - **Summary**

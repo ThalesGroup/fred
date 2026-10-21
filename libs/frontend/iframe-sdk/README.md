@@ -61,15 +61,34 @@ or backend models.
 ## Requests
 
 Requests support `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, and `DELETE`, at most 32 ordinary string
-headers, a string-or-null body, 16 pending requests, and a 30-second local deadline by default.
+headers, a string, `Blob`, `FormData` or null body, 16 pending requests, and a 30-second local
+deadline by default (`timeoutMs` per request, for long transfers).
 HTTP errors resolve as inspectable `Response` objects. Host transport failures reject with a generic
 SDK error. Caller abort and timeout release local state only; protocol `"1"` has no remote cancel
 message. Unknown, duplicate, canceled, timed-out, disposed, and late replies are ignored by request
 ID. Mutations are never retried by the SDK.
 
-The transport is buffered text/JSON, not complete Fetch equivalence. Binary or multipart bodies,
-streaming responses, SSE, opaque/`null` origins, and detailed host
-transport errors are unsupported.
+Binary bodies need a host that announces them (`binary-bodies` in its context). With such a
+host, a `Blob` (a `File` included) is sent as is, a `FormData` as multipart with its own
+`content-type` (do not set one), and every response keeps the service's exact bytes:
+`blob()`, `arrayBuffer()`, `text()` and `json()` all work. With an older host, text requests work
+as before and a binary body rejects locally with `unsupported-by-host`. The host gateway bounds
+uploads (FRED: `FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE`, 10m by default, set by the operator).
+
+```ts
+const form = new FormData();
+form.append("file", file); // a File from an <input type="file">
+await fred.request("imports", {
+  method: "POST",
+  body: form,
+  timeoutMs: 120_000,
+});
+
+const report = await (await fred.request("reports/42.xlsx")).blob();
+```
+
+The transport is buffered, not complete Fetch equivalence: streaming responses, transfer progress,
+SSE, opaque/`null` origins, and detailed host transport errors are unsupported.
 
 ## Archive verification
 

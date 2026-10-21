@@ -188,6 +188,29 @@ Existing standard-library `%s`, `%d` and named-placeholder log calls remain supp
 in both output formats. They can also supply `extra={...}` structured properties,
 allowing gradual migration without rewriting every message or switching to f-strings.
 
+Stdout exception diagnostics preserve the ordinary exception message, type, traceback
+frames and visible causes in both delegation modes. JSON carries the rendered trace
+in `exception`; readable output retains multiline formatting. Known `token`,
+`access_token` and `id_token` query values and free-access/join-link secrets are
+redacted from rendered exceptions as well as server messages and string arguments.
+This is targeted redaction: arbitrary exception text can contain sensitive values
+outside those patterns. Local variables, request bodies and headers are not added
+automatically. The optional generic store keeps its existing representation.
+
+An uncaught HTTP failure is reported by `fred_core.logs.http` before request context
+closes, using the same request-owned snapshot as the separate `http` completion
+event. Both retain available admitted user/session/agent/team and request/correlation
+references across middleware task boundaries. For an otherwise unlogged exception
+that produces HTTP 500, these are two ERROR events and only the exception event has
+a traceback. The generic response handler retains response/KPI bookkeeping; the
+middleware re-raises the original exception after reporting it. A separate minimal
+filter suppresses only Uvicorn's duplicate of that exact marked exception. Unreported
+server failures remain visible, with whatever context exists at their boundary.
+Controllers that log and convert a failure to a handled HTTP error keep ownership
+of their diagnostic; an explicit 500 without an underlying logged exception has only
+completion. Audit, dependency filtering and runtime support references are unchanged.
+The durable behavior contract is the
+[structured-logging specification](../../../openspec/specs/structured-logging/spec.md).
 
 Ordinary application logs (startup messages, warnings, day-to-day diagnostics) are the lowest-
 sensitivity, highest-volume stream. They are stored in OpenSearch alongside — but in a separate
@@ -195,7 +218,8 @@ index from — product analytics, with no long-retention requirement. Their diag
 decreases over time; they are not an audit or compliance artifact and should never be treated as
 one.
 
-This stream carries no content (§7). Fred does not expose its own query surface for these logs —
+Ordinary event fields carry no content (section 7); exception stdout follows the targeted
+redaction policy above. Fred does not expose its own query surface for these logs —
 there is no Log Console UI and no `/logs/query` endpoint or agent tool. Consultation and
 exploration happen directly against the backing OpenSearch index via **OpenSearch Dashboards**,
 outside Fred's authorization model; that index is a meaningfully different exposure than "an
@@ -312,6 +336,12 @@ See [nginx log format](https://nginx.org/en/docs/http/ngx_http_log_module.html#l
 and [GKE logging](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/about-logs).
 
 ## 7. Data protection summary
+
+The exclusions below govern deliberately recorded fields. Exception stdout is the
+explicit exception described in section 6: it preserves diagnostic text with known
+URL-pattern redaction and cannot promise that every free-form value is scrubbed.
+This exception does not apply to audit events or authorize adding content or secrets
+to ordinary event fields.
 
 | Field category | Example fields | Where it may appear |
 |---|---|---|
