@@ -8,7 +8,7 @@ When the `spreadsheet` capability is enabled on an agent, the agent SHALL offer 
 
 - **GIVEN** an agent with the `spreadsheet` capability enabled
 - **WHEN** the user asks for a list of items "as an Excel file"
-- **THEN** the agent calls `create_spreadsheet` and the conversation shows a download chip for a `.xlsx` file
+- **THEN** the agent calls `create_spreadsheet` and the conversation shows a file card that downloads the `.xlsx` file
 - **AND** the file opens in Excel and LibreOffice without a repair prompt
 
 #### Scenario: Graph agent selects the capability
@@ -84,3 +84,44 @@ The agent form SHALL offer the capability as a toggle in the Advanced view and a
 
 - **WHEN** an author turns on the "Create an Excel file" pack for a team that can use the capability
 - **THEN** the agent's capability selection contains `spreadsheet`
+
+### Requirement: Users preview the workbook in the chat
+
+Each created workbook SHALL be stored with a JSON preview beside it, and the conversation SHALL show a card that opens a read-only side panel with that preview. The preview SHALL hold the first 500 rows of each sheet and totals computed for display; the `.xlsx` SHALL keep its formulas. When the preview cannot be built or stored, the conversation SHALL show the plain download chip instead and the file SHALL still be delivered.
+
+#### Scenario: Preview opens from the card
+
+- **GIVEN** the agent created a workbook with two sheets in this conversation
+- **WHEN** the user clicks the card's Preview button
+- **THEN** a side panel opens with the file name, a Download button and one tab per sheet
+- **AND** the selected sheet shows as a table with its header row and first column kept in view while scrolling
+
+#### Scenario: Values follow the column formats and the UI language
+
+- **GIVEN** a sheet with an EUR currency column, a percent column, a date column and a `sum` total
+- **WHEN** the preview is shown with the interface in French
+- **THEN** the cells read `1 200,00 €`, `12,5 %` and `31/01/2026`, numbers are right-aligned
+- **AND** the totals row shows the computed sum in bold below a separator
+
+#### Scenario: Long sheets are capped
+
+- **GIVEN** a sheet of 1 520 rows
+- **WHEN** its preview is shown
+- **THEN** the table holds the first 500 rows, totals cover all 1 520 rows, and a note says 1 020 more rows are in the file
+
+#### Scenario: Download from the panel
+
+- **WHEN** the user clicks Download in the panel header
+- **THEN** the `.xlsx` is downloaded with the session's credentials
+
+#### Scenario: Preview unavailable
+
+- **GIVEN** the preview cannot be fetched or parsed
+- **WHEN** the panel opens
+- **THEN** it says the preview is unavailable and the Download button still works
+
+#### Scenario: Preview storage fails
+
+- **GIVEN** the workbook was stored but its preview upload fails
+- **WHEN** the tool returns
+- **THEN** the conversation shows the plain download chip for the `.xlsx`

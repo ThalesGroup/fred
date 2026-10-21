@@ -133,8 +133,12 @@ minimum, maximum, nombre).
 **Ses limites** — l'agent écrit lui-même chaque valeur, le fichier reste donc
 de taille modeste : au plus 10 feuilles, 5 000 lignes par feuille et 50 000
 cellules en tout. Pas de graphique, pas de couleurs selon les valeurs, pas de
-macro, et l'agent ne modifie pas un classeur existant. Il n'y a pas d'aperçu
-dans le chat : téléchargez le fichier pour l'ouvrir.
+macro, et l'agent ne modifie pas un classeur existant.
+
+**L'aperçu** — le bouton **Aperçu** de la carte du fichier ouvre le classeur à
+côté de la conversation : une feuille par onglet, les montants et les dates au
+format de votre langue, la ligne de totaux en gras. L'aperçu montre les 500
+premières lignes de chaque feuille ; téléchargez le fichier pour voir le reste.
 
 **Un exemple** — « Mets les dépenses que nous venons de lister dans un fichier
 Excel, une feuille par mois, avec les montants en euros et un total en bas. »
