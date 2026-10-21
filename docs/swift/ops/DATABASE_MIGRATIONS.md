@@ -19,7 +19,7 @@ own single head — never rebased against another's. ORM models are registered i
 | --- | --- | --- |
 | control-plane | `apps/control-plane-backend/alembic/` | `alembic_version_control_plane` |
 | knowledge-flow | `apps/knowledge-flow-backend/alembic/` | `alembic_version_knowledge_flow` |
-| fred-runtime | `libs/fred-runtime/alembic/` | `alembic_version_runtime` |
+| fred-runtime | `libs/fred-runtime/fred_runtime/migrations/` | `alembic_version_runtime` |
 | writable-document capability | `libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/writable_document_migrations/` | `cap_writable_document_alembic_version` |
 
 A capability's tree sits inside its package rather than under `alembic/`, because
@@ -30,9 +30,12 @@ it after fred-runtime's own. Every tree resolves its `script_location` from a
 
 ## Configuration
 
-Alembic connects to the PostgreSQL instance defined in the config file pointed to by
-`CONFIG_FILE`. Locally this defaults to `./config/configuration_prod.yaml`
-(set via `ALEMBIC_CONFIG_FILE` in the Makefile).
+Alembic connects to the database resolved by each project's configuration. Set
+`CONFIG_FILE` to choose a config file, or use `ALEMBIC_CONFIG_FILE` with the Make
+targets below. In `apps/fred-agents`, the fallback is
+`./config/configuration.yaml` when neither the process nor its `.env` sets
+`CONFIG_FILE`; do not assume this is the database you intend to downgrade.
+Select the configuration explicitly for an operator downgrade.
 
 You can override it:
 
@@ -90,23 +93,31 @@ make db-downgrade
 
 Under the hood: `alembic downgrade -1`.
 
-`apps/fred-agents` uses the same Make target, but it has multiple independently
-versioned trees. Its `make db-downgrade` runs
-`python -m fred_runtime downgrade -1`: each installed capability tree moves
-back one revision in reverse discovery order, then fred-runtime moves back one
-revision. Run it from `apps/fred-agents` with the intended `CONFIG_FILE` or
-`ALEMBIC_CONFIG_FILE` (or `DATABASE_URL` for a throwaway database). The
-`libs/fred-runtime` Make target reaches only fred-runtime's own tree.
+`apps/fred-agents` hosts multiple independently versioned trees, so select
+the tree whose migration you intend to reverse. The target is mandatory:
 
-Review every participating `downgrade()` script and take a suitable backup
-before using the combined command. The writable-document capability's initial
-revision drops its document table on downgrade; fred-runtime's retired demo
-table revision has an empty downgrade. A changed version row therefore does not
-prove that data or schema was restored. The command stops at the first failure,
-which can leave earlier trees downgraded and later trees untouched. Check every
-version table and affected schema before restarting writers. This command does
-not coordinate application rollback or other state; see the deployment
-rollback work tracked in issue #3112.
+```bash
+cd apps/fred-agents
+make db-downgrade MIGRATION_TREE=runtime ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml
+make db-downgrade MIGRATION_TREE=capability:writable_document ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml
+```
+
+Each invocation moves only its selected tree back one revision. Under the
+hood, these run `python -m fred_runtime downgrade runtime -1` and
+`python -m fred_runtime downgrade capability:writable_document -1`. An
+installed capability that had no migration in the last deployment must not be
+downgraded just because `migrate` visited its tree. Select the intended
+database with `CONFIG_FILE` or `ALEMBIC_CONFIG_FILE` (or `DATABASE_URL` for a
+throwaway database). The `libs/fred-runtime` Make target reaches only the
+runtime tree.
+
+Review the selected `downgrade()` script and take a suitable backup before
+running it. The writable-document capability's initial revision drops its
+document table on downgrade; fred-runtime's retired demo table revision has
+an empty downgrade. A changed version row therefore does not prove that data
+or schema was restored. Check the selected version table and schema before
+restarting writers. This command does not coordinate application rollback or
+other state; see the deployment rollback work tracked in issue #3112.
 
 To roll back to a specific revision, run Alembic from the package that owns
 that tree (`libs/fred-runtime` or the installed capability package). Do not
@@ -148,7 +159,7 @@ databases with the right tables and an *unstamped* version table, which no
 later `alembic upgrade head` could ever be applied to (issue #2290). Since
 then:
 
-- `session_history` DDL lives only in `libs/fred-runtime/alembic/versions/`;
+- `session_history` DDL lives only in `libs/fred-runtime/fred_runtime/migrations/versions/`;
 - a fred-runtime pod verifies at startup that `session_history` exists and
   refuses to finish booting when it does not — the log names the table and the
   command to run, instead of surfacing an `UndefinedTableError` mid-request
@@ -245,7 +256,7 @@ cd apps/fred-agents && make db-upgrade      # python -m fred_runtime migrate
 
 Stamping writes into `alembic_version_runtime` (fred-runtime's own version
 table — every backend and every capability has its own; see
-`libs/fred-runtime/alembic/env.py`).
+`libs/fred-runtime/fred_runtime/migrations/env.py`).
 
 ## SQLite compatibility
 

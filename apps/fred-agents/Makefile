@@ -35,8 +35,12 @@ db-upgrade: dev ## apply all pending migrations (fred-runtime + every capability
 	$(ALEMBIC_CONFIG_ENV) $(UV) run python -m fred_runtime migrate
 
 .PHONY: db-downgrade
-db-downgrade: dev ## roll back one revision in every installed capability tree, then fred-runtime
-	$(ALEMBIC_CONFIG_ENV) $(UV) run python -m fred_runtime downgrade -1
+db-downgrade: check-migration-tree dev ## roll back one revision in MIGRATION_TREE=runtime or capability:<id>
+	$(ALEMBIC_CONFIG_ENV) $(UV) run python -m fred_runtime downgrade "$(MIGRATION_TREE)" -1
+
+.PHONY: check-migration-tree
+check-migration-tree:
+	@test -n "$(MIGRATION_TREE)" || { echo "Set MIGRATION_TREE=runtime or MIGRATION_TREE=capability:<id>" >&2; exit 2; }
 
 ##@ Docker
 

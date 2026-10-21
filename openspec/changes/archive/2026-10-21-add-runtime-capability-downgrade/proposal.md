@@ -4,9 +4,9 @@
 
 ## What Changes
 
-- Add `python -m fred_runtime downgrade -1` to move each installed capability tree back one revision in reverse discovery order, then move the fred-runtime tree back one revision.
-- Add `make db-downgrade` in `apps/fred-agents`, matching the other backends' one-revision target.
-- Document the command, independent version tables, possible partial completion, and destructive or no-op migration scripts. The command is an explicit database operation, not a complete deployment rollback.
+- Add `python -m fred_runtime downgrade <tree> -1` to move only an explicitly selected runtime or capability tree back one revision. An installed capability might not have advanced in the last deployment, so downgrading every tree would reverse unrelated migrations.
+- Add `make db-downgrade MIGRATION_TREE=<tree>` in `apps/fred-agents`, matching the other backends' one-revision target while requiring a tree selection.
+- Document the command, independent version tables, and destructive or no-op migration scripts. The command is an explicit database operation, not a complete deployment rollback.
 - Keep `python -m fred_runtime migrate` and the deployment migration hook's upgrade behavior unchanged.
 
 ## Capabilities

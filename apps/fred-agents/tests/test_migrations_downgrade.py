@@ -27,9 +27,7 @@ def _database_state(database_path: Path) -> tuple[set[str], str | None, str | No
     )
 
 
-def test_combined_cli_downgrades_runtime_and_installed_capability(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_cli_downgrades_only_selected_tree(tmp_path: Path, monkeypatch) -> None:
     database_path = tmp_path / "migrations.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")
 
@@ -40,7 +38,14 @@ def test_combined_cli_downgrades_runtime_and_installed_capability(
     assert runtime_revision == "e5f6a7b8c9d0"  # pragma: allowlist secret
     assert capability_revision == "w1r2i3t4a5b6"  # pragma: allowlist secret
 
-    assert main(["downgrade", "-1"]) == 0
+    assert main(["downgrade", "runtime", "-1"]) == 0
+    tables, runtime_revision, capability_revision = _database_state(database_path)
+    assert "runtime_web_research_activity" not in tables
+    assert "cap_writable_document_docs" in tables
+    assert runtime_revision == "d4e5c6b7a8f9"  # pragma: allowlist secret
+    assert capability_revision == "w1r2i3t4a5b6"  # pragma: allowlist secret
+
+    assert main(["downgrade", "capability:writable_document", "-1"]) == 0
     tables, runtime_revision, capability_revision = _database_state(database_path)
     assert "runtime_web_research_activity" not in tables
     assert "cap_writable_document_docs" not in tables

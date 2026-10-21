@@ -27,7 +27,8 @@ Why this module exists:
 
 How to use:
 - `python -m fred_runtime migrate` (see `fred_runtime.__main__`)
-- `python -m fred_runtime downgrade -1` reverses one revision per installed tree
+- `python -m fred_runtime downgrade runtime -1` rolls back only the runtime tree
+- `python -m fred_runtime downgrade capability:<id> -1` rolls back one capability
 - the Helm migration job overrides its `command`/`args` to that CLI, so
   deploying the pod applies both fred-runtime's and every installed
   capability's migrations in one hook
@@ -46,6 +47,10 @@ logger = logging.getLogger(__name__)
 # This package is the runtime's Alembic tree, so the migration CLI needs no
 # source checkout or repository-relative resources.
 RUNTIME_ALEMBIC_DIR = Path(__file__).resolve().parent
+
+
+class MigrationTreeSelectionError(ValueError):
+    """The requested migration tree is not available for downgrade."""
 
 
 def _upgrade(script_location: str, *, label: str) -> None:
@@ -101,20 +106,30 @@ def run_all_migrations() -> list[str]:
     return upgraded
 
 
-def run_all_downgrades() -> list[str]:
-    """Downgrade installed capability trees in reverse order, then runtime."""
+def downgrade_migration_tree(tree: str) -> str:
+    """Downgrade one explicitly selected migration tree by one revision."""
 
+    if tree == "runtime":
+        _downgrade(str(RUNTIME_ALEMBIC_DIR), label="fred-runtime")
+        return "fred-runtime"
+
+    prefix = "capability:"
+    if not tree.startswith(prefix) or not tree.removeprefix(prefix):
+        raise MigrationTreeSelectionError("tree must be 'runtime' or 'capability:<id>'")
+
+    cap_id = tree.removeprefix(prefix)
     registry = CapabilityRegistry()
     registry.discover()
-    downgraded: list[str] = []
-    for cap_id, location in reversed(registry.migration_locations()):
-        _downgrade(location, label=f"capability '{cap_id}'")
-        downgraded.append(cap_id)
+    locations = dict(registry.migration_locations())
+    if cap_id not in locations:
+        available = ", ".join(locations) or "none"
+        raise MigrationTreeSelectionError(
+            f"capability '{cap_id}' has no installed migration tree "
+            f"(available: {available})"
+        )
 
-    _downgrade(str(RUNTIME_ALEMBIC_DIR), label="fred-runtime")
-    downgraded.append("fred-runtime")
-    logger.info("[MIGRATE] downgrade complete: %s", ", ".join(downgraded))
-    return downgraded
+    _downgrade(locations[cap_id], label=f"capability '{cap_id}'")
+    return cap_id
 
 
 def upgrade_sqlite_database(sqlite_path: str | Path) -> None:

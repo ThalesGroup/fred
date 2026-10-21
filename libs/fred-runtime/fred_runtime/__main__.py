@@ -19,8 +19,8 @@ Commands:
 - `migrate` — upgrade fred-runtime's Alembic tree, then every installed
   capability's own tree (RFC §7.1). The Helm migration job points its
   `command`/`args` here so deploying the pod runs all migrations.
-- `downgrade -1` — move every installed capability tree back one revision,
-  then fred-runtime's tree.
+- `downgrade <tree> -1` - move only the selected runtime or capability tree
+  back one revision.
 - `dump-openapi <capability_id>` — print one capability router's OpenAPI JSON
   (RFC §9.1), the `schemaFile` input for that capability's frontend codegen.
 """
@@ -41,11 +41,15 @@ def _cmd_migrate(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_downgrade(_args: argparse.Namespace) -> int:
-    from .migrations import run_all_downgrades
+def _cmd_downgrade(args: argparse.Namespace) -> int:
+    from .migrations import MigrationTreeSelectionError, downgrade_migration_tree
 
-    downgraded = run_all_downgrades()
-    print(f"downgraded: {', '.join(downgraded)}")
+    try:
+        downgraded = downgrade_migration_tree(args.tree)
+    except MigrationTreeSelectionError as exc:
+        print(f"downgrade: {exc}", file=sys.stderr)
+        return 2
+    print(f"downgraded: {downgraded}")
     return 0
 
 
@@ -77,7 +81,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("migrate", help="run fred-runtime + capability migrations")
 
     downgrade = sub.add_parser(
-        "downgrade", help="roll back one revision in each installed migration tree"
+        "downgrade", help="roll back one revision in one selected migration tree"
+    )
+    downgrade.add_argument(
+        "tree", help="runtime or capability:<id> for an installed capability"
     )
     downgrade.add_argument("revision", choices=["-1"], help="one revision back")
 
