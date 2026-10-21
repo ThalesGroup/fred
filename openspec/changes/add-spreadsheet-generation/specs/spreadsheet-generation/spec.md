@@ -119,6 +119,12 @@ A column MAY declare `compute` instead of row values: `add`, `subtract`, `multip
 - **WHEN** the model calls the tool
 - **THEN** the file is created as sent, and the tool result names "Écart" with the `compute` that would produce it, asking the model to declare such columns with `compute` next time
 
+#### Scenario: Manual total row noted, file kept
+
+- **GIVEN** a sheet whose "Montant" column sets `total: sum` and whose rows end with a row labelled "Total" (case and spaces ignored; "Total HT" counts, "TotalEnergies" does not) whose total-column cells are empty or equal what the totals row computes
+- **WHEN** the model calls the tool
+- **THEN** the file is created as sent, and the tool result names the sheet and row as a likely manual total next to the automatic totals row, at most once per sheet; a "Total" row holding other values, or a sheet with no `total` column, gets no note
+
 ### Requirement: Size limits are enforced
 
 The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 rows per sheet, 50 000 cells in total, 2 000 characters per cell or header, or 10 MB of output, with an error tool result stating the limit and telling the model to inform the user plainly and suggest splitting the data. It SHALL never truncate data silently.

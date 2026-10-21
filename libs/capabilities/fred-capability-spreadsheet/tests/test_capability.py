@@ -159,6 +159,7 @@ def test_tool_schema_exposes_only_llm_arguments():
     assert "share_of_total" in schema["description"]
     assert "A division by zero leaves the cell empty" in schema["description"]
     assert "send null for it in rows" in schema["description"]
+    assert "Do not add your own total/subtotal row" in schema["description"]
     assert "Call this tool once per file" in schema["description"]
     assert "If you are a sub-agent" in schema["description"]
     assert "that agent creates one workbook" in schema["description"]
@@ -385,5 +386,31 @@ async def test_literal_derived_columns_keep_the_file_and_return_a_compute_note()
     assert artifact.is_error is False and len(workspace.writes) == 2
     assert (
         "'Gap' -> compute {op: 'subtract', left: 'Actual', right: 'Budget'}" in content
+    )
+    assert content.endswith("Do not create it again; reply now.")
+
+
+@pytest.mark.asyncio
+async def test_a_manual_total_row_keeps_the_file_and_returns_a_note():
+    args = {
+        "file_name": "Budget",
+        "sheets": [
+            {
+                "name": "Budget",
+                "columns": [
+                    {"header": "Line"},
+                    {"header": "Amount", "type": "currency", "total": "sum"},
+                ],
+                "rows": [["Rent", 1200], ["Pay", 8000], ["Total", None]],
+            }
+        ],
+    }
+    workspace = FakeWorkspace()
+    content, artifact = await _tool(workspace)(**args)
+
+    assert artifact.is_error is False and len(workspace.writes) == 2
+    assert (
+        "sheet 'Budget', row 4 ('Total') looks like a manual total next to the "
+        "automatic totals row" in content
     )
     assert content.endswith("Do not create it again; reply now.")

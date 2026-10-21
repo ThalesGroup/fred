@@ -53,6 +53,7 @@ from fred_capability_spreadsheet.workbook import (
     build_preview,
     build_workbook,
     derived_column_hints,
+    manual_total_hints,
     prepare,
     sanitize_file_name,
 )
@@ -96,7 +97,8 @@ _TOOL_DESCRIPTION = (
     "Dates are 'YYYY-MM-DD'. A currency column may set currency (EUR, USD, GBP, "
     "CHF, JPY, CNY, CAD, AUD).\n"
     "For totals or averages, set total (sum, average, min, max, count) on the "
-    "column: Excel adds the totals row. Never add a totals row yourself. Set "
+    "column: Excel adds the totals row. Do not add your own total/subtotal row "
+    "for columns that set total; the totals row is added automatically. Set "
     "language to the conversation's language ('fr' or 'en') for its label.\n"
     "Limits: 10 sheets, 50 columns, 5000 rows per sheet, 50000 cells. If the data "
     "exceeds a limit, tell the user plainly what the limit is and suggest "
@@ -129,7 +131,7 @@ class SpreadsheetPreviewPart(BaseModel):
 
 def _build_outputs(
     request: CreateSpreadsheetInput,
-) -> tuple[bytes, bytes | None, list[str]]:
+) -> tuple[bytes, bytes | None, list[str], list[str]]:
     prepared = prepare(request)
     content = build_workbook(prepared)
     try:
@@ -138,12 +140,17 @@ def _build_outputs(
         logger.exception("[SPREADSHEET] derived-column check failed")
         hints = []
     try:
+        totals = manual_total_hints(prepared)
+    except Exception:
+        logger.exception("[SPREADSHEET] manual-total check failed")
+        totals = []
+    try:
         preview = build_preview(prepared)
     except Exception:
         # The preview is a convenience: never lose the file over it.
         logger.exception("[SPREADSHEET] preview build failed")
         preview = None
-    return content, preview, hints
+    return content, preview, hints, totals
 
 
 async def _preview_part(
@@ -185,7 +192,9 @@ def _error(message: str) -> tuple[str, ToolInvocationResult]:
     return message, ToolInvocationResult(tool_ref=TOOL_NAME, is_error=True)
 
 
-def _created_text(output_file_name: str, hints: Sequence[str] = ()) -> str:
+def _created_text(
+    output_file_name: str, hints: Sequence[str] = (), totals: Sequence[str] = ()
+) -> str:
     note = (
         " Note: these columns hold values you computed, so the file has no formula "
         f"for them: {'; '.join(hints)}. Next time, declare such columns with "
@@ -193,6 +202,11 @@ def _created_text(output_file_name: str, hints: Sequence[str] = ()) -> str:
         if hints
         else ""
     )
+    if totals:
+        note += (
+            f" Note: {'; '.join(totals)} looks like a manual total next to the "
+            "automatic totals row; next time, leave totals to total."
+        )
     return (
         f"The Excel file '{output_file_name}' has a download button in the chat; "
         f"do not write a download link.{note} File created and shown to the user. "
@@ -241,7 +255,9 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             )
         _active_builds += 1
         try:
-            content, preview, hints = await asyncio.to_thread(_build_outputs, request)
+            content, preview, hints, totals = await asyncio.to_thread(
+                _build_outputs, request
+            )
         except SpreadsheetInputError as exc:
             logger.info("[SPREADSHEET] rejected input: %s", exc)
             return _error(f"No file was written. {exc}")
@@ -282,9 +298,11 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         )
         if hints:
             logger.info("[SPREADSHEET] literal derived columns=%d", len(hints))
+        if totals:
+            logger.info("[SPREADSHEET] manual total rows=%d", len(totals))
         created[request_key] = output_file_name
         return (
-            _created_text(output_file_name, hints),
+            _created_text(output_file_name, hints, totals),
             ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,)),
         )
 

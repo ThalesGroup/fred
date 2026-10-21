@@ -33,6 +33,7 @@ from fred_capability_spreadsheet.workbook import (
     build_preview,
     build_workbook,
     derived_column_hints,
+    manual_total_hints,
     prepare,
     sanitize_file_name,
 )
@@ -897,3 +898,42 @@ def test_a_single_matching_row_or_a_copied_column_is_no_derivation():
 
     assert _hints(_sheet(columns=columns, rows=[[4, 0, 4], [5, 0, 5]])) == []
     assert _hints(_sheet(columns=columns, rows=[[4, 1, 3], [5, 0, None]])) == []
+
+
+# --- manual total rows ----------------------------------------------------------
+
+_SUM_COLUMNS = [
+    {"header": "Poste"},
+    {"header": "HT", "type": "currency", "total": "sum"},
+    {"header": "TTC", "type": "currency", "total": "sum"},
+]
+
+
+def _totals(columns: list[dict[str, Any]], rows: list[list[Any]]) -> list[str]:
+    return manual_total_hints(prepare(_request(_sheet(columns=columns, rows=rows))))
+
+
+def test_an_empty_manual_total_row_is_named():
+    rows = [["Loyer", 100, 120], ["Pay", 200, 240], ["Total", None, None]]
+
+    assert _totals(_SUM_COLUMNS, rows) == ["sheet 'Data', row 4 ('Total')"]
+
+
+def test_filled_total_rows_equal_to_the_totals_are_named_once_per_sheet():
+    rows = [
+        ["Loyer", 100, 120],
+        ["Pay", 200, 240],
+        ["Total HT", 300, None],
+        ["  TOTAL  ttc :", None, 360],
+    ]
+
+    assert _totals(_SUM_COLUMNS, rows) == ["sheet 'Data', row 4 ('Total HT')"]
+
+
+def test_a_total_row_with_other_values_or_without_total_columns_is_data():
+    rows = [["Total", 50, 60], ["TotalEnergies", 100, 120], ["Pay", 200, 240]]
+    plain = [{"header": "Company"}, {"header": "Revenue", "type": "currency"}]
+
+    assert _totals(_SUM_COLUMNS, rows) == []
+    assert _totals(_SUM_COLUMNS, [["TotalEnergies", None, None], ["a", 1, 2]]) == []
+    assert _totals(plain, [["Total", None], ["TotalEnergies", 5]]) == []
