@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
-from typing import Annotated, AsyncIterator
+from typing import Annotated, AsyncGenerator
 
 from fastapi import HTTPException, Query, Request, Security
 
@@ -38,7 +38,7 @@ async def declare_delegation_parameters(
 async def mcp_mount_auth(
     request: Request,
     token: Annotated[str, Security(oauth2_scheme)],
-) -> AsyncIterator[KeycloakUser | AssertedUser]:
+) -> AsyncGenerator[KeycloakUser | AssertedUser, None]:
     """Authenticate a tool mount and record who the call speaks for."""
 
     # The bearer scheme does not fail on a missing credential, so without this

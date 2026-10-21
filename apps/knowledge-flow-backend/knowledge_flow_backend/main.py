@@ -50,7 +50,6 @@ from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
 from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
-from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_tree.controller import CorpusTreeController
@@ -75,6 +74,7 @@ from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
+from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
 # -----------------------
@@ -94,6 +94,7 @@ def _norm_origin(o) -> str:
 # -----------------------
 # APP CREATION
 # -----------------------
+
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()

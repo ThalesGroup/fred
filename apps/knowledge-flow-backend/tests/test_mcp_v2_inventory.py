@@ -14,11 +14,7 @@ def _semantic_schema(value):
     if isinstance(value, list):
         return [_semantic_schema(item) for item in value]
     if isinstance(value, dict):
-        result = {
-            key: _semantic_schema(item)
-            for key, item in value.items()
-            if key != "title" and not (key == "required" and item == [])
-        }
+        result = {key: _semantic_schema(item) for key, item in value.items() if key != "title" and not (key == "required" and item == [])}
         if "anyOf" in result:
             result.pop("type", None)
         return result

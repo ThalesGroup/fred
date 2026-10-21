@@ -7,8 +7,6 @@ from contextlib import AsyncExitStack
 import httpx2
 import pytest
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
-from fred_core.security import mcp_delegation
-from fred_core.security.delegation import DelegationGrant
 from fred_core.logs.context import current_context
 from fred_core.logs.http import RequestLoggingMiddleware
 from fred_core.logs.propagation import (
@@ -16,9 +14,10 @@ from fred_core.logs.propagation import (
     admit_delegated_log_context,
     decode_log_context,
 )
+from fred_core.security import mcp_delegation
+from fred_core.security.delegation import DelegationGrant
 
 from knowledge_flow_backend import mcp_mount
-
 
 _META = {
     "io.modelcontextprotocol/protocolVersion": "2026-07-28",
@@ -97,9 +96,7 @@ def _app() -> FastAPI:
 async def test_v2_mount_is_stateless_and_uses_only_verified_grant(monkeypatch) -> None:
     async def authenticate(request: Request, token: str):
         assert token == "test"
-        reset = mcp_delegation._verified_grant.set(
-            DelegationGrant(person="trusted", run="run-1", agent="agent-1")
-        )
+        reset = mcp_delegation._verified_grant.set(DelegationGrant(person="trusted", run="run-1", agent="agent-1"))
         try:
             yield None
         finally:
@@ -127,9 +124,7 @@ async def test_v2_mount_is_stateless_and_uses_only_verified_grant(monkeypatch) -
         assert listing.json()["result"]["cacheScope"] == "private"
         tools = listing.json()["result"]["tools"]
         assert {tool["name"] for tool in tools} == {"echo", "refused"}
-        assert not {"person", "run", "agent"} & set(
-            tools[0]["inputSchema"].get("properties", {})
-        )
+        assert not {"person", "run", "agent"} & set(tools[0]["inputSchema"].get("properties", {}))
 
         called = await _request(
             clients[1],
@@ -158,12 +153,8 @@ async def test_v2_mount_redacts_receiver_refusal(monkeypatch) -> None:
     monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
     app = _app()
     async with app.router.lifespan_context(app):
-        async with httpx2.AsyncClient(
-            transport=httpx2.ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await _request(
-                client, "tools/call", {"name": "refused", "arguments": {}}
-            )
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
+            response = await _request(client, "tools/call", {"name": "refused", "arguments": {}})
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["isError"] is True
@@ -190,14 +181,10 @@ async def test_v2_inner_request_uses_admitted_context_and_fresh_request_id(monke
             "query": dict(request.query_params),
         }
 
-    mcp_mount.mount_fastapi_tools(
-        app, path="/mcp-test", name="Context test", description="Context test", tags={"Selected"}
-    )
+    mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Context test", description="Context test", tags={"Selected"})
 
     async def authenticate(request: Request, token: str):
-        reset = mcp_delegation._verified_grant.set(
-            DelegationGrant(person="person-a", run="run-a", agent="agent-a")
-        )
+        reset = mcp_delegation._verified_grant.set(DelegationGrant(person="person-a", run="run-a", agent="agent-a"))
         try:
             yield None
         finally:
@@ -205,12 +192,8 @@ async def test_v2_inner_request_uses_admitted_context_and_fresh_request_id(monke
 
     monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
     async with app.router.lifespan_context(app):
-        async with httpx2.AsyncClient(
-            transport=httpx2.ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await _request(
-                client, "tools/call", {"name": "inside", "arguments": {"person": "model-person"}}
-            )
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
+            response = await _request(client, "tools/call", {"name": "inside", "arguments": {"person": "model-person"}})
     assert response.status_code == 200
     payload = response.json()["result"]["structuredContent"]
     assert payload["query"] == {"person": "person-a", "run": "run-a", "agent": "agent-a"}
@@ -226,9 +209,7 @@ async def test_v2_inner_request_uses_admitted_context_and_fresh_request_id(monke
     ("status", "marked", "authority_lost"),
     [(403, False, True), (503, True, True), (503, False, False)],
 )
-async def test_v2_mount_classifies_only_receiver_authority_refusals(
-    monkeypatch, status: int, marked: bool, authority_lost: bool
-) -> None:
+async def test_v2_mount_classifies_only_receiver_authority_refusals(monkeypatch, status: int, marked: bool, authority_lost: bool) -> None:
     app = FastAPI()
 
     @app.get("/protected", tags=["Selected"], operation_id="read_protected")
@@ -239,21 +220,15 @@ async def test_v2_mount_classifies_only_receiver_authority_refusals(
             headers={"X-Fred-Denial-Cause": "account_status_unavailable"} if marked else None,
         )
 
-    mcp_mount.mount_fastapi_tools(
-        app, path="/mcp-test", name="Protected test", description="Protected test", tags={"Selected"}
-    )
+    mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Protected test", description="Protected test", tags={"Selected"})
 
     async def authenticate(request: Request, token: str):
         yield None
 
     monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
     async with app.router.lifespan_context(app):
-        async with httpx2.AsyncClient(
-            transport=httpx2.ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await _request(
-                client, "tools/call", {"name": "read_protected", "arguments": {}}
-            )
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
+            response = await _request(client, "tools/call", {"name": "read_protected", "arguments": {}})
     result = response.json()["result"]
     assert result["isError"] is True
     assert (result.get("structuredContent") == {"cause": "authority_lost"}) is authority_lost
@@ -270,9 +245,7 @@ async def test_v2_mount_classifies_only_receiver_authority_refusals(
         ("read_query", 400, "private", None),
     ],
 )
-async def test_v2_mount_keeps_only_curated_sql_400_detail(
-    monkeypatch, tool_name: str, status: int, body: str, expected_detail: str | None
-) -> None:
+async def test_v2_mount_keeps_only_curated_sql_400_detail(monkeypatch, tool_name: str, status: int, body: str, expected_detail: str | None) -> None:
     app = FastAPI()
 
     @app.get("/query", tags=["Selected"], operation_id=tool_name)
@@ -280,18 +253,14 @@ async def test_v2_mount_keeps_only_curated_sql_400_detail(
         assert sql == "SELECT amount_typo FROM d_sales"
         return Response(body, status_code=status, media_type="application/json")
 
-    mcp_mount.mount_fastapi_tools(
-        app, path="/mcp-test", name="Query test", description="Query test", tags={"Selected"}
-    )
+    mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Query test", description="Query test", tags={"Selected"})
 
     async def authenticate(request: Request, token: str):
         yield None
 
     monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
     async with app.router.lifespan_context(app):
-        async with httpx2.AsyncClient(
-            transport=httpx2.ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
             response = await _request(
                 client,
                 "tools/call",

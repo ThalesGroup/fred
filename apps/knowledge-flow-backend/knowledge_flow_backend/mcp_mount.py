@@ -42,9 +42,7 @@ class _MountAuthentication:
         try:
             await anext(auth)
         except HTTPException as exc:
-            response = JSONResponse(
-                {"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers
-            )
+            response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
             await response(scope, receive, send)
             return
         try:
@@ -64,18 +62,12 @@ async def _forward_verified_identity(request: httpx2.Request) -> None:
         request.headers["Authorization"] = authorization
     request.headers.pop(CONTEXT_HEADER, None)
 
-    query = [
-        (name, value)
-        for name, value in request.url.params.multi_items()
-        if name not in GRANT_PARAM_NAMES
-    ]
+    query = [(name, value) for name, value in request.url.params.multi_items() if name not in GRANT_PARAM_NAMES]
     grant = verified_grant()
     if grant is not None:
-        query.extend(
-            (("person", grant.person), ("run", grant.run), ("agent", grant.agent))
-        )
+        query.extend((("person", grant.person), ("run", grant.run), ("agent", grant.agent)))
         request.headers.update(outbound_context_headers())
-    request.url = request.url.copy_with(query=str(httpx2.QueryParams(query)).encode())
+    request.url = request.url.copy_with(query=str(httpx2.QueryParams(tuple(query))).encode())
 
 
 def _curate_tool(route: Any, tool: Any) -> None:
@@ -105,11 +97,7 @@ class _ToolErrorPolicy(Middleware):
                     return ToolResult(content="Tool request failed.", is_error=True)
             response = http_error.response
             status = response.status_code
-            if status in (401, 403) or (
-                status == 503
-                and response.headers.get(DENIAL_CAUSE_HEADER)
-                == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
-            ):
+            if status in (401, 403) or (status == 503 and response.headers.get(DENIAL_CAUSE_HEADER) == ACCOUNT_STATUS_UNAVAILABLE_CAUSE):
                 return ToolResult(
                     content="Tool access was refused.",
                     structured_content={"cause": "authority_lost"},
@@ -122,10 +110,7 @@ class _ToolErrorPolicy(Middleware):
                     detail = None
                 if isinstance(detail, str) and detail:
                     return ToolResult(
-                        content=(
-                            "Error calling read_query. Status code: 400. Response: "
-                            + json.dumps({"detail": detail}, ensure_ascii=False)
-                        ),
+                        content=("Error calling read_query. Status code: 400. Response: " + json.dumps({"detail": detail}, ensure_ascii=False)),
                         is_error=True,
                     )
             return ToolResult(content="Tool request failed.", is_error=True)
@@ -160,10 +145,6 @@ def mount_fastapi_tools(
     )
     mcp.add_middleware(_ToolErrorPolicy())
     mcp_app = mcp.http_app(path=path, stateless_http=True, json_response=True)
-    app.router.routes.append(
-        Route(path, endpoint=_MountAuthentication(mcp_app), methods=["GET", "POST", "DELETE"])
-    )
-    app.router.lifespan_context = combine_lifespans(
-        app.router.lifespan_context, mcp_app.lifespan
-    )
+    app.router.routes.append(Route(path, endpoint=_MountAuthentication(mcp_app), methods=["GET", "POST", "DELETE"]))
+    app.router.lifespan_context = combine_lifespans(app.router.lifespan_context, mcp_app.lifespan)
     return mcp

@@ -6,8 +6,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import jwt
 import httpx2
+import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
@@ -27,10 +27,10 @@ from fred_core.tests.security.rebac_fakes import AccountStatusStore, account_sta
 from fred_core.users.store.postgres_user_store import get_user_store
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 from knowledge_flow_backend.features.tag.tag_controller import TagController
+from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 
 _HEADERS = {
     "authorization": "Bearer synthetic-workload-token",
@@ -112,7 +112,8 @@ def _app_with_mcp(*, mount: bool = True) -> tuple[FastAPI, FastMCP | None]:
             description="List documents.",
             tags={"Documents"},
         )
-        if mount else None
+        if mount
+        else None
     )
     return app, mcp
 
@@ -126,9 +127,7 @@ _META = {
 @asynccontextmanager
 async def _serving_mcp(app: FastAPI):
     async with app.router.lifespan_context(app):
-        async with httpx2.AsyncClient(
-            transport=httpx2.ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
             yield client
 
 
