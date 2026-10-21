@@ -1,6 +1,21 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 
 import httpx
 import pytest
@@ -29,6 +44,7 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
+from fred_sdk.contracts.models import AgentDefinition
 from pydantic import ValidationError
 
 
@@ -70,9 +86,9 @@ def test_discovery_only_catalog_has_stable_routable_profiles(monkeypatch) -> Non
     assert {p.capability_id for p in first.profiles} == {
         p.capability_id for p in reordered.profiles
     }
-    assert first.to_policy().profiles[0].model.settings["base_url"] == (
-        "https://models.example/v1"
-    )
+    settings = first.to_policy().profiles[0].model.settings
+    assert settings is not None
+    assert settings["base_url"] == ("https://models.example/v1")
     default = first.default_profile_by_capability[ModelCapability.CHAT]
     assert next(p for p in first.profiles if p.profile_id == default).model.name == (
         "chat-a"
@@ -91,6 +107,7 @@ def test_discovery_endpoint_overrides_common_openai_base(monkeypatch) -> None:
         transport=_transport({"data": [{"id": "chat-a"}]})
     )
     settings = resolved.to_policy().profiles[0].model.settings
+    assert settings is not None
     assert settings["base_url"] == "https://models.example/v1"
     assert "openai_api_base" not in settings
 
@@ -202,13 +219,16 @@ def test_pod_builder_advertises_its_routing_snapshot(monkeypatch, tmp_path) -> N
     config.set_models_catalog_path(str(path))
 
     factory = _build_chat_model_factory(config)
-    assert factory.catalog is resolved
-    assert _catalog_for_advertisement(str(path), factory.catalog) is resolved
-    projected = _project_model_catalog_response(factory.catalog)
+    assert isinstance(factory, RoutedChatModelFactory)
+    snapshot = factory.catalog
+    assert snapshot is resolved
+    assert snapshot is not None
+    assert _catalog_for_advertisement(str(path), snapshot) is resolved
+    projected = _project_model_catalog_response(snapshot)
     assert [item.name for item in projected.models] == ["chat-a"]
     assert (
         projected.default_chat_profile_id
-        == factory.catalog.default_profile_by_capability[ModelCapability.CHAT]
+        == snapshot.default_profile_by_capability[ModelCapability.CHAT]
     )
     assert factory.with_provider(factory._provider).catalog is resolved
 
@@ -245,7 +265,7 @@ def test_static_catalog_advertisement_still_reads_the_file(tmp_path) -> None:
     "base_url",
     [
         "file:///tmp/models",
-        "https://user:secret@models.example/v1",
+        "https://user@models.example/v1",
         "https://models.example/v1?q=x",
         "https://models.example/v1\n",
     ],
@@ -309,7 +329,7 @@ def test_discovered_model_uses_existing_grant_and_drift_gates(monkeypatch) -> No
     factory = RoutedChatModelFactory(
         resolver=ModelRoutingResolver(catalog.to_policy()), provider=Provider()
     )
-    definition = SimpleNamespace(agent_id="agent-a")
+    definition = cast(AgentDefinition, SimpleNamespace(agent_id="agent-a"))
     with pytest.raises(ModelNotUsableError):
         factory.build_for_chat(definition=definition, binding=binding(()))
     model, selection = factory.build_for_chat(

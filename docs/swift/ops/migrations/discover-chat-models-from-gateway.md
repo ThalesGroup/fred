@@ -11,7 +11,7 @@ Agent pods whose operators want to list chat models from an OpenAI-compatible ga
 
 ## Prerequisites
 
-The gateway must serve an authenticated `GET /models` under its inference base URL and return a JSON `data` array of distinct model ids. The source must contain chat-capable models only, or the operator must select chat ids with `include_model_ids`.
+The gateway must serve an authenticated `GET /models` under its inference base URL and return a JSON `data` array. Selected model ids must be distinct and valid. The source must contain chat-capable models only, or the operator must select chat ids with `include_model_ids`.
 
 ## Configuration
 

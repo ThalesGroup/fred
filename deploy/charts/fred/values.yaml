@@ -961,7 +961,7 @@ applications:
     models_catalog:
       version: v1
       discovery: null
-      # To discover chat models from an OpenAI-compatible gateway, add:
+      # To discover chat models from an OpenAI-compatible gateway, replace null with:
       # discovery:
       #   source_id: primary-gateway
       #   base_url: https://gateway.example/v1

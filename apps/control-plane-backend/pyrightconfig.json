@@ -2,5 +2,6 @@
   "typeCheckingMode": "standard",
   "venvPath": ".",
   "venv": ".venv",
+  "extraPaths": ["../../libs/fred-sdk"],
   "reportUnreachable": "warning"
 }
