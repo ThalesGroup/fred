@@ -27,7 +27,6 @@ from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException
 from control_plane_backend.product import api as product_api
 from control_plane_backend.product.schemas import (
     CreatePromptRequest,
@@ -35,6 +34,7 @@ from control_plane_backend.product.schemas import (
     PromptScoreUpdateRequest,
     UpdatePromptRequest,
 )
+from fastapi import HTTPException
 from fred_core import KeycloakUser, OrganizationPermission, TeamPermission
 from fred_core.common import TeamId
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
