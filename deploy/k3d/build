@@ -5,6 +5,7 @@ Writes $K3D_APP_OUT/images.txt, the content-tagged references to copy into the
 cluster, and $K3D_APP_OUT/images.yaml, the Helm values selecting them.
 """
 
+import hashlib
 import json
 import os
 import subprocess
@@ -49,13 +50,21 @@ def build(root: Path, output: Path) -> None:
                     stderr=subprocess.STDOUT,
                     check=True,
                 )
-        digest = subprocess.check_output(
-            ["docker", "image", "inspect", "--format", "{{.Id}}", image], text=True
-        ).strip()
-        if not digest.startswith("sha256:") or len(digest) != 71:
-            raise ValueError(f"Invalid Docker image ID for {app}")
+        # BuildKit's top-level ID can include fresh provenance attestations.
+        # Identify what runs instead: filesystem layers, runtime config and platform.
+        metadata = json.loads(subprocess.check_output(
+            ["docker", "image", "inspect", image], text=True
+        ))[0]
+        content = {
+            "rootfs": metadata["RootFS"],
+            "config": metadata["Config"],
+            "os": metadata["Os"],
+            "architecture": metadata["Architecture"],
+            "variant": metadata.get("Variant", ""),
+        }
+        digest = hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
         repository = image.rsplit(":", 1)[0]
-        tag = f"k3d-{digest[7:19]}"
+        tag = f"k3d-{digest[:16]}"
         reference = f"{repository}:{tag}"
         subprocess.run(["docker", "tag", image, reference], check=True)
         images.append(reference)
