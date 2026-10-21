@@ -1,7 +1,7 @@
 # RFC — Per-user token quotas
 
 **Status:** Draft. Product decisions below are settled by the owner; the
-five open questions in §5 are the only design points left before the
+six open questions in §5 are the only design points left before the
 work is sliced into OpenSpec changes (§6).
 **Author:** Maxime Daragon
 **Date:** 2026-10-21
@@ -45,6 +45,18 @@ calls are not tied to a user turn at all.
 - **User messages** at 50% and 80%. At 100%, a clean, friendly block that
   says when access returns. A turn already started always finishes; the block
   applies to the next turn.
+- **One platform-wide switch.** The platform admin turns enforcement on or
+  off for the whole platform. Off by default on install and upgrade, so an
+  upgrading platform blocks nobody (migration impact: optional activation,
+  minor). While off, spend is still written to the ledger (the team
+  "Consommation" view keeps working); gauges, 50/80% messages and the 100%
+  block are off. Toggling never changes the weekly default, overrides or
+  active boosts.
+- **Keep or reset on re-enable.** Turning enforcement back on asks: keep
+  counting (current windows include everything recorded, spend while off
+  included) or reset counters to 0. Reset deletes no ledger row: it stores a
+  platform-wide `counters_reset_at`, and windows sum only rows after
+  `max(window start, counters_reset_at)`.
 - **#2528 is a prerequisite**: Deep agents must report sub-agent spend before
   quotas are enforced, or they become a quota bypass.
 
@@ -60,12 +72,22 @@ insert-only rows, aggregates computed by query, safe across replicas.
 **Windows.** Weekly: `sum(credits)` since the last Monday 00:00
 Europe/Paris. 5-hour: the window start is the first ledger row after the
 previous window ended; it is derived from the ledger (or a one-row-per-user
-`window_started_at` column), never from process memory.
+`window_started_at` column), never from process memory. Both windows start
+at `max(window start, counters_reset_at)` when a reset baseline is set.
+
+**Platform switch.** Reuse platform access filtering: single-row settings
+with an optimistic `revision` (`PlatformAccessSettingsRow.filtering_enabled`,
+`fred_core/security/platform_access/models.py:22`), `PATCH
+/admin/platform/access` (`control_plane_backend/platform_access/service.py:145`),
+and the `PlatformAccessPage` header badge + button opening
+`PlatformAccessActivationDialog` (`PlatformAccessPage.tsx:145-170`), where the
+keep/reset choice goes. Quotas get their own settings row, not access columns.
 
 **Admission.** fred-agents already calls control-plane at every turn
 (`_resolve_agent_instance` → `GET /teams/{team_id}/agent-instances/{id}/runtime`,
 `product/api.py`), with user and team known, and that call already returns
-409 when an instance is disabled. The quota check rides on it: if either
+409 when an instance is disabled. The quota check rides on it (skipped
+while enforcement is off): if either
 gauge is at or above 100%, return 409 `user_quota_exhausted` with
 `resets_at`. The in-flight turn is never interrupted.
 
@@ -126,7 +148,11 @@ one default row, a nullable per-user override, 422 on invalid values.
    vs a dedicated endpoint.
    *Recommendation:* dedicated `GET /me/usage` (both gauges: used, budget,
    `resets_at`), refetched after each turn; the 409 carries `resets_at` for
-   the block. Avoids widening unrelated responses.
+   the block. Avoids widening unrelated responses. While enforcement is
+   off it returns `enforced: false` and the chat shows no gauge.
+6. **Does an active boost survive a counter reset?**
+   *Recommendation:* yes. A reset moves the counting baseline only; boosts
+   keep their `expires_at` and lapse at the next weekly reset as usual.
 
 ## 6. Slicing into OpenSpec changes
 
@@ -135,8 +161,9 @@ answered:
 
 - **(a) Usage ledger + admission block** — table + migration, turn-end
   reporting, credit computation, 409 on the runtime binding call.
-- **(b) Platform-admin quota page** — weekly default, 5-hour fraction
-  readout, per-user override via user search, "+20%" boost.
+- **(b) Platform-admin quota page** — enforcement switch with the keep/reset
+  choice on enable, weekly default, 5-hour fraction readout, per-user
+  override via user search, "+20%" boost.
 - **(c) User gauges + messages** — `GET /me/usage`, 50/80% notices, friendly
   100% block with the return time.
 - **(d) Team "Consommation" view** — credits by member and space on
@@ -149,7 +176,10 @@ answered:
 - `CONTROL-PLANE-PRODUCT-CONTRACT.md`: dated entries for the ledger table,
   turn-end reporting endpoint, `user_quota_exhausted` 409 on
   `GET /teams/{team_id}/agent-instances/{id}/runtime`, quota admin endpoints
-  (default, override, boost), `GET /me/usage`, and the team usage extension.
+  (default, override, boost), the platform quota settings endpoint
+  (`enforcement_enabled`, `counters_reset_at`; enabling takes a required
+  `on_enable: keep | reset` choice), `GET /me/usage`, and the team usage
+  extension.
 - `RUNTIME-EXECUTION-CONTRACT.md`: "Token accounting" section and a §8 entry
   for the turn-end spend report and how a 409 quota refusal is surfaced to
   the client before a turn starts.
