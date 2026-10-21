@@ -937,3 +937,18 @@ def test_a_total_row_with_other_values_or_without_total_columns_is_data():
     assert _totals(_SUM_COLUMNS, rows) == []
     assert _totals(_SUM_COLUMNS, [["TotalEnergies", None, None], ["a", 1, 2]]) == []
     assert _totals(plain, [["Total", None], ["TotalEnergies", 5]]) == []
+
+
+def test_round_on_a_large_value_does_not_overflow():
+    sheet = _sheet(
+        "Data",
+        [
+            {"header": "V", "type": "number"},
+            {
+                "header": "R",
+                "compute": {"op": "multiply", "left": "V", "right": 2, "round": 10},
+            },
+        ],
+        [[1e20]],
+    )
+    assert _preview(sheet)["sheets"][0]["rows"] == [[1e20, 2e20]]
