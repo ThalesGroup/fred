@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -561,6 +561,15 @@ wheels = [
 ]
 
 [[package]]
+name = "et-xmlfile"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54", size = 17234, upload-time = "2024-10-25T17:25:40.039Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa", size = 18059, upload-time = "2024-10-25T17:25:39.051Z" },
+]
+
+[[package]]
 name = "events"
 version = "0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -613,6 +622,7 @@ dependencies = [
     { name = "fred-capability-mcp" },
     { name = "fred-capability-platform-ops" },
     { name = "fred-capability-ppt-filler" },
+    { name = "fred-capability-spreadsheet" },
     { name = "fred-capability-team-wiki" },
     { name = "fred-capability-web-research" },
     { name = "fred-capability-writable-document" },
@@ -661,6 +671,7 @@ requires-dist = [
     { name = "fred-capability-mcp", editable = "../../libs/capabilities/fred-capability-mcp" },
     { name = "fred-capability-platform-ops", editable = "../../libs/capabilities/fred-capability-platform-ops" },
     { name = "fred-capability-ppt-filler", editable = "../../libs/capabilities/fred-capability-ppt-filler" },
+    { name = "fred-capability-spreadsheet", editable = "../../libs/capabilities/fred-capability-spreadsheet" },
     { name = "fred-capability-team-wiki", editable = "../../libs/capabilities/fred-capability-team-wiki" },
     { name = "fred-capability-web-research", editable = "../../libs/capabilities/fred-capability-web-research" },
     { name = "fred-capability-writable-document", editable = "../../libs/capabilities/fred-capability-writable-document" },
@@ -916,6 +927,50 @@ dev = [
     { name = "bandit", specifier = ">=1.8.6" },
     { name = "basedpyright", specifier = "==1.31.0" },
     { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", specifier = ">=1.2.0" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "pytest-socket", specifier = ">=0.7.0" },
+    { name = "ruff", specifier = ">=0.12.5" },
+]
+
+[[package]]
+name = "fred-capability-spreadsheet"
+version = "4.5.1"
+source = { editable = "../../libs/capabilities/fred-capability-spreadsheet" }
+dependencies = [
+    { name = "fred-core" },
+    { name = "fred-sdk", extra = ["agents"] },
+    { name = "langchain-core" },
+    { name = "openpyxl" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
+    { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
+    { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
+    { name = "fred-core", editable = "../../libs/fred-core" },
+    { name = "fred-runtime", marker = "extra == 'dev'", editable = "../../libs/fred-runtime" },
+    { name = "fred-sdk", extras = ["agents"], editable = "../../libs/fred-sdk" },
+    { name = "langchain-core", specifier = ">=0.3.0" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
+    { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
+    { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bandit", specifier = ">=1.8.6" },
+    { name = "basedpyright", specifier = "==1.31.0" },
+    { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "fred-runtime", editable = "../../libs/fred-runtime" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-cov", specifier = ">=6.2.1" },
@@ -2454,6 +2509,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/df/ce/ac103e36dd9a447186fbc1b816381c45629a1495ce790317951e89acfecc/openfga_sdk-0.10.3.tar.gz", hash = "sha256:02f5514d2fd09bcac07c295ab7a60998ca3dd817ca3af6676ff9c0817e80a110", size = 346509, upload-time = "2026-05-04T08:11:53.717Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/09/8e56c4c8604d42d939ddd90c69b2cae12f7e2e0a4675adbd158be53baff5/openfga_sdk-0.10.3-py3-none-any.whl", hash = "sha256:ece8e56ee39dd4ed6d5eea840508341c251b654e27d6282dbf0fdffbe80795fb", size = 266743, upload-time = "2026-05-04T08:11:51.676Z" },
+]
+
+[[package]]
+name = "openpyxl"
+version = "3.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "et-xmlfile" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050", size = 186464, upload-time = "2024-06-28T14:03:44.161Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2", size = 250910, upload-time = "2024-06-28T14:03:41.161Z" },
 ]
 
 [[package]]
