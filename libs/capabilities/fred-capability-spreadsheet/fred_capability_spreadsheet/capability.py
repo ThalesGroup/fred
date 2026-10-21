@@ -14,8 +14,9 @@
 
 """`SpreadsheetCapability`: one tool that turns tabular data into a downloadable `.xlsx`.
 
-Tool-only (`tools()`), so it runs on ReAct, Deep and Graph agents. The file goes
-through `RuntimeServices.workspace_fs` and reaches the chat as a download chip.
+Tool-only (`tools()`), so it runs on ReAct, Deep and Graph agents. The file and a
+JSON preview go through `RuntimeServices.workspace_fs`; the chat shows a card that
+opens the preview pane, or a plain download chip when the preview is missing.
 """
 
 from __future__ import annotations
@@ -24,20 +25,31 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Sequence
+from typing import Literal, cast
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
     CapabilityManifest,
     EmptyModel,
+    SidePanelSpec,
 )
-from fred_sdk.contracts.context import LinkKind, LinkPart, ToolInvocationResult
+from fred_sdk.contracts.context import (
+    LinkKind,
+    LinkPart,
+    PublishedArtifact,
+    ToolInvocationResult,
+    UiPart,
+)
+from fred_sdk.contracts.runtime import WorkspaceFsPort
 from langchain_core.tools import BaseTool, StructuredTool
+from pydantic import BaseModel
 
 from fred_capability_spreadsheet.workbook import (
     CreateSpreadsheetInput,
     SheetSpec,
     SpreadsheetInputError,
+    build_preview,
     build_workbook,
     sanitize_file_name,
 )
@@ -47,6 +59,8 @@ logger = logging.getLogger(__name__)
 SPREADSHEET_CAPABILITY_ID = "spreadsheet"
 TOOL_NAME = "create_spreadsheet"
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+PREVIEW_CONTENT_TYPE = "application/json"
+PANE_WIDGET = "spreadsheet_pane"
 
 # Per-pod bound on concurrent workbook builds so a burst cannot exhaust the
 # shared to_thread pool; over the bound we fail fast, never queue (as PPT Filler).
@@ -68,6 +82,69 @@ _TOOL_DESCRIPTION = (
     "A download button is shown to the user automatically: do not write a link or "
     "URL in your reply, just say briefly what the file contains."
 )
+
+
+class SpreadsheetPreviewPart(BaseModel):
+    """`spreadsheet_preview` chat part: the card that opens the preview pane.
+
+    Both hrefs are the durable bearer-protected `/fs/download` ones, since the part
+    is persisted with the conversation; the frontend fetches them at open time.
+    """
+
+    type: Literal["spreadsheet_preview"] = "spreadsheet_preview"
+    preview_id: str
+    title: str
+    file_name: str
+    xlsx_download_url: str
+    preview_url: str
+
+
+def _build_outputs(request: CreateSpreadsheetInput) -> tuple[bytes, bytes | None]:
+    content = build_workbook(request)
+    try:
+        preview = build_preview(request)
+    except Exception:
+        # The preview is a convenience: never lose the file over it.
+        logger.exception("[SPREADSHEET] preview build failed")
+        preview = None
+    return content, preview
+
+
+async def _preview_part(
+    workspace: WorkspaceFsPort,
+    preview: bytes | None,
+    path: str,
+    published: PublishedArtifact,
+    base_name: str,
+) -> UiPart | None:
+    """Store the preview beside the file; None falls back to the download chip."""
+
+    if preview is None or not published.href:
+        return None
+    try:
+        stored = await workspace.write(
+            path.removesuffix(".xlsx") + ".preview.json",
+            preview,
+            content_type=PREVIEW_CONTENT_TYPE,
+            title=f"{base_name}.preview.json",
+        )
+    except Exception:
+        logger.warning(
+            "[SPREADSHEET] preview upload failed (file still returned)", exc_info=True
+        )
+        return None
+    if not stored.href:
+        return None
+    file_name = f"{base_name}.xlsx"
+    part = SpreadsheetPreviewPart(
+        preview_id=published.key,
+        title=file_name,
+        file_name=file_name,
+        xlsx_download_url=published.href,
+        preview_url=stored.href,
+    )
+    # Capability parts join the runtime UiPart union at registry boot.
+    return cast(UiPart, part)
 
 
 def _error(message: str) -> tuple[str, ToolInvocationResult]:
@@ -99,7 +176,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             )
         _active_builds += 1
         try:
-            content = await asyncio.to_thread(build_workbook, request)
+            content, preview = await asyncio.to_thread(_build_outputs, request)
         except SpreadsheetInputError as exc:
             logger.info("[SPREADSHEET] rejected input: %s", exc)
             return _error(f"No file was written. {exc}")
@@ -121,14 +198,16 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 f"[{type(exc).__name__}]. Tell the user to try again later."
             )
 
-        link = LinkPart(
-            href=published.href,
-            title=output_file_name,
-            kind=LinkKind.download,
-            mime=XLSX_CONTENT_TYPE,
-            document_uid=published.document_uid,
-            file_name=output_file_name,
-        )
+        part = await _preview_part(workspace, preview, path, published, base_name)
+        if part is None:
+            part = LinkPart(
+                href=published.href,
+                title=output_file_name,
+                kind=LinkKind.download,
+                mime=XLSX_CONTENT_TYPE,
+                document_uid=published.document_uid,
+                file_name=output_file_name,
+            )
         logger.info(
             "[SPREADSHEET] created session=%s key=%s sheets=%d bytes=%d",
             session_id,
@@ -142,7 +221,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 "is shown to the user automatically; do not write a download link "
                 "yourself."
             ),
-            ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(link,)),
+            ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,)),
         )
 
     return StructuredTool.from_function(
@@ -155,7 +234,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
 
 
 class SpreadsheetCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
-    """Create downloadable Excel workbooks. No config, table, router or chat part."""
+    """Create downloadable Excel workbooks with a read-only preview pane."""
 
     manifest = CapabilityManifest(
         id=SPREADSHEET_CAPABILITY_ID,
@@ -163,6 +242,8 @@ class SpreadsheetCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
         name="capability.spreadsheet.name",
         description="capability.spreadsheet.description",
         icon="table_chart",
+        chat_parts=[SpreadsheetPreviewPart],
+        side_panels=[SidePanelSpec(widget=PANE_WIDGET)],
     )
     ConfigModel = EmptyModel
 
