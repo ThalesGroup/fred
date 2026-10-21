@@ -176,7 +176,7 @@ expected: 403        actual 200 means your data is readable by the whole realm
 Repeat for a user who *is* in a team but whose team was never granted the app —
 that one must be refused too, and it is the case most often missed.
 
-### 3. Register both in deployment configuration
+### 3. Register it in deployment configuration
 
 Registration is Helm values, not source: one entry, keyed by its `app_id`, in
 its own values file if you like. Helm merges maps, so it composes with every

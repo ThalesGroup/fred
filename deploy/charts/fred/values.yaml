@@ -533,8 +533,8 @@ global:
 
 # ── Registrations ────────────────────────────────────────────────────
 # What this deployment serves, one entry per application or Knowledge Base, keyed
-# by its id: Helm merges maps, so each one can come from its own values file (and
-# `null` removes it). The chart derives from them the control plane's
+# by its id: Helm merges maps, so each one can come from its own values file, and
+# `null` removes it (a whole entry, not one of its fields). The chart derives from them the control plane's
 # platform.application_sources and knowledge_bases.publishers, and the frontend
 # gateway's FRONTEND_APPLICATIONS_JSON; setting those directly is refused.
 # Registration grants no access: a platform admin enables each one per team.

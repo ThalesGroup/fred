@@ -22,5 +22,5 @@
 
 - [x] 5.1 Run `helm lint`, the chart CI renders from `Check-pending-requests.yml`, `make pod-chart-tests` and `make check-chart-schema-drift`. Record the results here
   - 2026-10-21, on `53d9b0422` plus this change: `helm lint deploy/charts/fred` (0 failed); the CI render with the six image tags; `make pod-chart-tests` OK; `make check-chart-schema-drift` passed; `make check-chart-values` valid; `make check-chart-ingestion-workers` passed; `make check-chart-registrations` 7 tests OK, 4 of them failing on a copy of the chart without the derivation; `make migration-check` valid. `values-entra.example.yaml` renders. `values-gcp.yaml` fails the values schema on its storage blocks, identically on `53d9b0422` without this change; it is not rendered by CI
-- [ ] 5.2 Apply the branch audit procedure and obtain an independent read-only review. Record base/head, findings and dispositions in the PR
+- [x] 5.2 Apply the branch audit procedure and obtain an independent read-only review. Record base/head, findings and dispositions in the PR
 - [ ] 5.3 Open the draft PR `feat(#3211): compose chart registrations by id`, linking #3211, then reconcile, sync and archive this change once verified

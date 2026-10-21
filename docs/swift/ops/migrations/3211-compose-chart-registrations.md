@@ -7,7 +7,7 @@ configuration_reason: "The fred chart now derives the control plane's platform.a
 ---
 ## Applicability
 
-Deployments of the fred chart whose values register an application (`applications.control-plane-backend.configuration.platform.application_sources`, or `FRONTEND_APPLICATIONS_JSON` in `applications.frontend.env` or `extraEnvVars`) or a Knowledge Base publisher (`applications.control-plane-backend.configuration.knowledge_bases.publishers`). Docker Compose configuration is unchanged.
+Deployments of the fred chart whose values register an application (`applications.control-plane-backend.configuration.platform.application_sources`, or `FRONTEND_APPLICATIONS_JSON` in `applications.frontend.env` or `extraEnvVars`) or a Knowledge Base publisher (`applications.control-plane-backend.configuration.knowledge_bases.publishers`). Docker Compose configuration is unchanged. The knowledge-base chart's install notes and README now print the `registrations.knowledgeBasePublishers` entry to add.
 
 ## Prerequisites
 
@@ -49,4 +49,4 @@ Restore the previous chart with the previous values. The rendered configuration 
 
 ## Limitations
 
-The chart validates each entry's fields. The gateway URLs are still checked by the frontend container at start, and publisher prefix overlaps by the control plane at start.
+The chart validates each entry's fields. Their consumers still check at start what the schema does not: the control plane refuses a reserved `app_id` and overlapping publisher prefixes, and the frontend container refuses an upstream that is not an origin and `service_required: true` without `service_upstream`. `null` in a later values file removes a whole entry, not one of its fields.
