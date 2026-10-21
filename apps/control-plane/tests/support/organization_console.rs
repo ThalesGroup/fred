@@ -265,12 +265,14 @@ async fn organization_console_registry_pagination_excludes_retired_and_costs_one
     for index in 0..102 {
         let id = Uuid::new_v4();
         ids.push(id);
-        sqlx::query("insert into space(id,kind,name,organization_id) values($1,'organization',$2,$1)")
-            .bind(id)
-            .bind(format!("Org {index}"))
-            .execute(&e.pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "insert into space(id,kind,name,organization_id) values($1,'organization',$2,$1)",
+        )
+        .bind(id)
+        .bind(format!("Org {index}"))
+        .execute(&e.pool)
+        .await
+        .unwrap();
     }
     let retired = ids.pop().unwrap();
     let deletion = Uuid::new_v4();
@@ -364,7 +366,13 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
     let (pool, fga, directory) = (e.pool.clone(), e.fga.clone(), identity.directory());
     let pending = tokio::spawn(async move {
         spaces::create_managed_organization(
-            &pool, &fga, &control_plane::users::Directory::Keycloak(Some(&directory)), "delegate", "Revoked", "target", "target",
+            &pool,
+            &fga,
+            &control_plane::users::Directory::Keycloak(Some(&directory)),
+            "delegate",
+            "Revoked",
+            "target",
+            "target",
         )
         .await
     });

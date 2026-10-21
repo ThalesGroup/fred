@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F19](#f19-formatage-rust-et-qualité) | Formatage Rust et qualité | Contrôle qualité réussi | Aucun changement de comportement |
 | [F03](#f03-listing-resources-unique-et-rafraîchissement) | Listing Resources unique et rafraîchissement | Tests automatisés validés | 09, A1, A2, carte des sources |
 | [F02](#f02-attente-du-verrou-des-écritures) | Attente bornée sans connexion retenue | Tests automatisés validés | 03, 09, A1 |
 | [F01](#f01-coût-du-contexte-organisation) | Placement SQL immuable et contexte commun | Tests automatisés validés | 03, 04, A1/A2/A3, 09 |
@@ -73,6 +74,17 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F19 Formatage Rust et qualité
+
+- 2026-10-21 : Dimi demande de corriger tous les échecs de `make code-quality`.
+  Après reproduction, `cargo fmt` corrige le formatage Rust préexistant (retours
+  à la ligne et ordre des imports/modules), sans changement de comportement.
+  `make code-quality` réussit ensuite intégralement : Clippy tous targets avec
+  warnings interdits, rustfmt --check et contrôle DSL/JSON OpenFGA.
+  Suites de tests non relancées pour ce formatage seul. Modifications préexistantes
+  de Cargo.lock et du journal préservées. Dimi autorise ensuite le commit et le push
+  de F19.
 
 ## F03 Listing Resources unique et rafraîchissement
 

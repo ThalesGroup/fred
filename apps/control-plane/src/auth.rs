@@ -430,7 +430,11 @@ impl Verifier {
         let caller_path = s.directory_delegation.roles_path();
         let delegation_caller = claim_path(&payload, &caller_path)
             .and_then(Value::as_array)
-            .is_some_and(|roles| roles.iter().any(|role| role.as_str() == Some(s.directory_delegation.caller_role.as_str())));
+            .is_some_and(|roles| {
+                roles
+                    .iter()
+                    .any(|role| role.as_str() == Some(s.directory_delegation.caller_role.as_str()))
+            });
         Ok(CurrentUser {
             delegation_caller,
             uid,

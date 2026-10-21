@@ -877,8 +877,13 @@ fn organization_directory(s: &AppState) -> AppResult<crate::users::Directory<'_>
     if s.onboarding.user_directory == crate::users::DirectoryKind::Local {
         return Ok(crate::users::Directory::Local(&s.pool));
     }
-    if s.directory.as_ref().is_some_and(|d| !s.auth.directory_subjects_match(d.realm())) {
-        return Err(AppError::Unavailable("directory requires matching subject authentication".into()));
+    if s.directory
+        .as_ref()
+        .is_some_and(|d| !s.auth.directory_subjects_match(d.realm()))
+    {
+        return Err(AppError::Unavailable(
+            "directory requires matching subject authentication".into(),
+        ));
     }
     Ok(crate::users::Directory::Keycloak(s.directory.as_ref()))
 }
@@ -908,9 +913,13 @@ async fn search_organization_candidates(
 ) -> AppResult<Json<Vec<crate::users::UserSummary>>> {
     platform::require_owner(&s.fga, &user.uid).await?;
     if query.query.chars().count() < 2 {
-        return Err(AppError::Unprocessable("query must contain at least 2 characters".into()));
+        return Err(AppError::Unprocessable(
+            "query must contain at least 2 characters".into(),
+        ));
     }
-    Ok(Json(organization_directory(&s)?.search(&query.query).await?))
+    Ok(Json(
+        organization_directory(&s)?.search(&query.query).await?,
+    ))
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]

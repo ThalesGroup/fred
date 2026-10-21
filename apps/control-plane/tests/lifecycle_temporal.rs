@@ -126,8 +126,8 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .unwrap();
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let operation: Uuid = serde_json::from_value(value["id"].clone()).unwrap();
-    let pg =
-        temporalio_client::Url::parse(&std::env::var("CONTROL_PLANE_IT_POSTGRES").unwrap()).unwrap();
+    let pg = temporalio_client::Url::parse(&std::env::var("CONTROL_PLANE_IT_POSTGRES").unwrap())
+        .unwrap();
     let database: String = sqlx::query_scalar("select current_database()")
         .fetch_one(&e.pool)
         .await

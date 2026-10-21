@@ -198,9 +198,7 @@ async fn lifecycle_partial_link_loss_reserves_name_and_organization() {
             .unwrap(),
         Some(org.id)
     );
-    let memberships = spaces::memberships(&e.pool, &e.fga, "bob")
-        .await
-        .unwrap();
+    let memberships = spaces::memberships(&e.pool, &e.fga, "bob").await.unwrap();
     assert!(memberships.iter().all(|m| m.space.id != p.id));
     assert_eq!(
         spaces::organization(&e.pool, &e.fga, "bob").await.unwrap(),

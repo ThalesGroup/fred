@@ -25,7 +25,6 @@ pub mod domain;
 pub mod error;
 pub mod fga;
 pub mod keycloak;
-pub mod users;
 pub mod lifecycle;
 pub mod logging;
 pub mod onboarding;
@@ -33,6 +32,7 @@ pub mod platform;
 pub mod processing;
 pub mod roles;
 pub mod spaces;
+pub mod users;
 
 pub mod provisioning;
 

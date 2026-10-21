@@ -197,14 +197,22 @@ impl Directory {
     /// Same free-text Keycloak search and result bound as Python's user service.
     pub async fn search(&self, query: &str) -> Result<Vec<crate::users::UserSummary>> {
         let mut url = self.users_url.clone();
-        url.query_pairs_mut().append_pair("search", query).append_pair("max", "20");
+        url.query_pairs_mut()
+            .append_pair("search", query)
+            .append_pair("max", "20");
         let response = self.request(Method::GET, url, None).await?;
         if !response.status().is_success() {
             bail!("Keycloak user search rejected ({})", response.status());
         }
-        let users: Vec<serde_json::Value> = response.json().await
+        let users: Vec<serde_json::Value> = response
+            .json()
+            .await
             .map_err(|_| anyhow::anyhow!("invalid Keycloak search response"))?;
-        Ok(users.iter().filter_map(crate::users::UserSummary::from_raw).take(20).collect())
+        Ok(users
+            .iter()
+            .filter_map(crate::users::UserSummary::from_raw)
+            .take(20)
+            .collect())
     }
 
     /// Exact search with explicit pagination. Do not trust a provider ignoring `exact`.

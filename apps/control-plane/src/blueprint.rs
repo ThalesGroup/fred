@@ -464,7 +464,10 @@ mod tests {
             Err(InputError::Unsupported)
         ));
         let mut f = files();
-        f.insert("manifest.json".into(), include_bytes!("../tests/fixtures/import_export/legacy_manifest.json").to_vec());
+        f.insert(
+            "manifest.json".into(),
+            include_bytes!("../tests/fixtures/import_export/legacy_manifest.json").to_vec(),
+        );
         assert!(matches!(
             Bundle::parse(&pack(&f, zip::CompressionMethod::Stored)),
             Err(InputError::Unsupported)

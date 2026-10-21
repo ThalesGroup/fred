@@ -186,7 +186,11 @@ async fn provisioning_browser_journey() {
     let sophia = directory.find_username("sophia").await.unwrap().unwrap();
     assert!(
         !e.fga
-            .check(&sophia.id, control_plane::domain::Permission::Read, north.id)
+            .check(
+                &sophia.id,
+                control_plane::domain::Permission::Read,
+                north.id
+            )
             .await
             .unwrap()
     );

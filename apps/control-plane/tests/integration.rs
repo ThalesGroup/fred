@@ -1553,7 +1553,8 @@ async fn import_cli_is_read_only_until_authorized_and_requires_initialized_state
     config["security"]["rebac"]["api_url"] = e.openfga.clone().into();
     config["security"]["rebac"]["store_name"] = e.store.clone().into();
     config["security"]["rebac"]["token_env_var"] = "CONTROL_PLANE_IT_NO_TOKEN".into();
-    let address = reqwest::Url::parse(&std::env::var("CONTROL_PLANE_IT_POSTGRES").unwrap()).unwrap();
+    let address =
+        reqwest::Url::parse(&std::env::var("CONTROL_PLANE_IT_POSTGRES").unwrap()).unwrap();
     let database: String = sqlx::query_scalar("select current_database()")
         .fetch_one(&e.pool)
         .await
@@ -4952,7 +4953,9 @@ async fn ambiguous_context_fails_closed_and_remains_repairable() {
         .await
         .unwrap();
     assert_eq!(
-        spaces::organization(&e.pool, &e.fga, "orphan").await.unwrap(),
+        spaces::organization(&e.pool, &e.fga, "orphan")
+            .await
+            .unwrap(),
         Some(a.id)
     );
     let memberships = spaces::memberships(&e.pool, &e.fga, "orphan")

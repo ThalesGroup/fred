@@ -285,7 +285,10 @@ async fn serve(config: Config) -> Result<()> {
             .await
             {
                 Ok(()) => return Ok(()),
-                Err(_) => tracing::warn!(error_code = "lifecycle_retry", "Lifecycle worker will reconnect"),
+                Err(_) => tracing::warn!(
+                    error_code = "lifecycle_retry",
+                    "Lifecycle worker will reconnect"
+                ),
             }
             tokio::select! {
                 _ = stopping.clone() => return Ok(()),
@@ -301,9 +304,7 @@ async fn serve(config: Config) -> Result<()> {
         },
     };
     let _ = stop.send(());
-    let drain = async {
-        while tasks.next().await.is_some() {}
-    };
+    let drain = async { while tasks.next().await.is_some() {} };
     if tokio::time::timeout(std::time::Duration::from_secs(25), drain)
         .await
         .is_err()
@@ -315,8 +316,9 @@ async fn serve(config: Config) -> Result<()> {
 
 /// Operator creation retains the historical combined owner/admin/member assignment.
 async fn create_org(config: Config, name: &str, admin: &str) -> Result<()> {
-    let directory = control_plane::keycloak::Directory::configured(config.security.m2m.as_ref())?
-        .context("organization creation requires configured Keycloak service credentials")?;
+    let directory =
+        control_plane::keycloak::Directory::configured(config.security.m2m.as_ref())?
+            .context("organization creation requires configured Keycloak service credentials")?;
     let auth = auth::Authenticator::start(config.security()?).await?;
     anyhow::ensure!(
         auth.directory_subjects_match(directory.realm()),

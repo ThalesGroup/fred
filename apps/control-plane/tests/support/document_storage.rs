@@ -1383,9 +1383,10 @@ async fn document_cleanup_skips_a_contended_organization_without_starving_other_
             .0,
         201
     );
-    let peer = control_plane::spaces::create_organization(&d.e.pool, &d.e.fga, "Peer", "peer-owner")
-        .await
-        .unwrap();
+    let peer =
+        control_plane::spaces::create_organization(&d.e.pool, &d.e.fga, "Peer", "peer-owner")
+            .await
+            .unwrap();
     let id = Uuid::new_v4();
     let failed = Uuid::new_v4();
     let pending_key:String=sqlx::query_scalar("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at) select $1,$1,actor,organization_id,space_id,folder_id,quota_owner,'pending.txt',mime,size,sha256,replace(object_key,id::text,$1::text),'pending',clock_timestamp()-interval '1 second' from document_upload where status='stored' returning object_key")
