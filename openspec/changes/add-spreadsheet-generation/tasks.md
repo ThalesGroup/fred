@@ -2,39 +2,47 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 
 ## 1. Package and capability
 
-- [ ] 1.1 Scaffold `libs/capabilities/fred-capability-spreadsheet/` from `fred-capability-html-artifact` (pyproject with `openpyxl>=3.1.5`, entry point `spreadsheet`, Makefile, baselines, `uv.lock`, README)
-- [ ] 1.2 `SpreadsheetCapability`: manifest (`id="spreadsheet"`, i18n name/description, `icon`), `ConfigModel = EmptyModel`, `tools()` returning `create_spreadsheet`; default `execution_models` and `team_scope`
-- [ ] 1.3 Tool input models (D2) with case-insensitive enums and the per-column currency
-- [ ] 1.4 Workbook builder (D3) in a worker thread: types to number formats, currency symbols, header style, freeze, auto filter, widths, totals formulas
-- [ ] 1.5 Validation and limits (D4) with messages naming sheet / row / column; formula-injection guard (D5)
-- [ ] 1.6 Delivery through `workspace_fs` and `LinkPart` (D6); `is_error` when the port is absent
-- [ ] 1.7 Wire into `apps/fred-agents` (pyproject, `uv.lock`, image, pyright) and the repo lists (root Makefile, pre-commit, CI change detection, release order); `registry.validate()` passes at boot
+- [x] 1.1 Scaffold `libs/capabilities/fred-capability-spreadsheet/` from `fred-capability-html-artifact` (pyproject with `openpyxl>=3.1.5`, entry point `spreadsheet`, Makefile, baselines, `uv.lock`, README)
+- [x] 1.2 `SpreadsheetCapability`: manifest (`id="spreadsheet"`, i18n name/description, `icon`), `ConfigModel = EmptyModel`, `tools()` returning `create_spreadsheet`; default `execution_models` and `team_scope`
+- [x] 1.3 Tool input models (D2) with case-insensitive enums and the per-column currency
+- [x] 1.4 Workbook builder (D3) in a worker thread: types to number formats, currency symbols, header style, freeze, auto filter, widths, totals formulas
+- [x] 1.5 Validation and limits (D4) with messages naming sheet / row / column; formula-injection guard (D5)
+- [x] 1.6 Delivery through `workspace_fs` and `LinkPart` (D6); `is_error` when the port is absent
+- [x] 1.7 Wire into `apps/fred-agents` (pyproject, `uv.lock`, image, shipped-ids boot test) and the repo lists (root Makefile, pre-commit, CI change detection, release order); `registry.validate()` passes at boot
 
 ## 2. Frontend
 
-- [ ] 2.1 `toolPacks.ts`: `CAP_SPREADSHEET` and a pack in `document_production`
-- [ ] 2.2 `locales/{en,fr}/translation.json`: `capability.spreadsheet.name/description`, pack title/description
-- [ ] 2.3 Pack logic tests updated (toolPackLogic) if they enumerate packs
+- [x] 2.1 `toolPacks.ts`: `CAP_SPREADSHEET` and a pack in `document_production`
+- [x] 2.2 `locales/{en,fr}/translation.json`: `capability.spreadsheet.name/description`, pack title/description
+- [x] 2.3 Pack logic tests updated (toolPackLogic) if they enumerate packs
 
 ## 3. Help Center
 
-- [ ] 3.1 "Create an Excel file" section under Document production in `helpCenter/content/en/features/capabilities.md` (what it does, limits, example)
-- [ ] 3.2 Same section in `fr/features/capabilities.md` ("Créer un fichier Excel")
+- [x] 3.1 "Create an Excel file" section under Document production in `helpCenter/content/en/features/capabilities.md` (what it does, limits, example)
+- [x] 3.2 Same section in `fr/features/capabilities.md` ("Créer un fichier Excel")
 
 ## 4. Tests and verification
 
-- [ ] 4.1 Offline tests: workbook read back with openpyxl (sheets, headers, values, number formats, currency symbols, freeze, widths, totals formulas), every validation error, every limit, injection guard, missing port
-- [ ] 4.2 Capability tests: manifest, entry point discovery, tool schema has only LLM arguments, Graph assembly accepts it
-- [ ] 4.3 `make code-quality`, `make test` in the package, fred-agents and frontend; `ruff --select I` and basedpyright
+- [x] 4.1 Offline tests: workbook read back with openpyxl (sheets, headers, values, number formats, currency symbols, freeze, widths, totals formulas), every validation error, every limit, injection guard, missing port
+- [x] 4.2 Capability tests: manifest, entry point discovery, tool schema has only LLM arguments, Graph assembly accepts it
+- [x] 4.3 `make code-quality`, `make test` in the package, fred-agents and frontend; `ruff --select I` and basedpyright
 - [ ] 4.4 Live check on the default Mistral model, ReAct and Deep agent: request -> tool call -> download -> file opens in LibreOffice without repair; record in verification evidence
-- [ ] 4.5 `fred-performance-reviewer` on the tool call site (CPU work off the event loop)
+- [x] 4.5 `fred-performance-reviewer` on the tool call site (CPU work off the event loop)
 
 ## 5. Docs and release
 
-- [ ] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
-- [ ] 5.2 Migration note (`docs/swift/ops/MIGRATION-GUIDES.md`): new admin-gated capability, new dependency in fred-agents
+- [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
+- [x] 5.2 Migration note (`docs/swift/ops/MIGRATION-GUIDES.md`): new admin-gated capability, new dependency in fred-agents
 - [ ] 5.3 Record verification evidence, archive the change, close #3208
 
 ## Verification evidence
 
-(filled during implementation)
+2026-10-21, branch `feat/spreadsheet-capability`:
+
+- Package `fred-capability-spreadsheet`: `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors); `make test` 45 passed (workbook read back: typed values and formats, currency symbols, percent decimals, bold frozen header, auto filter, declared/computed/capped widths, SUM/AVERAGE/MIN/MAX/COUNTA formulas with column formats, no totals without data, injection guard with quote prefix, multi-sheet, every structure/conversion error naming sheet/row/column, every limit and the inclusive 5000-row bound; tool: registry `validate()`, entry point, manifest admin-gated with `("react", "graph")`, schema without `$defs`, Graph `build_capability_agent_block` exposes the tool, file written under `spreadsheets/<session>/` with xlsx MIME, download `LinkPart`, `is_error` and no write on invalid input, missing port, storage failure, artifact kept through a LangChain tool call).
+- fred-agents: `boot_capability_registry()` lists `spreadsheet`; `make code-quality` green; `make test` 134 passed, 6 xfailed (`_SHIPPED_CAPABILITY_IDS` updated). `uv lock` adds only the package, `openpyxl 3.1.5` and `et-xmlfile 2.0.0`.
+- Frontend (worktree install): `make code-quality` green (tsc, prettier, eslint); vitest on AgentFormModal, helpCenter: 152 passed (new pack test).
+- Sample workbook: 50 000 cells built in 0.31 s (139 KB); input validation of that size 3.5 ms. LibreOffice headless conversion (PDF and CSV): totals computed (4, 16.3 %, 1 550,50 €, $1 300,25), `=1+1` and `@cmd` shown as text, no repair prompt.
+- `fred-performance-reviewer`: no blocking call on the event loop (generation and validation in `asyncio.to_thread`; argument parsing at the 50 000-cell limit is 3.5 ms); upload uses the existing async workspace client; no new metric, label or module state; tool latency covered by the existing tool observability middleware. Open risk, needs a load test: concurrent large generations share the GIL and the default thread pool (no dedicated bound, unlike PPT Filler's heavy-job slot).
+- `make migration-check`: 1 new declaration valid (`impact: none`).
+- Divergence from the draft: byte-identical output dropped (openpyxl stamps zip and core-property times; tests read back instead). Not done: 4.4 live check, 5.3 archive.
