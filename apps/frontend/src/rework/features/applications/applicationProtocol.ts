@@ -22,6 +22,9 @@ export const MAX_APPLICATION_REQUEST_HEADERS = 32;
 export const MAX_APPLICATION_REQUEST_ID_LENGTH = 128;
 export const MAX_PENDING_APPLICATION_REQUESTS = 16;
 
+/** Announced in `fred:context` by a host that relays Blob request and response bodies. */
+export const BINARY_BODIES_CAPABILITY = "binary-bodies";
+
 export const PROTECTED_APPLICATION_HEADERS = [
   "authorization",
   "cookie",
@@ -54,9 +57,15 @@ export interface FredApplicationRoute {
 }
 
 export type ApplicationHostMessage =
-  | { type: "fred:context"; protocolVersion: string; applicationId: string; context: FredApplicationContext }
+  | {
+      type: "fred:context";
+      protocolVersion: string;
+      applicationId: string;
+      context: FredApplicationContext;
+      capabilities?: readonly string[];
+    }
   | { type: "fred:route"; subPath: string }
-  | { type: "fred:response"; requestId: string; status: number; headers: Record<string, string>; body: string }
+  | { type: "fred:response"; requestId: string; status: number; headers: Record<string, string>; body: string | Blob }
   | { type: "fred:response-error"; requestId: string };
 
 export type ApplicationFrameMessage =
@@ -69,12 +78,24 @@ export type ApplicationFrameMessage =
       path: string;
       method: ApplicationRequestMethod;
       headers: Record<string, string>;
-      body: string | null;
+      body: string | Blob | null;
+      // Set only by a frame that can read a Blob body; text otherwise.
+      responseType?: "blob";
     };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+/** A request or response body the bridge carries, besides an empty one. */
+export function isApplicationBody(value: unknown): value is string | Blob {
+  return typeof value === "string" || (typeof Blob !== "undefined" && value instanceof Blob);
+}
+
+// Lenient on purpose: an entry a later host adds in another shape must not break this connection.
+function parseCapabilities(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
 function parseStringHeaders(value: unknown, maximum?: number): Record<string, string> | null {
@@ -141,14 +162,18 @@ export function parseApplicationFrameMessage(data: unknown): ApplicationFrameMes
       if (typeof method !== "string" || !ALLOWED_REQUEST_METHODS.has(method)) return null;
       const headers = parseStringHeaders(message.headers, MAX_APPLICATION_REQUEST_HEADERS);
       if (!headers) return null;
-      if (message.body !== undefined && message.body !== null && typeof message.body !== "string") return null;
+      const rawBody = message.body ?? null;
+      if (rawBody !== null && !isApplicationBody(rawBody)) return null;
+      const body = rawBody as string | Blob | null;
+      if (message.responseType !== undefined && message.responseType !== "blob") return null;
       return {
         type: "fred:request",
         requestId: message.requestId,
         path: message.path,
         method: method as ApplicationRequestMethod,
         headers,
-        body: typeof message.body === "string" ? message.body : null,
+        body,
+        ...(message.responseType === "blob" ? { responseType: "blob" as const } : {}),
       };
     }
     default:
@@ -171,14 +196,14 @@ export function parseApplicationHostMessage(data: unknown): ApplicationHostMessa
         return null;
       }
       const context = parseContext(message.context);
-      return context
-        ? {
-            type: "fred:context",
-            protocolVersion: message.protocolVersion,
-            applicationId: message.applicationId,
-            context,
-          }
-        : null;
+      if (!context) return null;
+      return {
+        type: "fred:context",
+        protocolVersion: message.protocolVersion,
+        applicationId: message.applicationId,
+        context,
+        ...(message.capabilities === undefined ? {} : { capabilities: parseCapabilities(message.capabilities) }),
+      };
     }
     case "fred:route":
       return typeof message.subPath === "string" ? { type: "fred:route", subPath: message.subPath } : null;
@@ -189,13 +214,14 @@ export function parseApplicationHostMessage(data: unknown): ApplicationHostMessa
       }
       if (message.headers === undefined) return null;
       const headers = parseStringHeaders(message.headers);
-      if (!headers || typeof message.body !== "string") return null;
+      const body = message.body;
+      if (!headers || !isApplicationBody(body)) return null;
       return {
         type: "fred:response",
         requestId: message.requestId,
         status: message.status as number,
         headers,
-        body: message.body,
+        body,
       };
     }
     case "fred:response-error":

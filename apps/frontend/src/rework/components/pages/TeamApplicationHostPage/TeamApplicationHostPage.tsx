@@ -27,6 +27,7 @@ import { ApplicationErrorBoundary } from "@rework/features/applications/Applicat
 import {
   ACCEPTED_APP_PROTOCOL_VERSIONS,
   applicationFrameTarget,
+  BINARY_BODIES_CAPABILITY,
   FRED_APP_PROTOCOL_VERSION,
   parseApplicationFrameMessage,
   type ApplicationHostMessage,
@@ -196,6 +197,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
           locale: currentLocale,
           theme: currentTheme,
         },
+        capabilities: [BINARY_BODIES_CAPABILITY],
       } satisfies ApplicationHostMessage,
       targetOrigin,
     );
@@ -213,10 +215,17 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
       frame.contentWindow?.postMessage(message, targetOrigin);
     };
 
-    const proxyRequest = async (requestId: string, path: string, init: RequestInit, signal: AbortSignal) => {
+    const proxyRequest = async (
+      requestId: string,
+      path: string,
+      init: RequestInit,
+      asBlob: boolean,
+      signal: AbortSignal,
+    ) => {
       try {
         const response = await request(path, { ...init, signal });
-        const body = await response.text();
+        // Only a frame that asked for a Blob gets one: an older SDK parses text bodies only.
+        const body = asBlob ? await response.blob() : await response.text();
         if (disposed) return;
         post({
           type: "fred:response",
@@ -295,6 +304,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
         message.requestId,
         message.path,
         { method: message.method, headers: message.headers, body: message.body ?? undefined },
+        message.responseType === "blob",
         controller.signal,
       );
     };

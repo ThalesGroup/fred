@@ -1666,6 +1666,29 @@ async function verifyProductionHostDownload(browser) {
       await readFile(downloadedFile),
       Buffer.from(expectedContents),
     );
+
+    // Binary through the request bridge: the service sees the exact upload and
+    // answers with the bytes reversed, which the frame downloads.
+    const uploaded = [0x00, 0xff, 0xc3, 0x28, 0x80, 0x7f];
+    assert.equal(
+      await child.locator("body").getAttribute("data-capabilities"),
+      "binary-bodies",
+    );
+    const [echo] = await Promise.all([
+      observation.page.waitForEvent("download", { timeout: 10_000 }),
+      child.locator("#transfer").click(),
+    ]);
+    assert.deepEqual(
+      await observation.page.evaluate(() => window.fixtureUpload),
+      { bytes: uploaded, type: "application/octet-stream" },
+    );
+    assert.equal(echo.suggestedFilename(), "echo.bin");
+    const echoedFile = path.join(downloadRoot, "echo.bin");
+    await echo.saveAs(echoedFile);
+    assert.deepEqual(
+      await readFile(echoedFile),
+      Buffer.from([...uploaded].reverse()),
+    );
     assertSuccessfulBrowserRequests(observation);
     assert.deepEqual(pageErrors, [], "production host raised a browser error");
     assert.deepEqual(
@@ -1679,6 +1702,7 @@ async function verifyProductionHostDownload(browser) {
       filename: download.suggestedFilename(),
       content: expectedContents,
       bytes: Buffer.byteLength(expectedContents),
+      binaryRoundTrip: { uploaded, downloaded: [...uploaded].reverse() },
       externalRequests: 0,
       productionComponent: "TeamApplicationHostPage.tsx",
     };

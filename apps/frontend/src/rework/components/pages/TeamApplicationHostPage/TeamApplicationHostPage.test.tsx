@@ -289,6 +289,7 @@ describe("TeamApplicationHostPage protocol handshake", () => {
           locale: "en",
           theme: "light",
         },
+        capabilities: ["binary-bodies"],
       },
     ]);
     expect(spy.mock.calls[0]?.[1]).toBe(FRED_ORIGIN);
@@ -588,6 +589,54 @@ describe("TeamApplicationHostPage service proxying", () => {
         body: '{"ok":true}',
       },
     ]);
+  });
+
+  it("forwards a Blob body as is and answers with a Blob when the frame asks for one", async () => {
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00]);
+    h.request.mockResolvedValue(
+      new Response(bytes, { status: 200, headers: { "content-type": "application/vnd.ms-excel" } }),
+    );
+    const spy = await connect();
+    spy.mockClear();
+    const upload = new Blob([bytes], { type: "application/octet-stream" });
+
+    await postFromFrame({
+      type: "fred:request",
+      requestId: "b1",
+      path: "exports",
+      method: "POST",
+      body: upload,
+      responseType: "blob",
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const [, init] = h.request.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBe(upload);
+    expect((init.body as Blob).type).toBe("application/octet-stream");
+    const [posted] = postedMessages(spy) as [{ type: string; status: number; headers: unknown; body: Blob }];
+    expect(posted).toMatchObject({
+      type: "fred:response",
+      requestId: "b1",
+      status: 200,
+      headers: { "content-type": "application/vnd.ms-excel" },
+    });
+    expect(typeof posted.body).not.toBe("string");
+    expect(new Uint8Array(await posted.body.arrayBuffer())).toEqual(bytes);
+  });
+
+  it("keeps a text response for a frame that does not ask for a Blob", async () => {
+    h.request.mockResolvedValue(new Response("plain", { status: 200 }));
+    const spy = await connect();
+    spy.mockClear();
+
+    await postFromFrame({ type: "fred:request", requestId: "t1", path: "reports" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(postedMessages(spy)).toMatchObject([{ type: "fred:response", requestId: "t1", status: 200, body: "plain" }]);
   });
 
   it("reports a failed call without repeating what the transport said", async () => {

@@ -27,5 +27,12 @@ Consumers own missing-theme fallback and translations; deployment configuration 
 `hostOrigin` separately, and
 `?theme=&locale=` iframe query values are not an authoritative channel.
 
-The current transport is buffered text/JSON over ordinary HTTP(S) origins. Opaque or `null` origins,
-streaming, binary bodies, remote cancellation, and automatic mutation retries are not implemented.
+Binary bodies are an optional protocol `"1"` addition: the host announces `binary-bodies` in
+`fred:context`, the SDK then sends `Blob` bodies (and `FormData` serialized to a multipart `Blob`)
+and asks for `responseType: "blob"`, and the host answers that request with a `Blob`. The four
+combinations hold: an SDK without the addition ignores the announcement and keeps text; a host
+without it never announces it, so a newer SDK keeps text and refuses binary bodies locally with
+`unsupported-by-host`; a host never sends a `Blob` to a frame that did not ask for one.
+
+The transport is buffered over ordinary HTTP(S) origins. Opaque or `null` origins, streaming,
+transfer progress, remote cancellation, and automatic mutation retries are not implemented.
