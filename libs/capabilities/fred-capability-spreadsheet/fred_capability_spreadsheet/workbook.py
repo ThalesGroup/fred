@@ -103,9 +103,10 @@ FORMULA_REJECTED = (
     "share_of_total), and set `total` on the column for sums/averages."
 )
 # A `"` inside a text value that closed it early: the rest of the row (and often
-# the next row's start) lands in this cell, e.g. 'Loyer", 1200, null], ['.
+# the next row's start) lands in this cell, e.g. 'Loyer", 1200, null], ['. No `[`
+# before the `]`, so 'Écran 27", 2 ports [HDMI]' stays text.
 _LEAKED_ROW = re.compile(
-    r'"\s*,\s*(?:null|true|false|-?\d|")[^\]]*\](?:\s*,\s*\[|\s*\]*\s*$)'
+    r'"\s*,\s*(?:null|true|false|-?\d|")[^\[\]]*\](?:\s*,\s*\[|\s*\]*\s*$)'
 )
 LEAKED_ROW_REJECTED = (
     "this text holds other cells' JSON (values, null, brackets): a quote closed "

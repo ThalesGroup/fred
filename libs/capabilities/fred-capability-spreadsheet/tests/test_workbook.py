@@ -792,6 +792,7 @@ def test_leaked_row_fragments_are_caught(raw):
         'Projet "Alpha", phase 2 [voir annexe]',
         "Liste [a, b], [c]",
         "null",
+        'Écran 27", 2 ports [HDMI]',
     ],
 )
 def test_ordinary_text_with_quotes_and_brackets_is_kept(raw):
