@@ -133,6 +133,7 @@ _SHIPPED_CAPABILITY_IDS = frozenset(
         "open_writable_document",
         "platform_postgres",
         "ppt_filler",
+        "spreadsheet",
         "team_wiki",
         "writable_document",
         "web_research",
