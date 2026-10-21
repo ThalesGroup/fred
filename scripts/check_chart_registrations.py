@@ -78,14 +78,25 @@ class ChartRegistrationTests(unittest.TestCase):
         result = self.helm(*files)
         self.assertEqual(result.returncode, 0, result.stderr)
         documents = [d for d in yaml.safe_load_all(result.stdout) if d]
-        config_map = next(d for d in documents if d["kind"] == "ConfigMap"
-                          and d["metadata"]["name"] == "control-plane-backend-back")
-        frontend = next(d for d in documents if d["kind"] == "Deployment"
-                        and d["metadata"]["name"] == "frontend")
+        config_map = next(
+            d
+            for d in documents
+            if d["kind"] == "ConfigMap"
+            and d["metadata"]["name"] == "control-plane-backend-back"
+        )
+        frontend = next(
+            d
+            for d in documents
+            if d["kind"] == "Deployment" and d["metadata"]["name"] == "frontend"
+        )
         env = frontend["spec"]["template"]["spec"]["containers"][0]["env"]
         gateway = [e["value"] for e in env if e["name"] == "FRONTEND_APPLICATIONS_JSON"]
-        self.assertEqual(len(gateway), 1, "FRONTEND_APPLICATIONS_JSON must be set exactly once")
-        return yaml.safe_load(config_map["data"]["configuration.yaml"]), json.loads(gateway[0])
+        self.assertEqual(
+            len(gateway), 1, "FRONTEND_APPLICATIONS_JSON must be set exactly once"
+        )
+        return yaml.safe_load(config_map["data"]["configuration.yaml"]), json.loads(
+            gateway[0]
+        )
 
     def refused(self, values: dict, message: str) -> None:
         result = self.helm(values)
@@ -99,15 +110,23 @@ class ChartRegistrationTests(unittest.TestCase):
         self.assertEqual(gateway, [])
 
     def test_files_compose_and_both_halves_agree(self):
-        configuration, gateway = self.render(apps(thanos=THANOS), apps(evaluation=EVALUATION))
+        configuration, gateway = self.render(
+            apps(thanos=THANOS), apps(evaluation=EVALUATION)
+        )
         sources = configuration["platform"]["application_sources"]
         self.assertEqual([s["app_id"] for s in sources], ["evaluation", "thanos"])
         thanos = next(s for s in sources if s["app_id"] == "thanos")
-        self.assertEqual(thanos, {"app_id": "thanos", **{k: v for k, v in THANOS.items() if k != "gateway"}})
-        self.assertEqual(gateway, [
-            {"app_id": "evaluation", **EVALUATION["gateway"]},
-            {"app_id": "thanos", **THANOS["gateway"]},
-        ])
+        self.assertEqual(
+            thanos,
+            {"app_id": "thanos", **{k: v for k, v in THANOS.items() if k != "gateway"}},
+        )
+        self.assertEqual(
+            gateway,
+            [
+                {"app_id": "evaluation", **EVALUATION["gateway"]},
+                {"app_id": "thanos", **THANOS["gateway"]},
+            ],
+        )
 
     def test_order_of_files_does_not_change_the_rendering(self):
         first = self.helm(apps(thanos=THANOS), apps(evaluation=EVALUATION))
@@ -117,31 +136,50 @@ class ChartRegistrationTests(unittest.TestCase):
 
     def test_null_unregisters(self):
         configuration, gateway = self.render(
-            apps(thanos=THANOS, evaluation=EVALUATION), apps(evaluation=None),
-            publishers(**{"kb-a": {"prefix": "a"}}), publishers(**{"kb-a": None}),
+            apps(thanos=THANOS, evaluation=EVALUATION),
+            apps(evaluation=None),
+            publishers(**{"kb-a": {"prefix": "a"}}),
+            publishers(**{"kb-a": None}),
         )
-        self.assertEqual([s["app_id"] for s in configuration["platform"]["application_sources"]], ["thanos"])
+        self.assertEqual(
+            [s["app_id"] for s in configuration["platform"]["application_sources"]],
+            ["thanos"],
+        )
         self.assertEqual([g["app_id"] for g in gateway], ["thanos"])
         self.assertEqual(configuration["knowledge_bases"]["publishers"], [])
 
     def test_publishers_are_registered_by_client(self):
-        configuration, _ = self.render(publishers(**{"kb-fred.opentext": {"prefix": "fred.opentext"}}),
-                                       publishers(**{"kb-fred.samples": {"prefix": "fred.samples"}}))
-        self.assertEqual(configuration["knowledge_bases"]["publishers"], [
-            {"client_id": "kb-fred.opentext", "prefix": "fred.opentext"},
-            {"client_id": "kb-fred.samples", "prefix": "fred.samples"},
-        ])
+        configuration, _ = self.render(
+            publishers(**{"kb-fred.opentext": {"prefix": "fred.opentext"}}),
+            publishers(**{"kb-fred.samples": {"prefix": "fred.samples"}}),
+        )
+        self.assertEqual(
+            configuration["knowledge_bases"]["publishers"],
+            [
+                {"client_id": "kb-fred.opentext", "prefix": "fred.opentext"},
+                {"client_id": "kb-fred.samples", "prefix": "fred.samples"},
+            ],
+        )
 
     def test_invalid_entries_are_refused(self):
         self.refused(apps(thanos={**THANOS, "ui_prefx": "/apps/thanos"}), "ui_prefx")
-        self.refused(apps(thanos={k: v for k, v in THANOS.items() if k != "gateway"}), "gateway")
-        self.refused(apps(thanos={**THANOS, "gateway": {"service_upstream": "http://x:1"}}), "ui_upstream")
+        self.refused(
+            apps(thanos={k: v for k, v in THANOS.items() if k != "gateway"}), "gateway"
+        )
+        self.refused(
+            apps(thanos={**THANOS, "gateway": {"service_upstream": "http://x:1"}}),
+            "ui_upstream",
+        )
         self.refused(apps(thanos={**THANOS, "app_id": "thanos"}), "app_id")
         self.refused(publishers(**{"kb-a": {}}), "prefix")
 
     def test_former_values_are_refused(self):
-        control_plane = {"applications": {"control-plane-backend": {"configuration": {}}}}
-        configuration = control_plane["applications"]["control-plane-backend"]["configuration"]
+        control_plane = {
+            "applications": {"control-plane-backend": {"configuration": {}}}
+        }
+        configuration = control_plane["applications"]["control-plane-backend"][
+            "configuration"
+        ]
         configuration["platform"] = {"application_sources": []}
         self.refused(control_plane, "registrations.applications")
         configuration.pop("platform")
@@ -149,7 +187,13 @@ class ChartRegistrationTests(unittest.TestCase):
         self.refused(control_plane, "registrations.knowledgeBasePublishers")
         for key in ("env", "extraEnvVars"):
             with self.subTest(key=key):
-                frontend = {"applications": {"frontend": {key: [{"name": "FRONTEND_APPLICATIONS_JSON", "value": "[]"}]}}}
+                frontend = {
+                    "applications": {
+                        "frontend": {
+                            key: [{"name": "FRONTEND_APPLICATIONS_JSON", "value": "[]"}]
+                        }
+                    }
+                }
                 self.refused(frontend, "registrations.applications.<app_id>.gateway")
 
 
