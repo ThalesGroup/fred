@@ -66,9 +66,6 @@ impl Processing {
             &config.temporal.task_queue,
         )?;
         security.enabled = true;
-        security.profile_c3 = true;
-        security.strict_issuer = true;
-        security.strict_audience = true;
         security.realm_url = config.worker.issuer.clone();
         security.audience = Some(config.worker.audience.clone());
         security.m2m_realm_url = None;

@@ -15,7 +15,7 @@
 //! Configuration, on fred's model: a YAML file named by CONFIG_FILE (default
 //! ./config/configuration.yaml) with the same section and field names as the Python
 //! backends, and secrets only from the environment (FRED_POSTGRES_PASSWORD,
-//! OPENFGA_API_TOKEN). FRED_STRICT_* / FRED_JWT_* stay environment toggles.
+//! OPENFGA_API_TOKEN). FRED_JWT_* stay environment settings.
 
 use std::time::Duration;
 
@@ -190,15 +190,6 @@ fn opt_env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 
-/// fred-core `coerce_bool`: known tokens only, anything else keeps the default.
-fn flag(name: &str, default: bool) -> bool {
-    match opt_env(name).map(|v| v.trim().to_lowercase()).as_deref() {
-        Some("1" | "true" | "yes" | "on" | "y") => true,
-        Some("0" | "false" | "no" | "off" | "n") => false,
-        _ => default,
-    }
-}
-
 fn number<T: std::str::FromStr>(name: &str, default: T) -> Result<T> {
     match opt_env(name) {
         Some(v) => v.parse().ok().with_context(|| format!("invalid {name}")),
@@ -293,8 +284,6 @@ impl Configuration {
                 Some("c3") => true,
                 Some(other) => bail!("Unsupported security profile: {other}"),
             },
-            strict_issuer: flag("FRED_STRICT_ISSUER", false),
-            strict_audience: flag("FRED_STRICT_AUDIENCE", false),
             clock_skew_seconds: number("FRED_JWT_CLOCK_SKEW", 0)?,
             max_token_lifetime_seconds: number("FRED_JWT_MAX_LIFETIME_SECONDS", 3600.0)?,
         })

@@ -73,7 +73,7 @@ impl Default for UserClaims {
     }
 }
 
-/// `security.user`, `security.m2m.realm_url`, `security.profile` and the FRED_JWT_* toggles.
+/// `security.user`, `security.m2m.realm_url`, `security.profile` and the FRED_JWT_* settings.
 #[derive(Debug, Clone)]
 pub struct SecuritySettings {
     pub directory_delegation: crate::users::DirectoryDelegation,
@@ -87,8 +87,6 @@ pub struct SecuritySettings {
     pub claims: UserClaims,
     pub m2m_realm_url: Option<String>,
     pub profile_c3: bool,
-    pub strict_issuer: bool,
-    pub strict_audience: bool,
     pub clock_skew_seconds: u64,
     pub max_token_lifetime_seconds: f64,
 }
@@ -257,17 +255,12 @@ pub struct Authenticator {
 }
 
 impl Authenticator {
-    /// Resolves endpoints once and applies the c3 profile, failing closed.
+    /// Resolves endpoints once; the c3 profile refuses to start without authentication.
     pub async fn start(settings: SecuritySettings) -> Result<Self> {
-        let mut settings = settings;
-        if settings.profile_c3 {
-            if !settings.enabled {
-                bail!(
-                    "C3 security profile violations (refusing to start): security.user.enabled must be true"
-                );
-            }
-            settings.strict_issuer = true;
-            settings.strict_audience = true;
+        if settings.profile_c3 && !settings.enabled {
+            bail!(
+                "C3 security profile violations (refusing to start): security.user.enabled must be true"
+            );
         }
         if !settings.enabled {
             tracing::warn!("[AUTH] Authentication is DISABLED; every caller is the mock admin");
@@ -300,8 +293,6 @@ impl Authenticator {
             issuer,
             jwks_url,
             client_id = settings.client_id,
-            strict_issuer = settings.strict_issuer,
-            strict_audience = settings.strict_audience,
             "[AUTH] user authentication initialized"
         );
         Ok(Self {
@@ -368,15 +359,11 @@ impl Verifier {
         let mut validation = Validation::new(Algorithm::RS256);
         validation.leeway = s.clock_skew_seconds;
         validation.validate_nbf = true;
-        validation.validate_aud = s.strict_audience;
-        if s.strict_audience {
-            validation.set_audience(&[&user_audience]);
-            validation.required_spec_claims.insert("aud".into());
-        }
-        if s.strict_issuer {
-            validation.set_issuer(&self.realm_issuers);
-            validation.required_spec_claims.insert("iss".into());
-        }
+        validation.set_audience(&[&user_audience]);
+        validation.set_issuer(&self.realm_issuers);
+        validation
+            .required_spec_claims
+            .extend(["aud", "iss"].map(String::from));
         let payload = match jsonwebtoken::decode::<Map<String, Value>>(token, &key, &validation) {
             Ok(data) => data.claims,
             Err(e) if matches!(e.kind(), ErrorKind::ExpiredSignature) => {
@@ -636,8 +623,6 @@ mod tests {
             claims: UserClaims::default(),
             m2m_realm_url: None,
             profile_c3: false,
-            strict_issuer: false,
-            strict_audience: false,
             clock_skew_seconds: 0,
             max_token_lifetime_seconds: 3600.0,
         }
@@ -831,28 +816,32 @@ mod tests {
 
     // Proves: I10
     #[tokio::test]
-    async fn strict_mode_checks_issuer_and_audience() {
-        let strict = SecuritySettings {
-            strict_issuer: true,
-            strict_audience: true,
+    async fn issuer_and_audience_are_always_checked() {
+        // Without a security profile: a token of another client or realm never authenticates.
+        assert!(!settings().profile_c3);
+        let wrong_aud = bob(json!({ "aud": "account" }));
+        let wrong_iss = bob(json!({ "iss": "http://evil/realms/app" }));
+        let mut no_aud = bob(json!({}));
+        no_aud.as_object_mut().unwrap().remove("aud");
+        let mut no_iss = bob(json!({}));
+        no_iss.as_object_mut().unwrap().remove("iss");
+        for claims in [wrong_aud, wrong_iss, no_aud, no_iss] {
+            assert_eq!(
+                decode(settings(), claims).await.unwrap_err(),
+                AuthError::Invalid
+            );
+        }
+        let configured = SecuritySettings {
+            audience: Some("control-plane".into()),
             ..settings()
         };
-        assert!(decode(strict.clone(), bob(json!({}))).await.is_ok());
-        let wrong_aud = bob(json!({ "aud": "account" }));
-        assert_eq!(
-            decode(strict.clone(), wrong_aud).await.unwrap_err(),
-            AuthError::Invalid
-        );
-        let wrong_iss = bob(json!({ "iss": "http://evil/realms/app" }));
-        assert_eq!(
-            decode(strict, wrong_iss).await.unwrap_err(),
-            AuthError::Invalid
-        );
-        // Soft mode only verifies signature and expiry, as in fred-core.
         assert!(
-            decode(settings(), bob(json!({ "aud": "account" })))
-                .await
-                .is_ok()
+            decode(
+                configured,
+                bob(json!({ "aud": ["account", "control-plane"] }))
+            )
+            .await
+            .is_ok()
         );
     }
 

@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F07](#f07-validation-jwt-toujours-stricte) | Issuer et audience JWT toujours vérifiés | Tests automatisés validés | 03, I10 (09), A3 |
 | [F04](#f04-suppression-de-la-création-opérateur) | Création par HTTP ou ZIP | Accepté par Dimi | 03, 03a, 04, 09, A1/A3, carte des sources |
 | [F19](#f19-formatage-rust-et-qualité) | Formatage Rust et qualité | Contrôle qualité réussi | Aucun changement de comportement |
 | [F03](#f03-listing-resources-unique-et-rafraîchissement) | Listing Resources unique et rafraîchissement | Tests automatisés validés | 09, A1, A2, carte des sources |
@@ -75,6 +76,29 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F07 Validation JWT toujours stricte
+
+- 2026-10-21 : vérification sur HEAD `f73960529`, verdict confirmé (latent : toutes les
+  configurations livrées déclarent `profile: c3`). Dimi choisit A. `FRED_STRICT_ISSUER` /
+  `FRED_STRICT_AUDIENCE` supprimés : `Verifier::decode` exige toujours `iss` parmi les realms
+  configurés et `aud` = `audience` ou `client_id`. `profile: c3` ne fait plus que refuser
+  `security.user.enabled: false` ; ligne redondante du processing retirée. Test
+  `issuer_and_audience_are_always_checked` (I10) sans profil, remplaçant l'assertion du mode
+  souple. Arc42 03, I10 et A3 (réglages `FRED_JWT_*` hors secrets) mis à jour ; blocs générés
+  et schéma de configuration régénérés, schéma inchangé. `FRED_JWT_*` restent dans
+  l'environnement, à traiter avec F08. Aucun contrat HTTP ni SQL modifié. Tests et qualité
+  non exécutés ; aucun commit.
+- 2026-10-21 : Dimi signale l'échec de `api_starts_without_temporal_and_keeps_storage_optional`.
+  Sa config sans profil déclarait `client_id: control-plane` avec des jetons `aud: app`,
+  accepté seulement par l'ancien mode souple. Fixture alignée sur `client_id: app` ;
+  aucun autre test ne s'authentifie avec une config écrite à la main. Tests non relancés.
+- 2026-10-21 : Dimi rapporte `make test-integration` réussi (108 tests) ; Clippy réussi,
+  rustfmt en échec sur le nouveau test d'auth.rs, formatage appliqué. `make code-quality`
+  relancé par l'assistant : réussi (Clippy, rustfmt, modèle OpenFGA).
+  Dimi confirme `make test` et `make test-integration` réussis ; `make -C docs/architecture
+  check` réussi. Index F07 : tests automatisés validés.
+- 2026-10-21 : Dimi autorise le commit et le push de F07.
 
 ## F04 Suppression de la création opérateur
 

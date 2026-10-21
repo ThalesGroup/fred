@@ -5670,7 +5670,7 @@ async fn api_starts_without_temporal_and_keeps_storage_optional() {
         .unwrap();
     let config = serde_json::json!({
         "app":{"base_url":"/control-plane/v1","address":"127.0.0.1","port":port},
-        "security":{"user":{"realm_url":identity.realm,"client_id":"control-plane"},"rebac":{"api_url":e.openfga,"store_name":e.store,"create_store_if_needed":false,"sync_schema_on_init":false}},
+        "security":{"user":{"realm_url":identity.realm,"client_id":"app"},"rebac":{"api_url":e.openfga,"store_name":e.store,"create_store_if_needed":false,"sync_schema_on_init":false}},
         "storage":{"postgres":{"host":pg.host_str(),"port":pg.port(),"username":"postgres","database":database}},
         "scheduler":{"lifecycle":{"enabled":true,"temporal":{"host":unavailable_temporal.local_addr().unwrap().to_string()}}}
     });

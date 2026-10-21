@@ -90,7 +90,12 @@ steps are in the [migration note](../swift/ops/migrations/rust-control-plane.md)
 
 `CONFIG_FILE` (default `./config/configuration.yaml`) holds the settings, in sections
 `app`, `security`, `storage`, `scheduler`, `policies`; `ENV_FILE` (default `./config/.env`) holds
-secrets only and never overrides the process environment.
+secrets and the two token-time settings below, and never overrides the process environment.
+
+| Token-time setting | Default |
+| --- | --- |
+| `FRED_JWT_MAX_LIFETIME_SECONDS` | `3600`, maximum `exp - iat` |
+| `FRED_JWT_CLOCK_SKEW` | `0`, leeway in seconds |
 
 | Secret | Read from |
 | --- | --- |
