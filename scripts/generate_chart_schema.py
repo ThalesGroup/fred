@@ -538,13 +538,55 @@ _GLOBAL = _obj({
 
 
 # ---------------------------------------------------------------------------
+# Registrations
+# ---------------------------------------------------------------------------
+
+def _keyed_entry(cp_schema: dict, name: str, key: str) -> tuple[dict, dict]:
+    """A control-plane entry model without its id field, and that field's schema."""
+    entry = _inline_refs({**cp_schema["$defs"][name], "$defs": cp_schema["$defs"]})
+    key_schema = entry["properties"].pop(key)
+    entry["required"] = [field for field in entry.get("required", []) if field != key]
+    return entry, key_schema
+
+
+def _registrations(cp_schema: dict) -> dict:
+    """`registrations`: the control plane's own entry models, keyed by their id.
+
+    A null entry is allowed: it is how a later values file unregisters one.
+    """
+    application, app_id = _keyed_entry(cp_schema, "ApplicationSourceConfig", "app_id")
+    # What the frontend gateway proxies to; the container validates the URLs at start.
+    application["properties"]["gateway"] = _obj({
+        "ui_upstream": _STRING,
+        "service_upstream": _STRING,
+        "service_required": _BOOL,
+    }, required=["ui_upstream"])
+    application["required"].append("gateway")
+    publisher, client_id = _keyed_entry(cp_schema, "KnowledgeBasePublisher", "client_id")
+
+    def keyed(entry: dict, key_schema: dict) -> dict:
+        names = {k: v for k, v in key_schema.items() if k in ("pattern", "minLength", "maxLength")}
+        return {
+            "type": "object",
+            "propertyNames": names,
+            "additionalProperties": {"anyOf": [entry, {"type": "null"}]},
+        }
+
+    return _obj({
+        "applications": keyed(application, app_id),
+        "knowledgeBasePublishers": keyed(publisher, client_id),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Assembly
 # ---------------------------------------------------------------------------
 
 def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> dict:
     fa_config = _inline_refs(_load(fa_schema_path))
     kf_config = _inline_refs(_load(kf_schema_path))
-    cp_config = _inline_refs(_load(cp_schema_path))
+    cp_schema = _load(cp_schema_path)
+    cp_config = _inline_refs(cp_schema)
 
     return {
         "$schema": "https://json-schema.org/draft-07/schema#",
@@ -557,6 +599,7 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
         "patternProperties": {"^x-": {}},
         "properties": {
             "global": _GLOBAL,
+            "registrations": _registrations(cp_schema),
             "applications": _obj({
                 "fred-agents": _fred_agents_app(fa_config),
                 "frontend": _frontend_app(),
