@@ -20,6 +20,7 @@ import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar.t
 import type { TaskState } from "../../../../features/tasks/taskTypes";
 import type { StepReport, StepStatus } from "../../../../features/pipeline/types";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { buildReport } from "./report";
 import styles from "./SelfTestPage.module.css";
 
 // The Task atoms speak the fred-core TaskState vocabulary; map the pipeline
@@ -43,22 +44,6 @@ function overallState(steps: StepReport[], isRunning: boolean): TaskState | "par
   return "succeeded";
 }
 
-function buildReport(steps: StepReport[]): string {
-  const passed = steps.filter((s) => s.status === "passed").length;
-  const failed = steps.filter((s) => s.status === "failed").length;
-  const skipped = steps.filter((s) => s.status === "skipped").length;
-  const lines = steps.map((step, i) => {
-    const dur = step.durationMs != null ? ` (${step.durationMs} ms)` : "";
-    const info = step.error ? ` — ERROR: ${step.error}` : step.detail ? ` — ${step.detail}` : "";
-    return `${i + 1}. [${step.status.toUpperCase()}] ${step.title}${info}${dur}`;
-  });
-  return [
-    `Self-test: ${passed} passed, ${failed} failed, ${skipped} skipped, ${steps.length} steps`,
-    "",
-    ...lines,
-  ].join("\n");
-}
-
 interface StepReportPanelProps {
   steps: StepReport[];
   isRunning: boolean;
@@ -67,10 +52,9 @@ interface StepReportPanelProps {
 }
 
 /**
- * Renders one pipeline run's live progress + step list + copy-to-clipboard
- * report. Shared by every self-test section on this page (functional,
- * authorization-for-myself, authorization-for-another-profile) so the
- * report UI/format stays identical regardless of which scenario produced it.
+ * Renders one run's live progress, step list and copy-to-clipboard report.
+ * Shared by every family on the page, so the report looks the same whichever
+ * scenario produced it.
  */
 export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPanelProps) {
   const { t } = useTranslation();

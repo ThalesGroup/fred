@@ -12,20 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Authorization self-test: proves the live UI/API honor the authorization
-// model, for the running admin's own session or for any other account. Runs
-// on the SAME step-report engine as `selfTestScenario.ts` (`runStep`,
-// `SkipStep`, `Reporter`), but against a different, minimal deps contract —
-// see `docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`.
-//
-// Deliberately NOT a hardcoded "sophia should be team_admin" lookup table:
-// the frontend has no way to know that (it lives in a deployment-factory
-// config file this app never reads). Every expectation below is derived
-// from data the API already reports about the target account itself —
-// including the one positive/write check (`team-write-access`): it reads the
-// target's own `can_update_resources` permission on their first team from
-// `GET /teams/{teamId}` and asserts a real create only succeeds when that
-// permission is present, rather than assuming a role from a name.
+// Probe existing access with an explicit account token. Expectations come
+// from API permissions; optional operator role expectations are checked separately.
 
 import { runStep, SkipStep } from "../step";
 import type { Reporter } from "../types";
@@ -33,6 +21,7 @@ import type { Reporter } from "../types";
 export interface BootstrapFlags {
   isPlatformAdmin: boolean;
   isPlatformObserver: boolean;
+  canListAllTeams: boolean;
 }
 
 export interface RegistryProbeResult {
@@ -67,19 +56,27 @@ export interface AuthzProbeDeps {
   fetchTeamPermissions(token: string, teamId: string): Promise<string[]>;
   /** POST /teams/{teamId}/prompts for the given token's owner — a run-scoped, throwaway prompt. */
   probeTeamWriteAccess(token: string, teamId: string): Promise<TeamWriteProbeResult>;
-  /** DELETE /teams/{teamId}/prompts/{promptId} — best-effort cleanup of what `probeTeamWriteAccess` created. */
+  /** DELETE /teams/{teamId}/prompts/{promptId}; failure must be reported. */
   cleanupTeamWrite(token: string, teamId: string, promptId: string): Promise<void>;
 }
 
-/** Pure — no fetch, nothing to mock. A capability that returns 200 must line up
- * with the same account's own `platform_admin` role, in either direction:
- * a "yes" without the flag, or the flag without the "yes", are both bugs. */
+/** A valid token must receive either the expected success or an explicit denial.
+ * Authentication failures and server errors cannot prove a permission boundary. */
+function assertPermissionResult(
+  label: string,
+  status: number,
+  expected: boolean,
+  permission: string,
+  success: number[],
+): void {
+  const allowed = success.includes(status);
+  const denied = status === 403 || status === 404;
+  if ((expected && allowed) || (!expected && denied)) return;
+  throw new Error(`${label}: HTTP ${status}, but ${permission}=${expected}`);
+}
+
 export function assertAccessMatchesPlatformAdmin(label: string, status: number, isPlatformAdmin: boolean): void {
-  const allowed = status === 200;
-  if (allowed === isPlatformAdmin) return;
-  throw new Error(
-    `${label}: HTTP ${status} (${allowed ? "allowed" : "denied"}), but platform_admin=${isPlatformAdmin}`,
-  );
+  assertPermissionResult(label, status, isPlatformAdmin, "platform_admin", [200]);
 }
 
 /** Pure — same shape as `assertAccessMatchesPlatformAdmin`, for a team-scoped write
@@ -87,11 +84,7 @@ export function assertAccessMatchesPlatformAdmin(label: string, status: number, 
  * succeeds (200/201) must line up with the account's own `can_update_resources`
  * permission on that team, as reported by the team itself (never hardcoded). */
 export function assertWriteAccessMatchesTeamPermission(label: string, status: number, hasPermission: boolean): void {
-  const allowed = status === 200 || status === 201;
-  if (allowed === hasPermission) return;
-  throw new Error(
-    `${label}: HTTP ${status} (${allowed ? "allowed" : "denied"}), but can_update_resources=${hasPermission}`,
-  );
+  assertPermissionResult(label, status, hasPermission, "can_update_resources", [200, 201]);
 }
 
 /**
@@ -145,7 +138,7 @@ export async function authzProbeScenario(
   if (flags) {
     await runStep(report, "registry-access", "Team registry access (GET /teams/all)", async () => {
       const { status } = await deps.probeRegistryAccess(targetToken);
-      assertAccessMatchesPlatformAdmin("registry access", status, flags.isPlatformAdmin);
+      assertPermissionResult("registry access", status, flags.canListAllTeams, "can_list_all_teams", [200]);
       return { value: undefined, detail: `HTTP ${status}` };
     });
 
