@@ -92,6 +92,13 @@ _FORBIDDEN_SHEET_CHARS = set("[]:*?/\\")
 _RESERVED_SHEET_NAMES = {"history"}
 # Text starting with one of these would be read as a formula by a spreadsheet.
 _FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+# A model-written formula (`=SUM(`, `=B2/...`, `=$B$2`): rejected so it sends the
+# computed value; other `=` text (`=1+1`, `=== x ===`) stays literal text.
+_FORMULA_LIKE = re.compile(r"^=\s*(?:[A-Za-z][A-Za-z0-9.]*\s*\(|\$?[A-Za-z]{1,3}\$?\d)")
+FORMULA_REJECTED = (
+    "formulas are not accepted: send the computed value, and set `total` on the "
+    "column for sums/averages."
+)
 _NUMERIC_JUNK = re.compile(r"[\s  _$€£¥]")
 # "1,234" reads as 1234 in English and 1.234 in French: refuse to guess.
 _AMBIGUOUS_COMMA = re.compile(r"^[+-]?\d{1,3},\d{3}$")
@@ -166,7 +173,10 @@ class SheetSpec(BaseModel):
     columns: list[ColumnSpec] = Field(description="The sheet's columns, in order.")
     rows: list[list[CellValue]] = Field(
         default_factory=list,
-        description="Data rows; each row has exactly one value per column (null for empty).",
+        description=(
+            "Data rows; each row has exactly one literal value per column (null "
+            "for empty). No formulas: send computed values."
+        ),
     )
 
 
@@ -420,9 +430,9 @@ def _check_structure(request: CreateSpreadsheetInput) -> None:
         for row_number, row in enumerate(sheet.rows, start=2):
             if len(row) != len(sheet.columns):
                 raise SpreadsheetInputError(
-                    f"{where}, row {row_number}: {len(row)} values for "
-                    f"{len(sheet.columns)} columns. Send exactly one value per "
-                    "column (null for an empty cell)."
+                    f"{where}, row {row_number}: expected {len(sheet.columns)} "
+                    f"values (one per column), got {len(row)}. Use null for an "
+                    "empty cell."
                 )
         total_cells += len(sheet.columns) * (len(sheet.rows) + 1)
     if total_cells > MAX_CELLS:
@@ -582,6 +592,12 @@ def _convert(raw: CellValue, column_type: str, where: str) -> Converted:
         raise SpreadsheetInputError(
             f"{where}: the value has {len(raw)} characters; the limit is {MAX_CELL_CHARS}."
         )
+    if (
+        isinstance(raw, str)
+        and raw.lstrip().startswith("=")
+        and (column_type != "text" or _FORMULA_LIKE.match(raw.strip()))
+    ):
+        raise SpreadsheetInputError(f"{where}: {raw!r}: {FORMULA_REJECTED}")
     try:
         if column_type == "text":
             return _strip_illegal(_to_text(raw)) or None

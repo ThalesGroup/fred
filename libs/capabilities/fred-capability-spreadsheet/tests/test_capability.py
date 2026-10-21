@@ -154,7 +154,8 @@ def test_tool_schema_exposes_only_llm_arguments():
     assert "never paste a Markdown table" in schema["description"]
     assert "as JSON numbers" in schema["description"]
     assert "tell the user plainly" in schema["description"]
-    assert "Each call creates a new file" in schema["description"]
+    assert "No formulas" in schema["description"]
+    assert "Call this tool once per file" in schema["description"]
 
 
 def test_graph_assembly_exposes_the_tool():
@@ -171,7 +172,9 @@ async def test_writes_xlsx_and_preview_and_returns_the_preview_card():
     workspace = FakeWorkspace()
     content, artifact = await _tool(workspace)(**ARGS)
 
-    assert "download button is shown" in content
+    assert content.endswith(
+        "File created and shown to the user. Do not create it again; reply now."
+    )
     assert artifact.is_error is False
     (path, data, content_type, title) = workspace.writes[0]
     assert path.startswith("spreadsheets/s-1/Q3 budget-") and path.endswith(".xlsx")
@@ -328,3 +331,26 @@ async def test_concurrent_builds_are_bounded_and_fail_fast(monkeypatch):
     assert all(result[1].is_error is False for result in results)
     assert capability._active_builds == 0
     assert len(workspace.writes) == 2 * bound  # each file plus its preview
+
+
+@pytest.mark.asyncio
+async def test_identical_repeat_call_in_a_turn_returns_the_first_result():
+    workspace = FakeWorkspace()
+    tool = _tool(workspace)
+    first, _ = await tool(**ARGS)
+    repeat, artifact = await tool(**{**ARGS, "file_name": "Q3 budget.xlsx"})
+
+    assert repeat == first
+    assert artifact.is_error is False and artifact.ui_parts == ()
+    assert len(workspace.writes) == 2  # one file plus its preview
+
+
+@pytest.mark.asyncio
+async def test_changed_data_or_a_new_turn_creates_a_new_file():
+    workspace = FakeWorkspace()
+    tool = _tool(workspace)
+    await tool(**ARGS)
+    changed = {**ARGS, "sheets": [{**ARGS["sheets"][0], "rows": [["Rent", 1300]]}]}
+    await tool(**changed)
+    await _tool(workspace)(**ARGS)  # tools are rebuilt for every turn
+    assert len(workspace.writes) == 6
