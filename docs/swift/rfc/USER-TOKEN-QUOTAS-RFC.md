@@ -1,8 +1,8 @@
 # RFC — Per-user token quotas
 
-**Status:** Draft — pending team review. Product decisions (§2) are settled
-by the owner; design in §3; one open point (§5). Once reviewed, each slice in
-§6 moves to an OpenSpec change.
+**Status:** Draft — design questions closed, pending team review. Product
+decisions (§2) are settled by the owner; design in §3. Once reviewed, each
+slice in §6 moves to an OpenSpec change.
 **Author:** Maxime Daragon
 **Date:** 2026-10-21
 **Tracking:** #3223 (epic). Prerequisite for blocking: #2528.
@@ -45,15 +45,17 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
   crédits · 5,00 €"), plus tokens where meaningful (analytics charts).
 - **Unpriced model:** loud admin alert; its spend is charged at the most
   expensive priced model's price until a price is entered (no free hole).
-- **Long conversations are the main driver** (the history is resent every
-  turn): the Help Center advises a new conversation when changing topic.
+- **Long conversations drive spend** (history resent every turn): the Help
+  Center advises a new conversation when changing topic.
 
 **Admin settings**
 - The platform admin sets one weekly default and, via user search, a weekly
-  override (null = default). The 5-hour budget is a fixed fraction (config,
-  default 25%) of the **effective weekly quota, active boost included**.
-- Quotas, overrides and the per-turn ceiling are stored and entered in
-  credits, with the € equivalent shown live; the boost stays a percentage.
+  override (null = default), in credits with the € shown live. The 5-hour
+  budget is a fixed fraction (config, default 25%) of the **effective weekly
+  quota, active boost included**.
+- **Per-turn ceiling = the effective weekly quota** (boost included), not
+  a separate setting: one turn never spends more than a week of quota, and
+  admins have one number fewer. Applies only while blocking is on.
 - **Platform admins are under quota like everyone.** Override `0` = blocked;
   no "unlimited" value (use a large override); a platform admin can set any
   override, their own included. Local/dev config ships a high default.
@@ -62,10 +64,10 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
 - Granted by the platform admin, or by a team admin to a member of their
   team **at most once per user per week across all teams** (then platform
   admin only). A team admin cannot boost themselves. Not cumulative.
-- +20% of the user's effective weekly quota (override if any, else default).
-- Expires at `max(next weekly reset, granted_at + 24h)`, so a late boost
-  lasts at least 24 h; survives a counters reset.
-- Revocable; visible in the user's gauge; audited (who, when).
+- +20% of the user's weekly quota (override if any, else default); expires
+  at `max(next weekly reset, granted_at + 24h)`, so a late boost lasts at
+  least 24 h; survives a counters reset; revocable, shown in the gauge,
+  audited (who, when).
 - Granted from the quota page's users table (platform admin) or the team
   "Consommation" page's member search (team admin, "+20%" button).
 
@@ -84,7 +86,9 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
   contrast, fails closed (`platform_access/access_control.py:206`, 503).
 
 **User experience**
-- **Chat badge** per message shows credits; input/output tokens on hover.
+- **Chat badge** per message shows credits (tokens on hover), as do the
+  `ManagedChatPage` conversation total and the Home "Responsible AI" tile
+  (`ResponsibleAiSection`, next to its environmental estimate).
 - **Composer indicator** left of the model selector, always visible while
   tracking is on. It shows a % or an icon besides colour (accessibility;
   visual to iterate). Levels: normal / 50% / 80% / 100%; the popover shows
@@ -94,23 +98,21 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
   says when access returns.
 - Existing design tokens and molecules only (`Tooltip`, `Dialog`, ...).
 - A started turn always finishes (bounded by the per-turn ceiling, so a turn
-  admitted at 99% can spend one ceiling; Help Center says so); HITL resumes
-  are never blocked.
+  admitted at 99% can spend up to one weekly quota; Help Center says so);
+  HITL resumes are never blocked.
 
 **Team "Consommation" view**
 - Extends `TeamUsagePage` (`/team/{id}/usage`), read-only, team admins only.
 - Team totals, breakdown by agent and by model. **No per-member spend.**
   Credits and euros from the ledger; KPI charts labelled as token analytics.
-- **Teams under 3 members: totals hidden** (platform config), with: "Totals
-  are hidden for teams with fewer than 3 members, to protect each member's
-  privacy."
+- **Teams under 3 members: totals hidden** (platform config), with a
+  privacy message ("Totals are hidden for teams with fewer than 3 members").
 
 **Platform switches** (roll out tracking first, block later)
 - **Usage tracking**: indicator and tooltips, `GET /me/usage` state, team
   credits view, over-quota notice at 100%.
 - **Blocking**: refuses turns at 100% (structured 409) and enables the
-  per-turn ceiling. Requires tracking; turning tracking off turns blocking
-  off.
+  per-turn ceiling; requires tracking (turning tracking off clears it).
 - Both off on install and upgrade (optional activation, minor). The ledger
   records spend in every state; toggling never changes quotas or boosts.
 - Turning either switch on asks: keep counting, or reset counters to 0
@@ -123,8 +125,7 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
   stated in the UI and the Help Center.
 
 **Scope boundaries**
-- **Known v1 bypass:** knowledge-flow ingestion, vision and embedding calls
-  are not counted.
+- **Known v1 bypass:** knowledge-flow ingestion, vision, embeddings.
 - Team ceilings stay out of scope (`TEAM-PLATFORM-POLICY-RFC.md`); a later
   team budget would cap, not replace, per-user quotas.
 
@@ -217,10 +218,11 @@ unreachable control-plane: admitted, no ceiling (fail-open). Refusal: HTTP
 409 `code: user_quota_exhausted` (distinct from the instance-disabled 409),
 `window`, `resets_at`, before the stream opens.
 
-**Per-turn ceiling.** Platform config in credits, returned by admission
-only while blocking is on, with the price snapshot the runtime needs to
-convert its accumulator (prices live in control-plane). Checked between
-model and sub-agent calls; when hit, the turn ends cleanly with a message.
+**Per-turn ceiling.** No setting of its own: control-plane computes it at
+admission as the effective weekly quota and returns it only while blocking
+is on, with the price snapshot the runtime needs to convert its
+accumulator (prices live in control-plane). Checked between model and
+sub-agent calls; when hit, the turn ends cleanly with a message.
 Parallel turns can overshoot, bounded by concurrent turns x ceiling.
 
 **Platform switches.** Reuse the platform access pattern: one settings row
@@ -239,13 +241,13 @@ failed spend reports, spend on unpriced models (with alert); Grafana panels.
 **Frontend.** Indicator fed by `GET /me/usage` (both windows: used,
 budget, `resets_at`, active boost; `tracking`, `blocking`), refetched after
 each turn; once-per-window tooltip state keyed by window start.
-`TokenUsageBadge` shows the exchange's credits (sum of its ledger rows,
-added to the message usage, which carries tokens only today), ↑/⚡/↓ tokens
-in the tooltip; the `ManagedChatPage` header total switches to credits too.
-One shared formatter rounds (nearest, minimum 1) and renders the admin
-"credits · €" pair. The chat and the OpenAI-compatible client map the 409
-`code` to the block message. The admin page reuses the `PlatformRolesPage`
-user search (`GET /users`); the team page searches team members only.
+`TokenUsageBadge`, the header total and the Home tile show credits (sum of
+ledger rows, added to the message usage, which carries tokens only today),
+↑/⚡/↓ tokens in the tooltip. One shared formatter rounds (nearest, minimum
+1) and renders the admin "credits · €" pair. The chat and the
+OpenAI-compatible client map the 409 `code` to the block message. The
+admin page reuses the `PlatformRolesPage` user search (`GET /users`); the
+team page searches team members only.
 
 ## 4. Alternatives considered
 
@@ -266,10 +268,7 @@ user search (`GET /users`); the team page searches team members only.
 
 ## 5. Open questions
 
-- **Home "Responsible AI" tile** (`ResponsibleAiSection`) shows the user's
-  token count next to its environmental estimate: switch it to credits like
-  the chat, or keep tokens because the tile is about energy, not budget?
-  Other implementation details are decided inside each OpenSpec change.
+None. Implementation details are decided inside each OpenSpec change.
 
 ## 6. Slicing into OpenSpec changes
 
@@ -279,10 +278,11 @@ Each slice is one OpenSpec change linked to #3223:
   accumulator at the model client, ledger and counter tables + migration
   (`run_id` key), exact-decimal credits from config-seeded prices, counter
   rebuild job, idempotent exit-path reporting, fail-open admission on every
-  entry point (`{admitted, ceiling, prices}`), ceiling, structured 409,
+  entry point (`{admitted, ceiling, prices}`, ceiling = effective weekly
+  quota), structured 409,
   switches seeded off. Also: migration note (minor), chart values +
   schemas (seed prices, `cache_read_rate`, `credits_per_euro`, unpriced
-  fallback, 5-hour fraction, ceiling, admission timeout, high dev default),
+  fallback, 5-hour fraction, admission timeout, high dev default),
   audit events, metrics, Grafana panels.
 - **(b) Platform-admin quota page** — model price table (€/M tokens,
   unpriced alert; KPI estimated cost reads it in €, closes #2451), switches
@@ -290,17 +290,17 @@ Each slice is one OpenSpec change linked to #3223:
   with live €, users table with boost grant/revoke; boost API incl.
   team-admin scope (once per user per week across teams, no self-boost).
 - **(c) Composer indicator and credits in chat** — `GET /me/usage`,
-  indicator and "used / budget credits" popover, once-per-window tooltips,
-  over-quota notice or 100% block; `TokenUsageBadge` and header total in
-  credits; fr+en Help Center (credits, windows, ceiling at 99%, under-count
-  while counting is incomplete, new conversation when changing topic).
+  indicator and popover, once-per-window tooltips, over-quota notice or
+  100% block; `TokenUsageBadge`, chat header total and Home
+  `ResponsibleAiSection` tile in credits; fr+en Help Center (credits,
+  windows, ceiling at 99%, under-count while counting is incomplete, new
+  conversation when changing topic).
 - **(d) Team "Consommation" view** — ledger totals by agent and model in
   credits and €, hidden under 3 members with the privacy message, member
   search with the "+20%" button, KPI charts labelled as token analytics.
 
 Order: (a) → (b) → (c); (d) once (a) and the boost API from (b) are in.
-**Release gate:** blocking cannot be enabled until the accumulator (incl.
-#2528) is merged.
+Blocking stays behind the release gate (§2).
 
 ## 7. Impact on contracts
 
@@ -318,8 +318,7 @@ Order: (a) → (b) → (c); (d) once (a) and the boost API from (b) are in.
   reaches the client before the stream (chat SSE and
   `openai_compat_router.py`).
 - Frontend: composer error handling for the 409 `code`.
-- `REBAC.md`: no new relation expected; confirm the team-admin boost scope
-  in slice (b).
+- `REBAC.md`: no new relation expected; confirm the boost scope in (b).
 - `OBSERVABILITY-AND-AUDIT.md`: new audit events, metrics, alerts.
 - `KPI-ANALYTICS-RFC.md` §2.7 / `model_impact_factors.yaml`: cost fields
   removed; prices come from the control-plane table.
