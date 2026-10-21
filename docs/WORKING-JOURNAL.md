@@ -349,6 +349,12 @@ parcours manuel dans l’UI Rebac. Résultat encore à observer.
 
 ## F-009 Sélection des utilisateurs à la création
 
+- 2026-10-21 : après l'échec signalé par Dimi, inventaire du test OpenAPI
+  complété avec `GET /admin/organizations/candidates`, déjà implémenté et documenté
+  au commit de référence. Sur son accord pour corriger les tests, `make test`
+  réussit : 45 tests unitaires et 10 tests de contrat. Aucun contrat HTTP modifié
+  par cette correction, aucun commit.
+
 - Vérification demandée par Dimi : Swift dispose déjà d'une autocomplétion
   des administrateurs initiaux dans TeamFormDialog, en création et édition.
   Recherche dès deux caractères ; affichage prénom, nom et username ; sélection

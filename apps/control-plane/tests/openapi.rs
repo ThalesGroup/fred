@@ -110,6 +110,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "delete /users/{user}/platform-roles/{role}",
         "get /admin/teams",
         "get /admin/organizations",
+        "get /admin/organizations/candidates",
         "post /admin/organizations",
         "post /authorize/platform",
         "post /authorize/space",
