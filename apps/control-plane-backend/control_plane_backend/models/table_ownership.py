@@ -49,6 +49,7 @@ import control_plane_backend.models.knowledge_base_models  # noqa: F401
 # codeql[py/unused-import]
 import control_plane_backend.models.marketplace_settings_models  # noqa: F401 — registers platform_marketplace_settings with Base
 import control_plane_backend.models.model_reasoning_models  # noqa: F401
+import control_plane_backend.models.notification_models  # noqa: F401 — registers notifications with Base
 
 # codeql[py/unused-import]
 import control_plane_backend.models.platform_default_team_models  # noqa: F401 - registers platform_default_teams with Base
