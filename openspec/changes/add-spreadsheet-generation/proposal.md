@@ -1,0 +1,35 @@
+## Why
+
+Fred agents read Excel files through the tabular tools but cannot write one. Asked for a spreadsheet, an agent pastes a Markdown table that the user copies into Excel and reformats by hand. The agent form's Document production section offers Word, PowerPoint and web page outputs, and nothing for spreadsheets. GitHub issue #3208.
+
+## What Changes
+
+- **New capability `spreadsheet`** with one tool, `create_spreadsheet`. Users see it as "Create an Excel file" / "Créer un fichier Excel".
+- **Deterministic `.xlsx` generation with openpyxl**: one or more sheets, typed columns (text, number, integer, percent, currency, date), a per-column currency (`EUR`, `USD`, ...) shown as a symbol in the number format, styled and frozen header row, auto filter, column widths (declared or computed), an optional totals row whose cells are live Excel formulas (`SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`).
+- **Delivery through the existing output port**: the file is written with `RuntimeServices.workspace_fs` and returned as the standard `LinkPart` download chip, like PPT Filler's fallback path. No preview, new chat part, side panel, router, table or frontend plugin.
+- **Validation returned to the model**: wrong sheet name, row length mismatch, unparsable value for a column type, or a size limit returns an `is_error` tool result naming the sheet, row and column, and no file is written.
+- **Safety**: no macros (`.xlsx` only), no free-form formulas, and text cells starting with `=`, `+`, `-`, `@` are stored as literal text.
+- **Tool-only capability** (`tools()`, default `execution_models`), so it works on ReAct, Deep and Graph agents. The tool schema stays simple for Mistral models.
+- **Agent form**: a "Create an Excel file" pack in the Document production section; en/fr labels. Admin-gated like the other output capabilities.
+- **Help Center**: a "Create an Excel file" section in `features/capabilities.md`, en and fr.
+
+## Capabilities
+
+### New Capabilities
+
+- `spreadsheet-generation`: generating a downloadable Excel workbook from a chat request.
+
+### Modified Capabilities
+
+- none. `agent-capability-packs` does not enumerate the Document production packs, so adding one needs no delta; the form requirement lives in `spreadsheet-generation`.
+
+## Impact
+
+- New package `libs/capabilities/fred-capability-spreadsheet/` (entry point `spreadsheet`), dependency `openpyxl>=3.1.5` (Knowledge Flow pins 3.1.5).
+- `apps/fred-agents/pyproject.toml` + `uv.lock`: the new package as an editable path dependency; image, pyright, pre-commit, CI change detection and root Makefile lists gain the package like the other capability packages.
+- `apps/frontend/src/rework/components/pages/TeamAgentsPage/AgentFormModal/toolPacks.ts`: one pack; `apps/frontend/src/locales/{en,fr}/translation.json`: capability and pack strings.
+- `apps/frontend/src/rework/features/helpCenter/content/{en,fr}/features/capabilities.md`.
+- `docs/swift/capabilities/AUTHORING.md`: one row; package `README.md`.
+- No SDK, runtime, control-plane or OpenAPI change. No stored-config migration (`ConfigModel = EmptyModel`).
+- Migration note per `docs/swift/ops/MIGRATION-GUIDES.md`.
+- Out of scope: charts in the workbook, editing an existing workbook, `.xlsx` templates (later slice), server-side export of a tabular query result (#2738), in-chat preview.
