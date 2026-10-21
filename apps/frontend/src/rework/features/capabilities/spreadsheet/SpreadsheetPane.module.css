@@ -247,9 +247,10 @@
   border-right: 1px solid var(--outline-muted);
   border-bottom: 2px solid transparent;
   background: none;
-  padding: var(--spacing-2xs) var(--spacing-s);
+  padding: var(--spacing-2xs) var(--spacing-m);
+  min-height: var(--spacing-xl);
   color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
+  font: var(--font-label-large);
   white-space: nowrap;
 }
 
@@ -266,7 +267,7 @@
   border-bottom-color: var(--primary);
   background-color: var(--surface-container);
   color: var(--primary);
-  font: var(--font-label-medium-emphasized);
+  font: var(--font-label-large-emphasized);
 }
 
 .tabActive:hover {

@@ -326,7 +326,7 @@ function SheetTabs({ names, selected, onSelect, tabId, panelId }: SheetTabsProps
         <div className={styles.tabArrows}>
           <IconButton
             variant="icon"
-            size="2xs"
+            size="small"
             icon={{ category: "outlined", type: "chevron_left" }}
             aria-label={t("capability.spreadsheet.previousSheets")}
             disabled={edges.atStart}
@@ -334,7 +334,7 @@ function SheetTabs({ names, selected, onSelect, tabId, panelId }: SheetTabsProps
           />
           <IconButton
             variant="icon"
-            size="2xs"
+            size="small"
             icon={{ category: "outlined", type: "chevron_right" }}
             aria-label={t("capability.spreadsheet.nextSheets")}
             disabled={edges.atEnd}
