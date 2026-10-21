@@ -42,7 +42,7 @@ Alternative: remove unsupported values from the SDK model now. That would make p
 
 - [OpenAPI projection drift] -> Capture the current Knowledge Flow tool names, descriptions, and input schemas, then compare with the new provider and explicitly adapt differences before cutover.
 - [Security context lost between MCP and inner FastAPI request] -> Exercise user-token and delegated calls end to end, including refusal, redirect, stale grant, and multi-pod routing cases.
-- [Extra client setup latency per tool call] -> Use MCPAdapter's supported connection lifecycle and cache where authority isolation permits, then compare call latency with the current path.
+- [Extra client setup latency per turn] -> Cache protocol responses through the SDK only for a fixed credential partition. Fresh adapters still discover legacy peers on each turn; keep the earlier benchmark as historical evidence and measure this residual cost before optimizing it further.
 - [FastMCP 4 / SDK v2 dependency churn] -> Pin compatible versions in each affected package and update lockfiles in one reviewable change.
 - [Legacy remote peers] -> Test v2-to-v2 and current legacy-protocol interoperability for the HTTP paths before release.
 
