@@ -121,6 +121,24 @@ dupliqué ou copié dans une autre équipe emporte son propre exemplaire du mod�
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
 
+### Créer un fichier Excel
+
+**Ce qu'elle fait** — l'agent transforme des données de la conversation en un
+fichier Excel que vous téléchargez depuis le chat. Chaque feuille a une ligne
+d'en-tête qui reste visible et sert de filtre ; les colonnes sont mises en
+forme en texte, nombres, pourcentages, montants avec leur devise ou dates.
+L'agent peut ajouter une ligne de totaux calculée par Excel (somme, moyenne,
+minimum, maximum, nombre).
+
+**Ses limites** — l'agent écrit lui-même chaque valeur, le fichier reste donc
+de taille modeste : au plus 10 feuilles, 5 000 lignes par feuille et 50 000
+cellules en tout. Pas de graphique, pas de couleurs selon les valeurs, pas de
+macro, et l'agent ne modifie pas un classeur existant. Il n'y a pas d'aperçu
+dans le chat : téléchargez le fichier pour l'ouvrir.
+
+**Un exemple** — « Mets les dépenses que nous venons de lister dans un fichier
+Excel, une feuille par mois, avec les montants en euros et un total en bas. »
+
 ### Générer une page web (HTML/CSS)
 
 **Ce qu'elle fait** — l'agent produit une page ou un composant web, affiché

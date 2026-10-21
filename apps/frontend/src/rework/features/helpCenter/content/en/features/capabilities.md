@@ -114,6 +114,23 @@ copied to another team takes its own copy of the template.
 **An example** — a five-slide monthly review template, which the agent fills
 each month from the period's documents.
 
+### Create an Excel file
+
+**What it does** — the agent turns data from the conversation into an Excel
+file you download from the chat. Each sheet has a header row that stays
+visible and filters; columns are formatted as text, numbers, percentages,
+amounts with their currency, or dates. The agent can add a totals row that
+Excel computes (sum, average, minimum, maximum, count).
+
+**Its limits** — the agent writes every value itself, so the file stays
+modest in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in
+all. No charts, no colors by value, no macros, and the agent does not edit an
+existing workbook. There is no preview in the chat: download the file to
+open it.
+
+**An example** — "Put the expenses we have just listed into an Excel file, one
+sheet per month, with the amounts in euros and a total at the bottom."
+
 ### Generate a web page (HTML/CSS)
 
 **What it does** — the agent produces a web page or component, shown in a

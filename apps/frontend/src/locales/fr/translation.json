@@ -265,6 +265,10 @@
         "plainText": "Texte brut"
       }
     },
+    "spreadsheet": {
+      "name": "Créer un fichier Excel",
+      "description": "Capacité de créer un classeur Excel téléchargeable, avec des colonnes typées et des totaux."
+    },
     "html_artifact": {
       "name": "Générer une page web (HTML/CSS)",
       "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat.",
@@ -3084,6 +3088,10 @@
             "powerpointDocument": {
               "title": "Remplir un document PowerPoint",
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
+            },
+            "spreadsheet": {
+              "title": "Créer un fichier Excel",
+              "description": "Capacité de créer un fichier Excel téléchargeable à partir des données de la conversation."
             },
             "webPage": {
               "title": "Générer une page web (HTML/CSS)",
