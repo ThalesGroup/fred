@@ -1,9 +1,9 @@
 # RFC — Per-user token quotas
 
-**Status:** Draft. Product decisions (§2) are settled by the owner; both
-independent review rounds and the gauge formula are folded into §3. The
-questions in §5 are the only design points left before the work is sliced
-into OpenSpec changes (§6).
+**Status:** Draft — design questions closed, pending team review. Product
+decisions (§2) are settled by the owner; both review rounds, the gauge
+formula and the running counters are folded into §3. Once reviewed, each
+slice in §6 moves to an OpenSpec change.
 **Author:** Maxime Daragon
 **Date:** 2026-10-21
 **Tracking:** #3223 (epic). Prerequisite for blocking: #2528.
@@ -22,7 +22,7 @@ counts are best-effort telemetry and incomplete: `_parse_turn_outcome`
 event only (one `model_name`, no `cache_creation_tokens`), so stopped,
 cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
 `fred_sdk/authoring/api.py:288`, document access) and sub-agent spend
-(#2528) are lost. There is no ledger admission can count against.
+(#2528) are lost. There is no shared count admission can check.
 
 ## 2. Decided
 
@@ -56,9 +56,9 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
   lasts at least 24 h; survives a counters reset.
 - Revocable; visible in the user's gauge; audited (granted/revoked by whom
   and when).
-- The quota tooltip offers **"Request a boost"**, notifying the admins who
-  can grant it: team admins of the team the user is working in, and platform
-  admins. The delivery channel is a slice (b)/(c) detail.
+- Admins grant it from their own pages: the platform admin from the quota
+  page's users table; a team admin from the team "Consommation" page, via a
+  member search with a "+20%" button.
 
 **Who pays**
 - **The authenticated identity decides, not the endpoint.** A person using
@@ -92,8 +92,11 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
 
 **Team "Consommation" view**
 - Extends `TeamUsagePage` (`/team/{id}/usage`), read-only, team admins only.
-- Team totals, breakdown by agent and by model. **No per-member view.**
+- Team totals, breakdown by agent and by model. **No per-member spend.**
   Credits from the ledger; KPI charts labelled as token analytics.
+- **Teams under 3 members: totals hidden** (platform config), so a total
+  cannot be read as one person's spend. The page says: "Totals are hidden
+  for teams with fewer than 3 members, to protect each member's privacy."
 
 **Platform switches** (roll out tracking first, block later)
 - **Usage tracking**: indicator and tooltips, `GET /me/usage` state, team
@@ -105,8 +108,8 @@ cancelled or failed turns, model calls inside tools (`ctx.extract_structured`,
   records spend in every state. Toggling never changes the default,
   overrides or active boosts.
 - Turning either switch on asks: keep counting, or reset counters to 0.
-  Reset deletes no row: it stores `counters_reset_at`, and windows sum only
-  rows after `max(window start, counters_reset_at)`.
+  Reset zeroes every counter row (§3) and stores `counters_reset_at`; the
+  ledger keeps every row.
 
 **Release gate: complete counting before blocking**
 - Blocking can only be enabled once the per-model-call accumulator (§3) is
@@ -156,19 +159,26 @@ segment: `user_id`, `space_kind` (`team` | `personal`), `space_id`,
 - No-person rows are identified by `source` (`service`, `scheduled`, `m2m`),
   with `user_id` null. A deleted user's rows get `user_id` null and
   `user_anonymised = true`, kept so team totals stay correct until retention.
-- Index `(user_id, created_at)`; aggregates by query, safe across replicas
-  (web-research quota pattern).
+- Index `(user_id, created_at)`. The ledger is the history (team view,
+  audit, retention); admission reads the counters below, never the ledger.
 - Credits computed at write with the coefficients in force.
 - Retention: 90 days. KPI analytics keep their own retention.
 - Failed reports retry with the unique key; a metric counts final failures.
 
-**Windows.**
-- Weekly: `sum(credits)` since the last Monday 00:00 Europe/Paris.
-- 5-hour: the window starts when spend is written, i.e. at the first ledger
-  row after the previous window ended, whatever the switch state;
-  `resets_at = window_start + 5h`. Stored as one row per user
-  (`window_started_at`), never in process memory.
-- Both start at `max(window start, counters_reset_at)` when a reset is set.
+**Running counters (control-plane Postgres).** One row per user:
+`window_started_at`, `window_credits` (5-hour) and `week_started_at`,
+`week_credits`. Never in process memory.
+- Each spend report adds to both windows in the same transaction as its
+  ledger insert, in one statement, safe across replicas:
+  `SET window_credits = CASE WHEN window expired THEN x ELSE window_credits + x END, window_started_at = CASE WHEN window expired THEN now() ELSE window_started_at END`
+  (same shape for the week). A retried report that hits the ledger unique
+  key adds nothing.
+- 5-hour: the window starts with the first spend after the previous window
+  ended, whatever the switch state; `resets_at = window_started_at + 5h`.
+  Weekly: starts Monday 00:00 Europe/Paris.
+- Admission is one primary-key read; a missing row or expired window reads as 0.
+- A reset zeroes every row. If counters drift, an admin maintenance job
+  rebuilds them from ledger rows after `max(window start, counters_reset_at)`.
 
 **Effective budget.** `weekly = (override ?? default) + active boost`;
 `five_hour = weekly x fraction`. Settings follow the marketplace publish
@@ -181,8 +191,8 @@ grant where `granted_by == user_id` by a team admin is refused.
 **Admission on every entry point.** A check riding on the `/runtime` binding
 call is not enough: `_resolve_agent_instance` (`agent_app.py:1777`) returns
 early for a direct `request.agent_id`. A dedicated control-plane admission
-call runs on every execute entry point, whatever the switch state (one
-indexed query):
+call runs on every execute entry point, whatever the switch state. It adds
+one primary-key read to the per-turn control-plane call (#3031):
 - `POST /agents/execute` and `/agents/execute/stream`, managed instance and
   direct `agent_id`; `/agents/evaluate`;
 - the OpenAI-compatible router (`openai_compat_router.py:267`);
@@ -212,12 +222,8 @@ refused until the release gate (§2) is met. `PlatformAccessActivationDialog`
 is an eligible-users preview without keep/reset, so the keep/reset choice is
 a new small dialog on the central `Dialog` molecule.
 
-**Team privacy (recommended).** Team totals are hidden for teams below a
-minimum member count (e.g. 3), so a total cannot be read as one person's
-spend.
-
 **Observability.** Audit events for override set/clear, boost
-grant/revoke/request, switch toggles, counters reset. Metrics for blocks,
+grant/revoke, switch toggles, counters reset. Metrics for blocks,
 50/80% warnings, ceiling hits, admission fail-open (with alert), failed
 spend reports, unknown-model coefficients; Grafana panels.
 
@@ -226,7 +232,7 @@ used, budget, `resets_at`, active boost; `tracking`, `blocking`), refetched
 after each turn; once-per-window tooltip state keyed by window start. The
 chat and the OpenAI-compatible client map the 409 `code` to the block
 message. The admin page reuses the `PlatformRolesPage` user search
-(`GET /users`).
+(`GET /users`); the team page searches team members only.
 
 ## 4. Alternatives considered
 
@@ -243,53 +249,47 @@ message. The admin page reuses the `PlatformRolesPage` user search
 - **Exemption by endpoint** (`/agents/evaluate`). Rejected: a bypass.
 - **Fail-closed admission.** Rejected: a ledger outage would stop all chat.
 
-## 5. Open questions (with recommendation)
+## 5. Open questions
 
-1. **Admission cost (#3031).** One more query on every turn's hot path.
-   *Recommendation:* one indexed `sum` over `(user_id, created_at >= week
-   start)` that also yields the 5-hour sum; load test in slice (a); a
-   rolling aggregate row only if the test requires it.
-2. **Team privacy threshold.** Hide team totals below N members.
-   *Recommendation:* N = 3, platform config.
-3. **Boost request delivery.** In-app notification, e-mail, or both.
-   *Recommendation:* in-app notification to team admins of the current team
-   and platform admins, decided in slice (b)/(c).
+None. Implementation details are decided inside each OpenSpec change.
 
 ## 6. Slicing into OpenSpec changes
 
 Each slice is one OpenSpec change linked to #3223:
 
-- **(a) Ledger + accumulator + admission + ceiling** — per-model-call
-  accumulator at the model client, ledger table + migration with `run_id`
-  key, credit formula, exit-path reporting with idempotent retry, fail-open
+- **(a) Ledger + counters + accumulator + admission + ceiling** —
+  per-model-call accumulator at the model client, ledger and counter tables
+  + migration with `run_id` key, credit formula, counter rebuild job, exit-path reporting with idempotent retry, fail-open
   admission on every entry point returning `{admitted, ceiling}`, per-turn
   ceiling, structured 409, switch effects seeded off. Also: migration note
   (minor), chart values + regenerated schemas (coefficients,
   `cache_read_rate`, 5-hour fraction, ceiling, admission timeout, high dev
-  default), audit events, metrics and Grafana panels, load test of the
-  admission query.
+  default), audit events, metrics and Grafana panels.
 - **(b) Platform-admin quota page** — switches (dependencies and release
   gate server-side, keep/reset dialog on `Dialog`), weekly default, 5-hour
-  fraction readout, overrides via user search, boost grant/revoke incl.
-  team-admin scope (once per user per week across teams, no self-boost).
+  fraction readout, users table with overrides and boost grant/revoke;
+  boost API incl. team-admin scope (once per user per week across teams,
+  no self-boost).
 - **(c) Composer indicator** — `GET /me/usage`, indicator with % or icon,
-  once-per-window tooltips, over-quota notice or 100% block, "Request a
-  boost"; fr+en Help Center pages (credits, windows, ceiling at 99%,
+  once-per-window tooltips, over-quota notice or 100% block; fr+en Help
+  Center pages (credits, windows, ceiling at 99%,
   under-count while counting is incomplete, start a new conversation when
   changing topic).
 - **(d) Team "Consommation" view** — ledger totals by agent and model,
-  minimum-member threshold, KPI charts labelled as token analytics.
+  hidden under 3 members with the privacy message, member search with the
+  "+20%" button, KPI charts labelled as token analytics.
 
-Order: (a) → (b) → (c); (d) in parallel once (a) is in. **Release gate:**
-the blocking switch cannot be enabled until the accumulator (incl. #2528)
-is merged.
+Order: (a) → (b) → (c); (d) once (a) and the boost API from (b) are in.
+**Release gate:** blocking cannot be enabled until the accumulator (incl.
+#2528) is merged.
 
 ## 7. Impact on contracts
 
-- `CONTROL-PLANE-PRODUCT-CONTRACT.md`: dated entries for the ledger table,
+- `CONTROL-PLANE-PRODUCT-CONTRACT.md`: dated entries for the ledger and
+  counter tables,
   the spend reporting endpoint, the admission endpoint (`{admitted,
   ceiling}`, 409 `code: user_quota_exhausted`), quota admin endpoints
-  (default, override, boost grant/revoke/request incl. team-admin scope),
+  (default, override, boost grant/revoke incl. team-admin scope),
   the quota settings endpoint (`tracking_enabled`, `blocking_enabled`, 422
   rules, `counters_reset_at`, `on_enable: keep | reset`), `GET /me/usage`,
   and the team usage extension.
