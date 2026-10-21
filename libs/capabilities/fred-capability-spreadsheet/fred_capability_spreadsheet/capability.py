@@ -22,6 +22,7 @@ opens the preview pane, or a plain download chip when the preview is missing.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import uuid
 from collections.abc import Sequence
@@ -73,20 +74,23 @@ _TOOL_DESCRIPTION = (
     "the user asks, in any wording or language, for an Excel file, a spreadsheet, "
     "an .xlsx, or a table to download; never paste a Markdown table instead.\n"
     "Each sheet has typed columns (text, number, integer, percent, currency, date) "
-    "and rows holding exactly one value per column (null for an empty cell). "
-    "Send amounts and numbers as JSON numbers (1234.5), never as text with "
-    "thousands separators or currency symbols. "
-    "Dates are 'YYYY-MM-DD'; percents are fractions (0.15) or strings ('15%'); "
-    "a currency column may set currency (EUR, USD, GBP, CHF, JPY, CNY, CAD, AUD). "
-    "Set total (sum, average, min, max, count) on a column to add a totals row "
-    "computed by Excel; never compute totals yourself. Set language to the "
-    "conversation's language ('fr' or 'en') for the totals label.\n"
+    "and rows holding exactly one value per column (null for an empty cell).\n"
+    "Cells take literal values only, already computed. No formulas: never send "
+    "'=SUM(...)', '=B2/B3' or any '=' expression. Send numbers and amounts as JSON "
+    "numbers (1234.5), never as text with thousands separators or currency "
+    "symbols. Percents go in a percent column as fractions (0.15) or '15%'. "
+    "Dates are 'YYYY-MM-DD'. A currency column may set currency (EUR, USD, GBP, "
+    "CHF, JPY, CNY, CAD, AUD).\n"
+    "For totals or averages, set total (sum, average, min, max, count) on the "
+    "column: Excel adds the totals row. Never add a totals row yourself. Set "
+    "language to the conversation's language ('fr' or 'en') for its label.\n"
     "Limits: 10 sheets, 50 columns, 5000 rows per sheet, 50000 cells. If the data "
     "exceeds a limit, tell the user plainly what the limit is and suggest "
     "splitting the data; never drop rows silently. If the tool returns an error, "
     "fix the input it names and call it again.\n"
-    "Each call creates a new file: to change a file, call the tool again with the "
-    "complete corrected data.\n"
+    "Call this tool once per file. After a successful creation, do not call it "
+    "again for the same file: answer the user. Call it again only to change the "
+    "file, with the complete corrected data.\n"
     "A download button is shown to the user automatically: do not write a link or "
     "URL in your reply, just say briefly what the file contains."
 )
@@ -157,9 +161,20 @@ def _error(message: str) -> tuple[str, ToolInvocationResult]:
     return message, ToolInvocationResult(tool_ref=TOOL_NAME, is_error=True)
 
 
+def _created_text(output_file_name: str) -> str:
+    return (
+        f"The Excel file '{output_file_name}' has a download button in the chat; "
+        "do not write a download link. File created and shown to the user. Do not "
+        "create it again; reply now."
+    )
+
+
 def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
     session_id = ctx.identity.session_id
     services = ctx.services
+    # Tools are built per turn, so this maps the turn's request hashes to the file
+    # already created: a model repeating an identical call gets no second copy.
+    created: dict[str, str] = {}
 
     async def create_spreadsheet(
         file_name: str, sheets: list[SheetSpec], language: str | None = None
@@ -167,6 +182,19 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         request = CreateSpreadsheetInput.model_validate(
             {"file_name": file_name, "sheets": sheets, "language": language}
         )
+        request_key = hashlib.sha256(
+            request.model_copy(
+                update={"file_name": sanitize_file_name(request.file_name)}
+            )
+            .model_dump_json()
+            .encode()
+        ).hexdigest()
+        if request_key in created:
+            logger.info("[SPREADSHEET] identical repeat call skipped")
+            return (
+                _created_text(created[request_key]),
+                ToolInvocationResult(tool_ref=TOOL_NAME),
+            )
         workspace = services.workspace_fs
         if workspace is None:
             logger.error("[SPREADSHEET] workspace_fs is not available on this runtime")
@@ -221,12 +249,9 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             len(request.sheets),
             len(content),
         )
+        created[request_key] = output_file_name
         return (
-            (
-                f"The Excel file '{output_file_name}' was created. A download button "
-                "is shown to the user automatically; do not write a download link "
-                "yourself."
-            ),
+            _created_text(output_file_name),
             ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,)),
         )
 

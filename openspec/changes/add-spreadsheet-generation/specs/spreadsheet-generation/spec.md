@@ -56,12 +56,17 @@ When a column declares a total (`sum`, `average`, `min`, `max`, `count`), the sy
 
 ### Requirement: Invalid input is returned to the model
 
-The system SHALL reject invalid input with an error tool result that names the sheet, row and column at fault, and SHALL NOT write any file in that case. Invalid input includes an empty, duplicated, over-31-character or reserved (`History`) sheet name, a name containing `[ ] : * ? / \` or control characters, a row whose length differs from the column count, a value that cannot be converted to its column type, a non-finite number, and a number whose lone comma could separate thousands or decimals (`"1,234"`). Control characters in cells and headers SHALL be removed, never raised as an error.
+The system SHALL reject invalid input with an error tool result that names the sheet, row and column at fault, and SHALL NOT write any file in that case. Invalid input includes an empty, duplicated, over-31-character or reserved (`History`) sheet name, a name containing `[ ] : * ? / \` or control characters, a row whose length differs from the column count, a value that cannot be converted to its column type, a non-finite number, a formula (any `=` value in a number, integer, percent or currency column, or a text cell such as `=SUM(B2:B6)` or `=B2/B3` that calls a function or references a cell), and a number whose lone comma could separate thousands or decimals (`"1,234"`). Control characters in cells and headers SHALL be removed, never raised as an error.
 
 #### Scenario: Row length mismatch
 
 - **WHEN** the model sends a row with four values for a three-column sheet
-- **THEN** the tool returns an error naming the sheet and row, no file is written, and the model can call the tool again in the same turn
+- **THEN** the tool returns an error naming the sheet and row with the expected and received value counts, no file is written, and the model can call the tool again in the same turn
+
+#### Scenario: Formula sent as a cell value
+
+- **WHEN** the model sends `=B2/SUM($B$2:$B$6)` in a percent column
+- **THEN** the tool returns an error saying formulas are not accepted, asking for the computed value and pointing to the column `total` for sums and averages, and no file is written
 
 #### Scenario: Ambiguous number
 
@@ -85,13 +90,28 @@ The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 
 
 ### Requirement: Generated workbooks run no code
 
-The system SHALL write `.xlsx` only (never macro-enabled formats), SHALL write formulas only in the totals row it generates, and SHALL store any text cell starting with `=`, `+`, `-`, `@`, tab or carriage return as literal text.
+The system SHALL write `.xlsx` only (never macro-enabled formats), SHALL write formulas only in the totals row it generates, and SHALL store any accepted text cell starting with `=`, `+`, `-`, `@`, tab or carriage return as literal text.
 
 #### Scenario: Data that looks like a formula
 
-- **GIVEN** a text cell `=HYPERLINK("http://example.test","x")`
+- **GIVEN** a text cell `=== Section ===` or `@SUM(A1)`
 - **WHEN** the workbook is generated
 - **THEN** the cell holds that literal string and no formula
+
+### Requirement: A created file is not created again
+
+The tool description SHALL tell the model to call the tool once per file and to answer the user after a successful creation, and the success result SHALL end with "File created and shown to the user. Do not create it again; reply now." Within one turn, a call identical to one that already created a file (same sanitized file name, sheets and language) SHALL return the first call's text without writing a new file or adding a new card.
+
+#### Scenario: Model repeats a successful call
+
+- **GIVEN** a turn in which `create_spreadsheet` created `Budget T3.xlsx`
+- **WHEN** the model calls it again with the same data
+- **THEN** no second file is written, no second card is shown, and the result tells the model to reply now
+
+#### Scenario: Model corrects the file
+
+- **WHEN** the model calls the tool again in the same turn with changed rows
+- **THEN** a new file and card are created
 
 ### Requirement: Authors enable it from the agent form
 
