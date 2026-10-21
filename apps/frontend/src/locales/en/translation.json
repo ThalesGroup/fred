@@ -2299,7 +2299,10 @@
       "home": "Home",
       "marketplace": "Marketplace",
       "helpCenter": "Help Center",
-      "adminConsole": "Technical console"
+      "adminConsole": "Technical console",
+      "notifications": "Notifications",
+      "notificationsUnseen_one": "Notifications, {{count}} unseen",
+      "notificationsUnseen_other": "Notifications, {{count}} unseen"
     },
     "profileMenu": {
       "contactSupport": "Contact support",
@@ -4301,6 +4304,40 @@
         "marketplace_entry_not_found": "This agent is not published.",
         "marketplace_runtime_unavailable": "The service running this agent cannot be reached. The published version is unchanged; try again later.",
         "marketplace_capability_not_exportable": "The capability \"{{capability}}\" cannot be prepared for the marketplace. The published version is unchanged."
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "clearAll": "Clear all",
+      "close": "Close notifications",
+      "loadMore": "Show more",
+      "loadError": "Your notifications could not be loaded.",
+      "unread": "Unread",
+      "delete": "Delete the notification “{{title}}”",
+      "empty": {
+        "title": "No notifications",
+        "description": "You will be told here when something needs you."
+      },
+      "handled": "Handled",
+      "handledBy": "Handled by {{name}}",
+      "handledRemoved": "Resolved: the agent left the marketplace",
+      "actions": {
+        "openAgent": "Open the agent"
+      },
+      "types": {
+        "republishNeeded": {
+          "title": "Published agent changed",
+          "body": "{{editor}} changed “{{agent}}” in {{team}}. Republish it to update the marketplace version.",
+          "bodyNoTeam": "{{editor}} changed “{{agent}}”. Republish it to update the marketplace version."
+        },
+        "marketplaceRemoved": {
+          "title": "Agent removed from the marketplace",
+          "body": "“{{agent}}” ({{team}}) is no longer on the marketplace. {{reason}}",
+          "bodyNoTeam": "“{{agent}}” is no longer on the marketplace. {{reason}}"
+        },
+        "unknown": {
+          "title": "Notification"
+        }
       }
     }
   },
