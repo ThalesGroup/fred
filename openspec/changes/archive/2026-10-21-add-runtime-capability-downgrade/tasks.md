@@ -12,4 +12,4 @@
 ## 3. Review and delivery
 
 - [x] 3.1 Run the required focused tests and root quality gate, apply the branch audit with independent read-only review, and record results in the PR.
-- [ ] 3.2 Reconcile and sync the OpenSpec change, then commit, push and open the draft PR for issue #3224; verify its target is `swift` and it remains a draft.
+- [x] 3.2 Reconcile and sync the OpenSpec change, then commit, push and open the draft PR for issue #3224; verify its target is `swift` and it remains a draft.
