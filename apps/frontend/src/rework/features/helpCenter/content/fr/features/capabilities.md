@@ -128,7 +128,10 @@ fichier Excel que vous téléchargez depuis le chat. Chaque feuille a une ligne
 d'en-tête qui reste visible et sert de filtre ; les colonnes sont mises en
 forme en texte, nombres, pourcentages, montants avec leur devise ou dates au
 format de votre ordinateur. L'agent peut ajouter une ligne de totaux calculée
-par Excel (somme, moyenne, minimum, maximum, nombre). Chaque demande produit un
+par Excel (somme, moyenne, minimum, maximum, nombre), ainsi que des colonnes
+calculées ligne par ligne à partir d'autres colonnes, avec de vraies formules
+Excel : addition, soustraction, multiplication, division ou part du total (par
+exemple « une colonne TTC égale à HT × 1,2 »). Chaque demande produit un
 nouveau fichier : pour en modifier un, demandez-le à l'agent, qui en écrit une
 copie corrigée à côté de la précédente.
 
