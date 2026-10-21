@@ -19,18 +19,18 @@ import asyncio
 import json
 import logging
 import os
-import re
 import sys
 import threading
 
 from fred_pod.common.config_files import flush_startup_logs
 from fred_pod.common.structures import LogOutputFormat
 
-from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
+from fred_core.logs.base_log_store import BaseLogStore
 from fred_core.logs.log_structures import (
     AUDIT_LOGGER_NAME,
     KPI_LOGGER_NAME,
     LogCategory,
+    LogEventDTO,
 )
 from fred_core.logs.processors import (
     ContextSnapshotFilter,
@@ -38,6 +38,10 @@ from fred_core.logs.processors import (
     install_context_capture,
     output_formatter,
 )
+from fred_core.logs.redaction import (
+    sanitize_sensitive_query_params as _sanitize_sensitive_query_params,
+)
+from fred_core.logs.reported_exceptions import AlreadyReportedExceptionFilter
 
 logger = logging.getLogger(__name__)
 
@@ -191,27 +195,6 @@ class UvicornWebsocketNoiseFilter(logging.Filter):
         return msg not in {"connection open", "connection closed"}
 
 
-_SENSITIVE_QUERY_PARAM_RE = re.compile(
-    r"([?&](?:token|access_token|id_token)=)[^&\s\"]+",
-    re.IGNORECASE,
-)
-
-
-def _sanitize_sensitive_query_params(value: str) -> str:
-    value = re.sub(
-        r"((?:/platform-access/free/|/join/))[^/?\s\"]+", r"\1<redacted>", value
-    )
-    return _SENSITIVE_QUERY_PARAM_RE.sub(r"\1<redacted>", value)
-
-
-def _delegation_in_use() -> bool:
-    # Local import avoids coupling logging module import order to security/audit
-    # initialization, which itself imports the logging package.
-    from fred_core.security.delegation import get_delegation_config
-
-    return get_delegation_config().in_use
-
-
 def _clear_unrestricted_diagnostic_details(record: logging.LogRecord) -> None:
     record.__dict__.pop("message", None)
     record.exc_info = None
@@ -235,47 +218,6 @@ class UvicornSensitiveQueryFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        delegation_in_use = _delegation_in_use()
-        if delegation_in_use or (
-            record.name != "uvicorn.access"
-            and (record.levelno >= logging.WARNING or record.exc_info is not None)
-        ):
-            if record.name == "uvicorn.access":
-                method = None
-                status = None
-                if isinstance(record.args, tuple) and len(record.args) >= 5:
-                    method = record.args[1]
-                    status = record.args[4]
-                if method not in {
-                    "GET",
-                    "POST",
-                    "PUT",
-                    "PATCH",
-                    "DELETE",
-                    "HEAD",
-                    "OPTIONS",
-                }:
-                    method = "OTHER"
-                if not isinstance(status, int) or not 100 <= status <= 599:
-                    status = None
-                # Uvicorn writes the access line when the response starts.
-                record.msg = (
-                    "access event=request outcome=responded method=%s status=%s"
-                )
-                record.args = (method, status)
-            else:
-                outcome = (
-                    "failed"
-                    if record.levelno >= logging.ERROR or record.exc_info
-                    else "observed"
-                )
-                record.msg = "server event=uvicorn outcome=%s reason=%s"
-                record.args = (
-                    outcome,
-                    "server_error" if outcome == "failed" else "lifecycle",
-                )
-            _clear_unrestricted_diagnostic_details(record)
-            return True
         if isinstance(record.msg, str):
             record.msg = _sanitize_sensitive_query_params(record.msg)
 
@@ -407,6 +349,7 @@ def log_setup(
                 if not isinstance(
                     f,
                     (
+                        AlreadyReportedExceptionFilter,
                         UvicornAccessProbeFilter,
                         UvicornSensitiveQueryFilter,
                         UvicornWebsocketNoiseFilter,
@@ -418,6 +361,8 @@ def log_setup(
                 lg.addFilter(UvicornAccessProbeFilter(("/healthz", "/ready")))
                 # The ASGI completion event owns HTTP access, including streams.
                 lg.disabled = True
+            if name == "uvicorn.error":
+                lg.addFilter(AlreadyReportedExceptionFilter())
             lg.addFilter(UvicornSensitiveQueryFilter())
             lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers
