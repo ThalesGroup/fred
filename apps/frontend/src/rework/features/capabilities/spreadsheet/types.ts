@@ -22,7 +22,6 @@ export interface SpreadsheetPreviewPartData {
   type: "spreadsheet_preview";
   /** Storage key of the `.xlsx`; unique per created file. */
   preview_id: string;
-  title: string;
   file_name: string;
   /** Bearer-protected `/fs/download` hrefs: fetch them with the Authorization header. */
   xlsx_download_url: string;
@@ -49,7 +48,7 @@ export interface SpreadsheetSheet {
   rows: SpreadsheetCell[][];
   /** Rows in the file, which can exceed `rows.length`. */
   row_count: number;
-  /** Computed totals row (the label cell holds "Total"), or null. */
+  /** Computed totals row (the label cell names its functions), or null. */
   totals: SpreadsheetCell[] | null;
 }
 
