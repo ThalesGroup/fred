@@ -27,7 +27,7 @@ import math
 import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Context, Decimal
 from typing import Literal, cast
 
 from openpyxl import Workbook
@@ -119,6 +119,8 @@ _OP_ALIASES = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide"}
 _OP_SYMBOLS = {"add": "+", "subtract": "-", "multiply": "*", "divide": "/"}
 NUMERIC_TYPES = ("number", "integer", "percent", "currency")
 MAX_ROUND_DECIMALS = 10
+# Enough digits for any finite float plus MAX_ROUND_DECIMALS: quantize never overflows.
+_ROUND_CONTEXT = Context(prec=400)
 _NUMERIC_JUNK = re.compile(r"[\s  _$€£¥]")
 # "1,234" reads as 1234 in English and 1.234 in French: refuse to guess.
 _AMBIGUOUS_COMMA = re.compile(r"^[+-]?\d{1,3},\d{3}$")
@@ -751,7 +753,11 @@ def _apply(
     if plan.decimals is not None:
         # Excel's ROUND rounds halves away from zero, unlike Python's round().
         step = Decimal(1).scaleb(-plan.decimals)
-        result = float(Decimal(repr(result)).quantize(step, rounding=ROUND_HALF_UP))
+        result = float(
+            Decimal(repr(result)).quantize(
+                step, rounding=ROUND_HALF_UP, context=_ROUND_CONTEXT
+            )
+        )
     return result
 
 
