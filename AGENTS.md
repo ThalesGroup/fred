@@ -64,6 +64,17 @@ its useful contracts and resolving consumers. These reconstruction-specific rule
 supersede conflicting legacy planning/archive rules below; they do not authorize
 unrequested tests, commits, publication, resets or unrelated archive deletion.
 
+## Architecture writing requires an agreed scope
+
+Before filling or substantially rewriting an arc42 section, agree its reader's
+question, scope and short outline with Dimi. A request for an exact correction
+already authorizes it; do not ask again. Otherwise leave the section empty rather
+than synthesize filler. A request for a complete dossier is not permission to
+invent its editorial content. A system overview explains purpose, actors, boundary
+and principal responsibilities, not local deployment details or storage inventory.
+Keep journeys, data models, operations and decisions in their respective homes.
+This rule overrides automatic documentation-completion instructions below.
+
 ## Locating reconstruction code and documentation
 
 For a question about the reconstructed user journey, start with the

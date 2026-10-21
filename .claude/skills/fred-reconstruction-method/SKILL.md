@@ -64,10 +64,32 @@ is absent. Dependencies necessary to exercise the slice cannot be silently exclu
 
 ## Build the future corpus in arc42
 
-Keep the main reading path about people: actor, prerequisites, action, visible
-result, denied actions and retained data. Technical detail goes in linked references.
-No empty chapter scaffolding, aspirational capabilities or generic architecture prose
-as a substitute for a verified explanation.
+### Agree the editorial intent before filling a section
+
+Do not populate or substantially rewrite an architecture section merely because its
+heading exists or a request asks for a complete dossier. First propose to Dimi the
+reader's question, intended scope and a short outline; wait for agreement before
+writing its body. An explicit request for a specific correction already authorizes
+that correction: do not ask again. Leave an unagreed section empty rather than fill
+it with generic prose, implementation inventory or a placeholder explanation.
+This rule takes precedence over automatic documentation-completion requirements.
+
+Each section answers its own question at one level of detail:
+
+- **System overview**: what the system is for, whom it serves, its boundary, principal
+  responsibilities and interactions with its environment. Do not substitute a local
+  deployment table, runtime command, component inventory or list of databases.
+- **User journey**: actor, prerequisites, actions, visible results and refusal cases.
+- **Data model**: entities, meaning, relationships, constraints and ownership.
+- **Operations/deployment**: environments, configuration, commands and topology.
+- **Design decisions**: the question, chosen solution, reasons and consequences.
+
+A true statement is not automatically relevant to a section. Exclude detail that
+does not answer its reader's question; link to its proper home only where useful.
+Avoid filler such as "the frontend exposes journeys" or "PostgreSQL holds data".
+Use precise domain statements supported by evidence. Do not replace absent product
+intent with guesses derived from the current implementation. If intent is unclear,
+ask Dimi. Correctness, relevance and placement all matter; word count does not.
 
 Reuse the existing dossier, not a second architecture tree. Give these three views
 separate, explicitly labelled homes within arc42:

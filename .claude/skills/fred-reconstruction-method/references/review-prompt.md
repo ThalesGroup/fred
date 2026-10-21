@@ -19,6 +19,10 @@ not as implicit permission to fix, deploy, reset or publish.
 > paths. Do not demand future features or invent their UI. A successful build or a
 > test name is not proof that a user journey works.
 >
+> Check that each arc42 section answers its own reader question at the proper
+> level. A system overview is not a deployment inventory. Unagreed sections must
+> remain empty; request editorial agreement before filling or substantially
+> rewriting them. Do not award completeness for generic filler.
 > Check that arc42 describes the actual journey in plain language, precisely
 > documents every relevant SQL table and authority boundary, and links each feature
 > to its source. Keep proposed features and open design choices explicitly separate

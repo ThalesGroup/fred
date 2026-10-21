@@ -7,7 +7,6 @@ Read the journeys first, then follow the relevant domain chapter.
 
 | Chapter | Reader's question |
 | --- | --- |
-| [1. System overview](01-system-overview.md) | What makes up Fred, and where are its boundaries? |
 | [2. User journeys](02-user-journeys.md) | How do the architectural rules work together in practice? |
 | [Document journey: Priya ingests a PDF](02a-document-journey.md) | What happens to one document, and how do we inspect each store? |
 | [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |

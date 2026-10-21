@@ -72,6 +72,13 @@ Rust path, affected consumer or Python reference, arc42 contract, verification a
 unreviewed boundary. Derive the feature inventory from the current checkout; do not
 freeze it to an old list of completed lots. Empty arc42 headings make no claim.
 
+Review editorial fitness as well as factual accuracy. A system overview must explain
+the system's purpose, actors, boundary and principal responsibilities; a correct
+local deployment inventory does not satisfy it. Apply the companion method's
+section-approval rule: unagreed sections stay empty. Flag a missing explanation
+without generating replacement prose or treating filler as completion. Separate
+user journeys, data models, operations and design decisions instead of mixing them.
+
 Check agreement in both directions: documented guarantees must hold in code, and
 implemented behavior/limitations must be explained in the relevant arc42 chapter.
 Inspect generated references and the tests behind invariant markers; a generated
