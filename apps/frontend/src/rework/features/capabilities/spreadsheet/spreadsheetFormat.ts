@@ -15,7 +15,7 @@
 // Locale-aware display of preview cells, close to what Excel shows for the
 // number formats the backend wrote (fixed decimals, currency symbol, percent).
 
-import type { SpreadsheetCell, SpreadsheetColumn } from "./types";
+import type { SpreadsheetCell, SpreadsheetColumn, SpreadsheetSheet } from "./types";
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -55,4 +55,34 @@ export function formatTotal(value: SpreadsheetCell, column: SpreadsheetColumn, l
   if (column.total === "count") return new Intl.NumberFormat(locale).format(value);
   if (column.total === "average" && column.type === "integer") return formatNumber(value, locale, column, 2);
   return formatCell(value, column, locale);
+}
+
+/** Excel column letters: 0 → A, 25 → Z, 26 → AA. */
+export function columnLetter(index: number): string {
+  let letters = "";
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    letters = String.fromCharCode(65 + ((n - 1) % 26)) + letters;
+  }
+  return letters;
+}
+
+const MIN_WIDTH = 6;
+const MAX_WIDTH = 60;
+
+export interface ColumnLayout {
+  /** Width in characters, the unit Excel column widths use. */
+  width: number;
+  /** A text column longer than the widest column wraps instead of cutting. */
+  wrap: boolean;
+}
+
+/** Same rule as the workbook writer (longest value + 2, capped), measured on the preview rows. */
+export function columnLayouts(sheet: SpreadsheetSheet, locale: string): ColumnLayout[] {
+  return sheet.columns.map((column, index) => {
+    let longest = column.header.length;
+    for (const row of sheet.rows) longest = Math.max(longest, formatCell(row[index], column, locale).length);
+    if (sheet.totals) longest = Math.max(longest, formatTotal(sheet.totals[index], column, locale).length);
+    const width = Math.min(Math.max(longest + 2, MIN_WIDTH), MAX_WIDTH);
+    return { width, wrap: column.type === "text" && longest + 2 > MAX_WIDTH };
+  });
 }

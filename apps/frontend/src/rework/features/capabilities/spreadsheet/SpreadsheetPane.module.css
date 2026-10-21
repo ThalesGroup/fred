@@ -52,87 +52,227 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-s);
   min-height: 0;
 }
 
-.tabs {
-  flex-shrink: 0;
-  overflow-x: auto;
+.view,
+.sheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
-/* Both scroll axes stay inside the table well; the header row and first column stick. */
-.tableScroll {
-  flex: 1;
+/* Name box with the selected address, then the cell's full content. */
+.formulaBar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  font: var(--font-body-small);
+}
+
+.nameBox {
+  flex-shrink: 0;
+  box-sizing: border-box;
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-xs);
+  padding: 0 var(--spacing-2xs);
+  min-width: 7ch;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.cellValue {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The only scroll area: headings and the workbook header row stay frozen in it. */
+.gridScroll {
+  flex: 1;
   background-color: var(--surface-container);
   min-height: 0;
   overflow: auto;
 }
 
-.table {
+.grid {
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 100%;
+  table-layout: fixed;
   color: var(--on-surface);
   font: var(--font-body-small);
   font-variant-numeric: tabular-nums;
 }
 
-.table th,
-.table td {
+.grid th,
+.grid td {
+  box-sizing: border-box;
+  border-right: 1px solid var(--outline-muted);
   border-bottom: 1px solid var(--outline-muted);
   background-color: var(--surface-container);
-  padding: var(--spacing-2xs) var(--spacing-xs);
-  max-width: 20rem;
+  padding: var(--spacing-3xs) var(--spacing-2xs);
   overflow: hidden;
+  font: inherit;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  border-bottom-color: var(--outline-variant);
-  color: var(--on-surface);
-  font: var(--font-label-medium);
-}
-
-.table th:first-child,
-.table td:first-child {
-  position: sticky;
-  left: 0;
-  border-right: 1px solid var(--outline-muted);
-}
-
-.table th:first-child {
-  z-index: 2;
-}
-
-.table .number {
+.grid .number {
   text-align: right;
 }
 
-.totals td {
-  border-top: 1px solid var(--outline-variant);
-  border-bottom: none;
+.grid .wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.grid .selected {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* Excel headings: column letters on top, row numbers on the left. */
+.grid .colHead,
+.grid .rowHead,
+.grid .corner {
+  border-color: var(--outline-variant);
+  background-color: var(--surface-container-highest);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-align: center;
+}
+
+.grid .headActive {
+  background-color: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.letters td {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: var(--spacing-l);
+}
+
+.headerRow > * {
+  position: sticky;
+  top: var(--spacing-l);
+  z-index: 2;
+}
+
+.grid .headerRow th {
+  background-color: var(--surface-container-high);
   font: var(--font-body-small-emphasized);
 }
 
-.note,
-.state {
+.grid .rowHead {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.grid .corner,
+.grid .headerRow .rowHead {
+  z-index: 3;
+}
+
+.corner {
+  left: 0;
+}
+
+.grid .totals td,
+.grid .totals th {
+  border-top: 1px solid var(--outline);
+  font: var(--font-body-small-emphasized);
+}
+
+.grid .totals .rowHead {
+  font: var(--font-label-small);
+}
+
+.note {
+  flex-shrink: 0;
   margin: 0;
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-s);
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-  text-align: center;
+}
+
+/* Fixed bottom strip, like Excel's sheet tabs. */
+.tabStrip {
+  display: flex;
+  flex-shrink: 0;
+  align-items: stretch;
+  border-top: 1px solid var(--outline-variant);
+  background-color: var(--surface-container-high);
+}
+
+.tabArrows {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-right: 1px solid var(--outline-muted);
+  padding: 0 var(--spacing-3xs);
+}
+
+.tabList {
+  display: flex;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabList::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  border-right: 1px solid var(--outline-muted);
+  border-bottom: 2px solid transparent;
+  background: none;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  background-color: var(--surface-container-highest);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.tabActive {
+  border-bottom-color: var(--primary);
+  background-color: var(--surface-container);
+  color: var(--primary);
+  font: var(--font-label-medium-emphasized);
+}
+
+.tabActive:hover {
+  background-color: var(--surface-container);
 }
 
 .state {
   display: flex;
   justify-content: center;
-  margin-top: var(--spacing-l);
+  margin: var(--spacing-l) var(--spacing-s) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-align: center;
 }

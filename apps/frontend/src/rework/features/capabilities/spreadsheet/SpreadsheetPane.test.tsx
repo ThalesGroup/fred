@@ -103,50 +103,113 @@ afterEach(async () => {
   container.remove();
 });
 
+const cells = (selector: string) => [...container.querySelectorAll(selector)].map(text);
+
+// happy-dom has no layout: fake the tab strip being narrower than its tabs.
+function fakeOverflow(clientWidth: number, scrollWidth: number) {
+  const owner = (name: string) => {
+    let proto: object | null = HTMLElement.prototype;
+    while (proto && !Object.getOwnPropertyDescriptor(proto, name)) proto = Object.getPrototypeOf(proto);
+    return (proto ?? HTMLElement.prototype) as HTMLElement;
+  };
+  vi.spyOn(owner("clientWidth"), "clientWidth", "get").mockReturnValue(clientWidth);
+  vi.spyOn(owner("scrollWidth"), "scrollWidth", "get").mockReturnValue(scrollWidth);
+}
+
 describe("SpreadsheetPane", () => {
-  it("shows the file name, the download button and one tab per sheet", async () => {
+  it("shows the file name, the download button and the sheet tabs below the grid", async () => {
     await render();
     expect(container.textContent).toContain("Q3 budget.xlsx");
     expect(container.textContent).toContain("download");
-    const tabs = [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
-    expect(tabs).toEqual(["Budget", "Detail"]);
+    expect(cells('[role="tab"]')).toEqual(["Budget", "Detail"]);
+    const tablist = container.querySelector('[role="tablist"]')!;
+    const table = container.querySelector("table")!;
+    expect(table.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(
+      container.querySelector('[role="tab"][aria-selected="true"]')?.id,
+    );
+  });
+
+  it("frames the grid with column letters and row numbers, the workbook header as row 1", async () => {
+    await render();
+    expect(cells("thead tr:first-child td")).toEqual(["", "A", "B", "C", "D"]);
+    expect(cells('thead th[scope="col"]')).toEqual(["Line", "Amount", "Rate", "Due"]);
+    expect(cells('th[scope="row"]')).toEqual(["1", "2", "3", "4"]);
   });
 
   it("formats currency, percent and dates in the user's locale and aligns numbers right", async () => {
     await render();
-    const cells = [...container.querySelectorAll("tbody tr:first-child td")];
-    expect(cells.map(text)).toEqual(["Rent", "€1,200.00", "12.5%", "01/31/2026"]);
-    expect(cells[0].className).toBe("");
-    expect(cells[1].className).not.toBe("");
+    const first = [...container.querySelectorAll("tbody tr:first-child td")];
+    expect(first.map(text)).toEqual(["Rent", "€1,200.00", "12.5%", "01/31/2026"]);
+    expect(first[0].className).toBe("");
+    expect(first[1].className).not.toBe("");
 
     await act(async () => root.unmount());
     root = createRoot(container);
     state.language = "fr";
     await render();
-    const fr = [...container.querySelectorAll("tbody tr:first-child td")].map(text);
-    expect(fr).toEqual(["Rent", "1 200,00 €", "12,5 %", "31/01/2026"]);
+    expect(cells("tbody tr:first-child td")).toEqual(["Rent", "1 200,00 €", "12,5 %", "31/01/2026"]);
   });
 
-  it("renders the totals row in the table footer", async () => {
+  it("renders the totals row last, with its row number in the file", async () => {
     await render();
-    const totals = [...container.querySelectorAll("tfoot td")].map(text);
-    expect(totals).toEqual(["Total", "€1,550.50", "", ""]);
+    expect(cells("tfoot td")).toEqual(["Total", "€1,550.50", "", ""]);
+    expect(cells("tfoot th")).toEqual(["4"]);
   });
 
-  it("switches sheet and says how many rows the preview leaves out", async () => {
+  it("shows the address and content of the clicked cell in the name box", async () => {
+    await render();
+    expect(cells("output")).toEqual(["A1"]);
+    const amount = container.querySelectorAll<HTMLElement>("tbody tr:nth-child(2) td")[1];
+    await act(async () => amount.click());
+    expect(cells("output")).toEqual(["B3"]);
+    expect(text(container.querySelector("output + span"))).toBe("€350.50");
+  });
+
+  it("switches sheet from the bottom tabs, by click or keyboard, and says how many rows are left out", async () => {
     await render();
     expect(container.textContent).not.toContain("capability.spreadsheet.moreRows");
-    const detail = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')][1];
+    const [budget, detail] = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     await act(async () => detail.click());
     expect(text(container.querySelector("tbody td"))).toBe("3");
     expect(container.querySelector("tfoot")).toBeNull();
     expect(text(container)).toContain("capability.spreadsheet.moreRows:1,519");
+
+    await act(async () => detail.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })));
+    expect(budget.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(budget);
+    expect(text(container.querySelector("tbody td"))).toBe("Rent");
   });
 
-  it("shows no tabs for a single sheet", async () => {
+  it("keeps one tab for a single sheet and no scroll arrows when the tabs fit", async () => {
     state.load = { status: "ready", preview: { ...preview, sheets: [preview.sheets[0]] } };
     await render();
-    expect(container.querySelector('[role="tab"]')).toBeNull();
+    expect(cells('[role="tab"]')).toEqual(["Budget"]);
+    expect(container.querySelector('[aria-label="capability.spreadsheet.nextSheets"]')).toBeNull();
+  });
+
+  it("shows tab scroll arrows, disabled at the ends, when the tabs overflow", async () => {
+    fakeOverflow(100, 300);
+    try {
+      await render();
+      const prev = container.querySelector<HTMLButtonElement>('[aria-label="capability.spreadsheet.previousSheets"]')!;
+      const next = container.querySelector<HTMLButtonElement>('[aria-label="capability.spreadsheet.nextSheets"]')!;
+      expect(prev.disabled).toBe(true);
+      expect(next.disabled).toBe(false);
+
+      const list = container.querySelector<HTMLElement>('[role="tablist"]')!;
+      const scrollBy = vi.fn();
+      list.scrollBy = scrollBy;
+      await act(async () => next.click());
+      expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ left: 60 }));
+
+      Object.defineProperty(list, "scrollLeft", { configurable: true, value: 200 });
+      await act(async () => list.dispatchEvent(new Event("scroll")));
+      expect(prev.disabled).toBe(false);
+      expect(next.disabled).toBe(true);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it("falls back to an unavailable message when the preview cannot load", async () => {
