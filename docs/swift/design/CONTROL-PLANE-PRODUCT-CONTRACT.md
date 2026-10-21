@@ -4890,6 +4890,53 @@ the ids in `admins` that still hold `pending_team_admin` only. Filled by the
 team listings that resolve membership (their `admins` include nominees);
 empty on the single-team projection, whose `admins` are accepted admins only.
 
+## 68. Contract Notes — in-app notifications (2026-10-22, #3232)
+
+**Routes.** Caller-scoped, `authenticated` only; the recipient is the token's
+uid, and another user's id answers 404. No route creates a notification:
+control-plane services compute the recipients.
+
+| Route                                    | Body / query                          | Response              |
+| ---------------------------------------- | ------------------------------------- | --------------------- |
+| `GET /notifications/summary`             | —                                     | `NotificationSummary` |
+| `GET /notifications`                     | `limit` 1-50 (default 50), `before`   | `NotificationPage`    |
+| `POST /notifications/seen`               | `MarkNotificationsSeenRequest.up_to`  | `NotificationSummary` |
+| `POST /notifications/{notification_id}/read` | —                                 | 204                   |
+| `DELETE /notifications/{notification_id}` | —                                    | 204                   |
+| `DELETE /notifications`                  | —                                     | 204 (clear all)       |
+
+`NotificationPage.items` is a union discriminated by `type`
+(`agent.republish_needed`, `agent.marketplace_removed`), each with its own
+payload model; `next_cursor` is opaque and goes back as `before` (a malformed
+one is 422). `seen` marks the caller's rows created at or before `up_to`, so a
+later arrival still badges; `read` also marks the row seen. A handled row
+carries `handled_at`, `handled_by_name` and `handled_outcome`
+(`republished`, `removed`). Rows are never text: the frontend renders type and
+payload.
+
+**Emission.** `NotificationService.notify`/`notify_many`/`resolve`, called
+after the triggering commit, best effort: a failure logs ids only and counts
+`notifications.emit_failed_total`, never failing the action. An open row of the
+same recipient and `group_key` gets the new payload and keeps its seen and
+read state. `resolve` deletes the actor's own open rows and marks the others
+handled.
+
+**Marketplace.** `agent_marketplace_entry.published_by` (nullable uid) is
+written on every publish and republish; older entries have none and notify
+nobody. A save by another editor that leaves a Published entry Modified sends
+`agent.republish_needed` to the publisher (group `agent_republish:<entry_id>`),
+resolved by a republish or any removal. Entering the Removed state (platform
+admin, deactivation, suspension, team made private, switch-off) sends
+`agent.marketplace_removed` with the reason and message, unless the actor is
+the publisher; a removal by the team (Dismissed) sends nothing.
+
+**Retention.** `expires_at = created_at + 30 days`; every read filters it. The
+lifecycle tick (Temporal `LifecycleManagerWorkflow` and memory
+`POST /lifecycle/run-once`) deletes expired rows in batches of 1000 within 30
+s; `LifecycleManagerResult.notifications` reports `deleted` and `batches`.
+Deleting a user deletes their rows; deleting a team deletes the rows carrying
+its `team_id`. Full behavior: OpenSpec `add-in-app-notifications`.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation
