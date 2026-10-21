@@ -91,6 +91,9 @@ _TOOL_DESCRIPTION = (
     "Call this tool once per file. After a successful creation, do not call it "
     "again for the same file: answer the user. Call it again only to change the "
     "file, with the complete corrected data.\n"
+    "If you are a sub-agent working for another agent, do not call this tool: "
+    "return the data (as a compact table or JSON) to the agent that delegated to "
+    "you; that agent creates one workbook for the user.\n"
     "A download button is shown to the user automatically: do not write a link or "
     "URL in your reply, just say briefly what the file contains."
 )
