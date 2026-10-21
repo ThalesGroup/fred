@@ -175,6 +175,7 @@ const selectStatus = (status: string) => {
 it("filters complete history from the first page", () => {
   hooks.total = 50;
   render();
+  expect(hooks.query.mock.lastCall?.[1]).toEqual({ refetchOnMountOrArgChange: true });
   act(() => document.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
   expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ offset: 25, status: undefined });
   selectStatus("expired");
@@ -297,15 +298,13 @@ it("keeps history available while Free is suspended and prevents link creation",
   );
 });
 
-it("refreshes the link access notice when the team's setting changes elsewhere", () => {
+it("refreshes the link access setting when the manager opens", () => {
   render();
-  expect(hooks.teamQuery).toHaveBeenCalledWith(undefined, {
-    refetchOnMountOrArgChange: true,
-    pollingInterval: 30000,
-  });
+  expect(hooks.teamQuery).toHaveBeenCalledWith(undefined, { refetchOnMountOrArgChange: true });
   expect(document.querySelector(`.${styles.linkSuspendedNotice}`)).toBeNull();
   hooks.teamFree = false;
   hooks.linkStatus = "suspended";
+  act(() => root.render(null));
   render();
   expect(document.querySelector(`.${styles.linkSuspendedNotice}`)).not.toBeNull();
   expect(button("createLink").disabled).toBe(true);
@@ -360,6 +359,7 @@ it("shows successful joiners on a revoked link with bounded pages", () => {
     offset: 0,
     limit: 25,
   });
+  expect(hooks.joinerQuery.mock.lastCall?.[1]).toEqual({ skip: false, refetchOnMountOrArgChange: true });
   expect(document.body.textContent).toContain("simon");
   expect(document.body.textContent).toContain("Martin");
   expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);

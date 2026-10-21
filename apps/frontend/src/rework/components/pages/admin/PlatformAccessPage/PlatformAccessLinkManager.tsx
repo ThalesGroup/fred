@@ -45,14 +45,12 @@ export default function PlatformAccessLinkManager({
   const [status, setStatus] = useState<LinkStatusFilter>("all");
   const teams = usePlatformAccessTeamsQuery(undefined, {
     refetchOnMountOrArgChange: true,
-    pollingInterval: 30000,
   });
   const linkAccessEnabled = teams.data?.find((entry) => entry.team_id === team.team_id)?.free ?? team.free;
   const links = usePlatformEnrollmentLinksQuery(
     { teamId: team.team_id, offset, limit: 25, status: status === "all" ? undefined : status },
     {
       refetchOnMountOrArgChange: true,
-      pollingInterval: 30000,
     },
   );
   const [generate, generating] = useGeneratePlatformLinkMutation();
@@ -64,7 +62,7 @@ export default function PlatformAccessLinkManager({
   const [joinersOffset, setJoinersOffset] = useState(0);
   const joiners = usePlatformEnrollmentJoinersQuery(
     { teamId: team.team_id, linkId: joinersLink?.id ?? "", offset: joinersOffset, limit: 25 },
-    { skip: !joinersLink, refetchOnMountOrArgChange: true, pollingInterval: 30000 },
+    { skip: !joinersLink, refetchOnMountOrArgChange: true },
   );
   const [deletedCount, setDeletedCount] = useState<number>();
   const [view, setView] = useState<"list" | "create" | "output">("list");

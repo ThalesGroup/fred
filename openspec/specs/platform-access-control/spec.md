@@ -805,6 +805,8 @@ An invitation without a note SHALL have an empty note cell in history and a gene
 
 Platform administrators SHALL be able to filter one team's complete invitation history by All, Active, Revoked or Expired. All SHALL be the default. Results and pagination totals SHALL reflect the selected status across the entire history, not only loaded rows. Revoked SHALL take precedence over Expired, which SHALL take precedence over Suspended; unrevoked, unexpired links SHALL be Active when Link access is enabled and Suspended otherwise. Changing the filter SHALL start at the first page and SHALL NOT display rows from the previous filter as current results. Both invitation and joiner histories SHALL keep the current page visible during a background refresh, including its available actions, and SHALL show loading instead of rows from another page or filter when the selected query has no current data. Filtering SHALL NOT change validity, membership, counters or access settings. The history table SHALL have a bounded fixed height with internal row scrolling, while its header, pagination and surrounding controls remain visible. When Link access is disabled, the invitation manager SHALL state that link sharing is disabled and valid links are suspended until it is enabled again.
 
+Opening the invitation manager SHALL refresh the team setting and first page of invitation history, even if cached. Opening a joiner dialog SHALL refresh its first page, even if cached. Neither dialog SHALL poll while open.
+
 #### Scenario: Filter beyond the first page
 
 - **WHEN** an administrator selects Expired and matching links exist beyond the previously loaded page
@@ -825,8 +827,9 @@ Platform administrators SHALL be able to filter one team's complete invitation h
 
 #### Scenario: Another administrator changes Link access
 
-- **WHEN** the Link access setting changes while an administrator keeps the invitation manager open
-- **THEN** the manager SHALL refresh the setting so its disabled notice and creation controls match the current team state
+- **GIVEN** another administrator changes Link access while the invitation manager is closed
+- **WHEN** an administrator opens the invitation manager
+- **THEN** its disabled notice and creation controls SHALL match the current team state
 
 ### Requirement: Administrators delete obsolete invitation history explicitly
 
