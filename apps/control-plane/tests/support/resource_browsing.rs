@@ -582,6 +582,10 @@ async fn folder_creation_governance_contract_and_request_budget() {
     );
     assert!(matches!((a.0, b.0), (201, 409) | (409, 201)));
     let held = hold_organization_lock(&e, org.id).await;
+    let since = sqlx::query_scalar("select clock_timestamp()")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
     let waiting_app = app.clone();
     let waiting_token = token.clone();
     let waiting = tokio::spawn(async move {
@@ -594,7 +598,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
         )
         .await
     });
-    wait_for_advisory_waiter(&e.pool).await;
+    wait_for_write_retry(&e.pool, since).await;
     delete_tuple(&e, "writer", "editor", &format!("space:{}", team.id)).await;
     held.commit().await.unwrap();
     assert_eq!(waiting.await.unwrap().0, 403);

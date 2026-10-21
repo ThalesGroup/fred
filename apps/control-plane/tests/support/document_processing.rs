@@ -1240,6 +1240,10 @@ async fn processing_workload_identity_and_revoked_publication() {
         }).await.unwrap();
     }
     waiting(&d.e.pool, 1).await;
+    let since = sqlx::query_scalar("select clock_timestamp()")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
     let publishing = p.clone();
     let pending_work = work.clone();
     let publish = tokio::spawn(async move {
@@ -1251,7 +1255,7 @@ async fn processing_workload_identity_and_revoked_publication() {
             })
             .await
     });
-    waiting(&d.e.pool, 2).await;
+    crate::wait_for_write_retry(&d.e.pool, since).await;
     held.rollback().await.unwrap();
     revoke.await.unwrap().unwrap();
     assert!(publish.await.unwrap().is_err());

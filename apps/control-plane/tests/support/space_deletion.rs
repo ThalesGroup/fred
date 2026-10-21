@@ -495,6 +495,10 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
     let id = team.id;
     let accept = tokio::spawn(async move { immediate().accept(&pool, &auth, "root", id).await });
     gate.entered.notified().await;
+    let since = sqlx::query_scalar("select clock_timestamp()")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
     let pool = e.pool.clone();
     let auth = e.fga.clone();
     let create = tokio::spawn(async move {
@@ -523,10 +527,11 @@ async fn lifecycle_waiters_recheck_retirement_and_authority_and_accept_once() {
         loop {
             let waiting: i64 = sqlx::query_scalar("select count(*) from pg_locks where locktype='advisory' and not granted and database=(select oid from pg_database where datname=current_database())")
                 .fetch_one(&e.pool).await.unwrap();
-            if waiting >= 3 { break; }
+            if waiting >= 2 { break; }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-    }).await.expect("create, grant and import wait behind retirement");
+    }).await.expect("grant and import wait behind retirement");
+    wait_for_write_retry(&e.pool, since).await;
     gate.release.notify_one();
     let accepted = accept.await.unwrap().unwrap();
     assert!(matches!(create.await.unwrap(), Err(AppError::Conflict(_))));

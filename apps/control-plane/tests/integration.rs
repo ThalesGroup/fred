@@ -835,6 +835,28 @@ async fn wait_for_advisory_waiter(pool: &PgPool) {
     }).await.expect("mutation must reach its lock before revocation");
 }
 
+// A failed try-lock ends in ROLLBACK, leaving an idle connection between attempts.
+async fn wait_for_write_retry(pool: &PgPool, since: chrono::DateTime<chrono::Utc>) {
+    tokio::time::timeout(Duration::from_secs(3), async {
+        let mut observer = pool.acquire().await.unwrap();
+        loop {
+            let retried: bool = sqlx::query_scalar(
+                "select exists(select 1 from pg_stat_activity where datname=current_database() and state='idle' and query ilike 'rollback%' and state_change >= $1)",
+            )
+            .bind(since)
+            .fetch_one(&mut *observer)
+            .await
+            .unwrap();
+            if retried {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("writer must roll back its failed try-lock before the competing mutation");
+}
+
 // Proves: I5
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
@@ -3217,6 +3239,114 @@ async fn folder_creation_keeps_one_connection_through_placement_and_write() {
     assert_eq!(db::space(&pool, org.id).await.unwrap().id, org.id);
 }
 
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn waiting_content_writers_release_the_shared_pool() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let peer = spaces::create_organization(&e.pool, &e.fga, "peer", "carol")
+        .await
+        .unwrap();
+    spaces::grant(
+        &e.pool,
+        &e.fga,
+        None,
+        "carol",
+        peer.id,
+        Role::Editor,
+        "carol",
+    )
+    .await
+    .unwrap();
+    // One connection makes any connection retained by a waiter observable.
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with((*e.pool.connect_options()).clone())
+        .await
+        .unwrap();
+    let held = hold_organization_lock(&e, org.id).await;
+    let since = sqlx::query_scalar("select clock_timestamp()")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    let mut writers = tokio::task::JoinSet::new();
+    for index in 0..10 {
+        let (pool, fga) = (pool.clone(), e.fga.clone());
+        writers.spawn(async move {
+            spaces::create_folder(
+                &pool,
+                &fga,
+                "alice",
+                team.id,
+                None,
+                format!("waiting-{index}"),
+            )
+            .await
+        });
+    }
+    wait_for_write_retry(&e.pool, since).await;
+    let peer_folder = tokio::time::timeout(
+        Duration::from_secs(2),
+        spaces::create_folder(&pool, &e.fga, "carol", peer.id, None, "unrelated".into()),
+    )
+    .await
+    .expect("contended organization must not retain the shared connection")
+    .unwrap();
+    assert_eq!(peer_folder.space_id, peer.id);
+    assert!(writers.try_join_next().is_none());
+    held.commit().await.unwrap();
+    while let Some(result) = writers.join_next().await {
+        result.unwrap().unwrap();
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn content_lock_deadline_and_cancellation_leave_no_mutation() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let held = hold_organization_lock(&e, org.id).await;
+    let before = std::time::Instant::now();
+    let result = tokio::time::timeout(
+        Duration::from_secs(7),
+        spaces::create_folder(&e.pool, &e.fga, "alice", team.id, None, "deadline".into()),
+    )
+    .await
+    .expect("lock acquisition has a five-second deadline");
+    assert!(before.elapsed() >= Duration::from_secs(5));
+    assert!(matches!(result, Err(AppError::Unavailable(_))));
+    let since = sqlx::query_scalar("select clock_timestamp()")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    let (pool, fga) = (e.pool.clone(), e.fga.clone());
+    let pending = tokio::spawn(async move {
+        spaces::create_folder(&pool, &fga, "alice", team.id, None, "cancelled".into()).await
+    });
+    wait_for_write_retry(&e.pool, since).await;
+    pending.abort();
+    assert!(pending.await.unwrap_err().is_cancelled());
+    held.commit().await.unwrap();
+    let count: i64 =
+        sqlx::query_scalar("select count(*) from folder where name in ('deadline', 'cancelled')")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+    spaces::create_folder(
+        &e.pool,
+        &e.fga,
+        "alice",
+        team.id,
+        None,
+        "after-cancel".into(),
+    )
+    .await
+    .unwrap();
+}
+
 // Proves: I18
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
@@ -4474,6 +4604,10 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
             .await
             .unwrap();
         let mut deleting = hold_organization_lock(&e, org.id).await;
+        let since = sqlx::query_scalar("select clock_timestamp()")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
         let (app, token) = (app.clone(), identity.token("alice"));
         let pending = tokio::spawn(async move {
             let (path, body) = if method == "POST" {
@@ -4490,7 +4624,7 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
             };
             content_request(app, &token, method, &path, &body).await
         });
-        wait_for_advisory_waiter(&e.pool).await;
+        wait_for_write_retry(&e.pool, since).await;
         db::delete_folder(&mut *deleting, folder.id).await.unwrap();
         deleting.commit().await.unwrap();
         assert_eq!(pending.await.unwrap(), 404);

@@ -17,7 +17,10 @@
 //! transaction-scoped advisory lock per organization: no concurrent mutation can
 //! interleave between check and write. Immutable placement is recorded in SQL alongside publication of OpenFGA links.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -750,14 +753,30 @@ pub async fn authorized_write(
     space_id: Uuid,
 ) -> AppResult<Transaction<'static, Postgres>> {
     let space = load(pool, space_id).await?;
-    let mut tx = pool.begin().await?;
+    let mut tx = tokio::time::timeout(Duration::from_secs(5), async {
+        let key = i64::from_be_bytes(space.organization.as_bytes()[..8].try_into().unwrap());
+        loop {
+            let mut tx = pool.begin().await?;
+            let acquired: bool = sqlx::query_scalar("select pg_try_advisory_xact_lock($1)")
+                .bind(key)
+                .fetch_one(&mut *tx)
+                .await?;
+            if acquired {
+                return Ok::<_, sqlx::Error>(tx);
+            }
+            // Finish rollback before sleeping so contenders return their connection.
+            tx.rollback().await?;
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .map_err(|_| AppError::Unavailable("database temporarily busy".into()))??;
     sqlx::query("set local lock_timeout = '5s'")
         .execute(&mut *tx)
         .await?;
     sqlx::query("set local statement_timeout = '15s'")
         .execute(&mut *tx)
         .await?;
-    lock_organization(&mut tx, &space).await?;
     crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     let mut guard = fga
         .guard(&[Scope::Organization(space.organization)])
@@ -784,8 +803,7 @@ pub(crate) fn folder_name(name: &str) -> AppResult<&str> {
     Ok(name)
 }
 
-/// Folder creation uses the held connection for placement lookup and insertion, so
-/// lock waiters cannot starve its transaction by consuming the rest of the pool.
+/// Folder placement lookup and insertion reuse the authorized transaction's connection.
 pub async fn create_folder(
     pool: &PgPool,
     fga: &Fga,

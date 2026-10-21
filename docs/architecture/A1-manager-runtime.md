@@ -574,8 +574,15 @@ held SQL connection. No workflow is dispatched by the API.
 
 Creation, rename and deletion use the same organization write boundary. Placement
 lookup precedes the transaction; organization lock, guard capture, current context,
-write Check and guard fence precede the local mutation. Existing folders are reread
-under that lock. Recursive deletion is one atomic operation and fails if a document
+write Check and guard fence precede the local mutation. `authorized_write` uses
+`pg_try_advisory_xact_lock` in a fresh transaction per attempt. A busy attempt rolls
+back before a 50 ms sleep without a connection; a five-second deadline bounds
+acquisition, including connection checkout after placement lookup. Expiry returns
+503 with `dependency_unavailable`, as SQL lock timeouts do. The successful
+transaction retains its lock through commit. The same acquisition boundary applies
+to upload reservation/publication, processing admission and final indexing
+publication. Role and lifecycle lock acquisition remains blocking. Existing folders
+are reread under that lock. Recursive deletion is one atomic operation and fails if a document
 or pending upload references any included folder. No per-folder authorization or Temporal dispatch
 occurs. The original dialogs prevent duplicate submission and discard completion
 after navigation; pending deletions of the same UUID share one request.

@@ -152,7 +152,12 @@ and [request costs](09-quality.md#openfga-request-costs).
 
 ## Mutation ordering and revocation
 
-An organization lock serializes live callers. Each authorized mutation also
+An organization lock serializes live callers. Content writes acquire it with a
+nonblocking SQL attempt: a busy attempt rolls back and releases its connection
+before retrying after 50 ms, within a five-second acquisition deadline. Authority
+checks and active-space rechecks run after acquisition; the same transaction retains
+the lock through SQL commit. Role and lifecycle mutations keep their existing
+blocking lock acquisition. Each authorized mutation also
 consumes an OpenFGA guard revision captured before its checks; a delayed remote
 write cannot reuse a consumed revision. Platform operations acquire the platform
 lock before organization locks. All direct space-role grants and revocations,

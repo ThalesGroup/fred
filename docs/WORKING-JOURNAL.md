@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F02](#f02-attente-du-verrou-des-écritures) | Attente bornée sans connexion retenue | Tests automatisés validés | 03, 09, A1 |
 | [F01](#f01-coût-du-contexte-organisation) | Placement SQL immuable et contexte commun | Tests automatisés validés | 03, 04, A1/A2/A3, 09 |
 | [F-001](#f-001-environnement-de-développement) | Déploiement secondaire, renommage control-plane | Correction à valider après renommage | [Opérations](architecture/08-operations.md), à reporter |
 | [F-002](#f-002-bootstrap-administrateur) | Bootstrap administrateur plateforme et CGU | Validé par Dimi | [Parcours](architecture/02-user-journeys.md), [sécurité](architecture/03-security.md) |
@@ -71,6 +72,30 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F02 Attente du verrou des écritures
+
+- 2026-10-21 : Dimi confirme que tout passe et autorise commit/push. Tests Rust
+  (45 unitaires, 10 contrats), intégration (108) et DocumentWorkspace (195) réussis.
+  Clippy et contrôle arc42 réussis. Formatage des ajouts corrigé ; rustfmt global
+  reste en échec sur le formatage préexistant, hors F02/F03 (F19).
+
+- 2026-10-21 : Dimi choisit C après vérification sur HEAD
+  `bc5a89cfeffb5d998d25994eaa175c4b994be4a1` et modifications locales.
+  `authorized_write` tente le verrou transactionnel sans attente SQL, termine le
+  rollback avant chaque pause de 50 ms et borne l'acquisition à cinq secondes.
+  Guard, fence, contrôles après acquisition et verrou jusqu'au commit conservent
+  I5/I22, y compris pour les publications documentaires et le processing.
+  Tests ajoutés pour dix écritures concurrentes sur un pool d'une connexion,
+  progression d'une autre organisation, délai borné et annulation ; tests
+  d'entrelacement dossier/révocation/suppression/publication adaptés aux retries.
+  Arc42 03, 09 et A1 décrivent le comportement et ses coûts au présent.
+  Génération arc42 réussie ; relecture indépendante du correctif et des tests sans
+  défaut identifié. Le HEAD a avancé extérieurement à `ef8f27dc936a8c938300b52cc1acea0b98c8c8a0`
+  pendant ce travail ; les changements F02 restent non committés.
+  Aucun test, build ou contrôle qualité exécuté ; validation à faire par Dimi.
+  Aucun commit ni push.
+
 
 ## F01 Coût du contexte organisation
 

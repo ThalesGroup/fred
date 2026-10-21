@@ -291,9 +291,23 @@ write authority until a fresh successful decision; it does not grant permission.
 Mutations cost `Q + 1` Reads, 1 Check and 1 Write containing two guard-version
 operations. Stored tuple count is unchanged: no folder tuple is created or deleted.
 Target placement precedes locking; guard Read, context resolution, Check, fence,
-local mutation and SQL commit occur while the organization lock is held. Waiting
-writers retain a SQL connection. Different organizations have independent locks;
-replicas share these database locks and OpenFGA guards.
+local mutation and SQL commit occur while the organization lock is held.
+Contending content writers use `pg_try_advisory_xact_lock`, roll back each failed
+attempt and release the connection before a 50 ms retry delay. Acquisition has a
+five-second deadline, including pool checkout and failed attempts after the initial
+placement lookup; expiry returns the existing 503 dependency-unavailable response.
+No guard or permission RPC runs during retries. I5 and I22 still apply after
+acquisition, with the same connection held through checks, fence and commit.
+
+The process shares a ten-connection pool. Content lock contenders do not retain
+connections during retry delays, allowing another organization to acquire one;
+active transactions and other blocking lock paths can still exhaust this pool.
+Different organizations have independent locks; replicas share these database
+locks and OpenFGA guards. There is no FIFO guarantee between retrying writers.
+Each failed attempt adds a begin/try-lock/rollback SQL cycle, at most one attempt
+per 50 ms delay plus SQL time for each waiting request. Same-organization throughput
+remains limited by lock residency, and an available lock may wait until the next
+retry. This mechanism does not increase the pool size or remove fencing RPCs.
 
 The directory query has no advisory lock. Page, total and up to 15 ancestors use
 one read-only repeatable-read transaction. Root/child predicates use the existing
