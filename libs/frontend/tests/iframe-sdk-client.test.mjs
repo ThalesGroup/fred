@@ -596,8 +596,13 @@ test("relays Blob and FormData bodies and Blob responses on a capable host", asy
     const form = new FormData();
     form.append("label", "PPS");
     form.append("file", new Blob([bytes]), "pps.xlsx");
+    const postsBefore = fake.posts.length;
     const posted = client.request("uploads", { method: "POST", body: form });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The multipart Blob is built asynchronously: wait for its post.
+    for (let tick = 0; fake.posts.length === postsBefore; tick += 1) {
+      assert(tick < 200, "the FormData request was never posted");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
     const multipart = fake.posts.at(-1).message;
     assert.match(
       multipart.headers["content-type"],
