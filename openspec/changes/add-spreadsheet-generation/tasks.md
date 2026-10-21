@@ -58,6 +58,14 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4c.4 Per-turn idempotency: identical repeat call returns the first text, no new file or card
 - [x] 4c.5 Description: a sub-agent returns the data to the delegating agent instead of calling the tool (description only; no sub-agent signal in the tool context, general fix #3219)
 
+## 4d. Computed columns (2026-10-21, owner-approved)
+
+- [x] 4d.1 `compute` on a column (`add`, `subtract`, `multiply`, `divide`, `share_of_total`, optional `round`), operands by header name or number; rows send null or omit computed columns (D9)
+- [x] 4d.2 Per-row formulas with the row's addresses, `IFERROR` where a result can be empty, `ROUND` for `round`; totals on computed columns
+- [x] 4d.3 Validation naming sheet and column: op, unknown/ambiguous header, text/date reference, self/forward reference, missing operand, two numbers, divide by literal 0, `round` range
+- [x] 4d.4 Preview values computed with the same semantics; free-formula refusal points to `compute`; tool description with one example
+- [x] 4d.5 Help Center en/fr: one sentence and an example
+
 ## 5. Docs and release
 
 - [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
@@ -89,3 +97,8 @@ Live-session fix pass, 2026-10-21 (session 41fde1b9, Deep agent on mistral-mediu
 - Package: `make test` 94 passed (new: 8 formula cases across number/percent/currency/integer and text `=HYPERLINK(`, `= sum(`, `=$B$2`, `=B2/B3`, each naming sheet/row/column and the exact message; `=== Section ===`, `+1`, `@SUM(A1)` and `=1+1` still stored as literal text; row mismatch "expected 3 values (one per column), got 4"; success text ending; identical repeat (also with `.xlsx` suffix) returns the first text with no write and no card; changed rows or a rebuilt tool write a new file); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
 - Not covered here: sub-agent cards never reaching the chat on Deep agents is a runtime issue, tracked separately.
 - Sub-agent guidance (4c.5): package `make code-quality` green, `make test` 94 passed (description asserts the sub-agent sentence).
+
+Computed columns, 2026-10-21:
+
+- Package: `make test` 121 passed (new: formula and preview value per op (`=C2-B2`, `=B2+10`, `=C2*1.2`, `=C2*(-2)`, `=IFERROR(C2/B2,"")`, `=IFERROR(ROUND(C2/3,1),"")`, `=IFERROR(C2/SUM($C$2:$C$4),"")`, `*` alias with case-insensitive header and `"2"`, `"15%"` operand); per-row and per-sheet addresses on two sheets; default number/percent formats; `SUM`/`COUNT` totals and preview totals over computed columns; chained computed columns and empty-result propagation; null placeholder, omitted and pre-filled computed cells; `ROUND` half away from zero (2.675 → 2.68, -0.125 → -0.13); 11 compute errors naming sheet and column; forward reference, text type, duplicate header; refusal message points to `compute`; tool description); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
+- LibreOffice headless CSV of a two-sheet workbook (subtract, divide + round with a 0 and an empty divisor, share of total, a chained multiply by -1.5, totals, a second sheet with a rounded share): every recalculated value equals the preview (`20`, `1,2`, `60%`, `-1,8`, empty for the zero/empty divisors and their dependants, totals `100`/`200`/`100%`, `14,3% 28,6% 57,1%`).

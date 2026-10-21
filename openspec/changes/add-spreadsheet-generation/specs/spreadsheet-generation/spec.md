@@ -66,7 +66,7 @@ The system SHALL reject invalid input with an error tool result that names the s
 #### Scenario: Formula sent as a cell value
 
 - **WHEN** the model sends `=B2/SUM($B$2:$B$6)` in a percent column
-- **THEN** the tool returns an error saying formulas are not accepted, asking for the computed value and pointing to the column `total` for sums and averages, and no file is written
+- **THEN** the tool returns an error saying formulas are not accepted in cells, asking for the computed value and pointing to the column `compute` for per-row calculations and to the column `total` for sums and averages, and no file is written
 
 #### Scenario: Ambiguous number
 
@@ -79,6 +79,34 @@ The system SHALL reject invalid input with an error tool result that names the s
 - **WHEN** the workbook is generated
 - **THEN** the cell holds the text without the control character and the file is delivered
 
+### Requirement: Computed columns are per-row formulas
+
+A column MAY declare `compute` instead of row values: `add`, `subtract`, `multiply` or `divide` between `left` and `right` (each a column header of the same sheet or a number), or `share_of_total` of one `column` (its value divided by that column's total), with an optional `round` (0 to 10 decimals). The system SHALL write one formula per data row using that row's cell addresses on the same sheet and only the `SUM`, `ROUND` and `IFERROR` functions; a result that can divide by zero, or that uses a computed column that can be empty, SHALL be wrapped in `IFERROR(...,"")`. Rows SHALL accept either `null` (any value is ignored) or no value at all for computed columns. A computed column without an explicit type SHALL be `number` (`percent` for `share_of_total`); a column `total` SHALL apply to it as to any numeric column. The preview SHALL hold the values the formulas yield (an empty source cell counts as 0, a division by zero is empty, `round` rounds halves away from zero). The system SHALL reject, naming the sheet and column and the fix, an unsupported op, a header that matches no column or several columns, a reference to a text or date column, to its own column or to a computed column placed after it, a computed text or date column, a missing operand, two number operands, a division by a literal 0 and a `round` outside 0 to 10.
+
+#### Scenario: Tax-inclusive amount
+
+- **GIVEN** a currency column "HT" in column B and a column "TTC" with `compute: {op: "multiply", left: "HT", right: 1.2}`, and rows `[[100, null]]`
+- **WHEN** the workbook is generated
+- **THEN** C2 holds `=B2*1.2` with the currency format, and the preview shows 120 for that cell
+
+#### Scenario: Share of a column total
+
+- **GIVEN** a column "Part" with `compute: {op: "share_of_total", column: "Montant"}` and "Montant" in column B over rows 2 to 4
+- **WHEN** the workbook is generated
+- **THEN** each row holds `=IFERROR(Bn/SUM($B$2:$B$4),"")`, the column is formatted as a percent, and a `total: "sum"` on it adds `=SUM(...)` over its range
+
+#### Scenario: Division by an empty or zero cell
+
+- **GIVEN** a column dividing "Réel" by "Budget" and a row whose Budget is 0 or empty
+- **WHEN** the workbook is opened in a spreadsheet application
+- **THEN** that cell is empty instead of `#DIV/0!`, and the preview shows it empty
+
+#### Scenario: Reference to a later computed column
+
+- **GIVEN** a computed column whose `left` names a computed column placed after it
+- **WHEN** the model calls the tool
+- **THEN** the tool returns an error naming the sheet and column and asking to move the column or compute from source columns, and no file is written
+
 ### Requirement: Size limits are enforced
 
 The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 rows per sheet, 50 000 cells in total, 2 000 characters per cell or header, or 10 MB of output, with an error tool result stating the limit and telling the model to inform the user plainly and suggest splitting the data. It SHALL never truncate data silently.
@@ -90,7 +118,7 @@ The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 
 
 ### Requirement: Generated workbooks run no code
 
-The system SHALL write `.xlsx` only (never macro-enabled formats), SHALL write formulas only in the totals row it generates, and SHALL store any accepted text cell starting with `=`, `+`, `-`, `@`, tab or carriage return as literal text.
+The system SHALL write `.xlsx` only (never macro-enabled formats), SHALL write formulas only in the totals row and the computed columns it generates, and SHALL store any accepted text cell starting with `=`, `+`, `-`, `@`, tab or carriage return as literal text.
 
 #### Scenario: Data that looks like a formula
 

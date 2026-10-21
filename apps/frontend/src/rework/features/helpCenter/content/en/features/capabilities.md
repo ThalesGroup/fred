@@ -121,7 +121,10 @@ file you download from the chat. Each sheet has a header row that stays
 visible and filters; columns are formatted as text, numbers, percentages,
 amounts with their currency, or dates shown in your computer's date format.
 The agent can add a totals row that Excel computes (sum, average, minimum,
-maximum, count). Each request produces a new file: to change one, ask the agent
+maximum, count), and columns calculated row by row from other columns with
+real Excel formulas: add, subtract, multiply, divide or share of the total (for
+example "a Total incl. VAT column equal to Excl. VAT × 1.2"). Each request
+produces a new file: to change one, ask the agent
 and it writes a corrected copy beside the previous one.
 
 **Its limits** — the agent writes every value itself, so the file stays

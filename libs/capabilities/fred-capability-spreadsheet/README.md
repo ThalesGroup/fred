@@ -15,6 +15,10 @@ Design: `openspec/changes/add-spreadsheet-generation/` (issue #3208).
   written as Excel formulas. Its label names the functions in the conversation
   language (`language`, `fr` by default): Total, Moyenne/Average, Min, Max,
   Nombre/Count.
+- Computed columns: `compute: {op, left, right}` (`add`, `subtract`, `multiply`,
+  `divide`) or `{op: "share_of_total", column}`, operands by header name or
+  number, optional `round`; each row gets a formula (`=C2*1.2`,
+  `=IFERROR(B2/SUM($B$2:$B$4),"")`) and the preview shows the same values.
 - Invalid input or a size limit (10 sheets, 50 columns, 5000 rows per sheet,
   50000 cells) returns an error naming the sheet, row and column; no file is
   written, and a limit error asks the model to tell the user and suggest
