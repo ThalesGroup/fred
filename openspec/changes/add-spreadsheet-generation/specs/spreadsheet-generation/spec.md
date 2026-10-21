@@ -125,6 +125,16 @@ A column MAY declare `compute` instead of row values: `add`, `subtract`, `multip
 - **WHEN** the model calls the tool
 - **THEN** the file is created as sent, and the tool result names the sheet and row as a likely manual total next to the automatic totals row, at most once per sheet; a "Total" row holding other values, or a sheet with no `total` column, gets no note
 
+### Requirement: Charts are not supported yet and the user is told
+
+The tool description SHALL state that charts are not supported yet and that the model MUST still create the workbook with its data and tell the user that charts are not available yet. Chart arguments the model sends anyway (`chart`, `charts`, `graph`, `graphs`, `plot`, `plots`, case ignored, at top level or on a sheet) SHALL be ignored without failing the call, and the success text SHALL say so before its closing sentence.
+
+#### Scenario: Chart requested, workbook without chart and user told
+
+- **GIVEN** a user asking for an Excel file with a chart, and the model sending a valid workbook plus a `chart` argument (top level or on a sheet)
+- **WHEN** the tool runs
+- **THEN** the workbook is created with its data and no chart, the card is shown, and the tool result says "Note: charts are not supported yet; the workbook was created without the chart. Tell the user." before "reply now"; a call without chart arguments gets no such note, and the argument never appears in the tool schema
+
 ### Requirement: Size limits are enforced
 
 The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 rows per sheet, 50 000 cells in total, 2 000 characters per cell or header, or 10 MB of output, with an error tool result stating the limit and telling the model to inform the user plainly and suggest splitting the data. It SHALL never truncate data silently.
