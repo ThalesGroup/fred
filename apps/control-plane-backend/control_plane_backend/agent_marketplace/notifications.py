@@ -26,6 +26,7 @@ from fred_core import KeycloakUser
 from control_plane_backend.agent_marketplace.store import (
     AgentMarketplaceStore,
     EntryState,
+    RemovalReason,
     RemovedEntry,
 )
 from control_plane_backend.notifications.schemas import (
@@ -44,6 +45,9 @@ if TYPE_CHECKING:
     from control_plane_backend.agent_instances.store import AgentInstanceRecord
 
 logger = logging.getLogger(__name__)
+
+# The entry goes with its agent or team: there is nothing left to open.
+_SILENT_REMOVALS = {RemovalReason.DELETED, RemovalReason.TEAM_DELETED}
 
 
 def republish_group(entry_id: str) -> str:
@@ -147,6 +151,7 @@ async def notify_unpublished(
         )
         for entry in removed
         if entry.state == EntryState.REMOVED
+        and entry.reason not in _SILENT_REMOVALS
         and entry.published_by is not None
         and entry.published_by != actor_uid
     ]

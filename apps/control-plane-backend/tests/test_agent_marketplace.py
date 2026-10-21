@@ -1716,6 +1716,22 @@ async def test_deactivation_by_another_editor_tells_the_publisher(editors) -> No
 
 
 @pytest.mark.asyncio
+async def test_agent_deletion_resolves_the_request_and_sends_no_removal(
+    editors,
+) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    await _save(env, _EDITOR_2, "A change")
+
+    await env.agents.delete("agent-1", _TEAM, actor_uid=_EDITOR_2)
+
+    [request] = await _inbox(env, _EDITOR)
+    assert request.type == "agent.republish_needed"
+    assert request.handled_outcome == "removed"
+
+
+@pytest.mark.asyncio
 async def test_team_deletion_deletes_the_teams_notifications(editors) -> None:
     from control_plane_backend.teams.service import delete_team
 
