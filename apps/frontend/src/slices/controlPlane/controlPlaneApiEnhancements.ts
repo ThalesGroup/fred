@@ -204,8 +204,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     markNotificationsSeenControlPlaneV1NotificationsSeenPost: {
       invalidatesTags: [{ type: "ControlPlaneNotification" as const, id: "SUMMARY" }],
     },
+    // Reading also marks seen, so the badge refreshes too.
     markNotificationReadControlPlaneV1NotificationsNotificationIdReadPost: {
-      invalidatesTags: [{ type: "ControlPlaneNotification" as const, id: "LIST" }],
+      invalidatesTags: ["ControlPlaneNotification"],
     },
     deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: {
       invalidatesTags: ["ControlPlaneNotification"],

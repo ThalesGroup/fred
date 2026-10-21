@@ -48,7 +48,7 @@
 - [x] 6.1 Regenerate without wiping a running Vite: `cd apps/control-plane-backend && make generate-openapi`, then `cd apps/frontend && npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json`; verify `controlPlaneOpenApi.ts` gains the routes and nothing is hand-edited.
   - Done: `make generate-openapi`, then `make update-control-plane-api` after a real `npm ci` in the worktree; only additions in `controlPlaneOpenApi.ts`; `npx tsc --noEmit` and prettier green.
 - [x] 6.2 In `controlPlaneApiEnhancements.ts`: a `ControlPlaneNotification` tag, summary and list providing it, every mutation invalidating it, friendly aliases (`useNotificationSummaryQuery`, `useNotificationsQuery`, `useMarkNotificationsSeenMutation`, `useMarkNotificationReadMutation`, `useDeleteNotificationMutation`, `useClearNotificationsMutation`); verify `npx tsc --noEmit`.
-  - Done: tag `ControlPlaneNotification` (`SUMMARY` on the summary, `LIST` on the list); `seen` invalidates `SUMMARY` only, `read` `LIST` only, delete and clear the whole tag; the six aliases. `npx tsc --noEmit` green.
+  - Done: tag `ControlPlaneNotification` (`SUMMARY` on the summary, `LIST` on the list); `seen` invalidates `SUMMARY` only, `read`, delete and clear the whole tag (`read` also marks seen); the six aliases. `npx tsc --noEmit` green.
 
 ## 7. Frontend
 
