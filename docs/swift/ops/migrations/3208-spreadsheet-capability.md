@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "New admin-gated capability: create an Excel file"
+title: "New admin-gated capability: generate an Excel file"
 impact: none
 configuration: none
 configuration_reason: "Adds the spreadsheet capability package to the fred-agents image; no configuration key, chart value or secret changes."
@@ -25,7 +25,7 @@ No configuration changes are required.
 
 Deploy Fred normally; no additional operator action is required. The new
 `spreadsheet` capability is admin-gated: a platform administrator opens it per
-team in the application, then agent authors enable the "Create an Excel file"
+team in the application, then agent authors enable the "Generate an Excel file"
 pack in the agent form. Generated files are stored in the existing agent
 workspace storage, like PowerPoint outputs.
 
@@ -46,4 +46,6 @@ already generated stay in workspace storage.
 
 The workbook is limited to 10 sheets, 5,000 rows per sheet and 50,000 cells.
 The in-chat preview shows the first 500 rows of each sheet. Each file is
-stored with a small `.preview.json` beside it in the agent workspace.
+stored with a small `.preview.json` beside it in the agent workspace; each
+request writes a new file. Deleting a conversation does not yet delete the
+files it produced (same as PowerPoint outputs).

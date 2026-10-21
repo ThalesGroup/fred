@@ -114,18 +114,21 @@ copied to another team takes its own copy of the template.
 **An example** — a five-slide monthly review template, which the agent fills
 each month from the period's documents.
 
-### Create an Excel file
+### Generate an Excel file
 
 **What it does** — the agent turns data from the conversation into an Excel
 file you download from the chat. Each sheet has a header row that stays
 visible and filters; columns are formatted as text, numbers, percentages,
-amounts with their currency, or dates. The agent can add a totals row that
-Excel computes (sum, average, minimum, maximum, count).
+amounts with their currency, or dates shown in your computer's date format.
+The agent can add a totals row that Excel computes (sum, average, minimum,
+maximum, count). Each request produces a new file: to change one, ask the agent
+and it writes a corrected copy beside the previous one.
 
 **Its limits** — the agent writes every value itself, so the file stays
 modest in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in
-all. No charts, no colors by value, no macros, and the agent does not edit an
-existing workbook.
+all; beyond that, the agent tells you and suggests splitting the data. No
+charts, no colors by value, no macros, and the agent does not edit an existing
+workbook. Deleting the conversation does not yet delete the files it produced.
 
 **The preview** — the **Preview** button on the file card opens the workbook
 beside the conversation: one tab per sheet, amounts and dates in your
