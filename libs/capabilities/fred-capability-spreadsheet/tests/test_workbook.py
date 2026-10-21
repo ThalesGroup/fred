@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import json
+import zipfile
 from datetime import datetime
 from typing import Any
 
@@ -29,16 +30,23 @@ from fred_capability_spreadsheet.workbook import (
     SpreadsheetInputError,
     build_preview,
     build_workbook,
+    prepare,
     sanitize_file_name,
 )
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 
-def _request(*sheets: dict[str, Any]) -> CreateSpreadsheetInput:
+def _request(
+    *sheets: dict[str, Any], language: str | None = None
+) -> CreateSpreadsheetInput:
     return CreateSpreadsheetInput.model_validate(
-        {"file_name": "test", "sheets": list(sheets)}
+        {"file_name": "test", "sheets": list(sheets), "language": language}
     )
+
+
+def _xlsx(*sheets: dict[str, Any], language: str | None = None) -> bytes:
+    return build_workbook(prepare(_request(*sheets, language=language)))
 
 
 def _sheet(name: str = "Data", columns=None, rows=None) -> dict[str, Any]:
@@ -49,19 +57,19 @@ def _sheet(name: str = "Data", columns=None, rows=None) -> dict[str, Any]:
     }
 
 
-def _build(*sheets: dict[str, Any]) -> Any:
-    return load_workbook(io.BytesIO(build_workbook(_request(*sheets))))
+def _build(*sheets: dict[str, Any], language: str | None = None) -> Any:
+    return load_workbook(io.BytesIO(_xlsx(*sheets, language=language)))
 
 
-def _ws(*sheets: dict[str, Any]) -> Worksheet:
-    sheet = _build(*sheets).worksheets[0]
+def _ws(*sheets: dict[str, Any], language: str | None = None) -> Worksheet:
+    sheet = _build(*sheets, language=language).worksheets[0]
     assert isinstance(sheet, Worksheet)
     return sheet
 
 
 def _error(*sheets: dict[str, Any]) -> str:
     with pytest.raises(SpreadsheetInputError) as info:
-        build_workbook(_request(*sheets))
+        _xlsx(*sheets)
     return str(info.value)
 
 
@@ -91,7 +99,18 @@ def test_typed_columns_get_values_and_number_formats():
     assert amount.value == 1234.5
     assert amount.number_format == '#,##0.00 "€"'
     assert due.value == datetime(2026, 10, 21)
-    assert due.number_format == "yyyy-mm-dd"
+    # Built-in short date (numFmtId 14): Excel follows the reader's locale.
+    assert due.number_format == "mm-dd-yy"
+
+
+def test_dates_use_the_builtin_short_date_format():
+    data = _xlsx(
+        _sheet(columns=[{"header": "Due", "type": "date"}], rows=[["2026-10-21"]])
+    )
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        styles = archive.read("xl/styles.xml").decode()
+    assert 'numFmtId="14"' in styles
+    assert "mm-dd-yy" not in styles  # no custom format entry
 
 
 def test_percent_keeps_needed_decimals():
@@ -154,7 +173,7 @@ def test_totals_row_holds_formulas_with_column_formats():
     ws = _ws(_sheet(columns=columns, rows=rows))
     total = [c.value for c in ws[12]]
     assert total == [
-        "Total",
+        "Moyenne / Total / Min / Max / Nombre",
         "=AVERAGE(B2:B11)",
         "=SUM(C2:C11)",
         "=MIN(D2:D11)",
@@ -263,7 +282,13 @@ def test_limits():
 
 
 def test_limits_are_inclusive():
-    build_workbook(_request(_sheet(rows=[["x"]] * 5000)))
+    _xlsx(_sheet(rows=[["x"]] * 5000))
+
+
+def test_limit_errors_ask_the_model_to_tell_the_user_and_split():
+    message = _error(_sheet(rows=[["x"]] * 5001))
+    assert "Tell the user plainly about this limit" in message
+    assert "splitting" in message
 
 
 @pytest.mark.parametrize(
@@ -273,6 +298,7 @@ def test_limits_are_inclusive():
         ("../etc/passwd", "passwd"),
         ("report.xlsx", "report"),
         ('a<b>:"c', "abc"),
+        ("Q3 #1 100%", "Q3 1 100"),
         ("   ", "spreadsheet"),
     ],
 )
@@ -280,8 +306,8 @@ def test_sanitize_file_name(raw, expected):
     assert sanitize_file_name(raw) == expected
 
 
-def _preview(*sheets: dict[str, Any]) -> dict[str, Any]:
-    return json.loads(build_preview(_request(*sheets)))
+def _preview(*sheets: dict[str, Any], language: str | None = None) -> dict[str, Any]:
+    return json.loads(build_preview(prepare(_request(*sheets, language=language))))
 
 
 def test_preview_carries_typed_values_and_display_formats():
@@ -322,7 +348,14 @@ def test_preview_totals_mirror_the_excel_functions():
         ["c", None, None, -2, None, "y"],
     ]
     sheet = _preview(_sheet(columns=columns, rows=rows))["sheets"][0]
-    assert sheet["totals"] == ["Total", 1550.5, 1.5, -2, 0.25, 2]
+    assert sheet["totals"] == [
+        "Total / Moyenne / Min / Max / Nombre",
+        1550.5,
+        1.5,
+        -2,
+        0.25,
+        2,
+    ]
     assert sheet["columns"][1]["total"] == "sum"
 
 
@@ -351,3 +384,104 @@ def test_preview_keeps_every_sheet_and_formula_like_text():
     assert [s["name"] for s in preview["sheets"]] == ["One", "Two"]
     assert preview["sheets"][0]["rows"] == [["=1+1"]]
     assert preview["sheets"][1]["rows"] == [["été"]]
+
+
+@pytest.mark.parametrize(
+    ("language", "total", "label"),
+    [
+        (None, "sum", "Total"),
+        ("fr", "average", "Moyenne"),
+        ("fr", "count", "Nombre"),
+        ("en", "average", "Average"),
+        ("en-GB", "count", "Count"),
+        ("EN", "max", "Max"),
+        ("de", "min", "Min"),
+    ],
+)
+def test_totals_label_follows_the_function_and_the_language(language, total, label):
+    columns = [{"header": "Item"}, {"header": "N", "type": "number", "total": total}]
+    sheet = _sheet(columns=columns, rows=[["a", 1], ["b", 2]])
+    assert _ws(sheet, language=language)["A4"].value == label
+    assert _preview(sheet, language=language)["sheets"][0]["totals"][0] == label
+
+
+def test_control_characters_are_stripped_from_headers_and_cells():
+    columns = [{"header": "Na\x0bme"}, {"header": "Note"}]
+    rows = [["Bo\x00lt\x1f", "\x08"], ["ok\ttab", "line\nbreak"]]
+    ws = _ws(_sheet(columns=columns, rows=rows))
+    assert ws["A1"].value == "Name"
+    assert ws["A2"].value == "Bolt"
+    assert ws["B2"].value is None  # nothing left once stripped
+    assert (ws["A3"].value, ws["B3"].value) == ("ok\ttab", "line\nbreak")
+    preview = _preview(_sheet(columns=columns, rows=rows))["sheets"][0]
+    assert preview["columns"][0]["header"] == "Name"
+    assert preview["rows"][0] == ["Bolt", None]
+
+
+def test_control_characters_in_a_sheet_name_are_rejected():
+    assert "control characters" in _error(_sheet(name="Q\x013"))
+
+
+def test_history_sheet_name_is_reserved():
+    assert "reserved by Excel" in _error(_sheet(name="history"))
+    assert "reserved by Excel" in _error(_sheet(name="History"))
+
+
+def test_header_longer_than_a_cell_is_rejected():
+    message = _error(_sheet("Sales", columns=[{"header": "h" * (MAX_CELL_CHARS + 1)}]))
+    assert "Sheet 'Sales', column 1: the header has" in message
+    assert f"limit is {MAX_CELL_CHARS}" in message
+
+
+@pytest.mark.parametrize(
+    ("raw", "column_type"),
+    [
+        ("1,234", "number"),
+        ("$1,500", "currency"),
+        ("-12,000", "integer"),
+        ("1,234%", "percent"),
+    ],
+)
+def test_a_lone_thousands_like_comma_is_ambiguous(raw, column_type):
+    column = {"header": "N", "type": column_type}
+    message = _error(_sheet(columns=[column], rows=[[raw]]))
+    assert "is ambiguous" in message
+    assert "JSON numbers" in message
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("1,5", 1.5), ("12,34", 12.34), ("1.234,5", 1234.5), ("1,234.5", 1234.5)],
+)
+def test_unambiguous_separators_still_parse(raw, expected):
+    ws = _ws(_sheet(columns=[{"header": "N", "type": "number"}], rows=[[raw]]))
+    assert ws["A2"].value == expected
+
+
+@pytest.mark.parametrize(
+    "raw", [float("nan"), float("inf"), float("-inf"), "nan", "Infinity"]
+)
+def test_non_finite_numbers_are_rejected(raw):
+    for column_type in ("number", "currency", "percent"):
+        message = _error(
+            _sheet(columns=[{"header": "N", "type": column_type}], rows=[[raw]])
+        )
+        assert "row 2, column 1" in message
+
+
+def test_conversion_happens_once_for_file_and_preview(monkeypatch):
+    from fred_capability_spreadsheet import workbook
+
+    calls = 0
+    original = workbook._convert
+
+    def counting(*args):
+        nonlocal calls
+        calls += 1
+        return original(*args)
+
+    monkeypatch.setattr(workbook, "_convert", counting)
+    prepared = prepare(_request(_sheet(rows=[["a"], ["b"]])))
+    build_workbook(prepared)
+    build_preview(prepared)
+    assert calls == 2

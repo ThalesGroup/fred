@@ -51,6 +51,7 @@ from fred_capability_spreadsheet.workbook import (
     SpreadsheetInputError,
     build_preview,
     build_workbook,
+    prepare,
     sanitize_file_name,
 )
 
@@ -73,12 +74,19 @@ _TOOL_DESCRIPTION = (
     "an .xlsx, or a table to download; never paste a Markdown table instead.\n"
     "Each sheet has typed columns (text, number, integer, percent, currency, date) "
     "and rows holding exactly one value per column (null for an empty cell). "
+    "Send amounts and numbers as JSON numbers (1234.5), never as text with "
+    "thousands separators or currency symbols. "
     "Dates are 'YYYY-MM-DD'; percents are fractions (0.15) or strings ('15%'); "
     "a currency column may set currency (EUR, USD, GBP, CHF, JPY, CNY, CAD, AUD). "
     "Set total (sum, average, min, max, count) on a column to add a totals row "
-    "computed by Excel; never compute totals yourself. Limits: 10 sheets, 50 "
-    "columns, 5000 rows per sheet, 50000 cells. If the tool returns an error, fix "
-    "the input it names and call it again.\n"
+    "computed by Excel; never compute totals yourself. Set language to the "
+    "conversation's language ('fr' or 'en') for the totals label.\n"
+    "Limits: 10 sheets, 50 columns, 5000 rows per sheet, 50000 cells. If the data "
+    "exceeds a limit, tell the user plainly what the limit is and suggest "
+    "splitting the data; never drop rows silently. If the tool returns an error, "
+    "fix the input it names and call it again.\n"
+    "Each call creates a new file: to change a file, call the tool again with the "
+    "complete corrected data.\n"
     "A download button is shown to the user automatically: do not write a link or "
     "URL in your reply, just say briefly what the file contains."
 )
@@ -93,16 +101,16 @@ class SpreadsheetPreviewPart(BaseModel):
 
     type: Literal["spreadsheet_preview"] = "spreadsheet_preview"
     preview_id: str
-    title: str
     file_name: str
     xlsx_download_url: str
     preview_url: str
 
 
 def _build_outputs(request: CreateSpreadsheetInput) -> tuple[bytes, bytes | None]:
-    content = build_workbook(request)
+    prepared = prepare(request)
+    content = build_workbook(prepared)
     try:
-        preview = build_preview(request)
+        preview = build_preview(prepared)
     except Exception:
         # The preview is a convenience: never lose the file over it.
         logger.exception("[SPREADSHEET] preview build failed")
@@ -135,11 +143,9 @@ async def _preview_part(
         return None
     if not stored.href:
         return None
-    file_name = f"{base_name}.xlsx"
     part = SpreadsheetPreviewPart(
         preview_id=published.key,
-        title=file_name,
-        file_name=file_name,
+        file_name=f"{base_name}.xlsx",
         xlsx_download_url=published.href,
         preview_url=stored.href,
     )
@@ -156,10 +162,10 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
     services = ctx.services
 
     async def create_spreadsheet(
-        file_name: str, sheets: list[SheetSpec]
+        file_name: str, sheets: list[SheetSpec], language: str | None = None
     ) -> tuple[str, ToolInvocationResult]:
         request = CreateSpreadsheetInput.model_validate(
-            {"file_name": file_name, "sheets": sheets}
+            {"file_name": file_name, "sheets": sheets, "language": language}
         )
         workspace = services.workspace_fs
         if workspace is None:
