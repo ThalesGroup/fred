@@ -267,7 +267,26 @@
     },
     "spreadsheet": {
       "name": "Create an Excel file",
-      "description": "Ability to create a downloadable Excel workbook with typed columns and totals."
+      "description": "Ability to create a downloadable Excel workbook with typed columns and totals.",
+      "panel": {
+        "spreadsheet_pane": {
+          "title": "Spreadsheet",
+          "launcher": "Spreadsheet preview"
+        }
+      },
+      "untitled": "Spreadsheet",
+      "close": "Close panel",
+      "download": "Download",
+      "downloadError": "Download failed",
+      "sheets": "Sheets",
+      "empty": "No spreadsheet yet. Ask the agent to create an Excel file.",
+      "unavailable": "Preview unavailable. Download the file to open it.",
+      "moreRows_one": "{{formatted}} more row is not shown. Download the file to see it.",
+      "moreRows_other": "{{formatted}} more rows are not shown. Download the file to see them all.",
+      "card": {
+        "aria": "Excel file",
+        "open": "Preview"
+      }
     },
     "html_artifact": {
       "name": "Generate a web page (HTML/CSS)",
