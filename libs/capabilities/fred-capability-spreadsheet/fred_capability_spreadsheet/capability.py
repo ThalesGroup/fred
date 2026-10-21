@@ -52,6 +52,7 @@ from fred_capability_spreadsheet.workbook import (
     SpreadsheetInputError,
     build_preview,
     build_workbook,
+    derived_column_hints,
     prepare,
     sanitize_file_name,
 )
@@ -75,16 +76,20 @@ _TOOL_DESCRIPTION = (
     "an .xlsx, or a table to download; never paste a Markdown table instead.\n"
     "Each sheet has typed columns (text, number, integer, percent, currency, date) "
     "and rows holding exactly one value per column (null for an empty cell).\n"
-    "Cells take literal values only, already computed. No formulas: never send "
-    "'=SUM(...)', '=B2/B3' or any '=' expression. For a per-row calculation, set "
-    "compute on the column instead: {op: add|subtract|multiply|divide, left, "
-    "right}, each operand another column's header or a number, or {op: "
-    "share_of_total, column} (the value divided by the column total, in a percent "
-    "column); optional round (decimals). It may use source columns and computed "
-    "columns placed before it. Excel then holds a formula on every row; send null "
-    "for that column in rows. Example: columns [{header: 'HT', type: 'currency'}, "
+    "Never compute derived columns yourself: when a column is derived from other "
+    "columns (difference, ratio, rate, share of total, VAT...), declare it with "
+    "compute so the file keeps a live formula, and send null for it in rows. "
+    "compute is {op: add|subtract|multiply|divide, left, right}, each operand "
+    "another column's header or a number, or {op: share_of_total, column} (each "
+    "value divided by that column's total, e.g. a share of the total in a percent "
+    "column); optional round (decimals). A division by zero leaves the cell empty, "
+    "so divide even when some values are 0. It may use source columns and computed "
+    "columns placed before it. Example: columns [{header: 'HT', type: 'currency'}, "
     "{header: 'TTC', type: 'currency', compute: {op: 'multiply', left: 'HT', "
-    "right: 1.2}}], rows [[100, null]].\n"
+    "right: 1.2}}, {header: 'Part', type: 'percent', compute: {op: "
+    "'share_of_total', column: 'HT'}}], rows [[100, null, null]].\n"
+    "Other cells take literal values only. No formulas: never send '=SUM(...)', "
+    "'=B2/B3' or any '=' expression.\n"
     "Send numbers and amounts as JSON "
     "numbers (1234.5), never as text with thousands separators or currency "
     "symbols. Percents go in a percent column as fractions (0.15) or '15%'. "
@@ -122,16 +127,23 @@ class SpreadsheetPreviewPart(BaseModel):
     preview_url: str
 
 
-def _build_outputs(request: CreateSpreadsheetInput) -> tuple[bytes, bytes | None]:
+def _build_outputs(
+    request: CreateSpreadsheetInput,
+) -> tuple[bytes, bytes | None, list[str]]:
     prepared = prepare(request)
     content = build_workbook(prepared)
+    try:
+        hints = derived_column_hints(prepared)
+    except Exception:
+        logger.exception("[SPREADSHEET] derived-column check failed")
+        hints = []
     try:
         preview = build_preview(prepared)
     except Exception:
         # The preview is a convenience: never lose the file over it.
         logger.exception("[SPREADSHEET] preview build failed")
         preview = None
-    return content, preview
+    return content, preview, hints
 
 
 async def _preview_part(
@@ -173,11 +185,18 @@ def _error(message: str) -> tuple[str, ToolInvocationResult]:
     return message, ToolInvocationResult(tool_ref=TOOL_NAME, is_error=True)
 
 
-def _created_text(output_file_name: str) -> str:
+def _created_text(output_file_name: str, hints: Sequence[str] = ()) -> str:
+    note = (
+        " Note: these columns hold values you computed, so the file has no formula "
+        f"for them: {'; '.join(hints)}. Next time, declare such columns with "
+        "compute instead of computing the values yourself."
+        if hints
+        else ""
+    )
     return (
         f"The Excel file '{output_file_name}' has a download button in the chat; "
-        "do not write a download link. File created and shown to the user. Do not "
-        "create it again; reply now."
+        f"do not write a download link.{note} File created and shown to the user. "
+        "Do not create it again; reply now."
     )
 
 
@@ -222,7 +241,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             )
         _active_builds += 1
         try:
-            content, preview = await asyncio.to_thread(_build_outputs, request)
+            content, preview, hints = await asyncio.to_thread(_build_outputs, request)
         except SpreadsheetInputError as exc:
             logger.info("[SPREADSHEET] rejected input: %s", exc)
             return _error(f"No file was written. {exc}")
@@ -261,9 +280,11 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             len(request.sheets),
             len(content),
         )
+        if hints:
+            logger.info("[SPREADSHEET] literal derived columns=%d", len(hints))
         created[request_key] = output_file_name
         return (
-            _created_text(output_file_name),
+            _created_text(output_file_name, hints),
             ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,)),
         )
 

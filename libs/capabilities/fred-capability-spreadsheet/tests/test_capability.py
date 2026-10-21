@@ -155,8 +155,10 @@ def test_tool_schema_exposes_only_llm_arguments():
     assert "as JSON numbers" in schema["description"]
     assert "tell the user plainly" in schema["description"]
     assert "No formulas" in schema["description"]
-    assert "set compute on the column instead" in schema["description"]
-    assert "send null for that column in rows" in schema["description"]
+    assert "Never compute derived columns yourself" in schema["description"]
+    assert "share_of_total" in schema["description"]
+    assert "A division by zero leaves the cell empty" in schema["description"]
+    assert "send null for it in rows" in schema["description"]
     assert "Call this tool once per file" in schema["description"]
     assert "If you are a sub-agent" in schema["description"]
     assert "that agent creates one workbook" in schema["description"]
@@ -358,3 +360,30 @@ async def test_changed_data_or_a_new_turn_creates_a_new_file():
     await tool(**changed)
     await _tool(workspace)(**ARGS)  # tools are rebuilt for every turn
     assert len(workspace.writes) == 6
+
+
+@pytest.mark.asyncio
+async def test_literal_derived_columns_keep_the_file_and_return_a_compute_note():
+    args = {
+        "file_name": "Budget",
+        "sheets": [
+            {
+                "name": "Budget",
+                "columns": [
+                    {"header": "Line"},
+                    {"header": "Budget", "type": "currency"},
+                    {"header": "Actual", "type": "currency"},
+                    {"header": "Gap", "type": "currency"},
+                ],
+                "rows": [["Rent", 1200, 1150, -50], ["Pay", 8000, 8400, 400]],
+            }
+        ],
+    }
+    workspace = FakeWorkspace()
+    content, artifact = await _tool(workspace)(**args)
+
+    assert artifact.is_error is False and len(workspace.writes) == 2
+    assert (
+        "'Gap' -> compute {op: 'subtract', left: 'Actual', right: 'Budget'}" in content
+    )
+    assert content.endswith("Do not create it again; reply now.")

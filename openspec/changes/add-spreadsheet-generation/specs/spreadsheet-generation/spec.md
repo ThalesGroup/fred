@@ -113,6 +113,12 @@ A column MAY declare `compute` instead of row values: `add`, `subtract`, `multip
 - **WHEN** the model calls the tool
 - **THEN** the tool returns an error naming the sheet and column and asking to move the column or compute from source columns, and no file is written
 
+#### Scenario: Derived values sent as literals
+
+- **GIVEN** columns "Budget", "Réel" and a literal column "Écart" whose values equal Réel − Budget on every filled row (up to the literal's own rounding)
+- **WHEN** the model calls the tool
+- **THEN** the file is created as sent, and the tool result names "Écart" with the `compute` that would produce it, asking the model to declare such columns with `compute` next time
+
 ### Requirement: Size limits are enforced
 
 The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 rows per sheet, 50 000 cells in total, 2 000 characters per cell or header, or 10 MB of output, with an error tool result stating the limit and telling the model to inform the user plainly and suggest splitting the data. It SHALL never truncate data silently.

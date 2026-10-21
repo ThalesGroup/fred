@@ -72,6 +72,11 @@ Tracking: GitHub issue #3208. Paths relative to the repository root.
 - [x] 4e.2 Preview carries a formula template per computed column and the totals formula per totals column
 - [x] 4e.3 Pane: Excel formula bar (name box, "fx", formula or raw value), updated by click and arrow keys
 
+## 4f. Derived columns sent as literals (2026-10-21, owner feedback)
+
+- [x] 4f.1 Tool description: never compute derived columns yourself, declare them with `compute`; `share_of_total` example; a division by zero leaves the cell empty
+- [x] 4f.2 Cheap check after a successful build: a literal numeric column equal (within its own rounding) to add/subtract/multiply/divide of two earlier columns or the share of total of one, on at least 2 of the first 20 rows, is named in the success text with its `compute`; file kept; at most 12 numeric columns checked, 3 hints
+
 ## 5. Docs and release
 
 - [x] 5.1 `docs/swift/capabilities/AUTHORING.md` one row; package README
@@ -114,3 +119,8 @@ Live-session round 2, 2026-10-21 (session 78bfa4f2, Deep agent on mistral-medium
 - Root cause of "null null null": the stored `Budget_Realisation-680539b6.preview.json` holds the text cell `Loyer", 1200, 1150, null, null, null], [` followed by `8000, 8400`: the model's quote closed "Loyer" early, so the row's JSON tail landed in one cell and the next row lost its label. Not a frontend `null` rendering (JSON null renders empty).
 - Package: `make test` 131 passed (new: the live rows rejected with sheet/row/column and the message; three leak fragments caught; quoted/bracketed text and `"null"` kept; formula templates equal the file's formula on every row, share range absolute, totals formula equal to the file's, none on literal columns; totals formulas cover rows beyond the preview cap, `COUNTA` on text); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
 - Frontend: `tsc --noEmit`, prettier and eslint clean on the spreadsheet feature; vitest on `features/capabilities/spreadsheet`: 5 files, 30 tests passed (new: formula bar for computed and totals cells by click and arrow keys, computed value in the cell, raw literal values, empty cell never "null"; `formulaBarText` unit cases incl. French decimal and percent).
+
+Live-session round 3, 2026-10-21 (session 1e3ef259, Deep agent on mistral-medium-latest):
+
+- Root cause of "no formula on Taux de réalisation / Part du total du réel": the stored `create_spreadsheet` call (session_history rank 2) sent no `compute` at all; every derived column was a literal (`-50, 0.9583, 0.1144`...). The model's reasoning says share of total "is not a column" so compute cannot express it, and that divide would fail on the 0 budget. Not a preview or formula-bar bug: no formula exists for those columns.
+- Package: `make test` 135 passed (new: the live rows name Écart → subtract, Taux → divide, Part → share_of_total; computed and independent columns get no hint; a single matching row or a copied operand is no derivation; the tool keeps the file and returns the note before "reply now"; description asserts the derived-column rule, `share_of_total` and the division-by-zero sentence); `make code-quality` green (ruff, import order, format, bandit, detect-secrets, basedpyright 0 errors).
