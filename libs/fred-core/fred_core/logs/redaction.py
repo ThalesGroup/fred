@@ -8,7 +8,7 @@
 import re
 
 _SENSITIVE_QUERY_PARAM_RE = re.compile(
-    r"([?&](?:token|access_token|id_token)=)[^&\s\"]+",
+    r"([?&](?:token|access_token|id_token|person|run|agent)=)[^&\s\"]+",
     re.IGNORECASE,
 )
 

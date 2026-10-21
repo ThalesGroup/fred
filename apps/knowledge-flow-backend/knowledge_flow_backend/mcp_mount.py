@@ -78,8 +78,11 @@ async def _forward_verified_identity(request: httpx2.Request) -> None:
     request.url = request.url.copy_with(query=str(httpx2.QueryParams(query)).encode())
 
 
-def _curate_tool(_route: Any, tool: Any) -> None:
+def _curate_tool(route: Any, tool: Any) -> None:
     """Keep grants out of schemas shown to a model."""
+
+    if route.summary and route.description and route.summary != route.description:
+        tool.description = f"{route.summary}\n\n{route.description}"
 
     properties = tool.parameters.get("properties")
     if isinstance(properties, dict):
@@ -143,10 +146,12 @@ def mount_fastapi_tools(
         name=name,
         instructions=description,
         route_maps=[
-            RouteMap(tags=tags, mcp_type=MCPType.TOOL),
+            *(RouteMap(tags={tag}, mcp_type=MCPType.TOOL) for tag in sorted(tags)),
             RouteMap(mcp_type=MCPType.EXCLUDE),
         ],
         mcp_component_fn=_curate_tool,
+        cache_ttl=300,
+        cache_scope="private",
         httpx_client_kwargs={
             "follow_redirects": False,
             "event_hooks": {"request": [_forward_verified_identity]},
