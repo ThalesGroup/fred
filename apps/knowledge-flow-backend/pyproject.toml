@@ -36,9 +36,8 @@ dependencies = [
   "docling==2.132.0",
   "openvino==2026.0.0; sys_platform == 'linux'",
   "hf-xet==1.6.0",
-  "fastapi-mcp==0.4.0",
-  # Patched v1 SDK; fastapi-mcp still consumes its v1 API.
-  "mcp>=1.30.0,<2.0.0",
+  "fastmcp==4.1.3",
+  "mcp==2.3.0",
   "duckdb>=1.3.2",
   "fred-core>=4.5.3",
   "dateparser>=1.2.2",
