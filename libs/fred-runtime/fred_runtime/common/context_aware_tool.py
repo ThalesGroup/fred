@@ -42,7 +42,6 @@ from fred_runtime.common.token_expiry import (
     unwrap_httpx_status_error,
 )
 from fred_runtime.runtime_context import get_runtime_context
-from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_runtime.runtime_support import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
@@ -50,6 +49,7 @@ from fred_runtime.runtime_support import (
     get_rag_knowledge_scope,
     get_vector_search_scopes,
 )
+from fred_runtime.runtime_support.authority import AuthorityLostError
 
 AgentSettingsProvider = Callable[[], AgentSettingsLike]
 
@@ -80,13 +80,13 @@ def _build_tool_error_message(
         if parsed is not None and tool_name == _READ_QUERY_TOOL_NAME:
             status_code, detail = parsed
             if status_code == 400:
-                return f"Error: {detail}"
-        return f"Error: {exc}"
+                return scrub_grant_text(f"Error: {detail}")
+        return scrub_grant_text(f"Error: {exc}")
     code = inner.response.status_code if inner.response is not None else "?"
     detail = _http_error_detail(inner)
     if tool_name == _READ_QUERY_TOOL_NAME and code == 400:
-        return f"Error: {detail}"
-    return f"Error: HTTP {code}: {detail}"
+        return scrub_grant_text(f"Error: {detail}")
+    return scrub_grant_text(f"Error: HTTP {code}: {detail}")
 
 
 def _http_error_detail(inner: httpx.HTTPStatusError) -> str:
@@ -188,7 +188,7 @@ def _build_tool_error_artifact(
             blocks=(
                 ToolContentBlock(
                     kind=ToolContentKind.TEXT,
-                    text=detail,
+                    text=scrub_grant_text(detail),
                 ),
             ),
         )
@@ -604,10 +604,9 @@ class ContextAwareTool(BaseTool):
                 # Raised before any logging: a refused call's body is not ours
                 # to preview, and the run ends rather than answering the model.
                 raise run_stop
-            if (
-                (self.base_tool.metadata or {}).get(MCP_DELEGATED_METADATA_KEY)
-                and str(e) == "Tool access was refused."
-            ):
+            if (self.base_tool.metadata or {}).get(MCP_DELEGATED_METADATA_KEY) and str(
+                e
+            ) == "Tool access was refused.":
                 raise AuthorityLostError() from None
             # Check for HTTP status in the exception chain for better logs
             inner = _unwrap_httpx_status_error(e)
@@ -652,10 +651,9 @@ class ContextAwareTool(BaseTool):
             if run_stop is not None:
                 # Same rule as `_run`: a run-stopping error is not a tool result.
                 raise run_stop
-            if (
-                (self.base_tool.metadata or {}).get(MCP_DELEGATED_METADATA_KEY)
-                and str(e) == "Tool access was refused."
-            ):
+            if (self.base_tool.metadata or {}).get(MCP_DELEGATED_METADATA_KEY) and str(
+                e
+            ) == "Tool access was refused.":
                 raise AuthorityLostError() from None
             # Check for HTTP status in the exception chain for better logs
             inner = _unwrap_httpx_status_error(e)

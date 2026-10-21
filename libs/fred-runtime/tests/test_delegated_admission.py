@@ -31,12 +31,15 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import httpx
+import httpx2
 import jwt
 import pytest
 from conftest import StaticWorkloadTokens, install_delegation_runtime
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_core.security import oidc
@@ -604,20 +607,19 @@ async def test_a_service_identity_runs_on_its_own_bearer_under_delegation(
     request = execute_request(
         runtime_context=RuntimeContext(team_id="team-1", access_token=EVALUATOR_TOKEN)
     )
-    captured: dict[str, Any] = {}
 
-    class _FakeMultiServerClient:
-        def __init__(self, conns, tool_interceptors=None) -> None:
-            captured.update(conns)
+    class _Adapter:
+        def __init__(self, client) -> None:
+            self.client = client
 
-        async def get_tools(self, server_name: str):
+        async def list_tools(self):
             return []
 
-    monkeypatch.setattr(mcp_utils, "MultiServerMCPClient", _FakeMultiServerClient)
+    monkeypatch.setattr(mcp_utils, "MCPAdapter", _Adapter)
 
     provider = agent_app_module._admission_credentials(request, evaluator(), container)
     assert request.runtime_context is not None
-    await mcp_utils.get_connected_mcp_client_for_agent(
+    adapters, _ = await mcp_utils.get_connected_mcp_client_for_agent(
         agent_id="agent-a",
         mcp_servers=[
             MCPServerConfiguration.model_validate(
@@ -639,8 +641,22 @@ async def test_a_service_identity_runs_on_its_own_bearer_under_delegation(
     assert request.runtime_context.access_token == EVALUATOR_TOKEN
     assert len(runtime.records) == 0
     assert audited(container, "delegated_run_admitted") == []
-    assert captured["kf-mcp"]["headers"]["Authorization"] == f"Bearer {EVALUATOR_TOKEN}"
-    assert captured["kf-mcp"]["url"] == "http://kf.invalid/mcp"
+    client = adapters[0].client
+    assert isinstance(client, Client)
+    transport = client.transport
+    assert isinstance(transport, StreamableHttpTransport)
+    assert transport.url == "http://kf.invalid/mcp"
+    seen = []
+
+    async def receive(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request.headers.get("Authorization"))
+        return httpx2.Response(200)
+
+    async with httpx2.AsyncClient(
+        transport=httpx2.MockTransport(receive), auth=transport.auth
+    ) as client:
+        await client.get("http://kf.invalid/mcp")
+    assert seen == [f"Bearer {EVALUATOR_TOKEN}"]
 
 
 @pytest.mark.asyncio

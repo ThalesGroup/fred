@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from functools import partial
@@ -34,6 +35,7 @@ from fred_sdk.contracts.models import MCPServerConfiguration
 from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from langchain.mcp import MCPAdapter
 from langchain_core.tools import BaseTool
+from mcp.client.caching import CacheConfig, InMemoryResponseCacheStore
 
 from fred_runtime.common.mcp_http_auth import MCPHTTPAuth
 from fred_runtime.common.outbound_credentials import (
@@ -50,15 +52,16 @@ from fred_runtime.runtime_support.authority import (
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
+SUPPORTED_TRANSPORTS = ["streamable_http", "stdio"]
 AUTH_MODE_NO_TOKEN: Final[str] = "no_token"
 AUTH_MODE_USER_TOKEN: Final[str] = "user_token"
 AUTH_MODE_DELEGATED: Final[str] = "delegated"
-GRANT_CARRYING_TRANSPORTS: Final[tuple[str, ...]] = ("streamable_http", "sse")
+GRANT_CARRYING_TRANSPORTS: Final[tuple[str, ...]] = ("streamable_http",)
 MCP_SERVER_ID_METADATA_KEY: Final[str] = "mcp_server_id"
 MCP_DELEGATED_METADATA_KEY: Final[str] = "mcp_delegated"
 CONNECT_TIMEOUT_SECS = 5.0
 SSE_READ_TIMEOUT_SECS = 30.0
+_tool_catalog_cache = InMemoryResponseCacheStore(max_entries=1024)
 
 
 class MCPConnectionError(Exception):
@@ -117,6 +120,7 @@ def _mcp_http_client_factory(
     headers: dict[str, str] | None = None,
     timeout: httpx2.Timeout | None = None,
     auth: httpx2.Auth | None = None,
+    follow_redirects: bool = False,
 ) -> httpx2.AsyncClient:
     # The SDK's default factory follows redirects; Fred's bearer and grant must not.
     return httpx2.AsyncClient(
@@ -124,6 +128,7 @@ def _mcp_http_client_factory(
         auth=auth,
         timeout=timeout,
         follow_redirects=False,
+        max_redirects=0,
     )
 
 
@@ -156,6 +161,24 @@ def _refusal_status(error: BaseException) -> int | None:
     return None
 
 
+def _catalog_cache_config(
+    server: MCPServerConfiguration, credentials: OutboundCredentials
+) -> CacheConfig | None:
+    if credentials.delegated:
+        return None
+    # Cache only protocol responses; each run still owns fresh callable tools and auth.
+    partition = hashlib.sha256(
+        (credentials.authorization or "anonymous").encode()
+    ).hexdigest()
+    target_id = hashlib.sha256(server.model_dump_json().encode()).hexdigest()
+    return CacheConfig(
+        store=_tool_catalog_cache,
+        partition=partition,
+        target_id=target_id,
+        default_ttl_ms=0,
+    )
+
+
 async def get_connected_mcp_client_for_agent(
     agent_id: str,
     mcp_servers: list[MCPServerConfiguration],
@@ -176,10 +199,6 @@ async def get_connected_mcp_client_for_agent(
         if transport not in SUPPORTED_TRANSPORTS:
             raise UnsupportedTransportError(
                 f"Unsupported transport '{server.transport}'. Supported: {', '.join(SUPPORTED_TRANSPORTS)}"
-            )
-        if transport not in ("streamable_http", "stdio"):
-            raise UnsupportedTransportError(
-                f"Transport '{transport}' is not yet implemented."
             )
 
     needs_credentials = any(
@@ -216,12 +235,15 @@ async def get_connected_mcp_client_for_agent(
                 )
             else:
                 if not server.command:
-                    raise ValueError(f"{server.name}: missing command for stdio transport")
+                    raise ValueError(
+                        f"{server.name}: missing command for stdio transport"
+                    )
                 merged_env = {**env, **(server.env or {})}
                 mcp_transport = StdioTransport(
                     command=server.command,
                     args=list(server.args or []),
                     env=merged_env or None,
+                    keep_alive=False,
                 )
 
             adapter = MCPAdapter(
@@ -229,6 +251,7 @@ async def get_connected_mcp_client_for_agent(
                     mcp_transport,
                     init_timeout=CONNECT_TIMEOUT_SECS,
                     timeout=SSE_READ_TIMEOUT_SECS,
+                    cache=_catalog_cache_config(server, call_credentials),
                 )
             )
             started = time.perf_counter()

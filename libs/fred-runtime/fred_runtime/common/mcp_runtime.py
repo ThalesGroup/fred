@@ -26,14 +26,20 @@ from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 from fred_sdk.contracts.models import (
     MCPServerConfiguration,
 )
-from langchain_core.tools import BaseTool
 from langchain.mcp import MCPAdapter
+from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
 
 from fred_runtime.common.kf_base_client import KnowledgeFlowAgentContext
 from fred_runtime.common.mcp_toolkit import McpToolkit
-from fred_runtime.common.mcp_utils import MCPConnectionError, get_connected_mcp_client_for_agent
-from fred_runtime.common.outbound_credentials import delegation_enabled, resolve_credential_provider
+from fred_runtime.common.mcp_utils import (
+    MCPConnectionError,
+    get_connected_mcp_client_for_agent,
+)
+from fred_runtime.common.outbound_credentials import (
+    delegation_enabled,
+    resolve_credential_provider,
+)
 from fred_runtime.common.structures import TokenRefreshCallback
 from fred_runtime.common.tool_node_utils import create_mcp_tool_node
 from fred_runtime.runtime_context import get_runtime_context
@@ -43,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 MCP_CONNECT_MAX_ATTEMPTS = 3
 MCP_CONNECT_RETRY_BASE_DELAY_SECS = 0.5
+
 
 async def _context_token(runtime_context: AgentRuntimeContext) -> str | None:
     return runtime_context.access_token
