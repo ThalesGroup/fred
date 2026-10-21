@@ -93,8 +93,16 @@ Each created workbook SHALL be stored with a JSON preview beside it, and the con
 
 - **GIVEN** the agent created a workbook with two sheets in this conversation
 - **WHEN** the user clicks the card's Preview button
-- **THEN** a side panel opens with the file name, a Download button and one tab per sheet
-- **AND** the selected sheet shows as a table with its header row and first column kept in view while scrolling
+- **THEN** a side panel opens with the file name and a Download button on top, and one tab per sheet in a strip at the bottom
+- **AND** the selected sheet shows as an Excel-like grid: column letters (A, B, ... AA) above, row numbers on the left, the workbook header as row 1 in bold, and the totals row last with its row number in the file
+- **AND** the grid scrolls in one area with the column letters, the row numbers and row 1 kept in view
+
+#### Scenario: Sheet tabs overflow the strip
+
+- **GIVEN** a workbook whose sheet tabs are wider than the panel
+- **WHEN** the preview is shown
+- **THEN** the tab strip does not wrap or show a scrollbar, and arrow buttons at its left scroll the tabs, each disabled at its end
+- **AND** selecting a tab, by click or with the arrow keys, scrolls it into view and shows its sheet
 
 #### Scenario: Values follow the column formats and the UI language
 
@@ -107,7 +115,7 @@ Each created workbook SHALL be stored with a JSON preview beside it, and the con
 
 - **GIVEN** a sheet of 1 520 rows
 - **WHEN** its preview is shown
-- **THEN** the table holds the first 500 rows, totals cover all 1 520 rows, and a note says 1 020 more rows are in the file
+- **THEN** the grid holds the first 500 rows, totals cover all 1 520 rows, and a note above the sheet tabs says 1 020 more rows are in the file
 
 #### Scenario: Download from the panel
 
