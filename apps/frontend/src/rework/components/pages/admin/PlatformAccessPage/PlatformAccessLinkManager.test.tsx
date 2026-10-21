@@ -14,6 +14,7 @@ const hooks = vi.hoisted(() => ({
   joinerQuery: vi.fn(),
   joinerRefetch: vi.fn(),
   joinerFetching: false,
+  joinerUncachedPage: false,
   joinerError: false,
   joinerTotal: 1,
   joinerDeleted: false,
@@ -23,6 +24,7 @@ const hooks = vi.hoisted(() => ({
   total: 1,
   inactive: 5,
   uncachedPage: false,
+  uncachedFilter: false,
   linkStatus: "active",
   linkNote: "Workshop" as string | null,
   teamFree: undefined as boolean | undefined,
@@ -54,7 +56,8 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       total: hooks.total,
       inactive_count: hooks.inactive,
     };
-    const uncached = hooks.uncachedPage && (args[0] as { offset: number }).offset > 0;
+    const query = args[0] as { offset: number; status?: string };
+    const uncached = (hooks.uncachedPage && query.offset > 0) || (hooks.uncachedFilter && !!query.status);
     return {
       data,
       currentData: uncached ? undefined : data,
@@ -64,21 +67,24 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   },
   usePlatformEnrollmentJoinersQuery: (...args: unknown[]) => {
     hooks.joinerQuery(...args);
+    const uncached = hooks.joinerUncachedPage && (args[0] as { offset: number }).offset > 0;
     return {
-      currentData: {
-        items: [
-          {
-            user_id: "joined-user",
-            username: "simon",
-            first_name: "Simon",
-            last_name: "Martin",
-            joined_at: "2026-10-12T12:00:00Z",
-            deleted: hooks.joinerDeleted,
+      currentData: uncached
+        ? undefined
+        : {
+            items: [
+              {
+                user_id: "joined-user",
+                username: "simon",
+                first_name: "Simon",
+                last_name: "Martin",
+                joined_at: "2026-10-12T12:00:00Z",
+                deleted: hooks.joinerDeleted,
+              },
+            ],
+            total: hooks.joinerTotal,
           },
-        ],
-        total: hooks.joinerTotal,
-      },
-      isFetching: hooks.joinerFetching,
+      isFetching: hooks.joinerFetching || uncached,
       isError: hooks.joinerError,
       refetch: hooks.joinerRefetch,
     };
@@ -103,10 +109,12 @@ beforeEach(() => {
   hooks.total = 1;
   hooks.inactive = 5;
   hooks.uncachedPage = false;
+  hooks.uncachedFilter = false;
   hooks.linkStatus = "active";
   hooks.linkNote = "Workshop";
   hooks.teamFree = undefined;
   hooks.joinerFetching = false;
+  hooks.joinerUncachedPage = false;
   hooks.joinerError = false;
   hooks.joinerTotal = 1;
   hooks.joinerDeleted = false;
@@ -181,20 +189,35 @@ it("keeps an uncached page selected while its first request is loading", () => {
   expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
   expect(document.body.textContent).not.toContain("Workshop");
   expect(button("links.cleanup").disabled).toBe(true);
+  expect(document.querySelector('[role="status"][aria-label="rework.platformAccess.links.loading"]')).not.toBeNull();
   hooks.uncachedPage = false;
   render();
   expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
   expect(document.body.textContent).toContain("Workshop");
 });
 
-it("hides stale rows during refresh without resetting the current page", () => {
+it("does not show rows from another filter while a new filter is loading", () => {
+  hooks.uncachedFilter = true;
+  render();
+  selectStatus("expired");
+  expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ status: "expired", offset: 0 });
+  expect(document.body.textContent).not.toContain("Workshop");
+  expect(button("links.cleanup").disabled).toBe(true);
+  expect(document.querySelector('[role="status"][aria-label="rework.platformAccess.links.loading"]')).not.toBeNull();
+});
+
+it("keeps cached links and actions visible during background refresh", () => {
   hooks.total = 50;
   render();
   act(() => document.querySelector<HTMLButtonElement>('button[aria-label="dataTable.pagination.next"]')!.click());
   hooks.fetching = true;
   render();
-  expect(document.body.textContent).not.toContain("Workshop");
-  expect(button("links.cleanup").disabled).toBe(true);
+  expect(document.body.textContent).toContain("Workshop");
+  expect(button("links.cleanup").disabled).toBe(false);
+  expect(button("links.copyUrl").disabled).toBe(false);
+  expect(button("links.joiners").disabled).toBe(false);
+  expect(button("links.revoke").disabled).toBe(false);
+  expect(document.querySelector('[role="status"][aria-label="rework.platformAccess.links.loading"]')).toBeNull();
   expect(hooks.query.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
   hooks.fetching = false;
   hooks.error = true;
@@ -366,12 +389,13 @@ it("keeps the last known identity visible on a dimmed deleted joiner", () => {
   expect(row?.querySelector(`.${styles.joinerUsernameText}`)?.getAttribute("title")).toBe("simon");
 });
 
-it("shows joiner loading, empty and retry states without stale rows", () => {
+it("keeps cached joiners visible during refresh and handles errors and empty results", () => {
   render();
   act(() => button("links.joiners").click());
   hooks.joinerFetching = true;
   render();
-  expect(document.body.textContent).not.toContain("simon");
+  expect(document.body.textContent).toContain("simon");
+  expect(frontDialog().querySelector('[role="status"][aria-label="rework.platformAccess.links.loading"]')).toBeNull();
   hooks.joinerFetching = false;
   hooks.joinerError = true;
   render();
@@ -382,6 +406,22 @@ it("shows joiner loading, empty and retry states without stale rows", () => {
   hooks.joinerTotal = 0;
   render();
   expect(document.body.textContent).toContain("rework.platformAccess.links.noJoiners");
+});
+
+it("shows loading instead of a previous joiner page when pagination is uncached", () => {
+  hooks.joinerTotal = 26;
+  hooks.joinerUncachedPage = true;
+  render();
+  act(() => button("links.joiners").click());
+  const nextButtons = frontDialog().querySelectorAll<HTMLButtonElement>(
+    'button[aria-label="dataTable.pagination.next"]',
+  );
+  act(() => nextButtons[nextButtons.length - 1]!.click());
+  expect(hooks.joinerQuery.mock.lastCall?.[0]).toMatchObject({ offset: 25 });
+  expect(frontDialog().textContent).not.toContain("simon");
+  expect(
+    frontDialog().querySelector('[role="status"][aria-label="rework.platformAccess.links.loading"]'),
+  ).not.toBeNull();
 });
 it("creates a noted link without an implicit expiry and clears reusable mutation data", async () => {
   render();

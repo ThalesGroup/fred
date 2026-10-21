@@ -82,7 +82,10 @@ export default function PlatformAccessLinkManager({
   const [confirmRevoke, setConfirmRevoke] = useState<string>();
   const [failed, setFailed] = useState(false);
   const busy = generating.isLoading || revoking.isLoading || deleting.isLoading;
-  const history = !links.isFetching && !links.isError ? links.currentData : undefined;
+  const history = !links.isError ? links.currentData : undefined;
+  const linksLoading = links.isFetching && !history;
+  const joinersPage = !joiners.isError ? joiners.currentData : undefined;
+  const joinersLoading = joiners.isFetching && !joinersPage;
   const inactiveCount = links.currentData?.inactive_count ?? 0;
   const date = (value: string | null) =>
     value ? new Date(value).toLocaleString(i18n.language) : t("rework.platformAccess.links.never");
@@ -202,7 +205,7 @@ export default function PlatformAccessLinkManager({
             color="error"
             variant="outlined"
             size="small"
-            disabled={busy || links.isFetching || links.isError || !inactiveCount}
+            disabled={busy || !history || !inactiveCount}
             onClick={(event) => {
               rememberFocus(event.currentTarget);
               setFailed(false);
@@ -275,7 +278,7 @@ export default function PlatformAccessLinkManager({
           {deletedCount !== undefined && (
             <p role="status">{t("rework.platformAccess.links.deleted", { count: deletedCount })}</p>
           )}
-          {links.isFetching && <Spinner statusText={t("rework.platformAccess.links.loading")} />}
+          {linksLoading && <Spinner statusText={t("rework.platformAccess.links.loading")} />}
           {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
           {links.isError && (
             <div role="alert">
@@ -341,7 +344,7 @@ export default function PlatformAccessLinkManager({
                               ? "rework.platformAccess.links.copied"
                               : "rework.platformAccess.links.copyUrl",
                           ),
-                          disabled: busy || links.isFetching || !link.recoverable,
+                          disabled: busy || !link.recoverable,
                           onClick: (event) => {
                             const attempt = rememberFocus(event.currentTarget);
                             void run(async () => {
@@ -356,7 +359,7 @@ export default function PlatformAccessLinkManager({
                           id: "joiners",
                           icon: "group",
                           label: t("rework.platformAccess.links.joiners"),
-                          disabled: busy || links.isFetching,
+                          disabled: busy,
                           onClick: (event) => {
                             rememberFocus(event.currentTarget);
                             setJoinersOffset(0);
@@ -367,7 +370,7 @@ export default function PlatformAccessLinkManager({
                           id: "revoke",
                           icon: "block",
                           label: t("rework.platformAccess.links.revoke"),
-                          disabled: busy || links.isFetching || link.status === "revoked",
+                          disabled: busy || link.status === "revoked",
                           onClick: (event) => {
                             rememberFocus(event.currentTarget);
                             setConfirmRevoke(link.id);
@@ -397,7 +400,7 @@ export default function PlatformAccessLinkManager({
           onConfirm={() => setJoinersLink(undefined)}
         >
           <div className={styles.dialogBody}>
-            {joiners.isFetching && <Spinner statusText={t("rework.platformAccess.links.loading")} />}
+            {joinersLoading && <Spinner statusText={t("rework.platformAccess.links.loading")} />}
             {joiners.isError && (
               <div role="alert">
                 <p>{t("rework.platformAccess.links.joinersFailed")}</p>
@@ -406,19 +409,17 @@ export default function PlatformAccessLinkManager({
                 </Button>
               </div>
             )}
-            {!joiners.isFetching && !joiners.isError && joiners.currentData?.total === 0 && (
-              <p>{t("rework.platformAccess.links.noJoiners")}</p>
-            )}
-            {!joiners.isFetching && !joiners.isError && !!joiners.currentData?.total && (
+            {joinersPage?.total === 0 && <p>{t("rework.platformAccess.links.noJoiners")}</p>}
+            {!!joinersPage?.total && (
               <DataTable
                 size="small"
-                data={joiners.currentData.items}
+                data={joinersPage.items}
                 rowKey={(person) => person.user_id}
                 rowClassName={(person) => (person.deleted ? styles.deletedJoiner : undefined)}
                 serverPagination={{
                   offset: joinersOffset,
                   limit: 25,
-                  totalCount: joiners.currentData.total,
+                  totalCount: joinersPage.total,
                   onOffsetChange: setJoinersOffset,
                 }}
                 columns={[
@@ -457,7 +458,7 @@ export default function PlatformAccessLinkManager({
           title={t("rework.platformAccess.links.cleanupTitle", { team: team.name || team.team_id })}
           confirmColor="error"
           confirmLabel={t("rework.platformAccess.links.cleanupConfirm")}
-          confirmDisabled={busy || links.isFetching || links.isError || !inactiveCount}
+          confirmDisabled={busy || !history || !inactiveCount}
           onCancel={() => {
             if (!busy) {
               setConfirmCleanup(false);
