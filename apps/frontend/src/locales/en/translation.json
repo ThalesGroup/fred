@@ -265,6 +265,10 @@
         "plainText": "Plain text"
       }
     },
+    "spreadsheet": {
+      "name": "Create an Excel file",
+      "description": "Ability to create a downloadable Excel workbook with typed columns and totals."
+    },
     "html_artifact": {
       "name": "Generate a web page (HTML/CSS)",
       "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
@@ -3369,6 +3373,10 @@
             "powerpointDocument": {
               "title": "Fill in a PowerPoint document",
               "description": "Ability to fill a PPT file from a detailed template."
+            },
+            "spreadsheet": {
+              "title": "Create an Excel file",
+              "description": "Ability to create a downloadable Excel file from data in the conversation."
             },
             "webPage": {
               "title": "Generate a web page (HTML/CSS)",
