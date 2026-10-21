@@ -416,6 +416,11 @@ async def test_a_manual_total_row_keeps_the_file_and_returns_a_note():
         "automatic totals row" in content
     )
     assert content.endswith("Do not create it again; reply now.")
+    # An identical repeat returns the same text, notes included.
+    tool = _tool(workspace)
+    first, _ = await tool(**args)
+    repeat, _ = await tool(**args)
+    assert repeat == first == content
 
 
 CHART_NOTE = (
