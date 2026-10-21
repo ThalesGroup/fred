@@ -18,7 +18,7 @@
 // band so the two don't stack. (The launcher rail itself lives in
 // CapabilityLauncherRail — see its own test.)
 
-import { act } from "react";
+import { act, lazy } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -372,5 +372,70 @@ describe("CapabilitySidePanelHost — restoring whichever panel was left open", 
     rerender();
 
     expect(requestedPanels()).toEqual([TEXT]);
+  });
+});
+
+// After a deploy, an old tab's pane chunk is gone: the failure must stay in the
+// drawer instead of replacing the whole chat page with the router's error page.
+describe("CapabilitySidePanelHost — a pane that fails to load", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const KEY = "writable_document:writable_document_pane";
+  const OTHER = "demo_echo:demo_echo_pane";
+
+  const show = (activeKey: string | null) =>
+    act(async () => {
+      root.render(
+        <CapabilitySidePanelHost
+          capabilityIds={["writable_document"]}
+          activeKey={activeKey}
+          onActiveKeyChange={() => undefined}
+        />,
+      );
+    });
+
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const Broken = lazy<typeof StubPanel>(() =>
+      Promise.reject(new Error("Failed to fetch dynamically imported module")),
+    );
+    state.entries = [
+      { ...entry("writable_document", "edit_document"), Component: Broken },
+      entry("demo_echo", "edit_note"),
+    ];
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    vi.restoreAllMocks();
+  });
+
+  it("shows the load-failure message inside the drawer", async () => {
+    await show(KEY);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("capability.panelLoadFailed");
+    expect(container.querySelector("[data-drawer]")).not.toBeNull();
+  });
+
+  it("recovers when another panel is opened", async () => {
+    await show(KEY);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+
+    await show(OTHER);
+
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector("[data-panel]")).not.toBeNull();
   });
 });
