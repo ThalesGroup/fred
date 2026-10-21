@@ -350,6 +350,102 @@ def build_preview(prepared: PreparedWorkbook) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
 
 
+_HINT_MAX_NUMERIC_COLUMNS = 12
+_HINT_SAMPLE_ROWS = 20
+_HINT_MAX = 3
+
+
+def derived_column_hints(prepared: PreparedWorkbook) -> list[str]:
+    """Name literal columns whose values the model computed from other columns.
+
+    The file is kept; the hint asks for `compute` so Excel holds a live formula.
+    Bounded: few numeric columns, first rows only, the first mismatch moves on.
+    """
+
+    hints: list[str] = []
+    for sheet in prepared.sheets:
+        numeric = [i for i, c in enumerate(sheet.columns) if c.type in NUMERIC_TYPES]
+        if len(numeric) > _HINT_MAX_NUMERIC_COLUMNS:
+            continue
+        for target in numeric:
+            if sheet.computes[target] is not None:
+                continue
+            found = _derivation(sheet, target, numeric)
+            if found is None:
+                continue
+            op, left, right = found
+            if right is None:
+                spec = f"{{op: 'share_of_total', column: '{sheet.headers[left]}'}}"
+            else:
+                spec = (
+                    f"{{op: '{op}', left: '{sheet.headers[left]}', "
+                    f"right: '{sheet.headers[right]}'}}"
+                )
+            hints.append(f"'{sheet.headers[target]}' -> compute {spec}")
+    return hints[:_HINT_MAX]
+
+
+def _derivation(
+    sheet: PreparedSheet, target: int, numeric: list[int]
+) -> tuple[str, int, int | None] | None:
+    sample = sheet.rows[:_HINT_SAMPLE_ROWS]
+    expected = [row[target] for row in sample]
+    if sum(isinstance(v, int | float) for v in expected) < 2:
+        return None
+    # Only columns placed before it: otherwise C = A - B also "derives" B = A - C.
+    before = [i for i in numeric if i < target]
+    for left in before:
+        sources = [row[left] for row in sample]
+        total = math.fsum(
+            float(v) for row in sheet.rows if isinstance(v := row[left], int | float)
+        )
+        if total and _matches(
+            expected, [_combine("divide", v, total) for v in sources]
+        ):
+            return ("share_of_total", left, None)
+        for right in before:
+            if right == left:
+                continue
+            others = [row[right] for row in sample]
+            for op in ("subtract", "divide", "add", "multiply"):
+                if op in ("add", "multiply") and right < left:
+                    continue  # commutative: one order is enough
+                values = [_combine(op, row[left], row[right]) for row in sample]
+                # A copy of an operand (the other all 0 or 1) is no derivation.
+                if values not in (sources, others) and _matches(expected, values):
+                    return (op, left, right)
+    return None
+
+
+def _combine(op: str, left: Converted, right: Converted | float) -> float | None:
+    if not isinstance(left, int | float) or not isinstance(right, int | float):
+        return None
+    a, b = float(left), float(right)
+    if op == "subtract":
+        return a - b
+    if op == "add":
+        return a + b
+    if op == "multiply":
+        return a * b
+    return a / b if b else None
+
+
+def _matches(expected: list[Converted], values: list[float | None]) -> bool:
+    """Every literal equals the computed value up to the literal's own rounding."""
+
+    for literal, value in zip(expected, values, strict=True):
+        if literal is None:
+            continue
+        if not isinstance(literal, int | float) or value is None:
+            return False
+        number = float(literal)
+        places = 0 if number.is_integer() else _decimals(number)
+        tolerance = 0.5 * 10**-places if places else 1e-9 * max(1.0, abs(value))
+        if abs(number - value) > tolerance + 1e-12:
+            return False
+    return True
+
+
 def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
     headers: list[str] = []
     for index, column in enumerate(sheet.columns, start=1):
