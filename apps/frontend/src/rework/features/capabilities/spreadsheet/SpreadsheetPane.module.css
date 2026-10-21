@@ -1,0 +1,138 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Fills the host InlineDrawer column (mirrors PptPreviewPane). */
+.pane {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-s);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--on-surface-retreat);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-s);
+  min-height: 0;
+}
+
+.tabs {
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+/* Both scroll axes stay inside the table well; the header row and first column stick. */
+.tableScroll {
+  flex: 1;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  min-height: 0;
+  overflow: auto;
+}
+
+.table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 100%;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--outline-muted);
+  background-color: var(--surface-container);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  max-width: 20rem;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom-color: var(--outline-variant);
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.table th:first-child,
+.table td:first-child {
+  position: sticky;
+  left: 0;
+  border-right: 1px solid var(--outline-muted);
+}
+
+.table th:first-child {
+  z-index: 2;
+}
+
+.table .number {
+  text-align: right;
+}
+
+.totals td {
+  border-top: 1px solid var(--outline-variant);
+  border-bottom: none;
+  font: var(--font-body-small-emphasized);
+}
+
+.note,
+.state {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-align: center;
+}
+
+.state {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--spacing-l);
+}

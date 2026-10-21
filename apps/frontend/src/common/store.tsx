@@ -24,6 +24,7 @@ import { pptFillerCapabilityApi } from "../rework/features/capabilities/ppt_fill
 import pptPreviewReducer from "../rework/features/capabilities/ppt_filler/pptPreviewSlice.ts";
 import { pptBuilderCapabilityApi } from "../rework/features/capabilities/ppt_builder/api/pptBuilderCapabilityApi.ts";
 import htmlArtifactReducer from "../rework/features/capabilities/html_artifact/htmlArtifactSlice.ts";
+import spreadsheetPreviewReducer from "../rework/features/capabilities/spreadsheet/spreadsheetPreviewSlice.ts";
 import { sidePanelOpenRequestSlice } from "../rework/features/capabilities/sidePanelOpenRequestSlice.ts";
 
 // Optional: Logging middleware for debugging
@@ -60,6 +61,7 @@ const combinedReducer = combineReducers({
   [pptBuilderCapabilityApi.reducerPath]: pptBuilderCapabilityApi.reducer,
   pptPreview: pptPreviewReducer,
   htmlArtifact: htmlArtifactReducer,
+  spreadsheetPreview: spreadsheetPreviewReducer,
   capabilitySidePanelOpenRequest: sidePanelOpenRequestSlice.reducer,
 });
 

@@ -267,7 +267,26 @@
     },
     "spreadsheet": {
       "name": "Créer un fichier Excel",
-      "description": "Capacité de créer un classeur Excel téléchargeable, avec des colonnes typées et des totaux."
+      "description": "Capacité de créer un classeur Excel téléchargeable, avec des colonnes typées et des totaux.",
+      "panel": {
+        "spreadsheet_pane": {
+          "title": "Classeur",
+          "launcher": "Aperçu du classeur"
+        }
+      },
+      "untitled": "Classeur",
+      "close": "Fermer le panneau",
+      "download": "Télécharger",
+      "downloadError": "Échec du téléchargement",
+      "sheets": "Feuilles",
+      "empty": "Aucun classeur pour l'instant. Demandez à l'agent de créer un fichier Excel.",
+      "unavailable": "Aperçu indisponible. Téléchargez le fichier pour l'ouvrir.",
+      "moreRows_one": "{{formatted}} ligne de plus n'est pas affichée. Téléchargez le fichier pour la voir.",
+      "moreRows_other": "{{formatted}} lignes de plus ne sont pas affichées. Téléchargez le fichier pour tout voir.",
+      "card": {
+        "aria": "Fichier Excel",
+        "open": "Aperçu"
+      }
     },
     "html_artifact": {
       "name": "Générer une page web (HTML/CSS)",
