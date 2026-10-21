@@ -10,6 +10,16 @@ no_action_reason: "The normal local deployment command generates and imports the
 
 Local k3d deployments built from a Fred checkout.
 
+## Prerequisites
+
+Use the existing Docker and k3d development environment. No additional tools or
+service upgrades are required for this tag calculation change.
+
+## Configuration
+
+No configuration changes are required. Existing deployment commands, chart
+values and credentials remain unchanged.
+
 ## Upgrade
 
 Run the usual application deployment command. The first run adopts new tags and
