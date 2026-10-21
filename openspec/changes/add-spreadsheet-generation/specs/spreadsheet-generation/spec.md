@@ -24,7 +24,7 @@ The system SHALL apply each column's declared type as an Excel number format (`t
 
 - **GIVEN** a sheet with a `date` column holding `"2026-10-21"` and a `percent` column holding `0.15`
 - **WHEN** the workbook is generated
-- **THEN** the date cell holds a date value with a date format and the percent cell holds `0.15` displayed as `15%`
+- **THEN** the date cell holds a date value with Excel's built-in short-date format (numFmtId 14), shown in the reader's locale, and the percent cell holds `0.15` displayed as `15%`
 
 #### Scenario: Currency symbol
 
@@ -40,7 +40,7 @@ The system SHALL apply each column's declared type as an Excel number format (`t
 
 ### Requirement: Totals are live formulas
 
-When a column declares a total (`sum`, `average`, `min`, `max`, `count`), the system SHALL add one totals row after the data whose cells are Excel formulas over that column's data range, formatted like the column.
+When a column declares a total (`sum`, `average`, `min`, `max`, `count`), the system SHALL add one totals row after the data whose cells are Excel formulas over that column's data range, formatted like the column. The row's label SHALL name the functions used, in the conversation language: Total, Moyenne, Min, Max, Nombre in French (the default) and Total, Average, Min, Max, Count in English.
 
 #### Scenario: Sum of a currency column
 
@@ -48,23 +48,40 @@ When a column declares a total (`sum`, `average`, `min`, `max`, `count`), the sy
 - **WHEN** the workbook is generated
 - **THEN** row 12 holds `=SUM(C2:C11)` in that column and "Total" in the first text column
 
+#### Scenario: Label follows the function and the language
+
+- **GIVEN** a column with `total: "average"`
+- **WHEN** the workbook is generated for a French conversation
+- **THEN** the totals label reads "Moyenne", and "Average" for an English conversation
+
 ### Requirement: Invalid input is returned to the model
 
-The system SHALL reject invalid input with an error tool result that names the sheet, row and column at fault, and SHALL NOT write any file in that case. Invalid input includes an empty, duplicated or over-31-character sheet name, a name containing `[ ] : * ? / \`, a row whose length differs from the column count, and a value that cannot be converted to its column type.
+The system SHALL reject invalid input with an error tool result that names the sheet, row and column at fault, and SHALL NOT write any file in that case. Invalid input includes an empty, duplicated, over-31-character or reserved (`History`) sheet name, a name containing `[ ] : * ? / \` or control characters, a row whose length differs from the column count, a value that cannot be converted to its column type, a non-finite number, and a number whose lone comma could separate thousands or decimals (`"1,234"`). Control characters in cells and headers SHALL be removed, never raised as an error.
 
 #### Scenario: Row length mismatch
 
 - **WHEN** the model sends a row with four values for a three-column sheet
 - **THEN** the tool returns an error naming the sheet and row, no file is written, and the model can call the tool again in the same turn
 
+#### Scenario: Ambiguous number
+
+- **WHEN** the model sends `"1,234"` in a number column
+- **THEN** the tool returns an error asking for a JSON number and no file is written
+
+#### Scenario: Text pasted with control characters
+
+- **GIVEN** a text cell holding a vertical tab copied from a PDF
+- **WHEN** the workbook is generated
+- **THEN** the cell holds the text without the control character and the file is delivered
+
 ### Requirement: Size limits are enforced
 
-The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 rows per sheet, 50 000 cells in total, 2 000 characters per cell, or 10 MB of output, with an error tool result stating the limit. It SHALL never truncate data silently.
+The system SHALL refuse a workbook above 10 sheets, 50 columns per sheet, 5 000 rows per sheet, 50 000 cells in total, 2 000 characters per cell or header, or 10 MB of output, with an error tool result stating the limit and telling the model to inform the user plainly and suggest splitting the data. It SHALL never truncate data silently.
 
 #### Scenario: Too many rows
 
 - **WHEN** a sheet holds 5 001 rows
-- **THEN** the tool returns an error stating the 5 000-row limit and no file is written
+- **THEN** the tool returns an error stating the 5 000-row limit and asking the model to tell the user and suggest splitting, and no file is written
 
 ### Requirement: Generated workbooks run no code
 
@@ -78,11 +95,11 @@ The system SHALL write `.xlsx` only (never macro-enabled formats), SHALL write f
 
 ### Requirement: Authors enable it from the agent form
 
-The agent form SHALL offer the capability as a toggle in the Advanced view and as a "Create an Excel file" pack in the Simple view's Document production section, subject to the team's capability availability. The capability SHALL be admin-gated: a platform administrator opens it per team.
+The agent form SHALL offer the capability as a toggle in the Advanced view and as a "Generate an Excel file" ("Générer un fichier Excel") pack in the Simple view's Document production section, subject to the team's capability availability. The capability SHALL be admin-gated: a platform administrator opens it per team.
 
 #### Scenario: Enable from the Simple view
 
-- **WHEN** an author turns on the "Create an Excel file" pack for a team that can use the capability
+- **WHEN** an author turns on the "Generate an Excel file" pack for a team that can use the capability
 - **THEN** the agent's capability selection contains `spreadsheet`
 
 ### Requirement: Users preview the workbook in the chat
@@ -116,6 +133,19 @@ Each created workbook SHALL be stored with a JSON preview beside it, and the con
 - **GIVEN** a sheet of 1 520 rows
 - **WHEN** its preview is shown
 - **THEN** the grid holds the first 500 rows, totals cover all 1 520 rows, and a note above the sheet tabs says 1 020 more rows are in the file
+
+#### Scenario: Keyboard navigation
+
+- **GIVEN** the preview is open
+- **WHEN** the user focuses the grid and presses the arrow keys
+- **THEN** the selection moves cell by cell, only the selected cell is focusable, and the name box shows its address and content
+- **AND** a cell whose text may be cut shows its full text as a tooltip
+
+#### Scenario: A new request makes a new file
+
+- **GIVEN** the agent already created a workbook in this conversation
+- **WHEN** the user asks for a corrected version
+- **THEN** a new `.xlsx` and a new card are produced and the previous file stays available
 
 #### Scenario: Download from the panel
 
