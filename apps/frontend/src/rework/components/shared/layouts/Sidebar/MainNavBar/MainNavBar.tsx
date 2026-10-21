@@ -26,6 +26,7 @@ import { useTranslation } from "react-i18next";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { canEnterAdminSection } from "@core/guards/Protected";
+import NotificationsEntry from "@rework/features/notifications/NotificationsEntry";
 
 interface MainNavEntry {
   key: string;
@@ -107,6 +108,7 @@ export default function MainNavBar() {
           />
         </Tooltip>
       ))}
+      <NotificationsEntry iconStyle={ICON_STYLE} />
     </nav>
   );
 }
