@@ -394,6 +394,20 @@ export default function PlatformAccessLinkManager({
           maxWidth={900}
           hideCancel
           confirmLabel={t("rework.back")}
+          footerStart={
+            <Button
+              color="primary"
+              variant="outlined"
+              size="small"
+              disabled={joiners.isFetching || links.isFetching}
+              onClick={() => {
+                void joiners.refetch();
+                void links.refetch();
+              }}
+            >
+              {t("common.refresh")}
+            </Button>
+          }
           onCancel={() => setJoinersLink(undefined)}
           onConfirm={() => setJoinersLink(undefined)}
         >

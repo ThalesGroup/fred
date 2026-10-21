@@ -11,6 +11,8 @@ const hooks = vi.hoisted(() => ({
   reset: vi.fn(),
   revealLoading: false,
   query: vi.fn(),
+  linkRefetch: vi.fn(),
+  linkOpeningCount: 7,
   joinerQuery: vi.fn(),
   joinerRefetch: vi.fn(),
   joinerFetching: false,
@@ -48,7 +50,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
           expires_at: null,
           revoked_at: null,
           status: hooks.linkStatus,
-          opening_count: 7,
+          opening_count: hooks.linkOpeningCount,
           last_opened_at: "2026-10-02T12:34:56Z",
           recoverable: true,
         },
@@ -63,6 +65,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       currentData: uncached ? undefined : data,
       isFetching: hooks.fetching || uncached,
       isError: hooks.error,
+      refetch: hooks.linkRefetch,
     };
   },
   usePlatformEnrollmentJoinersQuery: (...args: unknown[]) => {
@@ -111,6 +114,7 @@ beforeEach(() => {
   hooks.uncachedPage = false;
   hooks.uncachedFilter = false;
   hooks.linkStatus = "active";
+  hooks.linkOpeningCount = 7;
   hooks.linkNote = "Workshop";
   hooks.teamFree = undefined;
   hooks.joinerFetching = false;
@@ -406,6 +410,30 @@ it("keeps cached joiners visible during refresh and handles errors and empty res
   hooks.joinerTotal = 0;
   render();
   expect(document.body.textContent).toContain("rework.platformAccess.links.noJoiners");
+});
+
+it("refreshes joined users and the underlying opening count on demand", () => {
+  render();
+  act(() => button("links.joiners").click());
+  const refresh = [...frontDialog().querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "common.refresh",
+  )!;
+  expect(document.querySelector(`.${styles.boundedTable} [title="7"]`)).not.toBeNull();
+  act(() => refresh.click());
+  expect(hooks.joinerRefetch).toHaveBeenCalledOnce();
+  expect(hooks.linkRefetch).toHaveBeenCalledOnce();
+  hooks.joinerFetching = true;
+  hooks.fetching = true;
+  render();
+  expect(frontDialog().textContent).toContain("simon");
+  expect(document.querySelector(`.${styles.boundedTable} [title="7"]`)).not.toBeNull();
+  expect(refresh.disabled).toBe(true);
+  hooks.joinerFetching = false;
+  hooks.fetching = false;
+  hooks.linkOpeningCount = 8;
+  render();
+  expect(document.querySelector(`.${styles.boundedTable} [title="8"]`)).not.toBeNull();
+  expect(refresh.disabled).toBe(false);
 });
 
 it("shows loading instead of a previous joiner page when pagination is uncached", () => {

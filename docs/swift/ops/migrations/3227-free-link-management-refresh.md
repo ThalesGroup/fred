@@ -28,6 +28,8 @@ Deploy Fred normally; no additional operator or user action is required.
 As a platform administrator, open Administration > Teams > Manage links. The
 history stays visible while the dialog is open and refreshes when reopened.
 Opening a link's joiner history fetches its current list without periodic polling.
+Use Refresh in the joiner dialog; its list and the Opens count in the invitation
+history update when the requests complete.
 
 ## Rollback
 
@@ -36,4 +38,5 @@ Use the normal frontend rollback procedure; no data migration is involved.
 ## Limitations
 
 Changes made by another administrator appear when the manager or joiner dialog is
-reopened, or when an affected query is invalidated by an action in this session.
+reopened, when Refresh is used in the joiner dialog, or when an affected query is
+invalidated by an action in this session.
