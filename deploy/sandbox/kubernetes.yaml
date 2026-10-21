@@ -1,0 +1,229 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fred-sandbox
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fred-sandbox-deny-all
+  namespace: fred-sandbox
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: fred-sandbox-cap
+  namespace: fred-sandbox
+spec:
+  hard:
+    pods: "20"
+    count/jobs.batch: "20"
+    requests.cpu: "4"
+    requests.memory: 4Gi
+    limits.cpu: "12"
+    limits.memory: 8Gi
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fred-sandbox-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fred-sandbox-broker
+  namespace: fred-sandbox-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fred-sandbox-broker
+  namespace: fred-sandbox
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, list, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [get, create]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fred-sandbox-broker
+  namespace: fred-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: fred-sandbox-system
+roleRef:
+  kind: Role
+  name: fred-sandbox-broker
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fred-sandbox-broker-read
+rules:
+  - apiGroups: [node.k8s.io]
+    resources: [runtimeclasses]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: [fred-sandbox]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fred-sandbox-broker-read
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: fred-sandbox-system
+roleRef:
+  kind: ClusterRole
+  name: fred-sandbox-broker-read
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fred-sandbox-broker
+  namespace: fred-sandbox-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: fred-sandbox-broker
+  template:
+    metadata:
+      labels:
+        app: fred-sandbox-broker
+    spec:
+      serviceAccountName: fred-sandbox-broker
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: broker
+          image: registry.example.invalid/fred-sandbox-broker:review
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: https
+              containerPort: 8443
+          env:
+            - name: SANDBOX_BACKEND
+              value: kubernetes
+            - name: SANDBOX_ISOLATION
+              value: kata
+            - name: SANDBOX_RUNTIME_NAME
+              value: kata-qemu-runtime-rs
+            - name: SANDBOX_IMAGE
+              value: REPLACE_WITH_APPROVED_PYTHON_IMAGE_DIGEST
+            - name: SANDBOX_NAMESPACE
+              value: fred-sandbox
+            - name: SANDBOX_NETWORK_POLICY_VERIFIED
+              value: "false"
+            - name: SANDBOX_PID_LIMIT_VERIFIED
+              value: "false"
+            - name: SANDBOX_MAX_SANDBOXES
+              value: "8"
+            - name: SANDBOX_WARM_POOL_SIZE
+              value: "0"
+            - name: SANDBOX_COLD_START_ON_MISS
+              value: "true"
+            - name: SANDBOX_BROKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: fred-sandbox-broker-auth
+                  key: token
+            - name: HOME
+              value: /tmp
+          command: [uvicorn]
+          args:
+            - sandbox_broker.main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8443"
+            - --ssl-certfile
+            - /tls/tls.crt
+            - --ssl-keyfile
+            - /tls/tls.key
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+            - name: scratch
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: https
+              scheme: HTTPS
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          terminationMessagePolicy: FallbackToLogsOnError
+      volumes:
+        - name: tls
+          secret:
+            secretName: fred-sandbox-broker-tls
+            defaultMode: 288
+        - name: scratch
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fred-sandbox-broker
+  namespace: fred-sandbox-system
+spec:
+  type: ClusterIP
+  selector:
+    app: fred-sandbox-broker
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
