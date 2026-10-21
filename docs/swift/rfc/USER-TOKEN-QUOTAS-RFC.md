@@ -58,12 +58,14 @@ calls are not tied to a user turn at all.
 
 **User experience**
 - **Composer indicator** immediately left of the model selector, always
-  visible while enforcement is on (also before the first message). Its colour
+  visible while tracking is on (also before the first message). Its colour
   follows the alert level: normal / 50% / 80% / 100%.
 - At 50% and 80%, a coloured tooltip opens above the indicator when the
   threshold is crossed; dismissible. Hover shows details: used %, which
   window, reset time.
-- At 100%, a friendly block message says when access returns.
+- At 100%: with blocking on, a friendly block message says when access
+  returns; with blocking off, the same indicator's tooltip says the quota is
+  exceeded and the turn still runs.
 - Existing design tokens and molecules only (`Tooltip`, ...): no new CSS
   custom properties.
 - A turn already started always finishes (bounded by the per-turn ceiling,
@@ -74,14 +76,19 @@ calls are not tied to a user turn at all.
 - Team totals and breakdown by agent and by model. **No per-member
   breakdown** (privacy).
 
-**Platform switch**
-- One platform-wide enforcement switch, off by default on install and
-  upgrade (migration impact: optional activation, minor). While off, spend is
-  still written to the ledger; gauges, messages and the block are off.
-  Toggling never changes the default, overrides or active boosts.
-- Re-enabling asks: keep counting, or reset counters to 0. Reset deletes no
-  ledger row: it stores `counters_reset_at`, and windows sum only rows after
-  `max(window start, counters_reset_at)`.
+**Platform switches** (roll out tracking first, block later)
+- **Usage tracking**: composer indicator and tooltips, `GET /me/usage`
+  state, team "Consommation" credits view, over-quota notice at 100%.
+- **Blocking**: refuses turns at 100% (structured 409) and enables the
+  per-turn ceiling. Only possible while tracking is on; turning tracking off
+  also turns blocking off.
+- Both off by default on install and upgrade (migration impact: optional
+  activation, minor). The ledger records spend in every state. Toggling never
+  changes the default, overrides or active boosts.
+- Turning either switch on asks: keep counting, or reset counters to 0 (e.g.
+  enable blocking with a fresh start so nobody is blocked at once). Reset
+  deletes no ledger row: it stores `counters_reset_at`, and windows sum only
+  rows after `max(window start, counters_reset_at)`.
 
 **Scope boundaries**
 - **#2528 is a prerequisite**: Deep agents must report sub-agent spend before
@@ -127,7 +134,7 @@ team-admin weekly limit is a count on these rows.
 `/runtime` binding call is not enough: `_resolve_agent_instance`
 (`agent_app.py:1777`) returns at ~1802-1832 for a direct `request.agent_id`
 without calling control-plane. A dedicated control-plane quota admission
-call (skipped while enforcement is off) runs on each execute entry point:
+call (skipped unless blocking is on) runs on each execute entry point:
 - `POST /agents/execute` and `/agents/execute/stream`, managed instance
   (`agent_instance_id`) and direct `agent_id`;
 - the OpenAI-compatible router (`openai_compat_router.py:267`, direct
@@ -140,7 +147,8 @@ Refusal: HTTP 409 with a structured `code: user_quota_exhausted` (distinct
 from the existing instance-disabled 409), `window` and `resets_at`, returned
 before the stream opens.
 
-**Per-turn ceiling.** Platform config: max credits per turn. The runtime
+**Per-turn ceiling.** Platform config: max credits per turn, applied only
+while blocking is on. The runtime
 checks accumulated turn spend between LLM and sub-agent calls; when hit, the
 turn ends cleanly with a message to the user. Parallel turns (several tabs)
 can overshoot the quota, bounded by concurrent turns x per-turn ceiling;
@@ -152,21 +160,26 @@ via `finally` / cancel handlers), from the same place as
 `_emit_turn_completed`. Failed reports retry with the idempotency key; a
 metric counts reports that finally fail.
 
-**Platform switch.** Reuse the platform access filtering pattern:
+**Platform switches.** Reuse the platform access filtering pattern:
 single-row settings with an optimistic `revision`
 (`PlatformAccessSettingsRow.filtering_enabled`,
 `fred_core/security/platform_access/models.py:22`), `PATCH
 /admin/platform/access` (`control_plane_backend/platform_access/service.py:145`),
 and `PlatformAccessActivationDialog` (`PlatformAccessPage.tsx:145-170`) for
-the keep/reset choice. Quotas get their own settings row.
+the keep/reset choice. Quotas get their own settings row with
+`tracking_enabled` and `blocking_enabled`. The server enforces the
+dependency: a PATCH enabling blocking while tracking is off is a 422, and
+disabling tracking clears blocking in the same write.
 
 **Observability.** Audit events for override set/clear, boost grant/revoke,
-enforcement toggle, counters reset. Metrics for blocks, 50/80% warnings,
-per-turn ceiling hits, failed spend reports, unknown-model coefficients.
+tracking and blocking toggles, counters reset. Metrics for blocks, 50/80%
+warnings, per-turn ceiling hits, failed spend reports, unknown-model
+coefficients.
 
 **Frontend.** Composer indicator and tooltip fed by `GET /me/usage` (both
-windows: used, budget, `resets_at`, active boost; `enforced: false` hides
-the indicator), refetched after each turn. The chat and the OpenAI-compatible
+windows: used, budget, `resets_at`, active boost; `tracking: false` hides
+the indicator, `blocking: false` turns the 100% block into the over-quota
+notice), refetched after each turn. The chat and the OpenAI-compatible
 client map the 409 `code` to the block message. Platform-admin page reuses
 the `PlatformRolesPage` user search (`GET /users`).
 
@@ -213,12 +226,14 @@ answered:
   spend reporting on every exit path with idempotent retry, dedicated quota
   admission on every execute entry point, per-turn ceiling in the runtime,
   structured 409 before the stream, audit events and metrics.
-- **(b) Platform-admin quota page** — enforcement switch with keep/reset,
-  weekly default, 5-hour fraction readout, per-user override via user
-  search, boost grant/revoke; team-admin boost for their members (once per
-  user per week).
-- **(c) Composer indicator** — `GET /me/usage`, indicator left of the model
-  selector, threshold tooltip, friendly 100% block with the return time.
+- **(b) Platform-admin quota page** — tracking and blocking switches
+  (dependency enforced server-side, keep/reset on each enable), weekly
+  default, 5-hour fraction readout, per-user override via user search,
+  boost grant/revoke; team-admin boost for their members (once per user per
+  week).
+- **(c) Composer indicator** — `GET /me/usage` with `tracking`/`blocking`
+  state, indicator left of the model selector, threshold tooltip, over-quota
+  notice (tracking only) or friendly 100% block with the return time.
 - **(d) Team "Consommation" view** — ledger credit totals by agent and by
   model on `TeamUsagePage`, no per-member breakdown, KPI charts labelled as
   token analytics.
@@ -231,8 +246,10 @@ answered:
   the spend reporting endpoint, the quota admission endpoint and its 409
   `code: user_quota_exhausted`, quota admin endpoints (default, override,
   boost grant/revoke incl. team-admin scope), the platform quota settings
-  endpoint (`enforcement_enabled`, `counters_reset_at`, required
-  `on_enable: keep | reset`), `GET /me/usage`, and the team usage extension.
+  endpoint (`tracking_enabled`, `blocking_enabled` with its 422 dependency
+  rule, `counters_reset_at`, required `on_enable: keep | reset` whenever a
+  switch turns on), `GET /me/usage` (`tracking`, `blocking`), and the team
+  usage extension.
 - `RUNTIME-EXECUTION-CONTRACT.md`: "Token accounting" section and a §8 entry
   for admission on every execute entry point, the per-turn ceiling ending a
   turn, exit-path spend reporting, and how the 409 reaches the client before
