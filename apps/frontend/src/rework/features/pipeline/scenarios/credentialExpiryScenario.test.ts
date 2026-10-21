@@ -129,6 +129,7 @@ describe("SSO credential expiry", () => {
       expect.any(String),
       { "settings.hold_seconds": 315, "settings.check_access": true },
       expect.any(AbortSignal),
+      expect.stringMatching(/^[a-z0-9]{8}$/i),
     );
     expect(test.deps.deleteAgentInstance).toHaveBeenCalledExactlyOnceWith("temporary-instance");
   });

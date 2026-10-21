@@ -69,6 +69,7 @@ export interface PipelineDeps {
     sourceAgentId: string,
     tuningFieldValues?: Record<string, string | number | boolean>,
     signal?: AbortSignal,
+    runToken?: string,
   ): Promise<string | null>;
   /** Delete a managed agent instance (teardown). */
   deleteAgentInstance(agentInstanceId: string): Promise<void>;
@@ -77,7 +78,7 @@ export interface PipelineDeps {
   /** Delete a prompt-library prompt (teardown). */
   deleteContextPrompt(promptId: string): Promise<void>;
   /** Create a chat session bound to an agent instance and return its id. */
-  createSession(agentInstanceId: string): Promise<string>;
+  createSession(agentInstanceId: string, runToken?: string): Promise<string>;
   /** Attach (replace) the set of context prompts on a session — resolved into
    * `context_prompt_text` at prepare-execution. */
   attachSessionPrompts(sessionId: string, promptIds: string[]): Promise<void>;
@@ -102,4 +103,4 @@ export interface PipelineDeps {
 }
 
 /** A scenario composes actions and reports each step. */
-export type Scenario = (deps: PipelineDeps, report: Reporter, signal: AbortSignal) => Promise<void>;
+export type Scenario<D = PipelineDeps> = (deps: D, report: Reporter, signal: AbortSignal) => Promise<void>;

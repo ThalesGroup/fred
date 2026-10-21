@@ -37,6 +37,12 @@ describe("assertAccessMatchesPlatformAdmin", () => {
   it("throws when a platform_admin is unexpectedly denied (403)", () => {
     expect(() => assertAccessMatchesPlatformAdmin("registry access", 403, true)).toThrow(/platform_admin=true/);
   });
+  it.each([401, 500, 502])("rejects HTTP %i as an authorization result for a non-admin", (status) => {
+    expect(() => assertAccessMatchesPlatformAdmin("registry access", status, false)).toThrow(`HTTP ${status}`);
+  });
+  it("accepts a hidden admin route for a non-admin", () => {
+    expect(() => assertAccessMatchesPlatformAdmin("registry access", 404, false)).not.toThrow();
+  });
 });
 
 describe("assertWriteAccessMatchesTeamPermission", () => {
@@ -55,6 +61,14 @@ describe("assertWriteAccessMatchesTeamPermission", () => {
     expect(() => assertWriteAccessMatchesTeamPermission("team x write access", 403, true)).toThrow(
       /can_update_resources=true/,
     );
+  });
+  it.each([401, 500, 502])("rejects HTTP %i as a write denial", (status) => {
+    expect(() => assertWriteAccessMatchesTeamPermission("team x write access", status, false)).toThrow(
+      `HTTP ${status}`,
+    );
+  });
+  it("accepts a hidden write route without permission", () => {
+    expect(() => assertWriteAccessMatchesTeamPermission("team x write access", 404, false)).not.toThrow();
   });
 });
 
@@ -101,9 +115,22 @@ function statusOf(steps: StepReport[], id: string): string {
 }
 
 describe("authzProbeScenario", () => {
+  it("allows delegated registry access without granting user administration", async () => {
+    const deps = fakeDeps({
+      flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: true },
+      ownTeamIds: [],
+      registryByToken: () => ({ status: 200, teamIds: [] }),
+      usersStatus: 403,
+      promptsStatusByTeam: {},
+    });
+    const steps = await runScenario("admin-token", "delegated-token", deps);
+    expect(statusOf(steps, "registry-access")).toBe("passed");
+    expect(statusOf(steps, "users-access")).toBe("passed");
+  });
+
   it("passes every step for the running admin testing themselves", async () => {
     const deps = fakeDeps({
-      flags: { isPlatformAdmin: true, isPlatformObserver: true },
+      flags: { isPlatformAdmin: true, isPlatformObserver: true, canListAllTeams: true },
       ownTeamIds: [],
       registryByToken: () => ({ status: 200, teamIds: ["team-a", "team-b"] }),
       usersStatus: 200,
@@ -119,7 +146,7 @@ describe("authzProbeScenario", () => {
 
   it("passes every step for a correctly-denied non-admin profile", async () => {
     const deps = fakeDeps({
-      flags: { isPlatformAdmin: false, isPlatformObserver: false },
+      flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
       ownTeamIds: ["team-a"],
       registryByToken: (token) =>
         token === "admin-token" ? { status: 200, teamIds: ["team-a", "team-b"] } : { status: 403, teamIds: [] },
@@ -143,7 +170,7 @@ describe("authzProbeScenario", () => {
 
   it("fails registry-access when a non-admin is unexpectedly let in", async () => {
     const deps = fakeDeps({
-      flags: { isPlatformAdmin: false, isPlatformObserver: false },
+      flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
       ownTeamIds: [],
       registryByToken: () => ({ status: 200, teamIds: ["team-a"] }), // bug: 200 for a non-admin
       usersStatus: 403,
@@ -155,7 +182,7 @@ describe("authzProbeScenario", () => {
 
   it("fails foreign-team-isolation when a foreign team is unexpectedly readable", async () => {
     const deps = fakeDeps({
-      flags: { isPlatformAdmin: true, isPlatformObserver: true },
+      flags: { isPlatformAdmin: true, isPlatformObserver: true, canListAllTeams: true },
       ownTeamIds: [],
       registryByToken: () => ({ status: 200, teamIds: ["team-a"] }),
       usersStatus: 200,
@@ -167,7 +194,7 @@ describe("authzProbeScenario", () => {
 
   it("skips foreign-team-isolation when the target already belongs to every team", async () => {
     const deps = fakeDeps({
-      flags: { isPlatformAdmin: false, isPlatformObserver: false },
+      flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
       ownTeamIds: ["team-a"],
       registryByToken: (token) =>
         token === "admin-token" ? { status: 200, teamIds: ["team-a"] } : { status: 403, teamIds: [] },
@@ -181,7 +208,7 @@ describe("authzProbeScenario", () => {
   describe("team-write-access", () => {
     it("passes for a team_editor-equivalent account that can write", async () => {
       const deps = fakeDeps({
-        flags: { isPlatformAdmin: false, isPlatformObserver: false },
+        flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
         ownTeamIds: ["team-a"],
         registryByToken: () => ({ status: 403, teamIds: [] }),
         usersStatus: 403,
@@ -196,7 +223,7 @@ describe("authzProbeScenario", () => {
 
     it("cleans up the created prompt after a successful write", async () => {
       const deps = fakeDeps({
-        flags: { isPlatformAdmin: false, isPlatformObserver: false },
+        flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
         ownTeamIds: ["team-a"],
         registryByToken: () => ({ status: 403, teamIds: [] }),
         usersStatus: 403,
@@ -208,9 +235,27 @@ describe("authzProbeScenario", () => {
       expect(deps.cleanupCalls).toEqual([{ teamId: "team-a", promptId: "prompt-123" }]);
     });
 
+    it("fails the step when cleanup of a created prompt fails", async () => {
+      const deps = fakeDeps({
+        flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
+        ownTeamIds: ["team-a"],
+        registryByToken: () => ({ status: 403, teamIds: [] }),
+        usersStatus: 403,
+        promptsStatusByTeam: {},
+        teamPermissionsByTeam: { "team-a": ["can_update_resources"] },
+        writeProbeByTeam: { "team-a": { status: 201, createdId: "prompt-123" } },
+      });
+      deps.cleanupTeamWrite = async () => {
+        throw new Error("delete returned HTTP 500");
+      };
+      const steps = await runScenario("admin-token", "sophia-token", deps);
+      expect(statusOf(steps, "team-write-access")).toBe("failed");
+      expect(steps.find((s) => s.id === "team-write-access")?.error).toContain("delete returned HTTP 500");
+    });
+
     it("does not attempt cleanup when the write was correctly denied", async () => {
       const deps = fakeDeps({
-        flags: { isPlatformAdmin: false, isPlatformObserver: false },
+        flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
         ownTeamIds: ["team-a"],
         registryByToken: () => ({ status: 403, teamIds: [] }),
         usersStatus: 403,
@@ -224,7 +269,7 @@ describe("authzProbeScenario", () => {
 
     it("fails when a write succeeds despite the account lacking can_update_resources", async () => {
       const deps = fakeDeps({
-        flags: { isPlatformAdmin: false, isPlatformObserver: false },
+        flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
         ownTeamIds: ["team-a"],
         registryByToken: () => ({ status: 403, teamIds: [] }),
         usersStatus: 403,
@@ -240,7 +285,7 @@ describe("authzProbeScenario", () => {
 
     it("fails when a write is denied despite the account holding can_update_resources", async () => {
       const deps = fakeDeps({
-        flags: { isPlatformAdmin: false, isPlatformObserver: false },
+        flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
         ownTeamIds: ["team-a"],
         registryByToken: () => ({ status: 403, teamIds: [] }),
         usersStatus: 403,
@@ -254,7 +299,7 @@ describe("authzProbeScenario", () => {
 
     it("skips when the target belongs to no collaborative team", async () => {
       const deps = fakeDeps({
-        flags: { isPlatformAdmin: false, isPlatformObserver: false },
+        flags: { isPlatformAdmin: false, isPlatformObserver: false, canListAllTeams: false },
         ownTeamIds: [],
         registryByToken: () => ({ status: 403, teamIds: [] }),
         usersStatus: 403,
