@@ -16,10 +16,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
+import threading
 from importlib.metadata import entry_points
 
 import pytest
+from fred_capability_spreadsheet import capability
 from fred_capability_spreadsheet.capability import (
     TOOL_NAME,
     XLSX_CONTENT_TYPE,
@@ -213,3 +216,32 @@ async def test_tool_call_through_langchain_keeps_the_artifact():
         .ainvoke({"type": "tool_call", "id": "call-1", "name": TOOL_NAME, "args": ARGS})
     )
     assert message.artifact.ui_parts[0].kind == LinkKind.download
+
+
+@pytest.mark.asyncio
+async def test_concurrent_builds_are_bounded_and_fail_fast(monkeypatch):
+    bound = capability.MAX_CONCURRENT_BUILDS
+    entered = threading.Semaphore(0)
+    release = threading.Event()
+
+    def blocking_build(request):
+        entered.release()
+        assert release.wait(timeout=5)
+        return b"xlsx"
+
+    monkeypatch.setattr(capability, "build_workbook", blocking_build)
+    workspace = FakeWorkspace()
+    tool = _tool(workspace)
+    running = [asyncio.ensure_future(tool(**ARGS)) for _ in range(bound)]
+    for _ in range(bound):
+        assert await asyncio.to_thread(entered.acquire, timeout=5)
+
+    content, artifact = await tool(**ARGS)
+    assert artifact.is_error is True
+    assert "busy" in content
+
+    release.set()
+    results = await asyncio.gather(*running)
+    assert all(result[1].is_error is False for result in results)
+    assert capability._active_builds == 0
+    assert len(workspace.writes) == bound
