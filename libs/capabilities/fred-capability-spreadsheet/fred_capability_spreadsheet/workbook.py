@@ -27,6 +27,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, cast
 
 from openpyxl import Workbook
@@ -34,7 +35,7 @@ from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE, Cell
 from openpyxl.styles import Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_SHEETS = 10
 MAX_COLUMNS = 50
@@ -96,9 +97,15 @@ _FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
 # computed value; other `=` text (`=1+1`, `=== x ===`) stays literal text.
 _FORMULA_LIKE = re.compile(r"^=\s*(?:[A-Za-z][A-Za-z0-9.]*\s*\(|\$?[A-Za-z]{1,3}\$?\d)")
 FORMULA_REJECTED = (
-    "formulas are not accepted: send the computed value, and set `total` on the "
-    "column for sums/averages."
+    "formulas are not accepted in cells: send the computed value, set `compute` "
+    "on the column for a per-row calculation (add, subtract, multiply, divide, "
+    "share_of_total), and set `total` on the column for sums/averages."
 )
+COMPUTE_OPS = ("add", "subtract", "multiply", "divide", "share_of_total")
+_OP_ALIASES = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide"}
+_OP_SYMBOLS = {"add": "+", "subtract": "-", "multiply": "*", "divide": "/"}
+NUMERIC_TYPES = ("number", "integer", "percent", "currency")
+MAX_ROUND_DECIMALS = 10
 _NUMERIC_JUNK = re.compile(r"[\s  _$€£¥]")
 # "1,234" reads as 1234 in English and 1.234 in French: refuse to guess.
 _AMBIGUOUS_COMMA = re.compile(r"^[+-]?\d{1,3},\d{3}$")
@@ -132,6 +139,34 @@ def _lower(value: object) -> object:
     return value.strip().lower() if isinstance(value, str) else value
 
 
+class ComputeSpec(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    op: str = Field(
+        description=(
+            "add, subtract, multiply or divide (left op right), or share_of_total "
+            "(each value of `column` divided by that column's total)."
+        )
+    )
+    left: str | float | None = Field(
+        default=None, description="Another column's header, or a number."
+    )
+    right: str | float | None = Field(
+        default=None, description="Another column's header, or a number."
+    )
+    column: str | None = Field(
+        default=None, description="For share_of_total: the column's header."
+    )
+    round: int | None = Field(
+        default=None, description="Optional: decimals to round the result to."
+    )
+
+    @field_validator("op", mode="before")
+    @classmethod
+    def _lowercase(cls, value: object) -> object:
+        return _lower(value)
+
+
 class ColumnSpec(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -154,6 +189,13 @@ class ColumnSpec(BaseModel):
         default=None,
         description="Add a totals row computing this column with an Excel formula.",
     )
+    compute: ComputeSpec | None = Field(
+        default=None,
+        description=(
+            "Per-row calculation from other columns, written as an Excel formula "
+            "on every row; send null for this column in rows."
+        ),
+    )
 
     @field_validator("type", "total", mode="before")
     @classmethod
@@ -165,6 +207,13 @@ class ColumnSpec(BaseModel):
     def _uppercase(cls, value: object) -> object:
         return value.strip().upper() if isinstance(value, str) else value
 
+    @model_validator(mode="after")
+    def _computed_type_defaults_to_numeric(self) -> ColumnSpec:
+        # A computed column without an explicit type is numeric, never text.
+        if self.compute is not None and "type" not in self.model_fields_set:
+            self.type = "percent" if self.compute.op == "share_of_total" else "number"
+        return self
+
 
 class SheetSpec(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -175,7 +224,8 @@ class SheetSpec(BaseModel):
         default_factory=list,
         description=(
             "Data rows; each row has exactly one literal value per column (null "
-            "for empty). No formulas: send computed values."
+            "for empty, and null for a computed column). No formulas: send "
+            "computed values."
         ),
     )
 
@@ -197,13 +247,31 @@ class CreateSpreadsheetInput(BaseModel):
 
 
 @dataclass(frozen=True)
+class Operand:
+    column: int | None = None
+    number: float = 0.0
+
+
+@dataclass(frozen=True)
+class ComputePlan:
+    op: str
+    left: Operand
+    right: Operand | None
+    decimals: int | None
+    # Can yield "" in the file (division by zero, or an operand that can).
+    may_fail: bool
+
+
+@dataclass(frozen=True)
 class PreparedSheet:
     name: str
     columns: list[ColumnSpec]
     headers: list[str]
-    # Converted once; both the writer and the preview read these.
+    # Converted once; both the writer and the preview read these. Computed cells
+    # hold the value their formula yields (None for an empty result).
     rows: list[list[Converted]]
     formats: list[str]
+    computes: list[ComputePlan | None]
 
 
 @dataclass(frozen=True)
@@ -280,11 +348,18 @@ def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
                 f"characters; the limit is {MAX_CELL_CHARS}. Use a short title."
             )
         headers.append(header)
+    computes = _plan_computes(sheet, headers)
     rows: list[list[Converted]] = []
     for row_number, row in enumerate(sheet.rows, start=2):
+        if len(row) != len(sheet.columns):
+            # Rows that leave computed columns out get their placeholders back.
+            values = iter(row)
+            row = [None if plan else next(values) for plan in computes]
         rows.append(
             [
-                _convert(
+                None
+                if computes[index]
+                else _convert(
                     raw,
                     column.type,
                     f"Sheet '{sheet.name}', row {row_number}, column {index + 1} "
@@ -295,6 +370,7 @@ def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
                 )
             ]
         )
+    _evaluate(computes, rows)
     formats = [
         _number_format(column, [row[index] for row in rows])
         for index, column in enumerate(sheet.columns)
@@ -305,7 +381,205 @@ def _prepare_sheet(sheet: SheetSpec) -> PreparedSheet:
         headers=headers,
         rows=rows,
         formats=formats,
+        computes=computes,
     )
+
+
+def _plan_computes(sheet: SheetSpec, headers: list[str]) -> list[ComputePlan | None]:
+    """Resolve each `compute` to column indexes; only earlier computed columns count."""
+
+    plans: list[ComputePlan | None] = [None] * len(sheet.columns)
+    for index, column in enumerate(sheet.columns):
+        spec = column.compute
+        if spec is None:
+            continue
+        where = f"Sheet '{sheet.name}', column {index + 1} ('{headers[index]}')"
+        op = _OP_ALIASES.get(spec.op, spec.op)
+        if op not in COMPUTE_OPS:
+            raise SpreadsheetInputError(
+                f"{where}: compute op {spec.op!r} is not supported; use add, "
+                "subtract, multiply, divide or share_of_total."
+            )
+        if column.type not in NUMERIC_TYPES:
+            raise SpreadsheetInputError(
+                f"{where}: a computed column must be number, integer, percent or "
+                f"currency, not '{column.type}'."
+            )
+        if spec.round is not None and not 0 <= spec.round <= MAX_ROUND_DECIMALS:
+            raise SpreadsheetInputError(
+                f"{where}: round must be between 0 and {MAX_ROUND_DECIMALS} decimals."
+            )
+        right: Operand | None = None
+        if op == "share_of_total":
+            target = spec.column if spec.column is not None else spec.left
+            left = (
+                _operand(target, sheet, headers, index, where)
+                if target is not None
+                else None
+            )
+            if left is None or left.column is None:
+                raise SpreadsheetInputError(
+                    f"{where}: share_of_total needs `column`, the header of the "
+                    "column whose values are divided by its total."
+                )
+        else:
+            if spec.left is None or spec.right is None:
+                raise SpreadsheetInputError(
+                    f"{where}: {op} needs `left` and `right`, each a column header "
+                    "or a number."
+                )
+            left = _operand(spec.left, sheet, headers, index, where)
+            right = _operand(spec.right, sheet, headers, index, where)
+            if left.column is None and right.column is None:
+                raise SpreadsheetInputError(
+                    f"{where}: compute needs at least one column header; with two "
+                    "numbers, send the result as a value instead."
+                )
+            if op == "divide" and right.column is None and right.number == 0:
+                raise SpreadsheetInputError(
+                    f"{where}: divide by 0 is not possible; fix `right`."
+                )
+        failing = [
+            plans[operand.column]
+            for operand in (left, right)
+            if operand is not None and operand.column is not None
+        ]
+        plans[index] = ComputePlan(
+            op=op,
+            left=left,
+            right=right,
+            decimals=spec.round,
+            may_fail=op in ("divide", "share_of_total")
+            or any(plan is not None and plan.may_fail for plan in failing),
+        )
+    return plans
+
+
+def _operand(
+    raw: str | float, sheet: SheetSpec, headers: list[str], index: int, where: str
+) -> Operand:
+    if not isinstance(raw, str):
+        if isinstance(raw, bool) or not math.isfinite(raw):
+            raise SpreadsheetInputError(
+                f"{where}: compute operand {raw!r} must be a column header or a "
+                "finite number."
+            )
+        return Operand(number=float(raw))
+    name = raw.strip()
+    matches = [i for i, h in enumerate(headers) if h.strip() == name] or [
+        i for i, h in enumerate(headers) if h.strip().casefold() == name.casefold()
+    ]
+    if not matches:
+        try:
+            if name.endswith("%"):
+                return Operand(number=float(_to_number(name[:-1])) / 100)
+            return Operand(number=float(_to_number(name)))
+        except (TypeError, ValueError):
+            known = ", ".join(f"'{h}'" for h in headers)
+            raise SpreadsheetInputError(
+                f"{where}: compute refers to '{raw}', which is not a column header "
+                f"of this sheet. Use one of: {known}."
+            ) from None
+    if len(matches) > 1:
+        raise SpreadsheetInputError(
+            f"{where}: compute refers to '{raw}', a header used by several "
+            "columns; give the columns distinct headers."
+        )
+    ref = matches[0]
+    target = sheet.columns[ref]
+    if ref == index:
+        raise SpreadsheetInputError(
+            f"{where}: compute refers to its own column; use other columns."
+        )
+    if target.compute is not None and ref > index:
+        raise SpreadsheetInputError(
+            f"{where}: compute refers to '{headers[ref]}', a computed column placed "
+            "after it. Move this column after it, or compute from source columns."
+        )
+    if target.type not in NUMERIC_TYPES:
+        raise SpreadsheetInputError(
+            f"{where}: compute refers to '{headers[ref]}', a {target.type} column; "
+            "only number, integer, percent and currency columns can be computed on."
+        )
+    return Operand(column=ref)
+
+
+def _evaluate(plans: list[ComputePlan | None], rows: list[list[Converted]]) -> None:
+    """Fill computed cells with what Excel shows: a blank source cell counts as 0,
+    a division by zero (or a failed operand) is empty."""
+
+    for index, plan in enumerate(plans):
+        if plan is None:
+            continue
+        total = 0.0
+        if plan.op == "share_of_total":
+            source = cast(int, plan.left.column)
+            total = math.fsum(
+                float(v) for row in rows if isinstance(v := row[source], int | float)
+            )
+        for row in rows:
+            row[index] = _apply(plan, row, plans, total)
+
+
+def _apply(
+    plan: ComputePlan,
+    row: list[Converted],
+    plans: list[ComputePlan | None],
+    total: float,
+) -> float | None:
+    left = _operand_value(plan.left, row, plans)
+    right = total if plan.right is None else _operand_value(plan.right, row, plans)
+    if left is None or right is None:
+        return None
+    if plan.op == "add":
+        result = left + right
+    elif plan.op == "subtract":
+        result = left - right
+    elif plan.op == "multiply":
+        result = left * right
+    elif right == 0:
+        return None
+    else:
+        result = left / right
+    if not math.isfinite(result):
+        return None
+    if plan.decimals is not None:
+        # Excel's ROUND rounds halves away from zero, unlike Python's round().
+        step = Decimal(1).scaleb(-plan.decimals)
+        result = float(Decimal(repr(result)).quantize(step, rounding=ROUND_HALF_UP))
+    return result
+
+
+def _operand_value(
+    operand: Operand, row: list[Converted], plans: list[ComputePlan | None]
+) -> float | None:
+    if operand.column is None:
+        return operand.number
+    value = row[operand.column]
+    if value is None:
+        # An empty source cell is 0 in Excel; an empty computed one is "" (fails).
+        return None if plans[operand.column] else 0.0
+    return float(cast(int | float, value))
+
+
+def _formula(plan: ComputePlan, row: int, last_row: int) -> str:
+    def ref(operand: Operand) -> str:
+        if operand.column is not None:
+            return f"{get_column_letter(operand.column + 1)}{row}"
+        number = operand.number
+        text = str(int(number)) if number.is_integer() else repr(number).upper()
+        return f"({text})" if number < 0 else text
+
+    if plan.right is None:
+        letter = get_column_letter(cast(int, plan.left.column) + 1)
+        expr = f"{letter}{row}/SUM(${letter}$2:${letter}${last_row})"
+    else:
+        expr = f"{ref(plan.left)}{_OP_SYMBOLS[plan.op]}{ref(plan.right)}"
+    if plan.decimals is not None:
+        expr = f"ROUND({expr},{plan.decimals})"
+    if plan.may_fail:
+        expr = f'IFERROR({expr},"")'
+    return "=" + expr
 
 
 def _preview_sheet(sheet: PreparedSheet, language: Language) -> dict[str, object]:
@@ -427,12 +701,13 @@ def _check_structure(request: CreateSpreadsheetInput) -> None:
                     f"{where}, column {index} ('{column.header}'): a '{column.total}' "
                     f"total needs a numeric column, not '{column.type}'."
                 )
+        computed = sum(1 for column in sheet.columns if column.compute is not None)
         for row_number, row in enumerate(sheet.rows, start=2):
-            if len(row) != len(sheet.columns):
+            if len(row) not in (len(sheet.columns), len(sheet.columns) - computed):
                 raise SpreadsheetInputError(
                     f"{where}, row {row_number}: expected {len(sheet.columns)} "
                     f"values (one per column), got {len(row)}. Use null for an "
-                    "empty cell."
+                    "empty cell" + (" and for a computed column." if computed else ".")
                 )
         total_cells += len(sheet.columns) * (len(sheet.rows) + 1)
     if total_cells > MAX_CELLS:
@@ -478,8 +753,18 @@ def _write_sheet(ws: Worksheet, sheet: PreparedSheet, language: Language) -> Non
         cell.fill = _HEADER_FILL
         cell.border = _HEADER_BORDER
 
+    last_row = len(sheet.rows) + 1
     for row_number, row in enumerate(sheet.rows, start=2):
         for index, value in enumerate(row):
+            plan = sheet.computes[index]
+            if plan is not None:
+                cell = _cell(ws, row_number, index + 1)
+                cell.value = _formula(plan, row_number, last_row)
+                if sheet.formats[index]:
+                    cell.number_format = sheet.formats[index]
+                if value is not None:
+                    widths[index] = max(widths[index], _display_length(value))
+                continue
             if value is None:
                 continue
             cell = _cell(ws, row_number, index + 1)
@@ -491,7 +776,6 @@ def _write_sheet(ws: Worksheet, sheet: PreparedSheet, language: Language) -> Non
                     cell.number_format = sheet.formats[index]
             widths[index] = max(widths[index], _display_length(value))
 
-    last_row = len(sheet.rows) + 1
     last_column = get_column_letter(len(columns))
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{last_column}{last_row}"
