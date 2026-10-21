@@ -197,6 +197,25 @@ describe("NotificationsPopover", () => {
     expect(buttonByText(el, "rework.notifications.loadMore")).toBeUndefined();
   });
 
+  it("refetches a later page from the cursor the page above has now", () => {
+    pages({
+      first: { items: [notification("n3")], next_cursor: "cursor-2" },
+      "cursor-2": { items: [notification("n2")], next_cursor: null },
+    });
+    const el = render();
+    act(() => buttonByText(el, "rework.notifications.loadMore").click());
+
+    // A delete above pulled n2 onto the first page: page two now starts after it.
+    pages({
+      first: { items: [notification("n3"), notification("n2")], next_cursor: "cursor-1" },
+      "cursor-1": { items: [notification("n1")], next_cursor: null },
+    });
+    act(() => root!.render(<NotificationsPopover id="pop" onClose={onClose} />));
+
+    expect(el.querySelectorAll("li[data-unread]")).toHaveLength(3);
+    expect(listMock).toHaveBeenLastCalledWith({ limit: 50, before: "cursor-1" });
+  });
+
   it("puts focus on its title when it opens", () => {
     pages({ first: { items: [] } });
     const el = render();

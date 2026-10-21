@@ -75,37 +75,46 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
   );
 }
 
-function LoadMore({ cursor, onLoadMore }: { cursor: string | null | undefined; onLoadMore: (cursor: string) => void }) {
+function LoadMore({ cursor, onLoadMore }: { cursor: string | null | undefined; onLoadMore: () => void }) {
   const { t } = useTranslation();
   if (!cursor) return null;
   return (
     <li className={styles.loadMore}>
-      <Button type="button" color="primary" variant="text" size="small" onClick={() => onLoadMore(cursor)}>
+      <Button type="button" color="primary" variant="text" size="small" onClick={onLoadMore}>
         {t("rework.notifications.loadMore")}
       </Button>
     </li>
   );
 }
 
-/** A page after the first, fetched from the previous page's cursor. */
+/**
+ * The pages after the first, each fetched from the current cursor of the page
+ * before it, so a delete or an arrival above shifts them instead of duplicating
+ * or skipping a row.
+ */
 function NotificationPageItems({
   before,
-  isLast,
+  remaining,
   onLoadMore,
   handlers,
 }: {
   before: string;
-  isLast: boolean;
-  onLoadMore: (cursor: string) => void;
+  remaining: number;
+  onLoadMore: () => void;
   handlers: TileHandlers;
 }) {
   const { data } = useNotificationsQuery({ limit: NOTIFICATIONS_PAGE_SIZE, before });
+  const next = data?.next_cursor;
   return (
     <>
       {data?.items.map((notification) => (
         <NotificationListItem key={notification.id} notification={notification} handlers={handlers} />
       ))}
-      {isLast && <LoadMore cursor={data?.next_cursor} onLoadMore={onLoadMore} />}
+      {remaining > 0 && next ? (
+        <NotificationPageItems before={next} remaining={remaining - 1} onLoadMore={onLoadMore} handlers={handlers} />
+      ) : (
+        <LoadMore cursor={next} onLoadMore={onLoadMore} />
+      )}
     </>
   );
 }
@@ -128,7 +137,7 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   // Focus lands on the title on opening and whenever the focused tile goes away.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [openedAt] = useState(() => Date.now());
-  const [moreCursors, setMoreCursors] = useState<string[]>([]);
+  const [morePages, setMorePages] = useState(0);
   const seenPosted = useRef(false);
 
   const firstPage = useNotificationsQuery({ limit: NOTIFICATIONS_PAGE_SIZE }, { refetchOnMountOrArgChange: true });
@@ -181,13 +190,13 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   const clearAll = async () => {
     try {
       await clearNotifications().unwrap();
-      setMoreCursors([]);
+      setMorePages(0);
     } finally {
       titleRef.current?.focus();
     }
   };
 
-  const loadMore = (cursor: string) => setMoreCursors((cursors) => [...cursors, cursor]);
+  const loadMore = () => setMorePages((count) => count + 1);
 
   let content;
   if (!items) {
@@ -212,16 +221,16 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
         {items.map((notification) => (
           <NotificationListItem key={notification.id} notification={notification} handlers={handlers} />
         ))}
-        {moreCursors.length === 0 && <LoadMore cursor={firstPage.data?.next_cursor} onLoadMore={loadMore} />}
-        {moreCursors.map((cursor, index) => (
+        {morePages > 0 && firstPage.data?.next_cursor ? (
           <NotificationPageItems
-            key={cursor}
-            before={cursor}
-            isLast={index === moreCursors.length - 1}
+            before={firstPage.data.next_cursor}
+            remaining={morePages - 1}
             onLoadMore={loadMore}
             handlers={handlers}
           />
-        ))}
+        ) : (
+          <LoadMore cursor={firstPage.data?.next_cursor} onLoadMore={loadMore} />
+        )}
       </ul>
     );
   }
