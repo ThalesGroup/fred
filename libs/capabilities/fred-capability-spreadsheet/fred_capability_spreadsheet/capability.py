@@ -228,8 +228,8 @@ def _created_text(
 def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
     session_id = ctx.identity.session_id
     services = ctx.services
-    # Tools are built per turn, so this maps the turn's request hashes to the file
-    # already created: a model repeating an identical call gets no second copy.
+    # Tools are built per turn, so this maps the turn's request hashes to the first
+    # success text: a model repeating an identical call gets no second copy.
     created: dict[str, str] = {}
 
     async def create_spreadsheet(
@@ -250,10 +250,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         ).hexdigest()
         if request_key in created:
             logger.info("[SPREADSHEET] identical repeat call skipped")
-            return (
-                _created_text(created[request_key], charts_ignored=charts_ignored),
-                ToolInvocationResult(tool_ref=TOOL_NAME),
-            )
+            return created[request_key], ToolInvocationResult(tool_ref=TOOL_NAME)
         workspace = services.workspace_fs
         if workspace is None:
             logger.error("[SPREADSHEET] workspace_fs is not available on this runtime")
@@ -316,11 +313,9 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             logger.info("[SPREADSHEET] manual total rows=%d", len(totals))
         if charts_ignored:
             logger.info("[SPREADSHEET] chart arguments ignored")
-        created[request_key] = output_file_name
-        return (
-            _created_text(output_file_name, hints, totals, charts_ignored),
-            ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,)),
-        )
+        text = _created_text(output_file_name, hints, totals, charts_ignored)
+        created[request_key] = text
+        return text, ToolInvocationResult(tool_ref=TOOL_NAME, ui_parts=(part,))
 
     return StructuredTool.from_function(
         coroutine=create_spreadsheet,
