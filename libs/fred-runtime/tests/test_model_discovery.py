@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import httpx
 import pytest
 import yaml
 from conftest import ToolFriendlyFakeChatModel
-from pydantic import ValidationError
-from types import SimpleNamespace
-
 from fred_runtime.app.agent_app import (
     _build_chat_model_factory,
     _catalog_for_advertisement,
     _project_model_catalog_response,
 )
 from fred_runtime.app.config import AgentPodConfig
-from fred_runtime.model_routing.catalog import ModelCatalog
+from fred_runtime.model_routing.catalog import (
+    ModelCatalog,
+    load_model_routing_policy_from_catalog,
+)
 from fred_runtime.model_routing.contracts import (
     ModelCapability,
     ModelNotUsableError,
@@ -27,6 +29,7 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
+from pydantic import ValidationError
 
 
 def _catalog(**discovery: object) -> ModelCatalog:
@@ -77,6 +80,21 @@ def test_discovery_only_catalog_has_stable_routable_profiles(monkeypatch) -> Non
     assert all(not p.supports_thinking for p in first.profiles)
 
 
+def test_discovery_endpoint_overrides_common_openai_base(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    catalog = _catalog().model_copy(
+        update={
+            "common_model_settings": {"openai_api_base": "https://other.example/v1"}
+        }
+    )
+    resolved = catalog.resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    settings = resolved.to_policy().profiles[0].model.settings
+    assert settings["base_url"] == "https://models.example/v1"
+    assert "openai_api_base" not in settings
+
+
 def test_optional_metadata_and_allowlist(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     resolved = _catalog(include_model_ids=["chat-a"]).resolve_discovery(
@@ -100,6 +118,24 @@ def test_optional_metadata_and_allowlist(monkeypatch) -> None:
     assert resolved.profiles[0].context_window_tokens == 32768
     assert resolved.profiles[0].max_input_tokens == 30000
     assert resolved.profiles[0].max_output_tokens == 2048
+
+
+def test_allowlist_ignores_invalid_or_duplicate_excluded_entries(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    resolved = _catalog(include_model_ids=["chat-a"]).resolve_discovery(
+        transport=_transport(
+            {
+                "data": [
+                    {"id": "chat-a"},
+                    {"id": "embedding-b"},
+                    {"id": "embedding-b"},
+                    {"id": []},
+                    {},
+                ]
+            }
+        )
+    )
+    assert [profile.model.name for profile in resolved.profiles] == ["chat-a"]
 
 
 @pytest.mark.parametrize(
@@ -175,6 +211,21 @@ def test_pod_builder_advertises_its_routing_snapshot(monkeypatch, tmp_path) -> N
         == factory.catalog.default_profile_by_capability[ModelCapability.CHAT]
     )
     assert factory.with_provider(factory._provider).catalog is resolved
+
+
+def test_policy_loader_resolves_a_discovery_catalog(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(
+        yaml.safe_dump(_catalog().model_dump(mode="json")), encoding="utf-8"
+    )
+    resolved = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    monkeypatch.setattr(ModelCatalog, "resolve_discovery", lambda self: resolved)
+    assert (
+        load_model_routing_policy_from_catalog(path).profiles[0].model.name == "chat-a"
+    )
 
 
 def test_static_catalog_advertisement_still_reads_the_file(tmp_path) -> None:

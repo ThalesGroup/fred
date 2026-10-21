@@ -21,10 +21,10 @@ file and provides a strict Pydantic contract for externalized model catalogs.
 
 from __future__ import annotations
 
-from copy import deepcopy
-from hashlib import sha256
 import json
 import os
+from copy import deepcopy
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -204,7 +204,12 @@ class ModelCatalog(FrozenModel):
         selected: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
         for item in payload["data"]:
-            if not isinstance(item, dict) or not _valid_model_id(item.get("id")):
+            candidate_id = item.get("id") if isinstance(item, dict) else None
+            if included is not None and (
+                not isinstance(candidate_id, str) or candidate_id not in included
+            ):
+                continue
+            if not isinstance(item, dict) or not _valid_model_id(candidate_id):
                 raise ValueError(
                     f"Model discovery source {source.source_id!r} returned an invalid model id"
                 )
@@ -214,8 +219,7 @@ class ModelCatalog(FrozenModel):
                     f"Model discovery source {source.source_id!r} returned duplicate model ids"
                 )
             seen_ids.add(model_id)
-            if included is None or model_id in included:
-                selected.append(item)
+            selected.append(item)
         if not selected or (included is not None and not included.issubset(seen_ids)):
             raise ValueError(
                 f"Model discovery source {source.source_id!r} has no complete selected inventory"
@@ -282,6 +286,10 @@ class ModelCatalog(FrozenModel):
             profile_settings = profile.model.settings or {}
             merged_settings = _deep_merge_dict(global_defaults, capability_defaults)
             merged_settings = _deep_merge_dict(merged_settings, profile_settings)
+            if "base_url" in profile_settings:
+                merged_settings.pop("openai_api_base", None)
+            elif "openai_api_base" in profile_settings:
+                merged_settings.pop("base_url", None)
             resolved_model = profile.model.model_copy(
                 update={"settings": merged_settings}
             )
@@ -307,4 +315,4 @@ def load_model_catalog(path: str | Path) -> ModelCatalog:
 
 
 def load_model_routing_policy_from_catalog(path: str | Path) -> ModelRoutingPolicy:
-    return load_model_catalog(path).to_policy()
+    return load_model_catalog(path).resolve_discovery().to_policy()
