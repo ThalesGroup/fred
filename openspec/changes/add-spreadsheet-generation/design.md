@@ -33,6 +33,7 @@ Owner decisions (2026-10-21) closed the draft's open questions: new small packag
 create_spreadsheet(
   file_name: str,                       # without extension; sanitised
   sheets: list[Sheet],                  # 1..10
+  language: str | None = None,          # "fr" | "en", totals label; fr by default
 )
 Sheet  = { name: str, columns: list[Column], rows: list[list[str | int | float | bool | None]] }
 Column = { header: str,
@@ -42,15 +43,15 @@ Column = { header: str,
            total: "sum" | "average" | "min" | "max" | "count" | None = None }
 ```
 
-Scalar cells only: dates are ISO strings (`YYYY-MM-DD`); percents accept `0.15` or `"15%"`; numeric strings accept a decimal comma and a currency sign. Enum values are case-insensitive. `currency` applies to `currency` columns only; without it the column uses `#,##0.00` with no symbol. Unknown keys are ignored.
+Scalar cells only: dates are ISO strings (`YYYY-MM-DD`); percents accept `0.15` or `"15%"`; numeric strings accept a decimal comma and a currency sign, but a lone thousands-like comma (`"1,234"`, `"$1,500"`) is refused as ambiguous and NaN/Infinity are refused; the description asks for amounts as JSON numbers. `language` is a tool argument because `CapabilityContext` does not carry the turn's `runtime_context.language`; exposing it there would be an SDK contract change, not worth it for one label. Enum values are case-insensitive. `currency` applies to `currency` columns only; without it the column uses `#,##0.00` with no symbol. Unknown keys are ignored.
 
 ### D3. Generation
 
-openpyxl in a worker thread (`asyncio.to_thread`), validation included, so the event loop never blocks. Header: bold, neutral fill, bottom border; `freeze_panes="A2"`; `auto_filter` over header and data. Number formats: integer `#,##0`, number `#,##0.00`, percent `0%` (up to two decimals when the values need them), currency `#,##0.00` with the symbol (`#,##0.00 "€"`, `"$"#,##0.00`, `"¥"#,##0`, ...), date `yyyy-mm-dd`. Widths: declared (clamped 4..100), else `min(max(len(header), longest cell) + 2, 60)`. Totals row: bold, label "Total" in the first text column without a total, `=SUM(B2:B{n})` etc. in the flagged columns (`COUNTA` for a text column's count), with the column's number format. Workbook `creator="Fred"`. Byte-identical output is not a goal: openpyxl stamps zip and core-property times; tests read the workbook back instead.
+openpyxl in a worker thread (`asyncio.to_thread`), validation included, so the event loop never blocks. Header: bold, neutral fill, bottom border; `freeze_panes="A2"`; `auto_filter` over header and data. Number formats: integer `#,##0`, number `#,##0.00`, percent `0%` (up to two decimals when the values need them), currency `#,##0.00` with the symbol (`#,##0.00 "€"`, `"$"#,##0.00`, `"¥"#,##0`, ...), date: built-in `numFmtId 14` (written as `mm-dd-yy`, shown by Excel and LibreOffice in the reader's short-date format). Widths: declared (clamped 4..100), else `min(max(len(header), longest cell) + 2, 60)`. Totals row: bold, label in the first text column without a total naming the functions used, in column order without repeats and in the conversation language (fr: Total, Moyenne, Min, Max, Nombre; en: Total, Average, Min, Max, Count; e.g. "Total / Moyenne"), `=SUM(B2:B{n})` etc. in the flagged columns (`COUNTA` for a text column's count), with the column's number format. Workbook `creator="Fred"`. `prepare` validates and converts every value once (control characters stripped from text cells and headers); the writer and the preview both read its result, so one error context serves both. Byte-identical output is not a goal: openpyxl stamps zip and core-property times; tests read the workbook back instead.
 
 ### D4. Validation and limits
 
-Rejected with an `is_error` result naming sheet / row / column: sheet name empty, longer than 31, containing `[]:*?/\`, starting or ending with `'`, or duplicated (case-insensitive); zero columns; a row longer or shorter than the columns; a value not convertible to its column type; a `sum`/`average`/`min`/`max` total on a text or date column. Limits: 10 sheets, 50 columns, 5 000 rows per sheet, 50 000 cells in total, 2 000 characters per cell, 10 MB output. Rows are never truncated silently.
+Rejected with an `is_error` result naming sheet / row / column: sheet name empty, longer than 31, containing `[]:*?/\` or control characters, starting or ending with `'`, `History` (reserved by Excel), or duplicated (case-insensitive); a header over 2 000 characters; an ambiguous or non-finite number; zero columns; a row longer or shorter than the columns; a value not convertible to its column type; a `sum`/`average`/`min`/`max` total on a text or date column. Limits: 10 sheets, 50 columns, 5 000 rows per sheet, 50 000 cells in total, 2 000 characters per cell, 10 MB output. Rows are never truncated silently: a limit error tells the model to state the limit to the user plainly and suggest splitting the data, and the tool description says so too.
 
 ### D5. Formula-injection guard
 
@@ -58,7 +59,7 @@ Only the totals row holds formulas, generated by code. Any text cell starting wi
 
 ### D6. Delivery
 
-Path `spreadsheets/<session_id>/<file_name>-<short uuid>.xlsx` through `workspace_fs.write(..., content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")`. The tool returns the preview card (D8), or the download `LinkPart` when no preview was stored, and a text result telling the model a download button is shown, so it does not write a link itself (PPT Filler wording). Missing `workspace_fs` or a write failure → `is_error` result, logged.
+Path `spreadsheets/<session_id>/<file_name>-<short uuid>.xlsx` (the name drops `<>:"|?*`, and `#` and `%` as a stopgap for #3213); each call writes a new file and returns a new card, nothing is overwritten, through `workspace_fs.write(..., content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")`. The tool returns the preview card (D8), or the download `LinkPart` when no preview was stored, and a text result telling the model a download button is shown, so it does not write a link itself (PPT Filler wording). Missing `workspace_fs` or a write failure → `is_error` result, logged.
 
 ### D7. Model steering without middleware
 
@@ -68,8 +69,8 @@ The tool description carries the steering ("when the user asks for an Excel file
 
 - In the same worker thread, `build_preview` turns the validated request into JSON: per sheet the columns (type, currency, decimals the Excel format shows, total kind), typed values (dates as ISO strings), the first 500 rows, the full `row_count`, and a totals row computed in Python to mirror `SUM/AVERAGE/MIN/MAX/COUNT(A)` over every row. Display only; the `.xlsx` keeps its formulas.
 - The JSON is written beside the file (`<file>.preview.json`) through `workspace_fs`, like PPT Filler's PDF beside its `.pptx`. No new endpoint: the frontend fetches the durable `/fs/download` href with the session bearer.
-- The `spreadsheet_preview` part (preview id = storage key, title, file name, both hrefs) is declared in `manifest.chat_parts` with `SidePanelSpec(widget="spreadsheet_pane")`. A preview build or upload failure is logged and falls back to the `LinkPart`; it never costs the file.
-- Frontend plugin `features/capabilities/spreadsheet/`: the card registers the file in a small slice (launcher, restore) and opens the pane on a live creation; the lazy pane renders an Excel-like `<table>` in one scroll area: frozen column letters, row numbers and row 1 (the workbook header, as the file freezes it), the totals row last with its file row number, column widths from the writer's rule measured on the preview rows (no wrapping except a long text column), `Intl` number/currency/percent/date formats in the UI language, and a name box with the clicked cell's address and content. Sheet tabs sit in a fixed bottom strip (`tablist`, arrow keys), with scroll arrows when they overflow. `DataTable` was not reused: it is a paginated list table keyed by column label, without a totals row or frozen headings.
+- The `spreadsheet_preview` part (preview id = storage key, file name, both hrefs) is declared in `manifest.chat_parts` with `SidePanelSpec(widget="spreadsheet_pane")`. A preview build or upload failure is logged and falls back to the `LinkPart`; it never costs the file.
+- Frontend plugin `features/capabilities/spreadsheet/`: the card registers the file in a small slice (launcher, restore) and opens the pane on a live creation; the lazy pane renders an Excel-like `<table>` in one scroll area: frozen column letters, row numbers and row 1 (the workbook header, as the file freezes it), the totals row last with its file row number, column widths from the writer's rule measured on the preview rows (no wrapping except a long text column), `Intl` number/currency/percent/date formats in the UI language (one formatter set per column, one formatting pass per sheet), memoized rows so a selection change re-renders only the rows it touches, the whole `thead` sticky at the top, a `title` with the full text on cells that may be clipped, and a name box with the selected cell's address and content. The grid has one focusable cell (the selection); arrow keys move it. Sheet tabs sit in a fixed bottom strip (`tablist`, arrow keys), with scroll arrows when they overflow. `DataTable` was not reused: it is a paginated list table keyed by column label, without a totals row or frozen headings.
 
 ## Risks / Trade-offs
 
@@ -78,3 +79,19 @@ The tool description carries the steering ("when the user asks for an Excel file
 - A new dependency in the fred-agents image (openpyxl + et-xmlfile, pure Python).
 - Generation runs on the default thread pool, bounded per pod at 4 concurrent builds (fail fast over the bound, as PPT Filler); the 50 000-cell limit keeps one call to well under a second.
 - Each file now writes two objects (the `.xlsx` and its preview, at most a few hundred KB for 500 rows x 50 columns); the preview shows in the agent workspace listing next to the file, as PPT Filler's PDF does.
+
+## Known limitations
+
+- Erasing a conversation leaves its `.xlsx` and `.preview.json` in workspace storage, as for PPT Filler outputs (#3212).
+- The card auto-opens the pane with the shared page-load heuristic of the other capability cards (#3214).
+
+## Out of scope / later
+
+See the proposal's list; ranked roadmap in #3215.
+
+## Follow-ups
+
+- #3212 Generated files (spreadsheet, PowerPoint) survive conversation erasure
+- #3213 Workspace download links break on file names containing # or %
+- #3214 Deduplicate the capability card auto-open heuristic (4 copies)
+- #3215 Spreadsheet capability v2 roadmap
