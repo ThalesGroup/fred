@@ -29,6 +29,14 @@ Existing pieces this builds on:
 10. **Marketplace recipients from `published_by`.** Nullable column, set by `save_publication` on publish and republish. `agent.republish_needed` is emitted by `update_agent_instance` when the save changed the agent, the entry is Published, and `published_by` is set and differs from the editor; group `agent_republish:<entry_id>`. Republish or removal of the entry calls `resolve` on that group (the actor's row disappears, otherwise "Handled by"). `agent.marketplace_removed` is emitted wherever the entry enters the Removed state, unless the actor is the publisher; group `agent_removed:<entry_id>:<removed_at>`; it carries the reason code and the platform admin's message if any.
 11. **Navigation-only buttons in slice 1.** Both types offer "Open the agent", routing to the team's Agents page; the existing republish flow there does the rest. Domain-endpoint buttons are part of the framework and first used in slice 2.
 
+## Backend implementation notes (divergences to confirm)
+
+- `handled_by_name` column: a display snapshot, like the payload's names, so "Handled by <name>" needs no user lookup. Removals by deactivation, suspension or deletion go through the agent store, which knows no name: those rows show only `handled_outcome = removed`.
+- Index shapes: the list index is ascending `(recipient_id, created_at, id)` (a backward scan serves DESC), and the unique open-group index is ordered `(group_key, recipient_id)` so `resolve` uses it too.
+- The view is a union discriminated by `type` with one payload model per type, so the generated client types each payload instead of a hand-written frontend type. A row of a type this version does not know is skipped by the list.
+- `POST /notifications/seen` answers the new `NotificationSummary`; `before` is an opaque cursor (`next_cursor`), not a notification id.
+- `notification_type` is not in `PROMETHEUS_ALLOWED_LABELS`: per-type counts reach OpenSearch only. Adding the label is an owner decision.
+
 ## Risks / Trade-offs
 
 - [Polling cost at scale] → one indexed count per visible tab every 15 s, nothing when hidden; measured in verification with the existing mock load tooling if needed.
