@@ -159,7 +159,7 @@ impl Campaign<'_> {
                         &token,
                         "GET",
                         &format!(
-                            "/spaces/{space}/folders?limit=50&parent_id={}",
+                            "/spaces/{space}/entries?limit=50&parent_id={}",
                             parent.unwrap()
                         ),
                         Value::Null,
@@ -252,7 +252,7 @@ async fn folder_scaling() {
         .await
         .unwrap();
     let baseline_tuples = tuples(&e).await;
-    let list = format!("/spaces/{}/folders?parent_id={}", org.id, root.id);
+    let list = format!("/spaces/{}/entries?parent_id={}", org.id, root.id);
     // Folder count changes neither authorization RPCs nor persisted tuples.
     for count in [0, 9985] {
         if count > 0 {
@@ -294,47 +294,12 @@ async fn folder_scaling() {
         app.clone(),
         &token,
         "GET",
-        &format!("/spaces/{}/folders?parent_id={}", org.id, parent.id),
+        &format!("/spaces/{}/entries?parent_id={}", org.id, parent.id),
         Value::Null,
     )
     .await;
     assert_eq!(deep["ancestors"].as_array().unwrap().len(), 15);
     assert_eq!(deep["items"].as_array().unwrap().len(), 0);
-    sqlx::query("analyze folder")
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    for (label, parent) in [("wide", root.id), ("deep", parent.parent_id.unwrap())] {
-        let plan:Value=sqlx::query_scalar("explain(analyze,buffers,format json) select id,space_id,parent_id,name,path,created_at from folder where space_id=$1 and parent_id=$2 order by name,id limit 50")
-            .bind(org.id).bind(parent).fetch_one(&e.pool).await.unwrap();
-        println!("FOLDER_PLAN {label} {plan}");
-    }
-    for (label, sql) in [
-        (
-            "wide-count",
-            "explain(analyze,buffers,format json) select count(*) from folder where space_id=$1 and parent_id=$2",
-        ),
-        (
-            "wide-last-page",
-            "explain(analyze,buffers,format json) select id,space_id,parent_id,name,path,created_at from folder where space_id=$1 and parent_id=$2 order by name,id limit 50 offset 9900",
-        ),
-        (
-            "wide-search",
-            "explain(analyze,buffers,format json) select id,space_id,parent_id,name,path,created_at from folder where space_id=$1 and parent_id=$2 and strpos(lower(name),lower('child-09'))>0 order by name,id limit 50",
-        ),
-        (
-            "wide-date",
-            "explain(analyze,buffers,format json) select id,space_id,parent_id,name,path,created_at from folder where space_id=$1 and parent_id=$2 order by created_at,id limit 50",
-        ),
-    ] {
-        let plan: Value = sqlx::query_scalar(sql)
-            .bind(org.id)
-            .bind(root.id)
-            .fetch_one(&e.pool)
-            .await
-            .unwrap();
-        println!("FOLDER_PLAN {label} {plan}");
-    }
     println!(
         "FOLDER_FIXTURE {}",
         json!({"folders":folder_count,"max_depth":15,"initial_tuples":baseline_tuples,"pool_max_connections":e.pool.options().get_max_connections()})
@@ -468,17 +433,18 @@ async fn folder_scaling() {
         }
     });
     for _ in 0..80 {
-        let page = db::folders(
-            &e.pool,
-            space,
-            &domain::FolderQuery {
-                limit: Some(200),
-                ..Default::default()
-            },
+        let page = request(
+            app.clone(),
+            &separate[0].1,
+            "GET",
+            &format!("/spaces/{space}/entries?limit=200"),
+            Value::Null,
         )
-        .await
-        .unwrap();
-        assert_eq!(page.total as usize, page.items.len());
+        .await;
+        assert_eq!(
+            page["total"].as_u64().unwrap() as usize,
+            page["items"].as_array().unwrap().len()
+        );
     }
     writer.await.unwrap();
 }

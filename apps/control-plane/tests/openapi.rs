@@ -80,7 +80,6 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /deletions/{operation_id}",
         "put /spaces/{id}/roles/{role}/{user}",
         "delete /spaces/{id}/roles/{role}/{user}",
-        "get /spaces/{id}/folders",
         "post /folders",
         "patch /folders/{id}",
         "delete /folders/{id}",
@@ -306,35 +305,51 @@ fn document_metadata_and_mutation_routes_are_absent() {
 }
 
 #[test]
-fn folder_directory_contract_resolves_order_enum_and_metadata() {
+fn directory_contract_resolves_order_enum_and_metadata() {
     let api = schema();
     let schemas = &api["components"]["schemas"];
+    assert!(
+        api["paths"]
+            .get("/control-plane/v1/spaces/{id}/folders")
+            .is_none()
+    );
+    for removed in [
+        "FolderDirectory",
+        "FolderPage",
+        "FolderOrder",
+        "FolderQuery",
+    ] {
+        assert!(schemas.get(removed).is_none());
+    }
     assert_eq!(
-        schemas["FolderOrder"]["enum"],
-        json!(["name_asc", "name_desc", "created_asc", "created_desc"])
+        schemas["EntryOrder"]["enum"],
+        json!([
+            "name_asc",
+            "name_desc",
+            "created_asc",
+            "created_desc",
+            "size_asc",
+            "size_desc"
+        ])
     );
     assert_eq!(
         schemas["Folder"]["properties"]["created_at"]["format"],
         "date-time"
     );
-    let directory = &schemas["FolderDirectory"]["allOf"];
-    assert!(
-        directory
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|part| part["$ref"] == "#/components/schemas/FolderPage")
+    assert_eq!(
+        schemas["Directory"]["properties"]["can_write"]["type"],
+        "boolean"
     );
-    assert!(
-        directory
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|part| part["properties"]["can_write"]["type"] == "boolean")
-    );
-    for field in ["items", "ancestors", "total", "offset", "limit"] {
+    for field in [
+        "items",
+        "ancestors",
+        "total",
+        "offset",
+        "limit",
+        "processing",
+    ] {
         assert!(
-            schemas["FolderPage"]["required"]
+            schemas["Directory"]["required"]
                 .as_array()
                 .unwrap()
                 .contains(&json!(field))

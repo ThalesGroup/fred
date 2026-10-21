@@ -39,7 +39,6 @@ foreign context, and 409 for ambiguity.
 | GET | `/control-plane/v1/me/spaces` | `my_spaces` |
 | POST | `/control-plane/v1/spaces` | `create_space` |
 | DELETE | `/control-plane/v1/spaces/{id}` | `delete_space` |
-| GET | `/control-plane/v1/spaces/{id}/folders` | `list_folders` |
 | DELETE | `/control-plane/v1/spaces/{id}/roles/{role}/{user}` | `revoke` |
 | PUT | `/control-plane/v1/spaces/{id}/roles/{role}/{user}` | `grant` |
 | GET | `/control-plane/v1/users/platform-roles` | `list_platform_roles` |

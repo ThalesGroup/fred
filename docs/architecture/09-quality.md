@@ -234,7 +234,7 @@ resolver before filtering active rows and enumerating descendants.
 
 | Operation | OpenFGA calls | Read filter or decision scope |
 | --- | --- | --- |
-| Folder directory | `Q(caller) + 2 C` | Unique context, target placement, current read and write decisions on that space; zero Writes |
+| Combined directory (`/entries`) | `Q(caller) + 2 C` | Unique context, target placement, current read and write decisions on that space; zero Writes |
 | Content access; authorize document/space | `Q(caller) + 1 C` | Unique caller context, target placement, exact permission; a foreign context short-circuits before Check |
 | Authorize platform | `1 C` | Exact platform permission; no business context |
 | Authorize scope | `Q(caller) + 1 C` | Target placement, caller context, then read permission Check |
@@ -282,10 +282,17 @@ Sources: [client](../../apps/control-plane/src/fga.rs),
 ## Folder navigation and write costs
 
 Resources issues one combined directory request on entry, navigation, search, sort
-or page change, in addition to shared admission/membership queries. Its response
+or page change and when the window regains focus, in addition to shared
+admission/membership queries. While the displayed page contains a `pending` or
+`running` processing summary, it refreshes after three seconds between completed
+requests. Inactive pages do not poll; hidden pages do not issue the scheduled
+refresh and regain fresh data on window focus. Remote changes on an inactive page
+are discovered on focus or navigation, rather than on a periodic timer. Its response
 contains current read-authorized rows and a write decision: `Q` Reads and
 2 Checks, zero Writes. No separate write probe or document listing is issued.
-Successful mutations invalidate the directory query. A failed read hides cached
+Folder mutations, uploads and processing starts invalidate the directory query.
+The upload path resolves a folder-name conflict through the same `/entries` listing,
+selecting an exact folder name from its typed, paginated results. A failed read hides cached
 write authority until a fresh successful decision; it does not grant permission.
 
 Mutations cost `Q + 1` Reads, 1 Check and 1 Write containing two guard-version
@@ -309,15 +316,20 @@ per 50 ms delay plus SQL time for each waiting request. Same-organization throug
 remains limited by lock residency, and an available lock may wait until the next
 retry. This mechanism does not increase the pool size or remove fencing RPCs.
 
-The directory query has no advisory lock. Page, total and up to 15 ancestors use
-one read-only repeatable-read transaction. Root/child predicates use the existing
-space/parent/name index. Counts, substring searches, creation-date sorting and deep
+The directory query has no advisory lock. Total, mixed folder/document page,
+selected rows, processing summaries and up to 15 ancestors use one read-only
+repeatable-read transaction. Count and page share the same selection. Root/child
+predicates use `IS NULL` or equality on the existing space/parent/name indexes of
+folders and documents. Search is a literal case-insensitive substring limited to
+255 characters. Counts, substring searches, creation-date sorting and deep
 offsets still examine work proportional to the directory; limiting returned rows
 does not make that work constant. Recursive deletion scales with the removed
 subtree and its foreign-key checks, under the organization lock.
 
 The disposable `folder_scaling` fixture uses 10,000 folders: a root, 9,985
-immediate children and a branch reaching depth 15. A listing returns 50 folders.
+immediate children and a branch reaching depth 15. It requests `/entries`, the
+Resources endpoint, including document counts and processing-summary reads even
+when the fixture contains only folders. A listing returns 50 folder entries.
 With one organization editor role its expected directory budget is one Read and
 two Checks. With 40 additional team-member roles and forced pages of ten tuples,
 `Q=5`: five Reads and two Checks. Folder mutations add one guard Read and one
@@ -325,7 +337,9 @@ Write, with one permission Check. No placement Reads or folder tuples are added.
 These source-derived budgets do not establish latency or throughput. Same-organization
 writes still serialize; pagination, SQL query work and FGA Check evaluation remain
 cardinality-dependent. The model traverses at most two parents independently of
-folder depth. The fixture samples lock residency and request latency when executed.
+folder depth. The fixture samples lock residency and request latency when executed. Its
+source-derived budgets are not measured results for this endpoint; folder-only
+listing measurements do not establish the mixed directory's latency or throughput.
 
 For the ZIP importer, let `U` be users, `O` organizations, `N` new organizations,
 `G` normalized platform grants, `D` space-role tuples, `C` new teams and projects,

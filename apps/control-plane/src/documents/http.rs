@@ -172,7 +172,7 @@ async fn preflight(
     Ok(Json(result))
 }
 
-#[utoipa::path(get,path="/spaces/{id}/entries",params(("id"=Uuid,Path),("parent_id"=Option<Uuid>,Query),("search"=Option<String>,Query),("order"=Option<EntryOrder>,Query),("offset"=Option<i64>,Query),("limit"=Option<i64>,Query)),responses((status=200,body=Directory),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+#[utoipa::path(get,path="/spaces/{id}/entries",params(("id"=Uuid,Path),("parent_id"=Option<Uuid>,Query),("search"=Option<String>,Query,description="Literal case-insensitive substring; at most 255 characters."),("order"=Option<EntryOrder>,Query),("offset"=Option<i64>,Query),("limit"=Option<i64>,Query)),responses((status=200,body=Directory),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn entries(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,

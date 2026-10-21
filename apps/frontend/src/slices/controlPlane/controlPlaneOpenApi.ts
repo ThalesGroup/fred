@@ -247,18 +247,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    listFolders: build.query<ListFoldersApiResponse, ListFoldersApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.id}/folders`,
-        params: {
-          parent_id: queryArg.parentId,
-          search: queryArg.search,
-          order: queryArg.order,
-          offset: queryArg.offset,
-          limit: queryArg.limit,
-        },
-      }),
-    }),
     grant: build.mutation<GrantApiResponse, GrantApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.id}/roles/${queryArg.role}/${queryArg.user}`,
@@ -472,22 +460,10 @@ export type EntriesApiResponse = /** status 200 undefined */ Directory;
 export type EntriesApiArg = {
   id: string;
   parentId?: string;
+  /** Literal case-insensitive substring; at most 255 characters. */
   search?: string;
   order?: EntryOrder;
   offset?: number;
-  limit?: number;
-};
-export type ListFoldersApiResponse =
-  /** status 200 Directory page and ancestors from one SQL snapshot */ FolderDirectory;
-export type ListFoldersApiArg = {
-  id: string;
-  parentId?: string;
-  /** Literal case-insensitive substring within this directory; at most 255 characters. */
-  search?: string;
-  order?: FolderOrder;
-  /** Defaults to 0; negative values clamp to 0. */
-  offset?: number;
-  /** Defaults to 50; clamped to 1..200. */
   limit?: number;
 };
 export type GrantApiResponse = unknown;
@@ -898,19 +874,6 @@ export type Directory = {
   total: number;
 };
 export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
-export type FolderPage = {
-  /** Root to current directory, excluding the synthetic corpus root. */
-  ancestors: Folder[];
-  items: Folder[];
-  limit: number;
-  offset: number;
-  total: number;
-};
-export type FolderDirectory = FolderPage & {
-  /** Current OpenFGA decision for the existing write controls, not a grant. */
-  can_write: boolean;
-};
-export type FolderOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc";
 export type Grant = {
   role: PlatformRole;
   user_id: string;
@@ -975,8 +938,6 @@ export const {
   useLazyReceiptsQuery,
   useEntriesQuery,
   useLazyEntriesQuery,
-  useListFoldersQuery,
-  useLazyListFoldersQuery,
   useGrantMutation,
   useRevokeMutation,
   useSummaryQuery,

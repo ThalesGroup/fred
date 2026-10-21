@@ -370,6 +370,13 @@ The API reads published metadata, answers authorization probes and creates origi
 through the folder upload route below. Metadata and binary reads check the owning
 space's current authority. Document IDs are not Knowledge Flow identifiers.
 
+Resources reads one mixed `/spaces/{id}/entries` directory. Upload conflict recovery
+uses that same paginated endpoint and matches folder names exactly. Folder mutations,
+uploads and processing starts invalidate its client cache; window focus refreshes it.
+Only pages with pending/running processing refresh on a three-second cadence while
+visible. The server bounds literal substring search to 255 characters and uses
+separate root/child predicates for both count and page within one SQL snapshot.
+
 Folder rename/delete locate the immutable owning space, acquire its organization
 lock and authorize, then reread the folder through the held transaction (I22).
 A deletion that commits while a caller waits causes 404 without a fabricated success.

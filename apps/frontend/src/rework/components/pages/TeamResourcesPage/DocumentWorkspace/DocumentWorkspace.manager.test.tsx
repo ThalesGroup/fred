@@ -24,6 +24,10 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
+  findEntries: vi.fn(),
+  createConflict: false,
+  refetch: vi.fn(),
+  queryOptions: {} as Record<string, unknown>,
   processingEnabled: false,
   processing: {} as Record<string, import("../../../../../slices/controlPlane/controlPlaneOpenApi").Summary>,
   starts: vi.fn().mockResolvedValue({}),
@@ -51,8 +55,9 @@ const probe = vi.hoisted(() => ({
   legacyRequests: [] as string[],
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useLazyListFoldersQuery: () => [vi.fn()],
-  useEntriesQuery: (query: Record<string, unknown>) => {
+  useLazyEntriesQuery: () => [(args: unknown) => ({ unwrap: () => probe.findEntries(args) })],
+  useEntriesQuery: (query: Record<string, unknown>, options: Record<string, unknown>) => {
+    probe.queryOptions = options;
     probe.query = query;
     const parent = query.parentId as string | undefined;
     const ancestors = [];
@@ -82,13 +87,14 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       isSuccess: !probe.error,
       isError: probe.error,
       isFetching: probe.fetching,
-      refetch: vi.fn(),
+      refetch: probe.refetch,
     };
   },
   useCreateFolderMutation: () => [
     (args: { createFolder: Record<string, unknown> }) => ({
       unwrap: () => {
         probe.creates.push(args.createFolder);
+        if (probe.createConflict) return Promise.reject({ status: 409 });
         return new Promise<void>((resolve) => {
           probe.createResolve = resolve;
         });
@@ -222,6 +228,9 @@ async function menuAction(name: string) {
 }
 beforeEach(async () => {
   probe.documents = [];
+  probe.refetch.mockClear();
+  probe.findEntries.mockReset();
+  probe.createConflict = false;
   probe.processingEnabled = false;
   probe.processing = {};
   probe.starts.mockClear();
@@ -261,6 +270,8 @@ beforeEach(async () => {
   await render();
 });
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   act(() => root.unmount());
   container.remove();
   document.querySelectorAll('[role="presentation"]').forEach((el) => el.remove());
@@ -510,3 +521,52 @@ it.each(["row", "bulk"])(
     expect(probe.legacyRequests).toEqual([]);
   },
 );
+
+it("refreshes on focus and polls only active processing in the current directory", async () => {
+  vi.useFakeTimers();
+  expect(probe.queryOptions.pollingInterval ?? 0).toBe(0);
+  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  expect(probe.refetch).not.toHaveBeenCalled();
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  expect(probe.refetch).toHaveBeenCalledTimes(1);
+  probe.refetch.mockClear();
+  // Only status is consumed by this polling fixture; no document row is rendered.
+  probe.processing = { doc: { status: "running" } as (typeof probe.processing)[string] };
+  await render();
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(probe.refetch).toHaveBeenCalledTimes(1);
+  probe.processing = { doc: { status: "succeeded" } as (typeof probe.processing)[string] };
+  await render();
+  probe.refetch.mockClear();
+  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  expect(probe.refetch).not.toHaveBeenCalled();
+});
+
+it("finds an existing upload folder in mixed entry pages after a create conflict", async () => {
+  await click(namedButton("Library"));
+  await click(action("action.addFile"));
+  const drawer = probe.drawerProps[probe.drawerProps.length - 1]!;
+  probe.createConflict = true;
+  probe.findEntries
+    .mockResolvedValueOnce({ items: [{ kind: "document", data: { id: "wrong", name: "Nested" } }], total: 2 })
+    .mockResolvedValueOnce({ items: [{ kind: "folder", data: { id: "existing", name: "Nested" } }], total: 2 });
+  const ensure = drawer.ensureFolderPath as (segments: string[]) => Promise<string | null>;
+  expect(await ensure(["Nested"])).toBe("existing");
+  expect(probe.findEntries.mock.calls.map(([args]) => args.offset)).toEqual([0, 1]);
+  expect(probe.findEntries.mock.calls[0][0]).toMatchObject({ id: "space-1", parentId: "root-id", search: "Nested" });
+});
+
+it("pauses active directory refresh while hidden and refreshes on focus", async () => {
+  vi.useFakeTimers();
+  const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  probe.processing = { doc: { status: "pending" } as (typeof probe.processing)[string] };
+  await render();
+  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  expect(probe.refetch).not.toHaveBeenCalled();
+  visibility.mockReturnValue("visible");
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  expect(probe.refetch).toHaveBeenCalledTimes(1);
+  await render();
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(probe.refetch).toHaveBeenCalledTimes(2);
+});

@@ -105,22 +105,6 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         .layer(axum::middleware::from_fn(logging::request_logging))
 }
 
-async fn require(
-    pool: &PgPool,
-    fga: &Fga,
-    user: &str,
-    permission: Permission,
-    space: Uuid,
-) -> AppResult<()> {
-    let placed = spaces::load(pool, space).await?;
-    spaces::require_context(pool, fga, user, placed.organization).await?;
-    if fga.check(user, permission, space).await? {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden)
-    }
-}
-
 #[derive(Serialize, utoipa::ToSchema)]
 struct FrontendConfig {
     user_auth: onboarding::PublicAuth,
@@ -494,51 +478,6 @@ async fn revoke(
 }
 
 // ---------------------------------------------------------------- folders
-
-#[derive(Serialize, utoipa::ToSchema)]
-struct FolderDirectory {
-    #[serde(flatten)]
-    page: crate::domain::FolderPage,
-    /// Current OpenFGA decision for the existing write controls, not a grant.
-    can_write: bool,
-}
-
-#[utoipa::path(
-    get, path = "/spaces/{id}/folders",
-    params(("id" = Uuid, Path), ("parent_id" = Option<Uuid>, Query),
-        ("search" = Option<String>, Query, description = "Literal case-insensitive substring within this directory; at most 255 characters."),
-        ("order" = Option<crate::domain::FolderOrder>, Query),
-        ("offset" = Option<i64>, Query, description = "Defaults to 0; negative values clamp to 0."),
-        ("limit" = Option<i64>, Query, description = "Defaults to 50; clamped to 1..200.")),
-    responses(
-        (status = 200, description = "Directory page and ancestors from one SQL snapshot", body = FolderDirectory),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
-        (status = 401, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 404, description = "Unknown space or folder in this space", body = crate::error::ErrorBody),
-        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
-        (status = 422, description = "Search exceeds 255 characters", body = crate::error::ErrorBody),
-        (status = 500, description = "Request failed", body = crate::error::ErrorBody),
-    )
-)]
-async fn list_folders(
-    State(s): State<AppState>,
-    AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path(space): Path<Uuid>,
-    Query(q): Query<crate::domain::FolderQuery>,
-) -> AppResult<Json<FolderDirectory>> {
-    require(&s.pool, &s.fga, &user, Permission::Read, space).await?;
-    if q.search.as_ref().is_some_and(|s| s.chars().count() > 255) {
-        return Err(AppError::Unprocessable(
-            "folder search exceeds 255 characters".into(),
-        ));
-    }
-    let can_write = s.fga.check(&user, Permission::Write, space).await?;
-    Ok(Json(FolderDirectory {
-        page: db::folders(&s.pool, space, &q).await?,
-        can_write,
-    }))
-}
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct CreateFolder {
@@ -1041,7 +980,6 @@ fn governance_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(delete_space))
         .routes(routes!(deletion_status))
         .routes(routes!(create_personal_space))
-        .routes(routes!(list_folders))
         .routes(routes!(create_folder))
         .routes(
             routes!(import_blueprint).layer(axum::extract::DefaultBodyLimit::max(
@@ -1095,10 +1033,6 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     let components = api
         .components
         .get_or_insert_with(|| ComponentsBuilder::new().build());
-    components.schemas.insert(
-        "FolderOrder".into(),
-        <crate::domain::FolderOrder as utoipa::PartialSchema>::schema(),
-    );
     components.schemas.insert(
         "EntryOrder".into(),
         <crate::documents::models::EntryOrder as utoipa::PartialSchema>::schema(),

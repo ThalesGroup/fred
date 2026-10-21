@@ -5185,7 +5185,7 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
             app.clone(),
             &token,
             "GET",
-            &format!("/spaces/{}/folders", Uuid::new_v4()),
+            &format!("/spaces/{}/entries", Uuid::new_v4()),
             ""
         )
         .await,

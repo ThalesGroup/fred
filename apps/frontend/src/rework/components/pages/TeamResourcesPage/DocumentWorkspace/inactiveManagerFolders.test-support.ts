@@ -5,7 +5,7 @@ import { vi } from "vitest";
 // Legacy knowledge-base fixtures exercise only the tag-backed source. Fail if
 // they accidentally start a manager request instead of silently serving a fake page.
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useLazyListFoldersQuery: () => [vi.fn()],
+  useLazyEntriesQuery: () => [vi.fn()],
   useEntriesQuery: (_args: unknown, options: { skip: boolean }) => {
     if (!options.skip) throw new Error("Legacy fixture unexpectedly queried manager folders");
     return {};

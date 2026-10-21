@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
@@ -103,7 +104,7 @@ import {
 import { startManagerProcessing } from "../../../../features/imports/managerImportRun";
 import {
   useEntriesQuery,
-  useLazyListFoldersQuery,
+  useLazyEntriesQuery,
   useCreateFolderMutation,
   useRenameFolderMutation,
   useDeleteFolderMutation,
@@ -262,15 +263,25 @@ function DocumentWorkspace({
     {
       skip: !managerSpaceId,
       refetchOnMountOrArgChange: true,
-      pollingInterval: managerSpaceId ? 3000 : 0,
-      skipPollingIfUnfocused: true,
     },
   );
   const failedManagerRead = useRef(false);
   if (managerQuery.isError) failedManagerRead.current = true;
   if (managerQuery.isSuccess && !managerQuery.isFetching) failedManagerRead.current = false;
   const directory = failedManagerRead.current ? undefined : managerQuery.currentData;
-  const [findManagerFolders] = useLazyListFoldersQuery();
+  useRefetchOnWindowFocus(managerQuery.refetch, !managerSpaceId);
+  useEffect(() => {
+    if (!managerSpaceId || managerQuery.isFetching || !directory) return;
+    const active = Object.values(directory.processing ?? {}).some(
+      (processing) => processing.status === "pending" || processing.status === "running",
+    );
+    if (!active) return;
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState !== "hidden") void managerQuery.refetch();
+    }, DOC_STATUS_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [managerSpaceId, managerQuery.isFetching, managerQuery.refetch, directory]);
+  const [findManagerEntries] = useLazyEntriesQuery();
   const [createManagerFolder] = useCreateFolderMutation();
   const [renameManagerFolder] = useRenameFolderMutation();
   const [deleteManagerFolder] = useDeleteFolderMutation();
@@ -1550,15 +1561,15 @@ function DocumentWorkspace({
             if ((error as { status?: number }).status !== 409) throw error;
             let offset = 0;
             for (;;) {
-              const page = await findManagerFolders({
+              const page = await findManagerEntries({
                 id: managerSpaceId,
                 parentId: parentId ?? undefined,
                 search: name,
                 limit: 200,
                 offset,
               }).unwrap();
-              const match = page.items.find((f) => f.name === name);
-              if (match) return match.id;
+              const match = page.items.find((entry) => entry.kind === "folder" && entry.data.name === name);
+              if (match) return match.data.id;
               offset += page.items.length;
               if (!page.items.length || offset >= page.total) throw error;
             }

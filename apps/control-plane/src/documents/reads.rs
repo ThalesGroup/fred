@@ -151,6 +151,13 @@ impl Storage {
         space: Uuid,
         query: EntryQuery,
     ) -> AppResult<Directory> {
+        if query
+            .search
+            .as_ref()
+            .is_some_and(|s| s.chars().count() > 255)
+        {
+            return Err(invalid("Directory search exceeds 255 characters"));
+        }
         authorized(pool, fga, actor, space, Permission::Read).await?;
         let can_write = fga
             .check(actor, Permission::Write, space)
@@ -161,8 +168,10 @@ impl Storage {
             .execute(&mut *tx)
             .await?;
         let ancestors = db::folder_ancestors(&mut *tx, space, query.parent_id).await?;
-        let total: i64 = sqlx::query_scalar("select (select count(*) from folder where space_id=$1 and parent_id is not distinct from $2 and ($3::text is null or strpos(lower(name),lower($3))>0)) + (select count(*) from document where space_id=$1 and folder_id is not distinct from $2 and ($3::text is null or strpos(lower(name),lower($3))>0))")
-            .bind(space).bind(query.parent_id).bind(&query.search).fetch_one(&mut *tx).await?;
+        let total: i64 = directory_selection("select count(*)", space, &query)
+            .build_query_scalar()
+            .fetch_one(&mut *tx)
+            .await?;
         let order = match query.order.unwrap_or_default() {
             EntryOrder::SizeAsc => " order by kind,size asc nulls last,name,id",
             EntryOrder::SizeDesc => " order by kind,size desc nulls last,name,id",
@@ -173,24 +182,7 @@ impl Storage {
         };
         let offset = query.offset.unwrap_or(0).max(0);
         let limit = query.limit.unwrap_or(50).clamp(1, 200);
-        let mut sql = sqlx::QueryBuilder::new(
-            "select kind,id,name,created_at from (select 0 as kind,id,name,created_at,null::bigint as size from folder where space_id=",
-        );
-        sql.push_bind(space)
-            .push(" and parent_id is not distinct from ")
-            .push_bind(query.parent_id)
-            .push(
-                " union all select 1 as kind,id,name,created_at,size from document where space_id=",
-            )
-            .push_bind(space)
-            .push(" and folder_id is not distinct from ")
-            .push_bind(query.parent_id)
-            .push(") entries");
-        if let Some(search) = query.search.as_deref() {
-            sql.push(" where strpos(lower(name),lower(")
-                .push_bind(search)
-                .push("))>0");
-        }
+        let mut sql = directory_selection("select kind,id,name,created_at", space, &query);
         sql.push(order)
             .push(" limit ")
             .push_bind(limit)
@@ -353,4 +345,52 @@ impl Drop for AbortDownload {
     fn drop(&mut self) {
         self.0.abort();
     }
+}
+
+// Count and page share the same root/child and literal-search predicates.
+fn directory_selection(
+    select: &'static str,
+    space: Uuid,
+    query: &EntryQuery,
+) -> sqlx::QueryBuilder<sqlx::Postgres> {
+    let mut sql = sqlx::QueryBuilder::new(select);
+    sql.push(" from (");
+    for (index, (projection, table, parent)) in [
+        (
+            "0 as kind,id,name,created_at,null::bigint as size",
+            "folder",
+            "parent_id",
+        ),
+        ("1 as kind,id,name,created_at,size", "document", "folder_id"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if index != 0 {
+            sql.push(" union all ");
+        }
+        sql.push("select ")
+            .push(projection)
+            .push(" from ")
+            .push(table)
+            .push(" where space_id=")
+            .push_bind(space)
+            .push(" and ")
+            .push(parent);
+        match query.parent_id {
+            Some(id) => {
+                sql.push("=").push_bind(id);
+            }
+            None => {
+                sql.push(" is null");
+            }
+        }
+    }
+    sql.push(") entries");
+    if let Some(search) = query.search.as_ref().filter(|s| !s.is_empty()) {
+        sql.push(" where strpos(lower(name),lower(")
+            .push_bind(search.clone())
+            .push("))>0");
+    }
+    sql
 }

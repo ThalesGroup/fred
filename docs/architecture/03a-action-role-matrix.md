@@ -55,7 +55,6 @@ have no separate ACL, sharing grant or role inheritance tree.
 
 | Action and HTTP entry | member | editor | admin | analyst | Extra condition / effect |
 | --- | --- | --- | --- | --- | --- |
-| List immediate folders - `GET /spaces/{id}/folders` | Yes, local | Yes | No | Yes | Optional parent must belong to this space |
 | Browse mixed directory - `GET /spaces/{id}/entries` | Yes, local | Yes | No | Yes | Same-space parent; bounded page, total, ancestors and current write decision |
 | Read storage summary - `GET /spaces/{id}/storage` | Yes, local | Yes | No | Yes | Space statistics and shared quota usage; no other space's filenames |
 | Preflight original names/quota - `POST /folders/{id}/documents/preflight` | No | Yes | No | No | Advisory result, no reservation |

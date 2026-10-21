@@ -15,7 +15,7 @@ Paths in the frontend column are relative to `apps/frontend/src/`.
 | Import a provisioning ZIP | [blueprint.rs](blueprint.rs), [provisioning.rs](provisioning.rs), [keycloak.rs](keycloak.rs) | `rework/components/pages/admin/ProvisioningPage/ProvisioningPage.tsx` | `tests/browser_provisioning.rs`, `tests/fixtures/import_export/demo_provisioning/` |
 | Resolve organization and accessible spaces | [spaces.rs](spaces.rs), [db.rs](db.rs), [fga.rs](fga.rs) | `slices/controlPlane/controlPlaneApiEnhancements.ts`, `rework/components/shared/layouts/Sidebar/HomeNavPanel/HomeNavPanel.tsx` | `tests/support/resource_browsing.rs` |
 | Create a team/project or open personal space | [spaces.rs](spaces.rs), handlers in [api.rs](api.rs) | Personal entry in `rework/components/shared/layouts/Sidebar/HomeNavPanel/HomeNavPanel.tsx`; no connected team/project creation form | `tests/integration.rs`, `tests/support/resource_browsing.rs` |
-| Read/create folders | [spaces.rs](spaces.rs), [db.rs](db.rs), handlers in [api.rs](api.rs) | `rework/components/pages/TeamResourcesPage/DocumentWorkspace/DocumentWorkspace.tsx`, sibling `CreateFolderModal/CreateFolderModal.tsx` | `tests/support/resource_browsing.rs`, `tests/support/browser_resources.rs` |
+| Browse Resources / create folders | Listing: [documents/http.rs](documents/http.rs) and [documents/reads.rs](documents/reads.rs); mutations: [spaces.rs](spaces.rs), [db.rs](db.rs), [api.rs](api.rs) | `rework/components/pages/TeamResourcesPage/DocumentWorkspace/DocumentWorkspace.tsx`, sibling `CreateFolderModal/CreateFolderModal.tsx` | `tests/support/resource_browsing.rs`, `tests/support/folder_scaling.rs`, `tests/support/browser_resources.rs` |
 | Evaluate roles and parent relationships | [roles.rs](roles.rs), [fga.rs](fga.rs), [OpenFGA model](../openfga/model.fga) | Generated authorization queries, no independent frontend grant authority | `tests/integration.rs` |
 | Apply/check SQL migrations | [main.rs](main.rs), [db.rs](db.rs), [migrations](../migrations/) | None | `tests/integration.rs` |
 | Configure/start the process | [config.rs](config.rs), [main.rs](main.rs) | Public configuration handler in `api.rs` | [component commands](../README.md) |
@@ -36,9 +36,10 @@ client, not the implementation of the Rust routes.
 
 ## Beyond folder creation
 
-`documents/` owns original upload, receipts, storage and reads. `processing/` owns
+`documents/` owns Resources directory reads (`/entries`), original upload, receipts
+and storage reads. `processing/` owns
 processing admission, dispatch, publication and callbacks. `lifecycle/` owns space
-retirement and cleanup. These do not participate in creating an empty folder.
+retirement and cleanup. The empty-folder mutation remains in `spaces`/`api`; opening Resources uses `documents`.
 Their contracts are in the [documents chapter](../../../docs/architecture/05-documents.md)
 and the [runtime reference](../../../docs/architecture/A1-manager-runtime.md).
 

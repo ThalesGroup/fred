@@ -17,7 +17,7 @@
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domain::{Document, Folder, FolderOrder, FolderPage, FolderQuery, Space, SpaceRow};
+use crate::domain::{Document, Folder, Space, SpaceRow};
 
 // Macros rather than consts: sqlx only accepts compile-time SQL strings.
 macro_rules! space {
@@ -154,72 +154,6 @@ pub async fn folder_ancestors<'e>(
     } else {
         Ok(Vec::new())
     }
-}
-
-pub async fn folders(pool: &PgPool, space: Uuid, query: &FolderQuery) -> sqlx::Result<FolderPage> {
-    // Count, page and breadcrumbs describe one snapshot, including during deletion.
-    let mut tx = pool.begin().await?;
-    sqlx::query("set transaction isolation level repeatable read, read only")
-        .execute(&mut *tx)
-        .await?;
-    let ancestors = folder_ancestors(&mut *tx, space, query.parent_id).await?;
-    let total = folder_selection("select count(*)", space, query)
-        .build_query_scalar::<i64>()
-        .fetch_one(&mut *tx)
-        .await?;
-    let offset = query.offset.unwrap_or(0).max(0);
-    let limit = query.limit.unwrap_or(50).clamp(1, 200);
-    let order = match query.order.unwrap_or_default() {
-        FolderOrder::NameAsc => " order by name asc, id asc",
-        FolderOrder::NameDesc => " order by name desc, id desc",
-        FolderOrder::CreatedAsc => " order by created_at asc, id asc",
-        FolderOrder::CreatedDesc => " order by created_at desc, id desc",
-    };
-    let items = folder_selection(
-        "select id, space_id, parent_id, name, path, created_at",
-        space,
-        query,
-    )
-    .push(order)
-    .push(" limit ")
-    .push_bind(limit)
-    .push(" offset ")
-    .push_bind(offset)
-    .build_query_as::<Folder>()
-    .fetch_all(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(FolderPage {
-        items,
-        ancestors,
-        total,
-        offset,
-        limit,
-    })
-}
-
-fn folder_selection(
-    select: &'static str,
-    space: Uuid,
-    query: &FolderQuery,
-) -> sqlx::QueryBuilder<Postgres> {
-    let mut sql = sqlx::QueryBuilder::new(select);
-    sql.push(" from folder where space_id = ").push_bind(space);
-    // Null-safe equality prevents a selective parent index condition in PostgreSQL.
-    match query.parent_id {
-        Some(parent) => {
-            sql.push(" and parent_id = ").push_bind(parent);
-        }
-        None => {
-            sql.push(" and parent_id is null");
-        }
-    }
-    if let Some(search) = query.search.as_deref().filter(|s| !s.is_empty()) {
-        sql.push(" and strpos(lower(name), lower(")
-            .push_bind(search)
-            .push(")) > 0");
-    }
-    sql
 }
 
 pub async fn insert_folder<'e>(

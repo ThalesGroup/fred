@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F03](#f03-listing-resources-unique-et-rafraîchissement) | Listing Resources unique et rafraîchissement | Tests automatisés validés | 09, A1, A2, carte des sources |
 | [F02](#f02-attente-du-verrou-des-écritures) | Attente bornée sans connexion retenue | Tests automatisés validés | 03, 09, A1 |
 | [F01](#f01-coût-du-contexte-organisation) | Placement SQL immuable et contexte commun | Tests automatisés validés | 03, 04, A1/A2/A3, 09 |
 | [F-001](#f-001-environnement-de-développement) | Déploiement secondaire, renommage control-plane | Correction à valider après renommage | [Opérations](architecture/08-operations.md), à reporter |
@@ -73,6 +74,36 @@ fiche plutôt que d'effacer les résultats précédents.
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
 
+## F03 Listing Resources unique et rafraîchissement
+
+- 2026-10-21 : Dimi confirme que tout passe et autorise commit/push. Tests Rust
+  (45 unitaires, 10 contrats), intégration (108) et DocumentWorkspace (195) réussis.
+  Clippy et contrôle arc42 réussis. Formatage des ajouts corrigé ; rustfmt global
+  reste en échec sur le formatage préexistant, hors F02/F03 (F19).
+
+- 2026-10-21 : sur demande explicite de Dimi après signalement de tests en échec,
+  exécution locale réussie de `make test` (45 unitaires et 10 contrats OpenAPI),
+  `make test-integration` (108 tests, dont F02/F03 et folder_scaling) et des
+  28 fichiers de tests DocumentWorkspace (195 tests). Le fichier manager ciblé
+  passe aussi séparément (15 tests). Aucun échec reproduit, aucun correctif
+  supplémentaire nécessaire. Qualité et contrôle arc42 non exécutés pendant
+  cette validation ; aucun commit ni push.
+
+- 2026-10-21 : après vérification sur `ef8f27dc936a8c938300b52cc1acea0b98c8c8a0`,
+  Dimi autorise F03. `/entries` devient le listing unique de Resources et de la
+  récupération d'un dossier existant après conflit d'upload. Route `/folders` de
+  listing, types associés et SQL dupliqué supprimés ; mutations conservées.
+  Count/page partagent des prédicats racine/enfant explicites et une recherche
+  littérale limitée à 255 caractères. Rafraîchissement au focus, invalidations
+  existantes et polling uniquement pour les traitements actifs affichés.
+  Fixture folder_scaling retargetée sur le chemin réel ; anciens EXPLAIN de
+  requêtes dossiers isolées retirés. Tests de contrat, recherche, pagination,
+  rafraîchissement et récupération d'upload ajoutés/adaptés.
+  OpenAPI/client et blocs arc42 régénérés ; relecture indépendante, oublis de
+  route dans un test et dans la matrice 03a corrigés puis relus. Aucun test ni
+  outil qualité exécuté ; génération OpenAPI implique une compilation Rust.
+  Aucun commit ni push.
+
 ## F02 Attente du verrou des écritures
 
 - 2026-10-21 : Dimi confirme que tout passe et autorise commit/push. Tests Rust
@@ -95,7 +126,6 @@ fiche plutôt que d'effacer les résultats précédents.
   pendant ce travail ; les changements F02 restent non committés.
   Aucun test, build ou contrôle qualité exécuté ; validation à faire par Dimi.
   Aucun commit ni push.
-
 
 ## F01 Coût du contexte organisation
 

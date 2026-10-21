@@ -112,11 +112,9 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
     });
     let reader = identity.token("reader");
     let base = format!("/spaces/{}", team.id);
-    for suffix in ["folders", "entries"] {
-        let (status, body) = get(&app, &reader, &format!("{base}/{suffix}")).await;
-        assert_eq!(status, 200, "{body}");
-        assert_eq!(body["items"].as_array().unwrap().len(), 1);
-    }
+    let (status, body) = get(&app, &reader, &format!("{base}/entries")).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["items"].as_array().unwrap().len(), 1);
     let docs = format!("{base}/entries?parent_id={}&limit=50", root.id);
     let (status, first) = get(&app, &reader, &docs).await;
     assert_eq!(status, 200);
@@ -134,52 +132,50 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         ids,
         expected.iter().map(Uuid::to_string).collect::<Vec<_>>()
     );
-    for suffix in ["folders", "entries"] {
-        for invalid in [private.id, Uuid::new_v4()] {
-            assert_eq!(
-                get(
-                    &app,
-                    &reader,
-                    &format!("{base}/{suffix}?parent_id={invalid}")
-                )
-                .await
-                .0,
-                404
-            );
-        }
-        let (status, body) = get(
-            &app,
-            &reader,
-            &format!("{base}/{suffix}?parent_id={}", child.id),
-        )
-        .await;
-        assert_eq!(status, 200);
-        assert!(body["items"].as_array().unwrap().is_empty());
-        for user in ["reader", "editor", "analyst"] {
-            assert_eq!(
-                get(&app, &identity.token(user), &format!("{base}/{suffix}"))
-                    .await
-                    .0,
-                200
-            );
-        }
-        assert_eq!(
-            get(&app, &identity.token("admin"), &format!("{base}/{suffix}"))
-                .await
-                .0,
-            403
-        );
+    for invalid in [private.id, Uuid::new_v4()] {
         assert_eq!(
             get(
                 &app,
-                &identity.token("alice"),
-                &format!("/spaces/{}/{suffix}", personal.id)
+                &reader,
+                &format!("{base}/entries?parent_id={invalid}")
             )
             .await
             .0,
-            403
+            404
         );
     }
+    let (status, body) = get(
+        &app,
+        &reader,
+        &format!("{base}/entries?parent_id={}", child.id),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert!(body["items"].as_array().unwrap().is_empty());
+    for user in ["reader", "editor", "analyst"] {
+        assert_eq!(
+            get(&app, &identity.token(user), &format!("{base}/entries"))
+                .await
+                .0,
+            200
+        );
+    }
+    assert_eq!(
+        get(&app, &identity.token("admin"), &format!("{base}/entries"))
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        get(
+            &app,
+            &identity.token("alice"),
+            &format!("/spaces/{}/entries", personal.id)
+        )
+        .await
+        .0,
+        403
+    );
     // Same read budget with 0 or 53 documents, concurrency 1. Force role paging.
     for path in [format!("{base}/entries"), docs.clone()] {
         *proxy.fault.lock().await = support::fga_proxy::Fault {
@@ -204,7 +200,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         .await
         .unwrap();
     assert_eq!(get(&app, &reader, &docs).await.0, 403);
-    assert_eq!(get(&app, &reader, &format!("{base}/folders")).await.0, 403);
+    assert_eq!(get(&app, &reader, &format!("{base}/entries")).await.0, 403);
     let other = spaces::create_organization(&e.pool, &e.fga, "Other", "outsider")
         .await
         .unwrap();
@@ -745,7 +741,7 @@ async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
     .await
     .unwrap();
     let url = format!(
-        "/control-plane/v1/spaces/{}/folders?parent_id={}",
+        "/control-plane/v1/spaces/{}/entries?parent_id={}",
         team.id, root.id
     );
     let (status, first) = get(&app, &token, &url).await;
@@ -755,7 +751,7 @@ async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
     assert_eq!(first["can_write"], true);
     assert_eq!(first["ancestors"][0]["id"], root.id.to_string());
     assert_eq!(
-        first["items"][0]["created_at"],
+        first["items"][0]["data"]["created_at"],
         serde_json::to_value(child.created_at).unwrap()
     );
     assert_eq!(
@@ -776,21 +772,27 @@ async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
     )
     .await;
     assert_eq!(filtered["total"], 31);
-    assert_eq!(filtered["items"][0]["name"], "entry-0230");
-    assert_eq!(filtered["items"][1]["name"], "entry-0229");
+    assert_eq!(filtered["items"][0]["data"]["name"], "entry-0230");
+    assert_eq!(filtered["items"][1]["data"]["name"], "entry-0229");
     assert_eq!(
         get(&app, &token, &format!("{url}&search=%25")).await.1["total"],
         0
     );
     assert_eq!(
         get(&app, &token, &format!("{url}&order=invalid")).await.0,
-        400
+        422
     );
     assert_eq!(
         get(&app, &token, &format!("{url}&search={}", "a".repeat(256)))
             .await
             .0,
         422
+    );
+    assert_eq!(
+        get(&app, &token, &format!("{url}&search={}", "a".repeat(255)))
+            .await
+            .0,
+        200
     );
     let path = format!("/folders/{}", root.id);
     assert_eq!(
@@ -805,7 +807,7 @@ async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
         &app,
         &token,
         &format!(
-            "/control-plane/v1/spaces/{}/folders?parent_id={}",
+            "/control-plane/v1/spaces/{}/entries?parent_id={}",
             team.id, grandchild.id
         ),
     )
