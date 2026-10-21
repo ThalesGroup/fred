@@ -155,6 +155,8 @@ def test_tool_schema_exposes_only_llm_arguments():
     assert "as JSON numbers" in schema["description"]
     assert "tell the user plainly" in schema["description"]
     assert "No formulas" in schema["description"]
+    assert "set compute on the column instead" in schema["description"]
+    assert "send null for that column in rows" in schema["description"]
     assert "Call this tool once per file" in schema["description"]
     assert "If you are a sub-agent" in schema["description"]
     assert "that agent creates one workbook" in schema["description"]
