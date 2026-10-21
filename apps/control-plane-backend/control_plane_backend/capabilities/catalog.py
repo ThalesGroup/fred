@@ -245,10 +245,12 @@ async def aggregate_capability_catalog(
                             or existing.model_context_window_tokens
                         ),
                         "model_max_input_tokens": (
-                            entry.model_max_input_tokens or existing.model_max_input_tokens
+                            entry.model_max_input_tokens
+                            or existing.model_max_input_tokens
                         ),
                         "model_max_output_tokens": (
-                            entry.model_max_output_tokens or existing.model_max_output_tokens
+                            entry.model_max_output_tokens
+                            or existing.model_max_output_tokens
                         ),
                     }
                 )

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from control_plane_backend.product import service as product_service
 
 
@@ -57,7 +56,9 @@ async def test_model_metadata_is_projected_from_pod(monkeypatch) -> None:
         "AsyncClient",
         lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
     )
-    catalog = await product_service._model_capabilities_for_source_uncached("http://pod")
+    catalog = await product_service._model_capabilities_for_source_uncached(
+        "http://pod"
+    )
 
     assert catalog is not None
     first, second = catalog.entries

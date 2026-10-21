@@ -932,7 +932,9 @@ def _reasoning_efforts(raw: object) -> dict[str, tuple[ReasoningEffortLevel, ...
 
 
 def _model_token_limit(raw: object) -> int | None:
-    return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else None
+    return (
+        raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else None
+    )
 
 
 async def _model_capabilities_for_source_uncached(
