@@ -202,6 +202,7 @@ the resulting decisions get encoded in the `design/` contracts.
 | [`SYSTEM-PROMPT-LAYERING-RFC.md`](rfc/SYSTEM-PROMPT-LAYERING-RFC.md)                 | PROMPT-10 — four XML-delimited system-prompt blocks with a written precedence (platform instructions > platform prompt > tools > agent), heading demotion in one wrapper, reserved-tag 422 on the platform prompt and agent prompt fields; implemented 2026-09-09, archived by #2595 step 6 |
 | [`TASK-EVENT-STREAM-RFC.md`](rfc/TASK-EVENT-STREAM-RFC.md) | Remaining task coverage, presentation and retention questions; links to implemented contracts |
 | [`TEAM-PLATFORM-POLICY-RFC.md`](rfc/TEAM-PLATFORM-POLICY-RFC.md)                     | Team platform policy — storage, ingestion, size, deletion retention, tool guardrails (model/MCP allowlisting is out of scope, governed by the capability system instead)                                |
+| [`USER-TOKEN-QUOTAS-RFC.md`](rfc/USER-TOKEN-QUOTAS-RFC.md) | Per-user token quotas: 5-hour and weekly credit gauges, admin default/override/boost, team usage view; open questions on ledger, coefficient home and admission cost |
 
 ---
 
