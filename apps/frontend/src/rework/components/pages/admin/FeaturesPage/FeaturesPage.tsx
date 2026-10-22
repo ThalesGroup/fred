@@ -477,7 +477,7 @@ export default function FeaturesPage() {
       ? [
           {
             label: t("rework.admin.capabilities.col.reasoning"),
-            size: "1fr",
+            size: "1.1fr",
             cellRenderer: (cap: CapabilityEnablementItem) => {
               // §5.3: no reasoning-capable profile means NO control at all, not
               // a disabled one. Aptitude is declared in models_catalog.yaml —
@@ -560,7 +560,7 @@ export default function FeaturesPage() {
       : [
           {
             label: t("rework.admin.capabilities.col.health"),
-            size: "1fr",
+            size: activeKindFilter === "model" ? "0.9fr" : "1fr",
             cellRenderer: (cap: CapabilityEnablementItem) => {
               // Resting health straight from the aggregate list: agents this
               // capability breaks AT REST (`suspended_instances`) vs. agents whose pod
@@ -599,8 +599,8 @@ export default function FeaturesPage() {
         ]),
     {
       label: t("rework.admin.capabilities.col.actions"),
-      // Wide enough for the one-line button at desktop widths.
-      size: "1.4fr",
+      // Keep the icon and label clear of the outline at desktop widths.
+      size: "1.55fr",
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an
         // admin opens to grant its first team.
@@ -682,14 +682,14 @@ export default function FeaturesPage() {
           refreshError={discoveryRefresh.isError || Boolean(modelRefreshError)}
           refreshErrorMessage={modelRefreshError}
           unverifiedRuntimes={unverifiedModelRuntimes}
-          refresh={refreshModels}
         />
       )}
 
       {!isLoading &&
         !isError &&
         (activeKindFilter !== "model" || !hasDiscovery || modelInventoryReady) &&
-        capabilities.length === 0 && (
+        capabilities.length === 0 &&
+        !(activeKindFilter === "model" && hasDiscovery) && (
           <PageEmptyState
             icon="tune"
             message={t(
@@ -709,21 +709,35 @@ export default function FeaturesPage() {
       {!isLoading &&
         !isError &&
         (activeKindFilter !== "model" || !hasDiscovery || modelInventoryReady) &&
-        capabilities.length > 0 &&
+        (capabilities.length > 0 || (activeKindFilter === "model" && hasDiscovery)) &&
         (activeKindFilter === "model" && hasDiscovery ? (
           <section
             className={styles.modelSection}
             aria-label={t(`rework.admin.capabilities.discovery.${modelTab}Section`)}
           >
-            <div className={styles.modelFilter}>
-              <SearchInput
-                size="small"
-                ariaLabel={t("rework.admin.capabilities.discovery.filter")}
-                clearAriaLabel={t("rework.admin.capabilities.discovery.clearFilter")}
-                placeholder={t("rework.admin.capabilities.discovery.filter")}
-                value={modelFilter}
-                onChange={setModelFilter}
-              />
+            <div className={styles.modelListToolbar}>
+              {modelTab === "discovered" && (
+                <Button
+                  color="on-surface"
+                  variant="outlined"
+                  size="small"
+                  icon={{ category: "outlined", type: "refresh" }}
+                  disabled={discoveryRefresh.isLoading || !modelInventoryReady}
+                  onClick={() => void refreshModels()}
+                >
+                  {t("rework.admin.capabilities.discovery.refresh")}
+                </Button>
+              )}
+              <div className={styles.modelFilter}>
+                <SearchInput
+                  size="small"
+                  ariaLabel={t("rework.admin.capabilities.discovery.filter")}
+                  clearAriaLabel={t("rework.admin.capabilities.discovery.clearFilter")}
+                  placeholder={t("rework.admin.capabilities.discovery.filter")}
+                  value={modelFilter}
+                  onChange={setModelFilter}
+                />
+              </div>
             </div>
             {visibleModels.length === 0 ? (
               <p className={styles.status}>

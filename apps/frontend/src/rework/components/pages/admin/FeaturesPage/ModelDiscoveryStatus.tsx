@@ -101,7 +101,6 @@ export function ModelDiscoveryStatus({
   refreshError,
   refreshErrorMessage,
   unverifiedRuntimes = [],
-  refresh,
 }: {
   data: Status | undefined;
   discoveredSourceIds: string[];
@@ -109,7 +108,6 @@ export function ModelDiscoveryStatus({
   refreshError: boolean;
   refreshErrorMessage?: string | null;
   unverifiedRuntimes?: { runtime_id: string; base_url: string }[];
-  refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const sources = data?.sources ?? [];
@@ -124,23 +122,11 @@ export function ModelDiscoveryStatus({
 
   return (
     <section className={styles.discoveryStatus} aria-label={t("rework.admin.capabilities.discovery.title")}>
-      <div className={styles.discoveryHeading}>
-        <span className={styles.status}>
-          {sources.length > 0
-            ? t("rework.admin.capabilities.discovery.summary", { added: newCount, removed: removed.length })
-            : t("rework.admin.capabilities.discovery.title")}
-        </span>
-        <Button
-          color="on-surface"
-          variant="outlined"
-          size="small"
-          icon={{ category: "outlined", type: "refresh" }}
-          disabled={refreshing}
-          onClick={() => void refresh()}
-        >
-          {t("rework.admin.capabilities.discovery.refresh")}
-        </Button>
-      </div>
+      <span className={styles.status}>
+        {sources.length > 0
+          ? t("rework.admin.capabilities.discovery.summary", { added: newCount, removed: removed.length })
+          : t("rework.admin.capabilities.discovery.title")}
+      </span>
       {refreshing && <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>}
       {unverifiedRuntimes.length > 0 && (
         <p className={styles.statusWarning}>

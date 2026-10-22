@@ -57,7 +57,6 @@ it("shows a confirmed disappearance separately from available models", () => {
       discoveredSourceIds={["gateway"]}
       refreshing={false}
       refreshError={false}
-      refresh={async () => undefined}
     />,
   );
   expect(html).toContain("https://models.example/v1/models");
@@ -75,7 +74,6 @@ it("explains why discovered models have no editable source", () => {
       discoveredSourceIds={["gateway"]}
       refreshing={false}
       refreshError={false}
-      refresh={async () => undefined}
     />,
   );
 
@@ -101,7 +99,6 @@ it("warns when one discovered source is missing from a mixed status", () => {
       discoveredSourceIds={["other", "gateway"]}
       refreshing={false}
       refreshError={false}
-      refresh={async () => undefined}
     />,
   );
 
@@ -128,7 +125,6 @@ it("shows a source refresh failure outside the collapsed settings", () => {
       discoveredSourceIds={["west"]}
       refreshing={false}
       refreshError={false}
-      refresh={async () => undefined}
     />,
   );
   expect(html).toContain("rework.admin.capabilities.discovery.failedSourceswest");
@@ -143,7 +139,6 @@ it("warns about unreachable agent services without claiming discovery failed", (
       refreshing={false}
       refreshError={false}
       unverifiedRuntimes={[{ runtime_id: "fred-agents", base_url: "http://localhost:8010" }]}
-      refresh={async () => undefined}
     />,
   );
 
@@ -162,7 +157,6 @@ it("does not call a source unregistered while another pod is unreachable", () =>
       refreshing={false}
       refreshError={false}
       unverifiedRuntimes={[{ runtime_id: "pod-b", base_url: "http://localhost:8013" }]}
-      refresh={async () => undefined}
     />,
   );
 
@@ -184,7 +178,6 @@ it("shows the effective URL without edit controls to a delegated feature manager
         discoveredSourceIds={["gateway"]}
         refreshing={false}
         refreshError={false}
-        refresh={async () => undefined}
       />,
     );
 
@@ -222,7 +215,6 @@ it("shows a separate URL editor for each discovery source", () => {
       discoveredSourceIds={["mistral", "gateway"]}
       refreshing={false}
       refreshError={false}
-      refresh={async () => undefined}
     />,
   );
 

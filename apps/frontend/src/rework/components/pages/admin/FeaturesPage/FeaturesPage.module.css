@@ -122,14 +122,13 @@
 }
 
 .modelFilter {
-  align-self: flex-end;
+  margin-left: auto;
   width: 240px;
   max-width: 100%;
 }
 
-.discoveryHeading {
+.modelListToolbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
 }
@@ -448,4 +447,8 @@
   width: 100%;
   min-width: 0;
   white-space: nowrap;
+}
+
+.actionsCell button > div {
+  padding-inline-start: var(--spacing-s);
 }

@@ -95,6 +95,9 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
 }));
+vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
+  useUserCapabilities: () => ({ canAdmin: false }),
+}));
 
 // Isolate the page from the drawer's own internals (TuningFieldRenderer, tri-state
 // mutations, search) — but still render the props FeaturesPage passes it, so a
@@ -472,6 +475,15 @@ describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3
       ];
       await act(async () => root.render(<FeaturesPage />));
       expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(2);
+
+      await act(async () => {
+        const discoveryButton = container.querySelectorAll('[role="radiogroup"]')[1].querySelectorAll("button")[1];
+        discoveryButton.click();
+      });
+      h.list = { data: { items: [] }, isLoading: false, isError: false };
+      await act(async () => root.render(<FeaturesPage />));
+      expect(container.textContent).toContain("rework.admin.capabilities.discovery.refresh");
+      expect(container.textContent).toContain("rework.admin.capabilities.discovery.emptyDiscovered");
     } finally {
       await act(async () => root.unmount());
       container.remove();
