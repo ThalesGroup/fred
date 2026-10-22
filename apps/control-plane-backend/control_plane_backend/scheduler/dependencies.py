@@ -71,10 +71,8 @@ class LifecycleActionDependencies:
     # WIKI-05: the wiki proposal lifecycle sweep and its retention duration.
     get_team_wiki_store: Callable[[], "TeamWikiStore"]
     get_policy_catalog: Callable[[], "ConversationPolicyCatalog"]
-    # None = no notification expiry (test bundles).
-    get_notification_store: Callable[[], "NotificationStore"] | None = None
-    # None = no join request expiry (test bundles).
-    get_team_join_request_store: Callable[[], "TeamJoinRequestStore"] | None = None
+    get_notification_store: Callable[[], "NotificationStore"]
+    get_team_join_request_store: Callable[[], "TeamJoinRequestStore"]
 
 
 def build_lifecycle_action_dependencies(

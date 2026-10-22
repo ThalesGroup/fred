@@ -38,11 +38,14 @@ class WikiProposalLifecycleResult(BaseModel):
     dry_run_actions: int = 0
 
 
+#: Most rows of each table one lifecycle tick deletes; the next tick continues.
+NOTIFICATION_EXPIRY_BATCH_SIZE = 1000
+
+
 class NotificationExpiryResult(BaseModel):
-    """The notification half of one lifecycle tick: expired rows deleted."""
+    """Expired notifications and join requests one lifecycle tick deleted."""
 
     deleted: int = 0
-    batches: int = 0
 
 
 class LifecycleManagerResult(BaseModel):
@@ -108,9 +111,5 @@ class WikiProposalActionResult(BaseModel):
     changed: bool = True
 
 
-class DeleteExpiredNotificationsInput(BaseModel):
-    limit: int = Field(default=1000, ge=1, le=5000)
-
-
-class DeleteExpiredNotificationsResult(BaseModel):
-    deleted: int = 0
+class ExpireNotificationsInput(BaseModel):
+    limit: int = Field(default=NOTIFICATION_EXPIRY_BATCH_SIZE, ge=1, le=5000)

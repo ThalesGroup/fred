@@ -26,7 +26,7 @@ from control_plane_backend.scheduler.lifecycle_runner import (
 )
 from control_plane_backend.scheduler.temporal.activities import (
     DELETE_CONVERSATION_ACTIVITY_NAME,
-    DELETE_EXPIRED_NOTIFICATIONS_ACTIVITY_NAME,
+    EXPIRE_NOTIFICATIONS_AND_JOIN_REQUESTS_ACTIVITY_NAME,
     LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME,
     LIST_WIKI_PROPOSAL_CANDIDATES_ACTIVITY_NAME,
     REJECT_WIKI_PROPOSAL_ACTIVITY_NAME,
@@ -35,12 +35,12 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
-    DeleteExpiredNotificationsInput,
-    DeleteExpiredNotificationsResult,
+    ExpireNotificationsInput,
     LifecycleManagerInput,
     LifecycleManagerResult,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
+    NotificationExpiryResult,
     RejectWikiProposalInput,
     WikiProposalActionResult,
     WikiProposalCandidateBatch,
@@ -116,22 +116,20 @@ class LifecycleManagerWorkflow:
             log_prefix="[LIFECYCLE]",
         )
 
-        async def _delete_expired_notifications(
-            delete_input: DeleteExpiredNotificationsInput,
-        ) -> DeleteExpiredNotificationsResult:
+        async def _expire_notifications(
+            expire_input: ExpireNotificationsInput,
+        ) -> NotificationExpiryResult:
             return await workflow.execute_activity(
-                DELETE_EXPIRED_NOTIFICATIONS_ACTIVITY_NAME,
-                delete_input,
-                result_type=DeleteExpiredNotificationsResult,
+                EXPIRE_NOTIFICATIONS_AND_JOIN_REQUESTS_ACTIVITY_NAME,
+                expire_input,
+                result_type=NotificationExpiryResult,
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=retry_policy,
             )
 
-        # workflow.time() keeps the budget deterministic on replay.
         result.notifications = await run_notification_expiry_once(
             input_data=input_data,
-            delete_batch=_delete_expired_notifications,
-            clock=workflow.time,
+            expire=_expire_notifications,
             logger=workflow.logger,
             log_prefix="[LIFECYCLE]",
         )

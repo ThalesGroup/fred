@@ -32,10 +32,10 @@ from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.notifications.store import NotificationStore
 from control_plane_backend.scheduler.dependencies import LifecycleActionDependencies
 from control_plane_backend.scheduler.temporal.activities import (
-    delete_expired_notifications,
+    expire_notifications_and_join_requests,
 )
 from control_plane_backend.scheduler.temporal.structures import (
-    DeleteExpiredNotificationsInput,
+    ExpireNotificationsInput,
 )
 from control_plane_backend.teams import api as teams_api
 from control_plane_backend.teams.dependencies import (
@@ -757,11 +757,12 @@ async def test_the_expiry_activity_also_deletes_expired_requests(
         get_task_service=None,  # type: ignore[arg-type]
         get_team_wiki_store=None,  # type: ignore[arg-type]
         get_policy_catalog=None,  # type: ignore[arg-type]
+        get_notification_store=lambda: NotificationStore(world.engine),
         get_team_join_request_store=lambda: world.requests,
     )
 
-    result = await delete_expired_notifications(
-        DeleteExpiredNotificationsInput(limit=1000), deps=deps
+    result = await expire_notifications_and_join_requests(
+        ExpireNotificationsInput(), deps=deps
     )
 
     assert result.deleted == 1

@@ -20,8 +20,7 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
-    DeleteExpiredNotificationsInput,
-    DeleteExpiredNotificationsResult,
+    ExpireNotificationsInput,
     LifecycleManagerInput,
     LifecycleManagerResult,
     ListConversationCandidatesInput,
@@ -54,13 +53,9 @@ RejectWikiProposalExecutor = Callable[
     [RejectWikiProposalInput],
     Awaitable[WikiProposalActionResult],
 ]
-DeleteExpiredNotificationsExecutor = Callable[
-    [DeleteExpiredNotificationsInput],
-    Awaitable[DeleteExpiredNotificationsResult],
+ExpireNotificationsExecutor = Callable[
+    [ExpireNotificationsInput], Awaitable[NotificationExpiryResult]
 ]
-
-NOTIFICATION_EXPIRY_BATCH_SIZE = 1000
-NOTIFICATION_EXPIRY_BUDGET_SECONDS = 30.0
 
 
 async def run_lifecycle_manager_once(
@@ -187,30 +182,15 @@ async def run_wiki_proposal_lifecycle_once(
 async def run_notification_expiry_once(
     *,
     input_data: LifecycleManagerInput,
-    delete_batch: DeleteExpiredNotificationsExecutor,
-    clock: Callable[[], float],
+    expire: ExpireNotificationsExecutor,
     logger: _Logger,
     log_prefix: str,
 ) -> NotificationExpiryResult:
-    """Delete expired notifications in batches until none remain or the time
-    budget is spent; the next tick continues. Reads already hide them."""
+    """One bounded delete per tick; the next tick continues. Reads already hide
+    expired rows."""
     if input_data.dry_run:
         logger.info("%s[DRY_RUN] notification expiry skipped", log_prefix)
         return NotificationExpiryResult()
-    deadline = clock() + NOTIFICATION_EXPIRY_BUDGET_SECONDS
-    result = NotificationExpiryResult()
-    while True:
-        batch = await delete_batch(
-            DeleteExpiredNotificationsInput(limit=NOTIFICATION_EXPIRY_BATCH_SIZE)
-        )
-        result.batches += 1
-        result.deleted += batch.deleted
-        if batch.deleted < NOTIFICATION_EXPIRY_BATCH_SIZE or clock() >= deadline:
-            break
-    logger.info(
-        "%s notification expiry deleted=%s batches=%s",
-        log_prefix,
-        result.deleted,
-        result.batches,
-    )
+    result = await expire(ExpireNotificationsInput())
+    logger.info("%s notification expiry deleted=%s", log_prefix, result.deleted)
     return result

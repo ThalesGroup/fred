@@ -84,7 +84,7 @@ async def run_worker(
             activities.delete_conversation,
             activities.list_wiki_proposal_candidates,
             activities.reject_wiki_proposal,
-            activities.delete_expired_notifications,
+            activities.expire_notifications_and_join_requests,
         ],
     )
 
