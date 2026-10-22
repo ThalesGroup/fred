@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +18,8 @@
 // which key each state uses and on the enabled-team count and health it renders.
 
 import { renderToStaticMarkup } from "react-dom/server";
+import { createRoot } from "react-dom/client";
+import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
@@ -34,7 +37,17 @@ const h = vi.hoisted(() => ({
   // `renderToStaticMarkup` (no effects, no DOM) never contains the hint text —
   // the key request is the only observable signal that the hint was wired up.
   tKeys: [] as string[],
+  discoverySources: [] as { source_id: string; yaml_url: string; effective_url: string }[],
+  refetch: async () => {},
+  refreshDiscovery: () => ({ unwrap: async () => ({ sources: [] }) }),
 }));
+const translate = vi.hoisted(
+  () => (key: string, opts?: { defaultValue?: string; count?: number; content?: string }) => {
+    h.tKeys.push(key);
+    const interpolated = opts?.count ?? opts?.content;
+    return opts?.defaultValue ?? (interpolated === undefined ? key : `${key}:${interpolated}`);
+  },
+);
 
 // `t` echoes its key, but appends an interpolated `count` (or the composed
 // `content` of the "All (…)" wrapper) when one is passed — those are the values
@@ -42,22 +55,15 @@ const h = vi.hoisted(() => ({
 // whether the right number ever reached the label.
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: { defaultValue?: string; count?: number; content?: string }) => {
-      h.tKeys.push(key);
-      const interpolated = opts?.count ?? opts?.content;
-      return opts?.defaultValue ?? (interpolated === undefined ? key : `${key}:${interpolated}`);
-    },
+    t: translate,
     i18n: { language: "en" },
   }),
 }));
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useAdminCapabilitiesQuery: () => h.list,
-  useModelDiscoveryQuery: () => ({ data: { sources: [] } }),
-  useRefreshModelDiscoveryMutation: () => [
-    () => ({ unwrap: async () => ({ sources: [] }) }),
-    { isLoading: false, isError: false },
-  ],
+  useAdminCapabilitiesQuery: () => ({ ...h.list, refetch: h.refetch }),
+  useModelDiscoveryQuery: () => ({ data: { sources: h.discoverySources }, refetch: h.refetch }),
+  useRefreshModelDiscoveryMutation: () => [h.refreshDiscovery, { isLoading: false, isError: false }],
   useListAllTeamsQuery: (arg: unknown) => {
     h.allTeamsArg = arg;
     return h.allTeams;
@@ -80,6 +86,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSetPlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
   useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
   useSetModelDiscoveryUrlMutation: () => [vi.fn(), { isLoading: false }],
+  useSetModelDisplayNameMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -122,6 +129,7 @@ function render(): string {
 
 beforeEach(() => {
   h.applicationsEnabled = false;
+  h.discoverySources = [];
 });
 
 describe("FeaturesPage states", () => {
@@ -435,6 +443,41 @@ describe("FeaturesPage default-on gate for required team settings", () => {
 });
 
 describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3 RFC §8.7)", () => {
+  it("keeps the original model table when no discovery source is configured", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    h.list = {
+      data: { items: [cap({ id: "manual.chat", kind: "model" })] },
+      isLoading: false,
+      isError: false,
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<FeaturesPage />));
+      await act(async () => {
+        const modelButton = container.querySelectorAll('[role="radiogroup"] button')[2] as HTMLButtonElement;
+        modelButton.click();
+      });
+      expect(container.textContent).toContain("cap.manual.chat");
+      expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(1);
+      expect(container.querySelector('input[aria-label="rework.admin.capabilities.discovery.filter"]')).toBeNull();
+
+      h.discoverySources = [
+        {
+          source_id: "gateway",
+          yaml_url: "https://example.test/v1/models",
+          effective_url: "https://example.test/v1/models",
+        },
+      ];
+      await act(async () => root.render(<FeaturesPage />));
+      expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(2);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
   it("shows only tool-kind capabilities by default, hiding agent-kind and model-kind rows", () => {
     h.list = {
       data: {

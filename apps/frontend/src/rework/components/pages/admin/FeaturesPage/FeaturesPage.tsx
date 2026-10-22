@@ -194,6 +194,7 @@ export default function FeaturesPage() {
   // as the backend's own `CapabilityEnablementItem.kind`.
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
   const { manual: manualModels, discovered: discoveredModels } = splitModelSections(capabilities);
+  const hasDiscovery = Boolean(discoveryStatus?.sources?.length || discoveredModels.length);
   const visibleModels = (modelTab === "manual" ? manualModels : discoveredModels).filter((model) =>
     [model.model_display_name, model.name, model.id, ...(model.model_runtime_ids ?? [])]
       .filter(Boolean)
@@ -657,7 +658,7 @@ export default function FeaturesPage() {
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
 
-      {activeKindFilter === "model" && (
+      {activeKindFilter === "model" && hasDiscovery && (
         <div className={styles.modelToolbar}>
           <ButtonGroup
             size="2xs"
@@ -674,7 +675,7 @@ export default function FeaturesPage() {
         </div>
       )}
 
-      {activeKindFilter === "model" && modelTab === "discovered" && (
+      {activeKindFilter === "model" && hasDiscovery && modelTab === "discovered" && (
         <ModelDiscoveryStatus
           data={discoveryStatus}
           discoveredSourceIds={discoveredModels.flatMap((model) =>
@@ -689,28 +690,31 @@ export default function FeaturesPage() {
         />
       )}
 
-      {!isLoading && !isError && (activeKindFilter !== "model" || modelInventoryReady) && capabilities.length === 0 && (
-        <PageEmptyState
-          icon="tune"
-          message={t(
-            activeKindFilter === "agent"
-              ? "rework.admin.capabilities.emptyAgents"
-              : activeKindFilter === "model"
-                ? "rework.admin.capabilities.emptyModels"
-                : activeKindFilter === "app"
-                  ? "rework.admin.capabilities.emptyApps"
-                  : activeKindFilter === "knowledge_base"
-                    ? "rework.admin.capabilities.emptyKnowledgeBases"
-                    : "rework.admin.capabilities.empty",
-          )}
-        />
-      )}
+      {!isLoading &&
+        !isError &&
+        (activeKindFilter !== "model" || !hasDiscovery || modelInventoryReady) &&
+        capabilities.length === 0 && (
+          <PageEmptyState
+            icon="tune"
+            message={t(
+              activeKindFilter === "agent"
+                ? "rework.admin.capabilities.emptyAgents"
+                : activeKindFilter === "model"
+                  ? "rework.admin.capabilities.emptyModels"
+                  : activeKindFilter === "app"
+                    ? "rework.admin.capabilities.emptyApps"
+                    : activeKindFilter === "knowledge_base"
+                      ? "rework.admin.capabilities.emptyKnowledgeBases"
+                      : "rework.admin.capabilities.empty",
+            )}
+          />
+        )}
 
       {!isLoading &&
         !isError &&
-        (activeKindFilter !== "model" || modelInventoryReady) &&
+        (activeKindFilter !== "model" || !hasDiscovery || modelInventoryReady) &&
         capabilities.length > 0 &&
-        (activeKindFilter === "model" ? (
+        (activeKindFilter === "model" && hasDiscovery ? (
           <section
             className={styles.modelSection}
             aria-label={t(`rework.admin.capabilities.discovery.${modelTab}Section`)}
