@@ -71,6 +71,11 @@ def request_group(request_id: str) -> str:
     return f"join_request:{request_id}"
 
 
+def answer_group(request_id: str) -> str:
+    """The requester's notification group of the answer to one request."""
+    return f"join_request_outcome:{request_id}"
+
+
 def _aware(value: datetime) -> datetime:
     # SQLite hands timestamps back naive; they were written in UTC.
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
@@ -185,12 +190,13 @@ class TeamJoinRequestStore:
             return None
         return mine if await self._delete_if_unchanged(mine) else None
 
-    async def claim(self, team_id: str, request_id: str) -> StoredJoinRequest | None:
-        """Accept: delete the request unless another decision got there first."""
-        request = await self.get(team_id, request_id)
-        if request is None:
-            return None
-        return request if await self._delete_if_unchanged(request) else None
+    async def delete(self, request_id: str) -> bool:
+        """Accept: `False` when another acceptance deleted it first."""
+        async with use_session(self._sessions) as s:
+            result = await s.execute(
+                delete(TeamJoinRequestRow).where(TeamJoinRequestRow.id == request_id)
+            )
+            return _rowcount(result) == 1
 
     async def _delete_if_unchanged(self, request: StoredJoinRequest) -> bool:
         async with use_session(self._sessions) as s:
@@ -236,6 +242,35 @@ class TeamJoinRequestStore:
             )
         return await self._select(TeamJoinRequestRow.id.in_(ids))
 
+    async def delete_pending_for_team(self, team_id: str) -> list[StoredJoinRequest]:
+        """The team stopped taking requests: its pending ones go, and are returned.
+        No refusal row is kept, so nobody waits 24 hours to ask again."""
+        async with use_session(self._sessions) as s:
+            result = await s.execute(
+                delete(TeamJoinRequestRow)
+                .where(
+                    TeamJoinRequestRow.team_id == team_id,
+                    TeamJoinRequestRow.status == JoinRequestStatus.PENDING.value,
+                    _live(utcnow()),
+                )
+                .returning(TeamJoinRequestRow)
+            )
+            return [_to_stored(row) for row in result.scalars()]
+
+    async def delete_for_member(self, team_id: str, requester_id: str) -> list[str]:
+        """The requester joined another way: their request, whatever its state,
+        goes. Returns the deleted ids."""
+        async with use_session(self._sessions) as s:
+            result = await s.execute(
+                delete(TeamJoinRequestRow)
+                .where(
+                    TeamJoinRequestRow.team_id == team_id,
+                    TeamJoinRequestRow.requester_id == requester_id,
+                )
+                .returning(TeamJoinRequestRow.id)
+            )
+            return list(result.scalars())
+
     async def delete_for_team(self, team_id: str) -> None:
         async with use_session(self._sessions) as s:
             await s.execute(
@@ -280,5 +315,6 @@ __all__ = [
     "REFUSED_TTL",
     "StoredJoinRequest",
     "TeamJoinRequestStore",
+    "answer_group",
     "request_group",
 ]

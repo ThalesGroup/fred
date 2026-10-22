@@ -53,6 +53,7 @@ from control_plane_backend.teams.join_request_store import (
     JoinRequestStatus,
     StoredJoinRequest,
     TeamJoinRequestStore,
+    answer_group,
     request_group,
 )
 from control_plane_backend.teams.schemas import (
@@ -64,6 +65,7 @@ from control_plane_backend.teams.schemas import (
 )
 from control_plane_backend.teams.service import (
     _add_team_member_relation,
+    _close_join_request_of_member,
     _get_team_users_by_relation,
     _get_user_roles_in_team,
     _validate_team_and_check_permission,
@@ -82,8 +84,16 @@ def _notifications(deps: TeamServiceDependencies) -> NotificationService | None:
     return deps.get_notification_service() if deps.get_notification_service else None
 
 
-def _answer_group(request_id: str) -> str:
-    return f"join_request_outcome:{request_id}"
+def _lock_key(team_id: TeamId) -> str:
+    # Serializes asking with the sweep of a team that stops taking requests.
+    return f"team_join_requests:{team_id}"
+
+
+def _takes_requests(metadata: TeamMetadata) -> bool:
+    return (
+        metadata.visibility == TeamVisibility.PUBLIC
+        and metadata.joining_mode == JoiningMode.ON_REQUEST
+    )
 
 
 def _mine_view(request: StoredJoinRequest) -> MyTeamJoinRequest:
@@ -140,19 +150,37 @@ async def create_join_request(
     deps: TeamServiceDependencies,
 ) -> tuple[MyTeamJoinRequest, bool]:
     """The caller's pending request to the team; `True` when it is new."""
-    store = _store(deps)
-    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
-    # A private team is invisible to a non-member: same answer as no team.
-    if metadata is None or metadata.visibility != TeamVisibility.PUBLIC:
-        raise TeamNotFoundError(team_id)
-    if metadata.joining_mode != JoiningMode.ON_REQUEST:
-        raise TeamJoinRequestError.not_on_request()
-    if await _get_user_roles_in_team(deps.rebac, team_id, user.uid):
-        raise TeamJoinRequestError.already_member()
+    teams = deps.get_team_metadata_store()
+    # Under the lock the team either still takes requests once the admins are
+    # told, or its sweep runs after and finds this request.
+    async with teams.advisory_lock(_lock_key(team_id)):
+        metadata = await teams.get_by_team_id(team_id)
+        # A private team is invisible to a non-member: same answer as no team.
+        if metadata is None or metadata.visibility != TeamVisibility.PUBLIC:
+            raise TeamNotFoundError(team_id)
+        if metadata.joining_mode != JoiningMode.ON_REQUEST:
+            raise TeamJoinRequestError.not_on_request()
+        if await _get_user_roles_in_team(deps.rebac, team_id, user.uid):
+            raise TeamJoinRequestError.already_member()
+        created = await _create(user, team_id, message, deps)
+        if isinstance(created, MyTeamJoinRequest):
+            return created, False
+        _audit("created", user, created)
+        await _notify_admins(metadata, created, deps)
+    return _mine_view(created), True
 
+
+async def _create(
+    user: KeycloakUser,
+    team_id: TeamId,
+    message: str | None,
+    deps: TeamServiceDependencies,
+) -> StoredJoinRequest | MyTeamJoinRequest:
+    """The new request, or the caller's pending one already there."""
+    store = _store(deps)
     existing = await store.get_mine(team_id, user.uid)
     if existing is not None and existing.status == JoinRequestStatus.PENDING:
-        return _mine_view(existing), False
+        return _mine_view(existing)
     ask_again_at = existing.can_ask_again_at if existing is not None else None
     if ask_again_at is not None and ask_again_at > utcnow():
         raise TeamJoinRequestError.refused()
@@ -162,16 +190,13 @@ async def create_join_request(
         requester_name=display_name(user),
         message=message,
     )
-    if created is None:
-        # Another call of the same person won the slot.
-        existing = await store.get_mine(team_id, user.uid)
-        if existing is not None and existing.status == JoinRequestStatus.PENDING:
-            return _mine_view(existing), False
-        raise TeamJoinRequestError.refused()
-
-    _audit("created", user, created)
-    await _notify_admins(metadata, created, deps)
-    return _mine_view(created), True
+    if created is not None:
+        return created
+    # Another call of the same person won the slot.
+    existing = await store.get_mine(team_id, user.uid)
+    if existing is not None and existing.status == JoinRequestStatus.PENDING:
+        return _mine_view(existing)
+    raise TeamJoinRequestError.refused()
 
 
 async def _notify_admins(
@@ -235,14 +260,23 @@ async def accept_join_request(
     request_id: str,
     deps: TeamServiceDependencies,
 ) -> None:
-    """Accept a pending request, or a refused one ("Accept anyway")."""
+    """Accept a pending request, or a refused one ("Accept anyway") while the
+    team still takes requests."""
     metadata = await _require_admin(user, team_id, deps)
-    request = await _store(deps).claim(team_id, request_id)
+    store = _store(deps)
+    request = await store.get(team_id, request_id)
     if request is None:
         raise TeamJoinRequestError.not_found()
+    if not _takes_requests(metadata):
+        raise TeamJoinRequestError.not_on_request()
+    if await _joined_meanwhile(request, deps):
+        return
+    # Membership first: if the grant fails the request is still there to decide.
     await _add_team_member_relation(
         deps.rebac, team_id, request.requester_id, UserTeamRelation.TEAM_MEMBER
     )
+    if not await store.delete(request.id):
+        return  # another admin accepted it first and tells everyone
     _audit("accepted", user, request, requester_uid=request.requester_id)
 
     notifications = _notifications(deps)
@@ -253,13 +287,26 @@ async def accept_join_request(
         actor_uid=user.uid,
         actor_name=display_name(user),
         outcome="accepted",
-        # "Accept anyway": tiles already reading "refused" show the final outcome.
-        include_handled=request.status == JoinRequestStatus.REFUSED,
+        # Tiles already reading "refused" show the final outcome.
+        include_handled=True,
     )
-    if request.status == JoinRequestStatus.REFUSED:
-        # The acceptance replaces the refusal the requester already got.
-        await notifications.delete_groups([_answer_group(request.id)])
+    # The acceptance replaces any refusal the requester already got.
+    await notifications.delete_groups([answer_group(request.id)])
     await _answer(notifications, metadata, [request], "accepted")
+
+
+async def _joined_meanwhile(
+    request: StoredJoinRequest, deps: TeamServiceDependencies
+) -> bool:
+    """A requester who became a member another way gets no answer."""
+    if not await _get_user_roles_in_team(
+        deps.rebac, TeamId(request.team_id), request.requester_id
+    ):
+        return False
+    await _close_join_request_of_member(
+        deps, TeamId(request.team_id), request.requester_id
+    )
+    return True
 
 
 async def refuse_join_request(
@@ -275,6 +322,8 @@ async def refuse_join_request(
         raise TeamJoinRequestError.not_found()
     if request.status == JoinRequestStatus.REFUSED:
         return
+    if await _joined_meanwhile(request, deps):
+        return
     refused = await store.refuse(team_id, [request_id], decided_by=user.uid)
     if not refused:
         raise TeamJoinRequestError.not_found()
@@ -284,16 +333,13 @@ async def refuse_join_request(
 async def refuse_pending_join_requests(
     user: KeycloakUser, metadata: TeamMetadata, deps: TeamServiceDependencies
 ) -> None:
-    """The team left `on_request`: every pending request is refused."""
+    """The team stopped taking requests: the pending ones are answered "refused"
+    but deleted, so this refusal never makes anyone wait to ask again."""
     if deps.get_team_join_request_store is None:
         return
     store = deps.get_team_join_request_store()
-    pending = [
-        r.id
-        for r in await store.list_for_team(metadata.id)
-        if r.status == JoinRequestStatus.PENDING
-    ]
-    refused = await store.refuse(metadata.id, pending, decided_by=user.uid)
+    async with deps.get_team_metadata_store().advisory_lock(_lock_key(metadata.id)):
+        refused = await store.delete_pending_for_team(metadata.id)
     await _announce_refusals(
         user, metadata, refused, deps, reason="joining_mode_changed"
     )
@@ -342,7 +388,7 @@ async def _answer(
             NotificationDraft(
                 recipient_id=r.requester_id,
                 type=NotificationType.TEAM_JOIN_REQUEST_ANSWERED.value,
-                group_key=_answer_group(r.id),
+                group_key=answer_group(r.id),
                 payload=payload,
                 team_id=metadata.id if outcome == "accepted" else None,
             )

@@ -13,8 +13,8 @@
 # limitations under the License.
 
 """Team join requests: asking, cancelling, deciding, the 24-hour wait after a
-refusal, "Accept anyway", the automatic refusal when a team leaves
-`on_request`, expiry, the notifications of both sides and the routes."""
+refusal, "Accept anyway", the automatic refusal when a team stops taking
+requests, joining another way, expiry, notifications and the routes."""
 
 from __future__ import annotations
 
@@ -52,11 +52,18 @@ from control_plane_backend.teams.join_requests import (
     refuse_join_request,
 )
 from control_plane_backend.teams.schemas import (
+    AddTeamMemberRequest,
     TeamJoinRequestError,
     TeamNotFoundError,
     UpdateTeamRequest,
+    UserTeamRelation,
 )
-from control_plane_backend.teams.service import delete_team, update_team
+from control_plane_backend.teams.service import (
+    add_team_member,
+    delete_team,
+    join_default_teams_for_new_user,
+    update_team,
+)
 from fastapi import FastAPI
 from fred_core import (
     JoiningMode,
@@ -161,6 +168,7 @@ class _Teams:
             )
         }
         self.deleted: list[str] = []
+        self.locks: list[str] = []
 
     async def get_by_team_id(self, team_id, session=None):
         return self.teams.get(str(team_id))
@@ -178,6 +186,11 @@ class _Teams:
     @asynccontextmanager
     async def transaction(self):
         yield None
+
+    @asynccontextmanager
+    async def advisory_lock(self, key, session=None):
+        self.locks.append(key)
+        yield
 
 
 class _World:
@@ -535,6 +548,95 @@ async def test_an_emission_failure_does_not_fail_the_decision(
     assert [r.subject.id for r in world.rebac.added] == ["alice"]
 
 
+async def test_a_failed_grant_keeps_the_request_to_decide_again(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request, _ = await world.ask()
+    monkeypatch.setattr(
+        world.rebac, "add_relation", AsyncMock(side_effect=RuntimeError("fga down"))
+    )
+
+    with pytest.raises(RuntimeError):
+        await accept_join_request(_user("bob"), ATLAS, request.id, world.deps)
+
+    [still] = await world.requests.list_for_team(ATLAS)
+    assert still.status == "pending"
+    assert [n.handled_at for n in await world.inbox("bob")] == [None]
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"joining_mode": JoiningMode.INVITE_ONLY},
+        {"joining_mode": JoiningMode.OPEN},
+        {"visibility": TeamVisibility.PRIVATE},
+    ],
+)
+async def test_accept_anyway_is_refused_once_the_team_stops_taking_requests(
+    world: _World, update: dict[str, Any]
+) -> None:
+    request, _ = await world.ask()
+    await refuse_join_request(_user("bob"), ATLAS, request.id, world.deps)
+    world.teams.teams[ATLAS] = world.teams.teams[ATLAS].model_copy(update=update)
+
+    with pytest.raises(TeamJoinRequestError) as error:
+        await accept_join_request(_user("carol"), ATLAS, request.id, world.deps)
+
+    assert error.value.code == "team_not_on_request"
+    assert world.rebac.added == []
+    [still] = await world.requests.list_for_team(ATLAS)
+    assert still.status == "refused"
+
+
+async def test_deciding_on_someone_who_joined_another_way_sends_no_answer(
+    world: _World,
+) -> None:
+    first, _ = await world.ask("alice")
+    second, _ = await world.ask("frank")
+    world.rebac.roles[ATLAS]["alice"] = {RelationType.TEAM_MEMBER}
+    world.rebac.roles[ATLAS]["frank"] = {RelationType.TEAM_MEMBER}
+
+    await refuse_join_request(_user("bob"), ATLAS, first.id, world.deps)
+    await accept_join_request(_user("bob"), ATLAS, second.id, world.deps)
+
+    assert world.rebac.added == []
+    assert await world.requests.list_for_team(ATLAS) == []
+    assert await world.inbox("alice") == [] and await world.inbox("frank") == []
+    assert await world.inbox("bob") == [] and await world.inbox("carol") == []
+
+
+async def test_joining_another_way_closes_the_request(world: _World) -> None:
+    await world.ask("alice")
+    refused, _ = await world.ask("frank")
+    await refuse_join_request(_user("bob"), ATLAS, refused.id, world.deps)
+    world.deps.get_default_team_store = cast(Any, lambda: _DefaultTeams([ATLAS]))
+    world.teams.get_by_team_ids = AsyncMock(  # type: ignore[attr-defined]
+        return_value={ATLAS: world.teams.teams[ATLAS]}
+    )
+
+    await add_team_member(
+        _user("bob"),
+        ATLAS,
+        AddTeamMemberRequest(user_id="alice", relation=UserTeamRelation.TEAM_MEMBER),
+        world.deps,
+    )
+    await join_default_teams_for_new_user("frank", world.deps)
+
+    assert {r.subject.id for r in world.rebac.added} == {"alice", "frank"}
+    assert await world.requests.list_for_team(ATLAS) == []
+    # No answer, and the earlier refusal is gone with the admins' tiles.
+    assert await world.inbox("alice") == [] and await world.inbox("frank") == []
+    assert await world.inbox("bob") == [] and await world.inbox("carol") == []
+
+
+class _DefaultTeams:
+    def __init__(self, team_ids: list[str]) -> None:
+        self._team_ids = team_ids
+
+    async def list_team_ids(self) -> list[str]:
+        return self._team_ids
+
+
 # --- cancelling, mode changes, cleanup -----------------------------------------------
 
 
@@ -560,7 +662,7 @@ async def test_cancel_deletes_the_request_and_the_admins_notifications(
     "patch",
     [{"joining_mode": "invite_only"}, {"visibility": "private"}],
 )
-async def test_leaving_on_request_refuses_every_pending_request(
+async def test_leaving_on_request_refuses_every_pending_request_without_a_wait(
     world: _World, monkeypatch: pytest.MonkeyPatch, patch: dict[str, str]
 ) -> None:
     monkeypatch.setattr(
@@ -568,23 +670,37 @@ async def test_leaving_on_request_refuses_every_pending_request(
         AsyncMock(return_value=None),
     )
     alice, _ = await world.ask("alice")
-    frank, _ = await world.ask("frank")
+    await world.ask("frank")
+    # A real refusal from before the switch keeps its 24-hour wait.
+    erik, _ = await world.ask("erik")
+    await refuse_join_request(_user("carol"), ATLAS, erik.id, world.deps)
 
     await update_team(
         _user("bob"), ATLAS, UpdateTeamRequest.model_validate(patch), world.deps
     )
 
     assert world.teams.teams[ATLAS].joining_mode == JoiningMode.INVITE_ONLY
+    assert world.teams.locks == [f"team_join_requests:{ATLAS}"] * 4
     listed = await list_team_join_requests(_user("bob"), ATLAS, world.deps)
-    assert {(r.id, r.status) for r in listed} == {
-        (alice.id, "refused"),
-        (frank.id, "refused"),
-    }
+    assert [(r.id, r.status) for r in listed] == [(erik.id, "refused")]
     for uid in ("alice", "frank"):
         [answer] = await world.inbox(uid)
         assert answer.payload.model_dump()["outcome"] == "refused"
-    assert await world.inbox("bob") == []
-    assert {n.handled_by_name for n in await world.inbox("carol")} == {"Bob"}
+    # Carol's own refusal took her tile; the two swept requests read "Bob".
+    assert [n.handled_by_name for n in await world.inbox("carol")] == ["Bob"] * 2
+
+    # Back on request: the automatic refusal does not make anyone wait.
+    world.teams.teams[ATLAS] = world.teams.teams[ATLAS].model_copy(
+        update={
+            "joining_mode": JoiningMode.ON_REQUEST,
+            "visibility": TeamVisibility.PUBLIC,
+        }
+    )
+    again, created = await world.ask("alice")
+    assert created and again.id != alice.id
+    with pytest.raises(TeamJoinRequestError) as error:
+        await world.ask("erik")
+    assert error.value.code == "join_request_refused"
 
 
 async def test_a_public_team_opts_in_without_refusing_anything(
