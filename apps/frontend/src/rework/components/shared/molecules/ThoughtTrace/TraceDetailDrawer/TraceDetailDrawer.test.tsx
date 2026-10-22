@@ -37,6 +37,7 @@ vi.mock("react-i18next", () => ({
         return `${options?.count ?? 0} ${options?.count === 1 ? "table" : "tables"}`;
       if (key === "rework.chatTrace.tabular.tableNumber") return `Table ${options?.number ?? 0}`;
       if (key === "rework.chatTrace.toolLabels.readQuery") return "Reading query";
+      if (key === "rework.chatTrace.toolLabels.codeSandbox") return "Running code in an isolated space";
       if (key === "rework.chatTrace.toolLabels.documents") return "Listing tabular documents";
       if (key === "rework.chatTrace.toolLabels.markdown") return "Reading the workbook catalog";
       if (key === "rework.chatTrace.toolLabels.schemas") return "Reading tabular schemas";
@@ -107,6 +108,30 @@ function message(overrides: Partial<ChatMessage>): ChatMessage {
     ...overrides,
   };
 }
+
+describe("TraceDetailDrawer sandbox execution", () => {
+  it("uses the same localized label in the header and redacted detail", () => {
+    const entry: TraceEntry = {
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        parts: [{ type: "tool_call", call_id: "sandbox-1", name: "execute_code", args: { code: "secret code" } }],
+      }),
+      result: message({
+        channel: "tool_result",
+        role: "tool",
+        parts: [{ type: "tool_result", call_id: "sandbox-1", ok: true, content: "secret output", latency_ms: 42 }],
+      }),
+    };
+
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("<header>Running code in an isolated space");
+    expect(html).toContain("&quot;action&quot;: &quot;Running code in an isolated space&quot;");
+    expect(html).not.toContain("Executing code");
+    expect(html).not.toContain("secret code");
+    expect(html).not.toContain("secret output");
+  });
+});
 
 describe("TraceDetailDrawer read_query failure", () => {
   it("shows the submitted SQL and engine error without HTTP transport details", () => {

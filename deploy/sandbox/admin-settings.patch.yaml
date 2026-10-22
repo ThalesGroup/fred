@@ -1,0 +1,13 @@
+spec:
+  template:
+    spec:
+      containers:
+        - name: broker
+          env:
+            - name: SANDBOX_SETTINGS_URL
+              value: https://control-plane.example.invalid/control-plane/v1/internal/sandbox-settings
+            - name: SANDBOX_SETTINGS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: fred-sandbox-settings
+                  key: token

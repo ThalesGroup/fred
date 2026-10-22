@@ -45,6 +45,7 @@ import styles from "./FeaturesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
+import { SandboxSettingsPanel } from "./SandboxSettingsPanel.tsx";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
 import {
   capabilityLabel,
@@ -599,6 +600,10 @@ export default function FeaturesPage() {
 
       {isLoading && <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p>}
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
+
+      <SandboxSettingsPanel
+        visible={activeKindFilter === "tool" && allCapabilities.some((cap) => cap.id === "code_sandbox")}
+      />
 
       {!isLoading && !isError && capabilities.length === 0 && (
         <PageEmptyState

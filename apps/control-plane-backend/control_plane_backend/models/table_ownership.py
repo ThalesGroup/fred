@@ -58,6 +58,7 @@ import control_plane_backend.models.platform_ui_settings_models  # noqa: F401 â€
 import control_plane_backend.models.prompt_models  # noqa: F401
 import control_plane_backend.models.purge_queue_models  # noqa: F401
 import control_plane_backend.models.routing_policy_models  # noqa: F401
+import control_plane_backend.models.sandbox_settings_models  # noqa: F401
 import control_plane_backend.models.session_attachment_models  # noqa: F401
 import control_plane_backend.models.session_metadata_models  # noqa: F401
 import control_plane_backend.models.task_models  # noqa: F401 â€” registers cp_task_run / cp_task_event_log with Base

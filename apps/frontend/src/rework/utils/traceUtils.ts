@@ -418,8 +418,10 @@ export function stripDocumentUids(tree: string): string {
 }
 
 /** Curated {action, status, latency} payload for tool results with no recognized richer shape. */
-export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): Record<string, unknown> {
-  const action = humanizeToolName(toolName(entry.call));
+export function genericToolPayload(
+  entry: Extract<TraceEntry, { kind: "combo" }>,
+  action = humanizeToolName(toolName(entry.call)),
+): Record<string, unknown> {
   if (!entry.result) return { action, status: "running" };
   return {
     action,
@@ -554,6 +556,9 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Observation";
     case "tool_call": {
       if (entry.kind !== "combo") return "Tool call";
+      if (toolSlug(toolName(entry.call)) === "execute_code" && translate) {
+        return translate("rework.chatTrace.toolLabels.codeSandbox");
+      }
       if (toolName(entry.call) === "ask_user" && translate) {
         return translate("rework.chatTrace.toolLabels.askUser");
       }

@@ -55,6 +55,7 @@ from control_plane_backend.routing_policy.store import (
     PlatformModelBindingStore,
     TeamRoutingPolicyStore,
 )
+from control_plane_backend.sandbox_settings.store import SandboxSettingsStore
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
@@ -123,6 +124,7 @@ class ProductServiceDependencies:
     get_sql_session_factory: Callable[[], "async_sessionmaker[AsyncSession]"] | None = (
         None
     )
+    get_sandbox_settings_store: Callable[[], SandboxSettingsStore] | None = None
 
 
 def build_product_service_dependencies(
@@ -154,6 +156,7 @@ def build_product_service_dependencies(
         get_platform_prompt_store=container.get_platform_prompt_store,
         get_creation_assistant_settings_store=container.get_creation_assistant_settings_store,
         get_platform_ui_settings_store=container.get_platform_ui_settings_store,
+        get_sandbox_settings_store=container.get_sandbox_settings_store,
         get_announcement_store=container.get_announcement_store,
         get_knowledge_base_definition_store=container.get_knowledge_base_definition_store,
         get_knowledge_base_instance_store=container.get_knowledge_base_instance_store,
