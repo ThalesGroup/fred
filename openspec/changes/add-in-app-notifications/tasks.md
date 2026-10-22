@@ -75,7 +75,7 @@
 - [x] 8.1 Add `rework/features/helpCenter/content/{fr,en}/features/notifications.md` (what the bell shows, seen vs. read, clear and delete, 30-day expiry, the two marketplace notifications, legacy entries without a publisher); verify `helpCenter/content.test.ts`.
   - Done: `content/{fr,en}/features/notifications.md` (order 47) plus a line in each `features/index.md` and two cross-links in each `agents.md`; `helpCenter` tests green (18).
 - [x] 8.2 Add a dated numbered entry to `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` (routes, caller scope, `published_by`, expiry); verify it follows the latest section's format.
-  - Done: §68 of `CONTROL-PLANE-PRODUCT-CONTRACT.md`.
+  - Done: §69 of `CONTROL-PLANE-PRODUCT-CONTRACT.md`.
 - [x] 8.3 Write `docs/swift/ops/migrations/add-in-app-notifications.md` from the template, impact `minor` (Alembic migration, no operator action); verify `make migration-check` from the repo root.
   - Done: `docs/swift/ops/migrations/3232-add-in-app-notifications.md`; `make migration-check`: "Migration notes valid: 1 new declaration(s)".
 - [x] 8.4 Update `docs/swift/ux/COMPONENT-UX.md` for `NotificationTile`, `NotificationsPopover` and the bell entry.
