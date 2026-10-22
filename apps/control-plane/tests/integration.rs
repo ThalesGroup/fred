@@ -4631,6 +4631,58 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
     )
 }
 
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn tree_walk_reads_stay_within_the_concurrency_bound() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    for n in 0..19 {
+        spaces::create_space(
+            &e.pool,
+            &e.fga,
+            "alice",
+            SpaceKind::Team,
+            org.id,
+            format!("team-{n}"),
+            "alice",
+        )
+        .await
+        .unwrap();
+    }
+    grant(&e, org.id, Role::Analyst, "ana").await;
+    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
+    let observed = Fga::connect(
+        &proxy.base,
+        &e.store,
+        false,
+        false,
+        None,
+        Some(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap()
+    .load(&e.pool)
+    .await
+    .unwrap();
+    proxy.fault.lock().await.read_delay = Some(Duration::from_millis(50));
+    let listed = spaces::memberships(&e.pool, &observed, "ana")
+        .await
+        .unwrap();
+    assert_eq!(
+        listed
+            .iter()
+            .filter(|m| m.space.kind == SpaceKind::Team)
+            .count(),
+        20
+    );
+    let peak = proxy.fault.lock().await.peak_reads;
+    // Twenty teams are read concurrently, never more than the named bound at once.
+    assert!(
+        (2..=control_plane::fga::READ_CONCURRENCY).contains(&peak),
+        "peak {peak}"
+    );
+}
+
 // Proves: I23
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]

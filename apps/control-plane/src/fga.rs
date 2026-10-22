@@ -76,6 +76,9 @@ impl Scope {
     }
 }
 
+/// Concurrent OpenFGA Reads issued by one operation, such as one level of a tree walk.
+pub const READ_CONCURRENCY: usize = 8;
+
 #[derive(Debug, thiserror::Error)]
 #[error("authorization changed; retry with fresh authorization checks")]
 pub struct Conflict;
@@ -510,20 +513,28 @@ impl Fga {
         .await
     }
 
+    /// One Read per space, at most `READ_CONCURRENCY` in flight.
     async fn concurrently<T, F, Fut>(&self, spaces: &[Uuid], read: F) -> Result<Vec<(Uuid, T)>>
     where
         T: Send + 'static,
         F: Fn(Fga, Uuid) -> Fut,
         Fut: std::future::Future<Output = Result<T>> + Send + 'static,
     {
+        let mut waiting = spaces.iter().copied();
         let mut reads = tokio::task::JoinSet::new();
-        for &id in spaces {
+        let spawn = |reads: &mut tokio::task::JoinSet<_>, id: Uuid| {
             let pending = read(self.clone(), id);
             reads.spawn(async move { pending.await.map(|value| (id, value)) });
+        };
+        for id in waiting.by_ref().take(READ_CONCURRENCY) {
+            spawn(&mut reads, id);
         }
         let mut out = Vec::with_capacity(spaces.len());
         while let Some(result) = reads.join_next().await {
             out.push(result??);
+            if let Some(id) = waiting.next() {
+                spawn(&mut reads, id);
+            }
         }
         Ok(out)
     }

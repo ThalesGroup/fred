@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F09](#f09-lectures-openfga-bornées) | Lectures OpenFGA concurrentes bornées | Tests ciblés validés ; validation finale | 09 |
 | [F11](#f11-une-seule-réponse-dautorisation) | Une seule réponse d'autorisation métier | Tests ciblés validés ; validation finale du lot | 03, 03a, A2 |
 | [F12](#f12-un-seul-format-derreur) | Un seul module d'extracteurs, erreurs toujours en JSON | Tests ciblés validés ; validation finale du lot | A2, carte des sources |
 | [F13](#f13-recherche-locale-par-préfixe-littéral) | Recherche de candidats locale par préfixe littéral indexé | Tests ciblés validés ; validation finale du lot | 02, 04, 09, A2, A3 |
@@ -89,6 +90,17 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F09 Lectures OpenFGA bornées
+
+- 2026-10-22 : vérification sur HEAD `e527531f0` : partiel. La borne de 32 de
+  `spaces::organization` et `links_of` ont disparu avec F01 ; reste `Fga::concurrently`, appelé
+  par `children_of` dans `memberships` : un analyste ou editor d'organisation lisait toutes
+  ses équipes en parallèle, sans limite. Correction : borne nommée unique
+  `fga::READ_CONCURRENCY` = 8, appliquée par la `JoinSet` elle-même, sans dépendance.
+  Test `tree_walk_reads_stay_within_the_concurrency_bound` (20 équipes, 50 ms par Read, proxy
+  OpenFGA) : pic entre 2 et 8 ; pic 20 sans la borne. Les contrôles Keycloak de l'import
+  gardent leur propre limite de 8. `make test` réussi. Arc42 09.
 
 ## F11 Une seule réponse d'autorisation
 

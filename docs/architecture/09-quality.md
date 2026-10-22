@@ -431,8 +431,9 @@ platform guard initialization Write; existing state without a binding is refused
 Read pagination bounds each response, not the operation's memory: `read_keys`
 accumulates all matching tuples. With `R` direct role tuples and `S` returned spaces,
 `/me/spaces` uses `O(R + S)` application memory and `O(S log S + S * R)` processing
-for ordering and per-space role selection; its concurrent Reads are
-unbounded within one level. Space revocation tests child membership in `O(R * D)`
+for ordering and per-space role selection; each level of its walk keeps at most
+`fga::READ_CONCURRENCY` (8) children Reads in flight, whatever the number of teams
+(20 teams, 50 ms per Read: peak 8). Space revocation tests child membership in `O(R * D)`
 worst-case application work for `D` children and personal spaces. These costs concern Fred's processing of returned
 tuples, not OpenFGA's internal query plan.
 
