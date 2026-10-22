@@ -18,6 +18,6 @@
 
 ## 4. Verification and close-out
 
-- [ ] 4.1 Run the relevant backend, frontend and OpenFGA authorization tests, then the root quality gate once for the completed series; record exact commands and outcomes in the PR.
+- [x] 4.1 Run the relevant backend, frontend and OpenFGA authorization tests, then the root quality gate once for the completed series; record exact commands and outcomes in the PR.
 - [x] 4.2 Review the full branch against `swift` using the branch audit procedure and obtain an independent read-only review of the authorization change; resolve findings and record base/head, coverage and exclusions in the PR.
-- [ ] 4.3 Reconcile the final OpenSpec artifacts, validate and sync the deltas, archive the completed change, then push the topic branch and open an English draft PR linked to #3235; verify the PR diff and title.
+- [x] 4.3 Reconcile the final OpenSpec artifacts, validate and sync the deltas, archive the completed change, then push the topic branch and open an English draft PR linked to #3235; verify the PR diff and title.
