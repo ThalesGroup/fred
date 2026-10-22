@@ -684,7 +684,8 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
     let other = crate::support::member_organization(&e.pool, &e.fga, &name, "bob")
         .await
         .unwrap();
-    assert_eq!(other.name, name);
+    // Inner spaces and slashes are kept; surrounding whitespace is not.
+    assert_eq!(other.name, name.trim());
     let body = serde_json::json!({"kind":"team","parent_id":org.id,"name":name,"admin":"alice"})
         .to_string();
     assert_eq!(

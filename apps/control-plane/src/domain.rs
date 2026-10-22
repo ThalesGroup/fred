@@ -15,6 +15,7 @@
 //! Domain types and the placement rules. Pure functions: no I/O, unit-tested.
 
 use serde::{Deserialize, Serialize};
+use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 #[derive(
@@ -28,9 +29,18 @@ pub enum SpaceKind {
     Project,
 }
 
-/// Space labels preserve their spelling (including slashes); they are not paths.
-pub(crate) fn valid_space_name(name: &str) -> bool {
-    !name.trim().is_empty() && name.chars().count() <= 180 && !name.chars().any(char::is_control)
+/// Space and folder names are stored, compared and kept unique in this form: NFC,
+/// without surrounding whitespace, nonblank, at most `max` characters, no controls.
+pub(crate) fn canonical_name(raw: &str, max: usize) -> Option<String> {
+    let nfc: String = raw.nfc().collect();
+    let name = nfc.trim();
+    (!name.is_empty() && name.chars().count() <= max && !name.chars().any(char::is_control))
+        .then(|| name.to_owned())
+}
+
+/// Space labels keep inner spaces and slashes; they are not paths.
+pub(crate) fn space_name(raw: &str) -> Option<String> {
+    canonical_name(raw, 180)
 }
 
 /// Immutable placement is recorded with the space; roles remain in OpenFGA.

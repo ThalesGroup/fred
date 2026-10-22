@@ -4229,6 +4229,64 @@ async fn scope_follows_ancestors_and_levels_only_narrow_it() {
 // Proves: I1
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn space_and_folder_names_are_unique_in_canonical_form() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Editor, "writer").await;
+    // Surrounding whitespace and Unicode composition do not make a different name.
+    for name in [" TSN", "TSN\u{a0}"] {
+        let refused = crate::support::member_organization(&e.pool, &e.fga, name, "bob").await;
+        assert_eq!(refused.unwrap_err().0, 409, "{name:?}");
+    }
+    let create_team = |name: &str| {
+        spaces::create_space(
+            &e.pool,
+            &e.fga,
+            "alice",
+            SpaceKind::Team,
+            org.id,
+            name.into(),
+            "alice",
+        )
+    };
+    assert!(matches!(
+        create_team(" BID ").await,
+        Err(AppError::Conflict(_))
+    ));
+    let composed = create_team(" E\u{301}quipe ").await.unwrap();
+    assert_eq!(composed.name, "\u{c9}quipe");
+    assert!(matches!(
+        create_team("\u{c9}quipe").await,
+        Err(AppError::Conflict(_))
+    ));
+    let folder = spaces::create_folder(
+        &e.pool,
+        &e.fga,
+        "writer",
+        team.id,
+        None,
+        " E\u{301}te\u{301}\t".into(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(folder.name, "\u{c9}t\u{e9}");
+    assert!(matches!(
+        spaces::create_folder(
+            &e.pool,
+            &e.fga,
+            "writer",
+            team.id,
+            None,
+            "\u{c9}t\u{e9}".into()
+        )
+        .await,
+        Err(AppError::Conflict(_))
+    ));
+}
+
+// Proves: I1
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn sibling_names_are_unique_and_uncommitted_links_are_ignored() {
     use control_plane::fga::{Link, Tuple};
     let e = env().await;

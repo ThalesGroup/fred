@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F17](#f17-noms-despaces-et-de-dossiers-canoniques) | Noms d'espaces et de dossiers en NFC sans espaces de bord | Tests automatisés validés | 02, 04, 05 |
 | [F10](#f10-import-zip-et-jeton-de-lopérateur) | Import ZIP sans borne par le jeton de l'opérateur | Tests automatisés validés | 04, A1, 09 |
 | [F07](#f07-validation-jwt-toujours-stricte) | Issuer et audience JWT toujours vérifiés | Tests automatisés validés | 03, I10 (09), A3 |
 | [F04](#f04-suppression-de-la-création-opérateur) | Création par HTTP ou ZIP | Accepté par Dimi | 03, 03a, 04, 09, A1/A3, carte des sources |
@@ -77,6 +78,27 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F17 Noms d'espaces et de dossiers canoniques
+
+- 2026-10-22 : vérification sur HEAD `64fb174c9`, verdict confirmé : noms d'espaces stockés
+  tels quels (« ␠Acme » à côté de « Acme », NFC à côté de NFD), dossiers trimés sans NFC,
+  récupération d'upload après 409 comparant le segment brut. Dimi choisit A. Règle unique
+  `domain::canonical_name` (NFC, trim, longueur, contrôles) : espaces 180 avec slashes,
+  dossiers 255 sans séparateurs ; API organisation/équipe/projet, ZIP et dossiers stockent
+  et comparent cette forme. Aucune migration ni réécriture : un ancien nom non canonique
+  reste distinct. Frontend : `ensureManagerFolderPath` normalise les segments. Tests :
+  blueprint (forme canonique, NFC avant longueur, frères en collision), intégration
+  `space_and_folder_names_are_unique_in_canonical_form` (I1), DocumentWorkspace
+  (récupération NFD). Arc42 02, 04, 05 alignés. Documents hors périmètre (NFC sans trim).
+  `cargo check --all-targets` et `cargo fmt` exécutés ; tests et qualité non exécutés ;
+  aucun commit.
+- 2026-10-22 : Dimi signale deux échecs d'intégration. `space_names_match_organization_and_child_http_creation_contracts`
+  figeait l'ancien nom non trimé : attente alignée sur la forme canonique. Le nouveau test
+  créait un dossier avec un simple member : création confiée à un editor d'organisation.
+  Tests non relancés.
+- 2026-10-22 : Dimi confirme que tout est vert et autorise le commit et le push de F17
+  (et le push de F10).
 
 ## F10 Import ZIP et jeton de l'opérateur
 

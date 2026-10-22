@@ -62,7 +62,8 @@ it does not enumerate accounts that have never signed in. Local snapshots exclud
 search returns the directory results without that additional local filtering. A search failure is not an empty successful search.
 The server resolves the selected usernames again when creating the organization.
 
-The name must contain 1..180 characters after trimming, without control characters.
+The name is stored in NFC without surrounding whitespace and must then contain 1..180
+characters, without control characters.
 An existing or pending-deletion organization reserves its name. An unknown or
 ambiguous account, or a nominee already attached to another organization, prevents
 creation. The selected people receive only the organization's owner/admin roles:
@@ -117,7 +118,7 @@ controls open the folder-name dialog, at the root or inside the current folder.
 | Rule | Observable behavior |
 | --- | --- |
 | Authority | Creating a folder requires current write permission on its space. Owner/admin alone is insufficient. The server checks permission again when submitted. |
-| Name | Surrounding whitespace is removed; 1..255 characters, no `/`, `\` or control characters. |
+| Name | Stored in NFC without surrounding whitespace; 1..255 characters, no `/`, `\` or control characters. |
 | Uniqueness | A name must be unique in the same space and parent directory. The same name in another directory is a different folder. |
 | Parent | The parent must exist in the same space. A foreign-space parent is refused. |
 | Depth | At most 15 folder levels, counting a root folder as level one. |

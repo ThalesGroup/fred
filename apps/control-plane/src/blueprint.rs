@@ -194,10 +194,8 @@ impl Bundle {
                 return Err(Invalid);
             }
             for raw in raw {
-                if !name(&raw.reference)
-                    || !crate::domain::valid_space_name(&raw.name)
-                    || references.contains_key(&raw.reference)
-                {
+                let space_name = crate::domain::space_name(&raw.name).ok_or(Invalid)?;
+                if !name(&raw.reference) || references.contains_key(&raw.reference) {
                     return Err(Invalid);
                 }
                 let parent_ref = match kind {
@@ -224,7 +222,7 @@ impl Bundle {
                         return Err(Invalid);
                     }
                 }
-                if !siblings.insert((parent, raw.name.clone())) {
+                if !siblings.insert((parent, space_name.clone())) {
                     return Err(Invalid);
                 }
                 let mut roles = raw.roles;
@@ -246,7 +244,7 @@ impl Bundle {
                 }
                 references.insert(raw.reference.clone(), spaces.len());
                 spaces.push(SpaceDeclaration {
-                    name: raw.name,
+                    name: space_name,
                     kind,
                     parent,
                     roles,
@@ -437,24 +435,43 @@ mod tests {
     #[test]
     fn space_names_share_the_creation_contract_without_folder_path_rules() {
         for file in ["organizations.json", "teams.json", "projects.json"] {
-            for (name, valid) in [
-                ("".to_owned(), false),
-                ("  ".into(), false),
-                ("a\nb".into(), false),
-                ("é".repeat(181), false),
-                ("é".repeat(180), true),
-                (" R&D / TSN ".into(), true),
+            for (name, canonical) in [
+                ("".to_owned(), None),
+                ("  ".into(), None),
+                ("a\nb".into(), None),
+                ("é".repeat(181), None),
+                ("é".repeat(180), Some("é".repeat(180))),
+                ("e\u{301}".repeat(180), Some("é".repeat(180))),
+                (" R&D / TSN ".into(), Some("R&D / TSN".into())),
             ] {
                 let mut f = files();
                 let mut value: serde_json::Value = serde_json::from_slice(&f[file]).unwrap();
                 value[0]["name"] = name.clone().into();
                 f.insert(file.into(), serde_json::to_vec(&value).unwrap());
                 let result = Bundle::parse(&pack(&f, zip::CompressionMethod::Stored));
-                assert_eq!(result.is_ok(), valid, "{file}: {name:?}");
-                if let Ok(bundle) = result {
-                    assert!(bundle.spaces.iter().any(|space| space.name == name));
+                assert_eq!(result.is_ok(), canonical.is_some(), "{file}: {name:?}");
+                if let (Ok(bundle), Some(canonical)) = (result, canonical) {
+                    assert!(bundle.spaces.iter().any(|space| space.name == canonical));
                 }
             }
+        }
+    }
+    #[test]
+    fn siblings_differing_only_by_whitespace_or_composition_collide() {
+        for (first, second, collide) in [
+            ("Team", "Other", false),
+            ("Team", " Team", true),
+            ("\u{c9}quipe", "E\u{301}quipe", true),
+        ] {
+            let mut f = files();
+            let teams = serde_json::json!([
+                {"ref":"a","name":first,"organization":"org","roles":{}},
+                {"ref":"b","name":second,"organization":"org","roles":{}},
+            ]);
+            f.insert("teams.json".into(), serde_json::to_vec(&teams).unwrap());
+            f.insert("projects.json".into(), b"[]".to_vec());
+            let result = Bundle::parse(&pack(&f, zip::CompressionMethod::Stored));
+            assert_eq!(result.is_err(), collide, "{first:?} / {second:?}");
         }
     }
     #[test]

@@ -556,6 +556,21 @@ it("finds an existing upload folder in mixed entry pages after a create conflict
   expect(probe.findEntries.mock.calls[0][0]).toMatchObject({ id: "space-1", parentId: "root-id", search: "Nested" });
 });
 
+it("recovers an upload folder by its canonical name after a create conflict", async () => {
+  await click(namedButton("Library"));
+  await click(action("action.addFile"));
+  const drawer = probe.drawerProps[probe.drawerProps.length - 1]!;
+  probe.createConflict = true;
+  probe.findEntries.mockResolvedValueOnce({
+    items: [{ kind: "folder", data: { id: "existing", name: "\u00c9t\u00e9" } }],
+    total: 1,
+  });
+  const ensure = drawer.ensureFolderPath as (segments: string[]) => Promise<string | null>;
+  expect(await ensure([" E\u0301te\u0301 "])).toBe("existing");
+  expect(probe.creates[probe.creates.length - 1]).toMatchObject({ name: "\u00c9t\u00e9" });
+  expect(probe.findEntries.mock.calls[0][0]).toMatchObject({ search: "\u00c9t\u00e9" });
+});
+
 it("pauses active directory refresh while hidden and refreshes on focus", async () => {
   vi.useFakeTimers();
   const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");

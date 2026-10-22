@@ -1545,7 +1545,9 @@ function DocumentWorkspace({
   const ensureManagerFolderPath = async (segments: string[]): Promise<string | null> => {
     if (!managerSpaceId) return null;
     let parent = uploadTargetNode.managerFolder?.id ?? null;
-    for (const name of segments) {
+    for (const segment of segments) {
+      // The control plane stores folder names in NFC without surrounding whitespace.
+      const name = segment.normalize("NFC").trim();
       const key = JSON.stringify([managerSpaceId, parent, name]);
       let pending = managerFolderPaths.current.get(key);
       if (!pending) {

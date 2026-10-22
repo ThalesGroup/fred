@@ -55,9 +55,11 @@ no project; its organization manages it. Names are unique among siblings and amo
 organizations; identically named teams in different organizations remain different
 spaces. Placement is immutable.
 
-API creation and ZIP declarations accept nonblank names of 1..180
-Unicode scalar values without control characters. Spaces and slashes are preserved;
-these labels are not folder paths. Invalid API names return 422, and invalid ZIP
+API creation and ZIP declarations store names in NFC without surrounding whitespace,
+then require 1..180 Unicode scalar values without control characters. Inner spaces and
+slashes are preserved; these labels are not folder paths. Uniqueness and name resolution
+compare this stored form, so names differing only by surrounding whitespace or Unicode
+composition collide. Invalid API names return 422, and invalid ZIP
 declarations are rejected before external writes. Existing names are not rewritten.
 
 Editor, admin and analyst reach every descendant space; member stays local. An
@@ -140,7 +142,7 @@ shows its observable effects.
 Whole-bundle preflight rejects predictable errors before provisioning writes,
 including contradictory organization assignments, noncanonical usernames and known
 effective-email conflicts for new identities. Existing attachments are checked again
-after capturing the guards before publishing each organization subtree. Names are never silently normalized.
+after capturing the guards before publishing each organization subtree. Usernames are never silently normalized.
 Organizations resolve by root name, teams by organization/name and projects by
 team/name. Existing identity fields, passwords, committed space IDs and undeclared
 roles are preserved. Requested grants are repaired; no content role or CGU

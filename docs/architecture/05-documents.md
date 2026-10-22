@@ -43,8 +43,9 @@ tie-breaker. Folders have no aggregate size and use name order for size sorting.
 Search is a literal case-insensitive substring over the whole current directory.
 Separate requests are live views; concurrent changes can shift offset boundaries.
 
-Folder creation/rename trims labels, accepts 1..255 Unicode scalar values and
-rejects separators and controls. Placement stays fixed. Deletion removes one
+Folder creation/rename stores labels in NFC without surrounding whitespace, then
+accepts 1..255 Unicode scalar values and rejects separators and controls. Sibling
+uniqueness compares that stored form. Placement stays fixed. Deletion removes one
 selected subtree atomically, but any published document or pending upload below
 it refuses the whole operation. Multiple roots are independent, with partial
 success reported by the UI. Space retirement likewise refuses stored documents

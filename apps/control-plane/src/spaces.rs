@@ -354,13 +354,12 @@ async fn persist(
     Ok(())
 }
 
-fn validate_space_name(name: &str) -> AppResult<()> {
-    if !domain::valid_space_name(name) {
-        return Err(AppError::Unprocessable(
+fn validate_space_name(name: &str) -> AppResult<String> {
+    domain::space_name(name).ok_or_else(|| {
+        AppError::Unprocessable(
             "space name must contain 1..180 characters, be nonblank and contain no control characters".into(),
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 /// HTTP governance creates only the two explicitly selected roles, never content access.
@@ -374,7 +373,7 @@ pub async fn create_managed_organization(
     admin_username: &str,
 ) -> AppResult<Space> {
     crate::platform::require_owner(fga, caller).await?;
-    validate_space_name(name)?;
+    let name = &validate_space_name(name)?;
     for username in [owner_username, admin_username] {
         if username.is_empty()
             || username.chars().count() > 255
@@ -452,7 +451,7 @@ pub async fn create_space(
     name: String,
     admin: &str,
 ) -> AppResult<Space> {
-    validate_space_name(&name)?;
+    let name = validate_space_name(&name)?;
     let parent = load(pool, parent_id).await?;
     domain::check_parent(kind, Some(&parent))?;
     let mut tx = pool.begin().await?;
@@ -745,20 +744,15 @@ pub async fn authorized_write(
     Ok(tx)
 }
 
-pub(crate) fn folder_name(name: &str) -> AppResult<&str> {
-    let name = name.trim();
-    if name.is_empty()
-        || name.chars().count() > 255
-        || name
-            .chars()
-            .any(|c| c.is_control() || c == '/' || c == '\\')
-    {
-        return Err(AppError::Unprocessable(
-            "folder name must contain 1..255 characters without slashes or control characters"
-                .into(),
-        ));
-    }
-    Ok(name)
+pub(crate) fn folder_name(name: &str) -> AppResult<String> {
+    domain::canonical_name(name, 255)
+        .filter(|name| !name.contains(['/', '\\']))
+        .ok_or_else(|| {
+            AppError::Unprocessable(
+                "folder name must contain 1..255 characters without slashes or control characters"
+                    .into(),
+            )
+        })
 }
 
 /// Folder placement lookup and insertion reuse the authorized transaction's connection.
