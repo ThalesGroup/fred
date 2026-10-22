@@ -203,7 +203,7 @@ async def set_marketplace_default(
             impact, removed = await _apply_switch_off(deps, affected, session)
     emit_unpublished(removed, actor_uid=user.uid)
     await notify_unpublished(
-        deps.get_notification_service() if deps.get_notification_service else None,
+        deps.get_notification_service(),
         removed,
         actor_uid=user.uid,
         actor_name=display_name(user),
@@ -273,7 +273,7 @@ async def set_team_marketplace_settings(
             impact, removed = await _apply_switch_off(deps, affected, session)
     emit_unpublished(removed, actor_uid=user.uid)
     await notify_unpublished(
-        deps.get_notification_service() if deps.get_notification_service else None,
+        deps.get_notification_service(),
         removed,
         actor_uid=user.uid,
         actor_name=display_name(user),

@@ -112,10 +112,6 @@ class NotificationService:
         # None = no membership filter (tests that do not model teams).
         self._get_rebac = get_rebac
 
-    @property
-    def store(self) -> NotificationStore:
-        return self._store
-
     def _count(self, name: str, dims: dict[str, str | None]) -> None:
         if self._get_kpi_writer is None:
             return
@@ -276,6 +272,17 @@ class NotificationService:
 
     async def clear(self, user: KeycloakUser) -> None:
         await self._store.delete_all(user.uid)
+
+    # --- cleanups that raise, so the caller retries rather than orphans rows ----
+
+    async def delete_for_team(self, team_id: str) -> None:
+        await self._store.delete_for_team(team_id)
+
+    async def delete_for_member(self, recipient_id: str, team_id: str) -> None:
+        await self._store.delete_for_member(recipient_id, team_id)
+
+    async def delete_for_user(self, recipient_id: str) -> None:
+        await self._store.delete_for_user(recipient_id)
 
     # --- platform settings ------------------------------------------------------
 

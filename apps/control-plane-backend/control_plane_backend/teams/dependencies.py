@@ -116,6 +116,8 @@ class TeamServiceDependencies:
     attach_avatar_urls: AvatarUrlAttacher
     search_users: UserSearch
     run_lifecycle_manager_once_in_memory: LifecycleRunner
+    get_notification_service: Callable[[], NotificationService]
+    get_team_join_request_store: Callable[[], TeamJoinRequestStore]
     # None = the built-in marketplace defaults (lightweight test bundles).
     get_marketplace_settings_store: (
         Callable[[], PlatformMarketplaceSettingsStore] | None
@@ -125,10 +127,6 @@ class TeamServiceDependencies:
     get_agent_instance_store: Callable[[], AgentInstanceStore] | None = None
     # None = no KPI for the agents a team deletion removes (test bundles).
     get_kpi_writer: Callable[[], BaseKPIWriter] | None = None
-    # None = no notifications (test bundles).
-    get_notification_service: Callable[[], NotificationService] | None = None
-    # None = no join requests (test bundles).
-    get_team_join_request_store: Callable[[], TeamJoinRequestStore] | None = None
 
 
 def build_team_service_dependencies(

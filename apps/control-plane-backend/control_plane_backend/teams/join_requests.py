@@ -50,7 +50,6 @@ from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.join_request_store import (
     JoinRequestStatus,
     StoredJoinRequest,
-    TeamJoinRequestStore,
     answer_group,
     request_group,
 )
@@ -63,23 +62,13 @@ from control_plane_backend.teams.schemas import (
 )
 from control_plane_backend.teams.service import (
     _add_team_member_relation,
-    _close_join_request_of_member,
     _get_team_users_by_relation,
     _get_user_roles_in_team,
+    _on_team_access_changed,
     _validate_team_and_check_permission,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _store(deps: TeamServiceDependencies) -> TeamJoinRequestStore:
-    if deps.get_team_join_request_store is None:
-        raise RuntimeError("Team join requests are not wired in this bundle.")
-    return deps.get_team_join_request_store()
-
-
-def _notifications(deps: TeamServiceDependencies) -> NotificationService | None:
-    return deps.get_notification_service() if deps.get_notification_service else None
 
 
 def _lock_key(team_id: TeamId) -> str:
@@ -175,7 +164,7 @@ async def _create(
     deps: TeamServiceDependencies,
 ) -> StoredJoinRequest | MyTeamJoinRequest:
     """The new request, or the caller's pending one already there."""
-    store = _store(deps)
+    store = deps.get_team_join_request_store()
     existing = await store.get_mine(team_id, user.uid)
     if existing is not None and existing.status == JoinRequestStatus.PENDING:
         return _mine_view(existing)
@@ -200,9 +189,6 @@ async def _create(
 async def _notify_admins(
     metadata: TeamMetadata, request: StoredJoinRequest, deps: TeamServiceDependencies
 ) -> None:
-    notifications = _notifications(deps)
-    if notifications is None:
-        return
     try:
         admins = await _get_team_users_by_relation(
             deps.rebac, metadata.id, RelationType.TEAM_ADMIN
@@ -219,7 +205,7 @@ async def _notify_admins(
         message=request.message,
     )
     # notify() keeps only the admins holding can_administer_members.
-    await notifications.notify(
+    await deps.get_notification_service().notify(
         [
             NotificationDraft(
                 recipient_id=admin,
@@ -235,26 +221,28 @@ async def _notify_admins(
 async def cancel_my_join_request(
     user: KeycloakUser, team_id: TeamId, deps: TeamServiceDependencies
 ) -> None:
-    cancelled = await _store(deps).delete_pending_mine(team_id, user.uid)
+    cancelled = await deps.get_team_join_request_store().delete_pending_mine(
+        team_id, user.uid
+    )
     if cancelled is None:
         raise TeamJoinRequestError.not_found()
     _audit("cancelled", user, cancelled)
-    notifications = _notifications(deps)
-    if notifications is not None:
-        await notifications.delete_groups([request_group(cancelled.id)])
+    await deps.get_notification_service().delete_groups([request_group(cancelled.id)])
 
 
 async def list_my_join_requests(
     user: KeycloakUser, deps: TeamServiceDependencies
 ) -> list[MyTeamJoinRequest]:
-    return [_mine_view(r) for r in await _store(deps).list_for_requester(user.uid)]
+    requests = await deps.get_team_join_request_store().list_for_requester(user.uid)
+    return [_mine_view(r) for r in requests]
 
 
 async def list_team_join_requests(
     user: KeycloakUser, team_id: TeamId, deps: TeamServiceDependencies
 ) -> list[TeamJoinRequest]:
     await _require_admin(user, team_id, deps)
-    return [_team_view(r) for r in await _store(deps).list_for_team(team_id)]
+    requests = await deps.get_team_join_request_store().list_for_team(team_id)
+    return [_team_view(r) for r in requests]
 
 
 async def accept_join_request(
@@ -266,7 +254,7 @@ async def accept_join_request(
     """Accept a pending request, or a refused one ("Accept anyway") while the
     team still takes requests."""
     metadata = await _require_admin(user, team_id, deps)
-    store = _store(deps)
+    store = deps.get_team_join_request_store()
     request = await store.get(team_id, request_id)
     if request is None:
         raise TeamJoinRequestError.not_found()
@@ -282,9 +270,7 @@ async def accept_join_request(
         return  # another admin accepted it first and tells everyone
     _audit("accepted", user, request, requester_uid=request.requester_id)
 
-    notifications = _notifications(deps)
-    if notifications is None:
-        return
+    notifications = deps.get_notification_service()
     await notifications.resolve(
         [request_group(request.id)],
         actor_uid=user.uid,
@@ -306,9 +292,7 @@ async def _joined_meanwhile(
         deps.rebac, TeamId(request.team_id), request.requester_id
     ):
         return False
-    await _close_join_request_of_member(
-        deps, TeamId(request.team_id), request.requester_id
-    )
+    await _on_team_access_changed(deps, TeamId(request.team_id), request.requester_id)
     return True
 
 
@@ -319,7 +303,7 @@ async def refuse_join_request(
     deps: TeamServiceDependencies,
 ) -> None:
     metadata = await _require_admin(user, team_id, deps)
-    store = _store(deps)
+    store = deps.get_team_join_request_store()
     request = await store.get(team_id, request_id)
     if request is None:
         raise TeamJoinRequestError.not_found()
@@ -338,8 +322,6 @@ async def refuse_pending_join_requests(
 ) -> None:
     """The team stopped taking requests: the pending ones are answered "refused"
     but deleted, so this refusal never makes anyone wait to ask again."""
-    if deps.get_team_join_request_store is None:
-        return
     store = deps.get_team_join_request_store()
     async with deps.get_team_metadata_store().advisory_lock(_lock_key(metadata.id)):
         refused = await store.delete_pending_for_team(metadata.id)
@@ -360,9 +342,9 @@ async def _announce_refusals(
         _audit(
             "refused", user, request, requester_uid=request.requester_id, reason=reason
         )
-    notifications = _notifications(deps)
-    if notifications is None or not refused:
+    if not refused:
         return
+    notifications = deps.get_notification_service()
     await notifications.resolve(
         [request_group(r.id) for r in refused],
         actor_uid=user.uid,

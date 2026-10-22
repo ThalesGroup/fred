@@ -3140,7 +3140,7 @@ async def update_agent_instance(
             store, updated, kpi_writer=deps.get_kpi_writer()
         )
         updated = cleared if cleared is not None else updated
-    if updated is not None and deps.get_notification_service is not None:
+    if updated is not None:
         await notify_republish_needed(
             deps.get_notification_service(),
             store=deps.get_agent_marketplace_store(),

@@ -131,6 +131,7 @@ class ApplicationContext:
         self._marketplace_settings_store: PlatformMarketplaceSettingsStore | None = None
         self._agent_marketplace_store: AgentMarketplaceStore | None = None
         self._announcement_store: AnnouncementStore | None = None
+        self._notification_store: NotificationStore | None = None
         self._notification_service: NotificationService | None = None
         self._team_join_request_store: TeamJoinRequestStore | None = None
         self._knowledge_base_instance_store: KnowledgeBaseInstanceStore | None = None
@@ -471,17 +472,21 @@ class ApplicationContext:
             )
         return self._announcement_store
 
+    def get_notification_store(self) -> NotificationStore:
+        if self._notification_store is None:
+            self._notification_store = NotificationStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._notification_store
+
     def get_notification_service(self) -> NotificationService:
         if self._notification_service is None:
             self._notification_service = NotificationService(
-                NotificationStore(engine=self.get_pg_async_engine()),
+                self.get_notification_store(),
                 get_kpi_writer=self.get_kpi_writer,
                 get_rebac=self.get_rebac_engine,
             )
         return self._notification_service
-
-    def get_notification_store(self) -> NotificationStore:
-        return self.get_notification_service().store
 
     def get_team_join_request_store(self) -> TeamJoinRequestStore:
         if self._team_join_request_store is None:

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -37,7 +38,9 @@ from control_plane_backend.marketplace_settings.service import (
 from control_plane_backend.marketplace_settings.store import (
     PlatformMarketplaceSettingsStore,
 )
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
@@ -97,6 +100,8 @@ def _deps(
 ) -> TeamServiceDependencies:
     unused = cast(Any, object)
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=unused,
         rebac=cast(Any, rebac),
         scheduler_backend=unused,

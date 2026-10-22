@@ -119,13 +119,12 @@ class ProductServiceDependencies:
     get_task_service: Callable[[], TaskService]
     get_platform_bootstrap_store: Callable[[], PlatformBootstrapStore]
     get_runtime_http_client: Callable[[], httpx.AsyncClient]
+    get_notification_service: Callable[[], NotificationService]
     # Lets one service call batch several short reads on one pooled
     # connection; `None` (test fakes) falls back to one session per read.
     get_sql_session_factory: Callable[[], "async_sessionmaker[AsyncSession]"] | None = (
         None
     )
-    # None = no notifications (lightweight test bundles).
-    get_notification_service: Callable[[], NotificationService] | None = None
 
 
 def build_product_service_dependencies(

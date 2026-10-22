@@ -63,6 +63,7 @@ from control_plane_backend.notifications.schemas import (
 from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.notifications.store import NotificationStore
 from control_plane_backend.product.schemas import ManagedAgentInstanceSummary
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from fred_core import (
     AuthorizationError,
     KeycloakUser,
@@ -290,7 +291,7 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         get_agent_instance_store=lambda: agents,
         get_kpi_writer=None,
         get_notification_service=lambda: notifications,
-        get_team_join_request_store=None,
+        get_team_join_request_store=lambda: TeamJoinRequestStore(engine),
     )
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
@@ -1585,7 +1586,7 @@ async def test_a_failing_notification_store_never_fails_the_save(
     async def _down(*_args, **_kwargs):
         raise RuntimeError("database down")
 
-    monkeypatch.setattr(env.notifications.store, "upsert", _down)
+    monkeypatch.setattr(NotificationStore, "upsert", _down)
 
     saved = await _save(env, _EDITOR_2, "Saved anyway")
 
@@ -1715,13 +1716,13 @@ async def test_bulk_switch_off_emits_one_row_per_entry_in_one_insert(
     await _publish(env)
     await _publish(env, "agent-2", uid=_EDITOR_2)
     inserts: list[int] = []
-    upsert = env.notifications.store.upsert
+    upsert = NotificationStore.upsert
 
-    async def _counting(drafts):
+    async def _counting(store: NotificationStore, drafts):
         inserts.append(len(drafts))
-        return await upsert(drafts)
+        return await upsert(store, drafts)
 
-    monkeypatch.setattr(env.notifications.store, "upsert", _counting)
+    monkeypatch.setattr(NotificationStore, "upsert", _counting)
 
     await settings_service.set_team_marketplace_settings(
         user=_user(_PLATFORM),

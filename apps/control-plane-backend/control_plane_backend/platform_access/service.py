@@ -69,7 +69,7 @@ from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.teams.service import (
     _add_team_member_relation,
-    _close_join_request_of_member,
+    _on_team_access_changed,
 )
 from control_plane_backend.users.schemas import UserSummary
 
@@ -1081,7 +1081,7 @@ async def enroll(
             )
             joined = True
     if joined and team_deps is not None:
-        await _close_join_request_of_member(team_deps, TeamId(team.id), user.uid)
+        await _on_team_access_changed(team_deps, TeamId(team.id), user.uid)
     if joined:
         emit_audit_log(
             "team.join_link.joined"

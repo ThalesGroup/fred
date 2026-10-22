@@ -218,9 +218,7 @@ async def _require_model_enabled_for_team(
 
 
 class AgentInstanceStore:
-    def __init__(
-        self, engine: AsyncEngine, notifications: NotificationService | None = None
-    ) -> None:
+    def __init__(self, engine: AsyncEngine, notifications: NotificationService) -> None:
         self._sessions = make_session_factory(engine)
         self._notifications = notifications
 

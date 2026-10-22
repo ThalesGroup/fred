@@ -63,7 +63,7 @@ def _removed_group(entry: RemovedEntry) -> str:
 
 
 async def notify_republish_needed(
-    notifications: NotificationService | None,
+    notifications: NotificationService,
     *,
     store: AgentMarketplaceStore,
     before: AgentInstanceRecord,
@@ -71,7 +71,7 @@ async def notify_republish_needed(
     editor: KeycloakUser,
 ) -> None:
     """Ask the publisher to republish when another editor changed the agent."""
-    if notifications is None or after.updated_at == before.updated_at:
+    if after.updated_at == before.updated_at:
         return
     try:
         entry = await store.get_for_agent(after.agent_instance_id, after.team_id)
@@ -111,19 +111,18 @@ async def notify_republish_needed(
 
 
 async def resolve_republished(
-    notifications: NotificationService | None, *, entry_id: str, user: KeycloakUser
+    notifications: NotificationService, *, entry_id: str, user: KeycloakUser
 ) -> None:
-    if notifications is not None:
-        await notifications.resolve(
-            [republish_group(entry_id)],
-            actor_uid=user.uid,
-            actor_name=display_name(user),
-            outcome="republished",
-        )
+    await notifications.resolve(
+        [republish_group(entry_id)],
+        actor_uid=user.uid,
+        actor_name=display_name(user),
+        outcome="republished",
+    )
 
 
 async def notify_unpublished(
-    notifications: NotificationService | None,
+    notifications: NotificationService,
     removed: Sequence[RemovedEntry],
     *,
     actor_uid: str | None,
@@ -131,7 +130,7 @@ async def notify_unpublished(
 ) -> None:
     """Resolve the entries' republish requests and tell each publisher who did
     not cause it that their agent entered the Removed state, in one insert."""
-    if notifications is None or not removed:
+    if not removed:
         return
     await notifications.resolve(
         [republish_group(entry.entry_id) for entry in removed],

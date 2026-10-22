@@ -1471,7 +1471,7 @@ async def test_user_deletion_removes_what_the_user_has_seen(
         get_platform_bootstrap_store=lambda: SimpleNamespace(get_completed_by=_root),
         get_prompt_store=lambda: SimpleNamespace(delete_favorites_for_user=_nothing),
         get_announcement_store=lambda: store,
-        get_notification_store=lambda: SimpleNamespace(
+        get_notification_service=lambda: SimpleNamespace(
             delete_for_user=_nothing, delete_groups=_nothing
         ),
         get_team_join_request_store=lambda: SimpleNamespace(

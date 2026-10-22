@@ -50,7 +50,8 @@ from pydantic import BaseModel
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
-from control_plane_backend.notifications.store import NotificationStore
+from control_plane_backend.notifications.api import get_notification_service
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.platform_access.service import mark_user_join_history_deleted
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.teams.dependencies import (
@@ -154,10 +155,6 @@ def _get_prompt_store(request: Request) -> PromptStore:
 
 def _get_announcement_store(request: Request) -> AnnouncementStore:
     return get_application_container(request).get_announcement_store()
-
-
-def _get_notification_store(request: Request) -> NotificationStore:
-    return get_application_container(request).get_notification_store()
 
 
 def _get_team_join_request_store(request: Request) -> TeamJoinRequestStore:
@@ -448,7 +445,7 @@ async def delete_user(
     ],
     prompt_store: Annotated[PromptStore, Depends(_get_prompt_store)],
     announcement_store: Annotated[AnnouncementStore, Depends(_get_announcement_store)],
-    notification_store: Annotated[NotificationStore, Depends(_get_notification_store)],
+    notifications: Annotated[NotificationService, Depends(get_notification_service)],
     join_request_store: Annotated[
         TeamJoinRequestStore, Depends(_get_team_join_request_store)
     ],
@@ -479,10 +476,10 @@ async def delete_user(
     # Before the account, so a failure here is retried rather than orphaned.
     await prompt_store.delete_favorites_for_user(user_id)
     await announcement_store.delete_seen_for_user(user_id)
-    await notification_store.delete_for_user(user_id)
+    await notifications.delete_for_user(user_id)
     # The admins' open notifications about this person's requests go too.
     request_ids = await join_request_store.delete_for_requester(user_id)
-    await notification_store.delete_groups([request_group(i) for i in request_ids])
+    await notifications.delete_groups([request_group(i) for i in request_ids])
     await remove_user_avatar(user_id, deps)
     try:
         await delete_user_from_service(admin, user_id)

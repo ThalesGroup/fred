@@ -400,7 +400,7 @@ async def test_leaving_drops_the_acceptance_but_keeps_an_older_refusal(
     }
 
     # What leaving (or being removed from) the team does to her notifications.
-    await world.notifications.store.delete_for_member("alice", ATLAS)
+    await world.notifications.delete_for_member("alice", ATLAS)
 
     [kept] = await world.inbox("alice")
     assert kept.payload.model_dump()["outcome"] == "refused"
@@ -540,8 +540,8 @@ async def test_an_emission_failure_does_not_fail_the_decision(
     async def _down(*_a, **_k):
         raise RuntimeError("database down")
 
-    monkeypatch.setattr(world.notifications.store, "upsert", _down)
-    monkeypatch.setattr(world.notifications.store, "resolve", _down)
+    monkeypatch.setattr(NotificationStore, "upsert", _down)
+    monkeypatch.setattr(NotificationStore, "resolve", _down)
 
     await accept_join_request(_user("bob"), ATLAS, request.id, world.deps)
 

@@ -18,6 +18,8 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from control_plane_backend.notifications.service import NotificationService
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from fred_core import KeycloakUser, Resource, TeamPermission
 from fred_core.common import TeamId
 from fred_core.security.delegation import DelegationConfig, initialize_delegation
@@ -60,6 +62,8 @@ def _deps(rebac: _FakeRebac):
     config.app.team_admin_charter_version = None
     config.app.personal_max_resources_storage_size = 5368709120
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),

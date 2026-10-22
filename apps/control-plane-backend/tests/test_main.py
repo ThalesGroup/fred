@@ -50,6 +50,7 @@ from control_plane_backend.config.models import (
 )
 from control_plane_backend.main import create_app
 from control_plane_backend.models.base import Base as CPBase
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -68,6 +69,7 @@ from control_plane_backend.sessions.store import (
     SessionMetadataRecord,
     SessionMetadataStore,
 )
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import Team
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 from fred_core import (
@@ -2892,7 +2894,9 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
         )
 
     try:
-        store = AgentInstanceStore(engine)
+        store = AgentInstanceStore(
+            engine, notifications=AsyncMock(spec=NotificationService)
+        )
         created = await store.create(
             AgentInstanceRecord(
                 agent_instance_id="inst-sqlite-now",
@@ -3195,7 +3199,9 @@ async def test_create_session_persists_source_runtime_id_from_live_instance(
 ) -> None:
     """Capture routing and name through the same transaction as session creation."""
     session_store = SessionMetadataStore(control_plane_sql_engine)
-    agent_store = AgentInstanceStore(control_plane_sql_engine)
+    agent_store = AgentInstanceStore(
+        control_plane_sql_engine, notifications=AsyncMock(spec=NotificationService)
+    )
     await agent_store.create(
         _make_record(agent_instance_id="instance-1", source_runtime_id="runtime-a")
     )
@@ -3499,6 +3505,7 @@ def _build_erasure_deps(
         get_task_service=lambda: task_service or _NoopTaskService(),  # type: ignore[arg-type,return-value]
         get_platform_bootstrap_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_runtime_http_client=_get_runtime_http_client,
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
     )
 
 
@@ -6183,6 +6190,8 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     mock_config.scheduler.enabled = False
 
     fake_deps = TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
@@ -6263,6 +6272,8 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
     mock_config.scheduler.enabled = False
 
     fake_deps = TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
@@ -6599,6 +6610,8 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     fake_scheduler = type("SchedulerCfg", (), {"enabled": True})()
     fake_configuration = type("Cfg", (), {"scheduler": fake_scheduler})()
     fake_team_deps = TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=cast(Any, fake_configuration),
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,

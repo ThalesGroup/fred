@@ -40,6 +40,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine
+from control_plane_backend.notifications.service import NotificationService
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import TeamNotOpenForJoiningError
 from control_plane_backend.teams.service import join_team
 from fred_core import (
@@ -94,6 +96,8 @@ def _deps(rebac: object, store: _FakeMetadataStore):
     config.app.personal_max_resources_storage_size = 5368709120
     config.app.default_team_max_resources_storage_size = 5368709120
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
