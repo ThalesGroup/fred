@@ -29,13 +29,11 @@ No configuration changes are required.
 ## Upgrade
 
 Apply the control-plane Alembic head before starting the new control plane and
-its Temporal worker. This contribution's revisions, `fe166447f3d5` (creates
-`notifications` with its indexes, including plain indexes on `team_id` and
-`group_key`, adds `published_by`), `77cd5dc306cf` (creates
-`team_join_requests`) then `83b81adf7450` (creates the empty
-`disabled_notification_types`: every notification type stays on), rewrite no
-existing row. No other
-operator action is needed: the lifecycle workflow picks up the expiry step on
+its Temporal worker. This contribution's single revision, `83b81adf7450`
+(after `c9acb7dd3ad0`), creates `notifications` with its indexes,
+`team_join_requests` and an empty `disabled_notification_types` (every
+notification type stays on), and adds `published_by`; it rewrites no existing
+row. No other operator action is needed: the lifecycle workflow picks up the expiry step on
 its next tick.
 
 ## Validation
@@ -49,16 +47,15 @@ its admins' notification counts becomes 1, and accepting makes the requester a
 member of the team.
 
 In Administration > Notifications, a platform admin sees every notification
-type switched on.
+type switched on. Turning a type off hides its notifications from everyone
+until it is turned back on; it deletes nothing.
 
 ## Rollback
 
-Downgrading `83b81adf7450` drops `disabled_notification_types`: every type is
-sent again; notifications deleted when a type was turned off do not come back.
-Downgrading `77cd5dc306cf` drops `team_join_requests` and turns every
-`on_request` team back into `invite_only`, which older versions understand;
-pending and refused requests are lost. Downgrading `fe166447f3d5` then drops the `notifications` table and the
-`published_by` column; the notifications and the recorded publishers are lost.
+Downgrading `83b81adf7450` turns every `on_request` team back into
+`invite_only`, which older versions understand, and drops the three tables and
+the `published_by` column: notifications, pending and refused requests, the
+turned-off types and the recorded publishers are lost.
 Marketplace entries themselves are unaffected.
 
 ## Limitations
