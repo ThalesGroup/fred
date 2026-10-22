@@ -57,7 +57,7 @@ Each agentic pod owns a `models_catalog.yaml`. It declares:
 - reusable chat profiles;
 - one local chat default;
 - optional static `agent_id -> profile_id` overrides.
-- optionally, one OpenAI-compatible discovery source for chat profiles.
+- optionally, one or more named OpenAI-compatible discovery sources for chat profiles.
 
 The pod catalog is the fallback and the local source of model construction
 settings. It does not contain team, user, operation, or purpose rules.
@@ -102,8 +102,10 @@ binding to restore team and pod routing.
 
 The same panel has a separate **Fallback chat model**. It is used only when a
 saved choice names a discovered model confirmed absent by a successful refresh.
-It does not override a valid choice or the forced platform binding. Configure
-it to a reachable chat model, including a static YAML model if desired.
+It does not override a valid choice or the forced platform binding. Select a
+manual chat profile from the catalog; the picker offers profiles common to the
+available agent pods, and the pod resolves its current connection settings
+when needed. A manual declaration is an operator choice, not a health check.
 Without a usable fallback, that turn fails explicitly. A discovery outage
 does not trigger this fallback.
 
@@ -167,45 +169,69 @@ incomplete deployment view.
 
 ### Discover chat models from a gateway
 
-An operator can add discovery alongside manually listed chat profiles:
+An operator can add several discovery sources alongside manually listed chat profiles:
 
 ```yaml
 version: v1
-discovery:
-  source_id: primary-gateway
-  base_url: https://gateway.example/v1
-  default_model_id: chat-small
-  include_model_ids: [chat-small, chat-large]
+discoveries:
+  - source_id: primary-gateway
+    base_url: https://gateway.example/v1
+    include_model_ids: [chat-small, chat-large]
+  - source_id: secondary-gateway
+    base_url: https://other-gateway.example/v1
+    include_model_ids: [other-chat]
+default_profile_by_capability:
+  chat: chat.manual.safe
 ```
+
+For one source, the existing `discovery:` mapping remains valid. `discovery`
+and `discoveries` cannot appear together. Source IDs must be unique. A
+discovered `default_model_id` may be set on at most one source, and cannot
+coexist with a manual chat default.
 
 At pod startup and on administrator refresh, Fred sends an authenticated
 `GET https://gateway.example/v1/models` and reads the OpenAI-compatible JSON
 shape `{"data": [{"id": "chat-small"}]}`. The administrator can edit the
-`/models` URL in **Capabilities > Models**; the YAML URL remains the reset
-value. A successful refresh updates the active pod catalog immediately.
+`/models` URL of each source in **Capabilities > Models**; each YAML URL remains
+its reset value. A successful refresh updates that source's inventory
+immediately while preserving the other sources' models.
 `base_url` is also used for chat inference. Set `OPENAI_API_KEY` in the pod
-environment; never put the key in YAML. `source_id` is a stable operator-chosen
+environment; never put the key in YAML. Sources on one pod share this key, so
+use separate pods when endpoints need different credentials. `source_id` is a stable operator-chosen
 identity. Changing it creates new model capability and profile ids, which need
-new admin grants. `include_model_ids` is optional; when supplied, every listed
-id must be returned by a successful discovery response. A discovered default must be in the selected list. A
-static chat default and `discovery.default_model_id` cannot coexist.
+new admin grants. `include_model_ids` is optional; its listed IDs must be
+present during initial catalog validation. A later administrator refresh can
+confirm a listed model's removal and apply the platform fallback. A discovered
+default must be in the selected list when first validated.
 
-The standard `/models` response does not identify chat models or define their
-context sizes. Configure a gateway that lists chat models only, or use the
-allowlist to exclude embeddings and other modalities. Fred shows the exact
+The standard OpenAI `/models` response does not identify chat models, context
+sizes, or supported reasoning levels. Configure a gateway that lists chat
+models only, or use the allowlist to exclude embeddings and other modalities.
+OpenAI's `GET /models/{id}` also returns only basic model metadata; its model
+documentation publishes context limits, but the list API does not supply them
+for automatic discovery. The admin view marks the model type as unspecified
+when the endpoint does not confirm chat support and leaves unknown limits blank.
+When an entry supplies `capabilities.completion_chat`, only `true` entries are
+discovered; entries without this field remain eligible. Fred shows the exact
 upstream `id` in the admin Models table and uses it for inference. A nonblank
 `name` or `display_name` may provide a label. Positive integer
-`context_length` or `max_model_len`, `max_input_tokens`, and
+`context_length`, `max_model_len`, or Mistral's `max_context_length`, `max_input_tokens`, and
 `max_output_tokens` are shown when present. These optional values are
 informational; they do not change routing, grants, or reasoning controls.
-Fred does not parse vendor-specific fields such as Mistral's
-`max_context_length` or infer chat capability from vendor-specific metadata.
-Use `include_model_ids` to exclude embedding and other non-chat models.
+Reasoning effort levels are available only when declared in manual catalog
+profiles; `/models` does not provide a portable list of supported levels.
+An administrator can open a model's detail icon to request `GET /models/{id}`
+from the same source on demand. The returned fields are shown as a key/value
+tree. OpenAI's detail response still has no context field; Mistral's response
+may include `max_context_length`, already shown in the model row when supplied
+by its list response.
 
 Opening **Capabilities > Models** refreshes the discovered inventory before
-listing models. The view separates manually declared profiles from models
+listing models. Pill tabs separate manually declared profiles from models
 advertised by discovery, using the pod's inventory provenance rather than the
-model name. Both sections offer the same activation and team controls. If a
+model name. Both tabs offer the same activation, team controls, and text filter.
+The model identity names every pod that advertises it. The Discovery tab has a
+compact refresh button; its details reveal URL settings and unavailable models. If a
 pod advertises discovered models but control-plane lacks registered state for
 that source, the view names it as unavailable for URL management.
 New models are highlighted and start without a team grant.

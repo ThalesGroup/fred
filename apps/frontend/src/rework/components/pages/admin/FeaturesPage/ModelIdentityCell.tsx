@@ -13,11 +13,11 @@
 // limitations under the License.
 
 import { EntityIdentity } from "@shared/molecules/EntityIdentity/EntityIdentity.tsx";
-import { toIconType } from "@shared/utils/Type.ts";
 import { useTranslation } from "react-i18next";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { capabilityLabel } from "./capabilityEnablement";
 import { ModelDisplayNameEditor } from "./ModelDisplayNameEditor";
+import { ModelDetailTooltip } from "./ModelDetailTooltip";
 import styles from "./FeaturesPage.module.css";
 
 export function ModelIdentityCell({
@@ -29,15 +29,21 @@ export function ModelIdentityCell({
   dimmed: boolean;
   isNew?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const reasoningLevels = [...new Set(Object.values(capability.model_reasoning_efforts ?? {}).flat())];
+  const otherCapabilities = capability.model_capabilities?.filter((modelCapability) => modelCapability !== "chat");
+  const discoveredTypeUnknown = Boolean(
+    capability.model_discovery_source_id && !capability.model_chat_capability_verified,
+  );
+  const compactTokens = (count: number) =>
+    new Intl.NumberFormat(i18n?.language ?? "fr", { notation: "compact", maximumFractionDigits: 1 }).format(count);
   return (
     <div className={styles.modelCell}>
       <div className={styles.modelIdentity}>
         <EntityIdentity
           name={capabilityLabel(t, capability)}
-          icon={toIconType(capability.icon, "tune")}
           sourceId={capability.name}
-          runtimeId={capability.runtime_id}
+          runtimeId={(capability.model_runtime_ids ?? []).join(", ") || capability.runtime_id}
           version={capability.public_version}
           dimmed={dimmed}
         />
@@ -45,19 +51,57 @@ export function ModelIdentityCell({
       {isNew && <span className={styles.newModelBadge}>{t("rework.admin.capabilities.discovery.new")}</span>}
       {(capability.model_context_window_tokens ||
         capability.model_max_input_tokens ||
-        capability.model_max_output_tokens) && (
+        capability.model_max_output_tokens ||
+        otherCapabilities?.length ||
+        discoveredTypeUnknown ||
+        reasoningLevels.length > 0 ||
+        capability.model_discovery_source_id) && (
         <span className={styles.modelSpecs}>
+          {capability.model_discovery_source_id && (
+            <span className={styles.modelSpecChip}>
+              {t("rework.admin.capabilities.modelSpecs.source", { source: capability.model_discovery_source_id })}
+            </span>
+          )}
+          {discoveredTypeUnknown && (
+            <span className={styles.modelSpecChip}>{t("rework.admin.capabilities.modelSpecs.typeUnknown")}</span>
+          )}
+          {!discoveredTypeUnknown &&
+            otherCapabilities?.map((modelCapability) => (
+              <span key={modelCapability} className={styles.modelSpecChip}>
+                {t(`rework.admin.capabilities.modelSpecs.capabilities.${modelCapability}`, {
+                  defaultValue: modelCapability,
+                })}
+              </span>
+            ))}
           {capability.model_context_window_tokens && (
-            <span>
-              {t("rework.admin.capabilities.modelSpecs.context", { count: capability.model_context_window_tokens })}
+            <span
+              className={styles.modelSpecChip}
+              title={t("rework.admin.capabilities.modelSpecs.contextExact", {
+                count: capability.model_context_window_tokens,
+              })}
+            >
+              {t("rework.admin.capabilities.modelSpecs.context", {
+                value: compactTokens(capability.model_context_window_tokens),
+              })}
             </span>
           )}
           {capability.model_max_input_tokens && (
-            <span>{t("rework.admin.capabilities.modelSpecs.input", { count: capability.model_max_input_tokens })}</span>
+            <span className={styles.modelSpecChip}>
+              {t("rework.admin.capabilities.modelSpecs.input", {
+                value: compactTokens(capability.model_max_input_tokens),
+              })}
+            </span>
           )}
           {capability.model_max_output_tokens && (
-            <span>
-              {t("rework.admin.capabilities.modelSpecs.output", { count: capability.model_max_output_tokens })}
+            <span className={styles.modelSpecChip}>
+              {t("rework.admin.capabilities.modelSpecs.output", {
+                value: compactTokens(capability.model_max_output_tokens),
+              })}
+            </span>
+          )}
+          {reasoningLevels.length > 0 && (
+            <span className={styles.modelSpecChip}>
+              {t("rework.admin.capabilities.modelSpecs.reasoningLevels", { levels: reasoningLevels.join(", ") })}
             </span>
           )}
         </span>
@@ -68,6 +112,13 @@ export function ModelIdentityCell({
         effectiveName={capability.model_display_name}
         overrideName={capability.model_display_name_override}
       />
+      {capability.model_discovery_source_id && (
+        <ModelDetailTooltip
+          sourceId={capability.model_discovery_source_id}
+          modelId={capability.name}
+          runtimeId={capability.model_runtime_ids?.[0] ?? capability.runtime_id ?? undefined}
+        />
+      )}
     </div>
   );
 }

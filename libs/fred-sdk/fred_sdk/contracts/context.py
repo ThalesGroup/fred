@@ -982,6 +982,10 @@ class BoundRuntimeContext(FrozenModel):
         default=None,
         description="Trusted platform fallback used only for a confirmed removed chat profile.",
     )
+    platform_chat_model_fallback_profile_id: str | None = Field(
+        default=None,
+        description="Trusted manual catalog chat profile for a confirmed removed selection.",
+    )
     confirmed_removed_chat_profiles: dict[str, str] = Field(
         default_factory=dict,
         description="Trusted removed profile id to model capability id mapping from the last successful inventory.",

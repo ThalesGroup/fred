@@ -1583,6 +1583,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     # Both pods' profile ids survive — neither pod's registration wipes the
     # other's, unlike a plain last-registration-wins overwrite.
     assert set(entry.model_profile_ids) == {"chat.pod-a.gpt5", "chat.pod-b.gpt5"}
+    assert entry.model_runtime_ids == ("runtime-a", "runtime-b")
     assert set(entry.model_chat_profile_ids) == {
         "chat.pod-a.gpt5",
         "chat.pod-b.gpt5",
@@ -2788,6 +2789,9 @@ class _FakeNoPlatformModelBindingStore:
     snapshot, so every deps bundle exercising that function needs one."""
 
     async def get(self, session=None):
+        return None
+
+    async def get_profile_id(self, session=None):
         return None
 
 

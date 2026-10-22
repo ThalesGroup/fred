@@ -9,6 +9,9 @@ The Models tab shows the catalog loaded at pod startup. Administrators cannot ch
 - Provide a platform fallback chat model independent of the existing forced platform binding. Use it only when a saved selection is confirmed removed, without changing that selection.
 - Apply successful URL and inventory changes without restarting pods. Preserve display-name overrides and stable model identities.
 - Separate manually declared and discovered models in the admin list using pod-advertised provenance. If discovered rows exist without a registered source status, explain that URL management is unavailable instead of claiming no discovery is configured.
+- Present the two origins as pill tabs with filtering and all advertising pod IDs, and keep refresh compact within Discovery. Select the fallback from manual chat profiles. Use explicit `completion_chat` metadata where available; without it, retain the compatible inventory.
+- Allow several named discovery sources in one pod catalog, each with its own endpoint, inventory, URL override and refresh status. Keep the existing single-source YAML form valid.
+- Let an administrator request a discovered model's upstream `GET /models/{id}` detail on demand and inspect the returned fields as a key/value tree. Keep list loading independent from detail requests.
 
 ## Capabilities
 

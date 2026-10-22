@@ -94,3 +94,29 @@ it("warns when one discovered source is missing from a mixed status", () => {
   expect(html).toContain("rework.admin.capabilities.discovery.unregisteredSource");
   expect(html).toContain("gateway");
 });
+
+it("shows a source refresh failure outside the collapsed settings", () => {
+  const html = renderToStaticMarkup(
+    <ModelDiscoveryStatus
+      data={{
+        sources: [
+          {
+            source_id: "west",
+            yaml_url: "https://west.example/v1/models",
+            effective_url: "https://west.example/v1/models",
+            available_models: [],
+            removed_models: [],
+            new_ids: [],
+            last_error: "timeout",
+          },
+        ],
+      }}
+      discoveredSourceIds={["west"]}
+      refreshing={false}
+      refreshError={false}
+      refresh={async () => undefined}
+    />,
+  );
+  expect(html).toContain("rework.admin.capabilities.discovery.failedSourceswest");
+  expect(html.indexOf("failedSourceswest")).toBeLessThan(html.indexOf("<details>"));
+});

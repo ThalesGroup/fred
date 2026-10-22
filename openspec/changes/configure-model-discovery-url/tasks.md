@@ -20,3 +20,22 @@
 
 - [x] 4.1 Run root code-quality once, review the full PR against `swift` with independent read-only review, reconcile and archive the spec, push the draft PR, and confirm green CI.
 - [x] 4.2 Review and validate this follow-up, sync the spec, and rearchive the change.
+
+## 5. Model administration follow-up
+
+- [x] 5.1 Use pill tabs and a text filter for manual/discovered models, show every advertising pod, and replace the large discovery card with a compact refresh control.
+- [x] 5.2 Replace free-form disappearance fallback with a manual chat-profile selector resolved at runtime; update this PR's single migration and focused tests.
+- [x] 5.3 Exclude entries explicitly marked non-chat by `/models`, read Mistral's context field, and document the optional metadata and reasoning limitation.
+- [ ] 5.4 Regenerate clients, run targeted and root checks, review the whole branch, sync and archive the spec, push the draft PR, and confirm green CI.
+
+## 6. Multiple discovery URLs
+
+- [x] 6.1 Support multiple named sources in one YAML catalog while preserving the single-source form, source ownership, unique IDs and one chat default.
+- [x] 6.2 Refresh and advertise each source independently across runtime and control-plane, with retained inventories when another source fails.
+- [ ] 6.3 Document the YAML form and add focused multi-source tests, then verify and update the draft PR with green CI.
+
+## 7. Upstream model details
+
+- [x] 7.1 Add an authorized, bounded on-demand `GET /models/{id}` proxy for a discovered model and cover its source routing.
+- [x] 7.2 Show nested detail fields from a clickable information control, preserving context metadata already visible on the row.
+- [ ] 7.3 Verify generated clients, documentation, branch review and green CI before updating the draft PR.

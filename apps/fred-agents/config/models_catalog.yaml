@@ -18,6 +18,13 @@ default_profile_by_capability:
 
 # Mistral exposes GET https://api.mistral.ai/v1/models. Set OPENAI_API_KEY to
 # a Mistral key, then select chat-only IDs absent from static profiles.
+# For several endpoints on this pod, replace `discovery` with `discoveries`:
+# discoveries:
+#   - source_id: mistral
+#     base_url: https://api.mistral.ai/v1
+#   - source_id: another-gateway
+#     base_url: https://gateway.example/v1
+# All sources on one pod use its OPENAI_API_KEY; use separate pods for distinct keys.
 # discovery:
 #   source_id: mistral
 #   base_url: https://api.mistral.ai/v1

@@ -38,6 +38,7 @@ import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButto
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -49,12 +50,17 @@ import {
   useSetPlatformModelFallbackMutation,
   useDeletePlatformModelFallbackMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { ModelBinding, ModelBindingSettings } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  CapabilityEnablementItem,
+  ModelBinding,
+  ModelBindingSettings,
+} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PlatformModelBindingsPanel.module.css";
 
 interface PlatformModelBindingsPanelProps {
   open: boolean;
   onClose: () => void;
+  manualModels: CapabilityEnablementItem[];
 }
 
 /** Parses the settings textarea. `null` means "not a JSON object" (including
@@ -75,7 +81,7 @@ function parseSettingsObject(text: string): { value: Record<string, unknown> } |
   return { value: parsed as Record<string, unknown> };
 }
 
-export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindingsPanelProps) {
+export function PlatformModelBindingsPanel({ open, onClose, manualModels }: PlatformModelBindingsPanelProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { data, isLoading, isError } = usePlatformModelBindingQuery();
@@ -88,15 +94,22 @@ export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindi
 
   const binding = data?.binding ?? null;
   const fallback = fallbackData?.binding ?? null;
+  const fallbackProfileId = fallbackData?.profile_id ?? null;
+  const fallbackOptions = manualModels.flatMap((model) =>
+    (model.model_fallback_profile_ids ?? []).map((profileId) => ({
+      key: profileId,
+      value: profileId,
+      label: model.model_display_name || model.name,
+      description: `${profileId} - ${(model.model_runtime_ids ?? []).join(", ")}`,
+    })),
+  );
 
   const [isEditing, setIsEditing] = useState(false);
   const [provider, setProvider] = useState("");
   const [name, setName] = useState("");
   const [settingsText, setSettingsText] = useState("{}");
   const [isEditingFallback, setIsEditingFallback] = useState(false);
-  const [fallbackProvider, setFallbackProvider] = useState("");
-  const [fallbackName, setFallbackName] = useState("");
-  const [fallbackSettingsText, setFallbackSettingsText] = useState("{}");
+  const [selectedFallbackProfileId, setSelectedFallbackProfileId] = useState("");
 
   // Editing state does not survive the drawer closing — reopening always
   // starts from the current server state, never a stale in-progress edit.
@@ -119,28 +132,18 @@ export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindi
   const parsedSettings = parseSettingsObject(settingsText);
   const settingsInvalid = "error" in parsedSettings;
   const canSave = provider.trim() !== "" && name.trim() !== "" && !settingsInvalid;
-  const parsedFallbackSettings = parseSettingsObject(fallbackSettingsText);
-  const fallbackSettingsInvalid = "error" in parsedFallbackSettings;
-  const canSaveFallback = fallbackProvider.trim() !== "" && fallbackName.trim() !== "" && !fallbackSettingsInvalid;
+  const canSaveFallback = fallbackOptions.some((option) => option.value === selectedFallbackProfileId);
 
   const startFallbackEdit = () => {
     setIsEditingFallback(true);
-    setFallbackProvider(fallback?.provider ?? "");
-    setFallbackName(fallback?.name ?? "");
-    setFallbackSettingsText(JSON.stringify(fallback?.settings ?? {}, null, 2));
+    setSelectedFallbackProfileId(fallbackProfileId ?? fallbackOptions[0]?.value ?? "");
   };
 
   const handleFallbackSave = async () => {
-    if (!canSaveFallback || "error" in parsedFallbackSettings) return;
+    if (!canSaveFallback) return;
     try {
       await setFallback({
-        setPlatformModelFallbackRequest: {
-          binding: {
-            provider: fallbackProvider.trim() as ModelBinding["provider"],
-            name: fallbackName.trim(),
-            settings: parsedFallbackSettings.value as ModelBindingSettings,
-          },
-        },
+        setPlatformModelFallbackRequest: { profile_id: selectedFallbackProfileId },
       }).unwrap();
       showSuccess({ summary: t("rework.admin.platformModelBindings.fallbackSaveToast") });
       setIsEditingFallback(false);
@@ -287,15 +290,17 @@ export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindi
             <>
               <div className={styles.rowHeader}>
                 <span className={styles.stateText}>
-                  {fallback
-                    ? t("rework.admin.platformModelBindings.boundState", {
-                        provider: fallback.provider,
-                        name: fallback.name,
-                      })
-                    : t("rework.admin.platformModelBindings.noFallback")}
+                  {fallbackProfileId
+                    ? (fallbackOptions.find((option) => option.value === fallbackProfileId)?.label ?? fallbackProfileId)
+                    : fallback
+                      ? t("rework.admin.platformModelBindings.boundState", {
+                          provider: fallback.provider,
+                          name: fallback.name,
+                        })
+                      : t("rework.admin.platformModelBindings.noFallback")}
                 </span>
                 <div className={styles.rowActions}>
-                  {fallback && !isEditingFallback && (
+                  {(fallback || fallbackProfileId) && !isEditingFallback && (
                     <DeleteIconButton
                       size="small"
                       aria-label={t("rework.admin.platformModelBindings.clearFallback")}
@@ -324,34 +329,15 @@ export function PlatformModelBindingsPanel({ open, onClose }: PlatformModelBindi
                     void handleFallbackSave();
                   }}
                 >
-                  <TextInput
-                    label={t("rework.admin.platformModelBindings.form.provider")}
-                    value={fallbackProvider}
-                    onChange={(event) => setFallbackProvider(event.target.value)}
+                  <Select
+                    label={t("rework.admin.platformModelBindings.fallbackSelect")}
+                    size="small"
+                    compact
+                    options={fallbackOptions}
+                    value={selectedFallbackProfileId}
+                    onChange={setSelectedFallbackProfileId}
                     disabled={busy}
-                    required
-                  />
-                  <TextInput
-                    label={t("rework.admin.platformModelBindings.form.name")}
-                    value={fallbackName}
-                    onChange={(event) => setFallbackName(event.target.value)}
-                    disabled={busy}
-                    required
-                  />
-                  <TextArea
-                    label={t("rework.admin.platformModelBindings.form.settingsTitle")}
-                    value={fallbackSettingsText}
-                    onChange={(event) => setFallbackSettingsText(event.target.value)}
-                    rows={8}
-                    disabled={busy}
-                    error={
-                      fallbackSettingsInvalid
-                        ? t("rework.admin.platformModelBindings.form.settingsInvalidJson")
-                        : undefined
-                    }
-                    explanation={
-                      fallbackSettingsInvalid ? undefined : t("rework.admin.platformModelBindings.form.settingsHint")
-                    }
+                    emptyMessage={t("rework.admin.platformModelBindings.noManualModels")}
                   />
                   <div className={styles.formActions}>
                     <Button

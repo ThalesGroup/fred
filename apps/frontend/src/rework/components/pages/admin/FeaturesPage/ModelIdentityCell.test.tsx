@@ -25,6 +25,10 @@ vi.mock("./ModelDisplayNameEditor", () => ({
   ModelDisplayNameEditor: () => null,
 }));
 
+vi.mock("./ModelDetailTooltip", () => ({
+  ModelDetailTooltip: () => null,
+}));
+
 const capability: CapabilityEnablementItem = {
   id: "model:discovered.gateway.id",
   name: "upstream-chat",
@@ -53,14 +57,48 @@ describe("ModelIdentityCell", () => {
     );
     expect(markup).toContain("Gateway Chat");
     expect(markup).toContain("upstream-chat");
-    expect(markup).toContain("modelSpecs.context:128000");
-    expect(markup).toContain("modelSpecs.input:120000");
-    expect(markup).toContain("modelSpecs.output:8000");
+    expect(markup).toContain("modelSpecs.contextExact:128000");
+    expect(markup).toContain("modelSpecs.context:");
+    expect(markup).toContain("modelSpecs.input:");
+    expect(markup).toContain("modelSpecs.output:");
+    expect(markup).not.toContain("neurology");
   });
 
   it("keeps an id-only model free of invented limits", () => {
     const markup = renderToStaticMarkup(<ModelIdentityCell capability={capability} dimmed={false} />);
     expect(markup).toContain("upstream-chat");
     expect(markup).not.toContain("modelSpecs.");
+  });
+
+  it("does not present an OpenAI discovery entry as verified chat", () => {
+    const markup = renderToStaticMarkup(
+      <ModelIdentityCell
+        capability={{
+          ...capability,
+          model_discovery_source_id: "openai",
+          model_capabilities: ["chat"],
+        }}
+        dimmed={false}
+      />,
+    );
+    expect(markup).toContain("modelSpecs.typeUnknown");
+    expect(markup).toContain("modelSpecs.source");
+    expect(markup).not.toContain("modelSpecs.capabilities.chat");
+  });
+
+  it("does not show a redundant chat chip when the upstream confirms it", () => {
+    const markup = renderToStaticMarkup(
+      <ModelIdentityCell
+        capability={{
+          ...capability,
+          model_discovery_source_id: "mistral",
+          model_capabilities: ["chat"],
+          model_chat_capability_verified: true,
+        }}
+        dimmed={false}
+      />,
+    );
+    expect(markup).not.toContain("modelSpecs.capabilities.chat");
+    expect(markup).not.toContain("modelSpecs.typeUnknown");
   });
 });

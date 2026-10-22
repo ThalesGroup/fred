@@ -56,7 +56,8 @@ class SetDiscoveryUrlRequest(BaseModel):
 
 class PlatformModelFallback(BaseModel):
     binding: ModelBinding | None = None
+    profile_id: str | None = None
 
 
 class SetPlatformModelFallbackRequest(BaseModel):
-    binding: ModelBinding
+    profile_id: str = Field(min_length=1)

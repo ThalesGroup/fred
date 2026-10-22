@@ -72,6 +72,252 @@ def _transport(payload: object, *, status: int = 200) -> httpx.MockTransport:
     return httpx.MockTransport(respond)
 
 
+def _multi_source_catalog() -> ModelCatalog:
+    return ModelCatalog.model_validate(
+        {
+            "discoveries": [
+                {"source_id": "east", "base_url": "https://east.example/v1"},
+                {"source_id": "west", "base_url": "https://west.example/v1"},
+            ]
+        }
+    )
+
+
+def test_multiple_sources_keep_distinct_model_identities(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [{"id": "shared-chat"}]})
+
+    catalog = _multi_source_catalog().resolve_discovery(
+        transport=httpx.MockTransport(respond)
+    )
+    assert len(catalog.profiles) == 2
+    assert len({profile.profile_id for profile in catalog.profiles}) == 2
+    assert len({profile.capability_id for profile in catalog.profiles}) == 2
+    response = _project_model_catalog_response(catalog)
+    assert {source.source_id for source in response.discovery_sources} == {
+        "east",
+        "west",
+    }
+    assert all(
+        len(source.discovered_model_ids) == 1 for source in response.discovery_sources
+    )
+
+
+@pytest.mark.asyncio
+async def test_refresh_one_source_preserves_other_source_inventory(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_multi_source_catalog().model_dump(mode="json")))
+
+    def initial_response(request: httpx.Request) -> httpx.Response:
+        model_id = "east-chat" if request.url.host == "east.example" else "west-chat"
+        return httpx.Response(200, json={"data": [{"id": model_id}]})
+
+    initial = _multi_source_catalog().resolve_discovery(
+        transport=httpx.MockTransport(initial_response)
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    refreshed = await factory.refresh_catalog(
+        str(path),
+        source_id="east",
+        models_url="https://new-east.example/v1/models",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, json={"data": [{"id": "new-east-chat"}]}
+            )
+        ),
+    )
+    assert {profile.model.name for profile in refreshed.profiles} == {
+        "new-east-chat",
+        "west-chat",
+    }
+    east = refreshed.discovery_source("east")
+    west = refreshed.discovery_source("west")
+    assert east is not None and east.base_url == "https://new-east.example/v1"
+    assert west is not None and west.base_url == "https://west.example/v1"
+
+
+@pytest.mark.asyncio
+async def test_source_revision_does_not_fence_another_source(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_multi_source_catalog().model_dump(mode="json")))
+    initial = _multi_source_catalog().resolve_discovery(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, json={"data": [{"id": f"{request.url.host}-old"}]}
+            )
+        )
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    await factory.refresh_catalog(
+        str(path),
+        source_id="west",
+        models_url="https://new-west.example/v1/models",
+        revision=5,
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "west-new"}]})
+        ),
+    )
+    await factory.refresh_catalog(
+        str(path),
+        source_id="west",
+        models_url="https://new-west.example/v1/models",
+        revision=6,
+    )
+    await factory.refresh_catalog(
+        str(path),
+        source_id="west",
+        models_url="https://stale-west.example/v1/models",
+        revision=5,
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "stale-west"}]})
+        ),
+    )
+    await factory.refresh_catalog(
+        str(path),
+        source_id="east",
+        models_url="https://new-east.example/v1/models",
+        revision=1,
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "east-new"}]})
+        ),
+    )
+    assert factory.active_revision_for("east") == 1
+    assert factory.active_revision_for("west") == 6
+    active = factory.catalog
+    assert active is not None
+    assert {profile.model.name for profile in active.profiles} == {
+        "east-new",
+        "west-new",
+    }
+
+
+@pytest.mark.asyncio
+async def test_rollback_one_source_preserves_other_source_update(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_multi_source_catalog().model_dump(mode="json")))
+    initial = _multi_source_catalog().resolve_discovery(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, json={"data": [{"id": f"{request.url.host}-old"}]}
+            )
+        )
+    )
+    candidate = initial.resolve_discovery(
+        source_id="east",
+        models_url="https://new-east.example/v1/models",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "east-new"}]})
+        ),
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    factory._prepared["east-token"] = (
+        ModelRoutingResolver(candidate.to_policy()),
+        candidate,
+        "east",
+    )
+    await factory.activate_prepared_catalog("east-token", revision=1)
+    await factory.refresh_catalog(
+        str(path),
+        source_id="west",
+        models_url="https://new-west.example/v1/models",
+        revision=5,
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "west-new"}]})
+        ),
+    )
+    rolled_back = await factory.rollback_prepared_catalog("east-token")
+    assert {profile.model.name for profile in rolled_back.profiles} == {
+        "east.example-old",
+        "west-new",
+    }
+    assert factory.active_revision_for("east") == 0
+    assert factory.active_revision_for("west") == 5
+
+
+@pytest.mark.asyncio
+async def test_failed_source_backoffs_are_independent(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_multi_source_catalog().model_dump(mode="json")))
+    initial = _multi_source_catalog().resolve_discovery(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, json={"data": [{"id": f"{request.url.host}-old"}]}
+            )
+        )
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    requests: list[httpx.Request] = []
+
+    def fail(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(503)
+
+    for source_id in ("east", "west"):
+        with pytest.raises(ValueError, match="HTTP 503"):
+            await factory.refresh_catalog(
+                str(path),
+                source_id=source_id,
+                models_url=f"https://new-{source_id}.example/v1/models",
+                transport=httpx.MockTransport(fail),
+            )
+    for source_id in ("east", "west"):
+        await factory.refresh_catalog(
+            str(path),
+            source_id=source_id,
+            models_url=f"https://new-{source_id}.example/v1/models",
+            transport=httpx.MockTransport(fail),
+        )
+    assert len(requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_model_detail_is_fetched_only_for_a_discovered_model(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    catalog = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    requests: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(str(request.url))
+        return httpx.Response(200, json={"id": "chat-a", "max_context_length": 131072})
+
+    detail = await catalog.fetch_discovered_model_detail(
+        source_id="gateway",
+        model_id="chat-a",
+        transport=httpx.MockTransport(respond),
+    )
+    assert detail["max_context_length"] == 131072
+    assert requests == ["https://models.example/v1/models/chat-a"]
+    with pytest.raises(ValueError, match="Unknown discovered model"):
+        await catalog.fetch_discovered_model_detail(
+            source_id="gateway",
+            model_id="not-listed",
+            transport=httpx.MockTransport(respond),
+        )
+    assert len(requests) == 1
+
+
 def test_discovery_only_catalog_has_stable_routable_profiles(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     catalog = _catalog()
@@ -199,6 +445,31 @@ def test_optional_metadata_and_allowlist(monkeypatch) -> None:
     assert resolved.profiles[0].context_window_tokens == 32768
     assert resolved.profiles[0].max_input_tokens == 30000
     assert resolved.profiles[0].max_output_tokens == 2048
+
+
+def test_chat_capability_filters_only_when_advertised(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    resolved = _catalog().resolve_discovery(
+        transport=_transport(
+            {
+                "data": [
+                    {
+                        "id": "chat-a",
+                        "capabilities": {"completion_chat": True},
+                        "max_context_length": 131072,
+                    },
+                    {"id": "embedding-b", "capabilities": {"completion_chat": False}},
+                    {"id": "unknown-c"},
+                ]
+            }
+        )
+    )
+    assert [profile.model.name for profile in resolved.profiles] == [
+        "chat-a",
+        "unknown-c",
+    ]
+    assert resolved.profiles[0].context_window_tokens == 131072
+    assert resolved.verified_chat_profile_ids == (resolved.profiles[0].profile_id,)
 
 
 def test_refresh_accepts_confirmed_empty_inventory(monkeypatch) -> None:
@@ -460,7 +731,9 @@ def test_pod_builder_advertises_its_routing_snapshot(monkeypatch, tmp_path) -> N
     resolved = _catalog().resolve_discovery(
         transport=_transport({"data": [{"id": "chat-a"}]})
     )
-    monkeypatch.setattr(ModelCatalog, "resolve_discovery", lambda self: resolved)
+    monkeypatch.setattr(
+        ModelCatalog, "resolve_discovery", lambda self, **kwargs: resolved
+    )
     config = AgentPodConfig.model_construct()
     config.set_models_catalog_path(str(path))
 
@@ -489,7 +762,7 @@ def test_pod_can_boot_before_saved_discovery_url_is_applied(
     monkeypatch.setattr(
         ModelCatalog,
         "resolve_discovery",
-        lambda self: (_ for _ in ()).throw(ValueError("unavailable")),
+        lambda self, **kwargs: (_ for _ in ()).throw(ValueError("unavailable")),
     )
     config = AgentPodConfig.model_construct()
     config.set_models_catalog_path(str(path))
@@ -689,4 +962,55 @@ def test_confirmed_removed_team_default_uses_separate_platform_fallback(
         factory.build_for_chat(
             definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
             binding=no_team_choice,
+        )
+
+    manual_catalog = ModelCatalog.model_validate(
+        {
+            "discovery": {
+                "source_id": "gateway",
+                "base_url": "https://models.example/v1",
+            },
+            "profiles": [
+                {
+                    "profile_id": "chat.manual",
+                    "capability": "chat",
+                    "model": {
+                        "provider": "openai",
+                        "name": "tested-chat",
+                        "settings": {"base_url": "https://manual.example/v1"},
+                    },
+                }
+            ],
+        }
+    ).resolve_discovery(transport=_transport({"data": [{"id": "chat-b"}]}))
+
+    class ManualProvider:
+        def build_model(self, model_config, *, capability):
+            assert model_config.name == "tested-chat"
+            assert model_config.settings["base_url"] == "https://manual.example/v1"
+            return ToolFriendlyFakeChatModel(responses=[])
+
+    manual_factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(manual_catalog.to_policy()),
+        provider=ManualProvider(),
+        catalog=manual_catalog,
+    )
+    manual_binding = binding.model_copy(
+        update={
+            "platform_chat_model_fallback": None,
+            "platform_chat_model_fallback_profile_id": "chat.manual",
+        }
+    )
+    _, manual_selection = manual_factory.build_for_chat(
+        definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
+        binding=manual_binding,
+    )
+    assert manual_selection.source.value == "platform_fallback"
+    assert manual_selection.profile_id == "chat.manual"
+    with pytest.raises(ValueError, match="unavailable"):
+        manual_factory.build_for_chat(
+            definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
+            binding=manual_binding.model_copy(
+                update={"platform_chat_model_fallback_profile_id": "chat.missing"}
+            ),
         )

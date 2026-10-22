@@ -72,7 +72,7 @@
 
 .modelCell {
   display: grid;
-  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  grid-template-columns: minmax(0, max-content) auto auto minmax(0, 1fr);
   column-gap: var(--spacing-xs);
   row-gap: var(--spacing-3xs);
   min-width: 0;
@@ -98,9 +98,24 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
+}
+
+.modelToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.modelFilter {
   border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
-  padding: var(--spacing-m);
+  border-radius: 999px;
+  background: var(--surface-container);
+  padding: var(--spacing-xs) var(--spacing-m);
+  min-width: 220px;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
 }
 
 .discoveryHeading,
@@ -129,9 +144,19 @@
   grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: var(--spacing-xs);
-  padding-left: var(--spacing-xl);
+  padding-bottom: var(--spacing-s);
   color: var(--on-surface-muted);
   font: var(--font-label-small);
+}
+
+.modelSpecChip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  background: var(--surface-container-high);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  white-space: nowrap;
 }
 
 .modelNameForm {
@@ -144,14 +169,6 @@
   min-width: 0;
 }
 
-.modelSections {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--spacing-m);
-  min-height: 0;
-}
-
 .modelSection {
   display: flex;
   flex: 1;
@@ -160,25 +177,52 @@
   min-height: 0;
 }
 
-.modelSectionEmpty {
-  flex: 0 0 auto;
-}
-
-.modelSectionTitle {
-  margin: 0;
-  font: var(--font-title-small);
-}
-
-.modelSectionTable {
-  flex: 1;
-  min-height: 0;
-}
-
 .modelNameEditButton {
   grid-row: 1;
   grid-column: 2;
   align-self: center;
   justify-self: start;
+}
+
+.modelDetailButton {
+  display: flex;
+  grid-row: 1;
+  grid-column: 3;
+  align-items: center;
+  align-self: center;
+}
+
+.modelDetailPanel {
+  padding: var(--spacing-s);
+  width: min(520px, 80vw);
+  max-height: 60vh;
+  overflow: auto;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.modelDetailFields {
+  display: grid;
+  gap: var(--spacing-3xs);
+  margin: 0;
+}
+
+.modelDetailField {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.35fr) minmax(0, 1fr);
+  gap: var(--spacing-xs);
+  border-bottom: 1px solid var(--outline-variant);
+  padding: var(--spacing-3xs) 0;
+}
+
+.modelDetailField dt {
+  color: var(--on-surface-muted);
+  overflow-wrap: anywhere;
+}
+
+.modelDetailField dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .modelNameActions {

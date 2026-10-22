@@ -8,7 +8,7 @@ Defines how a pod turns model catalog sources into routable profiles and exposes
 
 ### Requirement: A model catalog can discover chat models from a compatible endpoint
 
-The catalog SHALL combine static YAML profiles and optional OpenAI-compatible discovery. By default, a configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. An administrator MAY override that URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for generated profiles. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL retain existing behavior.
+The catalog SHALL combine static YAML profiles and one or more named OpenAI-compatible discovery sources. The existing single-source YAML form SHALL remain valid. Source IDs SHALL be unique, and at most one chat default SHALL be declared across manual and discovered profiles. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. An administrator MAY override each URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL retain existing behavior.
 
 #### Scenario: Mixed catalog
 
@@ -40,6 +40,18 @@ The catalog SHALL combine static YAML profiles and optional OpenAI-compatible di
 - **WHEN** a pod next serves its catalog or a managed chat turn
 - **THEN** it uses a verified inventory from that URL and routes generated profiles through its parent inference URL without a restart
 
+#### Scenario: Several sources in one catalog
+
+- **GIVEN** two discovery sources with distinct IDs and URLs in the same pod catalog
+- **WHEN** both return valid models, including a shared wire model ID
+- **THEN** each model retains a distinct source-owned identity and appears under its own URL management status
+
+#### Scenario: Independent source revisions
+
+- **GIVEN** a pod has two named sources and source B has a later refresh revision than source A
+- **WHEN** the pod applies A's saved URL or rolls back an unsuccessful A activation
+- **THEN** A changes according to its own revision and B's inventory, URL and revision remain intact
+
 ### Requirement: Advertised discovered models match routable models
 
 The pod SHALL advertise the same successfully resolved inventory it uses for chat routing. It SHALL NOT advertise a newly returned remote model until that model is routable. On a refresh failure, it SHALL preserve the last successful inventory. If startup discovery fails, it SHALL keep static profiles available so a saved administrator URL can be applied on a managed turn.
@@ -56,9 +68,15 @@ The pod SHALL advertise the same successfully resolved inventory it uses for cha
 - **WHEN** the pod starts
 - **THEN** static profiles remain available and a later managed turn can apply a saved administrator URL
 
+#### Scenario: One of several sources fails
+
+- **GIVEN** two configured sources with verified inventories
+- **WHEN** one source fails during refresh
+- **THEN** its last verified inventory and the other source's inventory remain routable, without confirmed removals for the failed source
+
 ### Requirement: Discovered model metadata is optional and advisory
 
-The pod SHALL preserve each upstream model identifier as its wire name. It SHALL show a supplied human-readable name and supported context or token limit metadata in the admin Models view when those fields are valid. The absence of such fields SHALL leave the model selectable by identifier and SHALL NOT imply a context size or reasoning aptitude. Remote metadata SHALL NOT grant a team access or enable reasoning.
+The pod SHALL preserve each upstream model identifier as its wire name. It SHALL show valid human-readable names and context limits, including `max_context_length`, when supplied. When `capabilities.completion_chat` is present, the pod SHALL discover only entries where it is true; when absent, it SHALL keep the entry eligible. The admin view SHALL show non-chat profile capability types when relevant and declared reasoning levels without inferring levels from an upstream model name. Metadata SHALL NOT grant access or enable reasoning.
 
 #### Scenario: Basic OpenAI model list
 
@@ -71,6 +89,25 @@ The pod SHALL preserve each upstream model identifier as its wire name. It SHALL
 - **GIVEN** a response containing a valid display name and context window
 - **WHEN** an administrator opens the Models view
 - **THEN** those values appear as model details without changing model activation
+
+#### Scenario: Standard OpenAI list has no modality metadata
+
+- **GIVEN** a response containing model identifiers without `capabilities.completion_chat`
+- **WHEN** the pod resolves discovery
+- **THEN** all valid entries remain eligible, their type is displayed as unspecified, and unknown limits and reasoning levels are undisplayed
+
+#### Scenario: Mistral-style chat metadata
+
+- **GIVEN** two entries whose `completion_chat` values are true and false, and the chat entry declares `max_context_length`
+- **WHEN** the pod resolves discovery
+- **THEN** only the chat entry is advertised, and its context limit appears in the admin view
+
+#### Scenario: Model detail on demand
+
+- **GIVEN** a discovered model advertised by a named source and a user allowed to manage capabilities
+- **WHEN** the user clicks its information control
+- **THEN** the pod requests that source's `GET /models/{id}` using its existing credential and the admin view shows returned nested fields as key/value pairs
+- **AND** opening the model list does not make detail requests or hide the context limit already known from `/models`
 
 ### Requirement: Administrators can name advertised models after discovery
 
@@ -106,13 +143,19 @@ Every discovered model SHALL enter the existing model capability catalog without
 
 ### Requirement: Administrators can distinguish manual and discovered models
 
-The Models admin view SHALL separate manually declared models from models returned by discovery. The source of each model SHALL come from profiles actually added by the pod's discovery resolution and SHALL be included in the control-plane admin response. Both sections SHALL retain the same activation and team controls. If an advertised discovery source lacks registered state for URL management, the discovery status SHALL name that source rather than claiming no discovery is configured.
+The Models admin view SHALL separate manually declared models from models returned by discovery in two selectable pill tabs. The source of each model SHALL come from profiles actually added by the pod's discovery resolution and SHALL be included in the control-plane admin response. Each model SHALL identify all advertising runtime pods. Both tabs SHALL retain the same activation and team controls and support text filtering. The Discovery tab SHALL offer a compact manual refresh. If an advertised discovery source lacks registered state for URL management, the discovery status SHALL name that source rather than claiming no discovery is configured.
 
 #### Scenario: Mixed model list
 
 - **GIVEN** a pod advertises one static model and one discovered model
 - **WHEN** an administrator opens Features > Models
-- **THEN** each model appears in its corresponding section with its existing controls
+- **THEN** each model appears in its corresponding tab with its existing controls and advertising pod identity
+
+#### Scenario: Same wire ID from two sources
+
+- **GIVEN** two discovery sources on the same pod return the same wire model ID
+- **WHEN** an administrator views their rows or confirmed removals
+- **THEN** each row or removal identifies its source so the administrator can distinguish the models
 
 #### Scenario: Static profile with a discovery-like identifier
 
@@ -168,7 +211,13 @@ The Models admin view SHALL show each source's YAML and effective URL, last succ
 
 ### Requirement: A confirmed removed model falls back to the platform default
 
-The platform SHALL provide a fallback chat binding independent of its forced chat binding. On a managed turn, when the selected profile is confirmed removed by a successful source refresh, the pod SHALL use the fallback, report the actual routed model, and keep the stored choice unchanged. A failed refresh, unknown profile, disabled model, or access denial SHALL NOT count as a confirmed removal. An unavailable fallback SHALL fail explicitly.
+The platform SHALL provide a fallback manual chat profile independent of its forced chat binding. The admin SHALL select this profile from manual catalog chat profiles. On a managed turn, when the selected profile is confirmed removed by a successful source refresh, the pod SHALL resolve the selected manual profile from its current catalog, report the actual routed model, and keep the stored choice unchanged. A failed refresh, unknown profile, disabled model, or access denial SHALL NOT count as a confirmed removal. An unavailable fallback SHALL fail explicitly.
+
+#### Scenario: Manual fallback selection
+
+- **GIVEN** manual and discovered chat models in the admin catalog
+- **WHEN** the administrator opens the fallback selector
+- **THEN** only manual chat profiles are offered and the chosen profile ID is saved
 
 #### Scenario: Selected model disappears
 

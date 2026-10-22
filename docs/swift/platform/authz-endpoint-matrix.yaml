@@ -1090,6 +1090,11 @@ operations:
     review_status: approved
     required_permission: can_manage_capabilities
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/model-discovery/detail
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/model-discovery/{source_id}/url
     review_status: approved
@@ -1114,6 +1119,11 @@ operations:
     path: /pod/v1/agents/models-catalog/refresh
     review_status: approved
     required_permission: can_manage_capabilities # Enforced against the caller when pod security is enabled; local unsecured mode bypasses ReBAC.
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/models-catalog/detail
+    review_status: approved
+    required_permission: can_manage_capabilities
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/model-bindings

@@ -77,6 +77,36 @@ async def test_parses_a_well_formed_models_catalog_response(
 
 
 @pytest.mark.asyncio
+async def test_reads_discovery_default_from_the_second_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "models": [],
+        "discovery_default_profile_id": None,
+        "discovery_sources": [
+            {
+                "source_id": "east",
+                "discovered_model_ids": [],
+                "default_profile_id": None,
+            },
+            {
+                "source_id": "west",
+                "discovered_model_ids": [],
+                "default_profile_id": "discovered.chat.west.safe",
+            },
+        ],
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json=payload, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+    pod_models = await _model_capabilities_for_source("http://pod")
+    assert pod_models is not None
+    assert pod_models.discovery_default_profile_id == "discovered.chat.west.safe"
+
+
+@pytest.mark.asyncio
 async def test_carries_thinking_profile_ids_through_the_projection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -187,6 +217,9 @@ async def test_admin_row_carries_the_display_name() -> None:
         icon="neurology",
         kind="model",
         model_display_name="Mistral Medium 3.1",
+        model_runtime_ids=("fred-agents",),
+        model_capabilities=("chat",),
+        model_chat_profile_ids=("chat.mistral.medium",),
         model_context_window_tokens=32768,
         model_max_input_tokens=30000,
         model_max_output_tokens=2048,
@@ -199,9 +232,13 @@ async def test_admin_row_carries_the_display_name() -> None:
         total_personal_space_count=0,
         impact={},
         reasoning_enabled_ids=frozenset(),
+        universal_chat_profile_ids=frozenset({"chat.mistral.medium"}),
     )
 
     assert item.model_display_name == "Mistral Medium 3.1"
+    assert item.model_runtime_ids == ["fred-agents"]
+    assert item.model_capabilities == ["chat"]
+    assert item.model_fallback_profile_ids == ["chat.mistral.medium"]
     assert item.model_context_window_tokens == 32768
     assert item.model_max_input_tokens == 30000
     assert item.model_max_output_tokens == 2048

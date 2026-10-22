@@ -27,7 +27,7 @@ from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 import yaml
@@ -164,21 +164,176 @@ class ModelCatalog(FrozenModel):
     profiles: tuple[ModelProfile, ...] = ()
     agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
     discovery: ModelDiscoverySource | None = None
+    discoveries: tuple[ModelDiscoverySource, ...] = ()
     _discovered_profile_ids: tuple[str, ...] = PrivateAttr(default=())
+    _discovered_profile_sources: dict[str, str] = PrivateAttr(default_factory=dict)
+    _verified_chat_profile_ids: tuple[str, ...] = PrivateAttr(default=())
+    _verified_discovery_source_ids: frozenset[str] = PrivateAttr(
+        default_factory=frozenset
+    )
 
     @property
     def discovered_profile_ids(self) -> tuple[str, ...]:
         return self._discovered_profile_ids
 
+    @property
+    def verified_chat_profile_ids(self) -> tuple[str, ...]:
+        return self._verified_chat_profile_ids
+
+    @property
+    def discovery_sources(self) -> tuple[ModelDiscoverySource, ...]:
+        return (self.discovery,) if self.discovery is not None else self.discoveries
+
+    @property
+    def discovered_profile_sources(self) -> dict[str, str]:
+        return dict(self._discovered_profile_sources)
+
+    @property
+    def verified_discovery_source_ids(self) -> frozenset[str]:
+        return self._verified_discovery_source_ids
+
+    def discovery_source(
+        self, source_id: str | None = None
+    ) -> ModelDiscoverySource | None:
+        sources = self.discovery_sources
+        if source_id is None:
+            if len(sources) > 1:
+                raise ValueError("source_id is required for multiple discovery sources")
+            return sources[0] if sources else None
+        return next(
+            (source for source in sources if source.source_id == source_id), None
+        )
+
+    def with_discovery_source_from(
+        self, candidate: "ModelCatalog", source_id: str
+    ) -> "ModelCatalog":
+        old_owned = {
+            profile_id
+            for profile_id, owner in self._discovered_profile_sources.items()
+            if owner == source_id
+        }
+        new_owned = {
+            profile_id
+            for profile_id, owner in candidate._discovered_profile_sources.items()
+            if owner == source_id
+        }
+        source = candidate.discovery_source(source_id)
+        if source is None:
+            raise ValueError(f"Unknown discovery source {source_id!r}")
+        defaults = dict(self.default_profile_by_capability)
+        if defaults.get(ModelCapability.CHAT) in old_owned:
+            defaults.pop(ModelCapability.CHAT)
+        candidate_default = candidate.default_profile_by_capability.get(
+            ModelCapability.CHAT
+        )
+        if candidate_default in new_owned:
+            defaults[ModelCapability.CHAT] = candidate_default
+        source_fields: dict[str, Any] = (
+            {"discovery": source}
+            if self.discovery is not None
+            else {
+                "discoveries": tuple(
+                    source if item.source_id == source_id else item
+                    for item in self.discoveries
+                )
+            }
+        )
+        merged = self.model_copy(
+            update={
+                "profiles": tuple(
+                    profile
+                    for profile in self.profiles
+                    if profile.profile_id not in old_owned
+                )
+                + tuple(
+                    profile
+                    for profile in candidate.profiles
+                    if profile.profile_id in new_owned
+                ),
+                "default_profile_by_capability": defaults,
+                **source_fields,
+            }
+        )
+        merged._discovered_profile_sources = {
+            **{
+                profile_id: owner
+                for profile_id, owner in self._discovered_profile_sources.items()
+                if owner != source_id
+            },
+            **{profile_id: source_id for profile_id in new_owned},
+        }
+        merged._discovered_profile_ids = tuple(merged._discovered_profile_sources)
+        merged._verified_chat_profile_ids = tuple(
+            profile_id
+            for profile_id in self._verified_chat_profile_ids
+            if profile_id not in old_owned
+        ) + tuple(
+            profile_id
+            for profile_id in candidate._verified_chat_profile_ids
+            if profile_id in new_owned
+        )
+        merged._verified_discovery_source_ids = (
+            self._verified_discovery_source_ids - {source_id}
+        ) | (candidate._verified_discovery_source_ids & {source_id})
+        return merged
+
+    async def fetch_discovered_model_detail(
+        self,
+        *,
+        source_id: str,
+        model_id: str,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> dict[str, Any]:
+        source = self.discovery_source(source_id)
+        if source is None or not any(
+            profile.model.name == model_id
+            and self._discovered_profile_sources.get(profile.profile_id) == source_id
+            for profile in self.profiles
+        ):
+            raise ValueError("Unknown discovered model")
+        credential = os.getenv("OPENAI_API_KEY")
+        if not credential:
+            raise ValueError("Model discovery credential is unavailable")
+        try:
+            async with httpx.AsyncClient(
+                timeout=5.0, follow_redirects=False, transport=transport
+            ) as client:
+                async with client.stream(
+                    "GET",
+                    f"{source.base_url}/models/{quote(model_id, safe='')}",
+                    headers={"Authorization": f"Bearer {credential}"},
+                ) as response:
+                    if response.status_code != 200:
+                        raise ValueError(f"HTTP {response.status_code}")
+                    chunks: list[bytes] = []
+                    size = 0
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > 1_048_576:
+                            raise ValueError("response exceeds 1 MiB")
+                        chunks.append(chunk)
+            payload = json.loads(b"".join(chunks))
+        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
+            cause = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+            raise ValueError(f"Model detail request failed: {cause}") from None
+        if not isinstance(payload, dict):
+            raise ValueError("Model detail response must be an object")
+        return payload
+
     @model_validator(mode="after")
     def _validate_discovery_default(self) -> "ModelCatalog":
+        if self.discovery is not None and self.discoveries:
+            raise ValueError("use discovery or discoveries, not both")
+        sources = self.discovery_sources
+        if len({source.source_id for source in sources}) != len(sources):
+            raise ValueError("discovery source_ids must be unique")
         if (
-            self.discovery is not None
-            and self.discovery.default_model_id is not None
-            and ModelCapability.CHAT in self.default_profile_by_capability
+            sum(source.default_model_id is not None for source in sources)
+            + (ModelCapability.CHAT in self.default_profile_by_capability)
+            > 1
         ):
             raise ValueError(
-                "discovery default_model_id conflicts with the static chat default"
+                "discovery default_model_id conflicts with another chat default"
             )
         return self
 
@@ -187,10 +342,26 @@ class ModelCatalog(FrozenModel):
         *,
         transport: httpx.BaseTransport | None = None,
         models_url: str | None = None,
+        source_id: str | None = None,
         allow_missing_default: bool = False,
     ) -> "ModelCatalog":
-        source = self.discovery
+        if source_id is None and len(self.discovery_sources) > 1:
+            if models_url is not None:
+                raise ValueError(
+                    "source_id is required to override one of several sources"
+                )
+            resolved = self
+            for candidate in self.discovery_sources:
+                resolved = resolved.resolve_discovery(
+                    transport=transport,
+                    source_id=candidate.source_id,
+                    allow_missing_default=allow_missing_default,
+                )
+            return resolved
+        source = self.discovery_source(source_id)
         if source is None:
+            if source_id is not None:
+                raise ValueError(f"Unknown discovery source {source_id!r}")
             return self
         base_url = (
             base_url_from_models_url(models_url)
@@ -232,18 +403,37 @@ class ModelCatalog(FrozenModel):
                 f"Model discovery source {source.source_id!r} failed: {cause}"
             ) from None
         return self._resolve_discovery_payload(
-            payload, base_url=base_url, allow_missing_default=allow_missing_default
+            payload,
+            source=source,
+            base_url=base_url,
+            allow_missing_default=allow_missing_default,
         )
 
     async def resolve_discovery_async(
         self,
         *,
         models_url: str | None = None,
+        source_id: str | None = None,
         allow_missing_default: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> "ModelCatalog":
-        source = self.discovery
+        if source_id is None and len(self.discovery_sources) > 1:
+            if models_url is not None:
+                raise ValueError(
+                    "source_id is required to override one of several sources"
+                )
+            resolved = self
+            for candidate in self.discovery_sources:
+                resolved = await resolved.resolve_discovery_async(
+                    source_id=candidate.source_id,
+                    allow_missing_default=allow_missing_default,
+                    transport=transport,
+                )
+            return resolved
+        source = self.discovery_source(source_id)
         if source is None:
+            if source_id is not None:
+                raise ValueError(f"Unknown discovery source {source_id!r}")
             return self
         base_url = (
             base_url_from_models_url(models_url) if models_url else source.base_url
@@ -283,15 +473,20 @@ class ModelCatalog(FrozenModel):
                 f"Model discovery source {source.source_id!r} failed: {cause}"
             ) from None
         return self._resolve_discovery_payload(
-            payload, base_url=base_url, allow_missing_default=allow_missing_default
+            payload,
+            source=source,
+            base_url=base_url,
+            allow_missing_default=allow_missing_default,
         )
 
     def _resolve_discovery_payload(
-        self, payload: Any, *, base_url: str, allow_missing_default: bool
+        self,
+        payload: Any,
+        *,
+        source: ModelDiscoverySource,
+        base_url: str,
+        allow_missing_default: bool,
     ) -> "ModelCatalog":
-        source = self.discovery
-        if source is None:
-            return self
         if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
             raise ValueError(
                 f"Model discovery source {source.source_id!r} returned no data list"
@@ -308,6 +503,13 @@ class ModelCatalog(FrozenModel):
             candidate_id = item.get("id") if isinstance(item, dict) else None
             if included is not None and (
                 not isinstance(candidate_id, str) or candidate_id not in included
+            ):
+                continue
+            capabilities = item.get("capabilities") if isinstance(item, dict) else None
+            if (
+                isinstance(capabilities, dict)
+                and "completion_chat" in capabilities
+                and capabilities["completion_chat"] is not True
             ):
                 continue
             if not isinstance(item, dict) or not _valid_model_id(candidate_id):
@@ -328,17 +530,37 @@ class ModelCatalog(FrozenModel):
                 f"Model discovery source {source.source_id!r} has no complete selected inventory"
             )
 
-        profiles = list(self.profiles)
+        old_source_profiles = {
+            profile_id
+            for profile_id, owner in self._discovered_profile_sources.items()
+            if owner == source.source_id
+        }
+        profiles = [
+            profile
+            for profile in self.profiles
+            if profile.profile_id not in old_source_profiles
+        ]
         existing_profile_ids = {profile.profile_id for profile in profiles}
         existing_capability_ids = {profile.capability_id for profile in profiles}
-        discovered_profile_ids: list[str] = []
+        discovered_profile_sources = {
+            profile_id: owner
+            for profile_id, owner in self._discovered_profile_sources.items()
+            if owner != source.source_id
+        }
+        verified_chat_profile_ids = [
+            profile_id
+            for profile_id in self._verified_chat_profile_ids
+            if profile_id not in old_source_profiles
+        ]
         default_profile_id: str | None = None
         for item in selected:
             wire_id = item["id"]
             digest = sha256(wire_id.encode("utf-8")).hexdigest()
             profile_id = f"discovered.chat.{source.source_id}.{digest}"
-            context = _positive_int(item.get("context_length")) or _positive_int(
-                item.get("max_model_len")
+            context = (
+                _positive_int(item.get("context_length"))
+                or _positive_int(item.get("max_model_len"))
+                or _positive_int(item.get("max_context_length"))
             )
             profile = ModelProfile(
                 profile_id=profile_id,
@@ -362,27 +584,53 @@ class ModelCatalog(FrozenModel):
                     f"Model discovery source {source.source_id!r} conflicts with a static model identity"
                 )
             profiles.append(profile)
-            discovered_profile_ids.append(profile_id)
+            discovered_profile_sources[profile_id] = source.source_id
+            capabilities = item.get("capabilities")
+            if (
+                isinstance(capabilities, dict)
+                and capabilities.get("completion_chat") is True
+            ):
+                verified_chat_profile_ids.append(profile_id)
             existing_profile_ids.add(profile_id)
             existing_capability_ids.add(profile.capability_id)
             if wire_id == source.default_model_id:
                 default_profile_id = profile_id
         defaults = dict(self.default_profile_by_capability)
         if source.default_model_id is not None:
+            if defaults.get(ModelCapability.CHAT) in old_source_profiles:
+                defaults.pop(ModelCapability.CHAT)
             if default_profile_id is None and not allow_missing_default:
                 raise ValueError(
                     f"Model discovery source {source.source_id!r} is missing its default model"
                 )
             if default_profile_id is not None:
                 defaults[ModelCapability.CHAT] = default_profile_id
+        source_update = source.model_copy(update={"base_url": base_url})
+        source_fields: dict[str, Any] = (
+            {"discovery": source_update}
+            if self.discovery is not None
+            else {
+                "discoveries": tuple(
+                    source_update
+                    if candidate.source_id == source.source_id
+                    else candidate
+                    for candidate in self.discoveries
+                )
+            }
+        )
         resolved = self.model_copy(
             update={
                 "profiles": tuple(profiles),
                 "default_profile_by_capability": defaults,
-                "discovery": source.model_copy(update={"base_url": base_url}),
+                **source_fields,
             }
         )
-        resolved._discovered_profile_ids = tuple(discovered_profile_ids)
+        resolved._discovered_profile_sources = discovered_profile_sources
+        resolved._discovered_profile_ids = tuple(discovered_profile_sources)
+        resolved._verified_chat_profile_ids = tuple(verified_chat_profile_ids)
+        resolved._verified_discovery_source_ids = (
+            self._verified_discovery_source_ids | {source.source_id}
+        )
         return resolved
 
     def to_policy(self) -> ModelRoutingPolicy:

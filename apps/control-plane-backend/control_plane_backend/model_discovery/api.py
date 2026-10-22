@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fred_core import KeycloakUser, get_current_user
 from fred_core.security.models import AuthorizationError
 
@@ -63,6 +63,32 @@ async def refresh_model_discovery(
         )
     except AuthorizationError as exc:
         raise map_error(exc) from exc
+
+
+@router.get("/admin/model-discovery/detail", response_model=dict)
+async def get_model_discovery_detail(
+    request: Request,
+    deps: Dependencies,
+    source_id: Annotated[str, Query(min_length=1, max_length=64)],
+    model_id: Annotated[str, Query(min_length=1, max_length=256)],
+    runtime_id: str | None = None,
+    user: KeycloakUser = Depends(get_current_user),
+) -> dict:
+    try:
+        return await service.get_model_detail(
+            user,
+            deps,
+            source_id=source_id,
+            model_id=model_id,
+            runtime_id=runtime_id,
+            authorization=request.headers.get("Authorization"),
+        )
+    except AuthorizationError as exc:
+        raise map_error(exc) from exc
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail="Model detail is unavailable"
+        ) from None
 
 
 @router.put(
@@ -112,9 +138,11 @@ async def put_platform_model_fallback(
     user: KeycloakUser = Depends(get_current_user),
 ) -> PlatformModelFallback:
     try:
-        return await service.set_fallback(user, deps, body.binding)
+        return await service.set_fallback(user, deps, body.profile_id)
     except AuthorizationError as exc:
         raise map_error(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 @router.delete("/admin/platform-model-fallback", response_model=PlatformModelFallback)

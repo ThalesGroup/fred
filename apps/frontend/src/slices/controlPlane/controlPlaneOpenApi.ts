@@ -1081,6 +1081,19 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/model-discovery/refresh`, method: "POST" }),
     }),
+    getModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGet: build.query<
+      GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiResponse,
+      GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/detail`,
+        params: {
+          source_id: queryArg.sourceId,
+          model_id: queryArg.modelId,
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
     putModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPut: build.mutation<
       PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiResponse,
       PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiArg
@@ -2892,6 +2905,15 @@ export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiArg = void;
 export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse =
   /** status 200 Successful Response */ ModelDiscoveryStatus;
 export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg = void;
+export type GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiArg = {
+  sourceId: string;
+  modelId: string;
+  runtimeId?: string | null;
+};
 export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiResponse =
   /** status 200 Successful Response */ DiscoverySourceStatus;
 export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiArg = {
@@ -4284,6 +4306,9 @@ export type CapabilityCatalogEntry = {
   route_base_url?: string | null;
   default_capability_ids?: string[];
   model_profile_ids?: string[];
+  model_capabilities?: string[];
+  model_chat_capability_verified?: boolean;
+  model_runtime_ids?: string[];
   model_discovery_source_id?: string | null;
   model_chat_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
@@ -4764,6 +4789,7 @@ export type ManagedAgentRuntimeBinding = {
   team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
   platform_chat_model_fallback?: ModelBinding | null;
+  platform_chat_model_fallback_profile_id?: string | null;
   model_discovery_urls?: {
     [key: string]: string;
   };
@@ -4986,6 +5012,15 @@ export type CapabilityEnablementItem = {
   model_display_name_override?: string | null;
   /** The pod-advertised discovery source for this model, if any. */
   model_discovery_source_id?: string | null;
+  /** Runtime pods currently advertising this model. */
+  model_runtime_ids?: string[];
+  model_chat_profile_ids?: string[];
+  model_fallback_profile_ids?: string[];
+  model_capabilities?: string[];
+  model_chat_capability_verified?: boolean;
+  model_reasoning_efforts?: {
+    [key: string]: string[];
+  };
   model_context_window_tokens?: number | null;
   model_max_input_tokens?: number | null;
   model_max_output_tokens?: number | null;
@@ -5083,9 +5118,10 @@ export type SetDiscoveryUrlRequest = {
 };
 export type PlatformModelFallback = {
   binding?: ModelBinding | null;
+  profile_id?: string | null;
 };
 export type SetPlatformModelFallbackRequest = {
-  binding: ModelBinding;
+  profile_id: string;
 };
 export type KnowledgeBasePublicationResult = {
   id: string;
@@ -6187,6 +6223,8 @@ export const {
   useGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
   useLazyGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
   useRefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostMutation,
+  useGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery,
+  useLazyGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery,
   usePutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutMutation,
   useGetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetQuery,
   useLazyGetPlatformModelFallbackControlPlaneV1AdminPlatformModelFallbackGetQuery,

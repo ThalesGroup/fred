@@ -152,16 +152,14 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         self._provider = provider or FredCoreModelProvider()
         self._refresh_lock = asyncio.Lock()
         self._catalog_verified = catalog_verified
-        self._active_revision = 0
-        self._failed_url: tuple[str | None, float] | None = None
-        self._pending_refresh: (
-            tuple[str | None, int | None, asyncio.Task[ModelCatalog]] | None
-        ) = None
-        self._prepared: dict[str, tuple[ModelRoutingResolver, ModelCatalog]] = {}
-        self._activation_backups: dict[
-            str, tuple[ModelRoutingResolver, ModelCatalog, int, bool]
+        self._active_revisions: dict[str, int] = {}
+        self._failed_urls: dict[tuple[str, str | None], float] = {}
+        self._pending_refreshes: dict[
+            tuple[str, str | None, int | None], asyncio.Task[ModelCatalog]
         ] = {}
-        self._active_preparation_token: str | None = None
+        self._prepared: dict[str, tuple[ModelRoutingResolver, ModelCatalog, str]] = {}
+        self._activation_backups: dict[str, tuple[ModelCatalog, str, int, bool]] = {}
+        self._active_preparation_tokens: dict[str, str] = {}
 
     @property
     def catalog(self) -> ModelCatalog | None:
@@ -169,7 +167,10 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
 
     @property
     def active_revision(self) -> int:
-        return self._active_revision
+        return max(self._active_revisions.values(), default=0)
+
+    def active_revision_for(self, source_id: str | None) -> int:
+        return self._active_revisions.get(source_id or "", 0)
 
     @property
     def _resolver(self) -> ModelRoutingResolver:
@@ -180,6 +181,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         path: str,
         *,
         models_url: str | None = None,
+        source_id: str | None = None,
         revision: int | None = None,
         force: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -187,16 +189,17 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         from .catalog import load_model_catalog
 
         async with self._refresh_lock:
-            current = self.catalog
-            active_url = (
-                f"{current.discovery.base_url}/models"
-                if current is not None and current.discovery is not None
-                else None
-            )
+            current = self.catalog or load_model_catalog(path)
+            source = current.discovery_source(source_id)
+            if source is None:
+                raise ValueError(f"Unknown discovery source {source_id!r}")
+            source_id = source.source_id
+            refresh_key = (source_id, models_url)
+            active_url = f"{source.base_url}/models"
             if (
                 not force
                 and revision is not None
-                and revision < self._active_revision
+                and revision < self.active_revision_for(source_id)
                 and current is not None
             ):
                 return current
@@ -204,121 +207,146 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 not force
                 and models_url == active_url
                 and current is not None
-                and self._catalog_verified
+                and source_id in current.verified_discovery_source_ids
             ):
+                if revision is not None:
+                    self._active_revisions[source_id] = max(
+                        revision, self.active_revision_for(source_id)
+                    )
                 return current
             if (
                 not force
-                and self._failed_url is not None
-                and models_url == self._failed_url[0]
-                and time.monotonic() < self._failed_url[1]
+                and time.monotonic() < self._failed_urls.get(refresh_key, 0)
                 and current is not None
             ):
                 return current
-            pending = self._pending_refresh
-            if (
-                pending is not None
-                and pending[0] == models_url
-                and pending[1] == revision
-            ):
-                task = pending[2]
-            else:
+            task_key = (*refresh_key, revision)
+            task = self._pending_refreshes.get(task_key)
+            if task is None:
                 task = asyncio.create_task(
-                    load_model_catalog(path).resolve_discovery_async(
+                    current.resolve_discovery_async(
                         models_url=models_url,
+                        source_id=source_id,
                         allow_missing_default=True,
                         transport=transport,
                     )
                 )
-                self._pending_refresh = (models_url, revision, task)
+                self._pending_refreshes[task_key] = task
         try:
             catalog = await asyncio.shield(task)
             resolver = ModelRoutingResolver(catalog.to_policy())
         except asyncio.CancelledError:
             if task.cancelled():
                 async with self._refresh_lock:
-                    if (
-                        self._pending_refresh is not None
-                        and self._pending_refresh[2] is task
-                    ):
-                        self._pending_refresh = None
+                    if self._pending_refreshes.get(task_key) is task:
+                        self._pending_refreshes.pop(task_key)
             raise
         except Exception:
             async with self._refresh_lock:
-                if (
-                    self._pending_refresh is not None
-                    and self._pending_refresh[2] is task
-                ):
-                    self._pending_refresh = None
-                    self._failed_url = (models_url, time.monotonic() + 5)
+                if self._pending_refreshes.get(task_key) is task:
+                    self._pending_refreshes.pop(task_key)
+                    self._failed_urls[refresh_key] = time.monotonic() + 5
             raise
         async with self._refresh_lock:
-            if self._pending_refresh is not None and self._pending_refresh[2] is task:
-                if revision is not None and revision < self._active_revision:
-                    self._pending_refresh = None
+            if self._pending_refreshes.get(task_key) is task:
+                if revision is not None and revision < self.active_revision_for(
+                    source_id
+                ):
+                    self._pending_refreshes.pop(task_key)
                     return self.catalog or catalog
+                current = self.catalog
+                if current is not None and current is not catalog:
+                    catalog = current.with_discovery_source_from(catalog, source_id)
+                    resolver = ModelRoutingResolver(catalog.to_policy())
                 self._snapshot = (resolver, catalog)
                 self._catalog_verified = True
                 if revision is not None:
-                    self._active_revision = revision
-                self._active_preparation_token = None
-                self._failed_url = None
-                self._pending_refresh = None
+                    self._active_revisions[source_id] = revision
+                self._active_preparation_tokens.pop(source_id, None)
+                self._failed_urls.pop(refresh_key, None)
+                self._pending_refreshes.pop(task_key)
             return self.catalog or catalog
 
     async def prepare_catalog(
-        self, path: str, *, models_url: str
+        self, path: str, *, models_url: str, source_id: str | None = None
     ) -> tuple[str, ModelCatalog]:
         from .catalog import load_model_catalog
 
-        catalog = await load_model_catalog(path).resolve_discovery_async(
-            models_url=models_url, allow_missing_default=True
+        current = self.catalog or load_model_catalog(path)
+        source = current.discovery_source(source_id)
+        if source is None:
+            raise ValueError(f"Unknown discovery source {source_id!r}")
+        catalog = await current.resolve_discovery_async(
+            models_url=models_url,
+            source_id=source.source_id,
+            allow_missing_default=True,
         )
         resolver = ModelRoutingResolver(catalog.to_policy())
         token = uuid4().hex
         async with self._refresh_lock:
             if len(self._prepared) >= 16:
                 self._prepared.pop(next(iter(self._prepared)))
-            self._prepared[token] = (resolver, catalog)
+            self._prepared[token] = (resolver, catalog, source.source_id)
         return token, catalog
 
     async def activate_prepared_catalog(
         self, token: str, *, revision: int | None
     ) -> ModelCatalog:
         async with self._refresh_lock:
-            if revision is None or revision <= self._active_revision:
-                raise ValueError("Prepared catalog revision is stale")
-            prepared = self._prepared.pop(token, None)
+            prepared = self._prepared.get(token)
             if prepared is None:
                 raise ValueError("Prepared model catalog is no longer available")
+            source_id = prepared[2]
+            if revision is None or revision <= self.active_revision_for(source_id):
+                raise ValueError("Prepared catalog revision is stale")
+            self._prepared.pop(token)
             current = self.catalog
             if current is None:
                 raise ValueError("No active model catalog")
+            candidate = current.with_discovery_source_from(prepared[1], prepared[2])
+            prepared_resolver = ModelRoutingResolver(candidate.to_policy())
             self._activation_backups[token] = (
-                self._resolver,
                 current,
-                self._active_revision,
+                source_id,
+                self.active_revision_for(source_id),
                 self._catalog_verified,
             )
             if len(self._activation_backups) > 16:
                 self._activation_backups.pop(next(iter(self._activation_backups)))
-            self._snapshot = prepared
+            self._snapshot = (prepared_resolver, candidate)
             self._catalog_verified = True
-            self._active_revision = revision
-            self._active_preparation_token = token
-            self._failed_url = None
-            self._pending_refresh = None
-            return prepared[1]
+            self._active_revisions[source_id] = revision
+            self._active_preparation_tokens[source_id] = token
+            self._failed_urls = {
+                key: deadline
+                for key, deadline in self._failed_urls.items()
+                if key[0] != source_id
+            }
+            for key in tuple(self._pending_refreshes):
+                if key[0] == source_id:
+                    self._pending_refreshes.pop(key)
+            return candidate
 
     async def rollback_prepared_catalog(self, token: str) -> ModelCatalog:
         async with self._refresh_lock:
             previous = self._activation_backups.pop(token, None)
-            if previous is not None and self._active_preparation_token == token:
-                self._snapshot = (previous[0], previous[1])
-                self._active_revision = previous[2]
-                self._catalog_verified = previous[3]
-                self._active_preparation_token = None
-                self._pending_refresh = None
+            if (
+                previous is not None
+                and self._active_preparation_tokens.get(previous[1]) == token
+            ):
+                current = self.catalog
+                if current is None:
+                    raise ValueError("No active model catalog")
+                catalog = current.with_discovery_source_from(previous[0], previous[1])
+                self._snapshot = (ModelRoutingResolver(catalog.to_policy()), catalog)
+                self._active_revisions[previous[1]] = previous[2]
+                self._catalog_verified = previous[3] or bool(
+                    catalog.verified_discovery_source_ids
+                )
+                self._active_preparation_tokens.pop(previous[1], None)
+                for key in tuple(self._pending_refreshes):
+                    if key[0] == previous[1]:
+                        self._pending_refreshes.pop(key)
             current = self.catalog
             if current is None:
                 raise ValueError("No active model catalog")
@@ -650,7 +678,14 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             team_chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
         )
         if resolution is None:
-            source = self.catalog.discovery if self.catalog is not None else None
+            source = next(
+                (
+                    item
+                    for item in (self.catalog.discovery_sources if self.catalog else ())
+                    if item.default_model_id is not None
+                ),
+                None,
+            )
             if source is not None and source.default_model_id is not None:
                 from hashlib import sha256
 
@@ -720,6 +755,29 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
     def _platform_fallback_selection(
         self, binding: BoundRuntimeContext, removed_profile_id: str
     ) -> ModelSelection:
+        fallback_profile_id = binding.platform_chat_model_fallback_profile_id
+        if fallback_profile_id is not None:
+            profile = self._resolver.profile_or_none(fallback_profile_id)
+            discovered_ids = (
+                set(self.catalog.discovered_profile_ids)
+                if self.catalog is not None
+                else set()
+            )
+            if (
+                profile is None
+                or profile.capability != ModelCapability.CHAT
+                or fallback_profile_id in discovered_ids
+            ):
+                raise ValueError(
+                    f"Platform fallback profile {fallback_profile_id!r} is unavailable"
+                )
+            return ModelSelection(
+                source=ModelSelectionSource.PLATFORM_FALLBACK,
+                capability=ModelCapability.CHAT,
+                profile_id=profile.profile_id,
+                model=profile.model.model_copy(deep=True),
+                capability_id=profile.capability_id,
+            )
         fallback = binding.platform_chat_model_fallback
         if fallback is None:
             raise ValueError(

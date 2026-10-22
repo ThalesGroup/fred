@@ -20,7 +20,7 @@ export interface EntityIdentityProps {
   /** Display name, already translated. */
   name: string;
   /** Material Symbols name for the leading icon. */
-  icon: IconType;
+  icon?: IconType;
   /** The identifier its author wrote, e.g. `fred.samples.assistant`. */
   sourceId?: string | null;
   /** The pod that serves it. Absent for kinds no pod hosts. */
@@ -48,7 +48,7 @@ export function EntityIdentity({ name, icon, sourceId, runtimeId, version, dimme
 
   return (
     <div className={`${styles.root} ${dimmed ? styles.dimmed : ""}`}>
-      <Icon category="outlined" type={icon} />
+      {icon && <Icon category="outlined" type={icon} />}
       <div className={styles.text}>
         <span className={styles.name} title={name}>
           {name}

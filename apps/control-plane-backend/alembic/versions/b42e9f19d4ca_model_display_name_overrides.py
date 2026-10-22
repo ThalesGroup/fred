@@ -67,9 +67,10 @@ def upgrade() -> None:
     op.create_table(
         "platform_model_fallback",
         sa.Column("model_capability", sa.String(), primary_key=True),
-        sa.Column("provider", sa.String(), nullable=False),
-        sa.Column("name", sa.String(), nullable=False),
-        sa.Column("settings_json", sa.Text(), nullable=False),
+        sa.Column("profile_id", sa.String(), nullable=True),
+        sa.Column("provider", sa.String(), nullable=True),
+        sa.Column("name", sa.String(), nullable=True),
+        sa.Column("settings_json", sa.Text(), nullable=True),
         sa.Column("updated_by", sa.String(), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(

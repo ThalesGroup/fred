@@ -418,6 +418,8 @@ class _FakeDeps:
         instances: list[Any] | None = None,
         reasoning_enabled_ids: set[str] | None = None,
         display_name_overrides: dict[str, str] | None = None,
+        fallback_profile_id: str | None = None,
+        removed_profiles: dict[str, str] | None = None,
     ) -> None:
         self._store = store
         self.team_dependencies = type("_TD", (), {"rebac": rebac})()
@@ -431,6 +433,8 @@ class _FakeDeps:
         self._agent_instance_store = _FakeAgentInstanceStore(records)
         store._instances = self._agent_instance_store
         self._reasoning_enabled_ids = reasoning_enabled_ids or set()
+        self._fallback_profile_id = fallback_profile_id
+        self._removed_profiles = removed_profiles or {}
         self._display_name_overrides = display_name_overrides or {}
         self.configuration = SimpleNamespace(
             platform=SimpleNamespace(
@@ -1453,9 +1457,15 @@ class _ResolutionDeps(_FakeDeps):
         sources: list[Any] | None = None,
         reasoning_enabled_ids: set[str] | None = None,
         display_name_overrides: dict[str, str] | None = None,
+        fallback_profile_id: str | None = None,
+        removed_profiles: dict[str, str] | None = None,
     ) -> None:
         super().__init__(
-            store=store, rebac=rebac, display_name_overrides=display_name_overrides
+            store=store,
+            rebac=rebac,
+            display_name_overrides=display_name_overrides,
+            fallback_profile_id=fallback_profile_id,
+            removed_profiles=removed_profiles,
         )
         self._instance = instance
         self._reasoning_enabled_ids = reasoning_enabled_ids or set()
@@ -1496,16 +1506,31 @@ class _ResolutionDeps(_FakeDeps):
         return _Store()
 
     def get_platform_model_fallback_store(self):
+        fallback_profile_id = self._fallback_profile_id
+
         class _Store:
             async def get(self, session=None):
                 return None
 
+            async def get_profile_id(self, session=None):
+                return fallback_profile_id
+
         return _Store()
 
     def get_model_discovery_state_store(self):
+        removed_profiles = self._removed_profiles
+
         class _Store:
             async def list_all(self, session=None):
-                return []
+                return [
+                    SimpleNamespace(
+                        removed=[
+                            {"id": capability_id, "chat_profile_ids": [profile_id]}
+                        ],
+                        active_url=None,
+                    )
+                    for profile_id, capability_id in removed_profiles.items()
+                ]
 
         return _Store()
 
@@ -1529,6 +1554,8 @@ def _resolution_deps(
     sources: list[Any] | None = None,
     reasoning_enabled_ids: set[str] | None = None,
     display_name_overrides: dict[str, str] | None = None,
+    fallback_profile_id: str | None = None,
+    removed_profiles: dict[str, str] | None = None,
 ) -> ProductServiceDependencies:
     stored: dict[str, Any] = {}
     if stored_default is not None or stored_disabled or stored_reasoning_off:
@@ -1546,6 +1573,8 @@ def _resolution_deps(
         sources=sources,
         reasoning_enabled_ids=reasoning_enabled_ids,
         display_name_overrides=display_name_overrides,
+        fallback_profile_id=fallback_profile_id,
+        removed_profiles=removed_profiles,
     )
 
 
@@ -1864,6 +1893,39 @@ async def test_effective_model_names_the_entry_owning_the_winning_profile(
     assert result.capability_id == "model__openai__mistral-medium"
     # The sibling's toggle must not surface an inert control on this model.
     assert result.reasoning_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_effective_model_names_manual_fallback_for_removed_choice(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry(
+                "model__openai__manual-safe",
+                "chat.manual.safe",
+                name="manual-safe",
+                display_name="Safe Chat",
+            )
+        ],
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            instance=_FakeInstanceForResolution(
+                source_agent_id="rico", recommended="discovered.chat.gateway.gone"
+            ),
+            fallback_profile_id="chat.manual.safe",
+            removed_profiles={"discovered.chat.gateway.gone": "model__openai__gone"},
+            display_name_overrides={"model__openai__manual-safe": "Platform Safe"},
+        ),
+    )
+    assert result.name == "manual-safe"
+    assert result.display_name == "Platform Safe"
+    assert result.capability_id == "model__openai__manual-safe"
 
 
 @pytest.mark.asyncio

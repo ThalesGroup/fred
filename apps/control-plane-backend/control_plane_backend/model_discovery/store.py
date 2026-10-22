@@ -168,6 +168,7 @@ class ModelDiscoveryStateStore:
                     new_ids_json="[]",
                 )
                 s.add(row)
+            row.yaml_url = yaml_url
             row.last_attempt_at = utcnow()
             row.last_error = error[:1000]
             return _source_record(row)
@@ -180,15 +181,27 @@ class PlatformModelFallbackStore:
     async def get(self, *, session: AsyncSession | None = None) -> ModelBinding | None:
         async with use_session(self._sessions, session) as s:
             row = await s.get(PlatformModelFallbackRow, "chat")
-            if row is None:
+            if (
+                row is None
+                or row.profile_id is not None
+                or row.provider is None
+                or row.name is None
+            ):
                 return None
             return ModelBinding.model_validate(
                 {
                     "provider": row.provider,
                     "name": row.name,
-                    "settings": json.loads(row.settings_json),
+                    "settings": json.loads(row.settings_json or "{}"),
                 }
             )
+
+    async def get_profile_id(
+        self, *, session: AsyncSession | None = None
+    ) -> str | None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(PlatformModelFallbackRow, "chat")
+            return row.profile_id if row is not None else None
 
     async def set(self, binding: ModelBinding, *, updated_by: str | None) -> None:
         async with use_session(self._sessions) as s:
@@ -197,6 +210,7 @@ class PlatformModelFallbackStore:
                 s.add(
                     PlatformModelFallbackRow(
                         model_capability="chat",
+                        profile_id=None,
                         provider=binding.provider,
                         name=binding.name,
                         settings_json=json.dumps(
@@ -206,11 +220,30 @@ class PlatformModelFallbackStore:
                     )
                 )
             else:
+                row.profile_id = None
                 row.provider = binding.provider
                 row.name = binding.name
                 row.settings_json = json.dumps(
                     binding.settings.model_dump(mode="json", exclude_none=True)
                 )
+                row.updated_by = updated_by
+
+    async def set_profile_id(self, profile_id: str, *, updated_by: str | None) -> None:
+        async with use_session(self._sessions) as s:
+            row = await s.get(PlatformModelFallbackRow, "chat")
+            if row is None:
+                s.add(
+                    PlatformModelFallbackRow(
+                        model_capability="chat",
+                        profile_id=profile_id,
+                        updated_by=updated_by,
+                    )
+                )
+            else:
+                row.profile_id = profile_id
+                row.provider = None
+                row.name = None
+                row.settings_json = None
                 row.updated_by = updated_by
 
     async def delete(self) -> None:

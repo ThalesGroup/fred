@@ -460,10 +460,17 @@ async def resolve_effective_chat_model(
     if pod_models is None:
         return empty
 
-    stored, usable, fallback, discovery_states = await asyncio.gather(
+    (
+        stored,
+        usable,
+        fallback,
+        fallback_profile_id,
+        discovery_states,
+    ) = await asyncio.gather(
         deps.get_team_routing_policy_store().get(team_id=team_id),
         usable_capability_ids(deps.team_dependencies.rebac, team_id),
         deps.get_platform_model_fallback_store().get(),
+        deps.get_platform_model_fallback_store().get_profile_id(),
         deps.get_model_discovery_state_store().list_all(),
     )
     removed_profiles = {
@@ -486,32 +493,45 @@ async def resolve_effective_chat_model(
         )
 
     def _fallback_result() -> EffectiveChatModel:
-        if fallback is None:
-            return empty
-        fallback_base_url = fallback.settings.model_dump(
-            mode="json", exclude_none=True
-        ).get("base_url")
-        discovered_id = next(
-            (
-                item["id"]
-                for state in discovery_states
-                if state.active_url is not None
-                and state.active_url.removesuffix("/models") == fallback_base_url
-                for item in state.inventory
-                if item.get("provider") == fallback.provider
-                and item.get("name") == fallback.name
-            ),
-            None,
-        )
-        expected_id = discovered_id or model_capability_id(
-            fallback.provider, fallback.name
-        )
-        fallback_entry = next(
-            (entry for entry in pod_models.entries if entry.id == expected_id), None
-        )
-        fallback_id = fallback_entry.id if fallback_entry is not None else expected_id
+        if fallback_profile_id is not None:
+            fallback_entry = entry_by_profile.get(fallback_profile_id)
+            if (
+                fallback_entry is None
+                or fallback_entry.model_discovery_source_id is not None
+            ):
+                return empty
+            fallback_id = fallback_entry.id
+            fallback_name = fallback_entry.name
+        else:
+            if fallback is None:
+                return empty
+            fallback_base_url = fallback.settings.model_dump(
+                mode="json", exclude_none=True
+            ).get("base_url")
+            discovered_id = next(
+                (
+                    item["id"]
+                    for state in discovery_states
+                    if state.active_url is not None
+                    and state.active_url.removesuffix("/models") == fallback_base_url
+                    for item in state.inventory
+                    if item.get("provider") == fallback.provider
+                    and item.get("name") == fallback.name
+                ),
+                None,
+            )
+            expected_id = discovered_id or model_capability_id(
+                fallback.provider, fallback.name
+            )
+            fallback_entry = next(
+                (entry for entry in pod_models.entries if entry.id == expected_id), None
+            )
+            fallback_id = (
+                fallback_entry.id if fallback_entry is not None else expected_id
+            )
+            fallback_name = fallback.name
         return EffectiveChatModel(
-            name=fallback.name,
+            name=fallback_name,
             display_name=display_name_overrides.get(
                 fallback_id,
                 fallback_entry.model_display_name

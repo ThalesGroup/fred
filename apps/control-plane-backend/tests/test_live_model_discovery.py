@@ -83,9 +83,12 @@ async def test_successful_inventory_diff_and_failure_preserve_confirmed_removals
         assert second.new_ids == ["model__openai__c"]
         assert [item["id"] for item in second.removed] == ["model__openai__a"]
         failed = await store.record_failure(
-            source_id="gateway", yaml_url=first.yaml_url, error="timeout"
+            source_id="gateway",
+            yaml_url="https://new-models.example/v1/models",
+            error="timeout",
         )
         assert failed.last_error == "timeout"
+        assert failed.yaml_url == "https://new-models.example/v1/models"
         assert failed.removed == second.removed
         assert failed.inventory == second.inventory
         assert failed.active_url == second.active_url
@@ -162,6 +165,9 @@ async def test_url_override_and_fallback_persist_independently() -> None:
         fallback = PlatformModelFallbackStore(engine)
         await fallback.set(binding, updated_by="admin")
         assert await PlatformModelFallbackStore(engine).get() == binding
+        await fallback.set_profile_id("chat.manual", updated_by="admin")
+        assert await fallback.get_profile_id() == "chat.manual"
+        assert await fallback.get() is None
         await fallback.delete()
         assert await fallback.get() is None
     finally:
@@ -379,3 +385,205 @@ async def test_refresh_recovers_when_a_pod_revision_is_ahead(monkeypatch) -> Non
     assert activations == [4, 4]
     assert saved_revision == 4
     assert result.sources[0].available_models[0].name == "b"
+
+
+@pytest.mark.asyncio
+async def test_one_pod_registers_and_refreshes_multiple_sources(monkeypatch) -> None:
+    async def allowed(*args, **kwargs) -> None:
+        return None
+
+    async def no_names(*args, **kwargs) -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(service, "require_manage_capabilities", allowed)
+    monkeypatch.setattr(service, "model_display_name_overrides", no_names)
+    rows: dict[str, StoredDiscoverySourceState] = {}
+
+    class Store:
+        async def get(self, source_id: str) -> StoredDiscoverySourceState | None:
+            return rows.get(source_id)
+
+        async def list_all(self) -> list[StoredDiscoverySourceState]:
+            return list(rows.values())
+
+        async def record_failure(self, **kwargs) -> None:
+            pytest.fail("Both sources should refresh")
+
+        async def save_success(self, **kwargs) -> StoredDiscoverySourceState:
+            source_id = kwargs["source_id"]
+            row = StoredDiscoverySourceState(
+                source_id=source_id,
+                yaml_url=kwargs["yaml_url"],
+                override_url=None,
+                active_url=kwargs["effective_url"],
+                revision=kwargs["applied_revision"],
+                inventory=kwargs["inventory"],
+                removed=[],
+                new_ids=[item["id"] for item in kwargs["inventory"]],
+                last_success_at=None,
+                last_attempt_at=None,
+                last_error=None,
+            )
+            rows[source_id] = row
+            return row
+
+    prepared: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sources = [
+            {
+                "source_id": source_id,
+                "yaml_url": f"https://{source_id}.example/v1/models",
+            }
+            for source_id in ("east", "west")
+        ]
+        if request.method == "GET":
+            return httpx.Response(
+                200, json={"models": [], "discovery_sources": sources}
+            )
+        body = json.loads(request.content)
+        source_id = body.get("source_id")
+        if body.get("prepare"):
+            prepared.append(source_id)
+            model = _model(source_id)
+            return httpx.Response(
+                200,
+                json={
+                    "models": [model],
+                    "discovery_source_id": source_id,
+                    "discovery_effective_url": f"https://{source_id}.example/v1/models",
+                    "discovered_model_ids": [model["id"]],
+                    "preparation_token": f"token-{source_id}",
+                    "active_revision": 0,
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "discovered_model_ids": [
+                    _model("east")["id"]
+                    if body.get("preparation_token") == "token-east"
+                    else _model("west")["id"]
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        deps = cast(
+            ProductServiceDependencies,
+            SimpleNamespace(
+                team_dependencies=SimpleNamespace(rebac=object()),
+                configuration=SimpleNamespace(
+                    platform=SimpleNamespace(
+                        runtime_catalog_sources=[
+                            SimpleNamespace(
+                                base_url="https://pod.example", enabled=True
+                            )
+                        ]
+                    )
+                ),
+                get_model_discovery_state_store=lambda: Store(),
+                get_runtime_http_client=lambda: client,
+            ),
+        )
+        result = await service.refresh(
+            cast(KeycloakUser, object()), deps, authorization=None
+        )
+    assert prepared == ["east", "west"]
+    assert {item.source_id for item in result.sources} == {"east", "west"}
+
+
+@pytest.mark.asyncio
+async def test_model_detail_is_proxied_to_the_selected_runtime(monkeypatch) -> None:
+    async def allowed(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(service, "require_manage_capabilities", allowed)
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"id": "chat-a", "max_context_length": 131072})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        deps = cast(
+            ProductServiceDependencies,
+            SimpleNamespace(
+                team_dependencies=SimpleNamespace(rebac=object()),
+                configuration=SimpleNamespace(
+                    platform=SimpleNamespace(
+                        runtime_catalog_sources=[
+                            SimpleNamespace(
+                                runtime_id="pod-a",
+                                base_url="https://pod.example",
+                                enabled=True,
+                            )
+                        ]
+                    )
+                ),
+                get_runtime_http_client=lambda: client,
+            ),
+        )
+        detail = await service.get_model_detail(
+            cast(KeycloakUser, object()),
+            deps,
+            source_id="east",
+            model_id="chat-a",
+            runtime_id="pod-a",
+            authorization="Bearer test",
+        )
+    assert detail["max_context_length"] == 131072
+    assert dict(requests[0].url.params) == {"source_id": "east", "model_id": "chat-a"}
+    assert requests[0].headers["Authorization"] == "Bearer test"
+
+
+@pytest.mark.asyncio
+async def test_model_detail_tries_another_runtime_when_preferred_is_unavailable(
+    monkeypatch,
+) -> None:
+    async def allowed(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(service, "require_manage_capabilities", allowed)
+    requests: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.host)
+        if request.url.host == "preferred.example":
+            return httpx.Response(503)
+        return httpx.Response(200, json={"id": "chat-a"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        deps = cast(
+            ProductServiceDependencies,
+            SimpleNamespace(
+                team_dependencies=SimpleNamespace(rebac=object()),
+                configuration=SimpleNamespace(
+                    platform=SimpleNamespace(
+                        runtime_catalog_sources=[
+                            SimpleNamespace(
+                                runtime_id="pod-b",
+                                base_url="https://other.example",
+                                enabled=True,
+                            ),
+                            SimpleNamespace(
+                                runtime_id="pod-a",
+                                base_url="https://preferred.example",
+                                enabled=True,
+                            ),
+                        ]
+                    )
+                ),
+                get_runtime_http_client=lambda: client,
+            ),
+        )
+        detail = await service.get_model_detail(
+            cast(KeycloakUser, object()),
+            deps,
+            source_id="east",
+            model_id="chat-a",
+            runtime_id="pod-a",
+            authorization=None,
+        )
+    assert detail == {"id": "chat-a"}
+    assert requests == ["preferred.example", "other.example"]

@@ -520,16 +520,16 @@ def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
 
     catalog = load_model_catalog(catalog_path)
     catalog_verified = True
-    try:
-        catalog = catalog.resolve_discovery()
-    except ValueError as exc:
-        if catalog.discovery is None:
-            raise
-        logger.warning(
-            "[fred-runtime] startup model discovery failed; managed turns can apply the saved URL: %s",
-            exc,
-        )
-        catalog_verified = False
+    for source in catalog.discovery_sources:
+        try:
+            catalog = catalog.resolve_discovery(source_id=source.source_id)
+        except ValueError as exc:
+            logger.warning(
+                "[fred-runtime] startup model discovery failed for %s; managed turns can apply the saved URL: %s",
+                source.source_id,
+                exc,
+            )
+            catalog_verified = False
     policy = catalog.to_policy()
     logger.info(
         "[fred-runtime] model routing from catalog=%s profiles=%d agent_overrides=%d",
@@ -774,6 +774,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         *,
         platform_chat_model_binding: ModelBinding | None = None,
         platform_chat_model_fallback: ModelBinding | None = None,
+        platform_chat_model_fallback_profile_id: str | None = None,
         confirmed_removed_chat_profiles: dict[str, str] | None = None,
         platform_prompt: str | None = None,
         credentials: OutboundCredentialProvider | None = None,
@@ -794,6 +795,9 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # to reach it is this private attribute on the invoker itself.
         self._platform_chat_model_binding = platform_chat_model_binding
         self._platform_chat_model_fallback = platform_chat_model_fallback
+        self._platform_chat_model_fallback_profile_id = (
+            platform_chat_model_fallback_profile_id
+        )
         self._confirmed_removed_chat_profiles = confirmed_removed_chat_profiles or {}
         # TRUSTED, same private channel and same reason: without it a nested
         # `context.invoke_agent(...)` child would compose its prompt with
@@ -896,6 +900,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             # own `context` — that dict has no field for it at all.
             platform_chat_model_binding=self._platform_chat_model_binding,
             platform_chat_model_fallback=self._platform_chat_model_fallback,
+            platform_chat_model_fallback_profile_id=self._platform_chat_model_fallback_profile_id,
             confirmed_removed_chat_profiles=self._confirmed_removed_chat_profiles,
             platform_prompt=self._platform_prompt,
         ):
@@ -1107,6 +1112,7 @@ def _build_runtime_services(
             # never the child's, and never a client-controlled value.
             platform_chat_model_binding=binding.platform_chat_model_binding,
             platform_chat_model_fallback=binding.platform_chat_model_fallback,
+            platform_chat_model_fallback_profile_id=binding.platform_chat_model_fallback_profile_id,
             confirmed_removed_chat_profiles=binding.confirmed_removed_chat_profiles,
             platform_prompt=binding.platform_prompt,
         )
@@ -1370,6 +1376,8 @@ class _ModelCatalogEntry(BaseModel):
     name: str
     description: str | None = None
     profile_ids: list[str] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    chat_capability_verified: bool = False
     """Every `models_catalog.yaml` profile_id sharing this entry's model
     identity — TEAM-ROUTING-POLICY-RFC.md §7.1's id-space
     translation: a routing policy picks by profile_id (finer-grained than
@@ -1454,6 +1462,14 @@ def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | Non
     return value if isinstance(value, str) else None
 
 
+class _ModelDiscoveryAdvertisement(BaseModel):
+    source_id: str
+    yaml_url: str
+    effective_url: str
+    discovered_model_ids: list[str] = Field(default_factory=list)
+    default_profile_id: str | None = None
+
+
 class _ModelCatalogResponse(BaseModel):
     models: list[_ModelCatalogEntry]
     preparation_token: str | None = None
@@ -1463,6 +1479,7 @@ class _ModelCatalogResponse(BaseModel):
     discovery_effective_url: str | None = None
     discovered_model_ids: list[str] = Field(default_factory=list)
     discovery_default_profile_id: str | None = None
+    discovery_sources: list[_ModelDiscoveryAdvertisement] = Field(default_factory=list)
     default_chat_profile_id: str | None = None
     """This pod's `default_profile_by_capability.chat` — the LOWEST precedence
     level (`LLM_ROUTING_FRED.md` §Deterministic precedence), and the one that
@@ -1548,6 +1565,10 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
                 existing.max_input_tokens = profile.max_input_tokens
             if existing.max_output_tokens is None:
                 existing.max_output_tokens = profile.max_output_tokens
+        if profile.capability.value not in existing.capabilities:
+            existing.capabilities.append(profile.capability.value)
+        if profile.profile_id in catalog.verified_chat_profile_ids:
+            existing.chat_capability_verified = True
         if profile.capability == ModelCapability.CHAT:
             existing.chat_profile_ids.append(profile.profile_id)
         # REASON-01 §5.3: aptitude is per profile, the toggle is per model —
@@ -1564,7 +1585,9 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
     return list(seen.values())
 
 
-def _project_model_catalog_response(catalog: Any) -> _ModelCatalogResponse:
+def _project_model_catalog_response(
+    catalog: Any, *, yaml_catalog: Any | None = None, source_id: str | None = None
+) -> _ModelCatalogResponse:
     """Project a loaded `ModelCatalog` into the full `/agents/models-catalog`
     payload: the per-model-identity inventory plus the two pod-owned
     precedence levels control-plane needs.
@@ -1580,27 +1603,48 @@ def _project_model_catalog_response(catalog: Any) -> _ModelCatalogResponse:
     capability_by_profile_id = {
         profile.profile_id: profile.capability for profile in catalog.profiles
     }
-    discovered_profile_ids = set(catalog.discovered_profile_ids)
+    yaml_sources = {
+        source.source_id: source
+        for source in (yaml_catalog or catalog).discovery_sources
+    }
+    advertisements = []
+    for source in catalog.discovery_sources:
+        owned_ids = {
+            profile_id
+            for profile_id, owner in catalog.discovered_profile_sources.items()
+            if owner == source.source_id
+        }
+        default_profile_id = (
+            f"discovered.chat.{source.source_id}."
+            f"{sha256(source.default_model_id.encode('utf-8')).hexdigest()}"
+            if source.default_model_id is not None
+            else None
+        )
+        advertisements.append(
+            _ModelDiscoveryAdvertisement(
+                source_id=source.source_id,
+                yaml_url=f"{yaml_sources[source.source_id].base_url}/models",
+                effective_url=f"{source.base_url}/models",
+                discovered_model_ids=[
+                    profile.capability_id
+                    for profile in catalog.profiles
+                    if profile.profile_id in owned_ids
+                ],
+                default_profile_id=default_profile_id,
+            )
+        )
+    selected = next(
+        (item for item in advertisements if item.source_id == source_id),
+        advertisements[0] if source_id is None and advertisements else None,
+    )
     return _ModelCatalogResponse(
         models=_project_model_catalog_entries(catalog),
-        discovery_source_id=(
-            catalog.discovery.source_id if catalog.discovery else None
-        ),
-        discovery_effective_url=(
-            f"{catalog.discovery.base_url}/models" if catalog.discovery else None
-        ),
-        discovered_model_ids=[
-            profile.capability_id
-            for profile in catalog.profiles
-            if profile.profile_id in discovered_profile_ids
-        ],
-        discovery_default_profile_id=(
-            f"discovered.chat.{catalog.discovery.source_id}."
-            f"{sha256(catalog.discovery.default_model_id.encode('utf-8')).hexdigest()}"
-            if catalog.discovery is not None
-            and catalog.discovery.default_model_id is not None
-            else None
-        ),
+        discovery_sources=advertisements,
+        discovery_source_id=selected.source_id if selected else None,
+        discovery_yaml_url=selected.yaml_url if selected else None,
+        discovery_effective_url=selected.effective_url if selected else None,
+        discovered_model_ids=selected.discovered_model_ids if selected else [],
+        discovery_default_profile_id=selected.default_profile_id if selected else None,
         default_chat_profile_id=catalog.default_profile_by_capability.get(
             ModelCapability.CHAT
         ),
@@ -1625,6 +1669,7 @@ def _catalog_for_advertisement(path: str, snapshot: Any | None) -> Any:
 
 class _ModelCatalogRefreshRequest(BaseModel):
     models_url: str | None = None
+    source_id: str | None = None
     prepare: bool = False
     preparation_token: str | None = None
     rollback_token: str | None = None
@@ -1658,6 +1703,7 @@ class _ResolvedAgentInstance(BaseModel):
     # never read off the caller-supplied context either.
     platform_chat_model_binding: ModelBinding | None = None
     platform_chat_model_fallback: ModelBinding | None = None
+    platform_chat_model_fallback_profile_id: str | None = None
     model_discovery_urls: dict[str, str] = Field(default_factory=dict)
     model_discovery_revisions: dict[str, int] = Field(default_factory=dict)
     confirmed_removed_chat_profiles: dict[str, str] = Field(default_factory=dict)
@@ -1706,6 +1752,7 @@ class _ResolvedExecutionTarget:
     # pod-local routing.
     platform_chat_model_binding: ModelBinding | None = None
     platform_chat_model_fallback: ModelBinding | None = None
+    platform_chat_model_fallback_profile_id: str | None = None
     confirmed_removed_chat_profiles: dict[str, str] = field(default_factory=dict)
     # Platform-wide platform prompt, resolved on the SAME per-turn call as the
     # two fields above and for the same reason. `None` for direct (non-managed)
@@ -1993,15 +2040,19 @@ async def _resolve_agent_instance(
     if resolution.model_discovery_urls:
         runtime_config = get_runtime_context().config
         factory = runtime_config.chat_model_factory
-        if isinstance(factory, RoutedChatModelFactory) and factory.catalog is not None:
-            source = factory.catalog.discovery
-            if source is not None and runtime_config.models_catalog_path:
+        if (
+            isinstance(factory, RoutedChatModelFactory)
+            and factory.catalog is not None
+            and runtime_config.models_catalog_path
+        ):
+            for source in factory.catalog.discovery_sources:
                 effective_url = resolution.model_discovery_urls.get(source.source_id)
                 if effective_url is not None:
                     try:
                         await factory.refresh_catalog(
                             runtime_config.models_catalog_path,
                             models_url=effective_url,
+                            source_id=source.source_id,
                             revision=resolution.model_discovery_revisions.get(
                                 source.source_id, 0
                             ),
@@ -2030,6 +2081,7 @@ async def _resolve_agent_instance(
         team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
         platform_chat_model_fallback=resolution.platform_chat_model_fallback,
+        platform_chat_model_fallback_profile_id=resolution.platform_chat_model_fallback_profile_id,
         confirmed_removed_chat_profiles=resolution.confirmed_removed_chat_profiles,
         platform_prompt=resolution.platform_prompt,
     )
@@ -3839,6 +3891,7 @@ async def _stream(
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
+    platform_chat_model_fallback_profile_id: str | None = None,
     confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -3891,6 +3944,7 @@ async def _stream(
         team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
         platform_chat_model_fallback=platform_chat_model_fallback,
+        platform_chat_model_fallback_profile_id=platform_chat_model_fallback_profile_id,
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
@@ -4487,6 +4541,7 @@ async def _iterate_runtime_event_payloads(
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
+    platform_chat_model_fallback_profile_id: str | None = None,
     confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -4512,6 +4567,7 @@ async def _iterate_runtime_event_payloads(
         team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
         platform_chat_model_fallback=platform_chat_model_fallback,
+        platform_chat_model_fallback_profile_id=platform_chat_model_fallback_profile_id,
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
@@ -4602,6 +4658,7 @@ async def _iterate_runtime_event_payloads_inner(
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
+    platform_chat_model_fallback_profile_id: str | None = None,
     confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
@@ -4786,6 +4843,7 @@ async def _iterate_runtime_event_payloads_inner(
         # chat_default_profile_id above, there is no ctx.get(...) for it at all.
         platform_chat_model_binding=platform_chat_model_binding,
         platform_chat_model_fallback=platform_chat_model_fallback,
+        platform_chat_model_fallback_profile_id=platform_chat_model_fallback_profile_id,
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles or {},
         # TRUSTED, same channel: no ctx.get(...) exists for either field.
         team_disabled_model_ids=tuple(team_disabled_model_ids),
@@ -5468,19 +5526,19 @@ def _build_agent_router(
                 factory.catalog
                 if isinstance(factory, RoutedChatModelFactory)
                 and factory.catalog is not None
-                and factory.catalog.discovery is not None
+                and factory.catalog.discovery_sources
                 else None
             ),
         )
-        result = _project_model_catalog_response(catalog)
-        if isinstance(factory, RoutedChatModelFactory):
-            result.active_revision = factory.active_revision
-        if catalog.discovery is not None:
-            from ..model_routing import load_model_catalog
+        from ..model_routing import load_model_catalog
 
-            source = load_model_catalog(catalog_path).discovery
-            if source is not None:
-                result.discovery_yaml_url = f"{source.base_url}/models"
+        result = _project_model_catalog_response(
+            catalog, yaml_catalog=load_model_catalog(catalog_path)
+        )
+        if isinstance(factory, RoutedChatModelFactory):
+            result.active_revision = factory.active_revision_for(
+                result.discovery_source_id
+            )
         return result
 
     @router.post("/models-catalog/refresh", response_model=_ModelCatalogResponse)
@@ -5503,7 +5561,7 @@ def _build_agent_router(
             factory, RoutedChatModelFactory
         ):
             raise HTTPException(status_code=409, detail="model_discovery_unavailable")
-        if factory.catalog is None or factory.catalog.discovery is None:
+        if factory.catalog is None or not factory.catalog.discovery_sources:
             raise HTTPException(status_code=409, detail="model_discovery_unconfigured")
         try:
             if body.rollback_token is not None:
@@ -5516,11 +5574,16 @@ def _build_agent_router(
                 token = None
             elif body.models_url is not None and body.prepare:
                 token, catalog = await factory.prepare_catalog(
-                    config.models_catalog_path, models_url=body.models_url
+                    config.models_catalog_path,
+                    models_url=body.models_url,
+                    source_id=body.source_id,
                 )
             elif body.models_url is not None:
                 catalog = await factory.refresh_catalog(
-                    config.models_catalog_path, models_url=body.models_url, force=True
+                    config.models_catalog_path,
+                    models_url=body.models_url,
+                    source_id=body.source_id,
+                    force=True,
                 )
                 token = None
             else:
@@ -5530,15 +5593,45 @@ def _build_agent_router(
                 )
         except ValueError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from None
-        result = _project_model_catalog_response(catalog)
-        result.preparation_token = token
-        result.active_revision = factory.active_revision
         from ..model_routing import load_model_catalog
 
-        source = load_model_catalog(config.models_catalog_path).discovery
-        if source is not None:
-            result.discovery_yaml_url = f"{source.base_url}/models"
+        result = _project_model_catalog_response(
+            catalog,
+            yaml_catalog=load_model_catalog(config.models_catalog_path),
+            source_id=body.source_id,
+        )
+        result.preparation_token = token
+        result.active_revision = factory.active_revision_for(result.discovery_source_id)
         return result
+
+    @router.get("/models-catalog/detail", response_model=dict[str, Any])
+    async def get_discovered_model_detail(
+        source_id: str,
+        model_id: str,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> dict[str, Any]:
+        config = get_runtime_context().config
+        rebac = config.rebac_engine
+        if security_enabled:
+            if caller is None or rebac is None or not rebac.enabled:
+                raise HTTPException(
+                    status_code=403, detail="model_discovery_access_denied"
+                )
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID
+            )
+        factory = config.chat_model_factory
+        if not isinstance(factory, RoutedChatModelFactory) or factory.catalog is None:
+            raise HTTPException(status_code=409, detail="model_discovery_unavailable")
+        try:
+            return await factory.catalog.fetch_discovered_model_detail(
+                source_id=source_id, model_id=model_id
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=404 if str(exc) == "Unknown discovered model" else 502,
+                detail=str(exc),
+            ) from None
 
     @router.get("/platform-prompt")
     async def get_platform_prompt_file() -> _PlatformPromptFileResponse:
@@ -6470,6 +6563,7 @@ def _build_agent_router(
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 platform_chat_model_fallback=target.platform_chat_model_fallback,
+                platform_chat_model_fallback_profile_id=target.platform_chat_model_fallback_profile_id,
                 confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
@@ -6580,6 +6674,7 @@ def _build_agent_router(
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 platform_chat_model_fallback=target.platform_chat_model_fallback,
+                platform_chat_model_fallback_profile_id=target.platform_chat_model_fallback_profile_id,
                 confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
@@ -6711,6 +6806,7 @@ def _build_agent_router(
             team_disabled_model_ids=target.team_disabled_model_ids,
             platform_chat_model_binding=target.platform_chat_model_binding,
             platform_chat_model_fallback=target.platform_chat_model_fallback,
+            platform_chat_model_fallback_profile_id=target.platform_chat_model_fallback_profile_id,
             confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
             platform_prompt=target.platform_prompt,
             credential_provider=provider,
@@ -6958,7 +7054,7 @@ def create_agent_app(
                             chat_factory.catalog
                             if isinstance(chat_factory, RoutedChatModelFactory)
                             and chat_factory.catalog is not None
-                            and chat_factory.catalog.discovery is not None
+                            and chat_factory.catalog.discovery_sources
                             else None
                         ),
                         default_platform_prompt=_platform_prompt_file_field(

@@ -25,6 +25,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PlatformModelBinding } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityEnablementItem } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -37,6 +38,7 @@ const h = vi.hoisted(() => ({
   setBinding: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   deleteBinding: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   setFallback: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  manualModels: [] as CapabilityEnablementItem[],
 }));
 
 vi.mock("react-i18next", () => ({
@@ -88,6 +90,7 @@ afterEach(() => {
   h.deleteBinding.mockClear();
   h.setFallback.mockClear();
   h.binding = undefined;
+  h.manualModels = [];
 });
 
 function buttons(): HTMLButtonElement[] {
@@ -123,7 +126,7 @@ function openEditForm() {
 describe("PlatformModelBindingsPanel chat-only surface", () => {
   it("renders exactly one row (chat) when unset", () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
 
     expect(container.textContent).toContain("rework.admin.platformModelBindings.capability.chat");
     expect(container.textContent).not.toContain("rework.admin.platformModelBindings.capability.language");
@@ -134,7 +137,7 @@ describe("PlatformModelBindingsPanel chat-only surface", () => {
 
   it("renders the single row even when the backend response is not yet loaded", () => {
     h.binding = undefined;
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
 
     expect(buttons().filter((b) => b.textContent === "rework.admin.platformModelBindings.editAction")).toHaveLength(2);
   });
@@ -143,29 +146,28 @@ describe("PlatformModelBindingsPanel chat-only surface", () => {
 describe("PlatformModelBindingsPanel fallback", () => {
   it("keeps fallback editing separate from the forced binding", async () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    h.manualModels = [
+      {
+        id: "model-chat-backup",
+        name: "chat-backup",
+        model_display_name: "Chat backup",
+        model_chat_profile_ids: ["manual.chat.backup"],
+        model_fallback_profile_ids: ["manual.chat.backup"],
+        model_runtime_ids: ["fred"],
+      } as CapabilityEnablementItem,
+    ];
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
     expect(container.textContent).toContain("rework.admin.platformModelBindings.noFallback");
     const editButtons = buttons().filter(
       (button) => button.textContent === "rework.admin.platformModelBindings.editAction",
     );
     click(editButtons[1]);
-    const inputs = Array.from(container.querySelectorAll("input"));
-    typeInto(inputs[0], "openai");
-    typeInto(inputs[1], "chat-backup");
-    const textarea = container.querySelector("textarea");
-    expect(textarea).not.toBeNull();
-    typeInto(textarea!, '{"base_url":"https://gateway.example/v1"}');
+    expect(container.textContent).toContain("Chat backup");
     await act(async () => {
       findButton("rework.admin.platformModelBindings.form.save").click();
     });
     expect(h.setFallback).toHaveBeenCalledWith({
-      setPlatformModelFallbackRequest: {
-        binding: {
-          provider: "openai",
-          name: "chat-backup",
-          settings: { base_url: "https://gateway.example/v1" },
-        },
-      },
+      setPlatformModelFallbackRequest: { profile_id: "manual.chat.backup" },
     });
     expect(h.setBinding).not.toHaveBeenCalled();
   });
@@ -186,7 +188,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
         },
       },
     };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
     openEditForm();
 
     const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
@@ -217,7 +219,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
 
   it("reports invalid JSON inline and disables Save without issuing the mutation", () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
     openEditForm();
 
     const inputs = () => Array.from(container.querySelectorAll("input"));
@@ -237,7 +239,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
 
   it("rejects a non-object JSON value (array) the same way as a syntax error", () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
     openEditForm();
 
     const inputs = () => Array.from(container.querySelectorAll("input"));
@@ -253,7 +255,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
 
   it("accepts an empty textarea as an empty settings object", async () => {
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
     openEditForm();
 
     const inputs = () => Array.from(container.querySelectorAll("input"));
@@ -277,7 +279,7 @@ describe("PlatformModelBindingsPanel JSON settings editor", () => {
 describe("PlatformModelBindingsPanel delete/reset", () => {
   it("fires the delete mutation, then reflects the pod-default state once the query catches up", () => {
     h.binding = { model_capability: "chat", binding: { provider: "openai", name: "gpt-5", settings: {} } };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
 
     expect(container.textContent).toContain("boundState:provider=openai,name=gpt-5");
 
@@ -297,7 +299,7 @@ describe("PlatformModelBindingsPanel delete/reset", () => {
     });
     container.remove();
     h.binding = { model_capability: "chat", binding: null };
-    render(<PlatformModelBindingsPanel open onClose={() => {}} />);
+    render(<PlatformModelBindingsPanel open onClose={() => {}} manualModels={h.manualModels} />);
 
     expect(container.textContent).not.toContain("boundState:provider=openai,name=gpt-5");
     expect(container.textContent).toContain("rework.admin.platformModelBindings.podDefault");

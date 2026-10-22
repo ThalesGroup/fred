@@ -190,6 +190,15 @@ class CapabilityEnablementItem(BaseModel):
         default=None,
         description="The pod-advertised discovery source for this model, if any.",
     )
+    model_runtime_ids: list[str] = Field(
+        default_factory=list,
+        description="Runtime pods currently advertising this model.",
+    )
+    model_chat_profile_ids: list[str] = Field(default_factory=list)
+    model_fallback_profile_ids: list[str] = Field(default_factory=list)
+    model_capabilities: list[str] = Field(default_factory=list)
+    model_chat_capability_verified: bool = False
+    model_reasoning_efforts: dict[str, list[str]] = Field(default_factory=dict)
     model_context_window_tokens: int | None = Field(default=None, gt=0)
     model_max_input_tokens: int | None = Field(default=None, gt=0)
     model_max_output_tokens: int | None = Field(default=None, gt=0)

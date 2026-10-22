@@ -988,19 +988,38 @@ async def _model_capabilities_for_source_uncached(
         if isinstance(raw_discovery_source_id, str) and raw_discovery_source_id
         else None
     )
-    discovered_ids = payload.get("discovered_model_ids")
-    discovered = (
-        {item for item in discovered_ids if isinstance(item, str)}
-        if discovery_source_id is not None and isinstance(discovered_ids, list)
-        else set()
-    )
+    discovered_source_by_id: dict[str, str] = {}
+    raw_sources = payload.get("discovery_sources")
+    discovery_default_profile_id: str | None = None
+    if isinstance(raw_sources, list):
+        for source in raw_sources:
+            if not isinstance(source, dict) or not isinstance(
+                source.get("source_id"), str
+            ):
+                continue
+            source_default = source.get("default_profile_id")
+            if isinstance(source_default, str) and source_default:
+                discovery_default_profile_id = source_default
+            for model_id in source.get("discovered_model_ids", []):
+                if isinstance(model_id, str):
+                    discovered_source_by_id[model_id] = source["source_id"]
+    elif discovery_source_id is not None and isinstance(
+        payload.get("discovered_model_ids"), list
+    ):
+        discovered_source_by_id = {
+            model_id: discovery_source_id
+            for model_id in payload["discovered_model_ids"]
+            if isinstance(model_id, str)
+        }
+    if discovery_default_profile_id is None:
+        raw_default = payload.get("discovery_default_profile_id")
+        if isinstance(raw_default, str):
+            discovery_default_profile_id = raw_default
     entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
             source_id=entry["id"],
-            model_discovery_source_id=(
-                discovery_source_id if entry["id"] in discovered else None
-            ),
+            model_discovery_source_id=discovered_source_by_id.get(entry["id"]),
             # No runtime_id on purpose: several pods can serve the same model,
             # and the catalog unions their entries below. A single pod id would
             # be whichever one merged last — arbitrary, and read as fact.
@@ -1013,6 +1032,9 @@ async def _model_capabilities_for_source_uncached(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(entry.get("profile_ids") or ()),
+            model_capabilities=tuple(entry.get("capabilities") or ()),
+            model_chat_capability_verified=entry.get("chat_capability_verified")
+            is True,
             # Team routing is chat-only. Preserve the pod-authored capability
             # projection instead of deriving it from a profile-id naming
             # convention. Missing on an older pod means no chat profile is
@@ -1053,14 +1075,7 @@ async def _model_capabilities_for_source_uncached(
             if isinstance(raw_default := payload.get("default_chat_profile_id"), str)
             else None
         ),
-        discovery_default_profile_id=(
-            raw_discovery_default
-            if isinstance(
-                raw_discovery_default := payload.get("discovery_default_profile_id"),
-                str,
-            )
-            else None
-        ),
+        discovery_default_profile_id=discovery_default_profile_id,
         agent_chat_profile_overrides={
             str(agent_id): str(profile_id)
             for agent_id, profile_id in raw_overrides.items()
@@ -3711,11 +3726,23 @@ async def get_runtime_binding_for_team(
         )
         binding = await resolve_platform_chat_model_binding(deps, session=session)
         fallback = await deps.get_platform_model_fallback_store().get(session=session)
+        fallback_profile_id = (
+            await deps.get_platform_model_fallback_store().get_profile_id(
+                session=session
+            )
+        )
         discovery_states = await deps.get_model_discovery_state_store().list_all(
             session=session
         )
         prompt = await resolve_platform_prompt_text(deps, session=session)
-        return reasoning, binding, fallback, discovery_states, prompt
+        return (
+            reasoning,
+            binding,
+            fallback,
+            fallback_profile_id,
+            discovery_states,
+            prompt,
+        )
 
     team_result, platform_result = await asyncio.gather(
         _in_read_session(deps, _team_reads),
@@ -3728,6 +3755,7 @@ async def get_runtime_binding_for_team(
         reasoning_enabled_model_ids,
         platform_chat_model_binding,
         platform_chat_model_fallback,
+        platform_chat_model_fallback_profile_id,
         discovery_states,
         platform_prompt,
     ) = platform_result
@@ -3761,6 +3789,7 @@ async def get_runtime_binding_for_team(
         ),
         platform_chat_model_binding=platform_chat_model_binding,
         platform_chat_model_fallback=platform_chat_model_fallback,
+        platform_chat_model_fallback_profile_id=platform_chat_model_fallback_profile_id,
         model_discovery_urls={
             state.source_id: state.active_url or state.yaml_url
             for state in discovery_states

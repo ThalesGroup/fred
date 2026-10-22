@@ -54,9 +54,10 @@ class PlatformModelFallbackRow(Base):
     model_capability: Mapped[str] = mapped_column(
         String, primary_key=True, default="chat"
     )
-    provider: Mapped[str] = mapped_column(String, nullable=False)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    settings_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    settings_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow

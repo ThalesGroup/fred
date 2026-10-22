@@ -85,34 +85,60 @@ export function ModelDiscoveryStatus({
   discoveredSourceIds,
   refreshing,
   refreshError,
+  refreshErrorMessage,
   refresh,
 }: {
   data: Status | undefined;
   discoveredSourceIds: string[];
   refreshing: boolean;
   refreshError: boolean;
+  refreshErrorMessage?: string | null;
   refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const sources = data?.sources ?? [];
   const registeredSourceIds = new Set(sources.map((source) => source.source_id));
   const missingSourceIds = [...new Set(discoveredSourceIds)].filter((id) => !registeredSourceIds.has(id));
+  const failedSourceIds = sources.filter((source) => source.last_error).map((source) => source.source_id);
   const newCount = sources.reduce((count, source) => count + (source.new_ids?.length ?? 0), 0);
-  const removed = sources.flatMap((source) => source.removed_models ?? []);
+  const removed = sources.flatMap((source) =>
+    (source.removed_models ?? []).map((model) => ({ ...model, discoverySourceId: source.source_id })),
+  );
 
   return (
     <section className={styles.discoveryStatus} aria-label={t("rework.admin.capabilities.discovery.title")}>
       <div className={styles.discoveryHeading}>
-        <strong>{t("rework.admin.capabilities.discovery.title")}</strong>
-        <Button color="on-surface" variant="outlined" size="small" disabled={refreshing} onClick={() => void refresh()}>
+        <span className={styles.status}>
+          {sources.length > 0
+            ? t("rework.admin.capabilities.discovery.summary", { added: newCount, removed: removed.length })
+            : t("rework.admin.capabilities.discovery.title")}
+        </span>
+        <Button
+          color="on-surface"
+          variant="outlined"
+          size="small"
+          icon={{ category: "outlined", type: "refresh" }}
+          disabled={refreshing}
+          onClick={() => void refresh()}
+        >
           {t("rework.admin.capabilities.discovery.refresh")}
         </Button>
       </div>
       {refreshing && <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>}
       {(refreshError || data?.refresh_error) && (
-        <p className={styles.statusError}>{t("rework.admin.capabilities.discovery.refreshFailed")}</p>
+        <p className={styles.statusError}>
+          {t("rework.admin.capabilities.discovery.refreshFailed")}
+          {refreshErrorMessage && refreshErrorMessage !== t("rework.admin.capabilities.discovery.refreshFailed") && (
+            <> {refreshErrorMessage}</>
+          )}
+        </p>
       )}
-      {data && !refreshing && missingSourceIds.length > 0 && (
+      {failedSourceIds.length > 0 && (
+        <p className={styles.statusError}>
+          {t("rework.admin.capabilities.discovery.failedSources", { sources: failedSourceIds.join(", ") })}
+        </p>
+      )}
+      {data && !refreshing && !refreshError && missingSourceIds.length > 0 && (
         <p className={styles.statusError}>
           {t("rework.admin.capabilities.discovery.unregisteredSource", { sources: missingSourceIds.join(", ") })}
         </p>
@@ -120,32 +146,32 @@ export function ModelDiscoveryStatus({
       {sources.length === 0 ? (
         data &&
         !refreshing &&
+        !refreshError &&
         missingSourceIds.length === 0 && (
           <p className={styles.status}>{t("rework.admin.capabilities.discovery.none")}</p>
         )
       ) : (
         <>
-          <p className={styles.status}>
-            {t("rework.admin.capabilities.discovery.summary", { added: newCount, removed: removed.length })}
-          </p>
-          {sources.map((source) => (
-            <SourceUrlEditor key={source.source_id} source={source} />
-          ))}
-          {removed.length > 0 && (
-            <div className={styles.discoveryRemoved}>
-              <strong>{t("rework.admin.capabilities.discovery.unavailable")}</strong>
-              <ul>
-                {removed.map((model) => (
-                  <li key={model.id}>
-                    {model.display_name ?? model.name} ({model.name})
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <details>
+            <summary>{t("rework.admin.capabilities.discovery.details")}</summary>
+            {sources.map((source) => (
+              <SourceUrlEditor key={source.source_id} source={source} />
+            ))}
+            {removed.length > 0 && (
+              <div className={styles.discoveryRemoved}>
+                <strong>{t("rework.admin.capabilities.discovery.unavailable")}</strong>
+                <ul>
+                  {removed.map((model) => (
+                    <li key={`${model.discoverySourceId}:${model.id}`}>
+                      {model.display_name ?? model.name} ({model.name}) - {model.discoverySourceId}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </details>
         </>
       )}
-      <p className={styles.status}>{t("rework.admin.capabilities.discovery.formatLimit")}</p>
     </section>
   );
 }

@@ -113,16 +113,24 @@ export default function FeaturesPage() {
   const [pendingGrantAll, setPendingGrantAll] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<CapabilityKind>("tool");
+  const [modelTab, setModelTab] = useState<"manual" | "discovered">("manual");
+  const [modelFilter, setModelFilter] = useState("");
   const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
   const { data: discoveryStatus, refetch: refetchDiscoveryStatus } = useModelDiscoveryQuery(undefined, {
     skip: activeKindFilter !== "model",
   });
   const [refreshDiscovery, discoveryRefresh] = useRefreshModelDiscoveryMutation();
   const [modelInventoryReady, setModelInventoryReady] = useState(false);
+  const [modelRefreshError, setModelRefreshError] = useState<string | null>(null);
   const refreshModels = useCallback(async () => {
-    await refreshDiscovery().unwrap();
+    try {
+      const result = await refreshDiscovery().unwrap();
+      setModelRefreshError(result.refresh_error ?? null);
+    } catch {
+      setModelRefreshError(t("rework.admin.capabilities.discovery.refreshFailed"));
+    }
     await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
-  }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus]);
+  }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus, t]);
   useEffect(() => {
     if (activeKindFilter !== "model") return;
     let mounted = true;
@@ -177,6 +185,11 @@ export default function FeaturesPage() {
   // as the backend's own `CapabilityEnablementItem.kind`.
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
   const { manual: manualModels, discovered: discoveredModels } = splitModelSections(capabilities);
+  const visibleModels = (modelTab === "manual" ? manualModels : discoveredModels).filter((model) =>
+    [model.model_display_name, model.name, model.id, ...(model.model_runtime_ids ?? [])]
+      .filter(Boolean)
+      .some((value) => value!.toLocaleLowerCase().includes(modelFilter.trim().toLocaleLowerCase())),
+  );
   const rowIsUnused = (capability: CapabilityEnablementItem) =>
     hasAgentInstanceLifecycle(capability.kind) ? isUnused(capability) : enabledTeamCount(capability) === 0;
 
@@ -436,7 +449,7 @@ export default function FeaturesPage() {
       size: "2.4fr",
       cellRenderer: (cap) =>
         cap.kind === "model" ? (
-          <ModelIdentityCell capability={cap} dimmed={rowIsUnused(cap)} isNew={newModelIds.has(cap.id)} />
+          <ModelIdentityCell capability={cap} dimmed={false} isNew={newModelIds.has(cap.id)} />
         ) : (
           <EntityIdentity
             name={capabilityLabel(t, cap)}
@@ -636,13 +649,39 @@ export default function FeaturesPage() {
       {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
 
       {activeKindFilter === "model" && (
+        <div className={styles.modelToolbar}>
+          <ButtonGroup
+            size="2xs"
+            color="secondary"
+            variant="radio"
+            aria-label={t("rework.admin.capabilities.discovery.tabAria")}
+            selectedIndex={modelTab === "manual" ? 0 : 1}
+            onSelectedIndexChange={(index) => setModelTab(index === 0 ? "manual" : "discovered")}
+            items={[
+              { label: `${t("rework.admin.capabilities.discovery.manualSection")} (${manualModels.length})` },
+              { label: `${t("rework.admin.capabilities.discovery.discoveredSection")} (${discoveredModels.length})` },
+            ]}
+          />
+          <input
+            type="search"
+            className={styles.modelFilter}
+            aria-label={t("rework.admin.capabilities.discovery.filter")}
+            placeholder={t("rework.admin.capabilities.discovery.filter")}
+            value={modelFilter}
+            onChange={(event) => setModelFilter(event.target.value)}
+          />
+        </div>
+      )}
+
+      {activeKindFilter === "model" && modelTab === "discovered" && (
         <ModelDiscoveryStatus
           data={discoveryStatus}
           discoveredSourceIds={discoveredModels.flatMap((model) =>
             model.model_discovery_source_id ? [model.model_discovery_source_id] : [],
           )}
           refreshing={discoveryRefresh.isLoading || !modelInventoryReady}
-          refreshError={discoveryRefresh.isError}
+          refreshError={discoveryRefresh.isError || Boolean(modelRefreshError)}
+          refreshErrorMessage={modelRefreshError}
           refresh={refreshModels}
         />
       )}
@@ -669,44 +708,22 @@ export default function FeaturesPage() {
         (activeKindFilter !== "model" || modelInventoryReady) &&
         capabilities.length > 0 &&
         (activeKindFilter === "model" ? (
-          <div className={styles.modelSections}>
-            {[
-              {
-                key: "manual",
-                title: t("rework.admin.capabilities.discovery.manualSection"),
-                empty: t("rework.admin.capabilities.discovery.emptyManual"),
-                items: manualModels,
-              },
-              {
-                key: "discovered",
-                title: t("rework.admin.capabilities.discovery.discoveredSection"),
-                empty: t("rework.admin.capabilities.discovery.emptyDiscovered"),
-                items: discoveredModels,
-              },
-            ].map((section) => (
-              <section
-                key={section.key}
-                className={`${styles.modelSection} ${section.items.length === 0 ? styles.modelSectionEmpty : ""}`}
-                aria-label={section.title}
-              >
-                <h2 className={styles.modelSectionTitle}>
-                  {section.title} ({section.items.length})
-                </h2>
-                {section.items.length === 0 ? (
-                  <p className={styles.status}>{section.empty}</p>
-                ) : (
-                  <div className={styles.modelSectionTable}>
-                    <DataTable
-                      columns={columns}
-                      data={section.items}
-                      rowKey={(capability) => capability.id}
-                      size="medium"
-                    />
-                  </div>
+          <section
+            className={styles.modelSection}
+            aria-label={t(`rework.admin.capabilities.discovery.${modelTab}Section`)}
+          >
+            {visibleModels.length === 0 ? (
+              <p className={styles.status}>
+                {t(
+                  modelFilter
+                    ? "rework.admin.capabilities.discovery.noMatches"
+                    : `rework.admin.capabilities.discovery.empty${modelTab === "manual" ? "Manual" : "Discovered"}`,
                 )}
-              </section>
-            ))}
-          </div>
+              </p>
+            ) : (
+              <DataTable columns={columns} data={visibleModels} rowKey={(capability) => capability.id} size="medium" />
+            )}
+          </section>
         ) : (
           <DataTable columns={columns} data={capabilities} rowKey={(capability) => capability.id} size="medium" />
         ))}
@@ -726,6 +743,7 @@ export default function FeaturesPage() {
       <PlatformModelBindingsPanel
         open={platformBindingsPanelOpen}
         onClose={() => setPlatformBindingsPanelOpen(false)}
+        manualModels={manualModels}
       />
 
       <SuspendedInstancesDrawer

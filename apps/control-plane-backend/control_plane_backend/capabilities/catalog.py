@@ -210,7 +210,11 @@ async def aggregate_capability_catalog(
                     KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
                 )
                 continue
-            if entry.kind != "model":
+            if entry.kind == "model":
+                entry = entry.model_copy(
+                    update={"model_runtime_ids": (source.runtime_id,)}
+                )
+            else:
                 # Stamp the advertising pod. Skipped for models on purpose:
                 # several pods can serve the same model and their entries are
                 # unioned just below, so a single pod id would be whichever one
@@ -227,6 +231,16 @@ async def aggregate_capability_catalog(
                     update={
                         "model_profile_ids": _union_profile_ids(
                             existing.model_profile_ids, entry.model_profile_ids
+                        ),
+                        "model_capabilities": _union_profile_ids(
+                            existing.model_capabilities, entry.model_capabilities
+                        ),
+                        "model_chat_capability_verified": (
+                            existing.model_chat_capability_verified
+                            or entry.model_chat_capability_verified
+                        ),
+                        "model_runtime_ids": _union_profile_ids(
+                            existing.model_runtime_ids, entry.model_runtime_ids
                         ),
                         "model_chat_profile_ids": _union_profile_ids(
                             existing.model_chat_profile_ids,

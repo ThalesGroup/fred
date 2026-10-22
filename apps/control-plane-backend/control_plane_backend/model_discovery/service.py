@@ -15,12 +15,17 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
 from fred_core import KeycloakUser
-from fred_sdk.contracts.context import ModelBinding
 
-from control_plane_backend.capabilities.catalog import model_display_name_overrides
+from control_plane_backend.capabilities.catalog import (
+    aggregate_capability_catalog,
+    model_display_name_overrides,
+    universally_available_chat_model_profile_ids,
+)
 from control_plane_backend.model_discovery.schemas import (
     DiscoveredModel,
     DiscoverySourceStatus,
@@ -182,10 +187,23 @@ async def refresh(
         if isinstance(item, BaseException):
             continue
         source, payload = item
-        source_id = payload.get("discovery_source_id")
-        yaml_url = payload.get("discovery_yaml_url")
-        if isinstance(source_id, str) and isinstance(yaml_url, str):
-            grouped.setdefault(source_id, []).append((source.base_url, payload))
+        advertised = payload.get("discovery_sources")
+        if not isinstance(advertised, list):
+            advertised = [
+                {
+                    "source_id": payload.get("discovery_source_id"),
+                    "yaml_url": payload.get("discovery_yaml_url"),
+                }
+            ]
+        for source_entry in advertised:
+            if not isinstance(source_entry, dict):
+                continue
+            source_id = source_entry.get("source_id")
+            yaml_url = source_entry.get("yaml_url")
+            if isinstance(source_id, str) and isinstance(yaml_url, str):
+                grouped.setdefault(source_id, []).append(
+                    (source.base_url, {**payload, "discovery_yaml_url": yaml_url})
+                )
 
     for source_id in (proposed_urls or {}).keys() - grouped.keys():
         existing = await store.get(source_id)
@@ -220,7 +238,11 @@ async def refresh(
             *(
                 client.post(
                     f"{base_url.rstrip('/')}/agents/models-catalog/refresh",
-                    json={"models_url": effective_url, "prepare": True},
+                    json={
+                        "source_id": source_id,
+                        "models_url": effective_url,
+                        "prepare": True,
+                    },
                     headers=headers,
                     timeout=10.0,
                     follow_redirects=False,
@@ -294,7 +316,7 @@ async def refresh(
                 *(
                     client.post(
                         f"{base_url.rstrip('/')}/agents/models-catalog/refresh",
-                        json={"rollback_token": token},
+                        json={"source_id": source_id, "rollback_token": token},
                         headers=headers,
                         timeout=5.0,
                         follow_redirects=False,
@@ -309,7 +331,11 @@ async def refresh(
             *(
                 client.post(
                     f"{base_url.rstrip('/')}/agents/models-catalog/refresh",
-                    json={"preparation_token": token, "revision": next_revision},
+                    json={
+                        "source_id": source_id,
+                        "preparation_token": token,
+                        "revision": next_revision,
+                    },
                     headers=headers,
                     timeout=5.0,
                     follow_redirects=False,
@@ -386,16 +412,72 @@ async def get_fallback(
 ) -> PlatformModelFallback:
     await require_manage_capabilities(deps.team_dependencies.rebac, user)
     return PlatformModelFallback(
-        binding=await deps.get_platform_model_fallback_store().get()
+        binding=await deps.get_platform_model_fallback_store().get(),
+        profile_id=await deps.get_platform_model_fallback_store().get_profile_id(),
     )
 
 
+async def get_model_detail(
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+    *,
+    source_id: str,
+    model_id: str,
+    runtime_id: str | None,
+    authorization: str | None,
+) -> dict[str, Any]:
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    sources = [
+        source
+        for source in deps.configuration.platform.runtime_catalog_sources
+        if source.enabled
+    ]
+    if runtime_id is not None:
+        sources.sort(key=lambda source: source.runtime_id != runtime_id)
+    if not sources:
+        raise KeyError("Unknown runtime pod")
+    headers = {"Authorization": authorization} if authorization else None
+    client = deps.get_runtime_http_client()
+    for source in sources:
+        try:
+            response = await client.get(
+                f"{source.base_url.rstrip('/')}/agents/models-catalog/detail",
+                params={"source_id": source_id, "model_id": model_id},
+                headers=headers,
+                timeout=5.0,
+                follow_redirects=False,
+            )
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            payload = response.json()
+            if isinstance(payload, dict):
+                return payload
+        except (httpx.HTTPError, ValueError):
+            continue
+    raise KeyError("Model detail is unavailable")
+
+
 async def set_fallback(
-    user: KeycloakUser, deps: ProductServiceDependencies, binding: ModelBinding
+    user: KeycloakUser, deps: ProductServiceDependencies, profile_id: str
 ) -> PlatformModelFallback:
     await require_manage_capabilities(deps.team_dependencies.rebac, user)
-    await deps.get_platform_model_fallback_store().set(binding, updated_by=user.uid)
-    return PlatformModelFallback(binding=binding)
+    catalog = await aggregate_capability_catalog(deps)
+    manual_profiles = {
+        candidate
+        for entry in catalog.values()
+        if entry.kind == "model" and entry.model_discovery_source_id is None
+        for candidate in entry.model_chat_profile_ids
+    }
+    universal = await universally_available_chat_model_profile_ids(deps)
+    if profile_id not in manual_profiles or profile_id not in universal:
+        raise ValueError(
+            "Fallback must be a manual chat profile available on every agent pod"
+        )
+    await deps.get_platform_model_fallback_store().set_profile_id(
+        profile_id, updated_by=user.uid
+    )
+    return PlatformModelFallback(profile_id=profile_id)
 
 
 async def delete_fallback(
