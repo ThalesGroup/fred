@@ -30,7 +30,7 @@ async def test_close_retains_lifecycle_until_teardown_finishes() -> None:
     assert runtime._lifecycle_task is not None
     release.set()
     with pytest.raises(asyncio.CancelledError):
-        await close
+        _ = await close
     assert runtime._lifecycle_task is None
     assert runtime._close_task is not None and runtime._close_task.done()
     await runtime.aclose()
@@ -56,7 +56,7 @@ async def test_cancelled_init_keeps_lifecycle_for_later_disposal() -> None:
     await started.wait()
     waiter.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await waiter
+        _ = await waiter
     assert runtime._lifecycle_task is lifecycle_task
     release.set()
     await runtime.aclose()
