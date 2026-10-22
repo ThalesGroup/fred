@@ -18,8 +18,8 @@
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NotificationItem } from "./notificationTypes";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { renderNotification, type NotificationItem } from "./notificationTypes";
 
 const listMock = vi.fn();
 const markSeen = vi.fn();
@@ -43,6 +43,11 @@ vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useDeleteNotificationMutation: () => [deleteNotification],
   useClearNotificationsMutation: () => [clearNotifications, { isLoading: false }],
 }));
+// Wrapped so a test can give a pending decision a navigate action, which no type has yet.
+vi.mock("./notificationTypes", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./notificationTypes")>();
+  return { ...actual, renderNotification: vi.fn(actual.renderNotification) };
+});
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError }) }));
 vi.mock("react-redux", () => ({ useDispatch: () => dispatch }));
@@ -223,6 +228,22 @@ describe("NotificationsPopover", () => {
 
     expect(el.querySelector('button[aria-label="rework.notifications.dismiss"]')).toBeNull();
     act(() => el.querySelector<HTMLButtonElement>("li button")!.click());
+
+    expect(deleteNotification).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith("/team/team-1/settings/members");
+  });
+
+  it("a navigate action on a pending decision does not delete it", () => {
+    const real = vi.mocked(renderNotification).getMockImplementation()!;
+    vi.mocked(renderNotification).mockImplementation((item, t) => ({
+      ...real(item, t),
+      actions: [{ id: "open-members", label: "Open members", kind: "navigate", to: "/team/team-1/settings/members" }],
+    }));
+    onTestFinished(() => void vi.mocked(renderNotification).mockImplementation(real));
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    act(() => buttonByText(el, "Open members").click());
 
     expect(deleteNotification).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith("/team/team-1/settings/members");

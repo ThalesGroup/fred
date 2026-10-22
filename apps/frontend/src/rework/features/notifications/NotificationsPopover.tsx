@@ -45,9 +45,8 @@ import styles from "./NotificationsPopover.module.scss";
 export const NOTIFICATIONS_PAGE_SIZE = 50;
 
 interface TileHandlers {
-  onOpen: (notification: NotificationItem, to: string | null) => void;
-  /** Follows the link without discarding the notification. */
-  onFollow: (to: string | null) => void;
+  /** A click on the tile or on a navigate action. */
+  interact: (notification: NotificationItem, to: string | null) => void;
   onAction: (notification: NotificationItem, action: NotificationAction) => void;
   onDismiss: (notification: NotificationItem) => void;
   /** True while one of the notification's actions is in flight. */
@@ -57,7 +56,6 @@ interface TileHandlers {
 function NotificationListItem({ notification, handlers }: { notification: NotificationItem; handlers: TileHandlers }) {
   const { t } = useTranslation();
   const rendered = renderNotification(notification, t);
-  const { pendingDecision } = rendered;
   return (
     <NotificationTile
       icon={rendered.icon}
@@ -75,8 +73,8 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
       }))}
       busy={handlers.isBusy(notification)}
       dismissLabel={t("rework.notifications.dismiss")}
-      dismissible={!pendingDecision}
-      onOpen={() => (pendingDecision ? handlers.onFollow(rendered.link) : handlers.onOpen(notification, rendered.link))}
+      dismissible={!rendered.pendingDecision}
+      onOpen={() => handlers.interact(notification, rendered.link)}
       onDismiss={() => handlers.onDismiss(notification)}
     />
   );
@@ -171,19 +169,16 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   }, [fresh, items, markSeen]);
 
   const handlers: TileHandlers = {
-    // Acting on a tile is done with it: opening or following it dismisses it.
-    onOpen: (notification, to) => {
-      handlers.onDismiss(notification);
-      handlers.onFollow(to);
-    },
-    onFollow: (to) => {
+    // Acting on a tile is done with it, unless it still waits for a decision.
+    interact: (notification, to) => {
+      if (!isPendingDecision(notification)) handlers.onDismiss(notification);
       if (!to) return;
       onClose(false);
       navigate(to);
     },
     onAction: (notification, action) => {
       if (action.kind === "navigate") {
-        handlers.onOpen(notification, action.to);
+        handlers.interact(notification, action.to);
         return;
       }
       // On success the domain endpoint resolves the group and deletes the actor's
