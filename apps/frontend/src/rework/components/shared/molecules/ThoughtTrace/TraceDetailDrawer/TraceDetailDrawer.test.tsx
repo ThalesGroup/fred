@@ -36,12 +36,12 @@ vi.mock("react-i18next", () => ({
       if (key === "rework.chatTrace.tables")
         return `${options?.count ?? 0} ${options?.count === 1 ? "table" : "tables"}`;
       if (key === "rework.chatTrace.tabular.tableNumber") return `Table ${options?.number ?? 0}`;
-      if (key === "rework.chatTrace.toolLabels.readQuery") return "Reading data";
-      if (key === "rework.chatTrace.toolLabels.documents") return "Listing data files";
-      if (key === "rework.chatTrace.toolLabels.markdown") return "Reading the workbook catalog";
-      if (key === "rework.chatTrace.toolLabels.schemas") return "Reading tabular schemas";
-      if (key === "rework.chatTrace.toolLabels.descriptions") return "Reading data structure";
-      if (key === "rework.chatTrace.toolLabels.search") return "Searching data";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.readQuery") return "Reading data";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.documents") return "Listing data files";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.markdown") return "Reading the workbook catalog";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.schemas") return "Reading tabular schemas";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.descriptions") return "Reading data structure";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.search") return "Searching data";
       if (key === "rework.chatTrace.toolStatus.failure") return "Failed";
       if (key === "rework.chatTrace.toolStatus.success") return "Success";
       if (key === "rework.chatTrace.executionTime") return `Execution time: ${options?.duration ?? ""}`;
@@ -631,7 +631,7 @@ describe("TraceDetailDrawer web research", () => {
       },
     );
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("rework.chatTrace.toolLabels.webSearch");
+    expect(html).toContain("rework.chatTrace.toolLabels.capabilities.webResearch.webSearch");
     expect(html).toContain("python release");
     expect(html).toContain('href="https://www.python.org/"');
     expect(html).toContain('rel="noopener noreferrer"');
