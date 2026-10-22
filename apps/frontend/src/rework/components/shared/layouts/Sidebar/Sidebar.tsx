@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import MainNavBar from "./MainNavBar/MainNavBar.tsx";
+import MainNavBar, { ICON_STYLE } from "./MainNavBar/MainNavBar.tsx";
+import NotificationsEntry from "@rework/features/notifications/NotificationsEntry";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
 import styles from "./Sidebar.module.scss";
@@ -34,11 +35,12 @@ export default function Sidebar() {
   return (
     <div className={styles["sidebar-container"]}>
       <div className={styles.rail}>
-        <div className={styles["main-nav-bar-container"]}>
-          <MainNavBar />
-        </div>
         <div className={styles["user-profile-container"]}>
           <UserProfile />
+        </div>
+        <NotificationsEntry iconStyle={ICON_STYLE} />
+        <div className={styles["main-nav-bar-container"]}>
+          <MainNavBar />
         </div>
       </div>
       <div className={styles["nav-panel-card"]}>

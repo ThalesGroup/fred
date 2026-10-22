@@ -24,7 +24,7 @@
   width: 100%;
 }
 
-/* Avatar-only trigger at the bottom of the rail: the hit area spans the whole
+/* Avatar-only trigger at the top of the rail: the hit area spans the whole
  * rail width, not just the avatar circle. */
 .trigger {
   display: flex;
@@ -48,7 +48,7 @@
  * MenuPopover molecule so this menu and the chat options menu stay identical. */
 .popoverWrap {
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: calc(100% + var(--spacing-xs));
   z-index: 10;
   width: 240px;
