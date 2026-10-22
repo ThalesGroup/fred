@@ -18,9 +18,14 @@ import TeamMemberGate from "@shared/organisms/TeamMemberGate/TeamMemberGate.tsx"
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate.tsx";
 import { useTaskPolling } from "../../../../features/tasks/useTaskPolling.ts";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration.ts";
+import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
+import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap.ts";
 import styles from "./MainLayout.module.css";
 
 export default function MainLayout() {
+  // Another session can add or remove the caller from a team: catch up on return.
+  const { refetch: refetchBootstrap } = useFrontendBootstrap();
+  useRefetchOnWindowFocus(refetchBootstrap, false);
   useTaskRehydration();
   useTaskPolling();
   return (

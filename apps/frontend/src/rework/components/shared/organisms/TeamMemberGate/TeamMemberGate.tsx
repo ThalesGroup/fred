@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -33,7 +33,7 @@ import styles from "./TeamMemberGate.module.scss";
 /** Keeps a non-member (e.g. one who left, following an old link) out of a team's pages. */
 export default function TeamMemberGate({ children }: { children: ReactNode }) {
   const { teamId } = useParams<{ teamId: string }>();
-  const { activeTeam } = useFrontendBootstrap();
+  const { activeTeam, availableTeams, refetch: refetchBootstrap } = useFrontendBootstrap();
   const skip = !teamId || isPersonalTeamId(teamId) || teamId === activeTeam?.id;
   // Fresh on every team change: a cached team could predate joining or leaving it.
   const {
@@ -52,10 +52,18 @@ export default function TeamMemberGate({ children }: { children: ReactNode }) {
   const [opened, setOpened] = useState(() => ({ teamId, at: Date.now() }));
   if (opened.teamId !== teamId) setOpened({ teamId, at: Date.now() });
 
-  if (skip) return <>{children}</>;
   const status = error ? normalizeApiError(error).status : undefined;
   const denied = status === 403 || status === 404;
   const known = team?.id === teamId && (fulfilledTimeStamp ?? 0) >= opened.at;
+  const outsider = !!team && team.id === teamId && team.is_member === false;
+  // Removed from the team in another session: drop it from the team list too.
+  const stillListed = availableTeams.some((listed) => listed.id === teamId);
+  const shutOut = !skip && (denied || (known && outsider));
+  useEffect(() => {
+    if (shutOut && stillListed) refetchBootstrap();
+  }, [shutOut, stillListed, refetchBootstrap]);
+
+  if (skip) return <>{children}</>;
   if (!error && !known) {
     return (
       <div className={styles.loading}>
@@ -63,7 +71,6 @@ export default function TeamMemberGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  const outsider = team?.id === teamId && team.is_member === false;
   if (!denied && !outsider) return <>{children}</>;
   return <NotAMember team={denied ? undefined : team} />;
 }

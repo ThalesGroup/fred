@@ -29,6 +29,8 @@ const h = vi.hoisted(() => ({
   error: undefined as unknown,
   fetchedAt: Number.MAX_SAFE_INTEGER as number | undefined,
   requests: [] as Array<{ team_id: string; status: string; can_ask_again_at?: string }>,
+  listed: [] as Array<{ id: string }>,
+  refetchBootstrap: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -36,7 +38,11 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../../../../../hooks/useFrontendBootstrap.ts", () => ({
-  useFrontendBootstrap: () => ({ activeTeam: { id: "personal-me" } }),
+  useFrontendBootstrap: () => ({
+    activeTeam: { id: "personal-me" },
+    availableTeams: h.listed,
+    refetch: h.refetchBootstrap,
+  }),
 }));
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -88,6 +94,8 @@ afterEach(() => {
   h.team = undefined;
   h.error = undefined;
   h.requests = [];
+  h.listed = [];
+  h.refetchBootstrap.mockClear();
   h.fetchedAt = Number.MAX_SAFE_INTEGER;
 });
 
@@ -160,5 +168,25 @@ describe("TeamMemberGate", () => {
     render();
     expect(container.textContent).toContain("rework.teamMemberGate.title");
     expect(container.textContent).toContain("rework.teamMemberGate.browseTeams");
+  });
+
+  it("refreshes the team list when a team it still shows turns the caller away", () => {
+    h.listed = [{ id: "team-1" }];
+    h.error = { status: 403, data: { detail: "nope" } };
+    render();
+    expect(h.refetchBootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the team list alone for a member", () => {
+    h.team = team({ is_member: true });
+    h.listed = [{ id: "team-1" }];
+    render();
+    expect(h.refetchBootstrap).not.toHaveBeenCalled();
+  });
+
+  it("leaves the team list alone when it no longer shows the team", () => {
+    h.error = { status: 403, data: { detail: "nope" } };
+    render();
+    expect(h.refetchBootstrap).not.toHaveBeenCalled();
   });
 });
