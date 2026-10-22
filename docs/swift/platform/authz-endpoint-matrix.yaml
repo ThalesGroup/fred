@@ -1240,11 +1240,6 @@ operations:
     review_status: approved
     required_permission: authenticated # Marks the caller's notifications seen up to `up_to`; 404 unless `up_to` is one of the caller's unexpired notifications, so another user's id reveals nothing.
   - service: control-plane
-    method: POST
-    path: /control-plane/v1/notifications/{notification_id}/read
-    review_status: approved
-    required_permission: authenticated # Marks one of the caller's notifications read (and seen); another user's id answers 404.
-  - service: control-plane
     method: DELETE
     path: /control-plane/v1/notifications/{notification_id}
     review_status: approved
