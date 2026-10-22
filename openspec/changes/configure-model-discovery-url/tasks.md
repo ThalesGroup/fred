@@ -27,6 +27,7 @@
 - [x] 5.2 Replace free-form disappearance fallback with a manual chat-profile selector resolved at runtime; update this PR's single migration and focused tests.
 - [x] 5.3 Exclude entries explicitly marked non-chat by `/models`, read Mistral's context field, and document the optional metadata and reasoning limitation.
 - [ ] 5.4 Regenerate clients, run targeted and root checks, review the whole branch, sync and archive the spec, push the draft PR, and confirm green CI.
+- [x] 5.5 Use the shared platform search field for the model filter.
 
 ## 6. Multiple discovery URLs
 
@@ -39,3 +40,10 @@
 - [x] 7.1 Add an authorized, bounded on-demand `GET /models/{id}` proxy for a discovered model and cover its source routing.
 - [x] 7.2 Show nested detail fields from a clickable information control, preserving context metadata already visible on the row.
 - [ ] 7.3 Verify generated clients, documentation, branch review and green CI before updating the draft PR.
+
+## 8. Unreachable pods and visual verification
+
+- [x] 8.1 Return agent catalogs that cannot be verified as a transient refresh warning without recording model-source failure or removals; show their IDs and URLs in the Discovery tab.
+- [x] 8.2 Verify the full Models admin page in separate Mistral and OpenAI Playwright sessions, each with one endpoint and live provider detail payloads; keep provider-key catalog design in a separate issue.
+- [ ] 8.3 Review the follow-up, update the draft PR and confirm green CI.
+- [x] 8.4 Restrict source URL changes to platform administrators at control-plane and pod boundaries, including prepared-token activation and rollback; cover delegated access.

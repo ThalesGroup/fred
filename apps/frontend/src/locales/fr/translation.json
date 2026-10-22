@@ -1133,7 +1133,6 @@
         },
         "modelSpecs": {
           "source": "Source : {{source}}",
-          "typeUnknown": "Type non précisé",
           "context": "Contexte {{value}}",
           "contextExact": "Contexte : {{count}} tokens",
           "input": "Entrée {{value}}",
@@ -1264,6 +1263,7 @@
           "refresh": "Actualiser",
           "refreshing": "Vérification des modèles disponibles...",
           "refreshFailed": "La découverte a échoué. Le dernier inventaire vérifié reste affiché.",
+          "unverifiedRuntimes": "Impossible de vérifier les catalogues de modèles de ces services d'agents :",
           "failedSources": "Découverte en échec pour : {{sources}}. Les derniers modèles vérifiés restent disponibles.",
           "summary": "{{added}} nouveau(x) modèle(s), {{removed}} modèle(s) indisponible(s)",
           "unavailable": "Modèles indisponibles",
@@ -1272,6 +1272,7 @@
           "discoveredSection": "Modèles issus de la découverte",
           "tabAria": "Origine des modèles",
           "filter": "Filtrer les modèles",
+          "clearFilter": "Effacer le filtre",
           "noMatches": "Aucun modèle ne correspond à ce filtre.",
           "details": "Paramètres de découverte et modèles indisponibles",
           "emptyManual": "Aucun modèle défini manuellement.",

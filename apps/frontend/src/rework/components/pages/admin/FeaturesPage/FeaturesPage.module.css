@@ -44,6 +44,19 @@
   font: var(--font-body-medium);
 }
 
+.statusWarning {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--warning);
+  font: var(--font-body-medium);
+}
+
+.statusWarning code {
+  font-size: inherit;
+  font-family: var(--font-family-mono, monospace);
+}
+
 .capCell {
   display: flex;
   align-items: center;
@@ -103,19 +116,14 @@
 .modelToolbar {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-m);
 }
 
 .modelFilter {
-  border: 1px solid var(--outline-variant);
-  border-radius: 999px;
-  background: var(--surface-container);
-  padding: var(--spacing-xs) var(--spacing-m);
-  min-width: 220px;
-  color: var(--on-surface);
-  font: var(--font-body-medium);
+  align-self: flex-end;
+  width: 240px;
+  max-width: 100%;
 }
 
 .discoveryHeading,
@@ -213,6 +221,10 @@
   gap: var(--spacing-xs);
   border-bottom: 1px solid var(--outline-variant);
   padding: var(--spacing-3xs) 0;
+}
+
+.modelDetailGroup {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .modelDetailField dt {

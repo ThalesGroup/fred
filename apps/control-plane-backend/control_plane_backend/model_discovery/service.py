@@ -31,9 +31,13 @@ from control_plane_backend.model_discovery.schemas import (
     DiscoverySourceStatus,
     ModelDiscoveryStatus,
     PlatformModelFallback,
+    UnverifiedRuntime,
 )
 from control_plane_backend.model_discovery.store import StoredDiscoverySourceState
-from control_plane_backend.organization_authz import require_manage_capabilities
+from control_plane_backend.organization_authz import (
+    require_manage_capabilities,
+    require_manage_model_discovery_urls,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
 
@@ -111,7 +115,7 @@ async def set_url(
     url: str | None,
     authorization: str | None,
 ) -> DiscoverySourceStatus:
-    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    await require_manage_model_discovery_urls(deps.team_dependencies.rebac, user)
     store = deps.get_model_discovery_state_store()
     existing = await store.get(source_id)
     if existing is None:
@@ -130,6 +134,7 @@ async def set_url(
         updated is None
         or updated.last_error is not None
         or result.refresh_error is not None
+        or result.unverified_runtimes
     ):
         raise DiscoveryRefreshError(
             "Discovery URL could not be applied to every runtime pod"
@@ -170,16 +175,31 @@ async def refresh(
     inspected = await asyncio.gather(
         *(inspect(source) for source in sources), return_exceptions=True
     )
-    if any(isinstance(result, BaseException) for result in inspected):
-        known = await store.list_all()
-        for row in known:
-            await store.record_failure(
-                source_id=row.source_id,
-                yaml_url=row.yaml_url,
-                error="Pod catalog unavailable",
-            )
+    unverified = [
+        UnverifiedRuntime(
+            runtime_id=source.runtime_id,
+            base_url=source.base_url,
+        )
+        for source, result in zip(sources, inspected, strict=True)
+        if isinstance(result, BaseException)
+    ]
+    if unverified:
         result = await get_status(user, deps)
-        result.refresh_error = "One or more runtime catalogs could not be checked. No removals were recorded."
+        result.unverified_runtimes = unverified
+        verified_source_ids: set[str] = set()
+        for item in inspected:
+            if isinstance(item, BaseException):
+                continue
+            payload = item[1]
+            advertised = payload.get("discovery_sources")
+            if not isinstance(advertised, list):
+                advertised = [{"source_id": payload.get("discovery_source_id")}]
+            for entry in advertised:
+                if isinstance(entry, dict):
+                    source_id = entry.get("source_id")
+                    if isinstance(source_id, str):
+                        verified_source_ids.add(source_id)
+        result.verified_source_ids = sorted(verified_source_ids)
         return result
 
     grouped: dict[str, list[tuple[str, dict]]] = {}

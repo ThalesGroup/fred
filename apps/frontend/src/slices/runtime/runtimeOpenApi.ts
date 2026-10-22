@@ -152,6 +152,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/pod/v1/agents/models-catalog` }),
     }),
+    getDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGet: build.query<
+      GetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetApiResponse,
+      GetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/models-catalog/detail`,
+        params: {
+          source_id: queryArg.sourceId,
+          model_id: queryArg.modelId,
+        },
+      }),
+    }),
     refreshModelsCatalogPodV1AgentsModelsCatalogRefreshPost: build.mutation<
       RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiResponse,
       RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiArg
@@ -377,6 +389,14 @@ export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiArg = void;
 export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiResponse =
   /** status 200 Successful Response */ ModelCatalogResponse;
 export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiArg = void;
+export type GetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetApiArg = {
+  sourceId: string;
+  modelId: string;
+};
 export type RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiResponse =
   /** status 200 Successful Response */ ModelCatalogResponse;
 export type RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiArg = {
@@ -1009,7 +1029,16 @@ export type McpCatalogEntry = {
 export type McpCatalogResponse = {
   servers: McpCatalogEntry[];
 };
+export type ModelDiscoveryAdvertisement = {
+  default_profile_id?: string | null;
+  discovered_model_ids?: string[];
+  effective_url: string;
+  source_id: string;
+  yaml_url: string;
+};
 export type ModelCatalogEntry = {
+  capabilities?: string[];
+  chat_capability_verified?: boolean;
   chat_profile_ids?: string[];
   context_window_tokens?: number | null;
   description?: string | null;
@@ -1035,6 +1064,7 @@ export type ModelCatalogResponse = {
   discovery_default_profile_id?: string | null;
   discovery_effective_url?: string | null;
   discovery_source_id?: string | null;
+  discovery_sources?: ModelDiscoveryAdvertisement[];
   discovery_yaml_url?: string | null;
   models: ModelCatalogEntry[];
   preparation_token?: string | null;
@@ -1045,6 +1075,7 @@ export type ModelCatalogRefreshRequest = {
   prepare?: boolean;
   revision?: number | null;
   rollback_token?: string | null;
+  source_id?: string | null;
 };
 export type PlatformPromptFileResponse = {
   creation_assistant_prompt: string;
@@ -1301,6 +1332,8 @@ export type CapabilityCatalogEntry = {
   icon: string;
   id: string;
   kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
+  model_capabilities?: string[];
+  model_chat_capability_verified?: boolean;
   model_chat_profile_ids?: string[];
   model_context_window_tokens?: number | null;
   model_discovery_source_id?: string | null;
@@ -1311,6 +1344,7 @@ export type CapabilityCatalogEntry = {
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];
   };
+  model_runtime_ids?: string[];
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;
@@ -1444,6 +1478,8 @@ export const {
   useLazyGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
   useGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
   useLazyGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
+  useGetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetQuery,
+  useLazyGetDiscoveredModelDetailPodV1AgentsModelsCatalogDetailGetQuery,
   useRefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostMutation,
   useGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useLazyGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,

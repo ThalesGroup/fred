@@ -13,11 +13,23 @@
 // limitations under the License.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { ModelDiscoveryStatus } from "./ModelDiscoveryStatus";
 
+const access = vi.hoisted(() => ({ canAdmin: false }));
+vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
+  useUserCapabilities: () => access,
+}));
+
+beforeEach(() => {
+  access.canAdmin = false;
+});
+
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string, values?: { sources?: string }) => `${key}${values?.sources ?? ""}` }),
+  useTranslation: () => ({
+    t: (key: string, values?: { sources?: string; services?: string }) =>
+      `${key}${values?.sources ?? values?.services ?? ""}`,
+  }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: vi.fn() }),
@@ -119,4 +131,70 @@ it("shows a source refresh failure outside the collapsed settings", () => {
   );
   expect(html).toContain("rework.admin.capabilities.discovery.failedSourceswest");
   expect(html.indexOf("failedSourceswest")).toBeLessThan(html.indexOf("<details>"));
+});
+
+it("warns about unreachable agent services without claiming discovery failed", () => {
+  const html = renderToStaticMarkup(
+    <ModelDiscoveryStatus
+      data={{ sources: [] }}
+      discoveredSourceIds={["gateway"]}
+      refreshing={false}
+      refreshError={false}
+      unverifiedRuntimes={[{ runtime_id: "fred-agents", base_url: "http://localhost:8010" }]}
+      refresh={async () => undefined}
+    />,
+  );
+
+  expect(html).toContain("discovery.unverifiedRuntimes");
+  expect(html).toContain("<code>fred-agents</code> (<code>http://localhost:8010</code>)");
+  expect(html).not.toContain("discovery.refreshFailed");
+  expect(html).not.toContain("discovery.unregisteredSource");
+  expect(html).not.toContain("discovery.none");
+});
+
+it("still reports an unregistered source advertised by a reachable pod", () => {
+  const html = renderToStaticMarkup(
+    <ModelDiscoveryStatus
+      data={{ sources: [] }}
+      discoveredSourceIds={["reachable", "unknown"]}
+      refreshing={false}
+      refreshError={false}
+      unverifiedRuntimes={[{ runtime_id: "pod-b", base_url: "http://localhost:8013" }]}
+      verifiedSourceIds={["reachable"]}
+      refresh={async () => undefined}
+    />,
+  );
+
+  expect(html).toContain("discovery.unregisteredSourcereachable");
+  expect(html).not.toContain("unknown");
+});
+
+it("shows the effective URL without edit controls to a delegated feature manager", () => {
+  const source = {
+    source_id: "gateway",
+    yaml_url: "https://models.example/v1/models",
+    effective_url: "https://override.example/v1/models",
+    override_url: "https://override.example/v1/models",
+  };
+  const render = () =>
+    renderToStaticMarkup(
+      <ModelDiscoveryStatus
+        data={{ sources: [source] }}
+        discoveredSourceIds={["gateway"]}
+        refreshing={false}
+        refreshError={false}
+        refresh={async () => undefined}
+      />,
+    );
+
+  const delegated = render();
+  expect(delegated).toContain(source.effective_url);
+  expect(delegated).not.toContain("discovery.save");
+  expect(delegated).not.toContain("discovery.reset");
+  expect(delegated).not.toContain("<input");
+
+  access.canAdmin = true;
+  const admin = render();
+  expect(admin).toContain("discovery.save");
+  expect(admin).toContain("discovery.reset");
 });

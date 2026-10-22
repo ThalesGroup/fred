@@ -5109,9 +5109,15 @@ export type DiscoverySourceStatus = {
   last_attempt_at?: string | null;
   last_error?: string | null;
 };
+export type UnverifiedRuntime = {
+  runtime_id: string;
+  base_url: string;
+};
 export type ModelDiscoveryStatus = {
   sources?: DiscoverySourceStatus[];
   refresh_error?: string | null;
+  unverified_runtimes?: UnverifiedRuntime[];
+  verified_source_ids?: string[];
 };
 export type SetDiscoveryUrlRequest = {
   url?: string | null;

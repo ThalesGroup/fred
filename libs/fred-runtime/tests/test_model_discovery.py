@@ -22,9 +22,12 @@ import httpx
 import pytest
 import yaml
 from conftest import ToolFriendlyFakeChatModel
+from fred_core import OrganizationPermission
 from fred_runtime.app.agent_app import (
     _build_chat_model_factory,
     _catalog_for_advertisement,
+    _model_catalog_refresh_permission,
+    _ModelCatalogRefreshRequest,
     _project_model_catalog_response,
 )
 from fred_runtime.app.config import AgentPodConfig
@@ -70,6 +73,31 @@ def _transport(payload: object, *, status: int = 200) -> httpx.MockTransport:
         return httpx.Response(status, json=payload)
 
     return httpx.MockTransport(respond)
+
+
+def test_refresh_permission_requires_platform_admin_for_new_endpoint() -> None:
+    approved = "https://models.example/v1/models"
+    assert (
+        _model_catalog_refresh_permission(
+            _ModelCatalogRefreshRequest(models_url=approved), approved
+        )
+        == OrganizationPermission.CAN_MANAGE_CAPABILITIES
+    )
+    assert (
+        _model_catalog_refresh_permission(
+            _ModelCatalogRefreshRequest(
+                models_url="https://attacker.example/v1/models"
+            ),
+            approved,
+        )
+        == OrganizationPermission.CAN_MANAGE_PLATFORM
+    )
+    assert (
+        _model_catalog_refresh_permission(
+            _ModelCatalogRefreshRequest(models_url=approved), None
+        )
+        == OrganizationPermission.CAN_MANAGE_PLATFORM
+    )
 
 
 def _multi_source_catalog() -> ModelCatalog:
@@ -249,6 +277,127 @@ async def test_rollback_one_source_preserves_other_source_update(
     }
     assert factory.active_revision_for("east") == 0
     assert factory.active_revision_for("west") == 5
+
+
+@pytest.mark.asyncio
+async def test_delegated_token_cannot_restore_a_replaced_source_url(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_multi_source_catalog().model_dump(mode="json")))
+    initial = _multi_source_catalog().resolve_discovery(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "chat-a"}]})
+        )
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    old_candidate = initial.resolve_discovery(
+        source_id="east",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "chat-new"}]})
+        ),
+    )
+    factory._prepared["old-token"] = (
+        ModelRoutingResolver(old_candidate.to_policy()),
+        old_candidate,
+        "east",
+    )
+    await factory.refresh_catalog(
+        str(path),
+        source_id="east",
+        models_url="https://new-east.example/v1/models",
+        revision=1,
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "chat-b"}]})
+        ),
+    )
+    with pytest.raises(ValueError, match="changes the active discovery URL"):
+        await factory.activate_prepared_catalog(
+            "old-token", revision=2, allow_url_change=False
+        )
+    assert factory.active_revision_for("east") == 1
+    assert factory.catalog is not None
+    active_east = factory.catalog.discovery_source("east")
+    assert active_east is not None
+    assert active_east.base_url == "https://new-east.example/v1"
+
+    factory._prepared["new-token"] = (
+        ModelRoutingResolver(old_candidate.to_policy()),
+        old_candidate,
+        "east",
+    )
+    await factory.activate_prepared_catalog("new-token", revision=2)
+    with pytest.raises(ValueError, match="changes the active discovery URL"):
+        await factory.rollback_prepared_catalog("new-token", allow_url_change=False)
+    assert factory.active_revision_for("east") == 2
+
+
+@pytest.mark.asyncio
+async def test_delegated_direct_refresh_cannot_publish_after_url_change(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_multi_source_catalog().model_dump(mode="json")))
+    initial = _multi_source_catalog().resolve_discovery(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "chat-a"}]})
+        )
+    )
+    old_candidate = initial.resolve_discovery(
+        source_id="east",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "chat-old"}]})
+        ),
+    )
+    new_candidate = initial.resolve_discovery(
+        source_id="east",
+        models_url="https://new-east.example/v1/models",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [{"id": "chat-new"}]})
+        ),
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delayed_discovery(*args, models_url: str, **kwargs) -> ModelCatalog:
+        if models_url == "https://new-east.example/v1/models":
+            return new_candidate
+        started.set()
+        await release.wait()
+        return old_candidate
+
+    monkeypatch.setattr(ModelCatalog, "resolve_discovery_async", delayed_discovery)
+    refresh = asyncio.create_task(
+        factory.refresh_catalog(
+            str(path),
+            source_id="east",
+            models_url="https://east.example/v1/models",
+            force=True,
+            allow_url_change=False,
+        )
+    )
+    await started.wait()
+    await factory.refresh_catalog(
+        str(path),
+        source_id="east",
+        models_url="https://new-east.example/v1/models",
+        revision=1,
+        force=True,
+    )
+    release.set()
+    with pytest.raises(ValueError, match="changed during refresh"):
+        await refresh
+    assert factory.catalog is not None
+    active_east = factory.catalog.discovery_source("east")
+    assert active_east is not None
+    assert active_east.base_url == "https://new-east.example/v1"
 
 
 @pytest.mark.asyncio

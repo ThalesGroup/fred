@@ -8,7 +8,7 @@ Defines how a pod turns model catalog sources into routable profiles and exposes
 
 ### Requirement: A model catalog can discover chat models from a compatible endpoint
 
-The catalog SHALL combine static YAML profiles and one or more named OpenAI-compatible discovery sources. The existing single-source YAML form SHALL remain valid. Source IDs SHALL be unique, and at most one chat default SHALL be declared across manual and discovered profiles. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. An administrator MAY override each URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL retain existing behavior.
+The catalog SHALL combine static YAML profiles and one or more named OpenAI-compatible discovery sources. The existing single-source YAML form SHALL remain valid. Source IDs SHALL be unique, and at most one chat default SHALL be declared across manual and discovered profiles. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. A platform administrator MAY override each URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL retain existing behavior.
 
 #### Scenario: Mixed catalog
 
@@ -76,7 +76,7 @@ The pod SHALL advertise the same successfully resolved inventory it uses for cha
 
 ### Requirement: Discovered model metadata is optional and advisory
 
-The pod SHALL preserve each upstream model identifier as its wire name. It SHALL show valid human-readable names and context limits, including `max_context_length`, when supplied. When `capabilities.completion_chat` is present, the pod SHALL discover only entries where it is true; when absent, it SHALL keep the entry eligible. The admin view SHALL show non-chat profile capability types when relevant and declared reasoning levels without inferring levels from an upstream model name. Metadata SHALL NOT grant access or enable reasoning.
+The pod SHALL preserve each upstream model identifier as its wire name. It SHALL show valid human-readable names and context limits, including `max_context_length`, when supplied. The admin view SHALL show a supplied context limit in a badge and SHALL NOT show a type badge for discovered models. When `capabilities.completion_chat` is present, the pod SHALL discover only entries where it is true; when absent, it SHALL keep the entry eligible. The admin view SHALL show declared reasoning levels without inferring levels from an upstream model name. Metadata SHALL NOT grant access or enable reasoning.
 
 #### Scenario: Basic OpenAI model list
 
@@ -94,7 +94,7 @@ The pod SHALL preserve each upstream model identifier as its wire name. It SHALL
 
 - **GIVEN** a response containing model identifiers without `capabilities.completion_chat`
 - **WHEN** the pod resolves discovery
-- **THEN** all valid entries remain eligible, their type is displayed as unspecified, and unknown limits and reasoning levels are undisplayed
+- **THEN** all valid entries remain eligible, no type badge is shown, and unknown limits and reasoning levels are undisplayed
 
 #### Scenario: Mistral-style chat metadata
 
@@ -175,15 +175,39 @@ The Models admin view SHALL separate manually declared models from models return
 - **WHEN** the Models view renders
 - **THEN** it names the unregistered source while showing the registered source's controls
 
-### Requirement: Administrators can override a discovery URL
+### Requirement: Platform administrators can override a discovery URL
 
-The Models admin view SHALL show each source's YAML and effective URL, last successful check, and refresh result. Opening the view SHALL request a fresh inventory. Overrides SHALL persist and take effect without restarting pods. The view SHALL show new and confirmed removed model counts before model rows. New models SHALL start without a platform default-on grant. Confirmed removed models SHALL remain visible as unavailable, without new activation or selection. A failed refresh SHALL preserve the last successful inventory and SHALL NOT mark any model removed. Clearing an override SHALL restore the YAML URL.
+The Models admin view SHALL show each source's YAML and effective URL, last successful check, and refresh result. Opening the view SHALL request a fresh inventory. Only a platform administrator SHALL edit a source URL; a feature manager MAY refresh its active URL. The pod SHALL independently reject a changed URL from a caller without platform management permission. Overrides SHALL persist and take effect without restarting pods. The view SHALL show new and confirmed removed model counts before model rows. New models SHALL start without a platform default-on grant. Confirmed removed models SHALL remain visible as unavailable, without new activation or selection. A failed refresh SHALL preserve the last successful inventory and SHALL NOT mark any model removed. If an agent pod catalog cannot be verified, the view SHALL show its identity and URL as a warning without persisting a source error; it SHALL still flag unregistered sources advertised by verified pods. Clearing an override SHALL restore the YAML URL.
 
 #### Scenario: Save a URL
 
 - **GIVEN** a discovery source configured in a pod and a platform administrator
 - **WHEN** the administrator saves a valid `/models` URL
 - **THEN** subsequent admin catalog reads and managed chat turns use that URL without restarting the pod
+
+#### Scenario: Delegated feature manager refreshes the active URL
+
+- **GIVEN** a feature manager without platform management permission
+- **WHEN** they refresh discovery or inspect its source settings
+- **THEN** the current URL is used and displayed, but its edit controls are unavailable
+
+#### Scenario: Changed URL requires platform management permission at the pod
+
+- **GIVEN** a caller without platform management permission
+- **WHEN** they call the pod refresh endpoint with a URL different from the active source URL
+- **THEN** the pod denies the request before contacting the new host
+
+#### Scenario: A stale prepared token cannot restore an old URL
+
+- **GIVEN** a feature manager prepared a catalog for URL A and an administrator later activated URL B
+- **WHEN** the feature manager activates or rolls back the old token
+- **THEN** the pod keeps URL B unless the caller has platform management permission
+
+#### Scenario: Saved override after pod restart
+
+- **GIVEN** a saved override and a restarted pod that has only loaded its YAML URL
+- **WHEN** a feature manager requests refresh before the override is restored
+- **THEN** the pod denies the URL change until a managed turn restores it or a platform administrator refreshes it
 
 #### Scenario: Refresh fails
 
@@ -208,6 +232,12 @@ The Models admin view SHALL show each source's YAML and effective URL, last succ
 - **GIVEN** a last successful inventory containing A and B
 - **WHEN** a successful refresh returns B and C
 - **THEN** the summary shows C as new and A as removed, C is disabled by default, and A remains visible as unavailable
+
+#### Scenario: Agent pod catalog cannot be verified
+
+- **GIVEN** a configured pod is unreachable while another pod still responds
+- **WHEN** an administrator refreshes the Models view
+- **THEN** the view warns which pod catalog could not be checked, retains the last verified inventory, and confirms no removals or source failure from this outage
 
 ### Requirement: A confirmed removed model falls back to the platform default
 

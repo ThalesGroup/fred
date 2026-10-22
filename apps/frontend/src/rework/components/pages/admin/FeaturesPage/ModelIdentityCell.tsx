@@ -31,10 +31,9 @@ export function ModelIdentityCell({
 }) {
   const { t, i18n } = useTranslation();
   const reasoningLevels = [...new Set(Object.values(capability.model_reasoning_efforts ?? {}).flat())];
-  const otherCapabilities = capability.model_capabilities?.filter((modelCapability) => modelCapability !== "chat");
-  const discoveredTypeUnknown = Boolean(
-    capability.model_discovery_source_id && !capability.model_chat_capability_verified,
-  );
+  const otherCapabilities = capability.model_discovery_source_id
+    ? []
+    : capability.model_capabilities?.filter((modelCapability) => modelCapability !== "chat");
   const compactTokens = (count: number) =>
     new Intl.NumberFormat(i18n?.language ?? "fr", { notation: "compact", maximumFractionDigits: 1 }).format(count);
   return (
@@ -53,7 +52,6 @@ export function ModelIdentityCell({
         capability.model_max_input_tokens ||
         capability.model_max_output_tokens ||
         otherCapabilities?.length ||
-        discoveredTypeUnknown ||
         reasoningLevels.length > 0 ||
         capability.model_discovery_source_id) && (
         <span className={styles.modelSpecs}>
@@ -62,17 +60,13 @@ export function ModelIdentityCell({
               {t("rework.admin.capabilities.modelSpecs.source", { source: capability.model_discovery_source_id })}
             </span>
           )}
-          {discoveredTypeUnknown && (
-            <span className={styles.modelSpecChip}>{t("rework.admin.capabilities.modelSpecs.typeUnknown")}</span>
-          )}
-          {!discoveredTypeUnknown &&
-            otherCapabilities?.map((modelCapability) => (
-              <span key={modelCapability} className={styles.modelSpecChip}>
-                {t(`rework.admin.capabilities.modelSpecs.capabilities.${modelCapability}`, {
-                  defaultValue: modelCapability,
-                })}
-              </span>
-            ))}
+          {otherCapabilities?.map((modelCapability) => (
+            <span key={modelCapability} className={styles.modelSpecChip}>
+              {t(`rework.admin.capabilities.modelSpecs.capabilities.${modelCapability}`, {
+                defaultValue: modelCapability,
+              })}
+            </span>
+          ))}
           {capability.model_context_window_tokens && (
             <span
               className={styles.modelSpecChip}

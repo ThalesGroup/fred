@@ -70,7 +70,7 @@ describe("ModelIdentityCell", () => {
     expect(markup).not.toContain("modelSpecs.");
   });
 
-  it("does not present an OpenAI discovery entry as verified chat", () => {
+  it("does not present a discovered model type without a portable type field", () => {
     const markup = renderToStaticMarkup(
       <ModelIdentityCell
         capability={{
@@ -81,9 +81,9 @@ describe("ModelIdentityCell", () => {
         dimmed={false}
       />,
     );
-    expect(markup).toContain("modelSpecs.typeUnknown");
     expect(markup).toContain("modelSpecs.source");
     expect(markup).not.toContain("modelSpecs.capabilities.chat");
+    expect(markup).not.toContain("modelSpecs.typeUnknown");
   });
 
   it("does not show a redundant chat chip when the upstream confirms it", () => {
@@ -99,6 +99,5 @@ describe("ModelIdentityCell", () => {
       />,
     );
     expect(markup).not.toContain("modelSpecs.capabilities.chat");
-    expect(markup).not.toContain("modelSpecs.typeUnknown");
   });
 });

@@ -28,6 +28,7 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -122,12 +123,20 @@ export default function FeaturesPage() {
   const [refreshDiscovery, discoveryRefresh] = useRefreshModelDiscoveryMutation();
   const [modelInventoryReady, setModelInventoryReady] = useState(false);
   const [modelRefreshError, setModelRefreshError] = useState<string | null>(null);
+  const [unverifiedModelRuntimes, setUnverifiedModelRuntimes] = useState<{ runtime_id: string; base_url: string }[]>(
+    [],
+  );
+  const [verifiedModelSourceIds, setVerifiedModelSourceIds] = useState<string[]>([]);
   const refreshModels = useCallback(async () => {
     try {
       const result = await refreshDiscovery().unwrap();
       setModelRefreshError(result.refresh_error ?? null);
+      setUnverifiedModelRuntimes(result.unverified_runtimes ?? []);
+      setVerifiedModelSourceIds(result.verified_source_ids ?? []);
     } catch {
       setModelRefreshError(t("rework.admin.capabilities.discovery.refreshFailed"));
+      setUnverifiedModelRuntimes([]);
+      setVerifiedModelSourceIds([]);
     }
     await Promise.all([refetchCapabilities(), refetchDiscoveryStatus()]);
   }, [refreshDiscovery, refetchCapabilities, refetchDiscoveryStatus, t]);
@@ -662,14 +671,6 @@ export default function FeaturesPage() {
               { label: `${t("rework.admin.capabilities.discovery.discoveredSection")} (${discoveredModels.length})` },
             ]}
           />
-          <input
-            type="search"
-            className={styles.modelFilter}
-            aria-label={t("rework.admin.capabilities.discovery.filter")}
-            placeholder={t("rework.admin.capabilities.discovery.filter")}
-            value={modelFilter}
-            onChange={(event) => setModelFilter(event.target.value)}
-          />
         </div>
       )}
 
@@ -682,6 +683,8 @@ export default function FeaturesPage() {
           refreshing={discoveryRefresh.isLoading || !modelInventoryReady}
           refreshError={discoveryRefresh.isError || Boolean(modelRefreshError)}
           refreshErrorMessage={modelRefreshError}
+          unverifiedRuntimes={unverifiedModelRuntimes}
+          verifiedSourceIds={verifiedModelSourceIds}
           refresh={refreshModels}
         />
       )}
@@ -712,6 +715,16 @@ export default function FeaturesPage() {
             className={styles.modelSection}
             aria-label={t(`rework.admin.capabilities.discovery.${modelTab}Section`)}
           >
+            <div className={styles.modelFilter}>
+              <SearchInput
+                size="small"
+                ariaLabel={t("rework.admin.capabilities.discovery.filter")}
+                clearAriaLabel={t("rework.admin.capabilities.discovery.clearFilter")}
+                placeholder={t("rework.admin.capabilities.discovery.filter")}
+                value={modelFilter}
+                onChange={setModelFilter}
+              />
+            </div>
             {visibleModels.length === 0 ? (
               <p className={styles.status}>
                 {t(

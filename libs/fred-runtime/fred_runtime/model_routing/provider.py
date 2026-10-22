@@ -155,7 +155,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         self._active_revisions: dict[str, int] = {}
         self._failed_urls: dict[tuple[str, str | None], float] = {}
         self._pending_refreshes: dict[
-            tuple[str, str | None, int | None], asyncio.Task[ModelCatalog]
+            tuple[str, str | None, int | None, bool], asyncio.Task[ModelCatalog]
         ] = {}
         self._prepared: dict[str, tuple[ModelRoutingResolver, ModelCatalog, str]] = {}
         self._activation_backups: dict[str, tuple[ModelCatalog, str, int, bool]] = {}
@@ -184,6 +184,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         source_id: str | None = None,
         revision: int | None = None,
         force: bool = False,
+        allow_url_change: bool = True,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> ModelCatalog:
         from .catalog import load_model_catalog
@@ -196,6 +197,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             source_id = source.source_id
             refresh_key = (source_id, models_url)
             active_url = f"{source.base_url}/models"
+            if not allow_url_change and models_url != active_url:
+                raise ValueError("Refresh changes the active discovery URL")
+            started_revision = self.active_revision_for(source_id)
             if (
                 not force
                 and revision is not None
@@ -220,7 +224,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 and current is not None
             ):
                 return current
-            task_key = (*refresh_key, revision)
+            task_key = (*refresh_key, revision, allow_url_change)
             task = self._pending_refreshes.get(task_key)
             if task is None:
                 task = asyncio.create_task(
@@ -255,6 +259,21 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     self._pending_refreshes.pop(task_key)
                     return self.catalog or catalog
                 current = self.catalog
+                if not allow_url_change:
+                    current_source = (
+                        current.discovery_source(source_id)
+                        if current is not None
+                        else None
+                    )
+                    if (
+                        current_source is None
+                        or models_url != f"{current_source.base_url}/models"
+                        or self.active_revision_for(source_id) != started_revision
+                    ):
+                        self._pending_refreshes.pop(task_key)
+                        raise ValueError(
+                            "Active discovery source changed during refresh"
+                        )
                 if current is not None and current is not catalog:
                     catalog = current.with_discovery_source_from(catalog, source_id)
                     resolver = ModelRoutingResolver(catalog.to_policy())
@@ -290,7 +309,11 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         return token, catalog
 
     async def activate_prepared_catalog(
-        self, token: str, *, revision: int | None
+        self,
+        token: str,
+        *,
+        revision: int | None,
+        allow_url_change: bool = True,
     ) -> ModelCatalog:
         async with self._refresh_lock:
             prepared = self._prepared.get(token)
@@ -299,10 +322,18 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             source_id = prepared[2]
             if revision is None or revision <= self.active_revision_for(source_id):
                 raise ValueError("Prepared catalog revision is stale")
-            self._prepared.pop(token)
             current = self.catalog
             if current is None:
                 raise ValueError("No active model catalog")
+            previous_source = current.discovery_source(source_id)
+            prepared_source = prepared[1].discovery_source(source_id)
+            if not allow_url_change and (
+                previous_source is None
+                or prepared_source is None
+                or previous_source.base_url != prepared_source.base_url
+            ):
+                raise ValueError("Prepared catalog changes the active discovery URL")
+            self._prepared.pop(token)
             candidate = current.with_discovery_source_from(prepared[1], prepared[2])
             prepared_resolver = ModelRoutingResolver(candidate.to_policy())
             self._activation_backups[token] = (
@@ -327,9 +358,26 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     self._pending_refreshes.pop(key)
             return candidate
 
-    async def rollback_prepared_catalog(self, token: str) -> ModelCatalog:
+    async def rollback_prepared_catalog(
+        self, token: str, *, allow_url_change: bool = True
+    ) -> ModelCatalog:
         async with self._refresh_lock:
-            previous = self._activation_backups.pop(token, None)
+            previous = self._activation_backups.get(token)
+            if previous is not None and not allow_url_change:
+                current = self.catalog
+                current_source = (
+                    current.discovery_source(previous[1])
+                    if current is not None
+                    else None
+                )
+                previous_source = previous[0].discovery_source(previous[1])
+                if (
+                    current_source is None
+                    or previous_source is None
+                    or current_source.base_url != previous_source.base_url
+                ):
+                    raise ValueError("Rollback changes the active discovery URL")
+            self._activation_backups.pop(token, None)
             if (
                 previous is not None
                 and self._active_preparation_tokens.get(previous[1]) == token

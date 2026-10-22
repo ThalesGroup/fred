@@ -45,9 +45,16 @@ class DiscoverySourceStatus(BaseModel):
     last_error: str | None = None
 
 
+class UnverifiedRuntime(BaseModel):
+    runtime_id: str
+    base_url: str
+
+
 class ModelDiscoveryStatus(BaseModel):
     sources: list[DiscoverySourceStatus] = Field(default_factory=list)
     refresh_error: str | None = None
+    unverified_runtimes: list[UnverifiedRuntime] = Field(default_factory=list)
+    verified_source_ids: list[str] = Field(default_factory=list)
 
 
 class SetDiscoveryUrlRequest(BaseModel):

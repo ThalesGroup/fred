@@ -39,6 +39,14 @@ async def require_manage_capabilities(rebac: RebacEngine, user: KeycloakUser) ->
     await _require(rebac, user, OrganizationPermission.CAN_MANAGE_CAPABILITIES)
 
 
+async def require_manage_model_discovery_urls(
+    rebac: RebacEngine, user: KeycloakUser
+) -> None:
+    """URL overrides can send the pod's provider credential to a new host."""
+
+    await _require(rebac, user, OrganizationPermission.CAN_MANAGE_PLATFORM)
+
+
 async def require_edit_platform_prompt(rebac: RebacEngine, user: KeycloakUser) -> None:
     """Platform-prompt gate: `can_edit_platform_prompt` (`platform_admin or
     prompt_editor`). Not `can_manage_platform` — that catch-all also carries

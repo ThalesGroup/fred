@@ -13,10 +13,12 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useUserCapabilities } from "@rework/core/hooks/useUserCapabilities";
 import { useSetModelDiscoveryUrlMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
   DiscoverySourceStatus,
@@ -26,6 +28,7 @@ import styles from "./FeaturesPage.module.css";
 
 function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
   const { t } = useTranslation();
+  const { canAdmin } = useUserCapabilities();
   const { showError } = useToast();
   const [url, setUrl] = useState(source.override_url ?? source.yaml_url);
   const [setUrlMutation, { isLoading }] = useSetModelDiscoveryUrlMutation();
@@ -43,28 +46,42 @@ function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
   return (
     <div className={styles.discoverySource}>
       <strong>{source.source_id}</strong>
-      <TextInput
-        label={t("rework.admin.capabilities.discovery.url")}
-        value={url}
-        onChange={(event) => setUrl(event.target.value)}
-        disabled={isLoading}
-      />
-      <div className={styles.discoveryActions}>
-        <Button
-          color="on-surface"
-          variant="outlined"
-          size="small"
-          disabled={isLoading || !url.trim()}
-          onClick={() => void save(url.trim())}
-        >
-          {t("rework.admin.capabilities.discovery.save")}
-        </Button>
-        {source.override_url && (
-          <Button color="on-surface" variant="text" size="small" disabled={isLoading} onClick={() => void save(null)}>
-            {t("rework.admin.capabilities.discovery.reset")}
-          </Button>
-        )}
-      </div>
+      {canAdmin ? (
+        <>
+          <TextInput
+            label={t("rework.admin.capabilities.discovery.url")}
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            disabled={isLoading}
+          />
+          <div className={styles.discoveryActions}>
+            <Button
+              color="on-surface"
+              variant="outlined"
+              size="small"
+              disabled={isLoading || !url.trim()}
+              onClick={() => void save(url.trim())}
+            >
+              {t("rework.admin.capabilities.discovery.save")}
+            </Button>
+            {source.override_url && (
+              <Button
+                color="on-surface"
+                variant="text"
+                size="small"
+                disabled={isLoading}
+                onClick={() => void save(null)}
+              >
+                {t("rework.admin.capabilities.discovery.reset")}
+              </Button>
+            )}
+          </div>
+        </>
+      ) : (
+        <span className={styles.status}>
+          {t("rework.admin.capabilities.discovery.url")}: {source.effective_url}
+        </span>
+      )}
       <span className={styles.status}>
         {t("rework.admin.capabilities.discovery.yamlUrl", { url: source.yaml_url })}
       </span>
@@ -86,6 +103,8 @@ export function ModelDiscoveryStatus({
   refreshing,
   refreshError,
   refreshErrorMessage,
+  unverifiedRuntimes = [],
+  verifiedSourceIds = [],
   refresh,
 }: {
   data: Status | undefined;
@@ -93,12 +112,16 @@ export function ModelDiscoveryStatus({
   refreshing: boolean;
   refreshError: boolean;
   refreshErrorMessage?: string | null;
+  unverifiedRuntimes?: { runtime_id: string; base_url: string }[];
+  verifiedSourceIds?: string[];
   refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const sources = data?.sources ?? [];
   const registeredSourceIds = new Set(sources.map((source) => source.source_id));
   const missingSourceIds = [...new Set(discoveredSourceIds)].filter((id) => !registeredSourceIds.has(id));
+  const visibleMissingSourceIds =
+    unverifiedRuntimes.length > 0 ? missingSourceIds.filter((id) => verifiedSourceIds.includes(id)) : missingSourceIds;
   const failedSourceIds = sources.filter((source) => source.last_error).map((source) => source.source_id);
   const newCount = sources.reduce((count, source) => count + (source.new_ids?.length ?? 0), 0);
   const removed = sources.flatMap((source) =>
@@ -125,6 +148,20 @@ export function ModelDiscoveryStatus({
         </Button>
       </div>
       {refreshing && <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>}
+      {unverifiedRuntimes.length > 0 && (
+        <p className={styles.statusWarning}>
+          <Icon category="outlined" type="warning" />
+          <span>
+            {t("rework.admin.capabilities.discovery.unverifiedRuntimes")}{" "}
+            {unverifiedRuntimes.map((runtime, index) => (
+              <span key={`${runtime.runtime_id}:${runtime.base_url}`}>
+                {index > 0 && ", "}
+                <code>{runtime.runtime_id}</code> (<code>{runtime.base_url}</code>)
+              </span>
+            ))}
+          </span>
+        </p>
+      )}
       {(refreshError || data?.refresh_error) && (
         <p className={styles.statusError}>
           {t("rework.admin.capabilities.discovery.refreshFailed")}
@@ -138,16 +175,17 @@ export function ModelDiscoveryStatus({
           {t("rework.admin.capabilities.discovery.failedSources", { sources: failedSourceIds.join(", ") })}
         </p>
       )}
-      {data && !refreshing && !refreshError && missingSourceIds.length > 0 && (
+      {data && !refreshing && !refreshError && visibleMissingSourceIds.length > 0 && (
         <p className={styles.statusError}>
-          {t("rework.admin.capabilities.discovery.unregisteredSource", { sources: missingSourceIds.join(", ") })}
+          {t("rework.admin.capabilities.discovery.unregisteredSource", { sources: visibleMissingSourceIds.join(", ") })}
         </p>
       )}
       {sources.length === 0 ? (
         data &&
         !refreshing &&
         !refreshError &&
-        missingSourceIds.length === 0 && (
+        unverifiedRuntimes.length === 0 &&
+        visibleMissingSourceIds.length === 0 && (
           <p className={styles.status}>{t("rework.admin.capabilities.discovery.none")}</p>
         )
       ) : (

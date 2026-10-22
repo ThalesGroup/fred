@@ -4,7 +4,7 @@ The Models tab shows the catalog loaded at pod startup. Administrators cannot ch
 
 ## What Changes
 
-- Keep static YAML profiles and OpenAI-compatible `GET /models` discovery in one catalog. Let an administrator override a source URL, with the YAML URL as its default.
+- Keep static YAML profiles and OpenAI-compatible `GET /models` discovery in one catalog. Let a platform administrator override a source URL, with the YAML URL as its default.
 - Refresh discovery when Features > Models opens. Show new and confirmed removed models before the rows, retain unavailable rows, and keep new models disabled until explicitly enabled. A failed refresh preserves the last successful inventory.
 - Provide a platform fallback chat model independent of the existing forced platform binding. Use it only when a saved selection is confirmed removed, without changing that selection.
 - Apply successful URL and inventory changes without restarting pods. Preserve display-name overrides and stable model identities.

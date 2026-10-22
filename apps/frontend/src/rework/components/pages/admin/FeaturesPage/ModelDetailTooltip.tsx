@@ -22,7 +22,10 @@ function DetailFields({ value }: { value: Record<string, unknown> }) {
   return (
     <dl className={styles.modelDetailFields}>
       {Object.entries(value).map(([key, field]) => (
-        <div className={styles.modelDetailField} key={key}>
+        <div
+          className={`${styles.modelDetailField} ${field !== null && typeof field === "object" ? styles.modelDetailGroup : ""}`}
+          key={key}
+        >
           <dt>{key}</dt>
           <dd>
             {field !== null && typeof field === "object" ? (

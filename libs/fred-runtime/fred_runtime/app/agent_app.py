@@ -1676,6 +1676,14 @@ class _ModelCatalogRefreshRequest(BaseModel):
     revision: int | None = None
 
 
+def _model_catalog_refresh_permission(
+    body: _ModelCatalogRefreshRequest, approved_url: str | None
+) -> OrganizationPermission:
+    if body.models_url is not None and body.models_url != approved_url:
+        return OrganizationPermission.CAN_MANAGE_PLATFORM
+    return OrganizationPermission.CAN_MANAGE_CAPABILITIES
+
+
 class _ResolvedAgentInstance(BaseModel):
     agent_instance_id: str
     template_agent_id: str
@@ -5548,15 +5556,36 @@ def _build_agent_router(
     ) -> _ModelCatalogResponse:
         config = get_runtime_context().config
         rebac = config.rebac_engine
+        factory = config.chat_model_factory
+        catalog = (
+            factory.catalog if isinstance(factory, RoutedChatModelFactory) else None
+        )
+        try:
+            source = (
+                catalog.discovery_source(body.source_id)
+                if catalog is not None
+                else None
+            )
+        except ValueError:
+            source = None
+        approved_url = f"{source.base_url}/models" if source is not None else None
+        allow_url_change = not security_enabled
         if security_enabled:
             if caller is None or rebac is None or not rebac.enabled:
                 raise HTTPException(
                     status_code=403, detail="model_discovery_access_denied"
                 )
             await rebac.check_user_permission_or_raise(
-                caller, OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID
+                caller,
+                _model_catalog_refresh_permission(body, approved_url),
+                ORGANIZATION_ID,
             )
-        factory = config.chat_model_factory
+            if body.models_url is not None and body.models_url != approved_url:
+                allow_url_change = True
+            if body.preparation_token is not None or body.rollback_token is not None:
+                allow_url_change = await rebac.has_user_permission(
+                    caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+                )
         if not config.models_catalog_path or not isinstance(
             factory, RoutedChatModelFactory
         ):
@@ -5565,11 +5594,15 @@ def _build_agent_router(
             raise HTTPException(status_code=409, detail="model_discovery_unconfigured")
         try:
             if body.rollback_token is not None:
-                catalog = await factory.rollback_prepared_catalog(body.rollback_token)
+                catalog = await factory.rollback_prepared_catalog(
+                    body.rollback_token, allow_url_change=allow_url_change
+                )
                 token = None
             elif body.preparation_token is not None:
                 catalog = await factory.activate_prepared_catalog(
-                    body.preparation_token, revision=body.revision
+                    body.preparation_token,
+                    revision=body.revision,
+                    allow_url_change=allow_url_change,
                 )
                 token = None
             elif body.models_url is not None and body.prepare:
@@ -5584,6 +5617,7 @@ def _build_agent_router(
                     models_url=body.models_url,
                     source_id=body.source_id,
                     force=True,
+                    allow_url_change=allow_url_change,
                 )
                 token = None
             else:

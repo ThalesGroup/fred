@@ -1133,7 +1133,6 @@
         },
         "modelSpecs": {
           "source": "Source: {{source}}",
-          "typeUnknown": "Type unspecified",
           "context": "{{value}} context",
           "contextExact": "Context: {{count}} tokens",
           "input": "{{value}} input",
@@ -1264,6 +1263,7 @@
           "refresh": "Refresh",
           "refreshing": "Checking available models...",
           "refreshFailed": "Discovery could not be refreshed. The last verified inventory is shown.",
+          "unverifiedRuntimes": "Could not check the model catalogs of these agent services:",
           "failedSources": "Discovery failed for: {{sources}}. The last verified models remain available.",
           "summary": "{{added}} new model(s), {{removed}} unavailable model(s)",
           "unavailable": "Unavailable models",
@@ -1272,6 +1272,7 @@
           "discoveredSection": "Discovered models",
           "tabAria": "Model source",
           "filter": "Filter models",
+          "clearFilter": "Clear filter",
           "noMatches": "No models match this filter.",
           "details": "Discovery settings and unavailable models",
           "emptyManual": "No manually configured models.",

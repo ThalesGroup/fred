@@ -34,7 +34,7 @@ from control_plane_backend.models.model_discovery_models import (
     PlatformModelFallbackRow,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, OrganizationPermission
 from fred_sdk.contracts.context import ModelBinding
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -186,6 +186,117 @@ async def test_url_override_and_fallback_persist_independently() -> None:
 def test_discovery_override_rejects_unsafe_urls(url: str) -> None:
     with pytest.raises(ValueError):
         validate_models_url(url)
+
+
+@pytest.mark.asyncio
+async def test_url_override_requires_platform_admin_before_store_access() -> None:
+    class Rebac:
+        async def check_user_permission_or_raise(
+            self,
+            user: KeycloakUser,
+            permission: OrganizationPermission,
+            resource_id: str,
+        ) -> None:
+            assert permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+            raise PermissionError("delegated feature manager")
+
+    deps = cast(
+        ProductServiceDependencies,
+        SimpleNamespace(team_dependencies=SimpleNamespace(rebac=Rebac())),
+    )
+    with pytest.raises(PermissionError, match="delegated feature manager"):
+        await service.set_url(
+            cast(KeycloakUser, object()),
+            deps,
+            source_id="gateway",
+            url="https://attacker.example/v1/models",
+            authorization=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_unreachable_runtime_is_a_transient_warning(monkeypatch) -> None:
+    async def allowed(*args, **kwargs) -> None:
+        return None
+
+    async def no_names(*args, **kwargs) -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(service, "require_manage_capabilities", allowed)
+    monkeypatch.setattr(service, "model_display_name_overrides", no_names)
+    row = StoredDiscoverySourceState(
+        source_id="gateway",
+        yaml_url="https://models.example/v1/models",
+        override_url=None,
+        active_url="https://models.example/v1/models",
+        revision=1,
+        inventory=[_model("a")],
+        removed=[],
+        new_ids=[],
+        last_success_at=None,
+        last_attempt_at=None,
+        last_error=None,
+    )
+
+    class Store:
+        async def list_all(self) -> list[StoredDiscoverySourceState]:
+            return [row]
+
+        async def record_failure(self, **kwargs) -> None:
+            pytest.fail("A pod outage must not be persisted as a source failure")
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "pod-b.example":
+            raise httpx.ConnectError("unreachable")
+        return httpx.Response(
+            200,
+            json={
+                "models": [_model("a")],
+                "discovery_sources": [
+                    {
+                        "source_id": "gateway",
+                        "yaml_url": "https://models.example/v1/models",
+                    }
+                ],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        deps = cast(
+            ProductServiceDependencies,
+            SimpleNamespace(
+                team_dependencies=SimpleNamespace(rebac=object()),
+                configuration=SimpleNamespace(
+                    platform=SimpleNamespace(
+                        runtime_catalog_sources=[
+                            SimpleNamespace(
+                                runtime_id="pod-a",
+                                base_url="https://pod-a.example",
+                                enabled=True,
+                            ),
+                            SimpleNamespace(
+                                runtime_id="pod-b",
+                                base_url="https://pod-b.example",
+                                enabled=True,
+                            ),
+                        ]
+                    )
+                ),
+                get_model_discovery_state_store=lambda: Store(),
+                get_runtime_http_client=lambda: client,
+            ),
+        )
+        result = await service.refresh(
+            cast(KeycloakUser, object()), deps, authorization="Bearer test"
+        )
+
+    assert result.refresh_error is None
+    assert [
+        (item.runtime_id, item.base_url) for item in result.unverified_runtimes
+    ] == [("pod-b", "https://pod-b.example")]
+    assert result.verified_source_ids == ["gateway"]
+    assert result.sources[0].last_error is None
+    assert [model.name for model in result.sources[0].available_models] == ["a"]
 
 
 @pytest.mark.asyncio
