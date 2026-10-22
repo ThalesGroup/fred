@@ -30,7 +30,10 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.models.base import utcnow
-from control_plane_backend.models.notification_models import NotificationRow
+from control_plane_backend.models.notification_models import (
+    DisabledNotificationTypeRow,
+    NotificationRow,
+)
 
 #: How long a notification lives after its creation.
 NOTIFICATION_TTL = timedelta(days=30)
@@ -370,8 +373,45 @@ class NotificationStore:
                 delete(NotificationRow).where(NotificationRow.team_id == team_id)
             )
 
+    async def disabled_types(self) -> dict[str, DisabledType]:
+        """The types a platform admin turned off; a handful of rows at most."""
+        async with use_session(self._sessions) as s:
+            rows = (await s.execute(select(DisabledNotificationTypeRow))).scalars()
+            return {
+                row.type: DisabledType(
+                    disabled_by=row.disabled_by, disabled_at=_aware(row.disabled_at)
+                )
+                for row in rows
+            }
+
+    async def disable_type(self, type_: str, *, disabled_by: str | None) -> int:
+        """Turn `type_` off and delete every sent notification of it, in one
+        transaction. Returns how many notifications went."""
+        async with use_session(self._sessions) as s:
+            if await s.get(DisabledNotificationTypeRow, type_) is None:
+                s.add(DisabledNotificationTypeRow(type=type_, disabled_by=disabled_by))
+            result = await s.execute(
+                delete(NotificationRow).where(NotificationRow.type == type_)
+            )
+            return _rowcount(result)
+
+    async def enable_type(self, type_: str) -> None:
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(DisabledNotificationTypeRow).where(
+                    DisabledNotificationTypeRow.type == type_
+                )
+            )
+
+
+@dataclass(frozen=True)
+class DisabledType:
+    disabled_by: str | None
+    disabled_at: datetime
+
 
 __all__ = [
+    "DisabledType",
     "NOTIFICATION_TTL",
     "NotificationDraft",
     "NotificationStore",

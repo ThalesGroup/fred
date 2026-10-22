@@ -25,10 +25,12 @@ import logging
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, OrganizationPermission
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
     RebacEngine,
     RebacReference,
     Resource,
@@ -42,10 +44,13 @@ from control_plane_backend.notifications.schemas import (
     NotificationPage,
     NotificationSummary,
     NotificationType,
+    NotificationTypeSetting,
+    NotificationTypeSettings,
     NotificationView,
     validate_payload,
 )
 from control_plane_backend.notifications.store import (
+    DisabledType,
     NotificationDraft,
     NotificationStore,
     PageCursor,
@@ -155,6 +160,8 @@ class NotificationService:
         try:
             for draft in drafts:
                 validate_payload(draft.type, draft.payload)
+            disabled = await self._store.disabled_types()
+            drafts = [d for d in drafts if d.type not in disabled]
             drafts = await self._allowed_recipients(drafts)
             if not drafts:
                 return True
@@ -319,6 +326,59 @@ class NotificationService:
 
     async def clear(self, user: KeycloakUser) -> None:
         await self._store.delete_all(user.uid)
+
+    # --- platform settings ------------------------------------------------------
+
+    async def _require_manage_platform(self, user: KeycloakUser) -> None:
+        # Same platform gate as the UI theme and announcement settings.
+        if self._get_rebac is None:
+            raise RuntimeError("platform settings need a ReBAC engine")
+        await self._get_rebac().check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+
+    async def list_type_settings(self, user: KeycloakUser) -> NotificationTypeSettings:
+        await self._require_manage_platform(user)
+        disabled = await self._store.disabled_types()
+        return NotificationTypeSettings(
+            items=[
+                _setting(type_, disabled.get(type_.value)) for type_ in NotificationType
+            ]
+        )
+
+    async def set_type_enabled(
+        self, user: KeycloakUser, type_: NotificationType, enabled: bool
+    ) -> NotificationTypeSetting:
+        """Off deletes every sent notification of the type for everyone; back on
+        only affects new events."""
+        await self._require_manage_platform(user)
+        deleted = 0
+        if enabled:
+            await self._store.enable_type(type_.value)
+        else:
+            deleted = await self._store.disable_type(type_.value, disabled_by=user.uid)
+        emit_audit_log(
+            "platform.notification_type.updated",
+            actor_uid=user.uid,
+            notification_type=type_.value,
+            enabled=enabled,
+            deleted_notifications=deleted,
+        )
+        disabled = await self._store.disabled_types()
+        return _setting(type_, disabled.get(type_.value))
+
+
+def _setting(
+    type_: NotificationType, disabled: DisabledType | None
+) -> NotificationTypeSetting:
+    if disabled is None:
+        return NotificationTypeSetting(type=type_, enabled=True)
+    return NotificationTypeSetting(
+        type=type_,
+        enabled=False,
+        disabled_by=disabled.disabled_by,
+        disabled_at=disabled.disabled_at,
+    )
 
 
 __all__ = [

@@ -191,3 +191,32 @@ class MarkNotificationsSeenRequest(BaseModel):
         description="The newest notification id the popover listed; it and every "
         "older notification are marked seen."
     )
+
+
+class NotificationTypeSetting(BaseModel):
+    """One notification type and whether the platform sends it. The frontend
+    names and describes it from `type`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: NotificationType
+    enabled: bool
+    disabled_by: str | None = None
+    disabled_at: datetime | None = None
+
+
+class NotificationTypeSettings(BaseModel):
+    """Every type this version knows, in declaration order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[NotificationTypeSetting]
+
+
+class SetNotificationTypeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        description="False stops sending the type and deletes every notification "
+        "of it already sent; true only affects new events."
+    )

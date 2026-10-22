@@ -5200,6 +5200,22 @@ s; `LifecycleManagerResult.notifications` reports `deleted` and `batches`.
 Deleting a user deletes their rows; deleting a team deletes the rows carrying
 its `team_id`. Full behavior: OpenSpec `add-in-app-notifications`.
 
+**Platform switch per type.** `can_manage_platform`, as the UI theme settings.
+
+| Route                                                        | Body                                 | Response                   |
+| ------------------------------------------------------------ | ------------------------------------ | -------------------------- |
+| `GET /admin/platform/notification-types`                     | —                                    | `NotificationTypeSettings` |
+| `PUT /admin/platform/notification-types/{notification_type}` | `SetNotificationTypeRequest.enabled` | `NotificationTypeSetting`  |
+
+The list is every `NotificationType`, in declaration order, with `enabled` and,
+when off, `disabled_by`/`disabled_at`; the frontend names each type from its
+value. Storage is `disabled_notification_types` (one row per type turned off; no
+row means on). `notify_many` drops drafts of a disabled type with one read of
+that table. Turning a type off deletes every row of it for every recipient in
+the same transaction; turning it back on only affects new events. Platform-wide
+only; the underlying actions (e.g. Members > Pending requests) stay available.
+Audit event `platform.notification_type.updated` (type, enabled, deleted count).
+
 ## 70. Contract Notes — team join requests (2026-10-22, #3232)
 
 **Access mode.** `JoiningMode` gains `on_request`, next to `open` and

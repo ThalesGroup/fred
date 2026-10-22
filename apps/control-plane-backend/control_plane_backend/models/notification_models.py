@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """In-app notifications: one row per recipient, rendered by the frontend from
-`type` and `payload`."""
+`type` and `payload`, plus the types a platform admin turned off."""
 
 from __future__ import annotations
 
@@ -93,3 +93,15 @@ Index(
     postgresql_where=text("handled_at IS NULL"),
     sqlite_where=text("handled_at IS NULL"),
 )
+
+
+class DisabledNotificationTypeRow(Base):
+    """A notification type the platform does not send. No row: the type is on."""
+
+    __tablename__ = "disabled_notification_types"
+
+    type: Mapped[str] = mapped_column(String(64), primary_key=True)
+    disabled_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    disabled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

@@ -1729,6 +1729,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/notifications/${queryArg.notificationId}`, method: "DELETE" }),
     }),
+    listNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGet: build.query<
+      ListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetApiResponse,
+      ListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/notification-types` }),
+    }),
+    setNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePut: build.mutation<
+      SetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutApiResponse,
+      SetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/notification-types/${queryArg.notificationType}`,
+        method: "PUT",
+        body: queryArg.setNotificationTypeRequest,
+      }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -3318,6 +3334,15 @@ export type MarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPos
 export type DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiResponse = unknown;
 export type DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiArg = {
   notificationId: string;
+};
+export type ListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetApiResponse =
+  /** status 200 Successful Response */ NotificationTypeSettings;
+export type ListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetApiArg = void;
+export type SetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutApiResponse =
+  /** status 200 Successful Response */ NotificationTypeSetting;
+export type SetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutApiArg = {
+  notificationType: NotificationType;
+  setNotificationTypeRequest: SetNotificationTypeRequest;
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
@@ -5789,6 +5814,24 @@ export type MarkNotificationsSeenRequest = {
   /** The newest notification id the popover listed; it and every older notification are marked seen. */
   up_to: string;
 };
+export type NotificationType =
+  | "agent.republish_needed"
+  | "agent.marketplace_removed"
+  | "team.join_requested"
+  | "team.join_request_answered";
+export type NotificationTypeSetting = {
+  type: NotificationType;
+  enabled: boolean;
+  disabled_by?: string | null;
+  disabled_at?: string | null;
+};
+export type NotificationTypeSettings = {
+  items: NotificationTypeSetting[];
+};
+export type SetNotificationTypeRequest = {
+  /** False stops sending the type and deletes every notification of it already sent; true only affects new events. */
+  enabled: boolean;
+};
 export type StartTaskResponse = {
   task_id: string;
 };
@@ -6444,6 +6487,9 @@ export const {
   useMarkNotificationsSeenControlPlaneV1NotificationsSeenPostMutation,
   useMarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostMutation,
   useDeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteMutation,
+  useListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery,
+  useLazyListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery,
+  useSetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

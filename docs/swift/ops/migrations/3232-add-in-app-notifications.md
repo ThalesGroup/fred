@@ -3,13 +3,13 @@ schema: 1
 title: "In-app notifications and team join requests"
 impact: minor
 configuration: none
-configuration_reason: "Only two new control-plane tables, one nullable column on agent_marketplace_entry, a new opt-in team access mode, new routes and a lifecycle step change; no configuration keys, environment variables or Helm values change."
+configuration_reason: "Only three new control-plane tables, one nullable column on agent_marketplace_entry, a new opt-in team access mode, new routes and a lifecycle step change; no configuration keys, environment variables or Helm values change."
 ---
 
 ## Applicability
 
-Every Fred deployment. The control-plane database gains the `notifications`
-and `team_join_requests` tables and the nullable
+Every Fred deployment. The control-plane database gains the `notifications`,
+`team_join_requests` and `disabled_notification_types` tables and the nullable
 `agent_marketplace_entry.published_by` column. Teams gain the opt-in access
 mode `on_request`; every team keeps its current mode.
 
@@ -25,8 +25,10 @@ No configuration changes are required.
 
 Apply the control-plane Alembic head before starting the new control plane and
 its Temporal worker. This contribution's revisions, `fe166447f3d5` (creates
-`notifications`, adds `published_by`) then `77cd5dc306cf` (creates
-`team_join_requests`), rewrite no existing row. No other
+`notifications`, adds `published_by`), `77cd5dc306cf` (creates
+`team_join_requests`) then `83b81adf7450` (creates the empty
+`disabled_notification_types`: every notification type stays on), rewrite no
+existing row. No other
 operator action is needed: the lifecycle workflow picks up the expiry step on
 its next tick.
 
@@ -40,8 +42,13 @@ Set a public team to On request, then ask to join it as a non-member: each of
 its admins' notification counts becomes 1, and accepting makes the requester a
 member of the team.
 
+In Administration > Notifications, a platform admin sees every notification
+type switched on.
+
 ## Rollback
 
+Downgrading `83b81adf7450` drops `disabled_notification_types`: every type is
+sent again; notifications deleted when a type was turned off do not come back.
 Downgrading `77cd5dc306cf` drops `team_join_requests` and turns every
 `on_request` team back into `invite_only`, which older versions understand;
 pending and refused requests are lost. Downgrading `fe166447f3d5` then drops the `notifications` table and the

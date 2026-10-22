@@ -411,6 +411,124 @@ async def test_notification_routes_reject_an_unauthenticated_caller(
             await http.post(f"{base}/x/read"),
             await http.delete(f"{base}/x"),
             await http.delete(base),
+            await http.get("/control-plane/v1/admin/platform/notification-types"),
         ]
 
-    assert [response.status_code for response in responses] == [401] * 6
+    assert [response.status_code for response in responses] == [401] * 7
+
+
+# --- platform switch per type ---------------------------------------------------
+
+
+class _PlatformRebac:
+    """Only `admin` manages the platform; every team check passes."""
+
+    async def check_user_permission_or_raise(self, user, permission, resource_id, **_):
+        if user.uid != "admin":
+            raise PermissionError(user.uid)
+
+    async def has_permission(self, *_, **__) -> bool:
+        return True
+
+
+@pytest_asyncio.fixture
+async def admin_service(control_plane_sql_engine: AsyncEngine) -> NotificationService:
+    return NotificationService(
+        NotificationStore(control_plane_sql_engine),
+        get_rebac=lambda: cast(RebacEngine, _PlatformRebac()),
+    )
+
+
+@pytest.mark.asyncio
+async def test_every_type_is_listed_and_on_by_default(
+    admin_service: NotificationService,
+) -> None:
+    settings = await admin_service.list_type_settings(_user("admin"))
+
+    assert [item.type for item in settings.items] == list(NotificationType)
+    assert all(item.enabled for item in settings.items)
+
+
+@pytest.mark.asyncio
+async def test_turning_a_type_off_deletes_it_for_everyone_and_stops_sending_it(
+    admin_service: NotificationService,
+) -> None:
+    await _notify(admin_service, "alice", "bob")
+    off = await admin_service.set_type_enabled(
+        _user("admin"), NotificationType.AGENT_REPUBLISH_NEEDED, False
+    )
+    assert not off.enabled and off.disabled_by == "admin"
+
+    for uid in ("alice", "bob"):
+        page = await admin_service.list_page(_user(uid), limit=50, before=None)
+        assert page.items == []
+    assert await _notify(admin_service, "alice", group="g2")
+    page = await admin_service.list_page(_user("alice"), limit=50, before=None)
+    assert page.items == []
+
+    on = await admin_service.set_type_enabled(
+        _user("admin"), NotificationType.AGENT_REPUBLISH_NEEDED, True
+    )
+    assert on.enabled and on.disabled_at is None
+    # Back on: only new events, nothing deleted comes back.
+    await _notify(admin_service, "alice", group="g3")
+    page = await admin_service.list_page(_user("alice"), limit=50, before=None)
+    assert len(page.items) == 1
+
+
+@pytest.mark.asyncio
+async def test_turning_a_type_off_leaves_the_other_types(
+    admin_service: NotificationService,
+) -> None:
+    await _notify(admin_service, "alice")
+    await admin_service.set_type_enabled(
+        _user("admin"), NotificationType.TEAM_JOIN_REQUESTED, False
+    )
+    await admin_service.set_type_enabled(
+        _user("admin"), NotificationType.TEAM_JOIN_REQUESTED, False
+    )
+
+    page = await admin_service.list_page(_user("alice"), limit=50, before=None)
+    assert len(page.items) == 1
+    settings = await admin_service.list_type_settings(_user("admin"))
+    assert [item.type for item in settings.items if not item.enabled] == [
+        NotificationType.TEAM_JOIN_REQUESTED
+    ]
+
+
+@pytest.mark.asyncio
+async def test_only_a_platform_admin_reads_or_changes_the_switches(
+    admin_service: NotificationService,
+) -> None:
+    with pytest.raises(PermissionError):
+        await admin_service.list_type_settings(_user("alice"))
+    with pytest.raises(PermissionError):
+        await admin_service.set_type_enabled(
+            _user("alice"), NotificationType.AGENT_REPUBLISH_NEEDED, False
+        )
+    settings = await admin_service.list_type_settings(_user("admin"))
+    assert all(item.enabled for item in settings.items)
+
+
+@pytest.mark.asyncio
+async def test_type_routes_list_and_switch(admin_service: NotificationService) -> None:
+    app = FastAPI()
+    app.include_router(notifications_api.router)
+    attach_application_container(
+        app,
+        SimpleNamespace(get_notification_service=lambda: admin_service),  # type: ignore[arg-type]
+    )
+    app.dependency_overrides[get_current_user] = lambda: _user("admin")
+    base = "/admin/platform/notification-types"
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as http:
+        listed = (await http.get(base)).json()["items"]
+        assert [item["type"] for item in listed] == [t.value for t in NotificationType]
+        switched = await http.put(
+            f"{base}/team.join_requested", json={"enabled": False}
+        )
+        assert switched.status_code == 200
+        assert switched.json()["enabled"] is False
+        unknown = await http.put(f"{base}/team.unknown", json={"enabled": False})
+        assert unknown.status_code == 422

@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The caller's own notifications. No route creates one: the control-plane
-services that emit them compute their recipients."""
+"""The caller's own notifications, and the platform admin's switch per type.
+No route creates one: the control-plane services that emit them compute their
+recipients."""
 
 from __future__ import annotations
 
@@ -28,6 +29,10 @@ from control_plane_backend.notifications.schemas import (
     MarkNotificationsSeenRequest,
     NotificationPage,
     NotificationSummary,
+    NotificationType,
+    NotificationTypeSetting,
+    NotificationTypeSettings,
+    SetNotificationTypeRequest,
 )
 from control_plane_backend.notifications.service import (
     InvalidNotificationCursor,
@@ -148,3 +153,32 @@ async def clear_notifications(
 ) -> Response:
     await notifications.clear(user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/admin/platform/notification-types",
+    response_model=NotificationTypeSettings,
+    summary="List every notification type and whether it is sent (platform admin).",
+)
+async def list_notification_types(
+    notifications: Notifications,
+    user: KeycloakUser = Depends(get_current_user),
+) -> NotificationTypeSettings:
+    return await notifications.list_type_settings(user)
+
+
+@router.put(
+    "/admin/platform/notification-types/{notification_type}",
+    response_model=NotificationTypeSetting,
+    summary="Turn one notification type on or off for the platform (platform admin).",
+)
+async def set_notification_type(
+    notification_type: NotificationType,
+    request: SetNotificationTypeRequest,
+    notifications: Notifications,
+    user: KeycloakUser = Depends(get_current_user),
+) -> NotificationTypeSetting:
+    """Off deletes every notification of the type already sent, for everyone."""
+    return await notifications.set_type_enabled(
+        user, notification_type, request.enabled
+    )
