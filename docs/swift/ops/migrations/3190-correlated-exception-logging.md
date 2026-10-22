@@ -4,6 +4,7 @@ title: "Restore correlated exception tracebacks and separate duplicate filtering
 impact: minor
 configuration: none
 configuration_reason: "Shared Python logging behavior changes; no configuration keys, defaults or chart values change."
+after: [3211-compose-chart-registrations]
 ---
 
 ## Applicability
