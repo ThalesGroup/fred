@@ -309,6 +309,10 @@ describe("SelfTestPage credential-expiry check", () => {
   });
 
   it("reports into its own panel, beside the authorization probe's", () => {
+    expect(container.textContent).not.toContain("EXPIRY_STEP");
+    act(() => {
+      for (const button of container.querySelectorAll<HTMLButtonElement>('[aria-expanded="false"]')) button.click();
+    });
     expect(container.textContent).toContain("EXPIRY_STEP");
     expect(container.textContent).toContain("rework.selftest.authz.expiry.title");
   });

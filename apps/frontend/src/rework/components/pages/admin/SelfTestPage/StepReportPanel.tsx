@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge.tsx";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar.tsx";
 import type { TaskState } from "../../../../features/tasks/taskTypes";
@@ -59,6 +60,7 @@ interface StepReportPanelProps {
 export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPanelProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const passed = steps.filter((s) => s.status === "passed").length;
   const failed = steps.filter((s) => s.status === "failed").length;
@@ -93,6 +95,14 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
           <TaskStateBadge state={state} size="md" />
         )}
         <span className={styles.counts}>{t("rework.selftest.report.counts", { passed, failed, skipped, total })}</span>
+        <IconButton
+          icon={{ category: "outlined", type: collapsed ? "expand_more" : "expand_less" }}
+          variant="icon"
+          size="small"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-label={t(collapsed ? "rework.selftest.report.expand" : "rework.selftest.report.collapse")}
+          aria-expanded={!collapsed}
+        />
         <Button
           color="secondary"
           variant="outlined"
@@ -106,20 +116,22 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
       </div>
       <TaskProgressBar state={state} progress={progress} />
 
-      <ul className={styles.steps}>
-        {steps.map((step) => (
-          <li key={step.id} className={styles.step}>
-            <TaskStateBadge state={STEP_TO_TASK_STATE[step.status]} showLabel={false} size="md" />
-            <div className={styles.stepBody}>
-              <span className={styles.stepTitle}>{step.title}</span>
-              {(step.error || step.detail) && (
-                <span className={step.error ? styles.stepError : styles.stepDetail}>{step.error ?? step.detail}</span>
-              )}
-            </div>
-            {step.durationMs != null && <span className={styles.duration}>{step.durationMs} ms</span>}
-          </li>
-        ))}
-      </ul>
+      {!collapsed && (
+        <ul className={styles.steps}>
+          {steps.map((step) => (
+            <li key={step.id} className={styles.step}>
+              <TaskStateBadge state={STEP_TO_TASK_STATE[step.status]} showLabel={false} size="md" />
+              <div className={styles.stepBody}>
+                <span className={styles.stepTitle}>{step.title}</span>
+                {(step.error || step.detail) && (
+                  <span className={step.error ? styles.stepError : styles.stepDetail}>{step.error ?? step.detail}</span>
+                )}
+              </div>
+              {step.durationMs != null && <span className={styles.duration}>{step.durationMs} ms</span>}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

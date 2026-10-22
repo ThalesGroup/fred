@@ -2640,6 +2640,8 @@
         "running": "En cours…",
         "empty": "Aucune exécution.",
         "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
+        "expand": "Afficher les étapes",
+        "collapse": "Masquer les étapes",
         "copy": "Copier le rapport",
         "copied": "Copié"
       },

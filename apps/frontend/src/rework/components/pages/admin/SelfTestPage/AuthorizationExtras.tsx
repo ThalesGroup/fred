@@ -141,29 +141,31 @@ export function AuthorizationExtras({ busy, onRunningChange }: AuthorizationExtr
         </div>
       )}
 
-      <div className={styles.testProfilePanel}>
-        {campaign.hasRecovery && (
-          <>
-            <p role="alert" className={styles.error}>
-              {t("rework.selftest.authz.campaign.recoveryNotice")}
-            </p>
-            <Button
-              color="secondary"
-              variant="outlined"
-              size="medium"
-              disabled={busy}
-              onClick={() => void campaign.recover()}
-            >
-              {t("rework.selftest.authz.campaign.recover")}
-            </Button>
-          </>
-        )}
-        <StepReportPanel
-          steps={campaign.steps}
-          isRunning={campaign.isRunning}
-          emptyLabel={t("rework.selftest.report.empty")}
-        />
-      </div>
+      {(campaign.hasRecovery || campaign.isRunning || campaign.steps.length > 0) && (
+        <div className={styles.testProfilePanel}>
+          {campaign.hasRecovery && (
+            <>
+              <p role="alert" className={styles.error}>
+                {t("rework.selftest.authz.campaign.recoveryNotice")}
+              </p>
+              <Button
+                color="secondary"
+                variant="outlined"
+                size="medium"
+                disabled={busy}
+                onClick={() => void campaign.recover()}
+              >
+                {t("rework.selftest.authz.campaign.recover")}
+              </Button>
+            </>
+          )}
+          <StepReportPanel
+            steps={campaign.steps}
+            isRunning={campaign.isRunning}
+            emptyLabel={t("rework.selftest.report.empty")}
+          />
+        </div>
+      )}
 
       {KeyCloakService.GetToken() && (
         <div className={styles.testProfilePanel}>

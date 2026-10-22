@@ -2640,6 +2640,8 @@
         "running": "Running…",
         "empty": "No run yet.",
         "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
+        "expand": "Show steps",
+        "collapse": "Hide steps",
         "copy": "Copy report",
         "copied": "Copied"
       },
