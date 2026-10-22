@@ -68,6 +68,7 @@ class MembershipEngine(NoopRebacEngine):
         self.members: dict[str, set[str]] = {}
         self.admin = True
         self.admins: set[str] = set()
+        self.permission_checks: list[OrganizationPermission] = []
         self.writes = []
         self.write_failure = False
 
@@ -78,11 +79,12 @@ class MembershipEngine(NoopRebacEngine):
         ]
 
     async def _has_permission_raw(self, subject, permission, resource, **kwargs):
-        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM_ACCESS:
             return subject.id in self.admins
         return resource.id in self.members.get(subject.id, set())
 
     async def check_user_permission_or_raise(self, *args, **kwargs):
+        self.permission_checks.append(args[1])
         if not self.admin:
             raise HTTPException(403, "forbidden")
 
@@ -692,6 +694,9 @@ async def test_admin_endpoints_reject_nonplatform_admins(access):
         )
         assert response.status_code == 403
     assert not (await access.state()).filtering_enabled
+    assert set(access.rebac.permission_checks) == {
+        OrganizationPermission.CAN_MANAGE_PLATFORM_ACCESS
+    }
 
 
 @pytest.mark.asyncio

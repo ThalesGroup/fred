@@ -5132,3 +5132,19 @@ and persisted in `capability_config`, as for any capability (a 422 when no
 default is usable by the team, as for any template declaring defaults). Chat controls such
 as `document_scope.bound_library_ids` then follow from it. An instance saved
 earlier keeps `selected_capability_ids: []` until it is edited and saved.
+
+## 68. Contract Notes - delegated Platform Access (2026-10-22)
+
+`platform_access_manager` holds `organization#can_manage_platform_access`.
+All `/admin/platform/access` routes use this permission, including filtering,
+rules, individual and team exceptions, T0, Free settings and Free-link creation,
+history, joiners, token recovery, revocation and cleanup. Link creation and
+recovery still require the caller's own human credential. The role also holds
+`can_list_all_teams` so the Admin Teams page can show its Free controls, but
+it cannot create or edit team registry entries or administer users or roles.
+
+The role is a current admission source while filtering is active; revocation
+removes that source on the next request. Suspension, terms and resource checks
+remain independent. `team_manager` has no Platform Access authority, including
+Free links. `platform_admin` inherits both delegated surfaces through the
+OpenFGA role unions. Deploy the OpenFGA model before the backend and frontend.

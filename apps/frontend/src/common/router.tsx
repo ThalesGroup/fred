@@ -55,7 +55,7 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
-import { isProtectedAllowed, Protected, type ProtectedRequirement } from "@core/guards/Protected";
+import { adminLandingPath, Protected } from "@core/guards/Protected";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
@@ -69,22 +69,10 @@ const ManagedChatPageRoute = () => {
   return <ManagedChatPage key={agentInstanceId} />;
 };
 
-// Bare `/admin` has no page of its own — land on the first page the caller can
-// actually see. A hardcoded redirect would bounce every delegated role holder
-// to `/unauthorized` before they ever reach the one page they own. Ordered:
-// the admin lands on teams, exactly as before.
-const ADMIN_LANDING: [ProtectedRequirement, string][] = [
-  ["teams", "/admin/teams"],
-  ["features", "/admin/features"],
-  ["platformPrompt", "/admin/platform-prompt"],
-  ["observer", "/admin/analytics"],
-];
-
 const AdminIndexRoute = () => {
   const { isLoading, ...capabilities } = useUserCapabilities();
   if (isLoading) return null;
-  const landing = ADMIN_LANDING.find(([requires]) => isProtectedAllowed(requires, capabilities));
-  return <Navigate to={landing?.[1] ?? "/unauthorized"} replace />;
+  return <Navigate to={adminLandingPath(capabilities)} replace />;
 };
 
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
@@ -228,7 +216,7 @@ export const routes: RouteObject[] = [
       {
         path: "admin/teams",
         element: (
-          <Protected requires="teams">
+          <Protected requires="teamRoster">
             <AdminTeamsPage />
           </Protected>
         ),
@@ -240,7 +228,7 @@ export const routes: RouteObject[] = [
         // are enforced server-side and only mirrored in the page's UI.
         path: "admin/platform-access",
         element: (
-          <Protected requires="admin">
+          <Protected requires="platformAccess">
             <PlatformAccessPage />
           </Protected>
         ),

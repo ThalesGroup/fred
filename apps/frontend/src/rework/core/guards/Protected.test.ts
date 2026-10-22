@@ -14,6 +14,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  adminLandingPath,
   canEnterAdminSection,
   isProtectedAllowed,
   type ProtectedCapabilities,
@@ -24,6 +25,7 @@ const NONE: ProtectedCapabilities = {
   canAdmin: false,
   canObservePlatform: false,
   canManageTeams: false,
+  canManagePlatformAccess: false,
   canManageFeatures: false,
   canEditPlatformPrompt: false,
 };
@@ -35,6 +37,7 @@ const REQUIREMENTS: [ProtectedRequirement, keyof ProtectedCapabilities][] = [
   ["admin", "canAdmin"],
   ["observer", "canObservePlatform"],
   ["teams", "canManageTeams"],
+  ["platformAccess", "canManagePlatformAccess"],
   ["features", "canManageFeatures"],
   ["platformPrompt", "canEditPlatformPrompt"],
 ];
@@ -57,6 +60,11 @@ describe("isProtectedAllowed", () => {
     expect(isProtectedAllowed("features", teamManager)).toBe(false);
     expect(isProtectedAllowed("platformPrompt", teamManager)).toBe(false);
     expect(isProtectedAllowed("admin", teamManager)).toBe(false);
+    expect(isProtectedAllowed("platformAccess", teamManager)).toBe(false);
+    const accessManager = caps({ canManagePlatformAccess: true });
+    expect(isProtectedAllowed("teamRoster", accessManager)).toBe(true);
+    expect(isProtectedAllowed("teams", accessManager)).toBe(false);
+    expect(isProtectedAllowed("admin", accessManager)).toBe(false);
   });
 
   it("denies a platform_observer the admin tier", () => {
@@ -71,5 +79,15 @@ describe("canEnterAdminSection", () => {
 
   it("keeps a user with no platform role out", () => {
     expect(canEnterAdminSection(NONE)).toBe(false);
+  });
+});
+
+describe("adminLandingPath", () => {
+  it("sends an access-only manager to Platform Access", () => {
+    expect(adminLandingPath(caps({ canManagePlatformAccess: true }))).toBe("/admin/platform-access");
+  });
+
+  it("keeps the platform administrator landing on teams", () => {
+    expect(adminLandingPath(caps({ canAdmin: true }))).toBe("/admin/teams");
   });
 });

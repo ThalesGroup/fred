@@ -24,6 +24,8 @@ type DefaultTeam = { team_id: string; name: string };
 
 const h = vi.hoisted(() => ({
   canAdmin: true,
+  canManageTeams: true,
+  canManagePlatformAccess: true,
   admissionEnabled: true,
   admissionFetching: false,
   admissionTeams: [
@@ -99,7 +101,11 @@ vi.mock("@core/hooks/useMutationAction.ts", () => ({
 }));
 
 vi.mock("@core/hooks/useUserCapabilities.ts", () => ({
-  useUserCapabilities: () => ({ canAdmin: h.canAdmin }),
+  useUserCapabilities: () => ({
+    canAdmin: h.canAdmin,
+    canManageTeams: h.canManageTeams,
+    canManagePlatformAccess: h.canManagePlatformAccess,
+  }),
 }));
 
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
@@ -174,6 +180,8 @@ const searchInput = () => defaultTeamSection()!.querySelector("input")!;
 
 beforeEach(() => {
   h.canAdmin = true;
+  h.canManageTeams = true;
+  h.canManagePlatformAccess = true;
   h.admissionEnabled = true;
   h.admissionFetching = false;
   h.admissionQuery.mockClear();
@@ -243,6 +251,7 @@ describe("AdminTeamsPage layout", () => {
 describe("AdminTeamsPage Free enrollment", () => {
   it("does not expose controls or request admission authority for ordinary team managers", () => {
     h.canAdmin = false;
+    h.canManagePlatformAccess = false;
     render();
     expect(h.admissionQuery).toHaveBeenLastCalledWith(undefined, { skip: true });
     expect(h.admissionTeamsQuery).toHaveBeenLastCalledWith(undefined, { skip: true });
@@ -279,6 +288,7 @@ describe("AdminTeamsPage Free enrollment", () => {
     expect(dialog.getAttribute("data-team")).toBe("uid-alpha");
     expect(dialog.getAttribute("data-free")).toBe("false");
     h.canAdmin = false;
+    h.canManagePlatformAccess = false;
     act(() => root.render(<AdminTeamsPage />));
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
@@ -296,6 +306,15 @@ describe("AdminTeamsPage Free enrollment", () => {
     expect(
       container.querySelector<HTMLInputElement>('input[aria-label="rework.platformAccess.free Gamma"]')!.disabled,
     ).toBe(true);
+  });
+
+  it("lets an access manager manage Free without team registry controls", () => {
+    h.canAdmin = false;
+    h.canManageTeams = false;
+    render();
+    expect(container.textContent).toContain("rework.platformAccess.links.manage");
+    expect(editButtons()).toHaveLength(0);
+    expect(buttonByText(container, "rework.adminTeams.createTeam.open")).toBeUndefined();
   });
 });
 
