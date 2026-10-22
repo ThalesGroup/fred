@@ -1,6 +1,7 @@
 {
   "$defs": {
     "AppConfig": {
+      "additionalProperties": false,
       "properties": {
         "address": {
           "type": "string"
@@ -42,6 +43,7 @@
       "type": "object"
     },
     "ClaimsConfig": {
+      "additionalProperties": false,
       "properties": {
         "email": {
           "type": [
@@ -77,6 +79,7 @@
       "type": "object"
     },
     "Configuration": {
+      "additionalProperties": false,
       "properties": {
         "app": {
           "$ref": "#/$defs/AppConfig"
@@ -236,6 +239,7 @@
       "type": "object"
     },
     "DirectoryDelegation": {
+      "additionalProperties": false,
       "description": "Only identity classification is needed here, not delegated grant acceptance.\nThese are the existing Python security.delegation claim settings.",
       "properties": {
         "audience": {
@@ -305,6 +309,7 @@
       "type": "string"
     },
     "M2mConfig": {
+      "additionalProperties": false,
       "description": "Issuer plus outbound directory credentials, used only when `enabled`.",
       "properties": {
         "client_id": {
@@ -346,6 +351,7 @@
       "type": "object"
     },
     "PostgresConfig": {
+      "additionalProperties": false,
       "properties": {
         "database": {
           "type": "string"
@@ -465,6 +471,7 @@
       "type": "object"
     },
     "RebacConfig": {
+      "additionalProperties": false,
       "properties": {
         "api_url": {
           "type": "string"
@@ -497,6 +504,7 @@
       "type": "object"
     },
     "SchedulerConfig": {
+      "additionalProperties": false,
       "properties": {
         "lifecycle": {
           "$ref": "#/$defs/LifecycleConfig"
@@ -515,6 +523,7 @@
       "type": "object"
     },
     "SecurityConfig": {
+      "additionalProperties": false,
       "properties": {
         "authorized_origins": {
           "items": {
@@ -558,6 +567,7 @@
       "type": "object"
     },
     "StorageConfig": {
+      "additionalProperties": false,
       "properties": {
         "content": {
           "oneOf": [
@@ -613,6 +623,7 @@
       "type": "object"
     },
     "UserConfig": {
+      "additionalProperties": false,
       "properties": {
         "audience": {
           "type": [

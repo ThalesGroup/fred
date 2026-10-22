@@ -31,5 +31,7 @@ Returns the resolved application as YAML; callers pipe it through `fromYaml`.
     {{- $_ := set $scheduler.lifecycle.temporal $key (index $connection $key) -}}
   {{- end -}}
 {{- end -}}
+{{- /* The manager refuses unknown keys: the shared connection is not one of its own. */ -}}
+{{- $_ := unset $scheduler "temporal" -}}
 {{- $config | toYaml -}}
 {{- end -}}

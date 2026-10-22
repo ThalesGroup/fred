@@ -58,21 +58,6 @@ applications:
       annotations:
         iam.gke.io/gcp-service-account: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
 
-    configuration:
-      storage:
-        # --- Content store: native GCS (bucket must already exist) ---
-        # bucket_name is suffixed at runtime → -objects (team banners/logos).
-        content_storage:
-          type: gcs
-          bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. <GCP_PROJECT_ID>-cp-content
-          project_id: "" # optional; inferred from ADC when empty
-          # Required: service account used to sign V4 signed URLs for
-          # browser-facing banner/logo images via IAM signBlob (keyless).
-          # Startup fails clearly if unset. It needs storage.objects.get on the
-          # -objects bucket; the GSA above needs iam.serviceAccounts.signBlob
-          # on it. May be the GSA itself (self-signing).
-          signing_service_account_email: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
-
     dotenv:
       KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: ""
       FRED_POSTGRES_PASSWORD: ""

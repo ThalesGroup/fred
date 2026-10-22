@@ -30371,8 +30371,10 @@
               "additionalProperties": false
             },
             "configuration": {
+              "additionalProperties": false,
               "properties": {
                 "app": {
+                  "additionalProperties": false,
                   "properties": {
                     "address": {
                       "type": "string"
@@ -30430,6 +30432,7 @@
                   "type": "object"
                 },
                 "scheduler": {
+                  "additionalProperties": false,
                   "properties": {
                     "lifecycle": {
                       "additionalProperties": false,
@@ -30758,11 +30761,24 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "temporal": {
+                      "type": "object",
+                      "properties": {
+                        "host": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "type": "object"
                 },
                 "security": {
+                  "additionalProperties": false,
                   "properties": {
                     "authorized_origins": {
                       "items": {
@@ -30770,9 +30786,35 @@
                       },
                       "type": "array"
                     },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "Only identity classification is needed here, not delegated grant acceptance.\nThese are the existing Python security.delegation claim settings.",
+                      "properties": {
+                        "audience": {
+                          "default": "fred-delegation",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "default": null,
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": [
+                            "array",
+                            "null"
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
                     "m2m": {
                       "oneOf": [
                         {
+                          "additionalProperties": false,
                           "description": "Issuer plus outbound directory credentials, used only when `enabled`.",
                           "properties": {
                             "client_id": {
@@ -30812,6 +30854,7 @@
                       ]
                     },
                     "rebac": {
+                      "additionalProperties": false,
                       "properties": {
                         "api_url": {
                           "type": "string"
@@ -30844,6 +30887,7 @@
                       "type": "object"
                     },
                     "user": {
+                      "additionalProperties": false,
                       "properties": {
                         "audience": {
                           "type": [
@@ -30852,6 +30896,7 @@
                           ]
                         },
                         "claims": {
+                          "additionalProperties": false,
                           "properties": {
                             "email": {
                               "type": [
@@ -30919,6 +30964,13 @@
                         "client_id"
                       ],
                       "type": "object"
+                    },
+                    "user_directory": {
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -30928,6 +30980,7 @@
                   "type": "object"
                 },
                 "storage": {
+                  "additionalProperties": false,
                   "properties": {
                     "content": {
                       "oneOf": [
@@ -31067,6 +31120,7 @@
                       ]
                     },
                     "postgres": {
+                      "additionalProperties": false,
                       "properties": {
                         "database": {
                           "type": "string"
@@ -32081,8 +32135,10 @@
               "additionalProperties": false
             },
             "configuration": {
+              "additionalProperties": false,
               "properties": {
                 "app": {
+                  "additionalProperties": false,
                   "properties": {
                     "address": {
                       "type": "string"
@@ -32140,6 +32196,7 @@
                   "type": "object"
                 },
                 "scheduler": {
+                  "additionalProperties": false,
                   "properties": {
                     "lifecycle": {
                       "additionalProperties": false,
@@ -32468,11 +32525,24 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "temporal": {
+                      "type": "object",
+                      "properties": {
+                        "host": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "type": "object"
                 },
                 "security": {
+                  "additionalProperties": false,
                   "properties": {
                     "authorized_origins": {
                       "items": {
@@ -32480,9 +32550,35 @@
                       },
                       "type": "array"
                     },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "Only identity classification is needed here, not delegated grant acceptance.\nThese are the existing Python security.delegation claim settings.",
+                      "properties": {
+                        "audience": {
+                          "default": "fred-delegation",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "default": null,
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": [
+                            "array",
+                            "null"
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
                     "m2m": {
                       "oneOf": [
                         {
+                          "additionalProperties": false,
                           "description": "Issuer plus outbound directory credentials, used only when `enabled`.",
                           "properties": {
                             "client_id": {
@@ -32522,6 +32618,7 @@
                       ]
                     },
                     "rebac": {
+                      "additionalProperties": false,
                       "properties": {
                         "api_url": {
                           "type": "string"
@@ -32554,6 +32651,7 @@
                       "type": "object"
                     },
                     "user": {
+                      "additionalProperties": false,
                       "properties": {
                         "audience": {
                           "type": [
@@ -32562,6 +32660,7 @@
                           ]
                         },
                         "claims": {
+                          "additionalProperties": false,
                           "properties": {
                             "email": {
                               "type": [
@@ -32629,6 +32728,13 @@
                         "client_id"
                       ],
                       "type": "object"
+                    },
+                    "user_directory": {
+                      "enum": [
+                        "keycloak",
+                        "local"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -32638,6 +32744,7 @@
                   "type": "object"
                 },
                 "storage": {
+                  "additionalProperties": false,
                   "properties": {
                     "content": {
                       "oneOf": [
@@ -32777,6 +32884,7 @@
                       ]
                     },
                     "postgres": {
+                      "additionalProperties": false,
                       "properties": {
                         "database": {
                           "type": "string"

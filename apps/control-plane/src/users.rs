@@ -30,7 +30,7 @@ pub enum DirectoryKind {
 /// Only identity classification is needed here, not delegated grant acceptance.
 /// These are the existing Python security.delegation claim settings.
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct DirectoryDelegation {
     pub audience: String,
     pub caller_role: String,

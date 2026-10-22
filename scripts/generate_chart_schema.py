@@ -478,6 +478,13 @@ def _kf_worker_app(kf_config: dict, *, partial_configuration: bool = False) -> d
 
 def _manager_app(config: dict) -> dict:
     # Catalog policy validation remains in manager; its shape is independent of SQL.
+    # scheduler.temporal is a chart input only: the template folds it into the
+    # lifecycle connection and removes it, since the manager refuses unknown keys.
+    config = copy.deepcopy(config)
+    config["properties"]["scheduler"]["properties"]["temporal"] = _obj({
+        "host": _STRING,
+        "namespace": _STRING,
+    })
     return _obj(_base_app_props({
         "configuration": config,
         "lifecycle_policy_catalog": {"type": ["object", "null"]},

@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F08](#f08-configuration-stricte) | Clés de configuration inconnues refusées | Tests ciblés validés ; validation finale du lot | A3, schémas |
 | [F21](#f21-profil-k3d-propriétaire-de-la-configuration-du-control-plane) | Profil k3d propriétaire de la configuration du control-plane | Tests ciblés validés ; validation finale du lot | 08, README k3d |
 | [F14](#f14-ouverture-de-lespace-personnel-à-coût-constant) | Espace personnel trouvé en SQL, coût constant | Tests ciblés validés ; validation finale du lot | 04, 09, A2, A3 |
 | [F06](#f06-clés-jwks-pendant-une-panne-du-fournisseur) | Clés JWKS connues servies 1 h au plus pendant une panne | Tests ciblés validés ; validation finale du lot | 03 |
@@ -85,6 +86,21 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F08 Configuration stricte
+
+- 2026-10-22 : vérification sur HEAD `6744e8f9b` : confirmé ; sous-modules déjà stricts,
+  `config.rs` et `DirectoryDelegation` non. Clés étrangères inventoriées : YAML livré
+  (`app.name`, `rebac.type`), exemple Entra (`scope`, `provider`, délégation Python),
+  `values-gcp.yaml` (stockage GCS de bannières), `scheduler.temporal` laissé par le gabarit,
+  profil k3d (corrigé par F21). Correction : `deny_unknown_fields` partout, clés retirées,
+  gabarit qui retire `scheduler.temporal` après recopie, générateur du schéma de chart qui
+  accepte cette seule entrée ; schémas de configuration et de chart régénérés. Tests :
+  toutes les configurations livrées (YAML, chart, Entra, GCP, exemples) sans clé inconnue ;
+  clé inconnue refusée par son nom à chaque niveau (mutation détectée) ; rendu k3d réel
+  accepté par Helm ; binaire lancé sur la configuration k3d rendue : passe la lecture,
+  refuse une clé fautive en la nommant. `make test` réussi. Le `serviceAccount` GCS de
+  `values-gcp.yaml` reste à revoir (hors fiche). Arc42 A3.
 
 ## F21 Profil k3d propriétaire de la configuration du control-plane
 

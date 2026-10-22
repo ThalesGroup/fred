@@ -90,7 +90,9 @@ steps are in the [migration note](../swift/ops/migrations/rust-control-plane.md)
 ## Configuration
 
 `CONFIG_FILE` (default `./config/configuration.yaml`) holds the settings, in sections
-`app`, `security`, `storage`, `scheduler`, `policies`; `ENV_FILE` (default `./config/.env`) holds
+`app`, `security`, `storage`, `scheduler`, `policies`. An unknown key at any level
+refuses startup and names the key; the chart's values schema rejects it before
+rendering. `ENV_FILE` (default `./config/.env`) holds
 secrets and the two token-time settings below, and never overrides the process environment.
 
 | Token-time setting | Default |
@@ -115,7 +117,6 @@ Local reference configuration:
 
 app:
   gcu_version: v1
-  name: Control Plane
   base_url: /control-plane/v1
   address: 0.0.0.0
   port: 8222
@@ -138,7 +139,6 @@ security:
   authorized_origins:
     - http://localhost:5173
   rebac:
-    type: openfga
     api_url: "http://localhost:9080"
     store_name: control-plane
 

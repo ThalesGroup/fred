@@ -3,7 +3,6 @@
 
 app:
   gcu_version: v1
-  name: Control Plane
   base_url: /control-plane/v1
   address: 0.0.0.0
   port: 8222
@@ -26,7 +25,6 @@ security:
   authorized_origins:
     - http://localhost:5173
   rebac:
-    type: openfga
     api_url: "http://localhost:9080"
     store_name: control-plane
 

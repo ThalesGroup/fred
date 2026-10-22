@@ -85,6 +85,7 @@ class ManagerChartTests(unittest.TestCase):
         self.assertEqual(temporal["host"], "custom:7233")
         self.assertEqual(temporal["namespace"], "custom")
         self.assertEqual(temporal["task_queue"], "control-plane-lifecycle")
+        self.assertNotIn("temporal", config["scheduler"])
 
     def test_document_storage_spool_is_bounded_and_credentials_stay_references(self):
         docs = render(values=CHART / "examples/document-storage.yaml")

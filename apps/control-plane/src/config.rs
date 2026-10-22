@@ -30,6 +30,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Configuration {
     pub app: AppConfig,
     pub security: SecurityConfig,
@@ -40,6 +41,7 @@ pub struct Configuration {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
     /// Active terms version; null disables consent gating.
     #[serde(default, deserialize_with = "terms_version")]
@@ -59,6 +61,7 @@ pub struct AppConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     #[serde(default)]
     pub profile: Option<String>,
@@ -76,6 +79,7 @@ pub struct SecurityConfig {
 
 /// Issuer plus outbound directory credentials, used only when `enabled`.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct M2mConfig {
     pub realm_url: String,
     pub enabled: bool,
@@ -84,6 +88,7 @@ pub struct M2mConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct UserConfig {
     #[serde(default = "yes")]
     pub enabled: bool,
@@ -102,6 +107,7 @@ pub struct UserConfig {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ClaimsConfig {
     pub uid: Option<String>,
     pub username: Option<String>,
@@ -111,6 +117,7 @@ pub struct ClaimsConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RebacConfig {
     pub api_url: String,
     /// Never fred's own store: syncing this model there would replace fred's.
@@ -127,12 +134,14 @@ pub struct RebacConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct StorageConfig {
     pub postgres: PostgresConfig,
     pub content: Option<crate::documents::config::ContentConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct PostgresConfig {
     pub host: String,
     #[serde(default = "default_pg_port")]
@@ -142,6 +151,7 @@ pub struct PostgresConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SchedulerConfig {
     #[serde(default)]
     pub lifecycle: crate::lifecycle::policy::LifecycleConfig,
@@ -341,6 +351,113 @@ mod tests {
                 .gcu_version
                 .is_none()
         );
+    }
+
+    /// The chart's control-plane configuration, optionally overlaid like Helm values.
+    fn chart(overlay: Option<&str>) -> serde_json::Value {
+        fn section(text: &str) -> serde_json::Value {
+            let values: serde_json::Value = serde_yaml_ng::from_str(text).unwrap();
+            values["applications"]["control-plane-backend"]["configuration"].clone()
+        }
+        fn merge(base: &mut serde_json::Value, overlay: serde_json::Value) {
+            match (base, overlay) {
+                // An overlay without this section leaves the chart's own.
+                (_, serde_json::Value::Null) => {}
+                (serde_json::Value::Object(base), serde_json::Value::Object(overlay)) => {
+                    for (key, value) in overlay {
+                        merge(base.entry(key).or_insert(serde_json::Value::Null), value);
+                    }
+                }
+                (base, overlay) => *base = overlay,
+            }
+        }
+        let mut config = section(include_str!("../../../deploy/charts/fred/values.yaml"));
+        if let Some(overlay) = overlay {
+            merge(&mut config, section(overlay));
+        }
+        config
+    }
+
+    #[test]
+    fn every_shipped_configuration_has_only_known_keys() {
+        let shipped =
+            serde_yaml_ng::from_str(include_str!("../config/configuration.yaml")).unwrap();
+        let rendered = [
+            ("shipped", shipped),
+            ("chart", chart(None)),
+            (
+                "entra",
+                chart(Some(include_str!(
+                    "../../../deploy/charts/fred/values-entra.example.yaml"
+                ))),
+            ),
+            (
+                "gcp",
+                chart(Some(include_str!(
+                    "../../../deploy/charts/fred/values-gcp.yaml"
+                ))),
+            ),
+            (
+                "storage",
+                chart(Some(include_str!(
+                    "../../../deploy/charts/fred/examples/document-storage.yaml"
+                ))),
+            ),
+            (
+                "processing",
+                chart(Some(include_str!(
+                    "../../../deploy/charts/fred/examples/document-processing.yaml"
+                ))),
+            ),
+        ];
+        for (name, config) in rendered {
+            if let Err(error) = serde_json::from_value::<Configuration>(config) {
+                panic!("{name}: {error}");
+            }
+        }
+    }
+
+    #[test]
+    fn an_unknown_key_at_any_level_is_refused_by_name() {
+        let shipped: serde_json::Value =
+            serde_yaml_ng::from_str(include_str!("../config/configuration.yaml")).unwrap();
+        let mut processing = shipped.clone();
+        processing["storage"]["content"] =
+            serde_json::json!({"endpoint":"http://localhost:9000","bucket":"originals"});
+        for path in [
+            "",
+            "/app",
+            "/security",
+            "/security/m2m",
+            "/security/user",
+            "/security/user/claims",
+            "/security/delegation",
+            "/security/rebac",
+            "/storage",
+            "/storage/postgres",
+            "/storage/content",
+            "/storage/content/limits",
+            "/scheduler",
+            "/scheduler/lifecycle",
+            "/scheduler/lifecycle/temporal",
+            "/policies",
+        ] {
+            let mut config = processing.clone();
+            let mut node = &mut config;
+            for key in path.split('/').filter(|k| !k.is_empty()) {
+                node = node
+                    .as_object_mut()
+                    .unwrap()
+                    .entry(key)
+                    .or_insert_with(|| serde_json::json!({}));
+            }
+            node["misspelt_key"] = true.into();
+            let error = serde_json::from_value::<Configuration>(config).unwrap_err();
+            assert!(
+                error.to_string().contains("misspelt_key"),
+                "{path}: {error}"
+            );
+        }
     }
 
     #[test]
