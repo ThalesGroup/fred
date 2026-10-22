@@ -738,7 +738,11 @@ class PlanChart(BaseModel):
         "area (one or two series) | stacked_bar (parts of a whole per category, long "
         "labels) | radar (3-8 criteria compared for 1-3 items) | scatter (how two "
         "measures relate across items; points {x, y}) | bubble (scatter plus a third "
-        "measure as size).",
+        "measure as size). Limits: at most "
+        f"{MAX_SERIES} series; pie and doughnut {MAX_SLICES} slices (group the rest as "
+        "'Other'); line and area up to 24 categories, others up to 12. Time series of "
+        "4+ points → line; long labels or more than 6 categories → bar; parts of one "
+        "whole → pie only within its slice limit; one unit per chart.",
         json_schema_extra={"enum": list(CHART_TYPES)},
     )
     categories: List[str] = Field(
@@ -1053,7 +1057,9 @@ class SlidePlan(BaseModel):
         default=None,
         description="On a content slide, its conclusion as a short sentence (a claim, not a topic).",
     )
-    subtitle: Optional[str] = None
+    subtitle: Optional[str] = Field(
+        default=None, description="One short line; only on kinds that list one."
+    )
     number: Optional[str] = Field(
         default=None,
         description="A section slide's number ('02'). Omitted → its place among the "
@@ -1094,7 +1100,12 @@ class SlidePlan(BaseModel):
         "document's name, 'user' (typed in the chat), or 'illustrative' only when the "
         "user asked for made-up data. Left out for general knowledge.",
     )
-    notes: Optional[str] = Field(default=None, description="Speaker notes.")
+    notes: Optional[str] = Field(
+        default=None,
+        description="What the presenter says beyond the slide: 2-4 spoken sentences in "
+        "the deck's language (context, how to read the figure). Never content the user "
+        "asked to see on the slide.",
+    )
     repeat_layout: bool = Field(
         default=False,
         description=REPEAT_LAYOUT_HINT,
