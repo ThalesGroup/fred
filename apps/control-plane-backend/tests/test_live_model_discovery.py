@@ -21,7 +21,6 @@ from typing import cast
 
 import httpx
 import pytest
-from fred_core import KeycloakUser
 from control_plane_backend.model_discovery import service
 from control_plane_backend.model_discovery.service import validate_models_url
 from control_plane_backend.model_discovery.store import (
@@ -35,6 +34,7 @@ from control_plane_backend.models.model_discovery_models import (
     PlatformModelFallbackRow,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
+from fred_core import KeycloakUser
 from fred_sdk.contracts.context import ModelBinding
 from sqlalchemy.ext.asyncio import create_async_engine
 
