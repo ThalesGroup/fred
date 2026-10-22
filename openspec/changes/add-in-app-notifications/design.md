@@ -28,7 +28,7 @@ Existing pieces this builds on:
 9. **Expiry**: `expires_at = created_at + 30 days`, filtered on every read; the lifecycle step deletes expired rows in batches of 1000 until none remain or a 30 s budget is spent.
 10. **Marketplace recipients from `published_by`.** Nullable column, set by `save_publication` on publish and republish. `agent.republish_needed` is emitted by `update_agent_instance` when the save changed the agent, the entry is Published, and `published_by` is set and differs from the editor; group `agent_republish:<entry_id>`. Republish or removal of the entry calls `resolve` on that group (the actor's row disappears, otherwise "Handled by"). `agent.marketplace_removed` is emitted wherever the entry enters the Removed state, unless the actor is the publisher; group `agent_removed:<entry_id>:<removed_at>`; it carries the reason code and the platform admin's message if any.
 12. **Team notifications go to current members only.** `notify_many` drops a draft whose `team_id` names a team the recipient is no longer a member of (`can_read_members`, one ReBAC check per distinct recipient and team); a member removal or departure deletes that member's rows for the team. A draft without `team_id` is never filtered, so a later type addressed to a non-member (a join request's answer) leaves `team_id` empty.
-11. **Navigation-only buttons in slice 1.** Both types offer "Open the agent", routing to the team's Agents page; the existing republish flow there does the rest. Domain-endpoint buttons are part of the framework and first used in slice 2.
+11. **Navigation-only buttons in slice 1.** Both types offer "Open the agent", routing to the team's Agents page with `?agent=<agent_instance_id>`, which opens that agent's edit form for an editor; the existing republish flow there does the rest. Domain-endpoint buttons are part of the framework and first used in slice 2.
 
 ## Backend implementation notes (divergences to confirm)
 
@@ -42,7 +42,7 @@ Existing pieces this builds on:
 
 - The badge reads "99+" above 99 (`IconButton badgeMax`, default 999 for other callers).
 - The bell, its popover, the polling hook and the type registry live in `rework/features/notifications/` (they consume RTK hooks); only `NotificationTile` is a shared molecule, props only. `MainNavBar` renders `NotificationsEntry` after its entries.
-- "Open the agent" leads to the team's Agents page (no per-agent route exists). The tile click follows the same link, so in slice 1 the button repeats the tile click; it is there for the button framework (`navigate` or `call` a domain endpoint, the latter unused until slice 2).
+- "Open the agent" leads to the team's Agents page with `?agent=<agent_instance_id>` (no per-agent route exists, so the page opens that agent's edit form for an editor and drops the param; a member, or an agent gone since, just lands on the page). The tile click follows the same link, so in slice 1 the button repeats the tile click; it is there for the button framework (`navigate` or `call` a domain endpoint, the latter unused until slice 2).
 - Cache tags: `seen` refreshes the badge only; `read` (which also marks seen), delete and clear refresh both.
 - A tab opened in the background sends no summary request until it is first shown.
 - A handled row without `handled_by_name` (removal by deactivation, suspension, deletion) reads "Resolved: the agent left the marketplace".

@@ -122,7 +122,7 @@ A notification SHALL be emitted after the triggering action is committed. A fail
 
 ### Requirement: The publisher is asked to update a changed published agent
 
-Publishing or republishing an agent SHALL record who published it. When an editor other than that publisher saves a change to a Published agent, the publisher SHALL receive an action-required notification proposing to update the marketplace version, with an "Open the agent" button leading to the team's Agents page. No notification SHALL be sent for a save that changes nothing, for the publisher's own save, or for an entry published before the publisher was recorded. Republishing or removing the entry SHALL resolve it.
+Publishing or republishing an agent SHALL record who published it. When an editor other than that publisher saves a change to a Published agent, the publisher SHALL receive an action-required notification proposing to update the marketplace version, with an "Open the agent" button opening that agent's edit form on the team's Agents page. No notification SHALL be sent for a save that changes nothing, for the publisher's own save, or for an entry published before the publisher was recorded. Republishing or removing the entry SHALL resolve it.
 
 #### Scenario: Another editor changes the agent
 

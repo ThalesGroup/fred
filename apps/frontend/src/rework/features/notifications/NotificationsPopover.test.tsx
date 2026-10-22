@@ -143,7 +143,7 @@ describe("NotificationsPopover", () => {
 
     expect(markRead).toHaveBeenCalledWith({ notificationId: "n1" });
     expect(onClose).toHaveBeenCalledWith(false);
-    expect(navigate).toHaveBeenCalledWith("/team/team-1/agents");
+    expect(navigate).toHaveBeenCalledWith("/team/team-1/agents?agent=agent-1");
   });
 
   it("does not mark a read tile read again", () => {
@@ -153,7 +153,7 @@ describe("NotificationsPopover", () => {
     act(() => el.querySelector<HTMLButtonElement>("li button")!.click());
 
     expect(markRead).not.toHaveBeenCalled();
-    expect(navigate).toHaveBeenCalledWith("/team/team-1/agents");
+    expect(navigate).toHaveBeenCalledWith("/team/team-1/agents?agent=agent-1");
   });
 
   it("deletes one notification", () => {

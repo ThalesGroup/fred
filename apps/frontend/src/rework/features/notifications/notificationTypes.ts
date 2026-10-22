@@ -21,6 +21,7 @@ import type { TFunction } from "i18next";
 import type { NotificationCategory } from "@shared/molecules/NotificationTile/NotificationTile.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 import type { NotificationPage } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { teamAgentsPath } from "../../components/pages/TeamAgentsPage/agentDeepLink.ts";
 
 export type NotificationItem = NotificationPage["items"][number];
 type NotificationOfType<K extends NotificationItem["type"]> = Extract<NotificationItem, { type: K }>;
@@ -44,14 +45,12 @@ interface NotificationTypeDefinition<N> {
   actions: (notification: N, t: TFunction) => NotificationAction[];
 }
 
-const teamAgentsPath = (teamId: string) => `/team/${teamId}/agents`;
-
-const openAgent = (teamId: string, t: TFunction): NotificationAction => ({
+const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): NotificationAction => ({
   id: "open-agent",
   label: t("rework.notifications.actions.openAgent"),
   primary: true,
   kind: "navigate",
-  to: teamAgentsPath(teamId),
+  to: teamAgentsPath(teamId, agentInstanceId),
 });
 
 const NOTIFICATION_TYPES: {
@@ -72,8 +71,8 @@ const NOTIFICATION_TYPES: {
             editor: payload.editor_name,
             agent: payload.agent_name,
           }),
-    link: ({ payload }) => teamAgentsPath(payload.team_id),
-    actions: ({ payload }, t) => [openAgent(payload.team_id, t)],
+    link: ({ payload }) => teamAgentsPath(payload.team_id, payload.agent_instance_id),
+    actions: ({ payload }, t) => [openAgent(payload.team_id, payload.agent_instance_id, t)],
   },
   "agent.marketplace_removed": {
     icon: "unpublished",
@@ -95,8 +94,8 @@ const NOTIFICATION_TYPES: {
         ? `${subject} ${t("rework.agentMarketplace.removed.message", { message: payload.message })}`
         : subject;
     },
-    link: ({ payload }) => teamAgentsPath(payload.team_id),
-    actions: ({ payload }, t) => [openAgent(payload.team_id, t)],
+    link: ({ payload }) => teamAgentsPath(payload.team_id, payload.agent_instance_id),
+    actions: ({ payload }, t) => [openAgent(payload.team_id, payload.agent_instance_id, t)],
   },
 };
 

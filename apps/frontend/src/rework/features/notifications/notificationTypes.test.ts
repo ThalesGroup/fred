@@ -75,7 +75,7 @@ const removed: NotificationItem = {
 };
 
 describe("renderNotification", () => {
-  it("renders a republish request as an action with a button to the team's agents", () => {
+  it("renders a republish request as an action with a button opening that agent", () => {
     const rendered = renderNotification(republish, instances.en.t);
 
     expect(rendered.category).toBe("action_required");
@@ -84,9 +84,9 @@ describe("renderNotification", () => {
     expect(rendered.body).toContain("Léa D.");
     expect(rendered.body).toContain("RFP writer");
     expect(rendered.body).toContain("Purchasing");
-    expect(rendered.link).toBe("/team/team-1/agents");
+    expect(rendered.link).toBe("/team/team-1/agents?agent=agent-1");
     expect(rendered.actions).toEqual([
-      expect.objectContaining({ kind: "navigate", to: "/team/team-1/agents", label: "Open the agent" }),
+      expect.objectContaining({ kind: "navigate", to: "/team/team-1/agents?agent=agent-1", label: "Open the agent" }),
     ]);
     expect(rendered.handledLabel).toBeUndefined();
   });
@@ -100,6 +100,7 @@ describe("renderNotification", () => {
     expect(rendered.body).toContain("A platform administrator removed it.");
     expect(rendered.body).toContain("Duplicate entry");
     expect(rendered.actions.map((action) => action.label)).toEqual(["Open the agent"]);
+    expect(rendered.link).toBe("/team/team-1/agents?agent=agent-2");
   });
 
   it("falls back to the generic reason for a reason code it does not know", () => {
