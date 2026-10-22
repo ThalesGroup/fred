@@ -923,7 +923,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         http::{Request, StatusCode},
     };
     use control_plane::{
-        api::{AppState, governance_router},
+        api::{AppState, routes},
         roles::PlatformRole as P,
     };
     use std::sync::Arc;
@@ -938,7 +938,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    let app = governance_router(AppState {
+    let app = routes(AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: Arc::new(server.auth().await),
@@ -1026,7 +1026,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
         http::{Request, StatusCode},
     };
     use control_plane::{
-        api::{AppState, governance_router},
+        api::{AppState, routes},
         auth::Authenticator,
         config::Configuration,
         roles::PlatformRole,
@@ -1052,7 +1052,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
         if !other_realm {
             config.security.user.claims.uid = Some("preferred_username".into());
         }
-        let app = governance_router(AppState {
+        let app = routes(AppState {
             onboarding: Default::default(),
             lifecycle: Default::default(),
             auth: Arc::new(
@@ -1471,7 +1471,7 @@ async fn simultaneous_imports_reuse_usernames_and_space_names() {
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn provisioning_waiter_rechecks_revocation_but_not_bearer_expiry() {
     use control_plane::{
-        api::{AppState, governance_router},
+        api::{AppState, routes},
         provisioning::Importer,
     };
     let bundle = br#"{"users":[{"username":"alice","password":"private-password"}],"organizations":[{"ref":"org","name":"new","roles":{"alice":["admin","member","organization_owner"]}}],"teams":[],"projects":[]}"#;
@@ -1503,7 +1503,7 @@ async fn provisioning_waiter_rechecks_revocation_but_not_bearer_expiry() {
             })
         } else {
             // Admission accepts this bearer; it expires while the import waits.
-            let app = governance_router(AppState {
+            let app = routes(AppState {
                 onboarding: Default::default(),
                 lifecycle: Default::default(),
                 auth: std::sync::Arc::new(server.auth().await),
@@ -2127,7 +2127,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     .await
     .unwrap();
     proxy.fault.lock().await.calls.clear();
-    let app = control_plane::api::governance_router(control_plane::api::AppState {
+    let app = control_plane::api::routes(control_plane::api::AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(auth),
@@ -3409,7 +3409,7 @@ async fn http_import(
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
-    use control_plane::api::{AppState, governance_router};
+    use control_plane::api::{AppState, routes};
     use tower::ServiceExt;
     let e = env().await;
     let server = support::IdentityServer::start().await;
@@ -3418,7 +3418,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     bootstrap::grant_root(&e.pool, &e.fga, "root")
         .await
         .unwrap();
-    let app = governance_router(AppState {
+    let app = routes(AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: auth.clone(),
@@ -3640,7 +3640,7 @@ async fn blueprint_preflight_reads_child_names_after_organization_lock() {
         )
         .await
         .unwrap();
-    let app = control_plane::api::governance_router(control_plane::api::AppState {
+    let app = control_plane::api::routes(control_plane::api::AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(server.auth().await),
@@ -3675,7 +3675,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         http::Request,
     };
     use control_plane::{
-        api::{AppState, governance_router},
+        api::{AppState, routes},
         onboarding::{self, Onboarding},
     };
     use serde_json::{Value, json};
@@ -3697,7 +3697,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             ..Default::default()
         },
     };
-    let app = governance_router(state.clone());
+    let app = routes(state.clone());
     let request = |method: &str, path: &str, token: Option<String>, body: Value| {
         let mut req = Request::builder()
             .method(method)
@@ -3882,7 +3882,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     );
     let mut next = state.clone();
     next.onboarding.gcu_version = Some("v2".into());
-    let upgraded = governance_router(next);
+    let upgraded = routes(next);
     assert_eq!(
         upgraded
             .clone()
@@ -3941,7 +3941,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     let mut disabled = state;
     disabled.onboarding.gcu_version = None;
     assert_eq!(
-        governance_router(disabled)
+        routes(disabled)
             .oneshot(request(
                 "GET",
                 "/me",

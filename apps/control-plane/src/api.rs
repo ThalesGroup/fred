@@ -92,15 +92,9 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
             header::HeaderName::from_static("x-request-id"),
             header::HeaderName::from_static("x-correlation-id"),
         ]);
-    let governance = governance_router(state.clone());
-    let api = content_routes()
-        .with_state(state)
-        .split_for_parts()
-        .0
-        .merge(governance);
     // Request logging is outermost, as in fred-core: it also sees CORS and 404 answers.
     Router::new()
-        .nest(base_url, api)
+        .nest(base_url, routes(state))
         .layer(cors)
         .layer(axum::middleware::from_fn(logging::request_logging))
 }
@@ -972,12 +966,20 @@ impl FromRef<AppState> for AdmissionState {
         }
     }
 }
-pub fn governance_router(state: AppState) -> Router {
-    governance_routes().with_state(state).split_for_parts().0
+/// Every API route, without the base URL prefix, CORS or request logging.
+pub fn routes(state: AppState) -> Router {
+    registrations().with_state(state).split_for_parts().0
 }
 
-fn governance_routes() -> OpenApiRouter<AppState> {
+/// One registration list serves both the runtime router and the OpenAPI contract.
+fn registrations() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .routes(routes!(health))
+        .routes(routes!(create_space))
+        .routes(routes!(grant, revoke))
+        .routes(routes!(rename_folder, delete_folder))
+        .routes(routes!(authorize_document))
+        .routes(routes!(authorize_scope))
         .merge(crate::documents::http::routes())
         .merge(crate::processing::http::routes())
         .routes(routes!(frontend_config))
@@ -1005,17 +1007,6 @@ fn governance_routes() -> OpenApiRouter<AppState> {
         .route_layer(axum::middleware::from_fn(logging::expose_route))
 }
 
-fn content_routes() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new()
-        .routes(routes!(health))
-        .routes(routes!(create_space))
-        .routes(routes!(grant, revoke))
-        .routes(routes!(rename_folder, delete_folder))
-        .routes(routes!(authorize_document))
-        .routes(routes!(authorize_scope))
-        .route_layer(axum::middleware::from_fn(logging::expose_route))
-}
-
 #[derive(Serialize, utoipa::ToSchema)]
 struct Health {
     status: &'static str,
@@ -1033,8 +1024,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
         ComponentsBuilder,
         security::{Http, HttpAuthScheme, SecurityRequirement, SecurityScheme},
     };
-    let mut api = content_routes().into_openapi();
-    api.merge(governance_routes().into_openapi());
+    let api = registrations().into_openapi();
     let mut api = OpenApiRouter::<()>::new()
         .nest("/control-plane/v1", OpenApiRouter::with_openapi(api))
         .into_openapi();

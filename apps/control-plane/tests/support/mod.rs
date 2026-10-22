@@ -263,7 +263,7 @@ pub async fn member_organization(
     admin: &str,
 ) -> Result<control_plane::domain::Space, (u16, serde_json::Value)> {
     use control_plane::{
-        api::{AppState, governance_router},
+        api::{AppState, routes},
         db,
         domain::Role,
         fga::Scope,
@@ -283,7 +283,7 @@ pub async fn member_organization(
     fga.write_platform(&mut guard, &operator, PlatformRole::PlatformOwner, true)
         .await
         .unwrap();
-    let app = governance_router(AppState {
+    let app = routes(AppState {
         pool: pool.clone(),
         fga: fga.clone(),
         auth: std::sync::Arc::new(identity.auth().await),

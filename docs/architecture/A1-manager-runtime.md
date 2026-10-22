@@ -110,9 +110,9 @@ flowchart TB
 
 `roles` defines typed platform roles and scoped capabilities. `platform` serializes
 role mutations with bootstrap. `keycloak` owns one shared HTTP client and a synchronized
-service-token cache. `api::governance_router` groups identity, platform administration,
-space listing, personal opening, folder/document listing, folder creation, ZIP import and self-capability
-routes with the shared `AppState`; the HTTP API has no Temporal client.
+service-token cache. `api::routes` serves every HTTP route with the shared `AppState`,
+without prefix or outer layers; `api::router` adds the base URL, CORS and request
+logging. The HTTP API has no Temporal client.
 
 The same `utoipa-axum` registrations build the runtime routers and OpenAPI paths.
 `utoipa::ToSchema` derives request/response schemas from the Rust DTOs. The binary's

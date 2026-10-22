@@ -100,7 +100,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
     .load(&e.pool)
     .await
     .unwrap();
-    let app = control_plane::api::governance_router(control_plane::api::AppState {
+    let app = control_plane::api::routes(control_plane::api::AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
@@ -418,7 +418,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
     .load(&e.pool)
     .await
     .unwrap();
-    let app = control_plane::api::governance_router(control_plane::api::AppState {
+    let app = control_plane::api::routes(control_plane::api::AppState {
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),

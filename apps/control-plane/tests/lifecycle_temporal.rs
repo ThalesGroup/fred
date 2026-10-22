@@ -96,7 +96,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     lifecycle.config.temporal.workflow_id_prefix = lifecycle.config.temporal.task_queue.clone();
     lifecycle.catalog = Catalog::load(catalog.to_str()).unwrap();
     let identity = support::IdentityServer::start().await;
-    let app = api::governance_router(api::AppState {
+    let app = api::routes(api::AppState {
         auth: Arc::new(identity.auth().await),
         pool: e.pool.clone(),
         fga: e.fga.clone(),

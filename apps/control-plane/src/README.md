@@ -26,8 +26,9 @@ current revision.
 
 ## Contract and generated code
 
-HTTP registration and OpenAPI annotations are in `api.rs`; document and processing
-routes are registered from `documents/http.rs` and `processing/http.rs`.
+HTTP registration and OpenAPI annotations are in `api.rs`: one registration list
+(`registrations`) serves `routes`/`router` and produces `openapi`. Document and
+processing routes are registered from `documents/http.rs` and `processing/http.rs`.
 `domain.rs` owns shared domain types; `error.rs` owns API error conversion.
 The frontend uses `slices/controlPlane/controlPlaneOpenApi.ts` (generated) through
 `controlPlaneApiEnhancements.ts`. Change the source contract and regenerate;

@@ -6,7 +6,7 @@ use axum::{
     http::Request,
 };
 use control_plane::{
-    api::{AppState, governance_router},
+    api::{AppState, routes},
     onboarding::Onboarding,
 };
 use serde_json::{Value, json};
@@ -80,7 +80,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
     .await
     .unwrap();
     let state = state(&e, &identity, observed).await;
-    let app = governance_router(state.clone());
+    let app = routes(state.clone());
     for actor in [None, Some("ordinary")] {
         assert_eq!(
             request(
@@ -109,7 +109,7 @@ async fn organization_console_creation_authority_roles_failures_and_budget() {
             if actor.is_none() { 401 } else { 403 }
         );
     }
-    let guarded = governance_router(AppState {
+    let guarded = routes(AppState {
         onboarding: Onboarding {
             gcu_version: Some("v1".into()),
             ..Default::default()
@@ -290,7 +290,7 @@ async fn organization_console_registry_pagination_excludes_retired_and_costs_one
         .load(&e.pool)
         .await
         .unwrap();
-    let app = governance_router(state(&e, &identity, observed).await);
+    let app = routes(state(&e, &identity, observed).await);
     *proxy.fault.lock().await = Default::default();
     let (status, page) = request(
         &app,

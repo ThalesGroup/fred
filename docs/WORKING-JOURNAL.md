@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F15](#f15-une-seule-liste-de-routes) | Une seule liste de routes HTTP | Tests automatisés validés | A1, carte des sources |
 | [F20](#f20-migration-sql-unique) | Une seule migration 0001, sans en-tête contradictoire | Tests automatisés validés ; réinstallation k3d par Dimi | A2, A3, AGENTS, README du composant |
 | [F17](#f17-noms-despaces-et-de-dossiers-canoniques) | Noms d'espaces et de dossiers en NFC sans espaces de bord | Tests automatisés validés | 02, 04, 05 |
 | [F10](#f10-import-zip-et-jeton-de-lopérateur) | Import ZIP sans borne par le jeton de l'opérateur | Tests automatisés validés | 04, A1, 09 |
@@ -79,6 +80,18 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F15 Une seule liste de routes
+
+- 2026-10-22 : vérification sur HEAD `c017210be`, verdict confirmé : `governance_routes` et
+  `content_routes` avaient le même état et la même couche, toujours fusionnés par `router`
+  et `openapi` ; seul `governance_router` (sans préfixe ni couches) servait aux tests.
+  Refactor sur go de Dimi : une liste `registrations`, `pub fn routes(state)` remplace
+  `governance_router` (appels de tests renommés), `router` et `openapi` en dérivent.
+  `openapi.json` régénéré : diff vide, client frontend inchangé. A1 et carte des sources
+  mis à jour. `cargo check --all-targets` exécuté ; tests et qualité non exécutés ;
+  aucun commit.
+- 2026-10-22 : Dimi confirme que tout est bon et autorise le commit et le push de F15.
 
 ## F20 Migration SQL unique
 
