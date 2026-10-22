@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F12](#f12-un-seul-format-derreur) | Un seul module d'extracteurs, erreurs toujours en JSON | Tests ciblés validés ; validation finale du lot | A2, carte des sources |
 | [F13](#f13-recherche-locale-par-préfixe-littéral) | Recherche de candidats locale par préfixe littéral indexé | Tests ciblés validés ; validation finale du lot | 02, 04, 09, A2, A3 |
 | [F08](#f08-configuration-stricte) | Clés de configuration inconnues refusées | Tests ciblés validés ; validation finale du lot | A3, schémas |
 | [F21](#f21-profil-k3d-propriétaire-de-la-configuration-du-control-plane) | Profil k3d propriétaire de la configuration du control-plane | Tests ciblés validés ; validation finale du lot | 08, README k3d |
@@ -88,12 +89,26 @@ fiche plutôt que d'effacer les résultats précédents.
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
 
+## F12 Un seul format d'erreur
+
+- 2026-10-22 : vérification sur HEAD `07c094c10` : confirmé, sur trois modules : `api.rs` et
+  `processing/http.rs` avec `Path`/`Query` d'axum (400 text/plain) et `ApiJson` (tout en 422,
+  message serde pouvant reprendre l'entrée) ; `documents/http.rs` avec ses `Id`/`Params`/`Input`.
+  Correction : module `extract.rs` (`ApiPath`, `ApiQuery`, `ApiJson`) avec la convention déjà
+  testée par documents : JSON illisible → 400 `invalid_json`, valeurs de chemin, requête ou
+  corps invalides → 422 `invalid_fields`, corps trop gros → 413 ; messages fixes. Anciens
+  extracteurs supprimés. OpenAPI : plus de text/plain, 400/422 `ErrorBody` déclarés une fois
+  pour toute route à paramètres ou corps ; schémas inchangés ; client RTK inchangé. Test
+  `every_module_rejects_malformed_input_with_one_json_error_format`, en échec sur HEAD (400
+  text/plain) ; test de contrat étendu. `make test` et intégration complète (112) réussis.
+  Arc42 A2, carte des sources. Coquille du journal F13 corrigée.
+
 ## F13 Recherche locale par préfixe littéral
 
 - 2026-10-22 : vérification sur HEAD `9d0d25d15` : confirmé. `ilike '%q%'` sur quatre
   colonnes, jokers non échappés (« %% » listait 20 profils), parcours complet de
   `user_identity`. Décision de Dimi : préfixe indexé. Correction : `like lower($1) escape`
-  avec `%`, `_` et `\\` échappés, préfixe insensible à la casse sur username, prénom, nom,
+  avec `%`, `_` et `\` échappés, préfixe insensible à la casse sur username, prénom, nom,
   e-mail ; requête non persistante pour un plan construit avec le motif ; migration
   `0003_user_identity_prefix_search.sql` (quatre index `lower(...) text_pattern_ops`).
   EXPLAIN sur 20 000 profils : BitmapOr des quatre index. Tests : unitaire de l'échappement,

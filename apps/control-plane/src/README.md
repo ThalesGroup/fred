@@ -29,7 +29,8 @@ current revision.
 HTTP registration and OpenAPI annotations are in `api.rs`: one registration list
 (`registrations`) serves `routes`/`router` and produces `openapi`. Document and
 processing routes are registered from `documents/http.rs` and `processing/http.rs`.
-`domain.rs` owns shared domain types; `error.rs` owns API error conversion.
+`domain.rs` owns shared domain types; `error.rs` owns API error conversion;
+`extract.rs` owns the path, query and JSON extractors of every route.
 The frontend uses `slices/controlPlane/controlPlaneOpenApi.ts` (generated) through
 `controlPlaneApiEnhancements.ts`. Change the source contract and regenerate;
 do not manually patch generated types. `legacyControlPlane` is a separate preserved

@@ -17,6 +17,7 @@ use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
 #[derive(Default, serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct PreviewQuery {
     /// native, raw, metadata, or a relative path from the published manifest.
     #[serde(default = "raw")]

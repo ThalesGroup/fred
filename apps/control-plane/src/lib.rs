@@ -23,6 +23,7 @@ pub mod db;
 pub mod documents;
 pub mod domain;
 pub mod error;
+pub mod extract;
 pub mod fga;
 pub mod keycloak;
 pub mod lifecycle;

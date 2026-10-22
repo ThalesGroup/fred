@@ -159,21 +159,3 @@ impl IntoResponse for AppError {
         response
     }
 }
-
-/// `Json` whose rejections answer like FastAPI: 422 with a `detail`, never plain text.
-pub struct ApiJson<T>(pub T);
-
-impl<T, S> axum::extract::FromRequest<S> for ApiJson<T>
-where
-    Json<T>: axum::extract::FromRequest<S, Rejection = axum::extract::rejection::JsonRejection>,
-    S: Send + Sync,
-{
-    type Rejection = AppError;
-
-    async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, AppError> {
-        match Json::<T>::from_request(req, state).await {
-            Ok(Json(value)) => Ok(ApiJson(value)),
-            Err(rejection) => Err(AppError::Unprocessable(rejection.body_text())),
-        }
-    }
-}

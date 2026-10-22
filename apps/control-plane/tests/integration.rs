@@ -4630,6 +4630,88 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
     )
 }
 
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn every_module_rejects_malformed_input_with_one_json_error_format() {
+    use tower::ServiceExt;
+    let e = env().await;
+    org_and_team(&e).await;
+    let identity = support::IdentityServer::start().await;
+    let app = content_app(&e, &identity).await;
+    let token = identity.token("alice");
+    let unknown = Uuid::new_v4();
+    let cases = [
+        // api: path, query and body
+        (
+            "PUT",
+            "/spaces/not-a-uuid/roles/member/bob".to_string(),
+            "",
+            422,
+            "invalid_fields",
+        ),
+        (
+            "GET",
+            "/admin/teams?after=not-a-uuid".into(),
+            "",
+            422,
+            "invalid_fields",
+        ),
+        ("POST", "/folders".into(), "{", 400, "invalid_json"),
+        (
+            "POST",
+            "/folders".into(),
+            r#"{"name":1}"#,
+            422,
+            "invalid_fields",
+        ),
+        // documents
+        (
+            "GET",
+            "/spaces/not-a-uuid/entries".into(),
+            "",
+            422,
+            "invalid_fields",
+        ),
+        // processing
+        (
+            "GET",
+            "/documents/not-a-uuid/processing".into(),
+            "",
+            422,
+            "invalid_fields",
+        ),
+        (
+            "GET",
+            format!("/documents/{unknown}/processing?before=x"),
+            "",
+            422,
+            "invalid_fields",
+        ),
+    ];
+    for (method, path, body, status, code) in cases {
+        let request = axum::http::Request::builder()
+            .method(method)
+            .uri(format!("/control-plane/v1{path}"))
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), status, "{method} {path}");
+        assert_eq!(
+            response.headers()["content-type"],
+            "application/json",
+            "{method} {path}"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let error: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error["code"], code, "{method} {path}");
+        assert!(error["detail"].is_string(), "{method} {path}");
+    }
+}
+
 async fn content_request(
     app: axum::Router,
     token: &str,

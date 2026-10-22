@@ -133,11 +133,34 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
     .map(String::from)
     .collect();
     assert_eq!(actual, expected);
-    assert_eq!(
-        api["paths"]["/control-plane/v1/admin/organizations"]["get"]["responses"]["400"]["content"]
-            ["text/plain"]["schema"]["type"],
-        "string"
-    );
+    // One error format: every error answer is ErrorBody JSON, and any route with
+    // parameters or a body declares the extractors' 422.
+    for (path, item) in api["paths"].as_object().unwrap() {
+        for (method, operation) in item.as_object().unwrap() {
+            for (status, response) in operation["responses"].as_object().unwrap() {
+                if status.starts_with('4') || status.starts_with('5') {
+                    let content = response["content"].as_object().unwrap();
+                    assert_eq!(
+                        content.keys().collect::<Vec<_>>(),
+                        ["application/json"],
+                        "{method} {path} {status}"
+                    );
+                    assert_eq!(
+                        content["application/json"]["schema"]["$ref"],
+                        "#/components/schemas/ErrorBody",
+                        "{method} {path} {status}"
+                    );
+                }
+            }
+            let inputs = operation["parameters"]
+                .as_array()
+                .is_some_and(|p| !p.is_empty())
+                || operation["requestBody"].is_object();
+            if inputs {
+                assert!(operation["responses"]["422"].is_object(), "{method} {path}");
+            }
+        }
+    }
     assert_eq!(api["security"], json!([{"bearer": []}]));
     assert_eq!(
         api["components"]["securitySchemes"]["bearer"],

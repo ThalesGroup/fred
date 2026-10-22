@@ -16,6 +16,12 @@ one unknown to the user directory or a tuple OpenFGA rejects as invalid, 409 whe
 OpenFGA guard was consumed (retry with fresh checks), and 503 when the directory is
 unavailable.
 
+Every error answer is an `ErrorBody` JSON object with `detail` and `code`. An unreadable
+JSON body answers 400 `invalid_json`; path, query or body values that do not match
+their type answer 422 `invalid_fields`; an oversized JSON body answers 413
+`request_too_large`. These rejections use fixed messages that never echo input, and
+the contract declares them on every route that takes parameters or a body.
+
 <!-- generated: routes apps/control-plane/src/api.rs /control-plane/v1 -->
 | Method | Path | Handler |
 | --- | --- | --- |

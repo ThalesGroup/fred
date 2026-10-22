@@ -3,12 +3,13 @@
 use super::{Processing, models::*, store};
 use crate::{
     api::AppState,
-    error::{ApiJson, AppError, AppResult},
+    error::{AppError, AppResult},
+    extract::{ApiJson, ApiPath, ApiQuery},
     onboarding::AdmittedUser,
 };
 use axum::{
     Json,
-    extract::{FromRequestParts, Path, Query, State},
+    extract::{FromRequestParts, State},
     http::{HeaderMap, header, request::Parts},
     response::Response,
 };
@@ -68,7 +69,7 @@ fn key(headers: &HeaderMap) -> AppResult<Uuid> {
 async fn start(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     headers: HeaderMap,
     ApiJson(input): ApiJson<Start>,
 ) -> AppResult<Json<Summary>> {
@@ -79,15 +80,17 @@ async fn start(
     ))
 }
 #[derive(Default, serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct History {
+    #[param(nullable)]
     pub before: Option<Uuid>,
 }
 #[utoipa::path(get,path="/documents/{id}/processing",params(("id"=Uuid,Path),History),responses((status=200,body=Vec<Summary>),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn history(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Path(id): Path<Uuid>,
-    Query(q): Query<History>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(q): ApiQuery<History>,
 ) -> AppResult<Json<Vec<Summary>>> {
     Ok(Json(service(&s)?.history(&user.uid, id, q.before).await?))
 }
@@ -95,7 +98,7 @@ async fn history(
 async fn work(
     State(s): State<AppState>,
     Worker: Worker,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<Work>> {
     let p = service(&s)?;
     let row = store::row(&p.pool, id).await?;
@@ -108,7 +111,7 @@ async fn work(
 async fn claim(
     State(s): State<AppState>,
     Worker: Worker,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<Claim>,
 ) -> AppResult<Json<Descriptor>> {
     if id != input.work.processing_id {
@@ -120,7 +123,7 @@ async fn claim(
 async fn commit(
     State(s): State<AppState>,
     Worker: Worker,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<Commit>,
 ) -> AppResult<Json<Summary>> {
     if id != input.work.processing_id {
@@ -132,7 +135,7 @@ async fn commit(
 async fn abandon(
     State(s): State<AppState>,
     Worker: Worker,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<Failure>,
 ) -> AppResult<Json<Summary>> {
     if id != input.work.processing_id {
@@ -141,6 +144,7 @@ async fn abandon(
     Ok(Json(service(&s)?.abandon(input).await?))
 }
 #[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct OriginalQuery {
     pub generation: Uuid,
 }
@@ -148,8 +152,8 @@ pub struct OriginalQuery {
 async fn original(
     State(s): State<AppState>,
     Worker: Worker,
-    Path(id): Path<Uuid>,
-    Query(q): Query<OriginalQuery>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(q): ApiQuery<OriginalQuery>,
 ) -> AppResult<Response> {
     let p = service(&s)?;
     let r = store::row(&p.pool, id).await?;
@@ -170,8 +174,8 @@ async fn original(
 async fn preview(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Path(id): Path<Uuid>,
-    Query(query): Query<super::preview::PreviewQuery>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<super::preview::PreviewQuery>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
     super::preview::preview(&s, &user.uid, id, query, headers).await
@@ -180,7 +184,7 @@ async fn preview(
 async fn vectors(
     State(s): State<AppState>,
     Worker: Worker,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<super::cleanup::VectorPlan>,
 ) -> AppResult<()> {
     if id != input.work.processing_id {

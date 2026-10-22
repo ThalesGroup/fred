@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{FromRef, Path, Query, State},
+    extract::{FromRef, State},
     http::{HeaderValue, Method, StatusCode, header},
 };
 use serde::{Deserialize, Serialize};
@@ -35,7 +35,8 @@ use crate::{
     auth::{Authenticator, CurrentUser},
     bootstrap, db,
     domain::{Folder, Permission, Role, Space, SpaceKind, SpaceRow},
-    error::{ApiJson, AppError, AppResult},
+    error::{AppError, AppResult},
+    extract::{ApiJson, ApiPath, ApiQuery},
     fga::Fga,
     keycloak::Directory,
     logging,
@@ -412,7 +413,7 @@ fn parse_role(role: &str) -> AppResult<Role> {
     params(("id" = Uuid, Path), ("role" = Role, Path), ("user" = String, Path)),
     responses(
         (status = 204, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
@@ -425,7 +426,7 @@ fn parse_role(role: &str) -> AppResult<Role> {
 async fn grant(
     State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path((id, role, target)): Path<(Uuid, String, String)>,
+    ApiPath((id, role, target)): ApiPath<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
     let role = parse_role(&role)?;
     if role == Role::OrganizationOwner
@@ -456,7 +457,7 @@ async fn grant(
     params(("id" = Uuid, Path), ("role" = Role, Path), ("user" = String, Path)),
     responses(
         (status = 204, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
@@ -467,7 +468,7 @@ async fn grant(
 async fn revoke(
     State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path((id, role, target)): Path<(Uuid, String, String)>,
+    ApiPath((id, role, target)): ApiPath<(Uuid, String, String)>,
 ) -> AppResult<StatusCode> {
     spaces::revoke(&s.pool, &s.fga, &user, id, parse_role(&role)?, &target).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -524,7 +525,7 @@ struct Rename {
     request_body = Rename,
     responses(
         (status = 204, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
@@ -536,7 +537,7 @@ struct Rename {
 async fn rename_folder(
     State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     ApiJson(req): ApiJson<Rename>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
@@ -552,7 +553,7 @@ async fn rename_folder(
     params(("id" = Uuid, Path)),
     responses(
         (status = 204, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
@@ -563,7 +564,7 @@ async fn rename_folder(
 async fn delete_folder(
     State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
     let mut tx = spaces::authorized_write(&s.pool, &s.fga, &user, folder.space_id).await?;
@@ -689,7 +690,7 @@ fn platform_role(name: &str) -> AppResult<PlatformRole> {
     params(("user" = String, Path), ("role" = PlatformRole, Path)),
     responses(
         (status = 204, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
@@ -702,7 +703,7 @@ fn platform_role(name: &str) -> AppResult<PlatformRole> {
 async fn grant_platform_role(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Path((target, role)): Path<(String, String)>,
+    ApiPath((target, role)): ApiPath<(String, String)>,
 ) -> AppResult<StatusCode> {
     require_directory_actor(&s)?;
     let directory = s
@@ -730,7 +731,7 @@ async fn grant_platform_role(
     params(("user" = String, Path), ("role" = PlatformRole, Path)),
     responses(
         (status = 204, description = "Success"),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Direct grant not found", body = crate::error::ErrorBody),
@@ -742,7 +743,7 @@ async fn grant_platform_role(
 async fn revoke_platform_role(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Path((target, role)): Path<(String, String)>,
+    ApiPath((target, role)): ApiPath<(String, String)>,
 ) -> AppResult<StatusCode> {
     require_directory_actor(&s)?;
     platform::revoke(&s.pool, &s.fga, &user.uid, &target, platform_role(&role)?).await?;
@@ -812,7 +813,7 @@ struct RegistryQuery {
     params(("after" = Option<Uuid>, Query, description = "Exclusive UUID cursor; at most 100 non-personal teams, ordered by ID.")),
     responses(
         (status = 200, description = "Success", body = [Space]),
-        (status = 400, description = "Invalid path/query or application request", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
@@ -821,7 +822,7 @@ struct RegistryQuery {
 async fn team_registry(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Query(query): Query<RegistryQuery>,
+    ApiQuery(query): ApiQuery<RegistryQuery>,
 ) -> AppResult<Json<Vec<Space>>> {
     if !s
         .fga
@@ -847,7 +848,7 @@ struct OrganizationPage {
     params(("after" = Option<Uuid>, Query, description = "Exclusive UUID cursor; at most 100 active organizations.")),
     responses(
         (status = 200, body = OrganizationPage),
-        (status = 400, description = "Invalid query", content((crate::error::ErrorBody = "application/json"), (String = "text/plain"))),
+        (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, body = crate::error::ErrorBody),
         (status = 403, body = crate::error::ErrorBody),
         (status = 500, body = crate::error::ErrorBody)
@@ -856,7 +857,7 @@ struct OrganizationPage {
 async fn organization_registry(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Query(query): Query<RegistryQuery>,
+    ApiQuery(query): ApiQuery<RegistryQuery>,
 ) -> AppResult<Json<OrganizationPage>> {
     platform::require_owner(&s.fga, &user.uid).await?;
     let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
@@ -905,7 +906,7 @@ struct CandidateQuery {
 async fn search_organization_candidates(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Query(query): Query<CandidateQuery>,
+    ApiQuery(query): ApiQuery<CandidateQuery>,
 ) -> AppResult<Json<Vec<crate::users::UserSummary>>> {
     platform::require_owner(&s.fga, &user.uid).await?;
     if query.query.chars().count() < 2 {
@@ -1046,7 +1047,54 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
         "bearer",
         Vec::<String>::new(),
     )]);
+    declare_extractor_rejections(&mut api);
     api
+}
+
+/// `extract` rejects any route's parameters or body the same way; declare it once.
+fn declare_extractor_rejections(api: &mut utoipa::openapi::OpenApi) {
+    use utoipa::openapi::{ContentBuilder, Ref, RefOr, ResponseBuilder};
+    let error = |description: &str| {
+        RefOr::T(
+            ResponseBuilder::new()
+                .description(description)
+                .content(
+                    "application/json",
+                    ContentBuilder::new()
+                        .schema(Some(Ref::from_schema_name("ErrorBody")))
+                        .build(),
+                )
+                .build(),
+        )
+    };
+    for item in api.paths.paths.values_mut() {
+        let operations = [
+            &mut item.get,
+            &mut item.put,
+            &mut item.post,
+            &mut item.delete,
+            &mut item.patch,
+        ];
+        for operation in operations.into_iter().flatten() {
+            let json_body = operation
+                .request_body
+                .as_ref()
+                .is_some_and(|body| {
+                    matches!(body, RefOr::T(body) if body.content.contains_key("application/json"))
+                });
+            let responses = &mut operation.responses.responses;
+            if json_body {
+                responses
+                    .entry("400".into())
+                    .or_insert_with(|| error("Malformed JSON body"));
+            }
+            if json_body || operation.parameters.as_ref().is_some_and(|p| !p.is_empty()) {
+                responses
+                    .entry("422".into())
+                    .or_insert_with(|| error("Invalid path, query or body fields"));
+            }
+        }
+    }
 }
 
 // A multipart contract, not a second parser: the handler validates the stream itself.
@@ -1142,7 +1190,7 @@ fn upload_error(status: StatusCode) -> axum::response::Response {
 async fn delete_space(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
     require_directory_actor(&s)?;
     let receipt = s.lifecycle.accept(&s.pool, &s.fga, &user.uid, id).await?;
@@ -1163,7 +1211,7 @@ async fn delete_space(
 async fn deletion_status(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<crate::lifecycle::Receipt>> {
     require_directory_actor(&s)?;
     Ok(Json(

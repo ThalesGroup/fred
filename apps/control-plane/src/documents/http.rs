@@ -5,15 +5,15 @@ use super::{Storage, invalid, models::*, unavailable};
 use crate::{
     api::AppState,
     error::{AppError, AppResult},
+    extract::{ApiJson, ApiPath, ApiQuery},
     onboarding::AdmittedUser,
 };
 use axum::{
     Json,
-    extract::{DefaultBodyLimit, FromRequest, FromRequestParts, Multipart, Path, Query, State},
-    http::{HeaderMap, StatusCode, header, request::Parts},
+    extract::{DefaultBodyLimit, Multipart, State},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use utoipa_axum::{
     router::{OpenApiRouter, UtoipaMethodRouterExt},
@@ -24,54 +24,6 @@ use uuid::Uuid;
 fn storage(state: &AppState) -> AppResult<&Arc<Storage>> {
     state.content.as_ref().ok_or_else(unavailable)
 }
-pub(crate) struct Id(pub Uuid);
-impl<S: Send + Sync> FromRequestParts<S> for Id {
-    type Rejection = AppError;
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> AppResult<Self> {
-        Path::<Uuid>::from_request_parts(parts, state)
-            .await
-            .map(|Path(id)| Self(id))
-            .map_err(|_| invalid("Invalid resource identifier"))
-    }
-}
-pub(crate) struct Params<T>(pub T);
-impl<T: DeserializeOwned + Send, S: Send + Sync> FromRequestParts<S> for Params<T> {
-    type Rejection = AppError;
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> AppResult<Self> {
-        Query::<T>::from_request_parts(parts, state)
-            .await
-            .map(|Query(value)| Self(value))
-            .map_err(|_| invalid("Invalid query parameters"))
-    }
-}
-
-struct Input<T>(T);
-impl<T, S> FromRequest<S> for Input<T>
-where
-    Json<T>: FromRequest<S, Rejection = axum::extract::rejection::JsonRejection>,
-    S: Send + Sync,
-{
-    type Rejection = AppError;
-    async fn from_request(req: axum::extract::Request, state: &S) -> AppResult<Self> {
-        Json::<T>::from_request(req, state)
-            .await
-            .map(|Json(value)| Self(value))
-            .map_err(|error| match error.status() {
-                StatusCode::PAYLOAD_TOO_LARGE => AppError::problem(
-                    StatusCode::PAYLOAD_TOO_LARGE,
-                    "request_too_large",
-                    "The request body exceeds the limit",
-                ),
-                StatusCode::UNPROCESSABLE_ENTITY => invalid("Invalid request fields"),
-                _ => AppError::problem(
-                    StatusCode::BAD_REQUEST,
-                    "invalid_json",
-                    "Expected a valid JSON request",
-                ),
-            })
-    }
-}
-
 #[allow(dead_code)]
 #[derive(utoipa::ToSchema)]
 struct FileUpload {
@@ -86,8 +38,8 @@ struct FileUpload {
 async fn upload(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Id(id): Id,
-    Params(query): Params<UploadQuery>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<UploadQuery>,
     headers: HeaderMap,
     multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
 ) -> AppResult<Response> {
@@ -164,8 +116,8 @@ async fn upload(
 async fn preflight(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Id(id): Id,
-    Input(input): Input<Preflight>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<Preflight>,
 ) -> AppResult<Json<PreflightResult>> {
     let mut result = storage(&s)?.preflight(&user.uid, id, input).await?;
     result.storage.processing_enabled = s.processing.as_ref().is_some_and(|p| p.config.enabled);
@@ -176,8 +128,8 @@ async fn preflight(
 async fn entries(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Id(id): Id,
-    Params(query): Params<EntryQuery>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<EntryQuery>,
 ) -> AppResult<Json<Directory>> {
     let mut directory = Storage::directory(&s.pool, &s.fga, &user.uid, id, query).await?;
     directory.processing_enabled = s.processing.as_ref().is_some_and(|p| p.config.enabled);
@@ -188,7 +140,7 @@ async fn entries(
 async fn summary(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Id(id): Id,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<StorageSummary>> {
     let mut result = storage(&s)?.summary(&user.uid, id).await?;
     result.processing_enabled = s.processing.as_ref().is_some_and(|p| p.config.enabled);
@@ -199,8 +151,8 @@ async fn summary(
 async fn receipts(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Id(id): Id,
-    Params(query): Params<ReceiptQuery>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<ReceiptQuery>,
 ) -> AppResult<Json<Vec<UploadReceipt>>> {
     Ok(Json(storage(&s)?.receipts(&user.uid, id, query).await?))
 }
@@ -209,7 +161,7 @@ async fn receipts(
 async fn receipt(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Id(id): Id,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<UploadReceipt>> {
     Ok(Json(storage(&s)?.receipt(&user.uid, id).await?))
 }
@@ -218,7 +170,7 @@ async fn receipt(
 async fn acknowledge(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Id(id): Id,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<StatusCode> {
     storage(&s)?.acknowledge(&user.uid, id).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -229,7 +181,7 @@ async fn acknowledge(
 async fn content(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    Id(id): Id,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Response> {
     storage(&s)?.content(&user.uid, id).await
 }
