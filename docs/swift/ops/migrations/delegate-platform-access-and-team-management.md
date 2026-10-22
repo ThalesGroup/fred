@@ -1,7 +1,7 @@
 ---
 schema: 1
 title: "Delegate Platform Access administration"
-impact: minor
+impact: none
 configuration: none
 configuration_reason: "No configuration keys or defaults change; the authorization model gains one delegated role and permission."
 ---
