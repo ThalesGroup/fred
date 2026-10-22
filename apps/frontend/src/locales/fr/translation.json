@@ -4401,7 +4401,7 @@
       "toggleLabel": "Envoyer les notifications « {{name}} »",
       "turnOff": {
         "title": "Désactiver « {{name}} » ?",
-        "message": "Les notifications de ce type déjà envoyées seront supprimées, pour tout le monde. La réactiver ne concerne que les nouveaux événements.",
+        "message": "Les notifications de ce type déjà envoyées seront supprimées, pour tout le monde. Le réactiver ne concerne que les nouveaux événements.",
         "confirm": "Désactiver"
       }
     }
