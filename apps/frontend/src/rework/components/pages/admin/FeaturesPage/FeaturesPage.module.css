@@ -118,6 +118,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-m);
+  margin-top: var(--spacing-xs);
 }
 
 .modelFilter {
