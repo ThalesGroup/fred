@@ -5,6 +5,7 @@ impact: none
 configuration: none
 configuration_reason: "The frontend host page and the iframe SDK change; no setting, chart value or gateway rule is added. Upload size stays bounded by the existing FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE."
 no_action_reason: "The host announces the new capability by itself and applications without the matching SDK keep the text transport, so a normal frontend deployment is enough."
+after: [3211-compose-chart-registrations]
 ---
 
 ## Applicability
