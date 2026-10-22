@@ -1258,7 +1258,6 @@
         "discovery": {
           "title": "Model discovery",
           "url": "Models URL",
-          "yamlUrl": "YAML default: {{url}}",
           "lastSuccess": "Last successful check: {{time}}",
           "refresh": "Refresh",
           "refreshing": "Checking available models...",
@@ -1279,8 +1278,8 @@
           "emptyDiscovered": "No discovered models available.",
           "unregisteredSource": "Models from {{sources}} are visible, but discovery settings are unavailable. Check the other configured agent pods and refresh.",
           "none": "No discovery source is configured. Static catalog models are listed below.",
-          "save": "Save URL",
-          "reset": "Use YAML URL",
+          "save": "Save",
+          "reset": "Reset to default URL",
           "saveError": "Could not save or check the discovery URL.",
           "formatLimit": "Discovery accepts OpenAI-compatible GET /models responses with data[].id. Other formats need a gateway adapter."
         },

@@ -197,4 +197,37 @@ it("shows the effective URL without edit controls to a delegated feature manager
   const admin = render();
   expect(admin).toContain("discovery.save");
   expect(admin).toContain("discovery.reset");
+  expect(admin).not.toContain("discovery.yamlUrl");
+});
+
+it("shows a separate URL editor for each discovery source", () => {
+  access.canAdmin = true;
+  const html = renderToStaticMarkup(
+    <ModelDiscoveryStatus
+      data={{
+        sources: [
+          {
+            source_id: "mistral",
+            yaml_url: "https://api.mistral.ai/v1/models",
+            effective_url: "https://api.mistral.ai/v1/models",
+          },
+          {
+            source_id: "gateway",
+            yaml_url: "https://models.example/v1/models",
+            effective_url: "https://models.example/v1/models",
+          },
+        ],
+      }}
+      discoveredSourceIds={["mistral", "gateway"]}
+      refreshing={false}
+      refreshError={false}
+      refresh={async () => undefined}
+    />,
+  );
+
+  expect(html).toContain("mistral");
+  expect(html).toContain("gateway");
+  expect(html.match(/<input/g)).toHaveLength(2);
+  expect(html.match(/discovery\.save/g)).toHaveLength(2);
+  expect(html.match(/discovery\.reset/g)).toHaveLength(2);
 });

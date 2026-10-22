@@ -53,6 +53,7 @@ function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             disabled={isLoading}
+            compact
           />
           <div className={styles.discoveryActions}>
             <Button
@@ -64,17 +65,18 @@ function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
             >
               {t("rework.admin.capabilities.discovery.save")}
             </Button>
-            {source.override_url && (
-              <Button
-                color="on-surface"
-                variant="text"
-                size="small"
-                disabled={isLoading}
-                onClick={() => void save(null)}
-              >
-                {t("rework.admin.capabilities.discovery.reset")}
-              </Button>
-            )}
+            <Button
+              color="on-surface"
+              variant="text"
+              size="small"
+              disabled={isLoading || (!source.override_url && url === source.yaml_url)}
+              onClick={() => {
+                if (source.override_url) void save(null);
+                else setUrl(source.yaml_url);
+              }}
+            >
+              {t("rework.admin.capabilities.discovery.reset")}
+            </Button>
           </div>
         </>
       ) : (
@@ -82,9 +84,6 @@ function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
           {t("rework.admin.capabilities.discovery.url")}: {source.effective_url}
         </span>
       )}
-      <span className={styles.status}>
-        {t("rework.admin.capabilities.discovery.yamlUrl", { url: source.yaml_url })}
-      </span>
       {source.last_success_at && (
         <span className={styles.status}>
           {t("rework.admin.capabilities.discovery.lastSuccess", {

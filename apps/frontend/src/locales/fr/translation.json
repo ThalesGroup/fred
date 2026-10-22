@@ -1258,7 +1258,6 @@
         "discovery": {
           "title": "Découverte des modèles",
           "url": "URL des modèles",
-          "yamlUrl": "Valeur YAML : {{url}}",
           "lastSuccess": "Dernière vérification réussie : {{time}}",
           "refresh": "Actualiser",
           "refreshing": "Vérification des modèles disponibles...",
@@ -1279,8 +1278,8 @@
           "emptyDiscovered": "Aucun modèle découvert disponible.",
           "unregisteredSource": "Les modèles de {{sources}} sont visibles, mais les paramètres de découverte sont indisponibles. Vérifiez les autres pods agents configurés et actualisez.",
           "none": "Aucune source de découverte configurée. Les modèles du catalogue statique figurent ci-dessous.",
-          "save": "Enregistrer l'URL",
-          "reset": "Utiliser l'URL YAML",
+          "save": "Enregistrer",
+          "reset": "Rétablir l'URL par défaut",
           "saveError": "Impossible d'enregistrer ou de vérifier l'URL de découverte.",
           "formatLimit": "La découverte accepte les réponses GET /models compatibles OpenAI avec data[].id. Les autres formats nécessitent un adaptateur."
         },
