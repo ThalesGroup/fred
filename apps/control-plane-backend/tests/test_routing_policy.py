@@ -417,6 +417,7 @@ class _FakeDeps:
         source_runtime_ids: list[str] | None = None,
         instances: list[Any] | None = None,
         reasoning_enabled_ids: set[str] | None = None,
+        display_name_overrides: dict[str, str] | None = None,
     ) -> None:
         self._store = store
         self.team_dependencies = type("_TD", (), {"rebac": rebac})()
@@ -430,6 +431,7 @@ class _FakeDeps:
         self._agent_instance_store = _FakeAgentInstanceStore(records)
         store._instances = self._agent_instance_store
         self._reasoning_enabled_ids = reasoning_enabled_ids or set()
+        self._display_name_overrides = display_name_overrides or {}
         self.configuration = SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=[
@@ -1450,8 +1452,11 @@ class _ResolutionDeps(_FakeDeps):
         instance: _FakeInstanceForResolution | None,
         sources: list[Any] | None = None,
         reasoning_enabled_ids: set[str] | None = None,
+        display_name_overrides: dict[str, str] | None = None,
     ) -> None:
-        super().__init__(store=store, rebac=rebac)
+        super().__init__(
+            store=store, rebac=rebac, display_name_overrides=display_name_overrides
+        )
         self._instance = instance
         self._reasoning_enabled_ids = reasoning_enabled_ids or set()
         self.configuration = SimpleNamespace(
@@ -1490,6 +1495,15 @@ class _ResolutionDeps(_FakeDeps):
 
         return _Store()
 
+    def get_model_display_name_override_store(self):
+        overrides = self._display_name_overrides
+
+        class _Store:
+            async def list_all(self):
+                return dict(overrides)
+
+        return _Store()
+
 
 def _resolution_deps(
     *,
@@ -1500,6 +1514,7 @@ def _resolution_deps(
     instance: _FakeInstanceForResolution | None = None,
     sources: list[Any] | None = None,
     reasoning_enabled_ids: set[str] | None = None,
+    display_name_overrides: dict[str, str] | None = None,
 ) -> ProductServiceDependencies:
     stored: dict[str, Any] = {}
     if stored_default is not None or stored_disabled or stored_reasoning_off:
@@ -1516,6 +1531,7 @@ def _resolution_deps(
         else _FakeInstanceForResolution(source_agent_id="rico"),
         sources=sources,
         reasoning_enabled_ids=reasoning_enabled_ids,
+        display_name_overrides=display_name_overrides,
     )
 
 
@@ -1834,6 +1850,46 @@ async def test_effective_model_names_the_entry_owning_the_winning_profile(
     assert result.capability_id == "model__openai__mistral-medium"
     # The sibling's toggle must not surface an inert control on this model.
     assert result.reasoning_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_effective_model_and_picker_use_saved_admin_name(
+    monkeypatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry(
+                "model__openai__small",
+                "chat.small",
+                name="chat-small",
+                display_name="Gateway Small",
+            ),
+            _chat_entry(
+                "model__openai__large",
+                "chat.large",
+                name="chat-large",
+                display_name="Gateway Large",
+            ),
+        ],
+        default_chat_profile_id="chat.small",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            stored_default="chat.large",
+            display_name_overrides={"model__openai__large": "Team Large"},
+        ),
+    )
+
+    assert result.name == "chat-large"
+    assert result.display_name == "Team Large"
+    assert {row.name: row.display_name for row in result.selectable_models} == {
+        "chat-small": "Gateway Small",
+        "chat-large": "Team Large",
+    }
 
 
 @pytest.mark.asyncio

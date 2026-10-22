@@ -35,6 +35,9 @@ from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.capabilities.display_name_store import (
+    ModelDisplayNameOverrideStore,
+)
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
@@ -105,6 +108,7 @@ class ProductServiceDependencies:
     # is actually dispatched.
     get_temporal_client: Callable[[], Awaitable["TemporalClient"]]
     get_model_reasoning_store: Callable[[], ModelReasoningStore]
+    get_model_display_name_override_store: Callable[[], ModelDisplayNameOverrideStore]
     get_session_metadata_store: Callable[[], SessionMetadataStore]
     get_team_metadata_store: Callable[[], TeamMetadataStore]
     get_session_attachment_store: Callable[[], SessionAttachmentStore]
@@ -161,6 +165,7 @@ def build_product_service_dependencies(
             container.get_temporal_client_provider().get_client()
         ),
         get_model_reasoning_store=container.get_model_reasoning_store,
+        get_model_display_name_override_store=container.get_model_display_name_override_store,
         get_session_metadata_store=container.get_session_metadata_store,
         get_team_metadata_store=container.get_team_metadata_store,
         get_session_attachment_store=container.get_session_attachment_store,

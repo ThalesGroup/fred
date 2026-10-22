@@ -48,6 +48,7 @@ import control_plane_backend.models.knowledge_base_models  # noqa: F401
 
 # codeql[py/unused-import]
 import control_plane_backend.models.marketplace_settings_models  # noqa: F401 — registers platform_marketplace_settings with Base
+import control_plane_backend.models.model_display_name_models  # noqa: F401
 import control_plane_backend.models.model_reasoning_models  # noqa: F401
 
 # codeql[py/unused-import]

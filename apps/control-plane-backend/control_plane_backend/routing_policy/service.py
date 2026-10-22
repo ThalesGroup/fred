@@ -48,6 +48,7 @@ from control_plane_backend.capabilities.authz import (
 )
 from control_plane_backend.capabilities.catalog import (
     aggregate_capability_catalog,
+    model_display_name_overrides,
     universally_available_chat_model_profile_ids,
 )
 from control_plane_backend.organization_authz import require_manage_capabilities
@@ -414,8 +415,9 @@ async def resolve_effective_chat_model(
     # here and applied to every return path below: the composer must not offer
     # an inert toggle for a model whose reasoning is off, because
     # `RoutedChatModelFactory` strips the reasoning settings in that case.
-    reasoning_enabled_ids = (
-        await deps.get_model_reasoning_store().list_enabled_model_ids()
+    reasoning_enabled_ids, display_name_overrides = await asyncio.gather(
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
+        model_display_name_overrides(deps),
     )
 
     # A platform binding outranks every profile-valued level and bypasses team
@@ -428,12 +430,11 @@ async def resolve_effective_chat_model(
         )
         return EffectiveChatModel(
             name=platform_binding.name,
+            display_name=display_name_overrides.get(binding_capability_id),
             capability_id=binding_capability_id,
             reasoning_enabled=binding_capability_id in reasoning_enabled_ids,
             choice_locked=True,
-            # No `display_name`: an operator binding may name a model absent
-            # from every pod catalog, so there is no profile to read an
-            # ops-authored label from. The prettifying fallback covers it.
+            # An absent admin label keeps the frontend's name fallback.
         )
 
     from control_plane_backend.product.service import (
@@ -525,7 +526,9 @@ async def resolve_effective_chat_model(
                 ),
                 capability_id=candidate.id,
                 name=candidate.name,
-                display_name=candidate.model_display_name,
+                display_name=display_name_overrides.get(
+                    candidate.id, candidate.model_display_name
+                ),
                 reasoning_enabled=reasoning_enabled,
                 reasoning_default_on=reasoning_enabled
                 and candidate.id not in reasoning_off,
@@ -534,7 +537,7 @@ async def resolve_effective_chat_model(
         # `CapabilityCatalogEntry.name` already IS the concrete model name for a
         # `kind="model"` entry.
         name=entry.name,
-        display_name=entry.model_display_name,
+        display_name=display_name_overrides.get(entry.id, entry.model_display_name),
         capability_id=entry.id,
         # `None` means unrestricted (every capability usable), matching
         # `usable_capability_ids`' own contract — not "nothing usable".

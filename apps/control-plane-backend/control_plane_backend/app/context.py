@@ -53,6 +53,9 @@ from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.agent_marketplace.store import AgentMarketplaceStore
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.capabilities.display_name_store import (
+    ModelDisplayNameOverrideStore,
+)
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
@@ -135,6 +138,9 @@ class ApplicationContext:
         self._platform_default_team_store: PlatformDefaultTeamStore | None = None
         self._team_admin_charter_store: TeamAdminCharterStore | None = None
         self._model_reasoning_store: ModelReasoningStore | None = None
+        self._model_display_name_override_store: (
+            ModelDisplayNameOverrideStore | None
+        ) = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
@@ -499,6 +505,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._model_reasoning_store
+
+    def get_model_display_name_override_store(self) -> ModelDisplayNameOverrideStore:
+        if self._model_display_name_override_store is None:
+            self._model_display_name_override_store = ModelDisplayNameOverrideStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._model_display_name_override_store
 
     def get_session_metadata_store(self) -> SessionMetadataStore:
         if self._session_metadata_store is None:

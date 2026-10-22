@@ -48,6 +48,14 @@ logger = logging.getLogger(__name__)
 _CAPABILITY_ID_RE = re.compile(CAPABILITY_ID_PATTERN)
 
 
+async def model_display_name_overrides(
+    deps: ProductServiceDependencies,
+) -> dict[str, str]:
+    getter = getattr(deps, "get_model_display_name_override_store", None)
+    store = getter() if getter is not None else None
+    return await store.list_all() if store is not None else {}
+
+
 def _union_profile_ids(*groups: tuple[str, ...]) -> tuple[str, ...]:
     seen: dict[str, None] = {}
     for group in groups:
@@ -293,6 +301,13 @@ async def aggregate_capability_catalog(
             team_scope=TeamScopePolicy.ADMIN_GATED,
         )
         catalog[entry.id] = entry
+    overrides = await model_display_name_overrides(deps)
+    for capability_id, display_name in overrides.items():
+        entry = catalog.get(capability_id)
+        if entry is not None and entry.kind == "model":
+            catalog[capability_id] = entry.model_copy(
+                update={"model_display_name": display_name}
+            )
     return catalog
 
 
