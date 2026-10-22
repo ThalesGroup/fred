@@ -19,6 +19,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.notification_models import NotificationRow
+from control_plane_backend.notifications.schemas import (
+    TeamJoinRequestAnsweredPayload,
+)
 from control_plane_backend.notifications.store import (
     NotificationDraft,
     NotificationStore,
@@ -372,9 +375,10 @@ async def test_the_expiry_activity_deletes_expired_rows_only(
         [
             NotificationDraft(
                 recipient_id="alice",
-                type="agent.republish_needed",
                 group_key=g,
-                payload={},
+                payload=TeamJoinRequestAnsweredPayload(
+                    team_id="alpha", team_name="Alpha", outcome="refused"
+                ),
             )
             for g in ("old", "live")
         ]

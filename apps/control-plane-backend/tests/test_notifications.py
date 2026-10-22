@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Notification service and routes: payload validation, best-effort emission,
-and a caller who only ever reaches their own notifications."""
+"""Notification service and routes: best-effort emission and a caller who only
+ever reaches their own notifications."""
 
 from __future__ import annotations
 
@@ -27,10 +27,9 @@ import pytest_asyncio
 from control_plane_backend.app.dependencies import attach_application_container
 from control_plane_backend.notifications import api as notifications_api
 from control_plane_backend.notifications.schemas import (
-    ACTION_PERMISSION,
     AgentRepublishNeededPayload,
     NotificationType,
-    validate_payload,
+    TeamJoinRequestAnsweredPayload,
 )
 from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.notifications.store import (
@@ -42,7 +41,6 @@ from fred_core import KeycloakUser, get_current_user
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.security.rebac.rebac_engine import RebacEngine, TeamPermission
 from httpx import ASGITransport, AsyncClient
-from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 _PAYLOAD = AgentRepublishNeededPayload(
@@ -82,43 +80,20 @@ async def service(
     )
 
 
-async def _notify(service: NotificationService, *recipients: str, group: str = "g1"):
-    return await service.notify(
-        recipients=list(recipients),
-        type=NotificationType.AGENT_REPUBLISH_NEEDED,
-        payload=_PAYLOAD,
-        group_key=group,
-        team_id="alpha",
+async def _notify(
+    service: NotificationService, *recipients: str, group: str = "g1"
+) -> None:
+    await service.notify(
+        [
+            NotificationDraft(
+                recipient_id=recipient,
+                group_key=group,
+                payload=_PAYLOAD,
+                team_id="alpha",
+            )
+            for recipient in recipients
+        ]
     )
-
-
-# --- payloads -------------------------------------------------------------------
-
-
-def test_payload_validation_refuses_an_unknown_type_and_a_missing_field() -> None:
-    with pytest.raises(ValueError):
-        validate_payload("agent.unknown", _PAYLOAD)
-    incomplete = _PAYLOAD.model_dump()
-    del incomplete["editor_name"]
-    with pytest.raises(ValidationError):
-        validate_payload(NotificationType.AGENT_REPUBLISH_NEEDED, incomplete)
-    assert validate_payload(NotificationType.AGENT_REPUBLISH_NEEDED, _PAYLOAD) == (
-        _PAYLOAD.model_dump()
-    )
-
-
-def test_every_type_declares_the_permission_to_act_on_it() -> None:
-    assert set(ACTION_PERMISSION) == set(NotificationType)
-    assert ACTION_PERMISSION[NotificationType.AGENT_MARKETPLACE_REMOVED] == (
-        TeamPermission.CAN_UPDATE_AGENTS
-    )
-    assert ACTION_PERMISSION[NotificationType.TEAM_JOIN_REQUESTED] == (
-        TeamPermission.CAN_ADMINISTER_MEMBERS
-    )
-    # No permission only for a type sent outside any team: the requester's answer.
-    assert {t for t, p in ACTION_PERMISSION.items() if p is None} == {
-        NotificationType.TEAM_JOIN_REQUEST_ANSWERED
-    }
 
 
 # --- emission -------------------------------------------------------------------
@@ -128,7 +103,7 @@ def test_every_type_declares_the_permission_to_act_on_it() -> None:
 async def test_notify_creates_one_row_per_recipient_and_counts_it(
     service: NotificationService, kpi: _Kpi
 ) -> None:
-    assert await _notify(service, "alice", "dave")
+    await _notify(service, "alice", "dave")
 
     for uid in ("alice", "dave"):
         page = await service.list_page(_user(uid), limit=50, before=None)
@@ -160,16 +135,9 @@ async def test_a_team_notification_skips_who_cannot_act_on_it(
         get_rebac=lambda: cast(RebacEngine, _Rebac()),
     )
 
-    assert await _notify(service, "alice", "dave")
-    await service.notify_many(
-        [
-            NotificationDraft(
-                recipient_id="dave",
-                type=NotificationType.AGENT_REPUBLISH_NEEDED.value,
-                group_key="no-team",
-                payload=_PAYLOAD.model_dump(),
-            )
-        ]
+    await _notify(service, "alice", "dave")
+    await service.notify(
+        [NotificationDraft(recipient_id="dave", group_key="no-team", payload=_PAYLOAD)]
     )
 
     alice = await service.list_page(_user("alice"), limit=50, before=None)
@@ -201,7 +169,7 @@ async def test_losing_the_right_to_act_drops_those_notifications(
         NotificationStore(control_plane_sql_engine),
         get_rebac=lambda: cast(RebacEngine, _Rebac()),
     )
-    assert await _notify(service, "alice", "dave")
+    await _notify(service, "alice", "dave")
 
     await service.forget_lost_access("alice", "alpha")
     await service.forget_lost_access("dave", "alpha")
@@ -226,11 +194,16 @@ async def test_a_type_without_permission_reaches_a_non_member(
         get_rebac=lambda: cast(RebacEngine, _Rebac()),
     )
 
-    assert await service.notify(
-        recipients=["alice"],
-        type=NotificationType.TEAM_JOIN_REQUEST_ANSWERED,
-        payload={"team_id": "alpha", "team_name": "Alpha", "outcome": "refused"},
-        group_key="join_request_outcome:r1",
+    await service.notify(
+        [
+            NotificationDraft(
+                recipient_id="alice",
+                group_key="team.join_request_answered:r1",
+                payload=TeamJoinRequestAnsweredPayload(
+                    team_id="alpha", team_name="Alpha", outcome="refused"
+                ),
+            )
+        ]
     )
 
     [answer] = (await service.list_page(_user("alice"), limit=50, before=None)).items
@@ -246,7 +219,7 @@ async def test_delete_groups_removes_every_recipients_rows(
     await _notify(service, "alice", "dave", group="g1")
     await _notify(service, "alice", group="g2")
 
-    assert await service.delete_groups(["g1"])
+    await service.delete_groups(["g1"])
 
     page = await service.list_page(_user("alice"), limit=50, before=None)
     assert len(page.items) == 1
@@ -263,12 +236,12 @@ async def test_a_failing_store_never_raises_and_logs_ids_only(
     async def _down(*_args, **_kwargs):
         raise RuntimeError("database down")
 
-    monkeypatch.setattr(service.store, "upsert", _down)
-    monkeypatch.setattr(service.store, "resolve", _down)
+    monkeypatch.setattr(NotificationStore, "upsert", _down)
+    monkeypatch.setattr(NotificationStore, "resolve", _down)
 
     with caplog.at_level(logging.WARNING):
-        assert not await _notify(service, "alice")
-        assert not await service.resolve(
+        await _notify(service, "alice")
+        await service.resolve(
             ["g1"], actor_uid="bob", actor_name="Bob", outcome="republished"
         )
 
@@ -276,19 +249,6 @@ async def test_a_failing_store_never_raises_and_logs_ids_only(
     assert "g1" in text
     assert "Analyst" not in text and "Bob" not in text
     assert [name for name, _ in kpi.counts] == ["notifications.emit_failed_total"] * 2
-
-
-@pytest.mark.asyncio
-async def test_an_invalid_payload_is_not_raised_to_the_caller(
-    service: NotificationService,
-) -> None:
-    assert not await service.notify(
-        recipients=["alice"],
-        type=NotificationType.AGENT_MARKETPLACE_REMOVED,
-        payload=_PAYLOAD,
-        group_key="g1",
-    )
-    assert (await service.summary(_user("alice"))).unseen_count == 0
 
 
 @pytest.mark.asyncio
@@ -459,7 +419,7 @@ async def test_turning_a_type_off_deletes_it_for_everyone_and_stops_sending_it(
     for uid in ("alice", "bob"):
         page = await admin_service.list_page(_user(uid), limit=50, before=None)
         assert page.items == []
-    assert await _notify(admin_service, "alice", group="g2")
+    await _notify(admin_service, "alice", group="g2")
     page = await admin_service.list_page(_user("alice"), limit=50, before=None)
     assert page.items == []
 

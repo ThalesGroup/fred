@@ -34,7 +34,7 @@ from control_plane_backend.models.notification_models import (
     DisabledNotificationTypeRow,
     NotificationRow,
 )
-from control_plane_backend.notifications.schemas import DECISION_TYPES
+from control_plane_backend.notifications.schemas import NotificationPayload
 
 #: How long a notification lives after its creation.
 NOTIFICATION_TTL = timedelta(days=30)
@@ -45,9 +45,8 @@ class NotificationDraft:
     """One notification to emit, before it has an id."""
 
     recipient_id: str
-    type: str
     group_key: str
-    payload: dict[str, Any]
+    payload: NotificationPayload
     team_id: str | None = None
 
 
@@ -160,10 +159,10 @@ class NotificationStore:
                 {
                     "id": str(uuid.uuid4()),
                     "recipient_id": d.recipient_id,
-                    "type": d.type,
+                    "type": d.payload.TYPE.value,
                     "team_id": d.team_id,
                     "group_key": d.group_key,
-                    "payload": d.payload,
+                    "payload": d.payload.model_dump(mode="json"),
                     "created_at": now,
                     "expires_at": now + NOTIFICATION_TTL,
                 }
@@ -173,11 +172,8 @@ class NotificationStore:
         statement = statement.on_conflict_do_update(
             index_elements=[NotificationRow.group_key, NotificationRow.recipient_id],
             index_where=NotificationRow.handled_at.is_(None),
-            set_={
-                "type": statement.excluded.type,
-                "team_id": statement.excluded.team_id,
-                "payload": statement.excluded.payload,
-            },
+            # A group key names one subject of one type: its type and team never change.
+            set_={"payload": statement.excluded.payload},
         )
         async with use_session(self._sessions) as s:
             # An expired open row is invisible: replace it rather than update it.
@@ -309,8 +305,11 @@ class NotificationStore:
 
     async def delete_all(self, recipient_id: str) -> int:
         """ "Clear all": every row but the open decisions still waiting for one."""
+        decisions = [
+            p.TYPE.value for p in NotificationPayload.__subclasses__() if p.DECISION
+        ]
         waiting = and_(
-            NotificationRow.type.in_([t.value for t in DECISION_TYPES]),
+            NotificationRow.type.in_(decisions),
             NotificationRow.handled_at.is_(None),
         )
         async with use_session(self._sessions) as s:

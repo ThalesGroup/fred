@@ -33,6 +33,7 @@ from control_plane_backend.notifications.schemas import (
     AgentMarketplaceRemovedPayload,
     AgentRepublishNeededPayload,
     NotificationType,
+    group_key,
 )
 from control_plane_backend.notifications.service import (
     NotificationService,
@@ -51,12 +52,14 @@ _SILENT_REMOVALS = {RemovalReason.DELETED, RemovalReason.TEAM_DELETED}
 
 
 def republish_group(entry_id: str) -> str:
-    return f"agent_republish:{entry_id}"
+    return group_key(NotificationType.AGENT_REPUBLISH_NEEDED, entry_id)
 
 
 def _removed_group(entry: RemovedEntry) -> str:
     stamp = entry.removed_at.isoformat() if entry.removed_at else ""
-    return f"agent_removed:{entry.entry_id}:{stamp}"
+    return group_key(
+        NotificationType.AGENT_MARKETPLACE_REMOVED, f"{entry.entry_id}:{stamp}"
+    )
 
 
 async def notify_republish_needed(
@@ -89,18 +92,21 @@ async def notify_republish_needed(
         return
     assert entry.published_by is not None
     await notifications.notify(
-        recipients=[entry.published_by],
-        type=NotificationType.AGENT_REPUBLISH_NEEDED,
-        payload=AgentRepublishNeededPayload(
-            team_id=str(entry.team_id),
-            team_name=team_name,
-            agent_instance_id=entry.agent_instance_id,
-            agent_name=after.display_name,
-            entry_id=entry.entry_id,
-            editor_name=display_name(editor),
-        ),
-        group_key=republish_group(entry.entry_id),
-        team_id=str(entry.team_id),
+        [
+            NotificationDraft(
+                recipient_id=entry.published_by,
+                group_key=republish_group(entry.entry_id),
+                team_id=str(entry.team_id),
+                payload=AgentRepublishNeededPayload(
+                    team_id=str(entry.team_id),
+                    team_name=team_name,
+                    agent_instance_id=entry.agent_instance_id,
+                    agent_name=after.display_name,
+                    entry_id=entry.entry_id,
+                    editor_name=display_name(editor),
+                ),
+            )
+        ]
     )
 
 
@@ -136,7 +142,6 @@ async def notify_unpublished(
     drafts = [
         NotificationDraft(
             recipient_id=entry.published_by,
-            type=NotificationType.AGENT_MARKETPLACE_REMOVED.value,
             group_key=_removed_group(entry),
             team_id=str(entry.team_id),
             payload=AgentMarketplaceRemovedPayload(
@@ -147,7 +152,7 @@ async def notify_unpublished(
                 entry_id=entry.entry_id,
                 reason=entry.reason.value,
                 message=entry.message,
-            ).model_dump(mode="json"),
+            ),
         )
         for entry in removed
         if entry.state == EntryState.REMOVED
@@ -155,4 +160,4 @@ async def notify_unpublished(
         and entry.published_by is not None
         and entry.published_by != actor_uid
     ]
-    await notifications.notify_many(drafts)
+    await notifications.notify(drafts)

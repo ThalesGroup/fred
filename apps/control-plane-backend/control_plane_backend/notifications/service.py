@@ -23,7 +23,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable, Sequence
-from typing import Any
 
 from fred_core import KeycloakUser, OrganizationPermission
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
@@ -36,18 +35,17 @@ from fred_core.security.rebac.rebac_engine import (
     Resource,
     TeamPermission,
 )
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
 from control_plane_backend.notifications.schemas import (
-    ACTION_PERMISSION,
     MAX_PAGE_SIZE,
     NotificationPage,
+    NotificationPayload,
     NotificationSummary,
     NotificationType,
     NotificationTypeSetting,
     NotificationTypeSettings,
     NotificationView,
-    validate_payload,
 )
 from control_plane_backend.notifications.store import (
     DisabledType,
@@ -60,11 +58,15 @@ from control_plane_backend.notifications.store import (
 logger = logging.getLogger(__name__)
 
 _SYSTEM = KPIActor(type="system")
-_VIEW: TypeAdapter[Any] = TypeAdapter(NotificationView)
+_VIEW: TypeAdapter[NotificationView] = TypeAdapter(NotificationView)
 
 
-def _required_permission(type_: str) -> TeamPermission | None:
-    return ACTION_PERMISSION[NotificationType(type_)]
+def _required_check(draft: NotificationDraft) -> tuple[str, str, TeamPermission] | None:
+    """The (recipient, team, permission) to hold for `draft`; `None`: unfiltered."""
+    permission = draft.payload.PERMISSION
+    if draft.team_id is None or permission is None:
+        return None
+    return draft.recipient_id, draft.team_id, permission
 
 
 class NotificationNotFound(Exception):
@@ -81,7 +83,7 @@ def display_name(user: KeycloakUser) -> str:
     return full or user.username
 
 
-def _to_view(stored: StoredNotification) -> Any:
+def _to_view(stored: StoredNotification) -> NotificationView:
     return _VIEW.validate_python(
         {
             "id": stored.id,
@@ -122,63 +124,29 @@ class NotificationService:
         except Exception:
             logger.exception("Failed to emit %s", name)
 
-    async def notify(
-        self,
-        *,
-        recipients: Sequence[str],
-        type: NotificationType,
-        payload: BaseModel | dict[str, Any],
-        group_key: str,
-        team_id: str | None = None,
-    ) -> bool:
-        """One notification per recipient; see `notify_many`."""
+    async def notify(self, drafts: Sequence[NotificationDraft]) -> None:
+        """Emit in one insert; on failure, logs ids only."""
         try:
-            stored = validate_payload(type, payload)
-        except Exception:
-            # A programming error, still never the triggering action's failure.
-            logger.warning("Invalid notification payload type=%s", type.value)
-            self._count("notifications.emit_failed_total", {"status": "invalid"})
-            return False
-        return await self.notify_many(
-            [
-                NotificationDraft(
-                    recipient_id=recipient,
-                    type=type.value,
-                    group_key=group_key,
-                    payload=stored,
-                    team_id=team_id,
-                )
-                for recipient in recipients
-            ]
-        )
-
-    async def notify_many(self, drafts: Sequence[NotificationDraft]) -> bool:
-        """Emit in one insert. Returns `False`, logging ids only, on failure."""
-        if not drafts:
-            return True
-        try:
-            for draft in drafts:
-                validate_payload(draft.type, draft.payload)
             disabled = await self._store.disabled_types()
-            drafts = [d for d in drafts if d.type not in disabled]
+            drafts = [d for d in drafts if d.payload.TYPE.value not in disabled]
             drafts = await self._allowed_recipients(drafts)
             if not drafts:
-                return True
+                return
             await self._store.upsert(drafts)
         except Exception:
             logger.warning(
                 "Failed to emit notifications type=%s group_keys=%s",
-                sorted({draft.type for draft in drafts}),
+                sorted({draft.payload.TYPE.value for draft in drafts}),
                 sorted({draft.group_key for draft in drafts}),
                 exc_info=True,
             )
             self._count("notifications.emit_failed_total", {"status": "error"})
-            return False
+            return
         for draft in drafts:
             self._count(
-                "notifications.created_total", {"notification_type": draft.type}
+                "notifications.created_total",
+                {"notification_type": draft.payload.TYPE.value},
             )
-        return True
 
     async def _allowed_recipients(
         self, drafts: Sequence[NotificationDraft]
@@ -187,14 +155,8 @@ class NotificationService:
         if self._get_rebac is None:
             return drafts
         rebac = self._get_rebac()
-        checks = sorted(
-            {
-                (d.recipient_id, d.team_id, permission)
-                for d in drafts
-                if d.team_id is not None
-                and (permission := _required_permission(d.type)) is not None
-            }
-        )
+        needed = [_required_check(d) for d in drafts]
+        checks = sorted({check for check in needed if check is not None})
         allowed = await asyncio.gather(
             *(
                 rebac.has_permission(
@@ -207,11 +169,7 @@ class NotificationService:
         )
         granted = {check for check, ok in zip(checks, allowed) if ok}
         return [
-            d
-            for d in drafts
-            if d.team_id is None
-            or _required_permission(d.type) is None
-            or (d.recipient_id, d.team_id, _required_permission(d.type)) in granted
+            d for d, check in zip(drafts, needed) if check is None or check in granted
         ]
 
     async def forget_lost_access(self, recipient_id: str, team_id: str) -> None:
@@ -221,9 +179,10 @@ class NotificationService:
             return
         try:
             rebac = self._get_rebac()
-            permissions = sorted(
-                {p for p in ACTION_PERMISSION.values() if p is not None}
-            )
+            rules = {
+                p.TYPE.value: p.PERMISSION for p in NotificationPayload.__subclasses__()
+            }
+            permissions = sorted({p for p in rules.values() if p is not None})
             held = await rebac.has_permissions(
                 RebacReference(Resource.USER, recipient_id),
                 permissions,
@@ -231,7 +190,7 @@ class NotificationService:
                 consistency_token=RebacEngine.HIGHER_CONSISTENCY,
             )
             lost = {p for p, ok in zip(permissions, held) if not ok}
-            types = [t.value for t, p in ACTION_PERMISSION.items() if p in lost]
+            types = [t for t, p in rules.items() if p in lost]
             if types:
                 await self._store.delete_for_member(recipient_id, team_id, types=types)
         except Exception:
@@ -250,7 +209,7 @@ class NotificationService:
         actor_name: str | None,
         outcome: str,
         include_handled: bool = False,
-    ) -> bool:
+    ) -> None:
         """The actor's own rows disappear; the other recipients see who handled it."""
         try:
             await self._store.resolve(
@@ -267,10 +226,8 @@ class NotificationService:
                 exc_info=True,
             )
             self._count("notifications.emit_failed_total", {"status": "error"})
-            return False
-        return True
 
-    async def delete_groups(self, group_keys: Sequence[str]) -> bool:
+    async def delete_groups(self, group_keys: Sequence[str]) -> None:
         """Every row of these groups goes, for every recipient (the subject is gone)."""
         try:
             await self._store.delete_groups(group_keys)
@@ -280,8 +237,6 @@ class NotificationService:
                 sorted(group_keys),
                 exc_info=True,
             )
-            return False
-        return True
 
     async def summary(self, user: KeycloakUser) -> NotificationSummary:
         return NotificationSummary(

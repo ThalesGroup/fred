@@ -22,6 +22,10 @@ import pytest
 import pytest_asyncio
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.notification_models import NotificationRow
+from control_plane_backend.notifications.schemas import (
+    AgentRepublishNeededPayload,
+    TeamJoinRequestedPayload,
+)
 from control_plane_backend.notifications.store import (
     NotificationDraft,
     NotificationStore,
@@ -45,9 +49,14 @@ def _draft(
 ) -> NotificationDraft:
     return NotificationDraft(
         recipient_id=recipient,
-        type="agent.republish_needed",
         group_key=group,
-        payload={"editor_name": editor},
+        payload=AgentRepublishNeededPayload(
+            team_id="alpha",
+            agent_instance_id="agent-1",
+            agent_name="Analyst",
+            entry_id="e1",
+            editor_name=editor,
+        ),
         team_id=team,
     )
 
@@ -79,7 +88,7 @@ async def test_a_repeat_emission_updates_the_payload_without_rebadging(
 
     again = await _only(store)
     assert again.id == first.id
-    assert again.payload == {"editor_name": "Carol"}
+    assert again.payload["editor_name"] == "Carol"
     assert again.seen_at is not None
     assert await store.unseen_count("alice") == 0
 
@@ -89,7 +98,7 @@ async def test_one_statement_may_carry_the_same_subject_twice(
     store: NotificationStore,
 ) -> None:
     await store.upsert([_draft(editor="Bob"), _draft(editor="Carol")])
-    assert (await _only(store)).payload == {"editor_name": "Carol"}
+    assert (await _only(store)).payload["editor_name"] == "Carol"
 
 
 @pytest.mark.asyncio
@@ -285,20 +294,21 @@ async def test_a_lost_right_removes_only_the_types_it_covered(
 async def test_clear_all_keeps_the_decisions_still_waiting(
     store: NotificationStore,
 ) -> None:
-    decision = NotificationDraft(
-        recipient_id="alice",
-        type="team.join_requested",
-        group_key="join_request:r1",
-        payload={},
-        team_id="alpha",
-    )
-    decided = NotificationDraft(
-        recipient_id="alice",
-        type="team.join_requested",
-        group_key="join_request:r2",
-        payload={},
-        team_id="alpha",
-    )
+    def _request(request_id: str) -> NotificationDraft:
+        return NotificationDraft(
+            recipient_id="alice",
+            group_key=f"join_request:{request_id}",
+            payload=TeamJoinRequestedPayload(
+                team_id="alpha",
+                team_name="Alpha",
+                request_id=request_id,
+                requester_id="bob",
+                requester_name="Bob",
+            ),
+            team_id="alpha",
+        )
+
+    decision, decided = _request("r1"), _request("r2")
     await store.upsert([_draft("alice"), decision, decided])
     await store.resolve(
         ["join_request:r2"], actor_uid="bob", actor_name="Bob", outcome="refused"

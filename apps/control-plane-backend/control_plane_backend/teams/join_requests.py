@@ -38,10 +38,8 @@ from fred_core.teams.metadata_store import TeamMetadata
 
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.notifications.schemas import (
-    NotificationType,
     TeamJoinRequestAnsweredPayload,
     TeamJoinRequestedPayload,
-    validate_payload,
 )
 from control_plane_backend.notifications.service import (
     NotificationService,
@@ -212,20 +210,25 @@ async def _notify_admins(
     except Exception:
         logger.warning("Failed to list admins team_id=%s", metadata.id, exc_info=True)
         return
+    payload = TeamJoinRequestedPayload(
+        team_id=metadata.id,
+        team_name=metadata.name,
+        request_id=request.id,
+        requester_id=request.requester_id,
+        requester_name=request.requester_name,
+        message=request.message,
+    )
     # notify() keeps only the admins holding can_administer_members.
     await notifications.notify(
-        recipients=sorted(admins),
-        type=NotificationType.TEAM_JOIN_REQUESTED,
-        payload=TeamJoinRequestedPayload(
-            team_id=metadata.id,
-            team_name=metadata.name,
-            request_id=request.id,
-            requester_id=request.requester_id,
-            requester_name=request.requester_name,
-            message=request.message,
-        ),
-        group_key=request_group(request.id),
-        team_id=metadata.id,
+        [
+            NotificationDraft(
+                recipient_id=admin,
+                group_key=request_group(request.id),
+                team_id=metadata.id,
+                payload=payload,
+            )
+            for admin in sorted(admins)
+        ]
     )
 
 
@@ -375,19 +378,15 @@ async def _answer(
     requests: Sequence[StoredJoinRequest],
     outcome: Literal["accepted", "refused"],
 ) -> None:
-    payload = validate_payload(
-        NotificationType.TEAM_JOIN_REQUEST_ANSWERED,
-        TeamJoinRequestAnsweredPayload(
-            team_id=metadata.id, team_name=metadata.name, outcome=outcome
-        ),
+    payload = TeamJoinRequestAnsweredPayload(
+        team_id=metadata.id, team_name=metadata.name, outcome=outcome
     )
     # An acceptance carries the team so leaving it, or its deletion, takes the
     # "Open the team" tile along; a refusal has no team action and stays.
-    await notifications.notify_many(
+    await notifications.notify(
         [
             NotificationDraft(
                 recipient_id=r.requester_id,
-                type=NotificationType.TEAM_JOIN_REQUEST_ANSWERED.value,
                 group_key=answer_group(r.id),
                 payload=payload,
                 team_id=metadata.id if outcome == "accepted" else None,

@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.team_join_request_models import TeamJoinRequestRow
+from control_plane_backend.notifications.schemas import NotificationType, group_key
 
 #: How long a pending request waits for a decision.
 PENDING_TTL = timedelta(days=30)
@@ -68,12 +69,12 @@ class StoredJoinRequest:
 
 def request_group(request_id: str) -> str:
     """The admins' notification group of one request."""
-    return f"join_request:{request_id}"
+    return group_key(NotificationType.TEAM_JOIN_REQUESTED, request_id)
 
 
 def answer_group(request_id: str) -> str:
     """The requester's notification group of the answer to one request."""
-    return f"join_request_outcome:{request_id}"
+    return group_key(NotificationType.TEAM_JOIN_REQUEST_ANSWERED, request_id)
 
 
 def _aware(value: datetime) -> datetime:

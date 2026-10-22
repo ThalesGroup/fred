@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, ClassVar, Literal, Union
 
 from fred_core.security.rebac.rebac_engine import TeamPermission
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,12 +38,25 @@ class NotificationType(str, Enum):
     TEAM_JOIN_REQUEST_ANSWERED = "team.join_request_answered"
 
 
-class _Payload(BaseModel):
+class NotificationPayload(BaseModel):
+    """Base of one payload class per type, which also declares the type's rules."""
+
     model_config = ConfigDict(extra="forbid")
 
+    TYPE: ClassVar[NotificationType]
+    #: The team right needed to receive and act on the type, checked at send
+    #: time; losing it deletes the open ones. `None`: unfiltered.
+    PERMISSION: ClassVar[TeamPermission | None] = None
+    #: Asks the recipient to decide: an open one has no close button and survives
+    #: "Clear all" until someone decides.
+    DECISION: ClassVar[bool] = False
 
-class AgentRepublishNeededPayload(_Payload):
+
+class AgentRepublishNeededPayload(NotificationPayload):
     """Another editor changed an agent the recipient published."""
+
+    TYPE = NotificationType.AGENT_REPUBLISH_NEEDED
+    PERMISSION = TeamPermission.CAN_UPDATE_AGENTS
 
     team_id: str
     team_name: str | None = None
@@ -53,8 +66,11 @@ class AgentRepublishNeededPayload(_Payload):
     editor_name: str
 
 
-class AgentMarketplaceRemovedPayload(_Payload):
+class AgentMarketplaceRemovedPayload(NotificationPayload):
     """An agent the recipient published left the marketplace without them."""
+
+    TYPE = NotificationType.AGENT_MARKETPLACE_REMOVED
+    PERMISSION = TeamPermission.CAN_UPDATE_AGENTS
 
     team_id: str
     team_name: str | None = None
@@ -69,8 +85,12 @@ class AgentMarketplaceRemovedPayload(_Payload):
     )
 
 
-class TeamJoinRequestedPayload(_Payload):
+class TeamJoinRequestedPayload(NotificationPayload):
     """A non-member asks to join a team the recipient administers."""
+
+    TYPE = NotificationType.TEAM_JOIN_REQUESTED
+    PERMISSION = TeamPermission.CAN_ADMINISTER_MEMBERS
+    DECISION = True
 
     team_id: str
     team_name: str
@@ -80,44 +100,19 @@ class TeamJoinRequestedPayload(_Payload):
     message: str | None = None
 
 
-class TeamJoinRequestAnsweredPayload(_Payload):
+class TeamJoinRequestAnsweredPayload(NotificationPayload):
     """An admin decided on the recipient's request; never names the admin."""
+
+    TYPE = NotificationType.TEAM_JOIN_REQUEST_ANSWERED
 
     team_id: str
     team_name: str
     outcome: Literal["accepted", "refused"]
 
 
-PAYLOAD_MODELS: dict[NotificationType, type[_Payload]] = {
-    NotificationType.AGENT_REPUBLISH_NEEDED: AgentRepublishNeededPayload,
-    NotificationType.AGENT_MARKETPLACE_REMOVED: AgentMarketplaceRemovedPayload,
-    NotificationType.TEAM_JOIN_REQUESTED: TeamJoinRequestedPayload,
-    NotificationType.TEAM_JOIN_REQUEST_ANSWERED: TeamJoinRequestAnsweredPayload,
-}
-
-
-#: The team right needed to receive and act on a type, checked at send time; losing
-#: it deletes the open ones. `None`: unfiltered (a team still scopes cleanup).
-ACTION_PERMISSION: dict[NotificationType, TeamPermission | None] = {
-    NotificationType.AGENT_REPUBLISH_NEEDED: TeamPermission.CAN_UPDATE_AGENTS,
-    NotificationType.AGENT_MARKETPLACE_REMOVED: TeamPermission.CAN_UPDATE_AGENTS,
-    NotificationType.TEAM_JOIN_REQUESTED: TeamPermission.CAN_ADMINISTER_MEMBERS,
-    NotificationType.TEAM_JOIN_REQUEST_ANSWERED: None,
-}
-
-
-#: Types asking the recipient to decide: an open one has no close button and
-#: survives "Clear all" until someone decides.
-DECISION_TYPES: frozenset[NotificationType] = frozenset(
-    {NotificationType.TEAM_JOIN_REQUESTED}
-)
-
-
-def validate_payload(type_: str, payload: BaseModel | dict[str, Any]) -> dict[str, Any]:
-    """The payload as stored; raises on an unknown type or an invalid payload."""
-    model = PAYLOAD_MODELS[NotificationType(type_)]
-    data = payload.model_dump() if isinstance(payload, BaseModel) else payload
-    return model.model_validate(data).model_dump(mode="json")
+def group_key(type_: NotificationType, subject_id: str) -> str:
+    """The key shared by every row about one subject, namespaced by type."""
+    return f"{type_.value}:{subject_id}"
 
 
 class _NotificationBase(BaseModel):
