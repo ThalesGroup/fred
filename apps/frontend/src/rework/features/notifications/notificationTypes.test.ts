@@ -218,7 +218,7 @@ describe("renderNotification", () => {
     );
     expect(rendered.link).toBe("/team/team-1/settings/members");
     expect(rendered.actions.map(({ label, primary, color }) => [label, primary ?? false, color])).toEqual([
-      ["Refuse", false, "error"],
+      ["Refuse", true, "error"],
       ["Accept", true, "success"],
     ]);
 

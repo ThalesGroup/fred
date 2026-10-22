@@ -104,6 +104,7 @@
   display: flex;
   position: relative;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--spacing-xs);
   z-index: 1;
   margin-top: var(--spacing-2xs);

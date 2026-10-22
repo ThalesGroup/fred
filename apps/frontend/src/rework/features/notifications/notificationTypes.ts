@@ -141,6 +141,7 @@ const NOTIFICATION_TYPES: {
       {
         id: "refuse",
         label: t("rework.notifications.actions.refuse"),
+        primary: true,
         color: "error",
         kind: "call",
         call: decideJoinRequest(notification, "refuse"),
