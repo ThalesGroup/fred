@@ -1902,6 +1902,7 @@
         "success": "Succès"
       },
       "toolLabels": {
+        "codeSandbox": "Exécution du code dans un espace isolé",
         "readSkillFile": "Lecture d’un fichier du skill",
         "readQuery": "Lecture de la requête",
         "documents": "Liste des documents tabulaires",

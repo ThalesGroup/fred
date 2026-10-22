@@ -332,6 +332,11 @@ describe("entryLabel localization", () => {
   ])("uses the active language label %s", (translation, expected) => {
     expect(entryLabel(entry, () => translation)).toBe(expected);
   });
+
+  it("uses the localized sandbox label for code execution", () => {
+    const sandboxEntry = { ...entry, call: toolCallMsg("c1", "execute_code") };
+    expect(entryLabel(sandboxEntry, (key) => key)).toBe("rework.chatTrace.toolLabels.codeSandbox");
+  });
 });
 
 // ── statusForEntry ────────────────────────────────────────────────────────────

@@ -1902,6 +1902,7 @@
         "success": "Success"
       },
       "toolLabels": {
+        "codeSandbox": "Running code in an isolated space",
         "readSkillFile": "Reading skill file",
         "readQuery": "Reading query",
         "documents": "Listing tabular documents",
