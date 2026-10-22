@@ -1133,17 +1133,14 @@ async def update_team(
         if {"team_delete_grace", "max_idle"} & request.model_fields_set:
             await _reject_retention_overflow(team_id, request, deps)
             patch_data["retention_updated_by"] = user.uid
-        # TEAM-10 (RFC §5.1.2): a PRIVATE team can never be OPEN. Resolve
-        # what visibility/joining_mode would be *after* this patch (an
-        # untouched field keeps its current stored value) and, if that
-        # combination is invalid, downgrade joining_mode rather than reject
-        # the request — never trusting the client's belief about which
-        # field "wins".
+        # A PRIVATE team can be neither OPEN nor ON_REQUEST: judge the state
+        # *after* the patch and downgrade joining_mode rather than reject it,
+        # never trusting the client's belief about which field "wins".
         resulting_visibility = patch_data.get("visibility", metadata.visibility)
         resulting_joining_mode = patch_data.get("joining_mode", metadata.joining_mode)
-        if (
-            resulting_visibility == TeamVisibility.PRIVATE
-            and resulting_joining_mode == JoiningMode.OPEN
+        if resulting_visibility == TeamVisibility.PRIVATE and resulting_joining_mode in (
+            JoiningMode.OPEN,
+            JoiningMode.ON_REQUEST,
         ):
             patch_data["joining_mode"] = JoiningMode.INVITE_ONLY
         patch = TeamMetadataPatch.model_validate(patch_data)

@@ -6055,15 +6055,16 @@ def _setup_update_team_test(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("starting", [JoiningMode.OPEN, JoiningMode.ON_REQUEST])
 async def test_update_team_downgrades_joining_mode_when_visibility_turns_private(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, starting: JoiningMode
 ) -> None:
-    """TEAM-10 (RFC §5.1.2): a PRIVATE team can never be OPEN. Setting
-    visibility=private on a team that's currently OPEN must silently
-    downgrade joining_mode to invite_only, not reject the request."""
+    """A PRIVATE team can be neither OPEN nor ON_REQUEST. Setting
+    visibility=private on such a team must silently downgrade joining_mode to
+    invite_only, not reject the request."""
     fake_metadata_store, rebac = _setup_update_team_test(
         monkeypatch,
-        starting_joining_mode=JoiningMode.OPEN,
+        starting_joining_mode=starting,
         starting_visibility=TeamVisibility.PUBLIC,
     )
 
@@ -6100,12 +6101,16 @@ async def test_update_team_downgrades_joining_mode_when_open_requested_on_privat
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.patch(
-            "/control-plane/v1/teams/thales", json={"joining_mode": "open"}
-        )
+        for requested in ("open", "on_request"):
+            resp = await client.patch(
+                "/control-plane/v1/teams/thales", json={"joining_mode": requested}
+            )
+            assert resp.status_code == 200
 
-    assert resp.status_code == 200
-    assert fake_metadata_store.calls == [("thales", {"joining_mode": "invite_only"})]
+    assert fake_metadata_store.calls == [
+        ("thales", {"joining_mode": "invite_only"}),
+        ("thales", {"joining_mode": "invite_only"}),
+    ]
     # visibility wasn't part of this request, so no ReBAC sync call is expected.
     assert rebac.revoked_team_ids == []
     assert rebac.granted_team_ids == []
