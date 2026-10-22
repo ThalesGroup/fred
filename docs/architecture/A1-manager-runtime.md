@@ -584,6 +584,7 @@ held SQL connection. No workflow is dispatched by the API.
 | D19 | One version-2 ZIP with explicit organizations, teams, projects and direct roles serves CLI and HTTP. | Reconciliation needs unambiguous parent scope and complete preflight. | Legacy formats are explicitly unsupported; bundle-local references do not add persistent identity or imply content grants. |
 | D20 | The unique organization is derived from canonical direct roles and immutable SQL placement, including retired spaces. Workspace discovery uses that server-validated context. | Avoid a second SQL membership authority or a tenant choice controlled by URL/claims. | Zero attachments grant no business access; ambiguous attachments fail closed; platform governance remains independent. |
 | D21 | Personal creation requires explicit organization eligibility; opening reuses current authority. | Some people have no personal workspace; opening must not undo revocations. | First explicit open creates, repeats write nothing, and organization content remains a prerequisite. |
+| D22 | Processing admission writes the delivery intent in its transaction and notifies the dispatcher on commit; a periodic poll remains the safety net. The API holds no Temporal client. | SQL and Temporal share no transaction; the commit, not a timer, should start work; API replicas need no Temporal connection or credentials. | Delivery starts on commit; a missed notification costs at most `poll_seconds`; notifying commits serialize briefly; the listener holds one pool connection; the mechanism is unchanged whether the dispatcher runs inside `serve` or in a separate process. |
 
 ## Folder mutations from Resources
 
@@ -663,12 +664,13 @@ sequenceDiagram
     participant UI as Resources
     participant M as Manager API
     participant DB as Manager SQL
-    participant D as Manager worker
+    participant D as Manager dispatcher
     participant T as Temporal
     participant K as Existing KF workers
     participant S as Derived stores
     UI->>M: Upload with profile, or process stored original
     M->>DB: Guarded original and processing intent commit
+    DB-->>D: Notify on commit
     M-->>UI: Original identity and processing summary
     D->>DB: Lease due intents and release locks
     D->>T: Describe or start existing ProcessPush

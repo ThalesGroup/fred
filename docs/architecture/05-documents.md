@@ -176,10 +176,13 @@ a failed attempt without another file transfer. One active attempt and one linke
 successor per failure prevent competing starts. Each attempt freezes the Python
 worker's exported policy and profile settings. Original quota is charged once.
 
-The manager worker leases due SQL intents, releases database locks, then starts
-`ProcessPush` using unchanged `PipelineDefinition` and `FileToProcess` payloads.
+The dispatcher, a background task of `control-plane serve`, is woken when an
+admission commits and otherwise polls. It leases due SQL intents, never-delivered
+ones first, releases database locks, then starts `ProcessPush` with bounded
+concurrency using unchanged `PipelineDefinition` and `FileToProcess` payloads.
 It describes uncertain submissions before retrying, rejects duplicate workflow
-identities and expires queued/running work within configured deadlines. Temporal
+identities, describes running work again every two minutes and expires
+queued/running work within configured deadlines. Temporal
 history contains references and orchestration metadata, never files or credentials.
 
 The existing KF activities select a manager persistence adapter through the source

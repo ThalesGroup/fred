@@ -183,6 +183,11 @@ impl Processing {
         let workflow = format!("manager-document-{}-{id}", self.installation);
         let summary=sqlx::query_as("insert into document_processing(id,request_key,actor,installation_id,document_id,organization_id,space_id,original_sha256,profile,workflow_id,deadline_at,retry_of,submission,profile_settings) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp()+make_interval(secs=>$11),$12,$13,$14) returning *")
             .bind(id).bind(key).bind(actor).bind(self.installation).bind(document_id).bind(org).bind(document.space_id).bind(document.sha256).bind(start.profile).bind(&workflow).bind(self.config.limits.execution_seconds as f64).bind(start.retry_of).bind(Json(self.contract.submission(self.installation,id,document_id,actor,start.profile,&workflow))).bind(Json(&self.contract.processor_profiles[serde_json::to_value(start.profile).unwrap().as_str().unwrap()])).fetch_one(&mut **tx).await?;
+        // Sent only if this transaction commits; the dispatcher's poll covers a missed wake-up.
+        sqlx::query("select pg_notify($1, '')")
+            .bind(super::dispatch::WAKE_CHANNEL)
+            .execute(&mut **tx)
+            .await?;
         sqlx::query(
             "update document_upload set acknowledged_at=null where document_id=$1 and actor=$2",
         )

@@ -69,6 +69,7 @@ sequenceDiagram
     M->>S3: Conditional Put original, read and verify
     M->>FGA: Recheck write, advance guard
     M->>PG: Commit document D, stored receipt and processing P
+    PG-->>D: Notify on commit
     M-->>UI: Original stored, processing summary
     D->>PG: Lease P, release SQL locks
     D->>T: Start ProcessPush (existing payload)
@@ -122,8 +123,10 @@ and [processing admission](../../apps/control-plane/src/processing/store.rs).
 
 ### 3. Deliver the existing worker contract
 
-The separate manager worker reads the SQL intent and starts `ProcessPush` in the
-configured Temporal namespace and base queue. `W` is
+The dispatcher, a background task of `control-plane serve`, is woken by the
+commit's notification, leases the SQL intent and starts `ProcessPush` in the
+configured Temporal namespace and base queue. Its periodic poll delivers an intent
+whose notification was missed. `W` is
 `manager-document-<I>-<P>`; `R` identifies its execution. The input remains one
 `PipelineDefinition` containing one `FileToProcess`: `document_uid=D`,
 `source_tag=manager:<I>:<P>`, the selected profile and the exported KF policy.

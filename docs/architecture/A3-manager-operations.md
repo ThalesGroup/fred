@@ -542,7 +542,12 @@ and [migration procedure](../swift/ops/migrations/rust-control-plane.md#optional
 define provisioning, export, rollout and draining.
 
 The dispatcher uses bounded batches and leases, with no Temporal RPC under a SQL
-lock. Namespace retention must exceed the accepted queue horizon. An uncertain
+lock. Each admission notifies it on commit; `limits.poll_seconds` is the safety-net
+interval for a notification missed while its listener, which holds one pool
+connection, was disconnected. A tick leases never-delivered intents before running
+work due for reconciliation, runs at most 16 Temporal RPCs concurrently and repeats
+while it leases full `limits.batch` batches. Running work is described again every
+two minutes; an uncertain delivery is retried after 15 seconds. Namespace retention must exceed the accepted queue horizon. An uncertain
 start is reconciled by workflow identity; missing acknowledged history cannot
 create another execution. Queue/execution expiry produces a durable safe failure.
 HTTP, lifecycle work and the dispatch loop are supervised together by `control-plane serve`.

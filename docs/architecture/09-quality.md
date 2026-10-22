@@ -34,6 +34,7 @@ explanations move between chapters.
 | I25 | A published original has verified immutable bytes; pending reservations protect quota/name/targets, and cleanup never removes a published or live pending object. | upload journal, guarded reservation/publication, conditional S3 Put and SQL-checked inventory |
 | I26 | Processing preserves its immutable original and scope; only the current authorized, fenced generation publishes a verified result. | atomic processing intent, stage leases, guarded manifest commit and isolated cleanup |
 | I27 | A direct space-role grant writes only a subject usable as an OpenFGA user that the configured user directory knows; a consumed guard is a conflict, a tuple OpenFGA rejects is invalid input. | `domain::valid_subject`, `users::Directory::exists` after authorization, `fga::write_guarded` error codes |
+| I28 | A committed processing intent is started at most once and is never lost: a missed notification only delays its delivery. | workflow identity with `REJECT_DUPLICATE`, describe before retry, notification in the admission transaction, periodic poll |
 
 ## control-plane tests
 
@@ -512,6 +513,7 @@ Generated from the `// Proves:` markers.
 | I25 | `apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_existing_worker_journey_without_kf_http`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication`<br>`apps/control-plane/tests/support/document_storage.rs::document_creation_reads_conflicts_receipts_and_safe_download`<br>`apps/control-plane/tests/support/document_storage.rs::document_revocation_cleanup_and_late_put_recovery`<br>`apps/control-plane/tests/support/document_storage.rs::shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owned_late_writes`<br>`apps/control-plane/tests/support/document_storage.rs::cleanup_inaccessible_original_does_not_starve_other_objects` |
 | I26 | `apps/control-plane/tests/support/document_processing.rs::processing_admission_fences_publication_and_original_survival`<br>`apps/control-plane/tests/support/document_processing.rs::processing_existing_worker_journey_without_kf_http`<br>`apps/control-plane/tests/support/document_processing.rs::processing_upload_atomic_intent_and_retry_without_new_original`<br>`apps/control-plane/tests/support/document_processing.rs::processing_workload_identity_and_revoked_publication` |
 | I27 | `apps/control-plane/tests/integration.rs::grants_require_a_known_valid_subject_and_classify_openfga_errors` |
+| I28 | `apps/control-plane/tests/support/document_processing.rs::processing_existing_worker_journey_without_kf_http`<br>`apps/control-plane/tests/support/document_processing.rs::processing_dispatch_wakes_on_commit_and_prefers_new_intents` |
 <!-- end generated -->
 
 Provisioning tests inject failures before/after real FGA writes, fail deferred SQL commits,
@@ -621,7 +623,11 @@ and behavior assertions, not production latency or capacity guarantees.
 
 Focused integration tests cover admission races, idempotent upload choices,
 stale stage claims, workload identity, revoked publication, generation cleanup and
-original preservation. The opt-in `processing_existing_worker_journey` uses real
+original preservation. The opt-in `processing_dispatch_wakes_on_commit_and_prefers_new_intents`
+uses real Temporal without a KF worker: a committed admission is delivered well
+before a 60-second poll, a new intent is leased ahead of running work due for
+reconciliation, and an intent admitted while the dispatcher is stopped, or made due
+without a notification, is delivered at startup or by the poll. The opt-in `processing_existing_worker_journey` uses real
 Temporal, PostgreSQL/pgvector, OpenFGA and S3, with local identity/model protocol
 fixtures and no KF HTTP server. It checks unchanged worker decoding, independent
 profiles, text/PDF/CSV/Office outputs, persisted raw/native previews, lost dispatch

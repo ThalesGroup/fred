@@ -15,6 +15,7 @@ Read the journeys first, then follow the relevant domain chapter.
 | [5. Documents and knowledge](05-documents.md) | How does knowledge enter, circulate and leave Fred? |
 | [8. Operations](08-operations.md) | How is Fred configured, deployed and observed? |
 | [9. Quality and invariants](09-quality.md) | Which guarantees are proved, and what do they cost? |
+| [10. Feature plan](10-feature-plan.md) | Which slices exist, and which are agreed or proposed next? |
 
 The primary reading path is the user journey through folder creation, followed by
 organizations/security and the SQL catalogue. The document-ingestion journey is
@@ -33,6 +34,7 @@ passed its tests or that Dimi has validated every screen.
 | API endpoints and frontend bindings | [Generated routes](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
 | Startup, SQL migration or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution) | Source map rows startup/migrations and local profile |
 | Upload/process a PDF | [Separate document journey](02a-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
+| What is implemented, agreed or proposed next? | [Feature plan](10-feature-plan.md) | Implementation entry of each slice |
 
 Follow this map before searching historical OpenSpec changes or Swift documentation.
 For an audit, trace the named UI consumer through the handler, authorization and
@@ -57,7 +59,7 @@ source code; they are references, not another handwritten API specification.
 
 The [reconstruction method](../../.agents/skills/fred-reconstruction-method/SKILL.md)
 defines how this dossier converges with the implementation: current journeys and
-schemas, a separately labelled feature plan, and key design decisions. Proposed
+schemas, a separately labelled [feature plan](10-feature-plan.md), and key design decisions. Proposed
 features are not implemented guarantees. Superseded RFC/OpenSpec prose leaves the
 active corpus only after its useful information and consumers are reconciled.
 The [review prompt](../../.agents/skills/fred-reconstruction-method/references/review-prompt.md)

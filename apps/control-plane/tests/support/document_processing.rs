@@ -417,14 +417,7 @@ impl Drop for TemporalFixture {
             .output();
     }
 }
-// Proves: I22, I25, I26
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "needs disposable pgvector, OpenFGA, S3, Temporal and the KF Python environment"]
-async fn processing_existing_worker_journey_without_kf_http() {
-    if std::env::var_os("CONTROL_PLANE_IT_PROCESSING").is_none() {
-        return;
-    }
-    let (d, p) = Box::pin(setup()).await;
+fn start_temporal() -> (TemporalFixture, String) {
     let name = format!("fred-processing-temporal-{}", Uuid::new_v4().simple());
     let temporal = TemporalFixture(name.clone());
     let result = std::process::Command::new("docker")
@@ -452,6 +445,17 @@ async fn processing_existing_worker_journey_without_kf_http() {
         .output()
         .unwrap();
     let host = String::from_utf8(port.stdout).unwrap().trim().to_owned();
+    (temporal, host)
+}
+// Proves: I22, I25, I26, I28
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs disposable pgvector, OpenFGA, S3, Temporal and the KF Python environment"]
+async fn processing_existing_worker_journey_without_kf_http() {
+    if std::env::var_os("CONTROL_PLANE_IT_PROCESSING").is_none() {
+        return;
+    }
+    let (d, p) = Box::pin(setup()).await;
+    let (temporal, host) = start_temporal();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/v1", listener.local_addr().unwrap());
     let app = d.app.clone();
@@ -897,7 +901,7 @@ async fn processing_existing_worker_journey_without_kf_http() {
         )
         .await
         .unwrap();
-    control_plane::processing::dispatch::tick(&d.e.pool, &dispatch_config, &mut temporal_client)
+    control_plane::processing::dispatch::tick(&d.e.pool, &dispatch_config, &temporal_client)
         .await
         .unwrap();
     let accepted = store::row(&d.e.pool, pending.id).await.unwrap();
@@ -930,7 +934,7 @@ async fn processing_existing_worker_journey_without_kf_http() {
         "unsupported input must close without publishing success"
     );
     sqlx::query("update document_processing set run_id=null,delivered_at=null,dispatch_until=null,delivery_due_at=clock_timestamp() where id=$1").bind(pending.id).execute(&d.e.pool).await.unwrap();
-    control_plane::processing::dispatch::tick(&d.e.pool, &dispatch_config, &mut temporal_client)
+    control_plane::processing::dispatch::tick(&d.e.pool, &dispatch_config, &temporal_client)
         .await
         .unwrap();
     let reconciled = store::row(&d.e.pool, pending.id).await.unwrap();
@@ -963,7 +967,7 @@ async fn processing_existing_worker_journey_without_kf_http() {
         .await
         .unwrap();
     sqlx::query("update document_processing set created_at=clock_timestamp()-interval '2 days',first_dispatch_at=clock_timestamp()-interval '2 days' where id=$1").bind(expired.id).execute(&d.e.pool).await.unwrap();
-    control_plane::processing::dispatch::tick(&d.e.pool, &dispatch_config, &mut temporal_client)
+    control_plane::processing::dispatch::tick(&d.e.pool, &dispatch_config, &temporal_client)
         .await
         .unwrap();
     let expired = store::row(&d.e.pool, expired.id).await.unwrap();
@@ -995,6 +999,134 @@ async fn processing_existing_worker_journey_without_kf_http() {
     );
     assert!(d.identity.control.lock().await.worker_token_requests > 0);
     server.abort();
+    drop(temporal);
+}
+
+async fn ready_temporal(host: &str) -> temporalio_client::Client {
+    use temporalio_client::{
+        Client, ClientOptions, ConnectionOptions, Url, grpc::WorkflowService, tonic::Request,
+    };
+    use temporalio_common::protos::temporal::api::workflowservice::v1::DescribeNamespaceRequest;
+    for _ in 0..120 {
+        let connected = Client::connect(
+            ConnectionOptions::new(Url::parse(&format!("http://{host}")).unwrap()).build(),
+            ClientOptions::new("default").build(),
+        )
+        .await;
+        if let Ok(mut client) = connected {
+            let namespace = DescribeNamespaceRequest {
+                namespace: "default".into(),
+                ..Default::default()
+            };
+            if client
+                .describe_namespace(Request::new(namespace))
+                .await
+                .is_ok()
+            {
+                return client;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    panic!("Temporal did not become ready");
+}
+async fn admit(d: &Documents, p: &Processing, name: &str) -> Uuid {
+    let (status, receipt) = d
+        .upload("writer", name, b"kept", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{receipt}");
+    let document = receipt["document_id"].as_str().unwrap().parse().unwrap();
+    let start = Start {
+        profile: Profile::Fast,
+        retry_of: None,
+    };
+    p.start("writer", Uuid::new_v4(), document, start)
+        .await
+        .unwrap()
+        .id
+}
+async fn run_id_within(pool: &sqlx::PgPool, id: Uuid, within: Duration) -> Option<String> {
+    let deadline = tokio::time::Instant::now() + within;
+    loop {
+        let run = store::row(pool, id).await.unwrap().run_id;
+        if run.is_some() || tokio::time::Instant::now() >= deadline {
+            return run;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+// No KF worker polls the queue here, so delivered workflows stay running.
+// Proves: I28
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs disposable PostgreSQL, OpenFGA, SeaweedFS and Temporal"]
+async fn processing_dispatch_wakes_on_commit_and_prefers_new_intents() {
+    if std::env::var_os("CONTROL_PLANE_IT_PROCESSING").is_none() {
+        return;
+    }
+    use control_plane::processing::dispatch;
+    let (d, p) = Box::pin(setup()).await;
+    let (temporal, host) = start_temporal();
+    let client = ready_temporal(&host).await;
+    let mut config = p.config.clone();
+    config.temporal.host = host;
+
+    // The commit wakes the dispatcher long before its safety-net poll.
+    let mut slow = config.clone();
+    slow.limits.poll_seconds = 60;
+    let dispatcher = tokio::spawn(dispatch::run(d.e.pool.clone(), slow));
+    let first = admit(&d, &p, "first.txt").await;
+    assert!(
+        run_id_within(&d.e.pool, first, Duration::from_secs(30))
+            .await
+            .is_some()
+    );
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let woken = admit(&d, &p, "woken.txt").await;
+    assert!(
+        run_id_within(&d.e.pool, woken, Duration::from_secs(5))
+            .await
+            .is_some(),
+        "admission commit must wake the dispatcher"
+    );
+    dispatcher.abort();
+    dispatcher.await.unwrap_err();
+
+    // A new intent is leased before running work due for reconciliation.
+    let mut narrow = config.clone();
+    narrow.limits.batch = 2;
+    let running = [
+        admit(&d, &p, "running-a.txt").await,
+        admit(&d, &p, "running-b.txt").await,
+    ];
+    dispatch::tick(&d.e.pool, &narrow, &client).await.unwrap();
+    for id in running {
+        assert!(store::row(&d.e.pool, id).await.unwrap().run_id.is_some());
+    }
+    sqlx::query("update document_processing set delivery_due_at=clock_timestamp()-interval '1 minute' where id=any($1)")
+        .bind(&running[..]).execute(&d.e.pool).await.unwrap();
+    let fresh = admit(&d, &p, "fresh.txt").await;
+    assert_eq!(
+        dispatch::tick(&d.e.pool, &narrow, &client).await.unwrap(),
+        2
+    );
+    assert!(store::row(&d.e.pool, fresh).await.unwrap().run_id.is_some());
+
+    // A notification lost while stopped is delivered at startup, and a due row
+    // without any notification is reconciled by the poll.
+    let missed = admit(&d, &p, "missed.txt").await;
+    let mut fast = config.clone();
+    fast.limits.poll_seconds = 1;
+    let dispatcher = tokio::spawn(dispatch::run(d.e.pool.clone(), fast));
+    let delivered = run_id_within(&d.e.pool, missed, Duration::from_secs(10)).await;
+    assert!(delivered.is_some());
+    sqlx::query("update document_processing set run_id=null,delivered_at=null,dispatch_until=null,delivery_due_at=clock_timestamp() where id=$1")
+        .bind(missed).execute(&d.e.pool).await.unwrap();
+    assert_eq!(
+        run_id_within(&d.e.pool, missed, Duration::from_secs(5)).await,
+        delivered
+    );
+    dispatcher.abort();
     drop(temporal);
 }
 
