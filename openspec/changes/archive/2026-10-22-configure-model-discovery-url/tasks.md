@@ -16,4 +16,4 @@
 
 ## 4. Close-out
 
-- [ ] 4.1 Run root code-quality once, review the full PR against `swift` with independent read-only review, reconcile and archive the spec, push the draft PR, and confirm green CI.
+- [x] 4.1 Run root code-quality once, review the full PR against `swift` with independent read-only review, reconcile and archive the spec, push the draft PR, and confirm green CI.
