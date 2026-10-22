@@ -4349,7 +4349,6 @@
       },
       "handled": "Traitée",
       "handledBy": "Traitée par {{name}}",
-      "handledRemoved": "Résolue : l'agent a quitté la marketplace",
       "actions": {
         "openAgent": "Ouvrir l'agent",
         "accept": "Accepter",
@@ -4360,7 +4359,8 @@
         "republishNeeded": {
           "title": "Agent publié modifié",
           "body": "{{editor}} a modifié « {{agent}} » dans {{team}}. Republiez-le pour mettre à jour la version de la marketplace.",
-          "bodyNoTeam": "{{editor}} a modifié « {{agent}} ». Republiez-le pour mettre à jour la version de la marketplace."
+          "bodyNoTeam": "{{editor}} a modifié « {{agent}} ». Republiez-le pour mettre à jour la version de la marketplace.",
+          "handledRemoved": "Résolue : l'agent a quitté la marketplace"
         },
         "marketplaceRemoved": {
           "title": "Agent retiré de la marketplace",

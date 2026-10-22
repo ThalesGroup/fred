@@ -283,6 +283,7 @@ describe("renderNotification", () => {
       renderNotification(republish, instances[lng].t);
       renderNotification(removed, instances[lng].t);
       renderNotification({ ...republish, handled_at: "x", handled_by_name: "Bob" }, instances[lng].t);
+      renderNotification({ ...republish, handled_at: "x", handled_outcome: "removed" }, instances[lng].t);
       renderNotification(joinRequested, instances[lng].t);
       for (const outcome of ["accepted", "refused"] as const) {
         renderNotification(answered(outcome), instances[lng].t);

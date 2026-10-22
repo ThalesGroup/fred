@@ -95,6 +95,9 @@ const NOTIFICATION_TYPES: {
           }),
     link: ({ payload }) => teamAgentsPath(payload.team_id, payload.agent_instance_id),
     actions: ({ payload }, t) => [openAgent(payload.team_id, payload.agent_instance_id, t)],
+    // Leaving the marketplace resolves the request, often with no one to name.
+    handled: ({ handled_by_name: name, handled_outcome: outcome }, t) =>
+      !name && outcome === "removed" ? t("rework.notifications.types.republishNeeded.handledRemoved") : undefined,
   },
   "agent.marketplace_removed": {
     icon: "unpublished",
@@ -183,47 +186,41 @@ export interface RenderedNotification {
   pendingDecision: boolean;
 }
 
-function handledLabel(notification: NotificationItem, t: TFunction): string | undefined {
-  if (!notification.handled_at) return undefined;
-  if (notification.handled_by_name) {
-    return t("rework.notifications.handledBy", { name: notification.handled_by_name });
-  }
-  return notification.handled_outcome === "removed"
-    ? t("rework.notifications.handledRemoved")
+function handledLabel(notification: NotificationItem, t: TFunction): string {
+  return notification.handled_by_name
+    ? t("rework.notifications.handledBy", { name: notification.handled_by_name })
     : t("rework.notifications.handled");
 }
 
-function definitionOf(notification: NotificationItem): NotificationTypeDefinition<NotificationItem> | undefined {
-  return (NOTIFICATION_TYPES as Record<string, NotificationTypeDefinition<NotificationItem> | undefined>)[
-    notification.type
-  ];
+/** A type this version does not know: a generic tile without link or buttons. */
+const UNKNOWN_TYPE: NotificationTypeDefinition<NotificationItem> = {
+  icon: "notifications",
+  category: "information",
+  title: (_n, t) => t("rework.notifications.types.unknown.title"),
+  body: () => "",
+  link: () => null,
+  actions: () => [],
+};
+
+function definitionOf(notification: NotificationItem): NotificationTypeDefinition<NotificationItem> {
+  return (
+    (NOTIFICATION_TYPES as Record<string, NotificationTypeDefinition<NotificationItem> | undefined>)[
+      notification.type
+    ] ?? UNKNOWN_TYPE
+  );
 }
 
 /** Waiting for the recipient's decision: no close button, kept by "Clear all". */
 export function isPendingDecision(notification: NotificationItem): boolean {
-  return Boolean(definitionOf(notification)?.decision && !notification.handled_at);
+  return Boolean(definitionOf(notification).decision && !notification.handled_at);
 }
 
-/** Everything a tile shows. A type this version does not know renders as a
- *  generic tile without link or buttons. */
+/** Everything a tile shows. */
 export function renderNotification(notification: NotificationItem, t: TFunction): RenderedNotification {
   const definition = definitionOf(notification);
-  const handled =
-    notification.handled_at && definition?.handled
-      ? (definition.handled(notification, t) ?? handledLabel(notification, t))
-      : handledLabel(notification, t);
-  if (!definition) {
-    return {
-      icon: "notifications",
-      category: "information",
-      title: t("rework.notifications.types.unknown.title"),
-      body: "",
-      link: null,
-      actions: [],
-      handledLabel: handled,
-      pendingDecision: false,
-    };
-  }
+  const handled = notification.handled_at
+    ? (definition.handled?.(notification, t) ?? handledLabel(notification, t))
+    : undefined;
   return {
     icon: definition.icon,
     category: definition.category,
