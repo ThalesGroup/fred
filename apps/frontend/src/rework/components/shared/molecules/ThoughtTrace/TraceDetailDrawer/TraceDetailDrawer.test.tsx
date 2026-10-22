@@ -36,12 +36,12 @@ vi.mock("react-i18next", () => ({
       if (key === "rework.chatTrace.tables")
         return `${options?.count ?? 0} ${options?.count === 1 ? "table" : "tables"}`;
       if (key === "rework.chatTrace.tabular.tableNumber") return `Table ${options?.number ?? 0}`;
-      if (key === "rework.chatTrace.toolLabels.readQuery") return "Reading query";
-      if (key === "rework.chatTrace.toolLabels.documents") return "Listing tabular documents";
-      if (key === "rework.chatTrace.toolLabels.markdown") return "Reading the workbook catalog";
-      if (key === "rework.chatTrace.toolLabels.schemas") return "Reading tabular schemas";
-      if (key === "rework.chatTrace.toolLabels.descriptions") return "Reading tabular documents";
-      if (key === "rework.chatTrace.toolLabels.search") return "Searching tabular values";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.readQuery") return "Reading data";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.documents") return "Listing data files";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.markdown") return "Reading the workbook catalog";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.schemas") return "Reading tabular schemas";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.descriptions") return "Reading data structure";
+      if (key === "rework.chatTrace.toolLabels.mcp.tabular.search") return "Searching data";
       if (key === "rework.chatTrace.toolStatus.failure") return "Failed";
       if (key === "rework.chatTrace.toolStatus.success") return "Success";
       if (key === "rework.chatTrace.executionTime") return `Execution time: ${options?.duration ?? ""}`;
@@ -145,7 +145,7 @@ describe("TraceDetailDrawer read_query failure", () => {
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
 
     expect(html).toMatch(
-      /<header>Reading query<span[^>]*>Failed<\/span><span[^>]*aria-label="Execution time: 42ms"[^>]*>42ms<\/span><\/header>/,
+      /<header>Reading data<span[^>]*>Failed<\/span><span[^>]*aria-label="Execution time: 42ms"[^>]*>42ms<\/span><\/header>/,
     );
     expect(html).toContain("Query");
     expect(html).toContain("SELECT\n  amount_typo\nFROM\n  d_sales");
@@ -200,7 +200,7 @@ describe("TraceDetailDrawer read_query failure", () => {
     expect(html).toContain('data-copy-text="SELECT * FROM d_sales WHERE 1 = 0"');
     expect(html).toContain("Response");
     expect(html).toMatch(
-      /<header>Reading query<span[^>]*>Success<\/span><span[^>]*aria-label="Execution time: 12ms"[^>]*>12ms<\/span><\/header>/,
+      /<header>Reading data<span[^>]*>Success<\/span><span[^>]*aria-label="Execution time: 12ms"[^>]*>12ms<\/span><\/header>/,
     );
     expect(html).toContain("0 rows");
     expect(html).toContain('<pre data-language="json">[]</pre>');
@@ -353,7 +353,7 @@ describe("TraceDetailDrawer tabular tools", () => {
       },
     ]);
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("Listing tabular documents");
+    expect(html).toContain("Listing data files");
     expect(html).toContain("Sales.csv");
     expect(html).toContain("Budget.xlsx");
     expect(html).toContain("Revenue");
@@ -497,7 +497,7 @@ describe("TraceDetailDrawer tabular tools", () => {
       },
     ]);
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("Reading tabular documents");
+    expect(html).toContain("Reading data structure");
     expect(html.indexOf("Catalog marker")).toBeLessThan(html.indexOf("amount"));
     expect(html.indexOf("Catalog marker")).toBeLessThan(html.indexOf("rework.chatTrace.tabular.tablesHeading"));
     expect(html).toContain("Sales.csv");
@@ -525,7 +525,7 @@ describe("TraceDetailDrawer tabular tools", () => {
       searched_dataset_uids: ["uid-book"],
     });
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("Searching tabular values");
+    expect(html).toContain("Searching data");
     expect(html).toContain("Search term: <strong>Acme</strong>");
     expect(html).toContain("Response");
     expect(html.match(/data-language="json"/g)).toHaveLength(1);
@@ -631,7 +631,7 @@ describe("TraceDetailDrawer web research", () => {
       },
     );
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("rework.chatTrace.toolLabels.webSearch");
+    expect(html).toContain("rework.chatTrace.toolLabels.capabilities.webResearch.webSearch");
     expect(html).toContain("python release");
     expect(html).toContain('href="https://www.python.org/"');
     expect(html).toContain('rel="noopener noreferrer"');
