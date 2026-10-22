@@ -1303,6 +1303,7 @@ export type CapabilityCatalogEntry = {
   kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
   model_chat_profile_ids?: string[];
   model_context_window_tokens?: number | null;
+  model_discovery_source_id?: string | null;
   model_display_name?: string | null;
   model_max_input_tokens?: number | null;
   model_max_output_tokens?: number | null;
