@@ -35,7 +35,6 @@ vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     endpoints: {
       acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost: { initiate: vi.fn() },
       refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost: { initiate: vi.fn() },
-      deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: { initiate: vi.fn() },
     },
   },
   useNotificationsQuery: (...args: unknown[]) => listMock(...args),
@@ -205,6 +204,17 @@ describe("NotificationsPopover", () => {
     expect(deleteNotification).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
     expect(showError).toHaveBeenCalledWith(expect.objectContaining({ summary: "rework.notifications.actionFailed" }));
+  });
+
+  it.each([404, 403])("deletes a tile its call action can no longer act on, without a toast (%i)", async (status) => {
+    dispatch.mockReturnValue({ unwrap: () => Promise.reject({ status }) });
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    await act(async () => buttonByText(el, "rework.notifications.actions.accept").click());
+
+    expect(deleteNotification).toHaveBeenCalledExactlyOnceWith({ notificationId: "n1" });
+    expect(showError).not.toHaveBeenCalled();
   });
 
   it("sends one decision however often its button is clicked", async () => {

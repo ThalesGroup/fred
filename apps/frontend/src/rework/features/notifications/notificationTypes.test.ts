@@ -37,7 +37,6 @@ vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     endpoints: {
       acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost: { initiate: initiate("accept") },
       refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost: { initiate: initiate("refuse") },
-      deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: { initiate: initiate("delete") },
     },
   },
 }));
@@ -231,31 +230,12 @@ describe("renderNotification", () => {
     ]);
   });
 
-  it.each([404, 403])("deletes a join request tile it can no longer act on (%i)", async (status) => {
-    const [accept] = renderNotification(joinRequested, instances.en.t).actions;
-    const { calls, dispatch } = fakeDispatch({ accept: Object.assign(new Error("gone"), { status }) });
-
-    await callOf(accept)(dispatch);
-
-    expect(calls.map((call) => call.endpoint)).toEqual(["accept", "delete"]);
-    expect(calls[1].arg).toEqual({ notificationId: "n1" });
-  });
-
   it("marks only an open join request as a pending decision", () => {
     expect(isPendingDecision(joinRequested)).toBe(true);
     expect(renderNotification(joinRequested, instances.en.t).pendingDecision).toBe(true);
     const handled = { ...joinRequested, handled_at: "2026-10-21T09:00:00Z", handled_by_name: "Bob" };
     expect(isPendingDecision(handled as NotificationItem)).toBe(false);
     expect(isPendingDecision(republish)).toBe(false);
-  });
-
-  it("keeps the tile and rejects on any other failure", async () => {
-    const [accept] = renderNotification(joinRequested, instances.en.t).actions;
-    const { calls, dispatch } = fakeDispatch({ accept: Object.assign(new Error("down"), { status: 500 }) });
-
-    await expect(callOf(accept)(dispatch)).rejects.toThrow("down");
-
-    expect(calls.map((call) => call.endpoint)).toEqual(["accept"]);
   });
 
   it("renders a join request without a message with an empty body", () => {

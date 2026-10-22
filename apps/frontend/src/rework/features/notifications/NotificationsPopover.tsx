@@ -182,7 +182,8 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
         return;
       }
       // On success the domain endpoint resolves the group and deletes the actor's
-      // own row; on failure the tile stays usable and a toast says why.
+      // own row. A 404 or 403 leaves nothing to act on, so the tile goes; any other
+      // failure keeps it usable and a toast says why.
       if (inFlight.current.has(notification.id)) return;
       const setBusy = (busy: boolean) => {
         if (busy) inFlight.current.add(notification.id);
@@ -192,9 +193,11 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
       setBusy(true);
       void action
         .call(dispatch)
-        .catch((error: unknown) =>
-          showError({ summary: t("rework.notifications.actionFailed"), detail: normalizeApiError(error).detail }),
-        )
+        .catch((error: unknown) => {
+          const { status, detail } = normalizeApiError(error);
+          if (status === 404 || status === 403) void deleteNotification({ notificationId: notification.id });
+          else showError({ summary: t("rework.notifications.actionFailed"), detail });
+        })
         .finally(() => {
           setBusy(false);
           dispatch(enhancedControlPlaneApi.util.invalidateTags(["ControlPlaneNotification"]));

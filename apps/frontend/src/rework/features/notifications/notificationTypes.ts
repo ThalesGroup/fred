@@ -60,31 +60,19 @@ const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): Notif
 
 const teamMembersPath = (teamId: string) => `/team/${teamId}/settings/members`;
 
-/** A join request decision. A 404 (request gone) or 403 (no longer an admin)
- *  leaves nothing to act on, so the tile goes; any other failure rejects. */
+/** A join request decision, through the route that owns it. */
 function decideJoinRequest(
   notification: NotificationOfType<"team.join_requested">,
   decision: "accept" | "refuse",
 ): (dispatch: NotificationDispatch) => Promise<unknown> {
   const { endpoints } = enhancedControlPlaneApi;
   const args = { teamId: notification.payload.team_id, requestId: notification.payload.request_id };
-  return async (dispatch) => {
-    try {
-      await dispatch(
-        decision === "accept"
-          ? endpoints.acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost.initiate(args)
-          : endpoints.refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost.initiate(args),
-      ).unwrap();
-    } catch (error) {
-      const status = (error as { status?: unknown } | undefined)?.status;
-      if (status !== 404 && status !== 403) throw error;
-      await dispatch(
-        endpoints.deleteNotificationControlPlaneV1NotificationsNotificationIdDelete.initiate({
-          notificationId: notification.id,
-        }),
-      );
-    }
-  };
+  return (dispatch) =>
+    dispatch(
+      decision === "accept"
+        ? endpoints.acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost.initiate(args)
+        : endpoints.refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost.initiate(args),
+    ).unwrap();
 }
 
 const NOTIFICATION_TYPES: {
