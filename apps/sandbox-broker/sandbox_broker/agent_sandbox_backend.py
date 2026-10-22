@@ -34,10 +34,19 @@ class AgentSandboxBackend:
             raise SandboxError("policy_unavailable")
         target = pool_spec.get("replicas", 1)
         pool_status = pool.get("status", {})
-        if not isinstance(target, int) or target != 0 or any(
-            not isinstance(pool_status.get(field, 0), int)
-            or pool_status.get(field, 0) != 0
-            for field in ("replicas", "readyReplicas", "availableReplicas")
+        generation = pool.get("metadata", {}).get("generation", 1)
+        observed = pool_status.get("observedGeneration", 0)
+        if (
+            not isinstance(target, int)
+            or target != 0
+            or any(
+                not isinstance(pool_status.get(field, 0), int)
+                or pool_status.get(field, 0) != 0
+                for field in ("replicas", "readyReplicas", "availableReplicas")
+            )
+            or not isinstance(generation, int)
+            or not isinstance(observed, int)
+            or observed < generation
         ):
             raise SandboxError("policy_unavailable")
         template = await self._get("sandboxtemplate", template_name)

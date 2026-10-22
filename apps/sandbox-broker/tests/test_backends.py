@@ -224,6 +224,7 @@ class AgentRunner(KubeRunner):
         template_changes=False,
         ready_replicas=0,
         live_replicas=None,
+        observed_generation=1,
     ):
         super().__init__()
         self.bad_image = bad_image
@@ -232,6 +233,7 @@ class AgentRunner(KubeRunner):
         self.template_changes = template_changes
         self.ready_replicas = ready_replicas
         self.live_replicas = live_replicas
+        self.observed_generation = observed_generation
         self.template_reads = 0
         self.claim_name = ""
 
@@ -252,7 +254,7 @@ class AgentRunner(KubeRunner):
                         "status": {
                             "readyReplicas": self.live_replicas or 0,
                             "replicas": self.live_replicas or 0,
-                            "observedGeneration": 1,
+                            "observedGeneration": self.observed_generation,
                         },
                     }
                 ),
@@ -393,6 +395,14 @@ async def test_agent_sandbox_rejects_preloaded_replicas() -> None:
 @pytest.mark.asyncio
 async def test_agent_sandbox_rejects_live_preloaded_pods_during_scale_down() -> None:
     runner = AgentRunner(ready_replicas=0, live_replicas=1)
+    backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
+    with pytest.raises(SandboxError, match="policy_unavailable"):
+        await backend.preflight()
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_rejects_stale_zero_pool_status() -> None:
+    runner = AgentRunner(ready_replicas=0, observed_generation=0)
     backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
     with pytest.raises(SandboxError, match="policy_unavailable"):
         await backend.preflight()
