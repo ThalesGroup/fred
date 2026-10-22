@@ -16,9 +16,11 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import JoinRequestDialog from "@shared/organisms/TeamCard/JoinRequestDialog.tsx";
+import { formatAskAgainAt, joinRequestState } from "@shared/organisms/TeamCard/joinRequestState.ts";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap.ts";
 import type { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -26,6 +28,7 @@ import {
   useGetTeamQuery,
   useMyTeamJoinRequestsQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import styles from "./TeamMemberGate.module.scss";
 
 /** Keeps a non-member (e.g. one who left, following an old link) out of a team's pages. */
 export default function TeamMemberGate({ children }: { children: ReactNode }) {
@@ -36,7 +39,7 @@ export default function TeamMemberGate({ children }: { children: ReactNode }) {
   const {
     data: team,
     error,
-    isFetching,
+    fulfilledTimeStamp,
   } = useGetTeamQuery(
     { teamId: teamId ?? "" },
     {
@@ -45,29 +48,47 @@ export default function TeamMemberGate({ children }: { children: ReactNode }) {
     },
   );
 
+  // Only an answer fetched since this team was opened says whether the caller is in.
+  const [opened, setOpened] = useState(() => ({ teamId, at: Date.now() }));
+  if (opened.teamId !== teamId) setOpened({ teamId, at: Date.now() });
+
   if (skip) return <>{children}</>;
   const status = error ? normalizeApiError(error).status : undefined;
   const denied = status === 403 || status === 404;
-  const outsider = !isFetching && team?.id === teamId && team.is_member === false;
+  const known = team?.id === teamId && (fulfilledTimeStamp ?? 0) >= opened.at;
+  if (!error && !known) {
+    return (
+      <div className={styles.loading}>
+        <Spinner size={28} />
+      </div>
+    );
+  }
+  const outsider = team?.id === teamId && team.is_member === false;
   if (!denied && !outsider) return <>{children}</>;
   return <NotAMember team={denied ? undefined : team} />;
 }
 
 function NotAMember({ team }: { team?: Pick<Team, "id" | "name" | "visibility" | "joining_mode"> }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [askOpen, setAskOpen] = useState(false);
   const canAsk = !!team && team.visibility === "public" && team.joining_mode === "on_request";
   const { data: myRequests } = useMyTeamJoinRequestsQuery(undefined, { skip: !canAsk });
-  const pending = myRequests?.some((r) => r.team_id === team?.id && r.status === "pending");
+  const mine = myRequests?.find((r) => r.team_id === team?.id);
+  const request = canAsk ? joinRequestState(mine, Date.now()) : undefined;
+  let message = t("rework.teamMemberGate.message");
+  if (request === "pending") message = t("rework.teamMemberGate.pending");
+  if (request === "declined") {
+    message = t("rework.teamMemberGate.declined", { date: formatAskAgainAt(mine, i18n.language) });
+  }
 
   return (
     <>
       <PageError
         title={t("rework.teamMemberGate.title")}
-        message={pending ? t("rework.teamMemberGate.pending") : t("rework.teamMemberGate.message")}
+        message={message}
         actions={
-          canAsk && !pending ? (
+          request === "ask" ? (
             <Button color="primary" variant="filled" size="medium" onClick={() => setAskOpen(true)}>
               {t("rework.teamCard.askToJoin")}
             </Button>

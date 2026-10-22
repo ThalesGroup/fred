@@ -536,6 +536,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               { type: "ControlPlaneAgentMarketplace" as const, id: "LIST" },
             ]
           : []),
+        // Leaving on_request answers the pending requests and their admin tiles.
+        ...(arg.updateTeamRequest.visibility || arg.updateTeamRequest.joining_mode
+          ? [
+              { type: "ControlPlaneTeamJoinRequest" as const, id: `team-${arg.teamId}` },
+              "ControlPlaneNotification" as const,
+            ]
+          : []),
       ],
     },
     // Platform admin edit: name, description and admins of any team.
@@ -631,6 +638,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
+        // Adding someone closes their join request and its admin tiles.
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
+        "ControlPlaneNotification",
       ],
     },
     grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: {

@@ -18,6 +18,7 @@ import type { Team } from "../../../../../slices/controlPlane/controlPlaneOpenAp
 import { useAskToJoinTeamMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 
 /** The optional message the team admins read with the request. */
 export const JOIN_REQUEST_MESSAGE_MAX_LENGTH = 280;
@@ -32,6 +33,7 @@ interface JoinRequestDialogProps {
 export default function JoinRequestDialog({ team, open, onClose }: JoinRequestDialogProps) {
   const { t } = useTranslation();
   const [askToJoin, { isLoading: isAsking }] = useAskToJoinTeamMutation();
+  const { notifyApiError } = useApiErrorToast();
   const [message, setMessage] = useState("");
 
   const handleAsk = async (): Promise<void> => {
@@ -39,11 +41,14 @@ export default function JoinRequestDialog({ team, open, onClose }: JoinRequestDi
       const trimmed = message.trim();
       await askToJoin({ teamId: team.id, createTeamJoinRequest: { message: trimmed || null } }).unwrap();
       setMessage("");
+      onClose();
     } catch (error) {
-      // The request list refetches either way, so the caller shows the real state.
-      console.error("Ask to join error:", error);
+      // Stays open with the message kept, so the person can retry or cancel.
+      notifyApiError(error, {
+        summary: t("rework.teamCard.askDialog.failed"),
+        fallbackDetail: t("rework.teamCard.askDialog.failedDetail"),
+      });
     }
-    onClose();
   };
 
   return (

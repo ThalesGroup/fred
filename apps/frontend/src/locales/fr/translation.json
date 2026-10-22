@@ -2927,7 +2927,9 @@
         "title": "Demander à rejoindre {{team}}",
         "confirm": "Envoyer la demande",
         "messageLabel": "Message (facultatif)",
-        "messageDescription": "Expliquez aux administrateurs de l'équipe pourquoi vous souhaitez la rejoindre. Eux seuls le lisent."
+        "messageDescription": "Expliquez aux administrateurs de l'équipe pourquoi vous souhaitez la rejoindre. Eux seuls le lisent.",
+        "failed": "Votre demande n'a pas pu être envoyée",
+        "failedDetail": "Réessayez dans un instant."
       }
     },
     "teamDescription": {
@@ -2963,6 +2965,7 @@
       "title": "Vous n'êtes pas membre de cette équipe",
       "message": "Seuls ses membres peuvent ouvrir les pages de cette équipe.",
       "pending": "Votre demande pour rejoindre cette équipe attend une réponse.",
+      "declined": "Votre dernière demande pour rejoindre cette équipe a été refusée. Nouvelle demande possible le {{date}}.",
       "browseTeams": "Parcourir les équipes"
     },
     "teamAdminCharter": {

@@ -2927,7 +2927,9 @@
         "title": "Ask to join {{team}}",
         "confirm": "Send the request",
         "messageLabel": "Message (optional)",
-        "messageDescription": "Tell the team admins why you would like to join. Only they read it."
+        "messageDescription": "Tell the team admins why you would like to join. Only they read it.",
+        "failed": "Your request could not be sent",
+        "failedDetail": "Try again in a moment."
       }
     },
     "teamDescription": {
@@ -2963,6 +2965,7 @@
       "title": "You are not a member of this team",
       "message": "Only its members can open this team's pages.",
       "pending": "Your request to join this team is waiting for an answer.",
+      "declined": "Your last request to join this team was declined. You can ask again from {{date}}.",
       "browseTeams": "Browse teams"
     },
     "teamAdminCharter": {

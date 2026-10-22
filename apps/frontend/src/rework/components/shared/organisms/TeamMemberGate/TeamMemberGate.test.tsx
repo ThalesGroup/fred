@@ -27,11 +27,12 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   team: undefined as Record<string, unknown> | undefined,
   error: undefined as unknown,
-  requests: [] as Array<{ team_id: string; status: string }>,
+  fetchedAt: Number.MAX_SAFE_INTEGER as number | undefined,
+  requests: [] as Array<{ team_id: string; status: string; can_ask_again_at?: string }>,
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 
 vi.mock("../../../../../hooks/useFrontendBootstrap.ts", () => ({
@@ -40,10 +41,12 @@ vi.mock("../../../../../hooks/useFrontendBootstrap.ts", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: (_args: unknown, { skip }: { skip: boolean }) =>
-    skip ? { isFetching: false } : { data: h.team, error: h.error, isFetching: false },
+    skip ? {} : { data: h.team, error: h.error, fulfilledTimeStamp: h.fetchedAt },
   useMyTeamJoinRequestsQuery: () => ({ data: h.requests }),
   useAskToJoinTeamMutation: () => [vi.fn(), { isLoading: false }],
 }));
+
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
 
 vi.mock("@shared/molecules/Dialog/Dialog.tsx", () => ({
   Dialog: () => null,
@@ -85,6 +88,7 @@ afterEach(() => {
   h.team = undefined;
   h.error = undefined;
   h.requests = [];
+  h.fetchedAt = Number.MAX_SAFE_INTEGER;
 });
 
 describe("TeamMemberGate", () => {
@@ -118,6 +122,30 @@ describe("TeamMemberGate", () => {
     expect(container.textContent).toContain("rework.teamMemberGate.pending");
     expect(container.textContent).toContain("rework.teamMemberGate.browseTeams");
     expect(container.textContent).not.toContain("rework.teamCard.askToJoin");
+  });
+
+  it("waits for a fresh answer before showing a team's pages", () => {
+    h.team = team({ is_member: true });
+    h.fetchedAt = 0; // only a cached answer from before this opening
+    render();
+    expect(container.textContent).not.toContain("team-pages");
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+  });
+
+  it("hides Ask to join while a refusal still makes the person wait", () => {
+    h.team = team();
+    h.requests = [{ team_id: "team-1", status: "refused", can_ask_again_at: "2999-01-01T00:00:00Z" }];
+    render();
+    expect(container.textContent).toContain("rework.teamMemberGate.declined");
+    expect(container.textContent).toContain("rework.teamMemberGate.browseTeams");
+    expect(container.textContent).not.toContain("rework.teamCard.askToJoin");
+  });
+
+  it("offers Ask to join again once the wait is over", () => {
+    h.team = team();
+    h.requests = [{ team_id: "team-1", status: "refused", can_ask_again_at: "2000-01-01T00:00:00Z" }];
+    render();
+    expect(container.textContent).toContain("rework.teamCard.askToJoin");
   });
 
   it("points an outsider of an open or invite-only team to the teams", () => {

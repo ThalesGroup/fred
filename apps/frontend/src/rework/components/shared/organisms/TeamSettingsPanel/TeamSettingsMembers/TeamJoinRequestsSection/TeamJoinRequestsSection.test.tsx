@@ -16,11 +16,11 @@
 
 // What these pin: the section shows only to people who can decide and only
 // while requests exist; a pending row offers Accept and Refuse, a refused row
-// "Accept anyway", each calling the request's own endpoint.
+// "Accept anyway" while the team takes requests; a failure shows a toast.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TeamJoinRequest } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
@@ -34,11 +34,13 @@ const h = vi.hoisted(() => ({
   query: vi.fn(),
   accept: vi.fn(),
   refuse: vi.fn(),
+  showError: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: h.showError }) }));
 vi.mock("../../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useTeamJoinRequestsQuery: (arg: unknown, options: { skip: boolean }) => {
     h.query(arg, options);
@@ -73,12 +75,21 @@ const refused: TeamJoinRequest = {
 let container: HTMLDivElement;
 let root: Root;
 
-const render = (canAdministerMembers = true) => {
+const render = (canAdministerMembers = true, takesRequests = true) => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root.render(<TeamJoinRequestsSection teamId="demo" canAdministerMembers={canAdministerMembers} />));
+  act(() =>
+    root.render(
+      <TeamJoinRequestsSection
+        teamId="demo"
+        canAdministerMembers={canAdministerMembers}
+        takesRequests={takesRequests}
+      />,
+    ),
+  );
 };
+const settled = () => ({ unwrap: () => Promise.resolve() });
 const button = (label: string, row = 0) =>
   [...container.querySelectorAll("li")[row].querySelectorAll("button")].find((node) =>
     node.textContent?.includes(label),
@@ -89,8 +100,14 @@ afterEach(() => {
   container.remove();
   h.requests = [];
   h.query.mockClear();
-  h.accept.mockClear();
-  h.refuse.mockClear();
+  h.accept.mockReset();
+  h.refuse.mockReset();
+  h.showError.mockReset();
+});
+
+beforeEach(() => {
+  h.accept.mockReturnValue(settled());
+  h.refuse.mockReturnValue(settled());
 });
 
 it("renders nothing while no request is waiting", () => {
@@ -127,4 +144,22 @@ it("offers Accept anyway on a refused request", () => {
   );
   act(() => button("rework.teamSettings.members.joinRequests.acceptAnyway", 1)!.click());
   expect(h.accept).toHaveBeenCalledWith({ teamId: "demo", requestId: "r2" });
+});
+
+it("hides Accept anyway once the team no longer takes requests", () => {
+  h.requests = [refused];
+  render(true, false);
+  expect(container.textContent).toBe("");
+});
+
+it("reports a failed decision in a toast", async () => {
+  h.requests = [pending];
+  h.refuse.mockReturnValue({ unwrap: () => Promise.reject({ status: 500, data: { detail: "boom" } }) });
+  render();
+
+  await act(async () => button("rework.teamSettings.members.joinRequests.refuse")!.click());
+
+  expect(h.showError).toHaveBeenCalledWith(
+    expect.objectContaining({ summary: "rework.notifications.actionFailed", detail: "boom" }),
+  );
 });

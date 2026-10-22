@@ -32,6 +32,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   joinTeam: vi.fn(() => ({ unwrap: () => Promise.resolve({}) })),
   askToJoin: vi.fn((_arg: unknown) => ({ unwrap: () => Promise.resolve({}) })),
+  showError: vi.fn(),
   cancelRequest: vi.fn((_arg: unknown) => ({ unwrap: () => Promise.resolve({}) })),
   isJoining: false,
 }));
@@ -47,6 +48,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 }));
 
 // The shared Dialog portals out of the card; a stand-in keeps the body inline.
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: h.showError }) }));
 vi.mock("@shared/molecules/Dialog/Dialog.tsx", () => ({
   Dialog: ({
     open,
@@ -107,6 +109,7 @@ afterEach(() => {
   container.remove();
   h.joinTeam.mockClear();
   h.askToJoin.mockClear();
+  h.showError.mockClear();
   h.cancelRequest.mockClear();
   h.isJoining = false;
 });
@@ -233,6 +236,21 @@ describe("TeamCard on_request", () => {
       createTeamJoinRequest: { message: "I run the RFP pipeline." },
     });
     expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("a failed request keeps the dialog open and says why", async () => {
+    h.askToJoin.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 409, data: { detail: "Refused" } }) });
+    render(<TeamCard team={onRequestTeam} />);
+    click(buttonByLabel("rework.teamCard.askToJoin"));
+
+    await act(async () => {
+      buttonByLabel("rework.teamCard.askDialog.confirm")?.click();
+    });
+
+    expect(h.showError).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: "rework.teamCard.askDialog.failed", detail: "Refused" }),
+    );
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
   });
 
   it("an empty message is sent as none", async () => {

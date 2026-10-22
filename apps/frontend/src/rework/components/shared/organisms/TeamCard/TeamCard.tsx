@@ -28,6 +28,7 @@ import { useFrontendBootstrap } from "src/hooks/useFrontendBootstrap";
 import Button from "@shared/atoms/Button/Button.tsx";
 import React, { useState } from "react";
 import JoinRequestDialog from "./JoinRequestDialog.tsx";
+import { formatAskAgainAt, joinRequestState } from "./joinRequestState.ts";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { teamDescriptionText } from "@core/utils/teamFields.ts";
 
@@ -39,15 +40,6 @@ export interface TeamCardProps {
   onJoined?: () => void;
   /** The caller's own request to this team, for an `on_request` team. */
   joinRequest?: MyTeamJoinRequest;
-}
-
-type RequestState = "ask" | "pending" | "declined";
-
-function requestState(request: MyTeamJoinRequest | undefined, now: number): RequestState {
-  if (!request) return "ask";
-  if (request.status === "pending") return "pending";
-  const askAgainAt = request.can_ask_again_at ? Date.parse(request.can_ask_again_at) : 0;
-  return askAgainAt > now ? "declined" : "ask";
 }
 
 export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps) {
@@ -93,14 +85,8 @@ export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps)
   const canJoinDirectly = !team.is_member && team.joining_mode === "open";
   const isInviteOnlyOutsider = !team.is_member && team.joining_mode === "invite_only";
   const onRequest = !team.is_member && team.joining_mode === "on_request";
-  const request = onRequest ? requestState(joinRequest, Date.now()) : undefined;
-  const askAgainAt =
-    request === "declined" && joinRequest?.can_ask_again_at
-      ? new Date(joinRequest.can_ask_again_at).toLocaleString(i18n.language, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        })
-      : undefined;
+  const request = onRequest ? joinRequestState(joinRequest, Date.now()) : undefined;
+  const askAgainAt = request === "declined" ? formatAskAgainAt(joinRequest, i18n.language) : undefined;
 
   return (
     <div className={styles.teamCardContainer}>

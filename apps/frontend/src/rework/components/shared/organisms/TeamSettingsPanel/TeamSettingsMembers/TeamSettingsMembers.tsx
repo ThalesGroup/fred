@@ -72,7 +72,11 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
           </>
         }
       />
-      <TeamJoinRequestsSection teamId={team.id} canAdministerMembers={can_administer_members} />
+      <TeamJoinRequestsSection
+        teamId={team.id}
+        canAdministerMembers={can_administer_members}
+        takesRequests={team.visibility === "public" && team.joining_mode === "on_request"}
+      />
       <div className={styles["team-settings-members-table-wrapper"]}>
         <TeamSettingsMembersTable team={team} search={search} />
       </div>

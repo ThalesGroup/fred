@@ -13,11 +13,13 @@
 // limitations under the License.
 
 // Join requests waiting on this team's admins, plus the ones refused in the
-// last 7 days ("Accept anyway"). The bell is the main surface; this list also
-// covers an admin promoted after a request was sent.
+// last 7 days ("Accept anyway", only while the team takes requests). The bell is
+// the main surface; this list also covers an admin promoted after a request.
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useAcceptTeamJoinRequestMutation,
   useRefuseTeamJoinRequestMutation,
@@ -29,11 +31,19 @@ import styles from "./TeamJoinRequestsSection.module.scss";
 interface TeamJoinRequestsSectionProps {
   teamId: string;
   canAdministerMembers: boolean;
+  /** Public and `on_request`: otherwise a refused request can no longer be accepted. */
+  takesRequests: boolean;
 }
 
-export default function TeamJoinRequestsSection({ teamId, canAdministerMembers }: TeamJoinRequestsSectionProps) {
+export default function TeamJoinRequestsSection({
+  teamId,
+  canAdministerMembers,
+  takesRequests,
+}: TeamJoinRequestsSectionProps) {
   const { t, i18n } = useTranslation();
-  const { data: requests } = useTeamJoinRequestsQuery({ teamId }, { skip: !canAdministerMembers });
+  const { showError } = useToast();
+  const { data } = useTeamJoinRequestsQuery({ teamId }, { skip: !canAdministerMembers });
+  const requests = takesRequests ? data : data?.filter((request) => request.status === "pending");
   const [accept, { isLoading: accepting }] = useAcceptTeamJoinRequestMutation();
   const [refuse, { isLoading: refusing }] = useRefuseTeamJoinRequestMutation();
   const busy = accepting || refusing;
@@ -43,7 +53,11 @@ export default function TeamJoinRequestsSection({ teamId, canAdministerMembers }
   // A failed decision (e.g. the request was cancelled meanwhile) refetches the list.
   const decide = (request: TeamJoinRequest, decision: "accept" | "refuse") => {
     const args = { teamId, requestId: request.id };
-    void (decision === "accept" ? accept(args) : refuse(args));
+    (decision === "accept" ? accept(args) : refuse(args))
+      .unwrap()
+      .catch((error: unknown) =>
+        showError({ summary: t("rework.notifications.actionFailed"), detail: normalizeApiError(error).detail }),
+      );
   };
 
   const formatDate = (value: string) =>

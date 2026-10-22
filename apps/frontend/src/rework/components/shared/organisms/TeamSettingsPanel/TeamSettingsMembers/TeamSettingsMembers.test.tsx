@@ -38,7 +38,12 @@ vi.mock("./TeamInviteLinkDialog/TeamInviteLinkDialog.tsx", () => ({
 
 import TeamSettingsMembers from "./TeamSettingsMembers";
 
-const team = { id: "demo", name: "Demonstration" } as TeamWithPermissions;
+const team = {
+  id: "demo",
+  name: "Demonstration",
+  visibility: "public",
+  joining_mode: "on_request",
+} as TeamWithPermissions;
 let container: HTMLDivElement;
 let root: Root;
 
@@ -62,10 +67,10 @@ afterEach(() => {
   h.section.mockClear();
 });
 
-it("hands the pending requests section the team and the caller's right to decide", () => {
+it("hands the pending requests section the team, the caller's right to decide and the team's mode", () => {
   h.canAdministerMembers = false;
   render();
-  expect(h.section).toHaveBeenCalledWith({ teamId: "demo", canAdministerMembers: false });
+  expect(h.section).toHaveBeenCalledWith({ teamId: "demo", canAdministerMembers: false, takesRequests: true });
 });
 
 it("opens the team's invite link dialog next to Add members", () => {
