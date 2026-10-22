@@ -3474,7 +3474,7 @@ Popup title editor — Claude.com pattern. Display mode: `<button>` with `font: 
 **Location:** `src/rework/components/shared/molecules/RichInputField/RichInputField.tsx`
 **Status:** `Functional`
 
-Auto-growing textarea with optional `topSlot`, `leftSlot`, `rightSlot`, and `showSendButton`. Height grows with content up to `maxHeight` (200px default); `overflowY` switches from `hidden` to `auto` at max height. Enter (no Shift) sends; Shift+Enter inserts newline. `.bar` uses a gradient fade (`transparent → --surface-container-lowest`) so the field floats above the thread visually.
+Auto-growing textarea with optional `topSlot`, `leftSlot`, `rightSlot`, and `showSendButton`. Height grows with content up to `maxHeight` (200px default); `overflowY` switches from `hidden` to `auto` at max height. Enter (no Shift) sends; Shift+Enter inserts newline. `.bar` uses a gradient fade (`transparent` to `--surface-main`) above an active thread. `ManagedChatPage` removes the bar background in the initial empty state.
 
 #### Required composer-control pattern
 
