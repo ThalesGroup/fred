@@ -4635,12 +4635,20 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn a_stopped_lifecycle_worker_reports_only_its_stage() {
-    use control_plane::lifecycle::{policy::LifecycleConfig, worker};
+    use control_plane::lifecycle::{
+        policy::{LifecycleConfig, TemporalConfig},
+        worker,
+    };
     let e = env().await;
-    let mut config = LifecycleConfig::default();
-    config.enabled = true;
-    config.temporal.host = "127.0.0.1:1".into();
-    config.temporal.connect_timeout_seconds = 1;
+    let config = LifecycleConfig {
+        enabled: true,
+        temporal: TemporalConfig {
+            host: "127.0.0.1:1".into(),
+            connect_timeout_seconds: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
     let error = worker::run(
         e.pool.clone(),
         e.fga.clone(),
