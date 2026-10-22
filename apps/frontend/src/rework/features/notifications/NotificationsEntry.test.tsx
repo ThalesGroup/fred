@@ -16,7 +16,8 @@
 // What these pin: the badge shows the unseen count and disappears at zero, the
 // count is in the bell's accessible name; the summary polls every 15 s only
 // while the tab is visible and catches up at once when it returns; a tab opened
-// in the background sends nothing; Escape closes the popover onto the bell.
+// in the background sends nothing; a rising count refreshes the caller's join
+// requests and teams; Escape closes the popover onto the bell.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -24,10 +25,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const summaryMock = vi.fn();
 const refetch = vi.fn();
+const dispatch = vi.fn();
 
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useNotificationSummaryQuery: (...args: unknown[]) => summaryMock(...args),
+  enhancedControlPlaneApi: { util: { invalidateTags: (tags: unknown) => ({ invalidate: tags }) } },
 }));
+vi.mock("react-redux", () => ({ useDispatch: () => dispatch }));
 vi.mock("./NotificationsPopover", () => ({
   default: ({ id }: { id: string }) => <div id={id} role="dialog" />,
 }));
@@ -139,6 +143,25 @@ describe("NotificationsEntry", () => {
 
     setVisibility("visible");
     expect(lastOptions()).toEqual({ skip: false, pollingInterval: NOTIFICATION_POLL_INTERVAL_MS });
+  });
+
+  it("refreshes the caller's join requests and teams when the count rises, not on the first answer", () => {
+    render(1);
+    expect(dispatch).not.toHaveBeenCalled();
+
+    summaryMock.mockReturnValue({ data: { unseen_count: 2 }, refetch });
+    act(() => root!.render(<NotificationsEntry iconStyle={{}} />));
+
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith({
+      invalidate: [
+        { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
+        { type: "ControlPlaneTeam", id: "LIST" },
+      ],
+    });
+
+    summaryMock.mockReturnValue({ data: { unseen_count: 0 }, refetch });
+    act(() => root!.render(<NotificationsEntry iconStyle={{}} />));
+    expect(dispatch).toHaveBeenCalledOnce();
   });
 
   it("opens the popover, and Escape closes it onto the bell", () => {

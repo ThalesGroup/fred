@@ -355,6 +355,22 @@ async def test_accepting_someone_who_joined_meanwhile_is_harmless(
     assert await world.requests.list_for_team(ATLAS) == []
 
 
+async def test_after_accept_then_leave_the_requester_can_ask_again(
+    world: _World,
+) -> None:
+    request, _ = await world.ask()
+    await accept_join_request(_user("bob"), ATLAS, request.id, world.deps)
+    assert await list_my_join_requests(_user("alice"), world.deps) == []
+
+    world.rebac.roles[ATLAS].pop("alice")  # she leaves the team
+
+    assert await list_my_join_requests(_user("alice"), world.deps) == []
+    again, _ = await world.ask()
+    assert again.id != request.id
+    [mine] = await list_my_join_requests(_user("alice"), world.deps)
+    assert mine.status == "pending" and mine.team_id == ATLAS
+
+
 async def test_a_demoted_admin_loses_the_request_notification(world: _World) -> None:
     await world.ask()
     world.rebac.roles[ATLAS]["carol"] = {RelationType.TEAM_MEMBER}

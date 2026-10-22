@@ -641,9 +641,11 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
+    // Leaving a team must also refresh the leaver's own join requests (team cards).
     removeTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDelete: {
       invalidatesTags: (_, __, arg) => [
         "PlatformAccess",
+        { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },

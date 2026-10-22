@@ -16,9 +16,14 @@
 // connection: the browser's six connections per origin are already contested.
 // Polling stops while the tab is hidden and catches up the moment it returns.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDispatch } from "react-redux";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import { useNotificationSummaryQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  enhancedControlPlaneApi,
+  useNotificationSummaryQuery,
+} from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { NotificationDispatch } from "./notificationTypes";
 
 export const NOTIFICATION_POLL_INTERVAL_MS = 15_000;
 
@@ -47,5 +52,22 @@ export function useNotificationSummary(): number {
   }, [refetch, started]);
   useRefetchOnWindowFocus(refetch, !started);
 
-  return data?.unseen_count ?? 0;
+  // A new notification may be another user's answer to a join request: refresh
+  // the caller's requests and team list wherever they are on screen.
+  const unseen = data?.unseen_count;
+  const dispatch = useDispatch<NotificationDispatch>();
+  const previous = useRef(unseen);
+  useEffect(() => {
+    if (unseen === undefined) return;
+    if (previous.current !== undefined && unseen > previous.current)
+      dispatch(
+        enhancedControlPlaneApi.util.invalidateTags([
+          { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
+          { type: "ControlPlaneTeam", id: "LIST" },
+        ]),
+      );
+    previous.current = unseen;
+  }, [unseen, dispatch]);
+
+  return unseen ?? 0;
 }

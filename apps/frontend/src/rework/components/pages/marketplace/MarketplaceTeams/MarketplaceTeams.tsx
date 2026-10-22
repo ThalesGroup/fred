@@ -26,6 +26,7 @@ import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts"
 import { Link, Navigate } from "react-router-dom";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import { isPersonalTeamId } from "@shared/utils/teamId";
+import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { useMemo, useState } from "react";
 
 // Free-text query matched against name and description — a team must match
@@ -94,7 +95,12 @@ export default function MarketplaceTeams() {
 
   // The caller's own join requests, fetched once for every on_request card.
   const hasOnRequestTeam = !!otherTeams?.some((team) => team.joining_mode === "on_request");
-  const { data: myJoinRequests } = useMyTeamJoinRequestsQuery(undefined, { skip: !hasOnRequestTeam });
+  // An admin's answer is another user's write: refetch on mount and focus, never trust the cache.
+  const { data: myJoinRequests, refetch: refetchMyJoinRequests } = useMyTeamJoinRequestsQuery(undefined, {
+    skip: !hasOnRequestTeam,
+    refetchOnMountOrArgChange: true,
+  });
+  useRefetchOnWindowFocus(refetchMyJoinRequests, !hasOnRequestTeam);
 
   const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search, t), [yourTeams, search, t]);
   const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search, t), [otherTeams, search, t]);

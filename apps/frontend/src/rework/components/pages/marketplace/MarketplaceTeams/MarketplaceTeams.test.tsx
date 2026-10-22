@@ -31,6 +31,7 @@ const h = vi.hoisted(() => ({
   teams: { data: [] as Team[] } as { data?: Team[] },
   mine: [] as MyTeamJoinRequest[],
   mineSkipped: [] as boolean[],
+  mineRefetchOnMount: undefined as boolean | undefined,
   bootstrap: {
     activeTeam: { id: "personal-me" } as TeamWithPermissions | undefined,
     availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
@@ -59,9 +60,10 @@ vi.mock("react-router-dom", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListTeamsQuery: () => h.teams,
-  useMyTeamJoinRequestsQuery: (_arg: unknown, options: { skip: boolean }) => {
+  useMyTeamJoinRequestsQuery: (_arg: unknown, options: { skip: boolean; refetchOnMountOrArgChange?: boolean }) => {
     h.mineSkipped.push(options.skip);
-    return { data: options.skip ? undefined : h.mine };
+    h.mineRefetchOnMount = options.refetchOnMountOrArgChange;
+    return { data: options.skip ? undefined : h.mine, refetch: vi.fn() };
   },
 }));
 
@@ -279,5 +281,15 @@ describe("MarketplaceTeams join requests", () => {
     expect(h.mineSkipped).toEqual([false]);
     expect(html).toContain('data-testid="team-card-acme" data-request="pending"');
     expect(html).not.toContain('data-testid="team-card-beta" data-request');
+  });
+
+  // An admin accepts, the requester enters then leaves: coming back must not
+  // show the cached "Request sent" from before the answer.
+  it("refetches the caller's requests on every visit, so an answered request never lingers", () => {
+    h.teams = { data: [{ id: "acme", is_member: false, visibility: "public", joining_mode: "on_request" } as Team] };
+    h.mine = [];
+    const html = render();
+    expect(h.mineRefetchOnMount).toBe(true);
+    expect(html).not.toContain('data-request="pending"');
   });
 });
