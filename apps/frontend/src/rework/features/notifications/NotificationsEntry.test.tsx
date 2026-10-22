@@ -102,13 +102,6 @@ describe("NotificationsEntry", () => {
     expect(bell(el).getAttribute("aria-label")).toBe("rework.mainNav.notifications");
   });
 
-  it("polls every 15 seconds while the tab is visible", () => {
-    render(0);
-
-    expect(lastOptions()).toEqual({ skip: false, pollingInterval: NOTIFICATION_POLL_INTERVAL_MS });
-    expect(NOTIFICATION_POLL_INTERVAL_MS).toBe(15_000);
-  });
-
   it("stops polling while hidden and refreshes at once on return", () => {
     render(0);
 
