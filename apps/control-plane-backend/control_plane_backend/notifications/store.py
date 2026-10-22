@@ -200,14 +200,17 @@ class NotificationStore:
         actor_uid: str | None,
         actor_name: str | None,
         outcome: str,
+        include_handled: bool = False,
     ) -> None:
-        """The actor's own open rows go; every other open row is marked handled."""
+        """The actor's own open rows go; every other open row is marked handled.
+
+        `include_handled` also rewrites rows already handled (a decision reversed).
+        """
         if not group_keys:
             return
-        open_rows = [
-            NotificationRow.group_key.in_(list(group_keys)),
-            NotificationRow.handled_at.is_(None),
-        ]
+        open_rows = [NotificationRow.group_key.in_(list(group_keys))]
+        if not include_handled:
+            open_rows.append(NotificationRow.handled_at.is_(None))
         async with use_session(self._sessions) as s:
             if actor_uid is not None:
                 await s.execute(

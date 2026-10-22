@@ -38,7 +38,7 @@ What exists today (audit of `origin/swift` and `feat/notifications`, 2026-10-22)
 
 - [A promoted admin misses older requests in the bell] → the Members section lists them.
 - [Cancel and ask again re-badges admins] → accepted (decision 5); a refusal already imposes 24 hours.
-- [Accept anyway leaves the other admins' tiles reading "Handled by <name>" with outcome `refused`] → accepted: the Members section shows the truth, and the requester's own notification is replaced.
+- [Accept anyway after a refusal] → the group is resolved again with outcome `accepted` (`resolve(include_handled=True)`), so every admin tile shows the final outcome, and the requester's own refusal is replaced.
 - [The requester's answer is lost if emission fails] → best effort as in slice 1; the card's state (`mine`) still shows the truth: the team appears under "Your teams" once accepted, "Request declined" once refused.
 - [Three-way ButtonGroup on narrow screens] → checked in the live check; the group already wraps at small widths.
 

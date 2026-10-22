@@ -243,11 +243,16 @@ class NotificationService:
         actor_uid: str | None,
         actor_name: str | None,
         outcome: str,
+        include_handled: bool = False,
     ) -> bool:
         """The actor's own rows disappear; the other recipients see who handled it."""
         try:
             await self._store.resolve(
-                group_keys, actor_uid=actor_uid, actor_name=actor_name, outcome=outcome
+                group_keys,
+                actor_uid=actor_uid,
+                actor_name=actor_name,
+                outcome=outcome,
+                include_handled=include_handled,
             )
         except Exception:
             logger.warning(

@@ -253,6 +253,8 @@ async def accept_join_request(
         actor_uid=user.uid,
         actor_name=display_name(user),
         outcome="accepted",
+        # "Accept anyway": tiles already reading "refused" show the final outcome.
+        include_handled=request.status == JoinRequestStatus.REFUSED,
     )
     if request.status == JoinRequestStatus.REFUSED:
         # The acceptance replaces the refusal the requester already got.

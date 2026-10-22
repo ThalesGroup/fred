@@ -442,6 +442,21 @@ async def test_accept_anyway_replaces_the_refusal_within_7_days(world: _World) -
     assert answer.payload.model_dump()["outcome"] == "accepted"
 
 
+async def test_accept_anyway_shows_the_final_outcome_on_every_admin_tile(
+    world: _World,
+) -> None:
+    request, _ = await world.ask()
+    await refuse_join_request(_user("bob"), ATLAS, request.id, world.deps)
+    [refused] = await world.inbox("carol")
+    assert refused.handled_outcome == "refused"
+
+    await accept_join_request(_user("bob"), ATLAS, request.id, world.deps)
+
+    [handled] = await world.inbox("carol")
+    assert handled.handled_by_name == "Bob" and handled.handled_outcome == "accepted"
+    assert await world.inbox("bob") == []
+
+
 async def test_a_refusal_older_than_7_days_is_gone(world: _World) -> None:
     request, _ = await world.ask()
     await refuse_join_request(_user("bob"), ATLAS, request.id, world.deps)
