@@ -45,7 +45,7 @@ import styles from "./NotificationsPopover.module.scss";
 const NOTIFICATIONS_PAGE_SIZE = 50;
 
 interface TileHandlers {
-  /** A click on the tile or on a navigate action. */
+  /** The View button or a navigate action. */
   interact: (notification: NotificationItem, to: string | null) => void;
   onAction: (notification: NotificationItem, action: NotificationAction) => void;
   onDismiss: (notification: NotificationItem) => void;
@@ -56,6 +56,9 @@ interface TileHandlers {
 function NotificationListItem({ notification, handlers }: { notification: NotificationItem; handlers: TileHandlers }) {
   const { t } = useTranslation();
   const rendered = renderNotification(notification, t);
+  // No View button when an action already opens the same place.
+  const link = rendered.link;
+  const showView = !!link && !rendered.actions.some((action) => action.kind === "navigate" && action.to === link);
   return (
     <NotificationTile
       icon={rendered.icon}
@@ -75,7 +78,8 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
       busy={handlers.isBusy(notification)}
       dismissLabel={t("rework.notifications.dismiss")}
       dismissible={!rendered.pendingDecision}
-      onOpen={() => handlers.interact(notification, rendered.link)}
+      viewLabel={showView ? t("rework.notifications.actions.view") : undefined}
+      onView={() => handlers.interact(notification, rendered.link)}
       onDismiss={() => handlers.onDismiss(notification)}
     />
   );

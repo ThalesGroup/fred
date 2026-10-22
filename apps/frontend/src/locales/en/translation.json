@@ -4352,6 +4352,7 @@
       "handled": "Handled",
       "handledBy": "Handled by {{name}}",
       "actions": {
+        "view": "View",
         "openAgent": "Open the agent",
         "accept": "Accept",
         "refuse": "Refuse",

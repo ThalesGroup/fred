@@ -27,12 +27,6 @@
   list-style: none;
 }
 
-/* The state layer sits over the card instead of replacing it. */
-.tile:hover,
-.tile:focus-within {
-  background-image: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover));
-}
-
 .icon {
   display: inline-flex;
   flex-shrink: 0;
@@ -63,31 +57,10 @@
   min-width: 0;
 }
 
-/* The title is the tile's one click target: its ::after covers the tile. */
-.hit {
-  cursor: pointer;
-  border: none;
-  background: none;
-  padding: 0;
+.title {
+  margin: 0;
   color: var(--on-surface);
   font: var(--font-title-small);
-  text-align: left;
-}
-
-.hit::after {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-m);
-  content: "";
-}
-
-.hit:focus-visible {
-  outline: none;
-}
-
-.hit:focus-visible::after {
-  outline: 2px solid var(--primary);
-  outline-offset: -2px;
 }
 
 .body {
@@ -104,11 +77,9 @@
 
 .actions {
   display: flex;
-  position: relative;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--spacing-xs);
-  z-index: 1;
   margin-top: var(--spacing-2xs);
 }
 
@@ -133,10 +104,9 @@
   position: absolute;
   top: var(--spacing-xs);
   right: var(--spacing-xs);
-  z-index: 1;
 }
 
-.tile[data-dismissible] .hit,
+.tile[data-dismissible] .title,
 .tile[data-dismissible] .body {
   padding-right: var(--spacing-2xl);
 }

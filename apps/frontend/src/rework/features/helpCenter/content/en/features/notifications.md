@@ -24,7 +24,7 @@ whole screen, with a back arrow.
 - **Seen**: opening the bell marks everything it shows as seen, and the number
   goes away. A notification that arrives while the list is open still counts
   on the bell afterwards.
-- **Handled**: as soon as you click a notification or one of its buttons, it
+- **Handled**: as soon as you click **View** or one of its other buttons, it
   takes you where it points (usually the team's **Agents** page) and leaves your
   list. **Accept** and **Refuse** remove it only once the answer is saved: if
   it fails, the notification stays.
@@ -41,7 +41,7 @@ the agent.
 
 A request to join your team is the exception: it has no cross and stays in
 your list until someone answers it, even when you choose **Clear all**.
-Clicking it opens the team's members without removing it. Once you or another
+**View** opens the team's members without removing it. Once you or another
 Admin has answered, the cross comes back.
 
 Notifications are deleted on their own **30 days** after they arrive.

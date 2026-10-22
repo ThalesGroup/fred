@@ -25,7 +25,7 @@ retour.
 - **Vue** : ouvrir la cloche marque comme vu tout ce qu'elle affiche, et le
   nombre disparaît. Une notification arrivée pendant que la liste est ouverte
   compte encore sur la cloche ensuite.
-- **Traitée** : dès que vous cliquez sur une notification ou sur l'un de ses
+- **Traitée** : dès que vous cliquez sur **Voir** ou sur l'un de ses autres
   boutons, elle vous emmène là où elle pointe (en général la page **Agents**
   de l'équipe) et disparaît de votre liste. **Accepter** et **Refuser** ne la
   retirent qu'une fois la réponse enregistrée : en cas d'échec, elle reste.
@@ -42,7 +42,7 @@ votre liste : cela ne change rien à l'agent.
 
 Une demande pour rejoindre votre équipe fait exception : elle n'a pas de croix
 et reste dans votre liste tant que personne n'y a répondu, même avec **Tout
-effacer**. Cliquer dessus ouvre les membres de l'équipe sans la retirer. Une
+effacer**. **Voir** ouvre les membres de l'équipe sans la retirer. Une
 fois que vous ou un autre Admin avez répondu, la croix revient.
 
 Les notifications sont supprimées d'elles-mêmes **30 jours** après leur

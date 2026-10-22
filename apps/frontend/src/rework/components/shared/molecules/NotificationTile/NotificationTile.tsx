@@ -45,15 +45,13 @@ export interface NotificationTileProps {
   dismissLabel: string;
   /** False for a pending decision: the user answers it, they don't discard it. */
   dismissible?: boolean;
-  onOpen: () => void;
+  /** Label of the outlined button that opens the subject; no button without it. */
+  viewLabel?: string;
+  onView?: () => void;
   onDismiss: () => void;
 }
 
-/**
- * One notification in a list. The title button stretches over the whole tile, so
- * a click anywhere opens it; the actions and the always-visible close button sit
- * above that hit area.
- */
+/** One notification in a list: only its buttons are interactive, not the card. */
 export default function NotificationTile({
   icon,
   category,
@@ -66,33 +64,39 @@ export default function NotificationTile({
   busy = false,
   dismissLabel,
   dismissible = true,
-  onOpen,
+  viewLabel,
+  onView,
   onDismiss,
 }: NotificationTileProps) {
+  const view = viewLabel && onView ? { label: viewLabel, onClick: onView } : undefined;
   return (
     <li className={styles.tile} data-dismissible={dismissible || undefined}>
       <span className={styles.icon} data-category={category}>
         <Icon category="outlined" type={icon} />
       </span>
       <div className={styles.text}>
-        <button type="button" className={styles.hit} onClick={onOpen}>
-          {title}
-        </button>
+        <p className={styles.title}>{title}</p>
         {body && <p className={styles.body}>{body}</p>}
         <time className={styles.meta} dateTime={dateTime}>
           {time}
         </time>
-        {handledLabel ? (
+        {handledLabel && (
           <p className={styles.handled}>
             <span className={styles.handledIcon}>
               <Icon category="outlined" type="check_circle" />
             </span>
             {handledLabel}
           </p>
-        ) : (
-          actions.length > 0 && (
-            <div className={styles.actions}>
-              {actions.map((action) => (
+        )}
+        {(view || (!handledLabel && actions.length > 0)) && (
+          <div className={styles.actions}>
+            {view && (
+              <Button type="button" color="primary" variant="outlined" size="small" onClick={view.onClick}>
+                {view.label}
+              </Button>
+            )}
+            {!handledLabel &&
+              actions.map((action) => (
                 <Button
                   key={action.id}
                   type="button"
@@ -105,8 +109,7 @@ export default function NotificationTile({
                   {action.label}
                 </Button>
               ))}
-            </div>
-          )
+          </div>
         )}
       </div>
       {dismissible && (

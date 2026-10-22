@@ -39,7 +39,8 @@ function renderTile(overrides: Partial<NotificationTileProps> = {}) {
     time: "5 min ago",
     dateTime: "2026-10-20T10:00:00Z",
     dismissLabel: "Dismiss notification",
-    onOpen: vi.fn(),
+    viewLabel: "View",
+    onView: vi.fn(),
     onDismiss: vi.fn(),
     ...overrides,
   };
@@ -66,23 +67,40 @@ afterEach(() => {
 });
 
 describe("NotificationTile", () => {
-  it("opens on a click on its title", () => {
-    const { el, props } = renderTile();
+  it("opens through its View button, placed before the actions", () => {
+    const { el, props } = renderTile({ actions: [{ id: "accept", label: "Accept", onClick: vi.fn() }] });
 
-    click(el.querySelector("li button"));
+    const labels = [...el.querySelectorAll(".actions button, [class*='actions'] button")].map((b) => b.textContent);
+    expect(labels).toEqual(["View", "Accept"]);
+    click([...el.querySelectorAll("button")].find((b) => b.textContent === "View"));
 
-    expect(props.onOpen).toHaveBeenCalledOnce();
+    expect(props.onView).toHaveBeenCalledOnce();
   });
 
-  it("runs a button's own handler without opening the tile", () => {
+  it("does nothing on a click on the card itself", () => {
+    const { el, props } = renderTile();
+
+    click(el.querySelector("li"));
+    click(el.querySelector("p"));
+
+    expect(props.onView).not.toHaveBeenCalled();
+    expect(el.querySelector("p")?.closest("button")).toBeNull();
+  });
+
+  it("has no View button without one to show", () => {
+    const { el } = renderTile({ viewLabel: undefined });
+
+    expect([...el.querySelectorAll("button")].some((b) => b.textContent === "View")).toBe(false);
+  });
+
+  it("runs a button's own handler without opening the subject", () => {
     const onAction = vi.fn();
     const { el, props } = renderTile({ actions: [{ id: "open", label: "Open the agent", onClick: onAction }] });
 
-    const button = [...el.querySelectorAll("button")].find((b) => b.textContent === "Open the agent");
-    click(button);
+    click([...el.querySelectorAll("button")].find((b) => b.textContent === "Open the agent"));
 
     expect(onAction).toHaveBeenCalledOnce();
-    expect(props.onOpen).not.toHaveBeenCalled();
+    expect(props.onView).not.toHaveBeenCalled();
   });
 
   it("dismisses through its close button, present without hover", () => {
@@ -94,7 +112,7 @@ describe("NotificationTile", () => {
     click(close);
 
     expect(props.onDismiss).toHaveBeenCalledOnce();
-    expect(props.onOpen).not.toHaveBeenCalled();
+    expect(props.onView).not.toHaveBeenCalled();
   });
 
   it("disables its buttons while busy", () => {
