@@ -62,6 +62,29 @@ def check_archive(content: bytes) -> None:
             )
 
 
+# An OLE compound file: an old .ppt, or an Office file encrypted with a password.
+_CFB_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def unreadable_message(content: bytes) -> str:
+    """Why bytes python-pptx cannot open are no .pptx, in the author's words."""
+    if content.startswith(_CFB_MAGIC):
+        if "EncryptedPackage".encode("utf-16-le") in content:
+            return (
+                "This file is password-protected. Remove the password in PowerPoint "
+                "(File > Info > Protect Presentation), then upload it again."
+            )
+        return (
+            "This is an older PowerPoint file (.ppt). Open it in PowerPoint, save it "
+            "as .pptx, then upload it again."
+        )
+    return (
+        "The uploaded file could not be read as a PowerPoint presentation (.pptx): it "
+        "is another kind of file or it is damaged. Check that it opens in PowerPoint, "
+        "then upload it again."
+    )
+
+
 def open_presentation(content: bytes) -> PresentationType:
     """``Presentation`` of user bytes, the archive checked first (CPU-bound)."""
     check_archive(content)

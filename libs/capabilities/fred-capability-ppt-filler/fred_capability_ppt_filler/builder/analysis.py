@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import logging
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -69,13 +70,20 @@ from fred_capability_ppt_filler.builder.plan import (
     MAX_CHARTS_PER_SLIDE,
     chart_headings,
 )
-from fred_capability_ppt_filler.pptx_archive import open_presentation
+from fred_capability_ppt_filler.pptx_archive import (
+    UnsafeArchiveError,
+    open_presentation,
+    unreadable_message,
+)
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, walk_shapes
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from pptx.shapes.base import BaseShape
 
+logger = logging.getLogger(__name__)
+
 CODE_INVALID_UPLOAD = "invalid_upload"
+CODE_ANALYSIS_FAILED = "analysis_failed"
 
 # A relationship of these kinds does not block duplicating a slide (slide-to-
 # slide links are dropped, not copied); any other part (chart, SmartArt, OLE)
@@ -2097,20 +2105,32 @@ def analyze_template(pptx_source: Union[bytes, str]) -> AnalyzeResult:
             if isinstance(pptx_source, bytes)
             else Presentation(pptx_source)
         )
+    except UnsafeArchiveError as exc:
+        return _failed(
+            CODE_INVALID_UPLOAD, f"The uploaded file could not be read: {exc}"
+        )
+    except Exception as exc:  # noqa: BLE001 - any unopenable file is a template error
+        logger.info("Unreadable template: %s", type(exc).__name__)
+        raw = pptx_source if isinstance(pptx_source, bytes) else b""
+        return _failed(CODE_INVALID_UPLOAD, unreadable_message(raw))
+    try:
         inventory = analyze_presentation(presentation)
-    except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a template error
-        return AnalyzeResult(
-            errors=[
-                AnalysisError(
-                    code=CODE_INVALID_UPLOAD,
-                    message=f"The uploaded file could not be read as a .pptx: {exc}",
-                )
-            ]
+    except Exception:  # noqa: BLE001 - an analyser bug, not the author's file
+        logger.exception("Template analysis failed on an open presentation")
+        return _failed(
+            CODE_ANALYSIS_FAILED,
+            "Fred could not analyse this template. Please report it to your "
+            "administrator; another template can be used meanwhile.",
         )
     return AnalyzeResult(inventory=inventory, summary=inventory.summary())
 
 
+def _failed(code: str, message: str) -> AnalyzeResult:
+    return AnalyzeResult(errors=[AnalysisError(code=code, message=message)])
+
+
 __all__ = [
+    "CODE_ANALYSIS_FAILED",
     "CODE_INVALID_UPLOAD",
     "COPYABLE_REL_SUFFIXES",
     "ANALYSIS_VERSION",

@@ -1007,3 +1007,32 @@ def test_look_alike_template_slides_are_one_design():
     ]
     assert twin.design == first.id and twin.design_key == first.design_key
     assert decorated.design == "" and shifted.design == ""
+
+
+_CFB = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\0" * 504
+
+
+@pytest.mark.parametrize(
+    ("content", "said"),
+    [
+        (_CFB + "EncryptedPackage".encode("utf-16-le"), "password-protected"),
+        (_CFB, "older PowerPoint file (.ppt)"),
+        (b"not a presentation", "another kind of file or it is damaged"),
+    ],
+)
+def test_an_unopenable_file_says_why_in_the_author_s_words(content, said):
+    (error,) = analyze_template(content).errors
+    assert error.code == "invalid_upload" and said in error.message
+
+
+def test_an_analyser_bug_is_logged_and_reported_without_its_text(monkeypatch, caplog):
+    from fred_capability_ppt_filler.builder import analysis
+
+    def _broken(_presentation):
+        raise RuntimeError("secret slide text")
+
+    monkeypatch.setattr(analysis, "analyze_presentation", _broken)
+    (error,) = analyze_template(build_showcase_template()).errors
+    assert error.code == "analysis_failed" and "report it" in error.message
+    assert "secret" not in error.message
+    assert any(r.exc_info for r in caplog.records)

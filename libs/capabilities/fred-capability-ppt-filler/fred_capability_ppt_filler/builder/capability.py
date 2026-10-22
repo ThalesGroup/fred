@@ -119,6 +119,7 @@ from fred_capability_ppt_filler.pptx_archive import (
     UnsafeArchiveError,
     open_presentation,
     sanitize_template,
+    unreadable_message,
 )
 
 logger = logging.getLogger(__name__)
@@ -196,11 +197,8 @@ def _check_readable(content: bytes) -> bytes:
     except UnsafeArchiveError as exc:
         raise ValueError(f"The uploaded file could not be read: {exc}") from exc
     except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a template error
-        logger.info("[PPTBUILD] unreadable template upload: %r", exc)
-        raise ValueError(
-            "The uploaded file could not be read as a PowerPoint presentation (.pptx). "
-            "Check that it opens in PowerPoint, then upload it again."
-        ) from exc
+        logger.info("[PPTBUILD] unreadable template upload: %s", type(exc).__name__)
+        raise ValueError(unreadable_message(content)) from exc
     return content
 
 
