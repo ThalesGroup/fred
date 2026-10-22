@@ -1084,6 +1084,9 @@ digit after the name.
   profile, no divider), same medium IconButton and 1.25rem glyph as the nav entries,
   `badgeCount` = unseen count with `badgeMax={99}` ("99+"), count repeated in the
   `aria-label`. Primary and filled while its popover is open, like an active entry.
+  Refresh rule: data correctness never depends on notifications; cross-session data uses
+  `crossSessionRefreshOptions` + `useRefetchOnWindowFocus`, and the bell only refreshes
+  itself.
 - **`NotificationsPopover`** — the `UserProfile` pattern: positioned beside the rail, over the
   nav panel, surface from `MenuPopover` (`role="dialog"`). Header: title + text button
   "Clear all" (disabled when nothing but pending decisions is listed; those survive it); list newest first, "Show more" by cursor; empty state is
@@ -1092,16 +1095,16 @@ digit after the name.
   arrow.
 - **`NotificationTile`** — props-only molecule: category icon well (`primary-container`
   action, `success-container` response, `surface-container-high` information, as inside a
-  floating surface), title, full body (never clamped), relative time, type buttons (small
-  filled/outlined, disabled while `busy`), "Handled by" line instead of buttons. The title
-  button stretches over the tile; unread = emphasized title, `on-surface` body and a
-  primary dot, with an "Unread" prefix for screen readers. The close button ("Dismiss
-  notification", `close`, medium, `on-surface-retreat`) is always visible, with the dot
-  beside it. Clicking the tile or a button acts and dismisses it (a domain call only once
-  it succeeds).
+  floating surface), title, full body (never clamped), relative time, type buttons (small,
+  disabled while `busy`), "Handled by" line instead of buttons. The title button stretches
+  over the tile; tiles have no read/unread distinction. The close button ("Dismiss
+  notification", `close`, medium, `on-surface-retreat`) is always visible. One handler
+  serves the tile click and `navigate` buttons: it deletes the notification unless it is a
+  pending decision, then follows the link. A `call` button dismisses only once it succeeds;
+  a 404 or 403 removes the tile silently, any other failure shows the error toast.
 - **Pending-decision tile** (`dismissible={false}`, e.g. a join request) — no close button;
-  a click follows its link without dismissing it; Accept/Refuse are disabled while one is in
-  flight. Once someone decides, the "Handled by…" line replaces the buttons and the close
+  a click follows its link without dismissing it; Refuse (left, outlined, error color) and
+  Accept (right, filled, success color) are disabled while one is in flight. Once someone decides, the "Handled by…" line replaces the buttons and the close
   button comes back.
 
 #### Open UX issues
@@ -1115,7 +1118,7 @@ digit after the name.
 ### `TeamMemberGate`, `JoinRequestDialog`, admin `NotificationsPage` (2026-10-22)
 
 **Location:** `src/rework/components/shared/organisms/TeamMemberGate/`,
-`src/rework/components/shared/organisms/TeamCard/JoinRequestDialog.tsx`,
+`src/rework/components/shared/molecules/JoinRequestDialog/JoinRequestDialog.tsx`,
 `src/rework/components/pages/admin/NotificationsPage/`
 
 **Status:** `Functional`
@@ -1125,13 +1128,15 @@ digit after the name.
   `PageError` "You are not a member of this team" (platform admins included). Its action is
   "Ask to join" for a public `on_request` team, otherwise "Browse teams"; a pending request
   or a refusal still in its 24-hour wait replaces "Ask to join" with a line saying so.
-  UI only: server-side enforcement is tracked in #3260.
+  It also reconciles the bootstrap when membership and the team list disagree, in either
+  direction (`MainLayout` refetches the bootstrap on window focus only when it is older
+  than 30 s). UI only: server-side enforcement is tracked in #3260.
 - **`JoinRequestDialog`** — the shared `Dialog` with an optional `TextArea` (280, guidance in
   `description`). A failure shows the error toast and keeps the dialog open with the
   message.
 - **Admin `NotificationsPage`** — one `Switch` row per type. Turning a type off opens a
-  critical `ConfirmationDialog` saying its sent notifications will be deleted for everyone;
-  turning it on saves at once.
+  critical `ConfirmationDialog` saying its notifications are hidden for everyone until the
+  type is turned back on; turning it on saves at once.
 
 ---
 
@@ -2256,7 +2261,7 @@ the team's `joining_mode`, gated on `!team.is_member`:
 | `invite_only`    | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable                                                                                                                                                                |
 | already a member | Nothing renders in the footer's join slot                                                                                                                                                                                                                                 |
 
-`on_request` (2026-10-22, team join requests) follows the caller's own request, passed in as `joinRequest` by `MarketplaceTeams` (one `GET /teams/join-requests/mine`, skipped while no listed team is on request):
+`on_request` (2026-10-22, team join requests) follows the caller's own request, passed in as `joinRequest` by `MarketplaceTeams` (one `GET /teams/join-requests/mine`, skipped while no listed team is on request, kept fresh by `crossSessionRefreshOptions` and refetch on focus):
 
 | Request state                         | Footer content                                                                                                                                              |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2400,7 +2405,7 @@ same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
 Selecting an option PATCHes immediately (no separate save step), mirroring
 the retired `is_private` `Switch`'s auto-save behavior this control replaced.
 
-Joining mode is a three-item group Open / On request / Invite only since 2026-10-22 (team join requests); a private team keeps the locked "manual only" button. The admins answer requests in a "Pending requests" section at the top of `TeamSettingsMembers` (`TeamJoinRequestsSection`: rendered only for `can_administer_members` holders while the list has rows; `surface-container` list, `outline-variant` row dividers; Accept / Refuse on a pending row, "Accept anyway" on a row refused in the last 7 days while the team is still public and on request; a failed decision shows the error toast).
+Joining mode is a three-item group Open / On request / Invite only since 2026-10-22 (team join requests); a private team keeps the locked "manual only" button. The admins answer requests in a "Pending requests" section at the top of `TeamSettingsMembers` (`TeamJoinRequestsSection`: rendered only for `can_administer_members` holders while the list has rows; `surface-container` list, `outline-variant` row dividers; Refuse (left, outlined, error color) / Accept (right, filled, success color) on a pending row, "Accept anyway" (outlined, success color) on a row refused in the last 7 days while the team is still public and on request; a failed decision shows the error toast; kept fresh by `crossSessionRefreshOptions` (60 s polling) and refetch on focus).
 
 Joining mode narrowed to 2 options (`open`, `invite_only`) 2026-07-26 —
 `request_only` and `closed` were dropped from the `JoiningMode` enum
