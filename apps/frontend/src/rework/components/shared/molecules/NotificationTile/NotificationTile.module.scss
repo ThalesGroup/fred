@@ -94,12 +94,8 @@
 }
 
 .body {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
   margin: 0;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
