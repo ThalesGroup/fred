@@ -41,6 +41,8 @@ export interface NotificationTileProps {
   /** Replaces the actions once someone acted on the subject. */
   handledLabel?: string;
   actions?: NotificationTileAction[];
+  /** Disables the actions while one of them is in flight. */
+  busy?: boolean;
   dismissLabel: string;
   /** False for a pending decision: the user answers it, they don't discard it. */
   dismissible?: boolean;
@@ -64,6 +66,7 @@ export default function NotificationTile({
   unreadLabel,
   handledLabel,
   actions = [],
+  busy = false,
   dismissLabel,
   dismissible = true,
   onOpen,
@@ -100,6 +103,7 @@ export default function NotificationTile({
                   color="primary"
                   variant={action.primary ? "filled" : "outlined"}
                   size="small"
+                  disabled={busy}
                   onClick={action.onClick}
                 >
                   {action.label}

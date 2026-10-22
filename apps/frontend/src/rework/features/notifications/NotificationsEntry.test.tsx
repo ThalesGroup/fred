@@ -13,11 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// What these pin: the badge shows the unseen count and disappears at zero, the
-// count is in the bell's accessible name; the summary polls every 15 s only
-// while the tab is visible and catches up at once when it returns; a tab opened
-// in the background sends nothing; a rising count refreshes join
-// requests, members and teams; Escape closes the popover onto the bell.
+// Pins the badge and its accessible name, polling only while the tab is visible,
+// the refresh on a rising count, and Escape closing the popover onto the bell.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";

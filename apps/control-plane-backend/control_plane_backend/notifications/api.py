@@ -145,7 +145,7 @@ async def delete_notification(
 @router.delete(
     "/notifications",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete all of the caller's notifications.",
+    summary="Delete the caller's notifications, except decisions still waiting.",
 )
 async def clear_notifications(
     notifications: Notifications,

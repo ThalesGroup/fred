@@ -46,6 +46,8 @@ interface NotificationTypeDefinition<N> {
   actions: (notification: N, t: TFunction) => NotificationAction[];
   /** Overrides the generic "Handled by" line, e.g. to name the outcome. */
   handled?: (notification: N, t: TFunction) => string | undefined;
+  /** Asks for a decision: no close button and kept by "Clear all" until handled. */
+  decision?: boolean;
 }
 
 const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): NotificationAction => ({
@@ -58,9 +60,8 @@ const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): Notif
 
 const teamMembersPath = (teamId: string) => `/team/${teamId}/settings/members`;
 
-/** A join request decision; a 404 means the request is gone (cancelled,
- *  decided, expired), so the tile has nothing left to act on. Any other
- *  failure rejects, for the popover to report. */
+/** A join request decision. A 404 (request gone) or 403 (no longer an admin)
+ *  leaves nothing to act on, so the tile goes; any other failure rejects. */
 function decideJoinRequest(
   notification: NotificationOfType<"team.join_requested">,
   decision: "accept" | "refuse",
@@ -75,7 +76,8 @@ function decideJoinRequest(
           : endpoints.refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost.initiate(args),
       ).unwrap();
     } catch (error) {
-      if ((error as { status?: unknown } | undefined)?.status !== 404) throw error;
+      const status = (error as { status?: unknown } | undefined)?.status;
+      if (status !== 404 && status !== 403) throw error;
       await dispatch(
         endpoints.deleteNotificationControlPlaneV1NotificationsNotificationIdDelete.initiate({
           notificationId: notification.id,
@@ -132,6 +134,7 @@ const NOTIFICATION_TYPES: {
   "team.join_requested": {
     icon: "person_add",
     category: "action_required",
+    decision: true,
     title: ({ payload }, t) =>
       t("rework.notifications.types.joinRequested.title", { name: payload.requester_name, team: payload.team_name }),
     // The requester's message, in full: it is what the admin decides on.
@@ -188,6 +191,8 @@ export interface RenderedNotification {
   /** Empty once the notification is handled. */
   actions: NotificationAction[];
   handledLabel?: string;
+  /** See `isPendingDecision`. */
+  pendingDecision: boolean;
 }
 
 function handledLabel(notification: NotificationItem, t: TFunction): string | undefined {
@@ -200,12 +205,21 @@ function handledLabel(notification: NotificationItem, t: TFunction): string | un
     : t("rework.notifications.handled");
 }
 
+function definitionOf(notification: NotificationItem): NotificationTypeDefinition<NotificationItem> | undefined {
+  return (NOTIFICATION_TYPES as Record<string, NotificationTypeDefinition<NotificationItem> | undefined>)[
+    notification.type
+  ];
+}
+
+/** Waiting for the recipient's decision: no close button, kept by "Clear all". */
+export function isPendingDecision(notification: NotificationItem): boolean {
+  return Boolean(definitionOf(notification)?.decision && !notification.handled_at);
+}
+
 /** Everything a tile shows. A type this version does not know renders as a
  *  generic tile without link or buttons. */
 export function renderNotification(notification: NotificationItem, t: TFunction): RenderedNotification {
-  const definition = (NOTIFICATION_TYPES as Record<string, NotificationTypeDefinition<NotificationItem> | undefined>)[
-    notification.type
-  ];
+  const definition = definitionOf(notification);
   const handled =
     notification.handled_at && definition?.handled
       ? (definition.handled(notification, t) ?? handledLabel(notification, t))
@@ -219,6 +233,7 @@ export function renderNotification(notification: NotificationItem, t: TFunction)
       link: null,
       actions: [],
       handledLabel: handled,
+      pendingDecision: false,
     };
   }
   return {
@@ -229,5 +244,6 @@ export function renderNotification(notification: NotificationItem, t: TFunction)
     link: definition.link(notification),
     actions: handled ? [] : definition.actions(notification, t),
     handledLabel: handled,
+    pendingDecision: isPendingDecision(notification),
   };
 }

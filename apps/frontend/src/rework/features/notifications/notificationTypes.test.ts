@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// What these pin: each type renders its own title, body and "Open the
-// agent" button from the payload snapshot, in the viewer's locale; a handled
-// notification trades its buttons for who handled it; a type this version does
-// not know still renders, as a generic tile with nothing to click.
+// Pins each type's title, body and buttons from the payload, in the viewer's
+// locale; handled tiles, unknown types and the join request decisions.
 
 import i18n, { type i18n as I18n } from "i18next";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import en from "../../../locales/en/translation.json";
 import fr from "../../../locales/fr/translation.json";
 import {
+  isPendingDecision,
   renderNotification,
   type NotificationAction,
   type NotificationDispatch,
@@ -232,14 +231,22 @@ describe("renderNotification", () => {
     ]);
   });
 
-  it("deletes a join request tile whose request is gone (404)", async () => {
+  it.each([404, 403])("deletes a join request tile it can no longer act on (%i)", async (status) => {
     const [accept] = renderNotification(joinRequested, instances.en.t).actions;
-    const { calls, dispatch } = fakeDispatch({ accept: Object.assign(new Error("gone"), { status: 404 }) });
+    const { calls, dispatch } = fakeDispatch({ accept: Object.assign(new Error("gone"), { status }) });
 
     await callOf(accept)(dispatch);
 
     expect(calls.map((call) => call.endpoint)).toEqual(["accept", "delete"]);
     expect(calls[1].arg).toEqual({ notificationId: "n1" });
+  });
+
+  it("marks only an open join request as a pending decision", () => {
+    expect(isPendingDecision(joinRequested)).toBe(true);
+    expect(renderNotification(joinRequested, instances.en.t).pendingDecision).toBe(true);
+    const handled = { ...joinRequested, handled_at: "2026-10-21T09:00:00Z", handled_by_name: "Bob" };
+    expect(isPendingDecision(handled as NotificationItem)).toBe(false);
+    expect(isPendingDecision(republish)).toBe(false);
   });
 
   it("keeps the tile and rejects on any other failure", async () => {

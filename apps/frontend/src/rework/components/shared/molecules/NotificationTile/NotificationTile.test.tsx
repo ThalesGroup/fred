@@ -13,10 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// What these pin: an unread tile says so to sighted and screen-reader users
-// alike; a click on the tile opens it, a click on a button or on the close
-// button does not; the close button is always rendered, not only on hover; a
-// handled tile shows who handled it and no buttons.
+// Pins the unread mark (visible and spoken), what a click opens, the always
+// visible close button, busy buttons and the handled line.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -113,6 +111,16 @@ describe("NotificationTile", () => {
 
     expect(props.onDismiss).toHaveBeenCalledOnce();
     expect(props.onOpen).not.toHaveBeenCalled();
+  });
+
+  it("disables its buttons while busy", () => {
+    const onAction = vi.fn();
+    const { el } = renderTile({ busy: true, actions: [{ id: "accept", label: "Accept", onClick: onAction }] });
+
+    const button = [...el.querySelectorAll("button")].find((b) => b.textContent === "Accept")!;
+    expect(button.disabled).toBe(true);
+    click(button);
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it("has no close button while it waits for a decision", () => {

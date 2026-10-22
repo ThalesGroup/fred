@@ -96,16 +96,21 @@ PAYLOAD_MODELS: dict[NotificationType, type[_Payload]] = {
 }
 
 
-#: The right a recipient needs, on the notification's team, to act on it. It is
-#: checked per recipient at send time, and a loss of it deletes the recipient's
-#: open notifications of that type. `None`: never filtered by permission; such a
-#: type may still carry a team so leaving it, or its deletion, removes the row.
+#: The team right needed to receive and act on a type, checked at send time; losing
+#: it deletes the open ones. `None`: unfiltered (a team still scopes cleanup).
 ACTION_PERMISSION: dict[NotificationType, TeamPermission | None] = {
     NotificationType.AGENT_REPUBLISH_NEEDED: TeamPermission.CAN_UPDATE_AGENTS,
     NotificationType.AGENT_MARKETPLACE_REMOVED: TeamPermission.CAN_UPDATE_AGENTS,
     NotificationType.TEAM_JOIN_REQUESTED: TeamPermission.CAN_ADMINISTER_MEMBERS,
     NotificationType.TEAM_JOIN_REQUEST_ANSWERED: None,
 }
+
+
+#: Types asking the recipient to decide: an open one has no close button and
+#: survives "Clear all" until someone decides.
+DECISION_TYPES: frozenset[NotificationType] = frozenset(
+    {NotificationType.TEAM_JOIN_REQUESTED}
+)
 
 
 def validate_payload(type_: str, payload: BaseModel | dict[str, Any]) -> dict[str, Any]:

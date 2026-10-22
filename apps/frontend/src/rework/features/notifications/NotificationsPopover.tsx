@@ -33,6 +33,7 @@ import {
   useNotificationsQuery,
 } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
+  isPendingDecision,
   renderNotification,
   type NotificationAction,
   type NotificationDispatch,
@@ -49,12 +50,14 @@ interface TileHandlers {
   onFollow: (to: string | null) => void;
   onAction: (notification: NotificationItem, action: NotificationAction) => void;
   onDismiss: (notification: NotificationItem) => void;
+  /** True while one of the notification's actions is in flight. */
+  isBusy: (notification: NotificationItem) => boolean;
 }
 
 function NotificationListItem({ notification, handlers }: { notification: NotificationItem; handlers: TileHandlers }) {
   const { t } = useTranslation();
   const rendered = renderNotification(notification, t);
-  const pendingDecision = !rendered.handledLabel && rendered.actions.some((action) => action.kind === "call");
+  const { pendingDecision } = rendered;
   return (
     <NotificationTile
       icon={rendered.icon}
@@ -72,6 +75,7 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
         primary: action.primary,
         onClick: () => handlers.onAction(notification, action),
       }))}
+      busy={handlers.isBusy(notification)}
       dismissLabel={t("rework.notifications.dismiss")}
       dismissible={!pendingDecision}
       onOpen={() => (pendingDecision ? handlers.onFollow(rendered.link) : handlers.onOpen(notification, rendered.link))}
@@ -145,6 +149,9 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   const [openedAt] = useState(() => Date.now());
   const [morePages, setMorePages] = useState(0);
   const seenPosted = useRef(false);
+  // The ref guards a double click before the re-render; the state disables the buttons.
+  const inFlight = useRef(new Set<string>());
+  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
 
   const firstPage = useNotificationsQuery({ limit: NOTIFICATIONS_PAGE_SIZE }, { refetchOnMountOrArgChange: true });
   const [markSeen] = useMarkNotificationsSeenMutation();
@@ -182,13 +189,23 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
         return;
       }
       // On success the domain endpoint resolves the group and deletes the actor's
-      // own row; on failure the tile stays and a toast says why.
+      // own row; on failure the tile stays usable and a toast says why.
+      if (inFlight.current.has(notification.id)) return;
+      const setBusy = (busy: boolean) => {
+        if (busy) inFlight.current.add(notification.id);
+        else inFlight.current.delete(notification.id);
+        setBusyIds(new Set(inFlight.current));
+      };
+      setBusy(true);
       void action
         .call(dispatch)
         .catch((error: unknown) =>
           showError({ summary: t("rework.notifications.actionFailed"), detail: normalizeApiError(error).detail }),
         )
-        .finally(() => dispatch(enhancedControlPlaneApi.util.invalidateTags(["ControlPlaneNotification"])));
+        .finally(() => {
+          setBusy(false);
+          dispatch(enhancedControlPlaneApi.util.invalidateTags(["ControlPlaneNotification"]));
+        });
     },
     onDismiss: (notification) => {
       // The clicked button has focus; hand it to the neighbouring tile.
@@ -197,6 +214,7 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
       void deleteNotification({ notificationId: notification.id });
       (neighbour ?? titleRef.current)?.focus();
     },
+    isBusy: (notification) => busyIds.has(notification.id),
   };
 
   const clearAll = async () => {
@@ -209,6 +227,9 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
   };
 
   const loadMore = () => setMorePages((count) => count + 1);
+  // Pending decisions survive "Clear all": with nothing else listed, nothing to clear.
+  const clearable =
+    Boolean(firstPage.data?.next_cursor) || Boolean(items?.some((notification) => !isPendingDecision(notification)));
 
   let content;
   if (!items) {
@@ -273,7 +294,7 @@ export default function NotificationsPopover({ id, onClose }: NotificationsPopov
               color="primary"
               variant="text"
               size="small"
-              disabled={!items?.length || clearing}
+              disabled={!clearable || clearing}
               onClick={() => void clearAll()}
             >
               {t("rework.notifications.clearAll")}

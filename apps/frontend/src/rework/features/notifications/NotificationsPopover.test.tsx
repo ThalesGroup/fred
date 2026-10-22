@@ -13,11 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// What these pin: opening marks seen up to the newest listed notification, and
-// only from an answer fetched for this opening; a click on a tile or a navigate
-// action follows the link and deletes it; a domain action deletes nothing itself
-// (its endpoint does, on success); the close button and clear all call their
-// routes; the empty state; load more asks for the next page by cursor.
+// Pins marking seen on opening, what a click or an action deletes, one call per
+// decision, Clear all, the empty state and paging by cursor.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -77,6 +74,19 @@ function notification(id: string, overrides: Partial<NotificationItem> = {}): No
     },
     ...overrides,
   } as NotificationItem;
+}
+
+function joinRequest(id: string): NotificationItem {
+  return notification(id, {
+    type: "team.join_requested",
+    payload: {
+      team_id: "team-1",
+      team_name: "Ops",
+      request_id: "req-1",
+      requester_id: "u-2",
+      requester_name: "Bob",
+    },
+  } as Partial<NotificationItem>);
 }
 
 const FRESH = Number.MAX_SAFE_INTEGER;
@@ -190,6 +200,39 @@ describe("NotificationsPopover", () => {
     expect(deleteNotification).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
     expect(showError).toHaveBeenCalledWith(expect.objectContaining({ summary: "rework.notifications.actionFailed" }));
+  });
+
+  it("sends one decision however often its button is clicked", async () => {
+    let settle: (value: unknown) => void = () => {};
+    dispatch.mockReturnValue({ unwrap: () => new Promise((resolve) => (settle = resolve)) });
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    act(() => buttonByText(el, "rework.notifications.actions.accept").click());
+    act(() => buttonByText(el, "rework.notifications.actions.refuse").click());
+
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(buttonByText(el, "rework.notifications.actions.refuse").disabled).toBe(true);
+    await act(async () => settle(undefined));
+    expect(buttonByText(el, "rework.notifications.actions.refuse").disabled).toBe(false);
+  });
+
+  it("lets a pending decision follow its link without deleting it, and has no close button", () => {
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    expect(el.querySelector('button[aria-label="rework.notifications.dismiss"]')).toBeNull();
+    act(() => el.querySelector<HTMLButtonElement>("li button")!.click());
+
+    expect(deleteNotification).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith("/team/team-1/settings/members");
+  });
+
+  it("disables clear all when only pending decisions are listed", () => {
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    expect(buttonByText(el, "rework.notifications.clearAll").disabled).toBe(true);
   });
 
   it("deletes one notification through its close button", () => {

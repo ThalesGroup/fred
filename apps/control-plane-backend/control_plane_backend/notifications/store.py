@@ -34,6 +34,7 @@ from control_plane_backend.models.notification_models import (
     DisabledNotificationTypeRow,
     NotificationRow,
 )
+from control_plane_backend.notifications.schemas import DECISION_TYPES
 
 #: How long a notification lives after its creation.
 NOTIFICATION_TTL = timedelta(days=30)
@@ -329,10 +330,15 @@ class NotificationStore:
             return _rowcount(result) > 0
 
     async def delete_all(self, recipient_id: str) -> int:
+        """ "Clear all": every row but the open decisions still waiting for one."""
+        waiting = and_(
+            NotificationRow.type.in_([t.value for t in DECISION_TYPES]),
+            NotificationRow.handled_at.is_(None),
+        )
         async with use_session(self._sessions) as s:
             result = await s.execute(
                 delete(NotificationRow).where(
-                    NotificationRow.recipient_id == recipient_id
+                    NotificationRow.recipient_id == recipient_id, ~waiting
                 )
             )
             return _rowcount(result)
@@ -351,7 +357,12 @@ class NotificationStore:
             return _rowcount(result)
 
     async def delete_for_user(self, recipient_id: str) -> None:
-        await self.delete_all(recipient_id)
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                delete(NotificationRow).where(
+                    NotificationRow.recipient_id == recipient_id
+                )
+            )
 
     async def delete_for_member(
         self, recipient_id: str, team_id: str, *, types: Sequence[str] | None = None
