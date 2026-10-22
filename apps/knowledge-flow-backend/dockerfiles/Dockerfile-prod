@@ -4,7 +4,7 @@ ARG PYTHON_VERSION=3.12.15
 # PYTHON BASE: Ubuntu LTS with CPython from uv's standalone builds, so the
 # interpreter version is pinned here rather than following the distribution.
 # -----------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.5 AS uv
 
 FROM mirror.gcr.io/ubuntu:24.04 AS python-install
 ARG PYTHON_VERSION
