@@ -2,12 +2,13 @@ The Knowledge Base pod `{{ .Values.configuration.app.runtime_id }}` is deployed 
 
 The `publish` Job declares it to Fred's Control Plane after each install, upgrade
 and rollback{{ if not .Values.publish.enabled }} (off in this release: publish.enabled is false){{ end }}.
-The Control Plane accepts it only from a listed client: add this entry to
-`knowledge_bases.publishers` in the Fred chart's values
-(applications.control-plane-backend.configuration), then restart the Control Plane:
+The Control Plane accepts it only from a registered client: add this entry to the
+Fred chart's values (its own values file is fine) and upgrade Fred:
 
-    - client_id: {{ .Values.configuration.security.m2m.client_id }}
-      prefix: {{ .Values.configuration.knowledge_base.prefix }}
+    registrations:
+      knowledgeBasePublishers:
+        {{ .Values.configuration.security.m2m.client_id }}:
+          prefix: {{ .Values.configuration.knowledge_base.prefix }}
 
 A platform admin then enables it for teams in Fred's admin.
 

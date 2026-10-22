@@ -531,6 +531,43 @@ global:
     storageClass: "local-path" # if empty = default storage class
     hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
+# ── Registrations ────────────────────────────────────────────────────
+# What this deployment serves, one entry per application or Knowledge Base, keyed
+# by its id: Helm merges maps, so each one can come from its own values file, and
+# `null` removes it (a whole entry, not one of its fields). The chart derives from them the control plane's
+# platform.application_sources and knowledge_bases.publishers, and the frontend
+# gateway's FRONTEND_APPLICATIONS_JSON; setting those directly is refused.
+# Registration grants no access: a platform admin enables each one per team.
+registrations:
+  # <app_id>: the control plane's catalog entry, and under `gateway` the
+  # server-side addresses the frontend gateway proxies /apps/<app_id>/ and
+  # /app-services/<app_id>/ to. ui_prefix is browser-facing: exactly
+  # /apps/<app_id> while the UI is served from Fred's origin, or an absolute
+  # https URL once it has its own. Upstreams must be fully qualified on
+  # Kubernetes (nginx resolves them per request, without the search list) and
+  # are origins only; service_upstream omitted answers 503, and
+  # service_required: true refuses to start without one.
+  applications: {}
+  #   acme-forecast:
+  #     ui_prefix: /apps/acme-forecast
+  #     version: 1.0.0
+  #     icon: insights
+  #     display_name: { en: "Forecast", fr: "Prévisions" }
+  #     description:
+  #       en: "Demand forecasting for the selected team."
+  #       fr: "Prévision de la demande pour l'équipe sélectionnée."
+  #     enabled: true
+  #     gateway:
+  #       ui_upstream: http://acme-forecast-ui.acme-apps.svc.cluster.local:80
+  #       service_upstream: http://acme-forecast-api.acme-apps.svc.cluster.local:8000
+  #       service_required: true
+  # <client_id> (the token's `azp`): the one prefix that client may publish
+  # Knowledge Base definitions under. A prefix is registered once and may not
+  # cover another.
+  knowledgeBasePublishers: {}
+  #   kb-acme:
+  #     prefix: acme.kb
+
 # ── 3. Applications ──────────────────────────────────────────────────
 applications:
   # ── 3.1 Fred Agents Runtime ────────────────────────────────────────
@@ -1131,43 +1168,6 @@ applications:
         value: "http://knowledge-flow-backend:8000"
       - name: FRONTEND_CONTROL_PLANE_UPSTREAM
         value: "http://control-plane-backend:8222"
-      # Applications this deployment serves, as seen by the frontend gateway.
-      # These are the SERVER-SIDE addresses nginx proxies to; the browser only
-      # ever sees /apps/<app_id>/ and /app-services/<app_id>/. Every app_id
-      # listed here must also appear in the control-plane's
-      # platform.application_sources below, which owns the browser-facing
-      # ui_prefix, the display strings, and the team authorization grant.
-      #
-      # ui_upstream       required — the fork-built UI container. It must serve
-      #                   the bundle under /apps/<app_id>/, because the whole
-      #                   prefix is forwarded so the bundle's own absolute
-      #                   asset URLs keep resolving.
-      # service_upstream  optional — the application API. Omitted: requests to
-      #                   /app-services/<app_id>/ answer 503.
-      # service_required  true means the container refuses to start without a
-      #                   service_upstream, instead of serving a permanent 503.
-      #
-      # Both upstreams must be FULLY QUALIFIED on Kubernetes. Application routes
-      # use a variable proxy_pass, so nginx resolves the host per request through
-      # its own resolver, which does not apply the pod's DNS search list. A bare
-      # Service name gives "could not be resolved (3: Host not found)" and a 502,
-      # even though that same name resolves from a shell in the same pod. This is
-      # also what lets an application live in its own namespace: only the
-      # namespace segment of the name changes.
-      #
-      # Worked example — registering one application:
-      #   - name: FRONTEND_APPLICATIONS_JSON
-      #     value: |
-      #       [
-      #         {
-      #           "app_id": "acme-forecast",
-      #           "ui_upstream": "http://acme-forecast-ui.acme-apps.svc.cluster.local:80",
-      #           "service_upstream": "http://acme-forecast-api.acme-apps.svc.cluster.local:8000",
-      #           "service_required": true
-      #         }
-      #       ]
-      - name: FRONTEND_APPLICATIONS_JSON
-        value: "[]"
       - name: FRONTEND_CLIENT_MAX_BODY_SIZE
         value: "150m"
       - name: VITE_BACKEND_URL_KNOWLEDGE
@@ -1240,8 +1240,8 @@ applications:
             # Worked example — sending an application UI straight to its own
             # Service, skipping the frontend hop. Only the path changes hands:
             # the browser URL stays /apps/acme-forecast/, so ui_prefix and the
-            # bundle's base path are unaffected. Keep the app_id in
-            # FRONTEND_APPLICATIONS_JSON regardless, since /app-services still
+            # bundle's base path are unaffected. Keep its gateway in
+            # registrations.applications regardless, since /app-services still
             # goes through the frontend and needs the id to answer 404 vs 503.
             # - path: /apps/acme-forecast
             #   pathType: Prefix
@@ -2230,47 +2230,9 @@ applications:
             base_url: http://fred-agents/fred/agents/v2
             enabled: true
             ingress_prefix: /fred/agents/v2
-        # Applications this deployment serves. Expressed like
-        # runtime_catalog_sources above: a flat list an operator maintains, one
-        # entry per independently built and deployed component.
-        #
-        # ui_prefix is BROWSER-facing — it is what the application frame loads.
-        # While the UI is served from Fred's origin it must be exactly
-        # /apps/<app_id> (the gateway routes on that segment, so anything else
-        # 404s, and config load rejects it). Make it an absolute https URL the
-        # day the UI moves to its own origin. No other value has to change
-        # then, which is the point of naming it here rather than assuming it
-        # in the frontend.
-        #
-        # Proxy upstreams are NOT registered here. The frontend gateway owns
-        # them (FRONTEND_APPLICATIONS_JSON above), because nginx, not the
-        # control plane, does the proxying. app_id is the only key both halves
-        # carry.
-        #
-        # Registration grants no access; administrators manage team entitlements.
-        # Catalog entries resolve to typed application authorization resources.
-        #
-        # Worked example — the same application registered above:
-        # application_sources:
-        #   - app_id: acme-forecast
-        #     ui_prefix: /apps/acme-forecast
-        #     version: 1.0.0
-        #     icon: insights
-        #     display_name:
-        #       en: "Forecast"
-        #       fr: "Prévisions"
-        #     description:
-        #       en: "Demand forecasting for the selected team."
-        #       fr: "Prévision de la demande pour l'équipe sélectionnée."
-        #     enabled: true
-      # Knowledge Base clients allowed to publish their definitions, each with
-      # the one prefix it owns; client_id is the token's `azp`. Empty by
-      # default: nobody publishes. A prefix is registered once and may not
-      # cover another. A platform admin still enables each definition per team.
-      # knowledge_bases:
-      #   publishers:
-      #     - client_id: kb-acme
-      #       prefix: acme.kb
+        # The applications this deployment serves (application_sources) and the
+        # Knowledge Base publishers (knowledge_bases.publishers) are derived from
+        # `registrations`, at the top of this file.
       policies:
         purge_catalog_path: /app/config/conversation_policy_catalog.yaml
 
