@@ -5990,6 +5990,10 @@ def _setup_update_team_test(
         async def transaction(self):
             yield None
 
+        @asynccontextmanager
+        async def advisory_lock(self, key, session=None):
+            yield
+
         async def get_by_team_id(self, team_id, session=None) -> TeamMetadata | None:
             return None
 

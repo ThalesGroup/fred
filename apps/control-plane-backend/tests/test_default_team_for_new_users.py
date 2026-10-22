@@ -147,6 +147,7 @@ def _team_deps(rebac: _FakeRebac, default_store: _FakeDefaultTeamStore) -> Any:
             rebac=rebac,
             get_default_team_store=lambda: default_store,
             get_team_metadata_store=lambda: metadata_store,
+            get_team_join_request_store=None,
         ),
     )
 

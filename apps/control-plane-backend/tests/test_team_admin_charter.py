@@ -185,6 +185,7 @@ def _deps(
             get_team_metadata_store=lambda: metadata_store,
             get_team_admin_charter_store=lambda: store,
             get_notification_service=None,
+            get_team_join_request_store=None,
         ),
     )
 
