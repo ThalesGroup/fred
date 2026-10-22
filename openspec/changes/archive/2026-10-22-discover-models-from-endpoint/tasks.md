@@ -9,6 +9,9 @@
 - [x] 2.1 Carry optional display name, context window and input/output limits from the pod response through control-plane model capability and enablement schemas; verify aggregation and absent-metadata tests.
 - [x] 2.2 Regenerate frontend API types and show optional metadata in the existing admin Models table; verify focused component tests for full and id-only responses, and confirm existing activation controls still work.
 - [x] 2.3 Verify an ungranted discovered model is denied, an admin grant allows use, and a removed model follows the existing drift error without fallback; use focused runtime/control-plane integration tests.
+- [x] 2.4 Create one Alembic migration and store for platform model display-name overrides, with service validation and authorization.
+- [x] 2.5 Apply stored names to admin, team model choices and effective chat model responses; verify precedence, reset and unchanged wire identity.
+- [x] 2.6 Add the editable field to admin Models rows, regenerate the API client, localize it and test save/reset behavior.
 
 ## 3. Documentation and close-out
 
@@ -16,3 +19,4 @@
 - [x] 3.2 Run relevant module checks and one root `make code-quality` near PR completion; record exact results in the PR.
 - [x] 3.3 Review the full diff against `swift` with the branch audit procedure and an independent read-only reviewer; record findings and dispositions in the draft PR.
 - [x] 3.4 Reconcile the change artifacts with the implementation, sync the model-routing spec and archive the change after verification; verify `openspec validate --strict` passes.
+- [x] 3.5 Update issue, PR, operator/migration documentation and specification for UI naming; rerun root quality, migration checks and independent full-branch review.

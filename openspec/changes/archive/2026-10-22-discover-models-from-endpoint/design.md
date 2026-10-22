@@ -42,9 +42,15 @@ Each generated profile uses the exact upstream `id` as `model.name`, which is se
 
 ### 4. Project optional metadata through the existing model capability
 
-The standard `id` is always shown. Prefer a nonblank upstream `name` or `display_name` for the label when present. Accept a positive integer `context_length` or `max_model_len` as context window; carry `max_input_tokens` and `max_output_tokens` separately because they are not equivalent to total context. Ignore unknown fields and invalid optional metadata. Add typed optional fields through the pod catalog response, control-plane `CapabilityCatalogEntry` and `CapabilityEnablementItem`, generated frontend client, and existing Models table. No database storage is needed; values are advisory. Absence displays no value, and no field changes the reasoning aptitude or access grant.
+The standard `id` is always shown. Prefer a nonblank upstream `name` or `display_name` for the initial label when present. Accept a positive integer `context_length` or `max_model_len` as context window; carry `max_input_tokens` and `max_output_tokens` separately because they are not equivalent to total context. Ignore unknown fields and invalid optional metadata. Add typed optional fields through the pod catalog response, control-plane `CapabilityCatalogEntry` and `CapabilityEnablementItem`, generated frontend client, and existing Models table. Absence displays no value, and no field changes the reasoning aptitude or access grant.
 
-### 5. Reuse access and drift handling
+### 5. Let administrators name discovered models after discovery
+
+Add an inline display-name field to each model row in the admin Models view. A platform administrator can save a trimmed nonblank name or clear the override. Persist the override in one `model_display_name_override` table keyed by the stable model capability id, with the name and audit timestamps/user. This is a distinct platform-wide naming lifecycle: `model_reasoning` controls reasoning aptitude and `team_capability_settings` is team-scoped, so neither naturally holds it. One Alembic revision creates this table.
+
+The admin API validates that the target is an advertised model and applies the existing `can_manage_capabilities` gate. The override takes priority over pod metadata in the aggregated catalog, team model choices and effective chat model response; clearing it restores the pod label or existing frontend fallback. Keep both the effective label and the stored override in the admin row so the input can distinguish an authored value from a gateway label. Use a bounded, printable name and make the write idempotent. No pod restart is needed after an admin edit. The wire model id, profile/capability ids, grants and routing stay unchanged. If a model disappears, its stored override stays dormant and is reused if that same stable identity returns.
+
+### 6. Reuse access and drift handling
 
 The existing capability projection creates model rows with no grant by default. Default-on, per-team enablement, reasoning controls and chat policy validation remain the authorities. Discovery does not set `supports_thinking`; the reasoning control remains absent unless an explicit static profile declares it. A model removed from the gateway is absent after the next pod restart, and stored team policies hit existing unknown-profile handling. Rollout across pods must keep `source_id` and the relevant inventory consistent so team-selectable profile validation remains sound.
 
@@ -57,4 +63,4 @@ The existing capability projection creates model rows with no grant by default. 
 
 ## Migration Plan
 
-Deploy the new runtime and control-plane/frontend readers, then add a discovery block to the pod catalog and roll the pods. Verify the discovered rows and enable intended models in admin. Keep the old static profiles during a gradual move if their ids must remain available; choose a distinct source id and resolve collisions before rollout. Rollback removes the discovery block and restores the prior catalog/pod image; no schema or data rollback is needed, though grants to discovery-only ids become dormant.
+Deploy the database migration with the new control-plane and frontend readers, then add a discovery block to the pod catalog and roll the pods. Verify the discovered rows, enter names and enable intended models in admin. Keep the old static profiles during a gradual move if their ids must remain available; choose a distinct source id and resolve collisions before rollout. Rollback removes the discovery block and restores the prior catalog/pod image; any saved names and grants to discovery-only ids become dormant.

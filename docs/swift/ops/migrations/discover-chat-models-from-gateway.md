@@ -19,15 +19,15 @@ Set `applications.fred-agents.models_catalog.discovery` in the Fred chart values
 
 ## Upgrade
 
-Deploy the runtime, control plane and frontend changes, then configure discovery and restart the agent pods. Confirm that all model-capable pods use consistent source ids and inventories before selecting a discovered profile as a team default. Enable intended discovered models for teams in the admin Models view. New models are not granted automatically. Without the optional configuration, deploy normally.
+Apply the control-plane Alembic migration, then deploy the runtime, control plane and frontend changes. Configure discovery and restart the agent pods. Confirm that all model-capable pods use consistent source ids and inventories before selecting a discovered profile as a team default. Enable intended discovered models for teams in the admin Models view. An administrator can enter a display name there after discovery; it is saved in the control-plane database and appears in chat without a pod restart. New models are not granted automatically. Without the optional configuration, deploy normally.
 
 ## Validation
 
-Check that each restarted pod's `/agents/models-catalog` lists the selected ids, the admin Models view shows them with any supplied metadata, and a granted model can be selected and used by a team. A missing gateway or invalid inventory prevents an opted-in pod from starting.
+Check that each restarted pod's `/agents/models-catalog` lists the selected ids, the admin Models view shows them with any supplied metadata, and a granted model can be selected and used by a team. Save a display name in the admin view and confirm that it appears in chat while inference still uses the gateway id; clear it to restore the gateway label or identifier. A missing gateway or invalid inventory prevents an opted-in pod from starting.
 
 ## Rollback
 
-Remove the discovery block, restore the previous static chat default and profiles if changed, and restart the pods with the prior image or catalog. No database migration is required. Grants to discovery-only capability ids remain dormant until those ids are advertised again.
+Remove the discovery block, restore the previous static chat default and profiles if changed, and restart the pods with the prior image or catalog. Keep the additive display-name table when rolling back application code; saved names remain dormant while their capability ids are absent. Grants to discovery-only capability ids also remain dormant until those ids are advertised again.
 
 ## Limitations
 

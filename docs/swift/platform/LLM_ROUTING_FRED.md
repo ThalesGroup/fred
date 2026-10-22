@@ -127,6 +127,13 @@ one administrative decision. Profile settings and profile ids remain pod-owned.
 For team policy, the control plane offers only profiles explicitly advertised
 as chat profiles. It never infers capability from a profile-id prefix.
 
+An administrator can edit a model's display name in the Models view after the
+model is advertised. The saved name is stored by model capability id and takes
+effect in the admin list and chat model picker without restarting a pod. It
+takes priority over a name supplied by the gateway or a static profile; clearing
+it restores that name, or the model identifier when no name was supplied. The
+display name does not change the inference id, routing identity or team grants.
+
 With several enabled agentic pods, the two catalog views intentionally differ:
 
 - The platform model inventory is the union of models advertised by reachable

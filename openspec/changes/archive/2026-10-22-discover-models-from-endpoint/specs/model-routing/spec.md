@@ -58,6 +58,22 @@ The pod SHALL preserve each upstream model identifier as its wire name. It SHALL
 - **WHEN** an administrator opens the Models view
 - **THEN** those values appear as model details without changing model activation
 
+### Requirement: Administrators can name advertised models after discovery
+
+The admin Models view SHALL provide a display-name field for an advertised model. A platform administrator SHALL be able to save or clear a name through an authorized API. A saved name SHALL persist across requests and pod restarts and take precedence over gateway metadata in the admin view, team model choices and chat model picker. Clearing it SHALL restore the gateway name or existing identifier fallback. Naming SHALL NOT change the upstream wire id, routing identity or model access grants.
+
+#### Scenario: Name a discovered model
+
+- **GIVEN** a discovered model with a gateway name and no saved admin name
+- **WHEN** a platform administrator saves a different display name in the Models view
+- **THEN** the admin list and chat picker show the saved name immediately, while inference continues using the upstream id
+
+#### Scenario: Clear a saved name
+
+- **GIVEN** a discovered model with a saved admin name
+- **WHEN** a platform administrator clears the name
+- **THEN** the admin list and chat picker return to the gateway name, or the identifier fallback if the gateway did not provide one
+
 ### Requirement: Discovery uses existing access controls
 
 Every discovered model SHALL enter the existing model capability catalog without an initial access grant. Administrators SHALL be able to enable it through the existing default-on and team controls. A turn SHALL remain subject to the existing model access and routing checks. A model removed from the source after a pod restart SHALL not silently fall back to another model when referenced by a stored policy.
