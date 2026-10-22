@@ -37,6 +37,8 @@ export type NotificationAction = { id: string; label: string; primary?: boolean 
 );
 
 interface NotificationTypeDefinition<N> {
+  /** Its subtree under `rework.notifications.types`, which holds its `name` and `description` too. */
+  key: string;
   icon: IconType;
   category: NotificationCategory;
   title: (notification: N, t: TFunction) => string;
@@ -79,6 +81,7 @@ const NOTIFICATION_TYPES: {
   [K in NotificationItem["type"]]: NotificationTypeDefinition<NotificationOfType<K>>;
 } = {
   "agent.republish_needed": {
+    key: "republishNeeded",
     icon: "sync_problem",
     category: "action_required",
     title: (_n, t) => t("rework.notifications.types.republishNeeded.title"),
@@ -100,6 +103,7 @@ const NOTIFICATION_TYPES: {
       !name && outcome === "removed" ? t("rework.notifications.types.republishNeeded.handledRemoved") : undefined,
   },
   "agent.marketplace_removed": {
+    key: "marketplaceRemoved",
     icon: "unpublished",
     category: "information",
     title: (_n, t) => t("rework.notifications.types.marketplaceRemoved.title"),
@@ -123,6 +127,7 @@ const NOTIFICATION_TYPES: {
     actions: ({ payload }, t) => [openAgent(payload.team_id, payload.agent_instance_id, t)],
   },
   "team.join_requested": {
+    key: "joinRequested",
     icon: "person_add",
     category: "action_required",
     decision: true,
@@ -152,6 +157,7 @@ const NOTIFICATION_TYPES: {
     },
   },
   "team.join_request_answered": {
+    key: "joinRequestAnswered",
     icon: "groups",
     category: "information",
     title: ({ payload }, t) =>
@@ -194,6 +200,7 @@ function handledLabel(notification: NotificationItem, t: TFunction): string {
 
 /** A type this version does not know: a generic tile without link or buttons. */
 const UNKNOWN_TYPE: NotificationTypeDefinition<NotificationItem> = {
+  key: "unknown",
   icon: "notifications",
   category: "information",
   title: (_n, t) => t("rework.notifications.types.unknown.title"),
@@ -202,12 +209,20 @@ const UNKNOWN_TYPE: NotificationTypeDefinition<NotificationItem> = {
   actions: () => [],
 };
 
-function definitionOf(notification: NotificationItem): NotificationTypeDefinition<NotificationItem> {
-  return (
-    (NOTIFICATION_TYPES as Record<string, NotificationTypeDefinition<NotificationItem> | undefined>)[
-      notification.type
-    ] ?? UNKNOWN_TYPE
-  );
+const knownDefinition = (type: string) =>
+  (NOTIFICATION_TYPES as Record<string, NotificationTypeDefinition<NotificationItem> | undefined>)[type];
+
+const definitionOf = (notification: NotificationItem) => knownDefinition(notification.type) ?? UNKNOWN_TYPE;
+
+/** A type's name and description for the platform settings; one this version
+ *  does not know shows under its raw value. */
+export function describeNotificationType(type: string, t: TFunction): { name: string; description: string } {
+  const definition = knownDefinition(type);
+  if (!definition) return { name: type, description: "" };
+  return {
+    name: t(`rework.notifications.types.${definition.key}.name`),
+    description: t(`rework.notifications.types.${definition.key}.description`),
+  };
 }
 
 /** Waiting for the recipient's decision: no close button, kept by "Clear all". */

@@ -40,8 +40,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) =>
-      key.endsWith(".name") && key.includes("future") ? options?.defaultValue : key,
+    t: (key: string) => key,
     i18n: { language: "en" },
   }),
 }));
@@ -89,8 +88,8 @@ afterEach(() => {
 describe("NotificationsPage", () => {
   it("lists every type the backend returns with its switch", () => {
     expect(rows().map((row) => row.textContent)).toEqual([
-      expect.stringContaining("rework.notificationSettings.types.agent.republish_needed.name"),
-      expect.stringContaining("rework.notificationSettings.types.team.join_requested.name"),
+      expect.stringContaining("rework.notifications.types.republishNeeded.name"),
+      expect.stringContaining("rework.notifications.types.joinRequested.name"),
       expect.stringContaining("future.type"),
     ]);
     expect(rows().map((row) => switchOf(row).checked)).toEqual([true, false, true]);

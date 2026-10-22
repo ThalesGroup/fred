@@ -4357,12 +4357,16 @@
       },
       "types": {
         "republishNeeded": {
+          "name": "Agent publié modifié",
+          "description": "Envoyée à la personne qui a publié un agent dans la marketplace quand un autre éditeur le modifie, pour qu'elle le republie.",
           "title": "Agent publié modifié",
           "body": "{{editor}} a modifié « {{agent}} » dans {{team}}. Republiez-le pour mettre à jour la version de la marketplace.",
           "bodyNoTeam": "{{editor}} a modifié « {{agent}} ». Republiez-le pour mettre à jour la version de la marketplace.",
           "handledRemoved": "Résolue : l'agent a quitté la marketplace"
         },
         "marketplaceRemoved": {
+          "name": "Agent retiré de la marketplace",
+          "description": "Envoyée à la personne qui a publié un agent quand il quitte la marketplace sans son intervention.",
           "title": "Agent retiré de la marketplace",
           "body": "« {{agent}} » ({{team}}) n'est plus sur la marketplace. {{reason}}",
           "bodyNoTeam": "« {{agent}} » n'est plus sur la marketplace. {{reason}}"
@@ -4371,11 +4375,15 @@
           "title": "Notification"
         },
         "joinRequested": {
+          "name": "Demande pour rejoindre une équipe",
+          "description": "Envoyée aux administrateurs d'une équipe quand quelqu'un demande à la rejoindre ; les demandes restent dans Membres > Demandes en attente.",
           "title": "{{name}} demande à rejoindre {{team}}",
           "acceptedBy": "Acceptée par {{name}}",
           "refusedBy": "Refusée par {{name}}"
         },
         "joinRequestAnswered": {
+          "name": "Réponse à une demande d'adhésion",
+          "description": "Envoyée à la personne qui a demandé à rejoindre une équipe dès qu'un administrateur accepte ou refuse.",
           "acceptedTitle": "Vous avez rejoint {{team}}",
           "acceptedBody": "Un administrateur de l'équipe a accepté votre demande.",
           "refusedTitle": "Demande pour rejoindre {{team}} refusée",
@@ -4395,28 +4403,6 @@
         "title": "Désactiver « {{name}} » ?",
         "message": "Les notifications de ce type déjà envoyées seront supprimées, pour tout le monde. La réactiver ne concerne que les nouveaux événements.",
         "confirm": "Désactiver"
-      },
-      "types": {
-        "agent": {
-          "republish_needed": {
-            "name": "Agent publié modifié",
-            "description": "Envoyée à la personne qui a publié un agent dans la marketplace quand un autre éditeur le modifie, pour qu'elle le republie."
-          },
-          "marketplace_removed": {
-            "name": "Agent retiré de la marketplace",
-            "description": "Envoyée à la personne qui a publié un agent quand il quitte la marketplace sans son intervention."
-          }
-        },
-        "team": {
-          "join_requested": {
-            "name": "Demande pour rejoindre une équipe",
-            "description": "Envoyée aux administrateurs d'une équipe quand quelqu'un demande à la rejoindre ; les demandes restent dans Membres > Demandes en attente."
-          },
-          "join_request_answered": {
-            "name": "Réponse à une demande d'adhésion",
-            "description": "Envoyée à la personne qui a demandé à rejoindre une équipe dès qu'un administrateur accepte ou refuse."
-          }
-        }
       }
     }
   },

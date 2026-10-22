@@ -20,6 +20,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import en from "../../../locales/en/translation.json";
 import fr from "../../../locales/fr/translation.json";
 import {
+  describeNotificationType,
   isPendingDecision,
   renderNotification,
   type NotificationAction,
@@ -285,6 +286,9 @@ describe("renderNotification", () => {
       renderNotification({ ...republish, handled_at: "x", handled_by_name: "Bob" }, instances[lng].t);
       renderNotification({ ...republish, handled_at: "x", handled_outcome: "removed" }, instances[lng].t);
       renderNotification(joinRequested, instances[lng].t);
+      for (const item of [republish, removed, joinRequested, answered("accepted")]) {
+        describeNotificationType(item.type, instances[lng].t);
+      }
       for (const outcome of ["accepted", "refused"] as const) {
         renderNotification(answered(outcome), instances[lng].t);
         renderNotification(

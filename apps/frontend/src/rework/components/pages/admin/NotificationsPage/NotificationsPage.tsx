@@ -24,12 +24,12 @@ import {
   useSetNotificationTypeMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { NotificationType } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { describeNotificationType } from "../../../../features/notifications/notificationTypes";
 import styles from "./NotificationsPage.module.css";
 
 /**
  * Platform-wide switch per notification type. The list comes from the backend
- * registry; each type is named from its value, so a type this frontend does not
- * know yet still shows, under its raw value.
+ * registry; a type this frontend does not know yet still shows, under its raw value.
  */
 export default function NotificationsPage() {
   const { t } = useTranslation();
@@ -77,14 +77,12 @@ export default function NotificationsPage() {
 
       <ul className={styles.types}>
         {data?.items.map(({ type, enabled }) => {
-          const name = t(`rework.notificationSettings.types.${type}.name`, { defaultValue: type });
+          const { name, description } = describeNotificationType(type, t);
           return (
             <li key={type} className={styles.tile}>
               <span className={styles.text}>
                 <span className={styles.name}>{name}</span>
-                <span className={styles.description}>
-                  {t(`rework.notificationSettings.types.${type}.description`, { defaultValue: "" })}
-                </span>
+                <span className={styles.description}>{description}</span>
               </span>
               <Switch
                 size="small"
