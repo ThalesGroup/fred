@@ -15,13 +15,14 @@
 
 // The analysis status line for each state, and the vision toggle: locked off
 // with its explanation when no vision-capable model exists, selector listing
-// only vision-capable profiles while on; the template guide link.
+// only vision-capable profiles while on; the template guide link; the panel's
+// default view (template and plan approval) and its advanced section.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AnalysisStatusResponse } from "./api/pptBuilderCapabilityOpenApi";
+import type { AnalysisStatusResponse, Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
 
 const i18nState = vi.hoisted(() => ({ language: "fr" }));
 vi.mock("react-i18next", () => ({
@@ -39,7 +40,9 @@ vi.mock("@shared/molecules/Select/Select.tsx", () => ({
   ),
 }));
 
-import { AnalysisStatus, TemplateGuideLink } from "./PptBuilderTemplatePanel";
+vi.mock("./PatternReviewDialog", () => ({ PatternReviewDialog: () => null }));
+
+import { AnalysisStatus, PptBuilderTemplatePanel, TemplateGuideLink } from "./PptBuilderTemplatePanel";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
 import { analysisPhase, canRerun, type AnalysisPhase, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
 import { visionAvailability, type VisionAvailability } from "./useVisionAvailability";
@@ -246,5 +249,65 @@ describe("TemplateGuideLink", () => {
     expect(link.textContent).toBe("capability.ppt_builder.form.templateGuide");
     expect(link.getAttribute("href")).toBe(href);
     expect(link.getAttribute("target")).toBe("_blank");
+  });
+});
+
+describe("PptBuilderTemplatePanel", () => {
+  const slide = (id: string, extra: Partial<Pattern> = {}) =>
+    ({ id, source: "slide", label: id, kind: "bullets", ...extra }) as Pattern;
+  const inventory = (patterns: Pattern[]): TemplateInventory => ({ slide_width: 1, slide_height: 1, patterns });
+
+  function renderPanel(panelAnalysis: PptBuilderAnalysis) {
+    render(
+      <MemoryRouter>
+        <PptBuilderTemplatePanel
+          disabled={false}
+          analysis={panelAnalysis}
+          vision={{ available: true, visionProfiles: [] }}
+          configValues={{}}
+          onConfigChange={() => {}}
+        />
+      </MemoryRouter>,
+    );
+  }
+  const advancedToggle = () =>
+    [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("rework.teams.formAgent.advancedSettings"),
+    ) as HTMLButtonElement;
+
+  it("shows only the template and the plan approval by default", () => {
+    const effective = inventory([slide("a"), slide("b", { included: false, exclusion_reason: "author" })]);
+    renderPanel(analysis("succeeded", { effective, summary: { patterns: 1, excluded: 1 } }));
+    const text = container.textContent ?? "";
+    expect(text).toContain("capability.ppt_builder.form.replaceTemplate");
+    expect(text).toContain("capability.ppt_builder.form.templateGuide");
+    expect(text).toContain("capability.ppt_builder.fields.validate_plan.title");
+    expect(text).not.toContain("capability.ppt_builder.form.review");
+    expect(text).not.toContain("capability.ppt_builder.fields.use_vision.title");
+    expect(text).not.toContain("capability.ppt_builder.fields.variety_check.title");
+    expect(advancedToggle().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("reveals the slide review, vision and variety settings once the advanced section is opened", () => {
+    const effective = inventory([slide("a")]);
+    renderPanel(analysis("succeeded", { effective, summary: { patterns: 1, excluded: 0 } }));
+    act(() => advancedToggle().click());
+    expect(advancedToggle().getAttribute("aria-expanded")).toBe("true");
+    const text = container.textContent ?? "";
+    expect(text).toContain("capability.ppt_builder.form.review");
+    expect(text).toContain("capability.ppt_builder.fields.use_vision.title");
+    expect(text).toContain("capability.ppt_builder.fields.variety_check.title");
+  });
+
+  it("brings the slide review up when the analysis set slides aside", () => {
+    const effective = inventory([slide("a"), slide("b", { included: false, exclusion_reason: "table" })]);
+    renderPanel(analysis("succeeded", { effective, summary: { patterns: 1, excluded: 1 } }));
+    expect(container.textContent).toContain("capability.ppt_builder.form.review");
+    expect(advancedToggle().getAttribute("aria-expanded")).toBe("false");
+    act(() => advancedToggle().click());
+    const reviews = [...container.querySelectorAll("button")].filter((b) =>
+      b.textContent?.includes("capability.ppt_builder.form.review"),
+    );
+    expect(reviews).toHaveLength(1);
   });
 });

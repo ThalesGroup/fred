@@ -142,6 +142,10 @@ la lecture sera terminée, et vous pouvez fermer la
 fenêtre en attendant. Ensuite, **Vérifier les slides** montre chaque
 diapositive trouvée, avec son nom et son type : renommez une diapositive,
 changez son type ou mettez-la de côté. Rien n'est obligatoire.
+Le template et **Valider le plan avant de construire** s'affichent d'emblée ;
+**Vérifier les slides**, le modèle de vision et la variété sont sous
+**Paramètres avancés**. **Vérifier les slides** apparaît aussi sous le template
+quand la lecture a mis des diapositives de côté.
 Pour préparer un template que l'agent comprend bien, voir
 [Préparer son template PowerPoint](/help/fr/guides/prepare-powerpoint-template).
 

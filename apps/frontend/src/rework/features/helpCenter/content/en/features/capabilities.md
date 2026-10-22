@@ -132,6 +132,10 @@ be available again on its own in a few minutes, when the reading is done, and
 you can close the window in the meantime. Then
 **Review slides** shows each slide found, with its name and kind: rename a
 slide, change its kind, or set it aside. Nothing is mandatory.
+The template and **Validate the plan before building** are shown first;
+**Review slides**, the vision model and variety sit under **Advanced
+settings**. **Review slides** also appears under the template when the reading
+set slides aside.
 To prepare a template the agent understands well, see
 [Prepare your PowerPoint template](/help/en/guides/prepare-powerpoint-template).
 

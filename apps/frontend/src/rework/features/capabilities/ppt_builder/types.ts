@@ -133,3 +133,8 @@ export function summarize(inventory: TemplateInventory): InventorySummary {
   const included = patterns.filter((p) => p.included !== false).length;
   return { patterns: included, excluded: patterns.length - included };
 }
+
+/** Slides the analysis itself set aside (library sheets, tables…), not the author: worth a review. */
+export function hasAnalysisExclusions(patterns: Pattern[]): boolean {
+  return patterns.some((p) => p.included === false && Boolean(p.exclusion_reason) && p.exclusion_reason !== "author");
+}

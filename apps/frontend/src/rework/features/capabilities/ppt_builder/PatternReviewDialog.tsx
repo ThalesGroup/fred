@@ -28,7 +28,7 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
 import { usePatternsPreview, type PreviewSource } from "./usePatternsPreview";
-import { kindsFor, SLIDE_KINDS, type OverridePatch, type SlideKind } from "./types";
+import { hasAnalysisExclusions, kindsFor, SLIDE_KINDS, type OverridePatch, type SlideKind } from "./types";
 import styles from "./PatternReviewDialog.module.css";
 
 // A plain workerSrc (a fresh worker per load) is enough here: this dialog never
@@ -88,7 +88,7 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
   const layouts = patterns.filter((p) => p.included !== false && p.source === "layout");
   const excluded = patterns.filter((p) => p.included === false);
   // Slides the analysis set aside (library sheets, tables…) are worth a look: unfold them.
-  const analysisExcluded = excluded.some((p) => p.exclusion_reason && p.exclusion_reason !== "author");
+  const analysisExcluded = hasAnalysisExclusions(excluded);
   const card = (pattern: Pattern) => (
     <PatternCard
       key={pattern.id}

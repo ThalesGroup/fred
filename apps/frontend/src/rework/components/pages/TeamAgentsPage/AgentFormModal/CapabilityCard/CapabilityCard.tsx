@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
-import { Fragment, type PropsWithChildren, type ReactNode, useState } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { AdvancedSettingsSection } from "../../../../../features/capabilities/AdvancedSettingsSection.tsx";
 import { configWidgetFor } from "../../../../../features/capabilities/configWidgetRegistry.ts";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "../TuningFieldRenderer.tsx";
@@ -126,7 +126,6 @@ export function CapabilityConfigForm({
   onAssetFileChange: (slotKey: string, file: File | null) => void;
   onBlockingErrorChange: (message: string | null) => void;
 }) {
-  const { t } = useTranslation();
   const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
   // A gate hidden by its own gate hides its dependants too (a stored
   // `bind_libraries` must not show the picker while team documents is off).
@@ -194,29 +193,7 @@ export function CapabilityConfigForm({
   return (
     <>
       {renderGrouped(mainFields)}
-      {advancedFields.length > 0 && (
-        <AdvancedSection title={t("rework.teams.formAgent.advancedSettings")}>
-          <div className={styles.advancedFields}>{renderGrouped(advancedFields)}</div>
-        </AdvancedSection>
-      )}
-    </>
-  );
-}
-
-/**
- * Collapsed-by-default host of the `ui.advanced` fields, drawn as a clickable
- * labeled divider (`──── Advanced settings ⌄ ────`) so it reads as part of the
- * form's section language rather than a nested boxed accordion.
- */
-function AdvancedSection({ title, children }: PropsWithChildren<{ title: string }>) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button type="button" className={styles.advancedToggle} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <span className={styles.advancedToggleLabel}>{title}</span>
-        <Icon category="outlined" type={open ? "expand_less" : "expand_more"} />
-      </button>
-      {open && children}
+      {advancedFields.length > 0 && <AdvancedSettingsSection>{renderGrouped(advancedFields)}</AdvancedSettingsSection>}
     </>
   );
 }

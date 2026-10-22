@@ -13,9 +13,9 @@
 // limitations under the License.
 
 // The one surface both the Advanced widget and the Simple pack options render
-// for ppt_builder: an optional template upload, the background analysis
-// status, a summary with a "review patterns" entry, the vision and variety settings.
-// Nothing here is mandatory.
+// for ppt_builder: the optional template and the plan approval switch, then a
+// collapsed advanced section (slide review, vision, variety). The slide review
+// moves up when the analysis set slides aside itself. Nothing here is mandatory.
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,10 +25,12 @@ import Chip from "@shared/atoms/Chip/Chip.tsx";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { helpLangFor } from "@rework/features/helpCenter/manifest";
+import { AdvancedSettingsSection } from "../AdvancedSettingsSection";
 import { PatternReviewDialog } from "./PatternReviewDialog";
 import { PptBuilderPlanSettings } from "./PptBuilderPlanSettings";
 import { PptBuilderVarietySettings } from "./PptBuilderVarietySettings";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
+import { hasAnalysisExclusions } from "./types";
 import { isInProgress, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
 import type { VisionAvailability } from "./useVisionAvailability";
 import styles from "./PptBuilderTemplatePanel.module.css";
@@ -47,6 +49,30 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
   const [reviewOpen, setReviewOpen] = useState(false);
   const { phase, stagedFile, hasPersistedTemplate, effective, summary } = analysis;
   const readOnlyReview = phase === "builtin" || disabled;
+  const needsReview = phase !== "builtin" && effective !== null && hasAnalysisExclusions(effective.patterns ?? []);
+
+  // The slide count and the review entry: in the advanced section, or up in
+  // the template block while the analysis set slides aside.
+  const reviewRow =
+    summary && effective ? (
+      <div className={styles.summaryRow}>
+        <p className={styles.summary}>
+          {t(
+            phase === "builtin" ? "capability.ppt_builder.form.summaryBuiltin" : "capability.ppt_builder.form.summary",
+            { patterns: summary.patterns, excluded: summary.excluded },
+          )}
+        </p>
+        <Button
+          color="on-surface"
+          variant="text"
+          size="small"
+          icon={{ category: "outlined", type: "grid_view" }}
+          onClick={() => setReviewOpen(true)}
+        >
+          {t("capability.ppt_builder.form.review")}
+        </Button>
+      </div>
+    ) : null;
 
   const handleClear = () => {
     analysis.handleClear();
@@ -109,41 +135,23 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
           </p>
         )}
 
-        {summary && effective && (
-          <div className={styles.summaryRow}>
-            <p className={styles.summary}>
-              {t(
-                phase === "builtin"
-                  ? "capability.ppt_builder.form.summaryBuiltin"
-                  : "capability.ppt_builder.form.summary",
-                { patterns: summary.patterns, excluded: summary.excluded },
-              )}
-            </p>
-            <Button
-              color="on-surface"
-              variant="text"
-              size="small"
-              icon={{ category: "outlined", type: "grid_view" }}
-              onClick={() => setReviewOpen(true)}
-            >
-              {t("capability.ppt_builder.form.review")}
-            </Button>
-          </div>
-        )}
+        {needsReview && reviewRow}
 
         <TemplateGuideLink />
       </div>
 
-      <PptBuilderVisionSettings
-        disabled={disabled}
-        configValues={configValues}
-        onConfigChange={onConfigChange}
-        vision={vision}
-      />
-
-      <PptBuilderVarietySettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
-
       <PptBuilderPlanSettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
+
+      <AdvancedSettingsSection>
+        {reviewRow && !needsReview && <div className={styles.settingCard}>{reviewRow}</div>}
+        <PptBuilderVisionSettings
+          disabled={disabled}
+          configValues={configValues}
+          onConfigChange={onConfigChange}
+          vision={vision}
+        />
+        <PptBuilderVarietySettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
+      </AdvancedSettingsSection>
 
       {reviewOpen && effective && (
         <PatternReviewDialog
