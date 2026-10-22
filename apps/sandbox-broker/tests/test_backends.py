@@ -38,7 +38,7 @@ class DockerRunner:
         if args[:2] == ["docker", "run"]:
             return CommandResult(0, "container-id", "")
         if args[:2] == ["docker", "exec"]:
-            if self.timeout:
+            if self.timeout and args[3] != "python":
                 raise CommandTimeout
             return CommandResult(0, "42\n", "", truncated=True)
         return CommandResult(0, "", "")
@@ -85,6 +85,27 @@ async def test_docker_timeout_still_allows_forced_cleanup() -> None:
     ).timed_out
     await backend.dispose(lease)
     assert runner.calls[-1][0][:3] == ["docker", "rm", "--force"]
+
+
+@pytest.mark.asyncio
+async def test_docker_rejects_reuse_when_process_cleanup_fails() -> None:
+    class FailedCleanupRunner(DockerRunner):
+        async def run(self, args, *, timeout, output_limit=65536, input_data=None):
+            if args[:2] == ["docker", "exec"] and args[3:5] == ["python", "-c"]:
+                if "os.listdir('/proc')" in args[5]:
+                    return CommandResult(1, "", "processes remain")
+            return await super().run(
+                args, timeout=timeout, output_limit=output_limit, input_data=input_data
+            )
+
+    runner = FailedCleanupRunner()
+    backend = DockerBackend(settings(), runner)
+    lease = await backend.prepare()
+    with pytest.raises(SandboxError, match="backend_failed"):
+        await backend.execute(
+            lease, SandboxRequest(language="bash", code="echo finished")
+        )
+    await backend.dispose(lease)
 
 
 class KubeRunner:
@@ -327,12 +348,14 @@ async def test_agent_sandbox_claim_lifecycle_and_expiry() -> None:
     result = await backend.execute(
         lease, SandboxRequest(language="bash", code="echo ok")
     )
+    await backend.renew(lease, 1200)
     await backend.dispose(lease)
     assert runner.manifest["kind"] == "SandboxClaim"
     assert runner.manifest["spec"]["warmPoolRef"]["name"] == "fred-code"
     assert runner.manifest["spec"]["lifecycle"]["shutdownPolicy"] == "DeleteForeground"
     assert "shutdownTime" in runner.manifest["spec"]["lifecycle"]
     assert result.stdout == "ok\n"
+    assert any("patch" in args and "sandboxclaim" in args for args in runner.calls)
     assert "sandboxclaim" in runner.calls[-1]
     assert "--cascade=foreground" in runner.calls[-1]
 

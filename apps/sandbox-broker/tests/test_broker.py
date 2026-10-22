@@ -2,13 +2,16 @@ import asyncio
 from dataclasses import replace
 from time import monotonic
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
-from fred_sdk.contracts.sandbox import SandboxError, SandboxResult
+from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResult
 from sandbox_broker.api import create_app
 from sandbox_broker.backend import SandboxLease, SandboxPrepareLeak
 from sandbox_broker.config import BrokerSettings
 from sandbox_broker.pool import WarmPool
+from sandbox_broker.sessions import ConversationPool
+from sandbox_broker.settings_sync import SettingsSync
 
 
 def settings(**overrides):
@@ -79,6 +82,224 @@ def test_broker_rejects_large_input_before_backend() -> None:
         )
         assert response.status_code == 413
         assert fake.requests == []
+
+
+def test_conversation_reuses_workload_and_never_shares_it() -> None:
+    fake = FakeBackend()
+    config = settings(warm_pool_size=0, cold_start_on_miss=True, max_sandboxes=2)
+    with TestClient(create_app(config, fake)) as client:
+        headers = {"Authorization": "Bearer " + "x" * 32}
+        body = {"language": "bash", "code": "pwd"}
+        for key in ("a" * 64, "a" * 64, "b" * 64):
+            response = client.post(
+                "/v1/execute",
+                headers={**headers, "X-Fred-Sandbox-Session": key},
+                json=body,
+            )
+            assert response.status_code == 200
+        assert fake.requests[0][0] == fake.requests[1][0]
+        assert fake.requests[0][0] != fake.requests[2][0]
+        assert fake.disposed == []
+        assert client.get("/healthz").json()["active_conversations"] == 2
+        assert (
+            client.post(
+                "/v1/execute",
+                headers={**headers, "X-Fred-Sandbox-Session": "bad"},
+                json=body,
+            ).status_code
+            == 400
+        )
+    assert len(fake.disposed) == 2
+
+
+@pytest.mark.asyncio
+async def test_conversation_idle_expiry_replaces_workload() -> None:
+    fake = FakeBackend()
+    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
+    await pool.start()
+    sessions = ConversationPool(pool, idle_seconds=1200, max_sessions=1)
+    request = SandboxRequest(language="bash", code="pwd")
+    await sessions.execute("a", request)
+    sessions._sessions["a"].last_used = monotonic() - 1201
+    await sessions.sweep()
+    await asyncio.sleep(0)
+    await sessions.execute("a", request)
+    assert fake.requests[0][0] != fake.requests[1][0]
+    assert fake.requests[0][0] in fake.disposed
+    await sessions.close()
+    await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_retained_workload_is_replaced_on_retry() -> None:
+    class DeadBackend(FakeBackend):
+        fail_once = True
+
+        async def execute(self, lease, request):
+            if self.fail_once:
+                self.fail_once = False
+                raise SandboxError("backend_failed")
+            return await super().execute(lease, request)
+
+    fake = DeadBackend()
+    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
+    await pool.start()
+    sessions = ConversationPool(pool, max_sessions=1)
+    request = SandboxRequest(language="python", code="print(1)")
+    with pytest.raises(SandboxError, match="backend_failed"):
+        await sessions.execute("same", request)
+    for _ in range(100):
+        if fake.disposed:
+            break
+        await asyncio.sleep(0.01)
+    assert fake.disposed == [fake.prepared[0]]
+    assert (await sessions.execute("same", request)).stdout == "ready"
+    assert len(fake.prepared) == 2
+    await sessions.close()
+    await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_admin_policy_applies_without_redeploy_with_operator_cap() -> None:
+    fake = FakeBackend()
+    config = settings(
+        warm_pool_size=0,
+        cold_start_on_miss=True,
+        max_sandboxes=2,
+        settings_url="https://control-plane.local/control-plane/v1/internal/sandbox-settings",
+        settings_token="y" * 32,
+    )
+    pool = WarmPool(fake, config)
+    await pool.start()
+    sessions = ConversationPool(pool, max_sessions=2)
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={"idle_minutes": 30, "max_active_sessions": 20, "warm_capacity": 1},
+        )
+
+    sync = SettingsSync(config, pool, sessions, httpx.MockTransport(handler))
+    await sync.refresh()
+    assert seen[0].headers["Authorization"] == "Bearer " + "y" * 32
+    assert sessions.idle_seconds == 1800
+    assert sessions.max_sessions == 2
+    assert pool.target_size == 1
+    await sync.close()
+    await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_admin_policy_cannot_disable_all_strict_ready_capacity() -> None:
+    fake = FakeBackend()
+    config = settings(
+        settings_url="https://control-plane.local/control-plane/v1/internal/sandbox-settings",
+        settings_token="y" * 32,
+    )
+    pool = WarmPool(fake, config)
+    await pool.start()
+    sessions = ConversationPool(pool)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"idle_minutes": 30, "max_active_sessions": 1, "warm_capacity": 0},
+        )
+
+    sync = SettingsSync(config, pool, sessions, httpx.MockTransport(handler))
+    await sync.refresh()
+    assert pool.target_size == 1
+    assert pool.ready_count == 1
+    assert sessions.idle_seconds == 1800
+    await sync.close()
+    await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_reducing_active_limit_evicts_oldest_idle_conversation() -> None:
+    fake = FakeBackend()
+    pool = WarmPool(
+        fake, settings(warm_pool_size=0, cold_start_on_miss=True, max_sandboxes=2)
+    )
+    await pool.start()
+    sessions = ConversationPool(pool, max_sessions=2)
+    request = SandboxRequest(language="bash", code="pwd")
+    await sessions.execute("old", request)
+    await sessions.execute("new", request)
+    await sessions.configure(idle_seconds=1200, max_sessions=1)
+    assert list(sessions._sessions) == ["new"]
+    for _ in range(100):
+        if fake.disposed:
+            break
+        await asyncio.sleep(0.01)
+    assert fake.disposed == [fake.prepared[0]]
+    await sessions.close()
+    await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_reducing_active_limit_retires_inflight_conversation() -> None:
+    class SlowBackend(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.started = asyncio.Event()
+            self.finish = asyncio.Event()
+
+        async def execute(self, lease, request):
+            if request.code == "slow":
+                self.started.set()
+                await self.finish.wait()
+            return await super().execute(lease, request)
+
+    fake = SlowBackend()
+    pool = WarmPool(
+        fake, settings(warm_pool_size=0, cold_start_on_miss=True, max_sandboxes=2)
+    )
+    await pool.start()
+    sessions = ConversationPool(pool, max_sessions=2)
+    running = asyncio.create_task(
+        sessions.execute("old", SandboxRequest(language="bash", code="slow"))
+    )
+    await fake.started.wait()
+    await sessions.execute("new", SandboxRequest(language="bash", code="pwd"))
+    await sessions.configure(idle_seconds=1200, max_sessions=1)
+    assert sessions._sessions["old"].retire
+    fake.finish.set()
+    assert (await running).stdout == "ready"
+    assert list(sessions._sessions) == ["new"]
+    await sessions.close()
+    await pool.close()
+
+
+@pytest.mark.asyncio
+async def test_warm_capacity_zero_disposes_inflight_preparation() -> None:
+    class SlowBackend(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.started = asyncio.Event()
+            self.continue_prepare = asyncio.Event()
+
+        async def prepare(self):
+            self.started.set()
+            await self.continue_prepare.wait()
+            return await super().prepare()
+
+    fake = SlowBackend()
+    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
+    await pool.start()
+    await pool.configure_warm_capacity(1)
+    await fake.started.wait()
+    await pool.configure_warm_capacity(0)
+    fake.continue_prepare.set()
+    for _ in range(100):
+        if fake.disposed:
+            break
+        await asyncio.sleep(0.01)
+    assert len(fake.disposed) == 1
+    assert pool.ready_count == 0
+    await pool.close()
 
 
 @pytest.mark.asyncio

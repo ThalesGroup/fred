@@ -19,7 +19,11 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest
+from fred_sdk.contracts.sandbox import (
+    SandboxError,
+    SandboxRequest,
+    SandboxSessionIdentity,
+)
 from langchain_core.tools import BaseTool, StructuredTool
 
 
@@ -48,7 +52,17 @@ class CodeSandboxCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
                 request = SandboxRequest.model_validate(
                     {"language": language, "code": code}
                 )
-                result = await port.execute(request)
+                identity = ctx.identity
+                session = (
+                    SandboxSessionIdentity(
+                        user_id=identity.user_id,
+                        session_id=identity.session_id,
+                        team_id=identity.team_id,
+                    )
+                    if identity.session_id
+                    else None
+                )
+                result = await port.execute(request, session=session)
                 content = json.dumps(result.model_dump(), ensure_ascii=False)
                 is_error = False
             except SandboxError as exc:

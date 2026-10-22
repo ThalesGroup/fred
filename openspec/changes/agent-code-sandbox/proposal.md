@@ -11,6 +11,7 @@ Tracking issue: #3226.
 - Bound code size, execution time, output, CPU, memory, scratch storage, and concurrent work. Disable network access and remove every execution resource after completion or cancellation.
 - Provide Kubernetes and Docker deployment examples and a cluster preflight. The prototype is not evidence that a particular CNI enforces `NetworkPolicy` or that s3ns nodes support KVM.
 - Add a separately selectable SIG Agent Sandbox backend using SandboxClaim and SandboxWarmPool lifecycle APIs, and compare cold and ready latency on the same test cluster.
+- Retain one isolated workload per active conversation, expire it after 20 minutes without execution by default, and expose only the useful capacity and idle controls in the platform admin interface. Configuration changes shall take effect without a broker redeploy; runtime, image and security policy remain operator-approved.
 
 ## Capabilities
 
@@ -25,4 +26,4 @@ None.
 ## Impact
 
 - `fred-sdk` runtime port, one first-party capability package, `fred-runtime` service binding, and `fred-agents` package registration.
-- New standalone broker process and operator examples for Kubernetes and Docker. No database migration or frontend API is required for the prototype.
+- New standalone broker process and operator examples for Kubernetes and Docker. Conversation retention and admin controls add one platform settings migration and an admin API/UI surface.

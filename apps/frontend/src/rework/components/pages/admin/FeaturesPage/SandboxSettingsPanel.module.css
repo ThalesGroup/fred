@@ -1,0 +1,34 @@
+.panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+  margin: var(--spacing-m) 0;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  padding: var(--spacing-m);
+}
+
+.intro {
+  flex: 1 1 16rem;
+}
+
+.intro h2 {
+  margin: 0 0 var(--spacing-2xs);
+}
+
+.intro p {
+  margin: 0 0 var(--spacing-2xs);
+}
+
+.controls {
+  display: flex;
+  flex: 3 1 40rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-s);
+}
+
+.controls > * {
+  flex: 1 1 10rem;
+}

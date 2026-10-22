@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""One-shot isolated code execution contract shared by agents and brokers."""
+"""Isolated code execution contract shared by agents and brokers."""
 
 from __future__ import annotations
 
@@ -17,6 +17,14 @@ class SandboxRequest(BaseModel):
 
     language: SandboxLanguage
     code: str = Field(min_length=1, max_length=16_384)
+
+
+class SandboxSessionIdentity(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    user_id: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    team_id: str | None = None
 
 
 class SandboxResult(BaseModel):
@@ -52,5 +60,7 @@ class SandboxError(RuntimeError):
 
 class SandboxExecutionPort(ABC):
     @abstractmethod
-    async def execute(self, request: SandboxRequest) -> SandboxResult:
+    async def execute(
+        self, request: SandboxRequest, session: SandboxSessionIdentity | None = None
+    ) -> SandboxResult:
         """Run source in an isolated workload; infrastructure is bound privately."""

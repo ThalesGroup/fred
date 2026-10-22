@@ -22,6 +22,7 @@ class WarmPool:
     def __init__(self, backend: SandboxBackend, settings: BrokerSettings) -> None:
         self.backend = backend
         self.settings = settings
+        self.target_size = settings.warm_pool_size
         self._ready: asyncio.Queue[SandboxLease] = asyncio.Queue()
         self._active: set[SandboxLease] = set()
         self._leaked: set[SandboxLease] = set()
@@ -34,7 +35,7 @@ class WarmPool:
     async def start(self) -> None:
         await self.backend.preflight()
         try:
-            for _ in range(self.settings.warm_pool_size):
+            for _ in range(self.target_size):
                 self._total += 1
                 try:
                     lease = await self.backend.prepare()
@@ -93,6 +94,16 @@ class WarmPool:
         self._cleanup_tasks.add(task)
         task.add_done_callback(self._cleanup_tasks.discard)
 
+    async def configure_warm_capacity(self, target: int) -> None:
+        if not 0 <= target <= self.settings.max_sandboxes:
+            raise ValueError("Warm capacity exceeds the operator limit")
+        if target == 0 and not self.settings.cold_start_on_miss:
+            raise ValueError("Zero warm capacity requires on-demand provisioning")
+        self.target_size = target
+        while self._ready.qsize() > target:
+            self.schedule_release(self._ready.get_nowait())
+        self._wake.set()
+
     async def close(self) -> None:
         self._closed = True
         if self._worker is not None:
@@ -123,7 +134,7 @@ class WarmPool:
             await self._retire_expired()
             while (
                 not self._closed
-                and self._ready.qsize() < self.settings.warm_pool_size
+                and self._ready.qsize() < self.target_size
                 and self._total < self.settings.max_sandboxes
             ):
                 self._total += 1
@@ -144,7 +155,10 @@ class WarmPool:
                     await asyncio.sleep(2)
                     self._wake.set()
                     break
-                self._ready.put_nowait(lease)
+                if self._ready.qsize() >= self.target_size:
+                    await self.release(lease)
+                else:
+                    self._ready.put_nowait(lease)
 
     async def _retry_leaked(self) -> None:
         for lease in list(self._leaked):

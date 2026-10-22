@@ -1112,6 +1112,24 @@
   },
   "rework": {
     "admin": {
+      "sandboxSettings": {
+        "title": "Code sandbox",
+        "description": "One isolated sandbox per active conversation. Connected brokers apply changes within 30 seconds. Runtime, image and security policy are approved by the operator.",
+        "profile": "Approved profile",
+        "profileUnconfigured": "The operator has not named an approved profile yet.",
+        "loading": "Loading sandbox settings...",
+        "loadError": "Could not load sandbox settings.",
+        "idle": "Expire after inactivity (minutes)",
+        "idleHelp": "20 minutes by default. Scratch files are removed at expiry.",
+        "active": "Maximum active conversations",
+        "activeHelp": "Limited by the operator's hard capacity ceiling.",
+        "warm": "Unassigned ready sandboxes",
+        "warmHelp": "Keep this at zero unless measured cold latency justifies idle cost.",
+        "invalid": "Enter whole numbers within the allowed ranges.",
+        "save": "Save sandbox settings",
+        "saved": "Sandbox settings saved",
+        "saveError": "Could not save sandbox settings."
+      },
       "capabilities": {
         "title": "Features",
         "subtitle": "Platform feature catalog: per-team enablement, platform defaults, and health.",

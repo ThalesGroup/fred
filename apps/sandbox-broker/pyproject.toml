@@ -1,10 +1,10 @@
 [project]
 name = "fred-sandbox-broker"
 version = "0.1.0"
-description = "Isolated one-shot Bash and Python execution broker"
+description = "Isolated conversation-scoped Bash and Python execution broker"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = ["fastapi>=0.115", "fred-sdk>=4.5.3", "uvicorn>=0.35"]
+dependencies = ["fastapi>=0.115", "fred-sdk>=4.5.3", "httpx>=0.28", "uvicorn>=0.35"]
 
 [project.optional-dependencies]
 dev = ["httpx>=0.28", "pytest>=8.4.2", "pytest-asyncio>=1.2.0"]

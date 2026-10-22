@@ -2045,6 +2045,14 @@ applications:
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
+      - name: FRED_SANDBOX_SETTINGS_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: control-plane-sandbox-settings
+            key: token
+            optional: true
+      - name: FRED_SANDBOX_PROFILE_ID
+        value: unconfigured
     # ── Root platform-admin bootstrap secret (AUTHZ-07 Part 8 §40-42) ───────
     # Control Plane is the only pod that ever needs this token: it validates
     # POST /control-plane/v1/bootstrap/platform-admin. This chart never

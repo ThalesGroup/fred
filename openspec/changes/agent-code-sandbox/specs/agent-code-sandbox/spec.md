@@ -46,14 +46,14 @@ The system SHALL expose the same request and result contract through Kubernetes 
 
 #### Scenario: SIG Agent Sandbox backend
 - **WHEN** the operator selects SIG Agent Sandbox with a matching SandboxTemplate and SandboxWarmPool
-- **THEN** the broker creates a single-use SandboxClaim, executes through the same agent contract, and removes the claim and its workload afterward
+- **THEN** the broker creates a SandboxClaim, executes through the same agent contract, and removes the claim and its workload when its conversation lease ends
 
 #### Scenario: Template or pool mismatch
 - **WHEN** the upstream template or pool does not match the configured image, runtime or deny-all network boundary
 - **THEN** the broker refuses to start
 
 ### Requirement: Fast first execution with optional prewarming
-The broker SHALL support on-demand provisioning with zero idle sandbox Pods and an optional configurable pool of already running, unassigned sandboxes. A sandbox SHALL serve at most one agent execution and SHALL be destroyed afterward; the broker SHALL replenish configured warm capacity without waiting for the next request.
+The broker SHALL support on-demand provisioning with zero idle sandbox Pods and an optional configurable pool of already running, unassigned sandboxes. A sandbox SHALL be assigned to at most one conversation identity, and SHALL be destroyed after that conversation's idle lease ends; the broker SHALL replenish configured unassigned warm capacity without waiting for the next request. Calls without a conversation identity SHALL remain single-use.
 
 For a trivial program in the selected operating mode, the operator SHALL measure p50 and p95 broker request-to-result latency on the target deployment and use those measurements to choose cold or warm capacity.
 
@@ -74,8 +74,34 @@ For a trivial program in the selected operating mode, the operator SHALL measure
 - **THEN** the benchmark reports p50 and p95 latency for that mode without imposing an arbitrary threshold
 
 ### Requirement: Resource cleanup
-The broker SHALL attempt to remove the workload after success, failure, timeout, and request-task cancellation. A disconnected client MAY continue to consume capacity only until the configured execution deadline. Kubernetes workloads SHALL additionally have a server-side expiry as a backstop.
+The broker SHALL attempt to remove a one-shot workload after success, failure, timeout, and request-task cancellation. A conversation workload SHALL be removed after its idle deadline or an unrecoverable execution error. A disconnected client MAY continue to consume capacity only until the configured execution deadline. Kubernetes workloads SHALL additionally have a server-side expiry as a backstop.
 
 #### Scenario: Request task is cancelled
 - **WHEN** the broker request task is cancelled after workload creation
 - **THEN** the broker attempts to stop and remove that workload
+
+### Requirement: Conversation-scoped execution
+The system SHALL privately bind executions to user, team and conversation identity without adding identity to the model-visible tool schema. It SHALL serialize executions in the same conversation, retain scratch files between them, and never share a claimed workload with another conversation or user. The default inactivity expiry SHALL be 20 minutes after the last execution.
+
+#### Scenario: Reuse within a conversation
+- **WHEN** the same authorized conversation executes code again before its idle deadline
+- **THEN** the broker executes in the same isolated workload and can read scratch files written earlier
+
+#### Scenario: Isolation between conversations
+- **WHEN** a different conversation or user executes code
+- **THEN** the broker assigns a different workload and cannot read the first conversation's scratch files
+
+#### Scenario: Idle expiry
+- **WHEN** no execution occurs in a conversation for the configured idle period
+- **THEN** the workload and its scratch files are removed and the next execution starts a fresh workload
+
+### Requirement: Narrow admin settings
+The system SHALL allow platform admins to change the idle period, active conversation ceiling, and unassigned warm capacity without redeploy. Operator hard limits SHALL take precedence. The admin interface SHALL show the approved isolation profile and SHALL NOT accept arbitrary image, runtime or security-policy values.
+
+#### Scenario: Admin updates idle expiry
+- **WHEN** a platform admin saves a new permitted idle period
+- **THEN** the broker applies it within the documented refresh interval and future idle expiry uses the new value
+
+#### Scenario: Unapproved runtime change
+- **WHEN** a client attempts to submit an image or runtime through admin settings
+- **THEN** the request is rejected and the operator-approved runtime remains in use

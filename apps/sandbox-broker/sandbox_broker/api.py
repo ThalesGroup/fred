@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
+import re
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -15,13 +16,15 @@ from fastapi.responses import JSONResponse
 from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResult
 from pydantic import ValidationError
 
-from .backend import SandboxBackend
 from .agent_sandbox_backend import AgentSandboxBackend
+from .backend import SandboxBackend
 from .command import SubprocessRunner
 from .config import BrokerSettings
 from .docker_backend import DockerBackend
 from .kubernetes_backend import KubernetesBackend
 from .pool import WarmPool
+from .sessions import ConversationPool
+from .settings_sync import SettingsSync
 
 logger = logging.getLogger(__name__)
 _MAX_REQUEST_BYTES = 20_000
@@ -43,11 +46,23 @@ def create_app(
             selected_backend = KubernetesBackend(config, SubprocessRunner())
         pool = WarmPool(selected_backend, config)
         await pool.start()
+        sessions = ConversationPool(
+            pool,
+            idle_seconds=config.idle_timeout_seconds,
+            max_sessions=config.max_sandboxes,
+        )
+        sessions.start()
+        sync = SettingsSync(config, pool, sessions)
+        sync.start()
         app.state.settings = config
         app.state.pool = pool
+        app.state.sessions = sessions
+        app.state.settings_sync = sync
         try:
             yield
         finally:
+            await sync.close()
+            await sessions.close()
             await pool.close()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -58,7 +73,7 @@ def create_app(
         ready, target = (
             await warm_state()
             if warm_state is not None
-            else (app.state.pool.ready_count, app.state.settings.warm_pool_size)
+            else (app.state.pool.ready_count, app.state.pool.target_size)
         )
         return {
             "ready": ready,
@@ -66,6 +81,8 @@ def create_app(
             "limit": app.state.settings.max_sandboxes,
             "warm_target": target,
             "cold_on_miss": int(app.state.settings.cold_start_on_miss),
+            "active_conversations": app.state.sessions.active_count,
+            "idle_timeout_seconds": app.state.sessions.idle_seconds,
         }
 
     @app.post("/v1/execute")
@@ -83,6 +100,24 @@ def create_app(
             execution = SandboxRequest.model_validate_json(body)
         except ValidationError:
             return _error(400, "invalid_request")
+        session_key = request.headers.get("X-Fred-Sandbox-Session")
+        if session_key is not None:
+            if not re.fullmatch(r"[a-f0-9]{64}", session_key):
+                return _error(400, "invalid_request")
+            try:
+                result = await app.state.sessions.execute(session_key, execution)
+                return JSONResponse(result.model_dump())
+            except SandboxError as exc:
+                return _error(429 if exc.code == "busy" else 503, exc.code)
+            except TimeoutError:
+                return JSONResponse(
+                    SandboxResult(
+                        exit_code=None, stdout="", stderr="", timed_out=True
+                    ).model_dump()
+                )
+            except Exception:
+                logger.exception("Conversation sandbox execution failed")
+                return _error(503, "backend_failed")
         pool: WarmPool = app.state.pool
         try:
             lease = await pool.acquire()

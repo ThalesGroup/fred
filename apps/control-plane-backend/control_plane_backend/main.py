@@ -84,6 +84,7 @@ from control_plane_backend.routing_policy.api import (
     register_exception_handlers as register_routing_policy_exception_handlers,
 )
 from control_plane_backend.routing_policy.api import router as routing_policy_router
+from control_plane_backend.sandbox_settings.api import router as sandbox_settings_router
 from control_plane_backend.scheduler.dependencies import (
     build_lifecycle_action_dependencies,
 )
@@ -459,6 +460,7 @@ def create_app() -> FastAPI:
     router.include_router(team_wiki_router)
     router.include_router(platform_prompt_router)
     router.include_router(platform_ui_settings_router)
+    router.include_router(sandbox_settings_router)
     router.include_router(marketplace_settings_router)
     router.include_router(agent_marketplace_router)
     router.include_router(announcements_router)

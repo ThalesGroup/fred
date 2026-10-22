@@ -15,6 +15,7 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 from .backend import SandboxLease, SandboxPrepareLeak
 from .command import CommandRunner, CommandTimeout
 from .config import BrokerSettings
+from .process_cleanup import remove_code_processes
 
 _DENY_POLICY = "fred-sandbox-deny-all"
 
@@ -115,15 +116,22 @@ class KubernetesBackend:
     ) -> SandboxResult:
         interpreter = "/bin/bash" if request.language == "bash" else "python"
         try:
-            result = await self.runner.run(
-                self._kubectl(
-                    "exec", lease.target, "--", interpreter, "-c", request.code
-                ),
-                timeout=self.settings.execution_timeout_seconds,
-                output_limit=self.settings.output_limit_bytes,
+            try:
+                result = await self.runner.run(
+                    self._kubectl(
+                        "exec", lease.target, "--", interpreter, "-c", request.code
+                    ),
+                    timeout=self.settings.execution_timeout_seconds,
+                    output_limit=self.settings.output_limit_bytes,
+                )
+            except CommandTimeout:
+                return SandboxResult(
+                    exit_code=None, stdout="", stderr="", timed_out=True
+                )
+        finally:
+            await remove_code_processes(
+                self.runner, self._kubectl("exec", lease.target, "--")
             )
-        except CommandTimeout:
-            return SandboxResult(exit_code=None, stdout="", stderr="", timed_out=True)
         return SandboxResult(
             exit_code=result.returncode,
             stdout=result.stdout,
@@ -146,7 +154,7 @@ class KubernetesBackend:
             },
             "spec": {
                 "backoffLimit": 0,
-                "activeDeadlineSeconds": 3660,
+                "activeDeadlineSeconds": 86400,
                 "ttlSecondsAfterFinished": 60,
                 "template": {
                     "metadata": {"labels": {"app.kubernetes.io/name": "fred-sandbox"}},
@@ -171,7 +179,7 @@ class KubernetesBackend:
                                 "name": "sandbox",
                                 "image": settings.image,
                                 "imagePullPolicy": "IfNotPresent",
-                                "command": ["sleep", "3600"],
+                                "command": ["sleep", "infinity"],
                                 "workingDir": "/tmp",
                                 "env": [
                                     {"name": "HOME", "value": "/tmp"},

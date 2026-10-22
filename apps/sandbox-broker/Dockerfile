@@ -19,7 +19,7 @@ COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY libs/fred-sdk /build/fred-sdk
 COPY apps/sandbox-broker /build/sandbox-broker
 # The broker imports only fred_sdk.contracts.sandbox; avoid the full agent dependency tree.
-RUN pip install --no-cache-dir "fastapi>=0.115" "uvicorn>=0.35" \
+RUN pip install --no-cache-dir "fastapi>=0.115" "httpx>=0.28" "uvicorn>=0.35" \
     && pip install --no-cache-dir --no-deps /build/fred-sdk /build/sandbox-broker \
     && useradd --uid 65532 --create-home broker
 

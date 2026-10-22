@@ -12,6 +12,7 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 from .backend import SandboxLease, SandboxPrepareLeak
 from .command import CommandRunner, CommandTimeout
 from .config import BrokerSettings
+from .process_cleanup import remove_code_processes
 
 
 class DockerBackend:
@@ -80,7 +81,7 @@ class DockerBackend:
             "PYTHONDONTWRITEBYTECODE=1",
             settings.image,
             "sleep",
-            "3600",
+            "86400",
         ]
         try:
             result = await self.runner.run(
@@ -101,13 +102,18 @@ class DockerBackend:
     ) -> SandboxResult:
         interpreter = "/bin/bash" if request.language == "bash" else "python"
         try:
-            result = await self.runner.run(
-                ["docker", "exec", lease.target, interpreter, "-c", request.code],
-                timeout=self.settings.execution_timeout_seconds,
-                output_limit=self.settings.output_limit_bytes,
-            )
-        except CommandTimeout:
-            return SandboxResult(exit_code=None, stdout="", stderr="", timed_out=True)
+            try:
+                result = await self.runner.run(
+                    ["docker", "exec", lease.target, interpreter, "-c", request.code],
+                    timeout=self.settings.execution_timeout_seconds,
+                    output_limit=self.settings.output_limit_bytes,
+                )
+            except CommandTimeout:
+                return SandboxResult(
+                    exit_code=None, stdout="", stderr="", timed_out=True
+                )
+        finally:
+            await remove_code_processes(self.runner, ["docker", "exec", lease.target])
         return SandboxResult(
             exit_code=result.returncode,
             stdout=result.stdout,

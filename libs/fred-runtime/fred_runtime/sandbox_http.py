@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import os
 from urllib.parse import urlsplit
 
@@ -13,6 +16,7 @@ from fred_sdk.contracts.sandbox import (
     SandboxExecutionPort,
     SandboxRequest,
     SandboxResult,
+    SandboxSessionIdentity,
 )
 
 
@@ -61,11 +65,23 @@ class SandboxHttpAdapter(SandboxExecutionPort):
             raise ValueError("Both sandbox broker URL and token are required")
         return cls(base_url=url, token=token)
 
-    async def execute(self, request: SandboxRequest) -> SandboxResult:
+    async def execute(
+        self, request: SandboxRequest, session: SandboxSessionIdentity | None = None
+    ) -> SandboxResult:
+        headers = {"Authorization": f"Bearer {self._token}"}
+        if session is not None:
+            payload = json.dumps(
+                session.model_dump(), sort_keys=True, separators=(",", ":")
+            ).encode()
+            headers["X-Fred-Sandbox-Session"] = hmac.new(
+                self._token.encode(),
+                b"fred-sandbox-session-v1\0" + payload,
+                hashlib.sha256,
+            ).hexdigest()
         try:
             response = await self._client.post(
                 f"{self._base_url}/v1/execute",
-                headers={"Authorization": f"Bearer {self._token}"},
+                headers=headers,
                 json=request.model_dump(),
             )
         except (httpx.HTTPError, ValueError) as exc:

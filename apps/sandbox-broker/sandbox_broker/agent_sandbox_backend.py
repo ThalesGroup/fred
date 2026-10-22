@@ -71,7 +71,7 @@ class AgentSandboxBackend:
             and pod_security.get("seccompProfile", {}).get("type") == "RuntimeDefault"
             and container.get("image") == self.settings.image
             and container.get("name") == "sandbox"
-            and container.get("command") == ["sleep", "3600"]
+            and container.get("command") == ["sleep", "infinity"]
             and container.get("env")
             == [
                 {"name": "HOME", "value": "/tmp"},
@@ -121,7 +121,7 @@ class AgentSandboxBackend:
         expiry = datetime.now(timezone.utc) + timedelta(
             seconds=self.settings.preparation_timeout_seconds
             + self.settings.execution_timeout_seconds
-            + 120
+            + self.settings.idle_timeout_seconds
         )
         manifest: dict[str, Any] = {
             "apiVersion": "extensions.agents.x-k8s.io/v1beta1",
@@ -199,6 +199,46 @@ class AgentSandboxBackend:
                 "--wait=true",
             ),
             timeout=90,
+        )
+        if result.returncode != 0:
+            raise SandboxError("backend_failed")
+
+    async def renew(self, lease: SandboxLease, seconds: int) -> None:
+        expiry = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+        patch = {
+            "spec": {
+                "lifecycle": {"shutdownTime": expiry.isoformat().replace("+00:00", "Z")}
+            }
+        }
+        result = await self.runner.run(
+            self.kubernetes._kubectl(
+                "patch",
+                "sandboxclaim",
+                lease.id,
+                "--type=merge",
+                "-p",
+                json.dumps(patch),
+            ),
+            timeout=15,
+        )
+        if result.returncode != 0:
+            raise SandboxError("backend_failed")
+
+    async def set_warm_capacity(self, target: int) -> None:
+        if not 0 <= target <= self.settings.max_sandboxes:
+            raise ValueError("Warm capacity exceeds the operator limit")
+        await self.preflight()
+        patch = {"spec": {"replicas": target}}
+        result = await self.runner.run(
+            self.kubernetes._kubectl(
+                "patch",
+                "sandboxwarmpool",
+                self.settings.agent_pool_name,
+                "--type=merge",
+                "-p",
+                json.dumps(patch),
+            ),
+            timeout=15,
         )
         if result.returncode != 0:
             raise SandboxError("backend_failed")

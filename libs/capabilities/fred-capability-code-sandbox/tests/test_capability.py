@@ -14,24 +14,27 @@ from fred_sdk.contracts.sandbox import (
     SandboxError,
     SandboxExecutionPort,
     SandboxResult,
+    SandboxSessionIdentity,
 )
 
 
 class FakeSandbox(SandboxExecutionPort):
     def __init__(self) -> None:
         self.requests = []
+        self.sessions = []
         self.error: str | None = None
 
-    async def execute(self, request):
+    async def execute(self, request, session: SandboxSessionIdentity | None = None):
         self.requests.append(request)
+        self.sessions.append(session)
         if self.error:
             raise SandboxError(self.error)
         return SandboxResult(exit_code=0, stdout="42\n", stderr="")
 
 
-def context(port):
+def context(port, session_id=None):
     return CapabilityContext(
-        identity=CapabilityIdentity(user_id="user"),
+        identity=CapabilityIdentity(user_id="user", session_id=session_id),
         config=EmptyModel(),
         turn_options=EmptyModel(),
         services=RuntimeServices(sandbox_execution=port),
@@ -69,6 +72,7 @@ async def test_tool_executes_and_reports_bounded_error() -> None:
     assert json.loads(result.content)["stdout"] == "42\n"
     assert not result.artifact.is_error
     assert port.requests[0].language == "python"
+    assert port.sessions[0] is None
     port.error = "runtime_unavailable"
     result = await tool.ainvoke(
         {
@@ -80,3 +84,14 @@ async def test_tool_executes_and_reports_bounded_error() -> None:
     )
     assert result.artifact.is_error
     assert json.loads(result.content) == {"error_code": "runtime_unavailable"}
+
+
+@pytest.mark.asyncio
+async def test_tool_binds_conversation_without_exposing_it_to_model() -> None:
+    port = FakeSandbox()
+    tool = CodeSandboxCapability().tools(context(port, session_id="chat-1"))[0]
+    await tool.ainvoke({"language": "bash", "code": "echo ok"})
+    assert port.sessions[0] == SandboxSessionIdentity(
+        user_id="user", session_id="chat-1"
+    )
+    assert set(tool.args_schema.model_fields) == {"language", "code"}

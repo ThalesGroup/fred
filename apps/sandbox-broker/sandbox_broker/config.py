@@ -8,6 +8,7 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Literal
+from urllib.parse import urlsplit
 
 BackendKind = Literal["docker", "kubernetes", "agent_sandbox"]
 IsolationKind = Literal["kata", "gvisor"]
@@ -30,6 +31,9 @@ class BrokerSettings:
     execution_timeout_seconds: int = 15
     output_limit_bytes: int = 8192
     preparation_timeout_seconds: int = 90
+    idle_timeout_seconds: int = 1200
+    settings_url: str | None = None
+    settings_token: str | None = None
 
     def __post_init__(self) -> None:
         if self.backend not in {"docker", "kubernetes", "agent_sandbox"}:
@@ -79,6 +83,27 @@ class BrokerSettings:
             raise ValueError("Sandbox output limit must be 1024-16384 bytes")
         if not 5 <= self.preparation_timeout_seconds <= 300:
             raise ValueError("Sandbox preparation timeout must be 5-300 seconds")
+        if not 60 <= self.idle_timeout_seconds <= 7200:
+            raise ValueError("Sandbox idle timeout must be 60-7200 seconds")
+        if bool(self.settings_url) != bool(self.settings_token):
+            raise ValueError(
+                "Sandbox settings URL and token must be configured together"
+            )
+        if self.settings_url:
+            url = urlsplit(self.settings_url)
+            if (
+                not url.hostname
+                or url.scheme not in {"http", "https"}
+                or (
+                    url.scheme == "http"
+                    and url.hostname not in {"localhost", "127.0.0.1", "::1"}
+                )
+            ):
+                raise ValueError("Sandbox settings URL requires HTTPS outside loopback")
+            if self.settings_token is None or len(self.settings_token) < 32:
+                raise ValueError(
+                    "Sandbox settings token must have at least 32 characters"
+                )
 
     @classmethod
     def from_environment(cls) -> BrokerSettings:
@@ -109,4 +134,7 @@ class BrokerSettings:
             execution_timeout_seconds=int(os.getenv("SANDBOX_EXECUTION_TIMEOUT", "15")),
             output_limit_bytes=int(os.getenv("SANDBOX_OUTPUT_LIMIT_BYTES", "8192")),
             preparation_timeout_seconds=int(os.getenv("SANDBOX_PREPARE_TIMEOUT", "90")),
+            idle_timeout_seconds=int(os.getenv("SANDBOX_IDLE_TIMEOUT", "1200")),
+            settings_url=os.getenv("SANDBOX_SETTINGS_URL") or None,
+            settings_token=os.getenv("SANDBOX_SETTINGS_TOKEN") or None,
         )
