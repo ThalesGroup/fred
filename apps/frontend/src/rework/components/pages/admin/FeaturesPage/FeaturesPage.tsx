@@ -668,8 +668,8 @@ export default function FeaturesPage() {
             selectedIndex={modelTab === "manual" ? 0 : 1}
             onSelectedIndexChange={(index) => setModelTab(index === 0 ? "manual" : "discovered")}
             items={[
-              { label: `${t("rework.admin.capabilities.discovery.manualSection")} (${manualModels.length})` },
-              { label: `${t("rework.admin.capabilities.discovery.discoveredSection")} (${discoveredModels.length})` },
+              { label: t("rework.admin.capabilities.discovery.manualSection") },
+              { label: t("rework.admin.capabilities.discovery.discoveredSection") },
             ]}
           />
         </div>
