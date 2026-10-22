@@ -31,7 +31,7 @@ const h = vi.hoisted(() => ({
   teams: { data: [] as Team[] } as { data?: Team[] },
   mine: [] as MyTeamJoinRequest[],
   mineSkipped: [] as boolean[],
-  mineRefetchOnMount: undefined as boolean | undefined,
+  mineOptions: undefined as object | undefined,
   bootstrap: {
     activeTeam: { id: "personal-me" } as TeamWithPermissions | undefined,
     availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
@@ -60,9 +60,9 @@ vi.mock("react-router-dom", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListTeamsQuery: () => h.teams,
-  useMyTeamJoinRequestsQuery: (_arg: unknown, options: { skip: boolean; refetchOnMountOrArgChange?: boolean }) => {
+  useMyTeamJoinRequestsQuery: (_arg: unknown, options: { skip: boolean }) => {
     h.mineSkipped.push(options.skip);
-    h.mineRefetchOnMount = options.refetchOnMountOrArgChange;
+    h.mineOptions = options;
     return { data: options.skip ? undefined : h.mine, refetch: vi.fn() };
   },
 }));
@@ -81,6 +81,7 @@ vi.mock("@shared/organisms/TeamCard/TeamCard.tsx", () => ({
 }));
 
 import MarketplaceTeams from "./MarketplaceTeams";
+import { crossSessionRefreshOptions } from "@core/hooks/crossSessionRefresh";
 
 function render(): string {
   return renderToStaticMarkup(<MarketplaceTeams />);
@@ -283,13 +284,12 @@ describe("MarketplaceTeams join requests", () => {
     expect(html).not.toContain('data-testid="team-card-beta" data-request');
   });
 
-  // An admin accepts, the requester enters then leaves: coming back must not
-  // show the cached "Request sent" from before the answer.
-  it("refetches the caller's requests on every visit, so an answered request never lingers", () => {
+  // An admin's answer comes from another session: the cached "Request sent" must not linger.
+  it("keeps the caller's requests fresh across sessions", () => {
     h.teams = { data: [{ id: "acme", is_member: false, visibility: "public", joining_mode: "on_request" } as Team] };
     h.mine = [];
     const html = render();
-    expect(h.mineRefetchOnMount).toBe(true);
+    expect(h.mineOptions).toEqual(crossSessionRefreshOptions(false));
     expect(html).not.toContain('data-request="pending"');
   });
 });

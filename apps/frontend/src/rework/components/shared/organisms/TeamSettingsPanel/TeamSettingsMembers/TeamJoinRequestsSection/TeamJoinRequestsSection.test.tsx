@@ -44,7 +44,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ sho
 vi.mock("../../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useTeamJoinRequestsQuery: (arg: unknown, options: { skip: boolean }) => {
     h.query(arg, options);
-    return { data: options.skip ? undefined : h.requests };
+    return { data: options.skip ? undefined : h.requests, refetch: vi.fn() };
   },
   useAcceptTeamJoinRequestMutation: () => [h.accept, { isLoading: false }],
   useRefuseTeamJoinRequestMutation: () => [h.refuse, { isLoading: false }],
@@ -118,7 +118,7 @@ it("renders nothing while no request is waiting", () => {
 it("never fetches nor renders for someone who cannot administer members", () => {
   h.requests = [pending];
   render(false);
-  expect(h.query).toHaveBeenCalledWith({ teamId: "demo" }, { skip: true });
+  expect(h.query).toHaveBeenCalledWith({ teamId: "demo" }, expect.objectContaining({ skip: true }));
   expect(container.textContent).toBe("");
 });
 

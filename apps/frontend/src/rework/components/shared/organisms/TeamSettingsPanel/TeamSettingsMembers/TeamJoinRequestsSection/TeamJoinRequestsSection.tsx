@@ -19,6 +19,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useAcceptTeamJoinRequestMutation,
@@ -42,7 +43,9 @@ export default function TeamJoinRequestsSection({
 }: TeamJoinRequestsSectionProps) {
   const { t, i18n } = useTranslation();
   const { showError } = useToast();
-  const { data } = useTeamJoinRequestsQuery({ teamId }, { skip: !canAdministerMembers });
+  // Requesters and other admins act from their own sessions.
+  const { data, refetch } = useTeamJoinRequestsQuery({ teamId }, crossSessionRefreshOptions(!canAdministerMembers));
+  useRefetchOnWindowFocus(refetch, !canAdministerMembers);
   const requests = takesRequests ? data : data?.filter((request) => request.status === "pending");
   const [accept, { isLoading: accepting }] = useAcceptTeamJoinRequestMutation();
   const [refuse, { isLoading: refusing }] = useRefuseTeamJoinRequestMutation();
