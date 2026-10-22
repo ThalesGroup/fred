@@ -53,13 +53,13 @@ While the application tab is visible, the frontend SHALL refresh the unseen coun
 
 ### Requirement: Popover lists and deletes notifications
 
-Clicking the bell SHALL open a popover over the navigation panel, closed by an outside click or Escape. It SHALL list the caller's notifications newest first with an empty state when there are none, and a "Clear all" action deleting all of them except the pending decisions. A tile SHALL disappear as soon as its recipient acts on it: clicking the tile, or a button that follows a link, SHALL delete it for the caller and follow its link if it has one; a button calling a domain endpoint SHALL leave the deletion to that endpoint, so the tile goes only when the call succeeds and stays when it fails. Each tile SHALL show an always-visible close button that deletes it, except a pending decision. Tiles SHALL show no read/unread distinction.
+Clicking the bell SHALL open a popover over the navigation panel, closed by an outside click or Escape. It SHALL list the caller's notifications newest first with an empty state when there are none, and a "Clear all" action deleting all of them except the pending decisions. The card itself SHALL NOT be clickable and SHALL show no hover state; a notification with a link SHALL offer an outlined "View" button before its other buttons, unless one of them already opens that link. A tile SHALL disappear as soon as its recipient acts on it: "View", or a button that follows a link, SHALL delete it for the caller and follow its link; a button calling a domain endpoint SHALL leave the deletion to that endpoint, so the tile goes only when the call succeeds and stays when it fails. Each tile SHALL show an always-visible close button that deletes it, except a pending decision. Tiles SHALL show no read/unread distinction.
 
-A pending decision is an unhandled notification of a decision type (`team.join_requested`). Its tile SHALL have no close button, and clicking it SHALL follow its link without deleting it; it SHALL stay until someone decides. Once handled, it SHALL show "handled by <name>" instead of its buttons and get its close button back. "Clear all" SHALL keep pending decisions, server-side, and SHALL be disabled when they are all the popover lists.
+A pending decision is an unhandled notification of a decision type (`team.join_requested`). Its tile SHALL have no close button, and "View" SHALL follow its link without deleting it; it SHALL stay until someone decides. Once handled, it SHALL show "handled by <name>" instead of its buttons and get its close button back. "Clear all" SHALL keep pending decisions, server-side, and SHALL be disabled when they are all the popover lists.
 
 #### Scenario: Dismissed on click
 
-- **WHEN** Alice clicks a tile, or its "Open the agent" button
+- **WHEN** Alice clicks "View" on a tile, or its "Open the agent" button
 - **THEN** its link opens and the notification is deleted for her
 
 #### Scenario: Failed action keeps the tile

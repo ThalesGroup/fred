@@ -1096,10 +1096,12 @@ digit after the name.
 - **`NotificationTile`** — props-only molecule: category icon well (`primary-container`
   action, `success-container` response, `surface-container-high` information, as inside a
   floating surface), title, full body (never clamped), relative time, type buttons (small,
-  disabled while `busy`), "Handled by" line instead of buttons. The title button stretches
-  over the tile; tiles have no read/unread distinction. The close button ("Dismiss
+  disabled while `busy`), "Handled by" line instead of buttons. The card is not clickable
+  and has no hover state: an outlined "View" button (`viewLabel`/`onView`) comes before the
+  type buttons, omitted when a `navigate` button already opens the same link; tiles have no
+  read/unread distinction. The close button ("Dismiss
   notification", `close`, medium, `on-surface-retreat`) is always visible. One handler
-  serves the tile click and `navigate` buttons: it deletes the notification unless it is a
+  serves "View" and `navigate` buttons: it deletes the notification unless it is a
   pending decision, then follows the link. A `call` button dismisses only once it succeeds;
   a 404 or 403 removes the tile silently, any other failure shows the error toast.
 - **Pending-decision tile** (`dismissible={false}`, e.g. a join request) — no close button;
