@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* A card on the popover's `surface-container`: lighter than its background,
+/* A card in `surface-main` on the popover's `surface-container` background,
  * with the information icon well one step down at `-high`. */
 .tile {
   display: flex;
@@ -22,7 +22,7 @@
   align-items: flex-start;
   gap: var(--spacing-s);
   border-radius: var(--radius-m);
-  background: var(--surface-container-highest);
+  background: var(--surface-main);
   padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
   list-style: none;
 }
