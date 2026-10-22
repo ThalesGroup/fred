@@ -99,6 +99,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
     "ControlPlaneNotification",
+    "ControlPlaneTeamJoinRequest",
   ],
   endpoints: {
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
@@ -552,6 +553,41 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         "PlatformAccess",
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneTeam", id: "LIST" },
+      ],
+    },
+    // Join requests: MINE is the caller's own list (team cards), `team-<id>`
+    // the admins' list. A decision changes the members and the admins' tiles.
+    listMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGet: {
+      providesTags: [{ type: "ControlPlaneTeamJoinRequest" as const, id: "MINE" }],
+    },
+    createTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
+      ],
+    },
+    cancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
+      ],
+    },
+    listTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneTeamJoinRequest" as const, id: `team-${arg.teamId}` }],
+    },
+    acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost: {
+      invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
+        "ControlPlaneNotification",
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneTeam", id: arg.teamId },
+      ],
+    },
+    refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost: {
+      invalidatesTags: (_, __, arg) => [
+        "ControlPlaneNotification",
+        { type: "ControlPlaneTeamJoinRequest", id: `team-${arg.teamId}` },
       ],
     },
     uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: {
@@ -1008,6 +1044,14 @@ export const {
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useEditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchMutation: useEditTeamRegistryMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
+  useListMyTeamJoinRequestsControlPlaneV1TeamsJoinRequestsMineGetQuery: useMyTeamJoinRequestsQuery,
+  useCreateTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsPostMutation: useAskToJoinTeamMutation,
+  useCancelMyTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsMineDeleteMutation: useCancelTeamJoinRequestMutation,
+  useListTeamJoinRequestsControlPlaneV1TeamsTeamIdJoinRequestsGetQuery: useTeamJoinRequestsQuery,
+  useAcceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPostMutation:
+    useAcceptTeamJoinRequestMutation,
+  useRefuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePostMutation:
+    useRefuseTeamJoinRequestMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
   useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation: useUploadUserAvatarMutation,
   useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation: useDeleteUserAvatarMutation,

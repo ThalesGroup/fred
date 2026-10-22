@@ -20,6 +20,7 @@ import type { ThunkDispatch, UnknownAction } from "@reduxjs/toolkit";
 import type { TFunction } from "i18next";
 import type { NotificationCategory } from "@shared/molecules/NotificationTile/NotificationTile.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
+import { enhancedControlPlaneApi } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { NotificationPage } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { teamAgentsPath } from "../../components/pages/TeamAgentsPage/agentDeepLink.ts";
 
@@ -43,6 +44,8 @@ interface NotificationTypeDefinition<N> {
   /** Where a click on the tile leads, if anywhere. */
   link: (notification: N) => string | null;
   actions: (notification: N, t: TFunction) => NotificationAction[];
+  /** Overrides the generic "Handled by" line, e.g. to name the outcome. */
+  handled?: (notification: N, t: TFunction) => string | undefined;
 }
 
 const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): NotificationAction => ({
@@ -52,6 +55,34 @@ const openAgent = (teamId: string, agentInstanceId: string, t: TFunction): Notif
   kind: "navigate",
   to: teamAgentsPath(teamId, agentInstanceId),
 });
+
+const teamMembersPath = (teamId: string) => `/team/${teamId}/settings/members`;
+
+/** A join request decision; a 404 means the request is gone (cancelled,
+ *  decided, expired), so the tile has nothing left to act on. */
+function decideJoinRequest(
+  notification: NotificationOfType<"team.join_requested">,
+  decision: "accept" | "refuse",
+): (dispatch: NotificationDispatch) => Promise<unknown> {
+  const { endpoints } = enhancedControlPlaneApi;
+  const args = { teamId: notification.payload.team_id, requestId: notification.payload.request_id };
+  return async (dispatch) => {
+    try {
+      await dispatch(
+        decision === "accept"
+          ? endpoints.acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost.initiate(args)
+          : endpoints.refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost.initiate(args),
+      ).unwrap();
+    } catch (error) {
+      if ((error as { status?: unknown } | undefined)?.status !== 404) return;
+      await dispatch(
+        endpoints.deleteNotificationControlPlaneV1NotificationsNotificationIdDelete.initiate({
+          notificationId: notification.id,
+        }),
+      );
+    }
+  };
+}
 
 const NOTIFICATION_TYPES: {
   [K in NotificationItem["type"]]: NotificationTypeDefinition<NotificationOfType<K>>;
@@ -97,6 +128,54 @@ const NOTIFICATION_TYPES: {
     link: ({ payload }) => teamAgentsPath(payload.team_id, payload.agent_instance_id),
     actions: ({ payload }, t) => [openAgent(payload.team_id, payload.agent_instance_id, t)],
   },
+  "team.join_requested": {
+    icon: "person_add",
+    category: "action_required",
+    title: ({ payload }, t) =>
+      t("rework.notifications.types.joinRequested.title", { name: payload.requester_name, team: payload.team_name }),
+    // The requester's message, in full: it is what the admin decides on.
+    body: ({ payload }) => payload.message ?? "",
+    link: ({ payload }) => teamMembersPath(payload.team_id),
+    actions: (notification, t) => [
+      {
+        id: "accept",
+        label: t("rework.notifications.actions.accept"),
+        primary: true,
+        kind: "call",
+        call: decideJoinRequest(notification, "accept"),
+      },
+      {
+        id: "refuse",
+        label: t("rework.notifications.actions.refuse"),
+        kind: "call",
+        call: decideJoinRequest(notification, "refuse"),
+      },
+    ],
+    handled: ({ handled_by_name: name, handled_outcome: outcome }, t) => {
+      if (!name || (outcome !== "accepted" && outcome !== "refused")) return undefined;
+      return t(`rework.notifications.types.joinRequested.${outcome}By`, { name });
+    },
+  },
+  "team.join_request_answered": {
+    icon: "groups",
+    category: "information",
+    title: ({ payload }, t) =>
+      t(`rework.notifications.types.joinRequestAnswered.${payload.outcome}Title`, { team: payload.team_name }),
+    body: ({ payload }, t) => t(`rework.notifications.types.joinRequestAnswered.${payload.outcome}Body`),
+    link: ({ payload }) => (payload.outcome === "accepted" ? teamAgentsPath(payload.team_id) : null),
+    actions: ({ payload }, t) =>
+      payload.outcome === "accepted"
+        ? [
+            {
+              id: "open-team",
+              label: t("rework.notifications.actions.openTeam"),
+              primary: true,
+              kind: "navigate",
+              to: teamAgentsPath(payload.team_id),
+            },
+          ]
+        : [],
+  },
 };
 
 export interface RenderedNotification {
@@ -126,7 +205,10 @@ export function renderNotification(notification: NotificationItem, t: TFunction)
   const definition = (NOTIFICATION_TYPES as Record<string, NotificationTypeDefinition<NotificationItem> | undefined>)[
     notification.type
   ];
-  const handled = handledLabel(notification, t);
+  const handled =
+    notification.handled_at && definition?.handled
+      ? (definition.handled(notification, t) ?? handledLabel(notification, t))
+      : handledLabel(notification, t);
   if (!definition) {
     return {
       icon: "notifications",

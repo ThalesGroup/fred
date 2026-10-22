@@ -2916,7 +2916,18 @@
     "teamCard": {
       "join": "Join",
       "inviteOnly": "Invite only",
-      "memberCount": "{{count}} members"
+      "memberCount": "{{count}} members",
+      "askToJoin": "Ask to join",
+      "requestSent": "Request sent",
+      "cancelRequest": "Cancel request",
+      "requestDeclined": "Request declined",
+      "askAgainAt": "Ask again from {{date}}",
+      "askDialog": {
+        "title": "Ask to join {{team}}",
+        "confirm": "Send the request",
+        "messageLabel": "Message (optional)",
+        "messageDescription": "Tell the team admins why you would like to join. Only they read it."
+      }
     },
     "teamDescription": {
       "label": "Team description",
@@ -3004,7 +3015,15 @@
           "lastName": "Last name",
           "role": "Role"
         },
-        "title": "Team members"
+        "title": "Team members",
+        "joinRequests": {
+          "title": "Pending requests",
+          "sentOn": "Asked on {{date}}",
+          "refusedOn": "Refused on {{date}}",
+          "accept": "Accept",
+          "refuse": "Refuse",
+          "acceptAnyway": "Accept anyway"
+        }
       },
       "navigation": {
         "leaveTeam": "Leave team",
@@ -3064,11 +3083,12 @@
         },
         "joiningMode": {
           "label": "Joining mode",
-          "support": "Users can join your team freely or by invitation only.",
+          "support": "Users can join your team freely, ask the team admins to let them in, or join by invitation only.",
           "open": "Open",
           "inviteOnly": "Invite only",
           "manual": "Manual only",
-          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link."
+          "privateSupport": "A private team is not listed on the marketplace: a team admin adds its members or shares an invite link.",
+          "onRequest": "On request"
         },
         "visibility": {
           "label": "Team visibility",
@@ -4322,7 +4342,10 @@
       "handledBy": "Handled by {{name}}",
       "handledRemoved": "Resolved: the agent left the marketplace",
       "actions": {
-        "openAgent": "Open the agent"
+        "openAgent": "Open the agent",
+        "accept": "Accept",
+        "refuse": "Refuse",
+        "openTeam": "Open the team"
       },
       "types": {
         "republishNeeded": {
@@ -4337,6 +4360,17 @@
         },
         "unknown": {
           "title": "Notification"
+        },
+        "joinRequested": {
+          "title": "{{name}} asks to join {{team}}",
+          "acceptedBy": "Accepted by {{name}}",
+          "refusedBy": "Refused by {{name}}"
+        },
+        "joinRequestAnswered": {
+          "acceptedTitle": "You joined {{team}}",
+          "acceptedBody": "A team admin accepted your request.",
+          "refusedTitle": "Request to join {{team}} declined",
+          "refusedBody": "A team admin declined your request. You can ask again in 24 hours."
         }
       }
     }

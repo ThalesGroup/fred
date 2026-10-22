@@ -2916,7 +2916,18 @@
     "teamCard": {
       "join": "Rejoindre",
       "inviteOnly": "Sur invitation",
-      "memberCount": "{{count}} membres"
+      "memberCount": "{{count}} membres",
+      "askToJoin": "Demander à rejoindre",
+      "requestSent": "Demande envoyée",
+      "cancelRequest": "Annuler la demande",
+      "requestDeclined": "Demande refusée",
+      "askAgainAt": "Nouvelle demande possible le {{date}}",
+      "askDialog": {
+        "title": "Demander à rejoindre {{team}}",
+        "confirm": "Envoyer la demande",
+        "messageLabel": "Message (facultatif)",
+        "messageDescription": "Expliquez aux administrateurs de l'équipe pourquoi vous souhaitez la rejoindre. Eux seuls le lisent."
+      }
     },
     "teamDescription": {
       "label": "Description de l'équipe",
@@ -3004,7 +3015,15 @@
           "lastName": "Nom",
           "role": "Rôle"
         },
-        "title": "Membres de l'équipe"
+        "title": "Membres de l'équipe",
+        "joinRequests": {
+          "title": "Demandes en attente",
+          "sentOn": "Demandé le {{date}}",
+          "refusedOn": "Refusé le {{date}}",
+          "accept": "Accepter",
+          "refuse": "Refuser",
+          "acceptAnyway": "Accepter quand même"
+        }
       },
       "navigation": {
         "leaveTeam": "Quitter l'équipe",
@@ -3064,11 +3083,12 @@
         },
         "joiningMode": {
           "label": "Mode d'adhésion",
-          "support": "Les utilisateurs peuvent rejoindre votre équipe librement ou uniquement sur invitation.",
+          "support": "Les utilisateurs peuvent rejoindre votre équipe librement, demander aux administrateurs de les accepter, ou uniquement sur invitation.",
           "open": "Ouverte",
           "inviteOnly": "Sur invitation",
           "manual": "Ajout manuel",
-          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation."
+          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : un administrateur de l'équipe ajoute ses membres ou partage un lien d'invitation.",
+          "onRequest": "Sur demande"
         },
         "visibility": {
           "label": "Visibilité de l'équipe",
@@ -4322,7 +4342,10 @@
       "handledBy": "Traitée par {{name}}",
       "handledRemoved": "Résolue : l'agent a quitté la marketplace",
       "actions": {
-        "openAgent": "Ouvrir l'agent"
+        "openAgent": "Ouvrir l'agent",
+        "accept": "Accepter",
+        "refuse": "Refuser",
+        "openTeam": "Ouvrir l'équipe"
       },
       "types": {
         "republishNeeded": {
@@ -4337,6 +4360,17 @@
         },
         "unknown": {
           "title": "Notification"
+        },
+        "joinRequested": {
+          "title": "{{name}} demande à rejoindre {{team}}",
+          "acceptedBy": "Acceptée par {{name}}",
+          "refusedBy": "Refusée par {{name}}"
+        },
+        "joinRequestAnswered": {
+          "acceptedTitle": "Vous avez rejoint {{team}}",
+          "acceptedBody": "Un administrateur de l'équipe a accepté votre demande.",
+          "refusedTitle": "Demande pour rejoindre {{team}} refusée",
+          "refusedBody": "Un administrateur de l'équipe a refusé votre demande. Vous pourrez la renouveler dans 24 heures."
         }
       }
     }
