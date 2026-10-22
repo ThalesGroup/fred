@@ -23,6 +23,8 @@ Keeping them here avoids duplicating the same builders across ``test_fill.py``,
 from __future__ import annotations
 
 import io
+import struct
+import zlib
 from typing import List, Optional, Tuple, TypeVar
 
 from fred_capability_ppt_filler.parser import SlideSchema, parse
@@ -136,6 +138,17 @@ def png_bytes(width: int = 10, height: int = 10, color: str = "red") -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", (width, height), color).save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+def declared_png(width: int, height: int) -> bytes:
+    """A few bytes of PNG header declaring a ``width`` x ``height`` bitmap."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(kind + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", crc)
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IEND", b"")
 
 
 def webp_bytes(width: int = 10, height: int = 10, color: str = "red") -> bytes:

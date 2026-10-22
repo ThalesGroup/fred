@@ -1398,3 +1398,18 @@ async def test_characters_xml_refuses_are_dropped_and_the_deck_builds(monkeypatc
     deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
     title = cast(Any, deck.slides[1].shapes.title).text
     assert title.split() == ["bad", "title"]
+
+
+@pytest.mark.asyncio
+async def test_a_picture_too_large_is_left_out_with_a_note(monkeypatch):
+    from deck_builders import declared_png
+
+    docs = FakeDocs({"huge-1": (declared_png(9_000, 9_000), "image/png")})
+    text, result = await _build(
+        monkeypatch,
+        docs=docs,
+        variety="off",
+        slides=[COVER, {"title": "Site", "image": "huge-1"}],
+    )
+    assert not result.is_error, text
+    assert "image 'huge-1' was left out: the picture is too large" in text

@@ -31,7 +31,6 @@ opaque failure.
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import logging
 import re
@@ -62,7 +61,6 @@ from fred_sdk.contracts.context import (
 )
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
-from PIL import Image, UnidentifiedImageError
 from pydantic import (
     AliasChoices,
     BaseModel,
@@ -130,6 +128,7 @@ from fred_capability_ppt_filler.concurrency import (
 )
 from fred_capability_ppt_filler.fill import (
     BuildNote,
+    ImageBudgetError,
     BuiltSlide,
     PptPreviewPart,
     _pdf_key_for,
@@ -138,7 +137,12 @@ from fred_capability_ppt_filler.fill import (
     _sanitize_output_file_name,
     cast_ui_part,
 )
-from fred_capability_ppt_filler.images import NotAnImageError, prepare_picture
+from fred_capability_ppt_filler.images import (
+    NotAnImageError,
+    PictureTooLargeError,
+    open_picture,
+    prepare_picture,
+)
 from fred_capability_ppt_filler.pptx_archive import slide_fingerprints
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -691,15 +695,26 @@ def _to_changes(validated: Any) -> List[SlideChange]:
     ]
 
 
-def _loads(raw: object) -> bool:
-    """Whether fetched bytes open as an image (header only: cheap)."""
+def _unusable(raw: object) -> Optional[str]:
+    """Why fetched bytes are no picture to place, None when they are one
+    (header only: cheap)."""
+    if isinstance(raw, ImageBudgetError):
+        return f"was left out: {raw}"
     if not isinstance(raw, bytes):
-        return False
+        return _NOT_AN_IMAGE
     try:
-        with Image.open(io.BytesIO(raw)):
-            return True
-    except (UnidentifiedImageError, OSError, ValueError):
-        return False
+        open_picture(raw).close()
+    except PictureTooLargeError as exc:
+        return f"was left out: {exc}"
+    except NotAnImageError:
+        return _NOT_AN_IMAGE
+    return None
+
+
+_NOT_AN_IMAGE = (
+    "is not a usable image document and was left out: use a document_id from "
+    "list_images_in_folder"
+)
 
 
 def _assign_loadable(
@@ -711,7 +726,7 @@ def _assign_loadable(
 ) -> Tuple[Assignment, DeckPlan, List[str]]:
     """Assign with the pictures that load only: an id that does not must not
     count as filling a framed picture zone, which would then show its frame."""
-    bad = sorted(uid for uid, raw in prefetched.items() if not _loads(raw))
+    bad = sorted(uid for uid, raw in prefetched.items() if _unusable(raw))
     if bad:
         plan = plan.model_copy(
             update={"slides": [_without(slide, set(bad)) for slide in plan.slides]}
@@ -1636,11 +1651,7 @@ def build_builder_tools(
             logger.exception("[PPTBUILD][TOOL] plan evaluation FAILED")
             return _error(_INTERNAL_ERROR)
         first, called = not called, True
-        unloadable = [
-            f"image '{uid}' is not a usable image document and was left out: use a "
-            "document_id from list_images_in_folder."
-            for uid in bad
-        ]
+        unloadable = [f"image '{uid}' {_unusable(prefetched[uid])}." for uid in bad]
         workspace = services.workspace_fs
         session_id = identity.session_id
         asking = first and variety != "off"

@@ -106,6 +106,17 @@ _PDF_SUFFIX = ".pdf"
 # Bounded concurrency for the image-bytes prefetch (#2183): a template with
 # many image fields must not fire an unbounded burst of document fetches.
 _IMAGE_PREFETCH_CONCURRENCY = 4
+# Per deck: the pictures are held in memory until the render ends.
+MAX_PREFETCHED_IMAGES = 40
+MAX_PREFETCHED_IMAGE_BYTES = 60 * 1024 * 1024
+_BYTES_OVER = (
+    f"the deck's pictures exceed {MAX_PREFETCHED_IMAGE_BYTES // (1024 * 1024)} MB"
+)
+
+
+class ImageBudgetError(Exception):
+    """A picture left out: the deck already holds as many as it may."""
+
 
 # Top-level (non-slide) arg the model fills with a human-friendly name for the
 # output deck. Optional: when missing/blank we fall back to _OUTPUT_FILE_NAME.
@@ -435,17 +446,30 @@ async def _prefetch_image_bytes(
     port = services.document_content
     assert port is not None  # guarded by the caller (has_image_fields check)
     semaphore = asyncio.Semaphore(_IMAGE_PREFETCH_CONCURRENCY)
+    ordered = sorted(document_uids)
+    fetched_bytes = 0
 
     async def _fetch_one(document_uid: str) -> Tuple[str, object]:
+        nonlocal fetched_bytes
         async with semaphore:
+            if fetched_bytes > MAX_PREFETCHED_IMAGE_BYTES:
+                return document_uid, ImageBudgetError(_BYTES_OVER)
             try:
                 raw_blob = await port.fetch_raw(document_uid)
-                return document_uid, raw_blob.content
             except Exception as exc:  # noqa: BLE001 - surfaced per-key below
                 return document_uid, exc
+            fetched_bytes += len(raw_blob.content)
+            if fetched_bytes > MAX_PREFETCHED_IMAGE_BYTES:
+                return document_uid, ImageBudgetError(_BYTES_OVER)
+            return document_uid, raw_blob.content
 
-    results = await asyncio.gather(*(_fetch_one(uid) for uid in document_uids))
-    return dict(results)
+    kept = ordered[:MAX_PREFETCHED_IMAGES]
+    results = dict(await asyncio.gather(*(_fetch_one(uid) for uid in kept)))
+    for document_uid in ordered[MAX_PREFETCHED_IMAGES:]:
+        results[document_uid] = ImageBudgetError(
+            f"a deck holds at most {MAX_PREFETCHED_IMAGES} pictures"
+        )
+    return results
 
 
 def _place_images_on_slide(

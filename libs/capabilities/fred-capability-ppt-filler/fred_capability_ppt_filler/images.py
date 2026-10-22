@@ -27,20 +27,55 @@ from PIL import Image, UnidentifiedImageError
 PPTX_EMBEDDABLE_FORMATS = frozenset({"BMP", "GIF", "JPEG", "PNG", "TIFF", "WMF"})
 
 
+# Checked on the header, before any decoding: a slide never needs more, and a
+# small file can declare a bitmap of gigabytes. Pillow's process-wide limit
+# stays as it is for the other code of the pod.
+MAX_PICTURE_PIXELS = 40_000_000
+
+
 class NotAnImageError(ValueError):
     """The bytes are not a usable raster image."""
+
+
+class PictureTooLargeError(NotAnImageError):
+    """The image declares more pixels than a slide picture may hold."""
+
+
+def open_picture(image_bytes: bytes) -> Image.Image:
+    """The image, header read only; raises :class:`NotAnImageError`."""
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+    except Image.DecompressionBombError as exc:
+        raise PictureTooLargeError("the picture is too large") from exc
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise NotAnImageError(f"{type(exc).__name__}: {exc}") from exc
+    width, height = image.size
+    if width * height > MAX_PICTURE_PIXELS:
+        image.close()
+        raise PictureTooLargeError(
+            f"the picture is too large ({width}x{height} pixels, at most "
+            f"{MAX_PICTURE_PIXELS // 1_000_000} million)"
+        )
+    return image
 
 
 def prepare_picture(image_bytes: bytes) -> Tuple[bytes, int, int]:
     """Validate ``image_bytes`` as an image and return ``(embeddable bytes, width, height)``."""
     try:
-        with Image.open(io.BytesIO(image_bytes)) as image:
+        with open_picture(image_bytes) as image:
             width, height = image.size
             if image.format not in PPTX_EMBEDDABLE_FORMATS:
                 buffer = io.BytesIO()
                 image.convert("RGBA").save(buffer, format="PNG")
                 image_bytes = buffer.getvalue()
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    except NotAnImageError:
+        raise
+    except (
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+        Image.DecompressionBombError,
+    ) as exc:
         raise NotAnImageError(f"{type(exc).__name__}: {exc}") from exc
     return image_bytes, width, height
 

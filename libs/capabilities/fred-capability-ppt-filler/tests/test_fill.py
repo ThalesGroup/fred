@@ -1102,3 +1102,21 @@ def test_a_very_long_output_name_is_cut_and_keeps_its_suffix():
     name = fill_mod._sanitize_output_file_name("x" * 500 + ".pptx")
     assert name == "x" * fill_mod._MAX_OUTPUT_STEM + ".pptx"
     assert fill_mod._sanitize_output_file_name("Q3 review") == "Q3 review.pptx"
+
+
+@pytest.mark.asyncio
+async def test_a_deck_s_prefetched_pictures_are_capped_in_number_and_bytes(
+    monkeypatch,
+):
+    docs = FakeDocs({f"d{i:02}": (b"x" * 10, "image/png") for i in range(45)})
+    services = RuntimeServices(document_content=docs)
+    fetched = await fill_mod._prefetch_image_bytes(set(docs.docs), services)
+    over = [uid for uid, raw in fetched.items() if isinstance(raw, Exception)]
+    assert len(docs.fetch_uids) == fill_mod.MAX_PREFETCHED_IMAGES
+    assert len(over) == 5 and "at most 40 pictures" in str(fetched[over[0]])
+
+    monkeypatch.setattr(fill_mod, "MAX_PREFETCHED_IMAGE_BYTES", 25)
+    fetched = await fill_mod._prefetch_image_bytes({"d00", "d01", "d02"}, services)
+    kept = [raw for raw in fetched.values() if isinstance(raw, bytes)]
+    assert len(kept) == 2
+    assert any(isinstance(raw, fill_mod.ImageBudgetError) for raw in fetched.values())
