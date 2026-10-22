@@ -104,6 +104,34 @@ Every discovered model SHALL enter the existing model capability catalog without
 - **WHEN** a chat turn resolves that policy
 - **THEN** it routes to the platform fallback and keeps the stored selection unchanged
 
+### Requirement: Administrators can distinguish manual and discovered models
+
+The Models admin view SHALL separate manually declared models from models returned by discovery. The source of each model SHALL come from profiles actually added by the pod's discovery resolution and SHALL be included in the control-plane admin response. Both sections SHALL retain the same activation and team controls. If an advertised discovery source lacks registered state for URL management, the discovery status SHALL name that source rather than claiming no discovery is configured.
+
+#### Scenario: Mixed model list
+
+- **GIVEN** a pod advertises one static model and one discovered model
+- **WHEN** an administrator opens Features > Models
+- **THEN** each model appears in its corresponding section with its existing controls
+
+#### Scenario: Static profile with a discovery-like identifier
+
+- **GIVEN** a manually declared profile whose identifier resembles a generated discovery profile
+- **WHEN** the Models view renders after discovery
+- **THEN** that profile remains in the manual section
+
+#### Scenario: Discovered models without registered source state
+
+- **GIVEN** the capability list contains a discovered model and the discovery status has no source
+- **WHEN** the Models view renders
+- **THEN** it shows the discovered model and explains that its source is not registered for URL management
+
+#### Scenario: One of several sources is not registered
+
+- **GIVEN** two sources advertise discovered models and only one has registered URL state
+- **WHEN** the Models view renders
+- **THEN** it names the unregistered source while showing the registered source's controls
+
 ### Requirement: Administrators can override a discovery URL
 
 The Models admin view SHALL show each source's YAML and effective URL, last successful check, and refresh result. Opening the view SHALL request a fresh inventory. Overrides SHALL persist and take effect without restarting pods. The view SHALL show new and confirmed removed model counts before model rows. New models SHALL start without a platform default-on grant. Confirmed removed models SHALL remain visible as unavailable, without new activation or selection. A failed refresh SHALL preserve the last successful inventory and SHALL NOT mark any model removed. Clearing an override SHALL restore the YAML URL.
