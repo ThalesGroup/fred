@@ -219,6 +219,9 @@ def _slide_number_from_field(field_name: str) -> Optional[int]:
         return None
 
 
+_MAX_OUTPUT_STEM = 120
+
+
 def _sanitize_output_file_name(raw: object) -> str:
     """Turn a model-provided output name into a safe ``*.pptx`` file name.
 
@@ -234,6 +237,8 @@ def _sanitize_output_file_name(raw: object) -> str:
     name = "".join(c for c in name if c.isprintable() and c not in '<>:"\\|?*')
     if name.lower().endswith(_PPTX_SUFFIX):
         name = name[: -len(_PPTX_SUFFIX)].rstrip()
+    # Bounded: the name is a storage key segment and a download header value.
+    name = name[:_MAX_OUTPUT_STEM].rstrip()
     if not name:
         return _OUTPUT_FILE_NAME
     return f"{name}{_PPTX_SUFFIX}"

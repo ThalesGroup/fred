@@ -1096,3 +1096,9 @@ async def test_middleware_stays_silent_without_a_configured_template():
     await mw.awrap_model_call(request, _passthrough)
 
     assert request.system_message is None
+
+
+def test_a_very_long_output_name_is_cut_and_keeps_its_suffix():
+    name = fill_mod._sanitize_output_file_name("x" * 500 + ".pptx")
+    assert name == "x" * fill_mod._MAX_OUTPUT_STEM + ".pptx"
+    assert fill_mod._sanitize_output_file_name("Q3 review") == "Q3 review.pptx"
