@@ -3,6 +3,7 @@
 {
   "include": ["fred_capability_document_access", "tests"],
   "typeCheckingMode": "standard",
+  "enableExperimentalFeatures": true,
   "reportMissingTypeStubs": false,
   "venvPath": ".",
   "venv": ".venv",

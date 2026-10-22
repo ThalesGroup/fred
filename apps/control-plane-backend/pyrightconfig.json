@@ -1,5 +1,6 @@
 {
   "typeCheckingMode": "standard",
+  "enableExperimentalFeatures": true,
   "venvPath": ".",
   "venv": ".venv",
   "reportUnreachable": "warning"

@@ -361,4 +361,8 @@ class PostgresUserStore(BaseUserStore):
                     UserRow.avatar_object_storage_key.is_not(None),
                 )
             )
-            return {requested[row_id]: key for row_id, key in result.all()}
+            return {
+                requested[row_id]: key
+                for row_id, key in result.all()
+                if key is not None
+            }

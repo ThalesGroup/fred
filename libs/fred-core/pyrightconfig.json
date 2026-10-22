@@ -5,6 +5,8 @@
   "venvPath": ".",
   "venv": ".venv",
   "typeCheckingMode": "standard",
+  // Pydantic 2.14 uses TypeForm; basedpyright 1.31 gates its support here.
+  "enableExperimentalFeatures": true,
   "reportMissingTypeStubs": false,
   "reportUnreachable": "warning",
   "extraPaths": ["../fred-pod"],

@@ -4,6 +4,7 @@
     "tests"
   ],
   "typeCheckingMode": "standard",
+  "enableExperimentalFeatures": true,
   "reportMissingTypeStubs": false,
   "reportUnreachable": "warning",
   "venvPath": ".",
