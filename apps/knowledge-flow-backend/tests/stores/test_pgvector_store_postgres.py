@@ -19,8 +19,8 @@ store a deployment uses.
 Needs the `vector` extension, which `scripts/docker-compose.postgres.yml` does
 not provide; point FRED_PGVECTOR_DSN at a disposable pgvector database, e.g.
 
-    docker run -d --rm -p 5434:5432 -e POSTGRES_PASSWORD=test pgvector/pgvector:pg15
-    FRED_PGVECTOR_DSN=postgresql://postgres:test@localhost:5434/postgres \\
+    docker run -d --rm -p 5434:5432 -e POSTGRES_PASSWORD=<password> pgvector/pgvector:pg15
+    FRED_PGVECTOR_DSN=postgresql://postgres:<password>@localhost:5434/postgres \\
         .venv/bin/pytest tests/stores/test_pgvector_store_postgres.py -m integration
 """
 
