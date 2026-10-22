@@ -1153,6 +1153,9 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # deployment before this feature). V1 is chat-only — no
     # language/embedding/image sibling field exists here.
     platform_chat_model_binding: ModelBinding | None = None
+    platform_chat_model_fallback: ModelBinding | None = None
+    model_discovery_urls: dict[str, str] = Field(default_factory=dict)
+    confirmed_removed_chat_profiles: dict[str, str] = Field(default_factory=dict)
     # Platform-wide platform prompt, resolved fresh on this same per-turn call —
     # same trust boundary as the two fields above: it becomes the FIRST block
     # of the composed system prompt, ahead of every agent template, so a stale or

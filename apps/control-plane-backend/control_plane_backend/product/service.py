@@ -894,6 +894,7 @@ class PodModelCatalog:
 
     entries: list[CapabilityCatalogEntry] = field(default_factory=list)
     default_chat_profile_id: str | None = None
+    discovery_default_profile_id: str | None = None
     agent_chat_profile_overrides: dict[str, str] = field(default_factory=dict)
 
 
@@ -1035,6 +1036,14 @@ async def _model_capabilities_for_source_uncached(
         default_chat_profile_id=(
             raw_default
             if isinstance(raw_default := payload.get("default_chat_profile_id"), str)
+            else None
+        ),
+        discovery_default_profile_id=(
+            raw_discovery_default
+            if isinstance(
+                raw_discovery_default := payload.get("discovery_default_profile_id"),
+                str,
+            )
             else None
         ),
         agent_chat_profile_overrides={
@@ -3686,8 +3695,12 @@ async def get_runtime_binding_for_team(
             session=session
         )
         binding = await resolve_platform_chat_model_binding(deps, session=session)
+        fallback = await deps.get_platform_model_fallback_store().get(session=session)
+        discovery_states = await deps.get_model_discovery_state_store().list_all(
+            session=session
+        )
         prompt = await resolve_platform_prompt_text(deps, session=session)
-        return reasoning, binding, prompt
+        return reasoning, binding, fallback, discovery_states, prompt
 
     team_result, platform_result = await asyncio.gather(
         _in_read_session(deps, _team_reads),
@@ -3696,9 +3709,19 @@ async def get_runtime_binding_for_team(
     if team_result is None:
         return None
     instance, all_team_settings, routing_policy = team_result
-    reasoning_enabled_model_ids, platform_chat_model_binding, platform_prompt = (
-        platform_result
-    )
+    (
+        reasoning_enabled_model_ids,
+        platform_chat_model_binding,
+        platform_chat_model_fallback,
+        discovery_states,
+        platform_prompt,
+    ) = platform_result
+    confirmed_removed_chat_profiles = {
+        profile_id: item["id"]
+        for state in discovery_states
+        for item in state.removed
+        for profile_id in item.get("chat_profile_ids", [])
+    }
     # Ship only the settings slices of the capabilities this instance selected
     # (CAPAB-01, RFC §8.2); the pod carries each to `CapabilityContext`.
     selected = set(instance.tuning.selected_capability_ids or [])
@@ -3722,6 +3745,12 @@ async def get_runtime_binding_for_team(
             else []
         ),
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_chat_model_fallback=platform_chat_model_fallback,
+        model_discovery_urls={
+            state.source_id: state.active_url or state.yaml_url
+            for state in discovery_states
+        },
+        confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
     )
 

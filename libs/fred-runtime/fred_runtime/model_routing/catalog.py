@@ -27,7 +27,7 @@ from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 import yaml
@@ -60,6 +60,30 @@ def _valid_model_id(value: object) -> bool:
         and value == value.strip()
         and all(ord(char) >= 32 and ord(char) != 127 for char in value)
     )
+
+
+def base_url_from_models_url(models_url: str) -> str:
+    parts = urlsplit(models_url)
+    if (
+        models_url != models_url.strip()
+        or any(ord(char) < 32 or ord(char) == 127 for char in models_url)
+        or parts.scheme not in {"http", "https"}
+        or not parts.hostname
+        or parts.username is not None
+        or parts.password is not None
+        or parts.query
+        or parts.fragment
+        or "?" in models_url
+        or "#" in models_url
+        or not parts.path.endswith("/models")
+        or parts.path.endswith("//models")
+    ):
+        raise ValueError(
+            "discovery URL must be an HTTP(S) /models URL without credentials, query or fragment"
+        )
+    return urlunsplit(
+        (parts.scheme, parts.netloc, parts.path[: -len("/models")], "", "")
+    ).rstrip("/")
 
 
 class ModelDiscoverySource(FrozenModel):
@@ -154,11 +178,20 @@ class ModelCatalog(FrozenModel):
         return self
 
     def resolve_discovery(
-        self, *, transport: httpx.BaseTransport | None = None
+        self,
+        *,
+        transport: httpx.BaseTransport | None = None,
+        models_url: str | None = None,
+        allow_missing_default: bool = False,
     ) -> "ModelCatalog":
         source = self.discovery
         if source is None:
             return self
+        base_url = (
+            base_url_from_models_url(models_url)
+            if models_url is not None
+            else source.base_url
+        )
         credential = os.getenv("OPENAI_API_KEY")
         if not credential:
             raise ValueError(
@@ -170,7 +203,7 @@ class ModelCatalog(FrozenModel):
             ) as client:
                 with client.stream(
                     "GET",
-                    f"{source.base_url}/models",
+                    f"{base_url}/models",
                     headers={"Authorization": f"Bearer {credential}"},
                 ) as response:
                     if response.status_code != 200:
@@ -193,6 +226,67 @@ class ModelCatalog(FrozenModel):
             raise ValueError(
                 f"Model discovery source {source.source_id!r} failed: {cause}"
             ) from None
+        return self._resolve_discovery_payload(
+            payload, base_url=base_url, allow_missing_default=allow_missing_default
+        )
+
+    async def resolve_discovery_async(
+        self,
+        *,
+        models_url: str | None = None,
+        allow_missing_default: bool = False,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> "ModelCatalog":
+        source = self.discovery
+        if source is None:
+            return self
+        base_url = (
+            base_url_from_models_url(models_url) if models_url else source.base_url
+        )
+        credential = os.getenv("OPENAI_API_KEY")
+        if not credential:
+            raise ValueError(
+                f"Model discovery source {source.source_id!r} requires OPENAI_API_KEY"
+            )
+        try:
+            async with httpx.AsyncClient(
+                timeout=5.0, follow_redirects=False, transport=transport
+            ) as client:
+                async with client.stream(
+                    "GET",
+                    f"{base_url}/models",
+                    headers={"Authorization": f"Bearer {credential}"},
+                ) as response:
+                    if response.status_code != 200:
+                        raise ValueError(f"HTTP {response.status_code}")
+                    chunks: list[bytes] = []
+                    size = 0
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > 1_048_576:
+                            raise ValueError("response exceeds 1 MiB")
+                        chunks.append(chunk)
+            payload = json.loads(b"".join(chunks))
+        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
+            cause = (
+                str(exc)
+                if isinstance(exc, ValueError)
+                and not isinstance(exc, json.JSONDecodeError)
+                else type(exc).__name__
+            )
+            raise ValueError(
+                f"Model discovery source {source.source_id!r} failed: {cause}"
+            ) from None
+        return self._resolve_discovery_payload(
+            payload, base_url=base_url, allow_missing_default=allow_missing_default
+        )
+
+    def _resolve_discovery_payload(
+        self, payload: Any, *, base_url: str, allow_missing_default: bool
+    ) -> "ModelCatalog":
+        source = self.discovery
+        if source is None:
+            return self
         if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
             raise ValueError(
                 f"Model discovery source {source.source_id!r} returned no data list"
@@ -222,7 +316,9 @@ class ModelCatalog(FrozenModel):
                 )
             seen_ids.add(model_id)
             selected.append(item)
-        if not selected or (included is not None and not included.issubset(seen_ids)):
+        if not allow_missing_default and (
+            not selected or (included is not None and not included.issubset(seen_ids))
+        ):
             raise ValueError(
                 f"Model discovery source {source.source_id!r} has no complete selected inventory"
             )
@@ -249,7 +345,7 @@ class ModelCatalog(FrozenModel):
                 model=ModelConfiguration(
                     provider="openai",
                     name=wire_id,
-                    settings={"base_url": source.base_url},
+                    settings={"base_url": base_url},
                 ),
             )
             if (
@@ -266,15 +362,17 @@ class ModelCatalog(FrozenModel):
                 default_profile_id = profile_id
         defaults = dict(self.default_profile_by_capability)
         if source.default_model_id is not None:
-            if default_profile_id is None:
+            if default_profile_id is None and not allow_missing_default:
                 raise ValueError(
                     f"Model discovery source {source.source_id!r} is missing its default model"
                 )
-            defaults[ModelCapability.CHAT] = default_profile_id
+            if default_profile_id is not None:
+                defaults[ModelCapability.CHAT] = default_profile_id
         return self.model_copy(
             update={
                 "profiles": tuple(profiles),
                 "default_profile_by_capability": defaults,
+                "discovery": source.model_copy(update={"base_url": base_url}),
             }
         )
 

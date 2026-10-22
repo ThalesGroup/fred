@@ -56,6 +56,7 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from hashlib import sha256
 from typing import Any, cast
 from uuid import uuid4
 
@@ -517,7 +518,16 @@ def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
             "Use load_agent_pod_config() for pod startup."
         )
 
-    catalog = load_model_catalog(catalog_path).resolve_discovery()
+    catalog = load_model_catalog(catalog_path)
+    try:
+        catalog = catalog.resolve_discovery()
+    except ValueError as exc:
+        if catalog.discovery is None:
+            raise
+        logger.warning(
+            "[fred-runtime] startup model discovery failed; managed turns can apply the saved URL: %s",
+            exc,
+        )
     policy = catalog.to_policy()
     logger.info(
         "[fred-runtime] model routing from catalog=%s profiles=%d agent_overrides=%d",
@@ -759,6 +769,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         capability_registry: CapabilityRegistry | None = None,
         *,
         platform_chat_model_binding: ModelBinding | None = None,
+        platform_chat_model_fallback: ModelBinding | None = None,
+        confirmed_removed_chat_profiles: dict[str, str] | None = None,
         platform_prompt: str | None = None,
         credentials: OutboundCredentialProvider | None = None,
     ) -> None:
@@ -777,6 +789,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # or any other channel a caller/child could read or forge — the only way
         # to reach it is this private attribute on the invoker itself.
         self._platform_chat_model_binding = platform_chat_model_binding
+        self._platform_chat_model_fallback = platform_chat_model_fallback
+        self._confirmed_removed_chat_profiles = confirmed_removed_chat_profiles or {}
         # TRUSTED, same private channel and same reason: without it a nested
         # `context.invoke_agent(...)` child would compose its prompt with
         # `platform_prompt=None` and silently fall back to the pod default —
@@ -877,6 +891,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             # the parent turn's platform chat binding, never the request's
             # own `context` — that dict has no field for it at all.
             platform_chat_model_binding=self._platform_chat_model_binding,
+            platform_chat_model_fallback=self._platform_chat_model_fallback,
+            confirmed_removed_chat_profiles=self._confirmed_removed_chat_profiles,
             platform_prompt=self._platform_prompt,
         ):
             kind = payload.get("kind")
@@ -1086,6 +1102,8 @@ def _build_runtime_services(
             # None. `binding` is this same request's BoundRuntimeContext —
             # never the child's, and never a client-controlled value.
             platform_chat_model_binding=binding.platform_chat_model_binding,
+            platform_chat_model_fallback=binding.platform_chat_model_fallback,
+            confirmed_removed_chat_profiles=binding.confirmed_removed_chat_profiles,
             platform_prompt=binding.platform_prompt,
         )
         if registry is not None
@@ -1434,6 +1452,12 @@ def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | Non
 
 class _ModelCatalogResponse(BaseModel):
     models: list[_ModelCatalogEntry]
+    preparation_token: str | None = None
+    discovery_source_id: str | None = None
+    discovery_yaml_url: str | None = None
+    discovery_effective_url: str | None = None
+    discovered_model_ids: list[str] = Field(default_factory=list)
+    discovery_default_profile_id: str | None = None
     default_chat_profile_id: str | None = None
     """This pod's `default_profile_by_capability.chat` — the LOWEST precedence
     level (`LLM_ROUTING_FRED.md` §Deterministic precedence), and the one that
@@ -1553,6 +1577,27 @@ def _project_model_catalog_response(catalog: Any) -> _ModelCatalogResponse:
     }
     return _ModelCatalogResponse(
         models=_project_model_catalog_entries(catalog),
+        discovery_source_id=(
+            catalog.discovery.source_id if catalog.discovery else None
+        ),
+        discovery_effective_url=(
+            f"{catalog.discovery.base_url}/models" if catalog.discovery else None
+        ),
+        discovered_model_ids=[
+            profile.capability_id
+            for profile in catalog.profiles
+            if catalog.discovery is not None
+            and profile.profile_id.startswith(
+                f"discovered.chat.{catalog.discovery.source_id}."
+            )
+        ],
+        discovery_default_profile_id=(
+            f"discovered.chat.{catalog.discovery.source_id}."
+            f"{sha256(catalog.discovery.default_model_id.encode('utf-8')).hexdigest()}"
+            if catalog.discovery is not None
+            and catalog.discovery.default_model_id is not None
+            else None
+        ),
         default_chat_profile_id=catalog.default_profile_by_capability.get(
             ModelCapability.CHAT
         ),
@@ -1573,6 +1618,13 @@ def _catalog_for_advertisement(path: str, snapshot: Any | None) -> Any:
     from ..model_routing import load_model_catalog
 
     return snapshot if snapshot is not None else load_model_catalog(path)
+
+
+class _ModelCatalogRefreshRequest(BaseModel):
+    models_url: str | None = None
+    prepare: bool = False
+    preparation_token: str | None = None
+    rollback_token: str | None = None
 
 
 class _ResolvedAgentInstance(BaseModel):
@@ -1601,6 +1653,9 @@ class _ResolvedAgentInstance(BaseModel):
     # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
     # never read off the caller-supplied context either.
     platform_chat_model_binding: ModelBinding | None = None
+    platform_chat_model_fallback: ModelBinding | None = None
+    model_discovery_urls: dict[str, str] = Field(default_factory=dict)
+    confirmed_removed_chat_profiles: dict[str, str] = Field(default_factory=dict)
     # Platform-wide platform prompt, resolved fresh by control-plane on this same
     # call — same trust boundary again: it becomes the FIRST block of the
     # composed system prompt, ahead of every agent template. `None` means no admin
@@ -1645,6 +1700,8 @@ class _ResolvedExecutionTarget:
     # managed agent-instance execution only, and direct execution stays
     # pod-local routing.
     platform_chat_model_binding: ModelBinding | None = None
+    platform_chat_model_fallback: ModelBinding | None = None
+    confirmed_removed_chat_profiles: dict[str, str] = field(default_factory=dict)
     # Platform-wide platform prompt, resolved on the SAME per-turn call as the
     # two fields above and for the same reason. `None` for direct (non-managed)
     # template execution, where the pod default applies instead.
@@ -1928,6 +1985,22 @@ async def _resolve_agent_instance(
         )
 
     resolution = _ResolvedAgentInstance.model_validate(response.json())
+    runtime_config = get_runtime_context().config
+    factory = runtime_config.chat_model_factory
+    if isinstance(factory, RoutedChatModelFactory) and factory.catalog is not None:
+        source = factory.catalog.discovery
+        if source is not None and runtime_config.models_catalog_path:
+            effective_url = resolution.model_discovery_urls.get(source.source_id)
+            if effective_url is not None:
+                try:
+                    await factory.refresh_catalog(
+                        runtime_config.models_catalog_path, models_url=effective_url
+                    )
+                except ValueError as exc:
+                    logger.warning(
+                        "Model discovery URL could not be applied; keeping the active catalog: %s",
+                        exc,
+                    )
     definition = registry.get(resolution.template_agent_id)
     if definition is None:
         raise HTTPException(
@@ -1946,6 +2019,8 @@ async def _resolve_agent_instance(
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
         team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
+        platform_chat_model_fallback=resolution.platform_chat_model_fallback,
+        confirmed_removed_chat_profiles=resolution.confirmed_removed_chat_profiles,
         platform_prompt=resolution.platform_prompt,
     )
 
@@ -3753,6 +3828,8 @@ async def _stream(
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
+    platform_chat_model_fallback: ModelBinding | None = None,
+    confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
 ) -> AsyncGenerator[str, None]:
@@ -3803,6 +3880,8 @@ async def _stream(
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_chat_model_fallback=platform_chat_model_fallback,
+        confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
         owns_run_record=True,
@@ -4397,6 +4476,8 @@ async def _iterate_runtime_event_payloads(
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
+    platform_chat_model_fallback: ModelBinding | None = None,
+    confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
@@ -4420,6 +4501,8 @@ async def _iterate_runtime_event_payloads(
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_chat_model_fallback=platform_chat_model_fallback,
+        confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
         owns_run_record=owns_run_record,
@@ -4508,6 +4591,8 @@ async def _iterate_runtime_event_payloads_inner(
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
+    platform_chat_model_fallback: ModelBinding | None = None,
+    confirmed_removed_chat_profiles: dict[str, str] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
@@ -4690,6 +4775,8 @@ async def _iterate_runtime_event_payloads_inner(
         # request-body field can never set this: unlike
         # chat_default_profile_id above, there is no ctx.get(...) for it at all.
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_chat_model_fallback=platform_chat_model_fallback,
+        confirmed_removed_chat_profiles=confirmed_removed_chat_profiles or {},
         # TRUSTED, same channel: no ctx.get(...) exists for either field.
         team_disabled_model_ids=tuple(team_disabled_model_ids),
         recommended_chat_profile_id=(
@@ -5364,10 +5451,81 @@ def _build_agent_router(
         catalog_path = get_runtime_context().config.models_catalog_path
         if not catalog_path:
             return _ModelCatalogResponse(models=[])
+        factory = get_runtime_context().config.chat_model_factory
         catalog = _catalog_for_advertisement(
-            catalog_path, get_runtime_context().config.model_catalog_snapshot
+            catalog_path,
+            (
+                factory.catalog
+                if isinstance(factory, RoutedChatModelFactory)
+                and factory.catalog is not None
+                and factory.catalog.discovery is not None
+                else None
+            ),
         )
-        return _project_model_catalog_response(catalog)
+        result = _project_model_catalog_response(catalog)
+        if catalog.discovery is not None:
+            from ..model_routing import load_model_catalog
+
+            source = load_model_catalog(catalog_path).discovery
+            if source is not None:
+                result.discovery_yaml_url = f"{source.base_url}/models"
+        return result
+
+    @router.post("/models-catalog/refresh", response_model=_ModelCatalogResponse)
+    async def refresh_models_catalog(
+        body: _ModelCatalogRefreshRequest,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> _ModelCatalogResponse:
+        config = get_runtime_context().config
+        rebac = config.rebac_engine
+        if security_enabled:
+            if caller is None or rebac is None or not rebac.enabled:
+                raise HTTPException(
+                    status_code=403, detail="model_discovery_access_denied"
+                )
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID
+            )
+        factory = config.chat_model_factory
+        if not config.models_catalog_path or not isinstance(
+            factory, RoutedChatModelFactory
+        ):
+            raise HTTPException(status_code=409, detail="model_discovery_unavailable")
+        if factory.catalog is None or factory.catalog.discovery is None:
+            raise HTTPException(status_code=409, detail="model_discovery_unconfigured")
+        try:
+            if body.rollback_token is not None:
+                catalog = await factory.rollback_prepared_catalog(body.rollback_token)
+                token = None
+            elif body.preparation_token is not None:
+                catalog = await factory.activate_prepared_catalog(
+                    body.preparation_token
+                )
+                token = None
+            elif body.models_url is not None and body.prepare:
+                token, catalog = await factory.prepare_catalog(
+                    config.models_catalog_path, models_url=body.models_url
+                )
+            elif body.models_url is not None:
+                catalog = await factory.refresh_catalog(
+                    config.models_catalog_path, models_url=body.models_url, force=True
+                )
+                token = None
+            else:
+                raise HTTPException(
+                    status_code=422,
+                    detail="models_url or preparation_token is required",
+                )
+        except ValueError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from None
+        result = _project_model_catalog_response(catalog)
+        result.preparation_token = token
+        from ..model_routing import load_model_catalog
+
+        source = load_model_catalog(config.models_catalog_path).discovery
+        if source is not None:
+            result.discovery_yaml_url = f"{source.base_url}/models"
+        return result
 
     @router.get("/platform-prompt")
     async def get_platform_prompt_file() -> _PlatformPromptFileResponse:
@@ -6298,6 +6456,8 @@ def _build_agent_router(
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                platform_chat_model_fallback=target.platform_chat_model_fallback,
+                confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
                 owns_run_record=True,
@@ -6406,6 +6566,8 @@ def _build_agent_router(
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                platform_chat_model_fallback=target.platform_chat_model_fallback,
+                confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
                 platform_prompt=target.platform_prompt,
                 credential_provider=target.credential_provider,
                 owns_run_record=True,
@@ -6535,6 +6697,8 @@ def _build_agent_router(
             reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             team_disabled_model_ids=target.team_disabled_model_ids,
             platform_chat_model_binding=target.platform_chat_model_binding,
+            platform_chat_model_fallback=target.platform_chat_model_fallback,
+            confirmed_removed_chat_profiles=target.confirmed_removed_chat_profiles,
             platform_prompt=target.platform_prompt,
             credential_provider=provider,
         )

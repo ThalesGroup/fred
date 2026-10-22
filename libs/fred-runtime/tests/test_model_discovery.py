@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import cast
 
@@ -40,6 +41,7 @@ from fred_runtime.model_routing.provider import RoutedChatModelFactory
 from fred_runtime.model_routing.resolver import ModelRoutingResolver
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    ModelBinding,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -112,6 +114,40 @@ def test_discovery_endpoint_overrides_common_openai_base(monkeypatch) -> None:
     assert "openai_api_base" not in settings
 
 
+def test_static_profiles_remain_routable_when_discovered_inventory_changes(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    catalog = ModelCatalog.model_validate(
+        {
+            "default_profile_by_capability": {"chat": "chat.static"},
+            "profiles": [
+                {
+                    "profile_id": "chat.static",
+                    "capability": "chat",
+                    "model": {"provider": "openai", "name": "static-chat"},
+                }
+            ],
+            "discovery": {
+                "source_id": "gateway",
+                "base_url": "https://models.example/v1",
+            },
+        }
+    )
+    first = catalog.resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    later = catalog.resolve_discovery(
+        transport=_transport({"data": []}), allow_missing_default=True
+    )
+    assert {profile.model.name for profile in first.profiles} == {
+        "static-chat",
+        "chat-a",
+    }
+    assert [profile.model.name for profile in later.profiles] == ["static-chat"]
+    assert later.default_profile_by_capability[ModelCapability.CHAT] == "chat.static"
+
+
 def test_optional_metadata_and_allowlist(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     resolved = _catalog(include_model_ids=["chat-a"]).resolve_discovery(
@@ -135,6 +171,94 @@ def test_optional_metadata_and_allowlist(monkeypatch) -> None:
     assert resolved.profiles[0].context_window_tokens == 32768
     assert resolved.profiles[0].max_input_tokens == 30000
     assert resolved.profiles[0].max_output_tokens == 2048
+
+
+def test_refresh_accepts_confirmed_empty_inventory(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    resolved = _catalog().resolve_discovery(
+        transport=_transport({"data": []}), allow_missing_default=True
+    )
+    assert resolved.profiles == ()
+    assert resolved.default_profile_by_capability == {}
+    assert resolved.to_policy().profiles == ()
+
+
+@pytest.mark.asyncio
+async def test_live_refresh_replaces_verified_catalog_and_keeps_it_on_failure(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_catalog().model_dump(mode="json")))
+    initial = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    second = await factory.refresh_catalog(
+        str(path),
+        force=True,
+        transport=_transport({"data": [{"id": "chat-b"}]}),
+    )
+    assert {profile.model.name for profile in second.profiles} == {"chat-b"}
+    assert factory.catalog is second
+    with pytest.raises(ValueError, match="HTTP 503"):
+        await factory.refresh_catalog(
+            str(path), force=True, transport=_transport({}, status=503)
+        )
+    assert factory.catalog is second
+
+
+@pytest.mark.asyncio
+async def test_concurrent_turns_share_one_discovery_refresh(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(yaml.safe_dump(_catalog().model_dump(mode="json")))
+    initial = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(initial.to_policy()), catalog=initial
+    )
+    calls = 0
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.01)
+        return httpx.Response(200, json={"data": [{"id": "chat-b"}]})
+
+    results = await asyncio.gather(
+        *(
+            factory.refresh_catalog(
+                str(path),
+                models_url="https://other.example/v1/models",
+                transport=httpx.MockTransport(respond),
+            )
+            for _ in range(20)
+        )
+    )
+    assert calls == 1
+    assert all(result is factory.catalog for result in results)
+
+
+def test_models_url_override_changes_inference_base(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://other.example/v1/models"
+        return httpx.Response(200, json={"data": [{"id": "chat-a"}]})
+
+    resolved = _catalog().resolve_discovery(
+        models_url="https://other.example/v1/models",
+        transport=httpx.MockTransport(respond),
+    )
+    assert resolved.profiles[0].model.settings == {
+        "base_url": "https://other.example/v1"
+    }
 
 
 def test_allowlist_ignores_invalid_or_duplicate_excluded_entries(monkeypatch) -> None:
@@ -231,6 +355,27 @@ def test_pod_builder_advertises_its_routing_snapshot(monkeypatch, tmp_path) -> N
         == snapshot.default_profile_by_capability[ModelCapability.CHAT]
     )
     assert factory.with_provider(factory._provider).catalog is resolved
+
+
+def test_pod_can_boot_before_saved_discovery_url_is_applied(
+    monkeypatch, tmp_path
+) -> None:
+    path = tmp_path / "models_catalog.yaml"
+    path.write_text(
+        yaml.safe_dump(_catalog().model_dump(mode="json")), encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        ModelCatalog,
+        "resolve_discovery",
+        lambda self: (_ for _ in ()).throw(ValueError("unavailable")),
+    )
+    config = AgentPodConfig.model_construct()
+    config.set_models_catalog_path(str(path))
+    factory = _build_chat_model_factory(config)
+    assert isinstance(factory, RoutedChatModelFactory)
+    assert factory.catalog is not None
+    assert factory.catalog.discovery is not None
+    assert factory.catalog.profiles == ()
 
 
 def test_policy_loader_resolves_a_discovery_catalog(monkeypatch, tmp_path) -> None:
@@ -346,4 +491,80 @@ def test_discovered_model_uses_existing_grant_and_drift_gates(monkeypatch) -> No
                 (profile.capability_id,),
                 selected_profile="discovered.chat.gateway.removed",
             ),
+        )
+
+
+def test_confirmed_removed_team_default_uses_separate_platform_fallback(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    before = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+    after = _catalog().resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-b"}]}),
+        allow_missing_default=True,
+    )
+    removed = before.profiles[0]
+
+    class Provider:
+        def build_model(self, model_config, *, capability):
+            assert model_config.name == "chat-b"
+            return ToolFriendlyFakeChatModel(responses=[])
+
+    factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(after.to_policy()),
+        provider=Provider(),
+        catalog=after,
+    )
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(
+            team_id="team-a",
+            user_id="user-a",
+            chat_default_profile_id=removed.profile_id,
+        ),
+        portable_context=PortableContext(
+            request_id="request-a",
+            correlation_id="request-a",
+            actor="user-a",
+            tenant="default",
+            environment=PortableEnvironment.DEV,
+            team_id="team-a",
+            user_id="user-a",
+        ),
+        usable_model_ids=(removed.capability_id,),
+        confirmed_removed_chat_profiles={removed.profile_id: removed.capability_id},
+        platform_chat_model_fallback=ModelBinding.model_validate(
+            {
+                "provider": "openai",
+                "name": "chat-b",
+                "settings": {"base_url": "https://models.example/v1"},
+            }
+        ),
+    )
+    _, selection = factory.build_for_chat(
+        definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
+        binding=binding,
+    )
+    assert selection.source.value == "platform_fallback"
+    assert selection.model.name == "chat-b"
+
+    with pytest.raises(TeamRoutingProfileDriftError):
+        factory.build_for_chat(
+            definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
+            binding=binding.model_copy(update={"confirmed_removed_chat_profiles": {}}),
+        )
+
+    no_team_choice = binding.model_copy(
+        update={
+            "runtime_context": binding.runtime_context.model_copy(
+                update={"chat_default_profile_id": None}
+            ),
+            "usable_model_ids": (),
+        }
+    )
+    with pytest.raises(ModelNotUsableError):
+        factory.build_for_chat(
+            definition=cast(AgentDefinition, SimpleNamespace(agent_id="agent-a")),
+            binding=no_team_choice,
         )

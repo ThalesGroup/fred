@@ -978,6 +978,14 @@ class BoundRuntimeContext(FrozenModel):
             "through to the profile-valued levels exactly as before."
         ),
     )
+    platform_chat_model_fallback: ModelBinding | None = Field(
+        default=None,
+        description="Trusted platform fallback used only for a confirmed removed chat profile.",
+    )
+    confirmed_removed_chat_profiles: dict[str, str] = Field(
+        default_factory=dict,
+        description="Trusted removed profile id to model capability id mapping from the last successful inventory.",
+    )
     team_disabled_model_ids: tuple[str, ...] = Field(
         default=(),
         description=(

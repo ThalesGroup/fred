@@ -22,8 +22,12 @@ Provider-style adapters for routed chat-model selection.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Protocol
+from uuid import uuid4
+
+import httpx
 
 if TYPE_CHECKING:
     from .catalog import ModelCatalog
@@ -77,6 +81,7 @@ _INFO_LOGGED_SOURCES = frozenset(
         ModelSelectionSource.USER_CHOICE,
         ModelSelectionSource.INSTANCE_RECOMMENDATION,
         ModelSelectionSource.TEAM_POLICY,
+        ModelSelectionSource.PLATFORM_FALLBACK,
     }
 )
 
@@ -141,9 +146,124 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         provider: ModelProvider | None = None,
         catalog: ModelCatalog | None = None,
     ) -> None:
-        self._resolver = resolver
+        self._snapshot = (resolver, catalog)
         self._provider = provider or FredCoreModelProvider()
-        self.catalog = catalog
+        self._refresh_lock = asyncio.Lock()
+        self._failed_url: str | None = None
+        self._pending_refresh: tuple[str | None, asyncio.Task[ModelCatalog]] | None = (
+            None
+        )
+        self._prepared: dict[str, tuple[ModelRoutingResolver, ModelCatalog]] = {}
+        self._activation_backups: dict[
+            str, tuple[ModelRoutingResolver, ModelCatalog]
+        ] = {}
+        self._active_preparation_token: str | None = None
+
+    @property
+    def catalog(self) -> ModelCatalog | None:
+        return self._snapshot[1]
+
+    @property
+    def _resolver(self) -> ModelRoutingResolver:
+        return self._snapshot[0]
+
+    async def refresh_catalog(
+        self,
+        path: str,
+        *,
+        models_url: str | None = None,
+        force: bool = False,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> ModelCatalog:
+        from .catalog import load_model_catalog
+
+        async with self._refresh_lock:
+            current = self.catalog
+            active_url = (
+                f"{current.discovery.base_url}/models"
+                if current is not None and current.discovery is not None
+                else None
+            )
+            if not force and models_url == active_url and current is not None:
+                return current
+            if not force and models_url == self._failed_url and current is not None:
+                return current
+            pending = self._pending_refresh
+            if pending is not None and pending[0] == models_url:
+                task = pending[1]
+            else:
+                task = asyncio.create_task(
+                    load_model_catalog(path).resolve_discovery_async(
+                        models_url=models_url,
+                        allow_missing_default=True,
+                        transport=transport,
+                    )
+                )
+                self._pending_refresh = (models_url, task)
+        try:
+            catalog = await task
+            resolver = ModelRoutingResolver(catalog.to_policy())
+        except ValueError:
+            async with self._refresh_lock:
+                if (
+                    self._pending_refresh is not None
+                    and self._pending_refresh[1] is task
+                ):
+                    self._pending_refresh = None
+                    self._failed_url = models_url
+            raise
+        async with self._refresh_lock:
+            if self._pending_refresh is not None and self._pending_refresh[1] is task:
+                self._snapshot = (resolver, catalog)
+                self._active_preparation_token = None
+                self._failed_url = None
+                self._pending_refresh = None
+            return self.catalog or catalog
+
+    async def prepare_catalog(
+        self, path: str, *, models_url: str
+    ) -> tuple[str, ModelCatalog]:
+        from .catalog import load_model_catalog
+
+        catalog = await load_model_catalog(path).resolve_discovery_async(
+            models_url=models_url, allow_missing_default=True
+        )
+        resolver = ModelRoutingResolver(catalog.to_policy())
+        token = uuid4().hex
+        async with self._refresh_lock:
+            if len(self._prepared) >= 16:
+                self._prepared.pop(next(iter(self._prepared)))
+            self._prepared[token] = (resolver, catalog)
+        return token, catalog
+
+    async def activate_prepared_catalog(self, token: str) -> ModelCatalog:
+        async with self._refresh_lock:
+            prepared = self._prepared.pop(token, None)
+            if prepared is None:
+                raise ValueError("Prepared model catalog is no longer available")
+            current = self.catalog
+            if current is None:
+                raise ValueError("No active model catalog")
+            self._activation_backups[token] = (self._resolver, current)
+            if len(self._activation_backups) > 16:
+                self._activation_backups.pop(next(iter(self._activation_backups)))
+            self._snapshot = prepared
+            self._active_preparation_token = token
+            self._failed_url = None
+            self._pending_refresh = None
+            return prepared[1]
+
+    async def rollback_prepared_catalog(self, token: str) -> ModelCatalog:
+        async with self._refresh_lock:
+            previous = self._activation_backups.pop(token, None)
+            if previous is not None and self._active_preparation_token == token:
+                self._snapshot = previous
+                self._active_preparation_token = None
+                self._pending_refresh = None
+            current = self.catalog
+            if current is None:
+                raise ValueError("No active model catalog")
+            return current
 
     def with_provider(self, provider: ModelProvider) -> RoutedChatModelFactory:
         """Same routing, models built by `provider` (a pod serving extra providers)."""
@@ -275,7 +395,11 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         # `model.name`: siblings on one gateway share that wire name.
         capability_id = selection.capability_id
         if (
-            selection.source != ModelSelectionSource.PLATFORM_BINDING
+            selection.source
+            not in {
+                ModelSelectionSource.PLATFORM_BINDING,
+                ModelSelectionSource.PLATFORM_FALLBACK,
+            }
             and binding.usable_model_ids is not None
         ):
             if capability_id not in binding.usable_model_ids:
@@ -416,6 +540,41 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 )
             )
 
+        user_choice = self._accepted_choice(
+            binding.runtime_context.chat_profile_id, binding, level="user_choice"
+        )
+        recommendation = self._accepted_choice(
+            binding.recommended_chat_profile_id,
+            binding,
+            level="instance_recommendation",
+        )
+        removed = binding.confirmed_removed_chat_profiles
+        if definition.agent_id not in self._resolver.agent_overrides_for(capability):
+            candidates = (
+                (binding.runtime_context.chat_profile_id, user_choice),
+                (binding.recommended_chat_profile_id, recommendation),
+                (binding.runtime_context.chat_default_profile_id, None),
+            )
+            for candidate, accepted in candidates:
+                if accepted is not None:
+                    break
+                if (
+                    candidate is None
+                    or self._resolver.profile_or_none(candidate) is not None
+                ):
+                    continue
+                removed_capability_id = removed.get(candidate)
+                if removed_capability_id is None:
+                    continue
+                if removed_capability_id in binding.team_disabled_model_ids:
+                    continue
+                if (
+                    binding.usable_model_ids is not None
+                    and removed_capability_id not in binding.usable_model_ids
+                ):
+                    continue
+                return self._platform_fallback_selection(binding, candidate)
+
         resolution = resolve_effective_chat_profile(
             agent_id=definition.agent_id,
             pod_agent_chat_profile_overrides=self._resolver.agent_overrides_for(
@@ -424,17 +583,31 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             pod_default_chat_profile_id=self._resolver.default_profile_id_for(
                 capability
             ),
-            user_chat_profile_id=self._accepted_choice(
-                binding.runtime_context.chat_profile_id, binding, level="user_choice"
-            ),
-            instance_chat_profile_id=self._accepted_choice(
-                binding.recommended_chat_profile_id,
-                binding,
-                level="instance_recommendation",
-            ),
+            user_chat_profile_id=user_choice,
+            instance_chat_profile_id=recommendation,
             team_chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
         )
         if resolution is None:
+            source = self.catalog.discovery if self.catalog is not None else None
+            if source is not None and source.default_model_id is not None:
+                from hashlib import sha256
+
+                profile_id = (
+                    f"discovered.chat.{source.source_id}."
+                    f"{sha256(source.default_model_id.encode('utf-8')).hexdigest()}"
+                )
+                removed_capability_id = removed.get(profile_id)
+                if removed_capability_id is not None:
+                    if removed_capability_id in binding.team_disabled_model_ids or (
+                        binding.usable_model_ids is not None
+                        and removed_capability_id not in binding.usable_model_ids
+                    ):
+                        raise ModelNotUsableError(
+                            capability_id=removed_capability_id,
+                            provider="openai",
+                            name=source.default_model_id,
+                        )
+                    return self._platform_fallback_selection(binding, profile_id)
             # Same failure the resolver's own default lookup raised before: the
             # catalog declares no chat default and no other level produced one.
             raise ValueError(
@@ -480,6 +653,43 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
             capability_id=profile.capability_id,
+        )
+
+    def _platform_fallback_selection(
+        self, binding: BoundRuntimeContext, removed_profile_id: str
+    ) -> ModelSelection:
+        fallback = binding.platform_chat_model_fallback
+        if fallback is None:
+            raise ValueError(
+                f"Chat profile {removed_profile_id!r} was removed and no platform fallback is configured"
+            )
+        settings = fallback.settings.model_dump(mode="json", exclude_none=True)
+        matching = next(
+            (
+                profile
+                for profile in self._resolver.policy.profiles
+                if profile.capability == ModelCapability.CHAT
+                and profile.model.provider == fallback.provider
+                and profile.model.name == fallback.name
+                and (profile.model.settings or {}).get("base_url")
+                == settings.get("base_url")
+            ),
+            None,
+        )
+        return ModelSelection(
+            source=ModelSelectionSource.PLATFORM_FALLBACK,
+            capability=ModelCapability.CHAT,
+            profile_id=(matching.profile_id if matching else "platform-fallback:chat"),
+            model=ModelConfiguration(
+                provider=fallback.provider,
+                name=fallback.name,
+                settings=settings,
+            ),
+            capability_id=(
+                matching.capability_id
+                if matching
+                else model_capability_id(fallback.provider, fallback.name)
+            ),
         )
 
     def _accepted_choice(

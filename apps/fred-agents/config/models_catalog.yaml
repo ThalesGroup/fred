@@ -15,6 +15,15 @@ common_model_settings:
 
 default_profile_by_capability:
   chat: chat.mistral.small
+
+# Mistral exposes GET https://api.mistral.ai/v1/models. Set OPENAI_API_KEY to
+# a Mistral key, then select chat-only IDs absent from static profiles.
+# discovery:
+#   source_id: mistral
+#   base_url: https://api.mistral.ai/v1
+#   include_model_ids: [mistral-large-latest]
+# Keep the static chat default above, or replace it with discovery.default_model_id.
+
 profiles:
   - profile_id: chat.mistral.medium
     capability: chat

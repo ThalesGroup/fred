@@ -403,6 +403,7 @@ class ModelSelectionSource(str, Enum):
     USER_CHOICE = "user_choice"
     INSTANCE_RECOMMENDATION = "instance_recommendation"
     PLATFORM_BINDING = "platform_binding"
+    PLATFORM_FALLBACK = "platform_fallback"
 
 
 class ModelSelection(FrozenModel):

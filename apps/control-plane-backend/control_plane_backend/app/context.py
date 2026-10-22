@@ -75,6 +75,10 @@ from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionS
 from control_plane_backend.marketplace_settings.store import (
     PlatformMarketplaceSettingsStore,
 )
+from control_plane_backend.model_discovery.store import (
+    ModelDiscoveryStateStore,
+    PlatformModelFallbackStore,
+)
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
@@ -123,6 +127,8 @@ class ApplicationContext:
         self._team_capability_settings_store: TeamCapabilitySettingsStore | None = None
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
+        self._model_discovery_state_store: ModelDiscoveryStateStore | None = None
+        self._platform_model_fallback_store: PlatformModelFallbackStore | None = None
         self._platform_prompt_store: PlatformPromptStore | None = None
         self._creation_assistant_settings_store: (
             CreationAssistantSettingsStore | None
@@ -428,6 +434,20 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_model_binding_store
+
+    def get_model_discovery_state_store(self) -> ModelDiscoveryStateStore:
+        if self._model_discovery_state_store is None:
+            self._model_discovery_state_store = ModelDiscoveryStateStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._model_discovery_state_store
+
+    def get_platform_model_fallback_store(self) -> PlatformModelFallbackStore:
+        if self._platform_model_fallback_store is None:
+            self._platform_model_fallback_store = PlatformModelFallbackStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_model_fallback_store
 
     def get_platform_prompt_store(self) -> PlatformPromptStore:
         if self._platform_prompt_store is None:

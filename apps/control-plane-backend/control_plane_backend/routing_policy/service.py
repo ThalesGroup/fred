@@ -460,10 +460,18 @@ async def resolve_effective_chat_model(
     if pod_models is None:
         return empty
 
-    stored, usable = await asyncio.gather(
+    stored, usable, fallback, discovery_states = await asyncio.gather(
         deps.get_team_routing_policy_store().get(team_id=team_id),
         usable_capability_ids(deps.team_dependencies.rebac, team_id),
+        deps.get_platform_model_fallback_store().get(),
+        deps.get_model_discovery_state_store().list_all(),
     )
+    removed_profiles = {
+        profile_id: item["id"]
+        for state in discovery_states
+        for item in state.removed
+        for profile_id in item.get("chat_profile_ids", [])
+    }
     disabled, reasoning_off = _stored_lists(stored)
     # Chat profile -> its pod entry, for this pod only.
     entry_by_profile = {
@@ -477,9 +485,71 @@ async def resolve_effective_chat_model(
             capability_id not in disabled
         )
 
+    def _fallback_result() -> EffectiveChatModel:
+        if fallback is None:
+            return empty
+        fallback_base_url = fallback.settings.model_dump(
+            mode="json", exclude_none=True
+        ).get("base_url")
+        discovered_id = next(
+            (
+                item["id"]
+                for state in discovery_states
+                if state.active_url is not None
+                and state.active_url.removesuffix("/models") == fallback_base_url
+                for item in state.inventory
+                if item.get("provider") == fallback.provider
+                and item.get("name") == fallback.name
+            ),
+            None,
+        )
+        expected_id = discovered_id or model_capability_id(
+            fallback.provider, fallback.name
+        )
+        fallback_entry = next(
+            (entry for entry in pod_models.entries if entry.id == expected_id), None
+        )
+        fallback_id = fallback_entry.id if fallback_entry is not None else expected_id
+        return EffectiveChatModel(
+            name=fallback.name,
+            display_name=display_name_overrides.get(
+                fallback_id,
+                fallback_entry.model_display_name
+                if fallback_entry is not None
+                else None,
+            ),
+            capability_id=fallback_id,
+            reasoning_enabled=fallback_id in reasoning_enabled_ids,
+            selectable_models=[
+                SelectableChatModel(
+                    profile_id=entry.model_chat_profile_ids[0],
+                    capability_id=entry.id,
+                    name=entry.name,
+                    display_name=display_name_overrides.get(
+                        entry.id, entry.model_display_name
+                    ),
+                    reasoning_enabled=entry.id in reasoning_enabled_ids,
+                    reasoning_default_on=(
+                        entry.id in reasoning_enabled_ids
+                        and entry.id not in reasoning_off
+                    ),
+                )
+                for entry in pod_models.entries
+                if entry.model_chat_profile_ids and _selectable(entry.id)
+            ],
+        )
+
     # Same validation the pod applies before trusting the recommendation.
     recommended = instance.tuning.recommended_chat_profile_id
     recommended_entry = entry_by_profile.get(recommended) if recommended else None
+    if (
+        recommended is not None
+        and recommended_entry is None
+        and recommended in removed_profiles
+        and _selectable(removed_profiles[recommended])
+        and instance.source_agent_id not in pod_models.agent_chat_profile_overrides
+    ):
+        return _fallback_result()
     resolution = resolve_effective_chat_profile(
         agent_id=instance.source_agent_id,
         pod_agent_chat_profile_overrides=pod_models.agent_chat_profile_overrides,
@@ -496,10 +566,21 @@ async def resolve_effective_chat_model(
         ),
     )
     if resolution is None:
+        removed_default = pod_models.discovery_default_profile_id
+        if (
+            removed_default is not None
+            and removed_default in removed_profiles
+            and _selectable(removed_profiles[removed_default])
+        ):
+            return _fallback_result()
         return empty
 
     entry = entry_by_profile.get(resolution.profile_id)
     if entry is None:
+        if resolution.profile_id in removed_profiles and _selectable(
+            removed_profiles[resolution.profile_id]
+        ):
+            return _fallback_result()
         # The winning profile is not a chat profile this pod advertises. For a
         # team-origin id that is exactly the drift
         # `TeamRoutingProfileDriftError` raises at turn time; either way there
