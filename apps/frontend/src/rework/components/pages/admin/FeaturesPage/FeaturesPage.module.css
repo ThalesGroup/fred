@@ -73,7 +73,8 @@
 .modelCell {
   display: grid;
   grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-  gap: var(--spacing-3xs);
+  column-gap: var(--spacing-xs);
+  row-gap: var(--spacing-3xs);
   min-width: 0;
 }
 
