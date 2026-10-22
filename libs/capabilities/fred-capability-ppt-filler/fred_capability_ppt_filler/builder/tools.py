@@ -128,8 +128,8 @@ from fred_capability_ppt_filler.concurrency import (
 )
 from fred_capability_ppt_filler.fill import (
     BuildNote,
-    ImageBudgetError,
     BuiltSlide,
+    ImageBudgetError,
     PptPreviewPart,
     _pdf_key_for,
     _prefetch_image_bytes,
@@ -175,6 +175,10 @@ _BUSY_MESSAGE = (
     "No deck was built: the server is busy building other presentations. Tell the user and "
     "offer to try again in a moment; then make ONE call, never several calls at once."
 )
+
+# The turn waits this long for its preview, queue included; past it the deck is
+# delivered as a download only.
+PREVIEW_WAIT_SECONDS = 75.0
 
 _INTERNAL_ERROR = (
     "No deck was built because of an internal problem. Tell the user and suggest "
@@ -1820,9 +1824,18 @@ def build_builder_tools(
         )
         notes = delta + _designs_line(inventory, deck.slides, patterns) + notes
 
-        pdf_bytes = await convert_office_bytes_to_pdf(
-            result.preview_pptx or result.pptx, suffix=".pptx"
-        )
+        try:
+            pdf_bytes = await asyncio.wait_for(
+                convert_office_bytes_to_pdf(
+                    result.preview_pptx or result.pptx, suffix=".pptx"
+                ),
+                PREVIEW_WAIT_SECONDS,
+            )
+        except asyncio.TimeoutError:  # the conversions are all busy: deliver the file
+            logger.warning(
+                "[PPTBUILD][TOOL] preview skipped after %.0fs", PREVIEW_WAIT_SECONDS
+            )
+            pdf_bytes = None
         pdf_url: Optional[str] = None
         if pdf_bytes is not None:
             try:

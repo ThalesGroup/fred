@@ -86,7 +86,7 @@ def _uploads(content: bytes = TEMPLATE):
 
 @pytest.fixture(autouse=True)
 def offline_conversion(monkeypatch):
-    async def _pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+    async def _pdf(_bytes: bytes, *, suffix: str, **_options):
         return b"%PDF-thumbs"
 
     async def _labels(inventory, template, pdf, port, *, profile_id, use_vision):
@@ -684,3 +684,17 @@ async def test_another_team_cannot_rewrite_an_agent_s_template(analysis_db):
         before.job_id,
         SHA,
     )
+
+
+@pytest.mark.asyncio
+async def test_the_analysis_converts_on_the_background_worker(analysis_db, monkeypatch):
+    seen: list[dict] = []
+
+    async def _pdf(_bytes: bytes, *, suffix: str, **options):
+        seen.append(options)
+        return b"%PDF-thumbs"
+
+    monkeypatch.setattr(analysis_job, "convert_office_bytes_to_pdf", _pdf)
+    await _save(PptBuilderConfig(use_vision=False), _uploads())
+    await drain()
+    assert seen and all(o.get("background") is True for o in seen)

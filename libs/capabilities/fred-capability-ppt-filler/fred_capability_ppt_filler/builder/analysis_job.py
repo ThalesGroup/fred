@@ -919,7 +919,10 @@ async def _analyse(
         raise AnalysisFailed(" | ".join(e.message for e in result.errors))
     deck = await _cpu(build_patterns_deck, template, result.inventory)
     pdf = await convert_office_bytes_to_pdf(
-        deck, suffix=".pptx", timeout_seconds=PATTERNS_PDF_TIMEOUT_SECONDS
+        deck,
+        suffix=".pptx",
+        timeout_seconds=PATTERNS_PDF_TIMEOUT_SECONDS,
+        background=True,
     )
     use_vision, profile_id = parse_labelling_key(key)
     inventory = await label_inventory(

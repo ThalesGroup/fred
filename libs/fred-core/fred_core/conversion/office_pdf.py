@@ -58,6 +58,11 @@ MAX_CONCURRENT_CONVERSIONS = 4
 _conversion_executor = ThreadPoolExecutor(
     max_workers=MAX_CONCURRENT_CONVERSIONS, thread_name_prefix="office2pdf"
 )
+# Work nobody waits on (a template analysis) runs on its own single worker, so
+# a burst of it never takes the slots of the conversions a user waits for.
+_background_executor = ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="office2pdf-background"
+)
 
 # LibreOffice can occasionally hang (font server, first-run profile init). A bounded
 # timeout keeps a stuck conversion from stalling an async agent turn indefinitely.
@@ -181,6 +186,7 @@ async def convert_office_bytes_to_pdf(
     *,
     suffix: str,
     timeout_seconds: float = DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS,
+    background: bool = False,
 ) -> bytes | None:
     """Convert in-memory office-document bytes to PDF bytes, off the event loop and bounded.
 
@@ -188,7 +194,7 @@ async def convert_office_bytes_to_pdf(
     LibreOffice selects its import filter from it, so passing the wrong one fails the
     conversion. Returns the PDF bytes, or ``None`` when the conversion is unavailable or
     fails. Never raises for a conversion problem, so a caller can treat the result as
-    best-effort.
+    best-effort. ``background``: no user waits on it; it queues on its own worker.
 
     Example:
     ```python
@@ -211,7 +217,8 @@ async def convert_office_bytes_to_pdf(
 
     try:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(_conversion_executor, _run)
+        executor = _background_executor if background else _conversion_executor
+        return await loop.run_in_executor(executor, _run)
     except (
         Exception
     ):  # pragma: no cover - defensive: never let conversion break the caller

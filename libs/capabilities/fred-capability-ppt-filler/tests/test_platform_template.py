@@ -91,7 +91,7 @@ class _Authorizer(CapabilityTeamAuthorizer):
 def offline_conversion(monkeypatch):
     labelled: list[tuple[Any, Any, bool]] = []
 
-    async def _pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+    async def _pdf(_bytes: bytes, *, suffix: str, **_options):
         return b"%PDF-thumbs"
 
     async def _labels(inventory, template, pdf, port, *, profile_id, use_vision):

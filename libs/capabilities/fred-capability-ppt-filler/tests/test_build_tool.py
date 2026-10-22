@@ -1413,3 +1413,21 @@ async def test_a_picture_too_large_is_left_out_with_a_note(monkeypatch):
     )
     assert not result.is_error, text
     assert "image 'huge-1' was left out: the picture is too large" in text
+
+
+@pytest.mark.asyncio
+async def test_a_preview_stuck_in_the_queue_leaves_the_deck_download_only(
+    monkeypatch, preview_union
+):
+    async def _stuck(_bytes: bytes, *, suffix: str, **_options):
+        await asyncio.sleep(30)
+
+    config, assets = _configured()
+    workspace = FakeWorkspace()
+    tools = _tools(_ctx(config, assets=assets, workspace=workspace))
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _stuck)
+    monkeypatch.setattr(tools_mod, "PREVIEW_WAIT_SECONDS", 0.05)
+    text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[COVER])
+    assert not result.is_error and "only the download" in text
+    assert result.ui_parts[0].kind.value == "download"
+    assert [w["path"][-5:] for w in workspace.writes] == [".pptx"]
