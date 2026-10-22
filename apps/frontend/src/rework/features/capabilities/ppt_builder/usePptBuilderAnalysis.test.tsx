@@ -32,6 +32,9 @@ const analysis = vi.hoisted(() => ({
   options: [] as { skip?: boolean; pollingInterval?: number }[],
   refetch: vi.fn(),
   readinessCheck: vi.fn(),
+  platform: { data: undefined, isLoading: false } as { data?: unknown; isLoading: boolean },
+  builtinOptions: [] as { skip?: boolean }[],
+  configValues: { template_sha256: "abc" } as Record<string, unknown>,
 }));
 
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
@@ -39,7 +42,11 @@ vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
     analysis.options.push(options);
     return { ...analysis.state, refetch: analysis.refetch };
   },
-  useGetPptBuilderBuiltinQuery: () => ({ data: undefined }),
+  useGetPptBuilderBuiltinQuery: (_arg: unknown, options: { skip?: boolean }) => {
+    analysis.builtinOptions.push(options);
+    return { data: undefined };
+  },
+  useGetPptBuilderPlatformQuery: () => analysis.platform,
 }));
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => true }));
@@ -83,7 +90,7 @@ function Harness() {
   result = usePptBuilderAnalysis({
     teamId: "team",
     agentInstanceId: "agent",
-    configValues: { template_sha256: SHA },
+    configValues: analysis.configValues,
     onConfigChange: () => {},
     assetFiles: {},
     onAssetFileChange: () => {},
@@ -100,6 +107,9 @@ const polling = () => analysis.options[analysis.options.length - 1].pollingInter
 
 beforeEach(() => {
   analysis.options = [];
+  analysis.builtinOptions = [];
+  analysis.platform = { data: undefined, isLoading: false };
+  analysis.configValues = { template_sha256: SHA };
   analysis.readinessCheck.mockReset().mockReturnValue(Promise.resolve());
   analysis.refetch.mockReset();
   container = document.createElement("div");
@@ -167,5 +177,36 @@ describe("usePptBuilderAnalysis", () => {
     expect(result.refreshing).toBe(false);
     expect(result.effective?.patterns?.[0].id).toBe("new");
     expect(polling()).toBe(0);
+  });
+
+  it("builds on the administrator's template, with its slide edits, when the agent has none", () => {
+    analysis.configValues = { overrides: [{ pattern_id: "slide:1", label: "Agent edit" }] };
+    analysis.platform = {
+      isLoading: false,
+      data: {
+        analysis: status({
+          status: "succeeded",
+          has_thumbnails: true,
+          inventory: { slide_width: 1, slide_height: 1, patterns: [PATTERN] },
+        }),
+        template_filename: "brand.pptx",
+        overrides: [{ pattern_id: "slide:1", label: "Admin edit" }],
+      },
+    };
+    show({});
+    expect(result.phase).toBe("builtin");
+    expect(result.platformTemplate).toEqual({ filename: "brand.pptx" });
+    expect(result.effective?.patterns?.[0].label).toBe("Admin edit");
+    expect(result.previewSource).toEqual({ kind: "platform" });
+    expect(analysis.builtinOptions[analysis.builtinOptions.length - 1].skip).toBe(true);
+  });
+
+  it("falls back to the built-in template while no platform template is in effect", () => {
+    analysis.configValues = {};
+    analysis.platform = { isLoading: false, data: { analysis: null, replacement: status({ status: "pending" }) } };
+    show({});
+    expect(result.platformTemplate).toBeNull();
+    expect(result.previewSource).toEqual({ kind: "builtin" });
+    expect(analysis.builtinOptions[analysis.builtinOptions.length - 1].skip).toBe(false);
   });
 });

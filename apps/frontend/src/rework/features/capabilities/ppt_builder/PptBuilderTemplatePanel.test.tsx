@@ -98,6 +98,7 @@ function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> =
     error: null,
     canRerun: false,
     refreshing: false,
+    platformTemplate: null,
     effective: null,
     summary: null,
     droppedOverrides: [],
@@ -297,6 +298,18 @@ describe("PptBuilderTemplatePanel", () => {
     expect(text).toContain("capability.ppt_builder.form.review");
     expect(text).toContain("capability.ppt_builder.fields.use_vision.title");
     expect(text).toContain("capability.ppt_builder.fields.variety_check.title");
+  });
+
+  it("names the administrator's template when the agent has none and one is in effect", () => {
+    renderPanel(analysis("builtin", { hasPersistedTemplate: false, platformTemplate: { filename: "brand.pptx" } }));
+    const text = container.textContent ?? "";
+    expect(text).toContain("capability.ppt_builder.form.adminTemplate");
+    expect(text).not.toContain("capability.ppt_builder.form.builtInTemplate");
+    // An own template still overrides it.
+    expect(text).toContain("capability.ppt_builder.form.uploadTemplate");
+
+    renderPanel(analysis("builtin", { hasPersistedTemplate: false }));
+    expect(container.textContent).toContain("capability.ppt_builder.form.builtInTemplate");
   });
 
   it("brings the slide review up when the analysis set slides aside", () => {

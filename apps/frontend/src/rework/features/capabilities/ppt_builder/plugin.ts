@@ -16,6 +16,7 @@ import type { CapabilityUiPlugin } from "../types";
 import { PptPreviewPane } from "../ppt_filler/PptPreviewPane";
 import { useHasPptPreview } from "../ppt_filler/useSessionPptPreview";
 import { PptBuilderConfigForm } from "./PptBuilderConfigForm";
+import { PptBuilderPlatformPanel } from "./PptBuilderPlatformPanel";
 
 export const pptBuilderCapability: CapabilityUiPlugin = {
   id: "ppt_builder",
@@ -24,6 +25,8 @@ export const pptBuilderCapability: CapabilityUiPlugin = {
   // declares the same preview pane for when it is active alone; with both on,
   // the side-panel registry offers the pane once.
   configWidgets: { ppt_builder_template: PptBuilderConfigForm },
+  // The platform default template, set in Admin > Features.
+  platformPanel: PptBuilderPlatformPanel,
   sidePanels: {
     ppt_preview_pane: {
       Component: PptPreviewPane,

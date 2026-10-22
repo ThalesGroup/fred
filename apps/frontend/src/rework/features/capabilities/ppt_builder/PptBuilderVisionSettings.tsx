@@ -32,9 +32,11 @@ interface Props {
   configValues: Record<string, unknown>;
   onConfigChange: (key: string, value: unknown) => void;
   vision: VisionAvailability;
+  /** The first option's label: the model used when none is picked. */
+  defaultModelLabel?: string;
 }
 
-export function PptBuilderVisionSettings({ disabled, configValues, onConfigChange, vision }: Props) {
+export function PptBuilderVisionSettings({ disabled, configValues, onConfigChange, vision, defaultModelLabel }: Props) {
   const { t } = useTranslation();
   const unavailable = vision.available === false;
   const useVision = !unavailable && configValues[USE_VISION_KEY] !== false;
@@ -45,7 +47,7 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
     {
       value: AGENT_DEFAULT,
       key: "agent-default",
-      label: t("capability.ppt_builder.fields.labelling_model.agentDefault"),
+      label: defaultModelLabel ?? t("capability.ppt_builder.fields.labelling_model.agentDefault"),
     },
     ...vision.visionProfiles.map((profile) => ({
       value: profile.profile_id,

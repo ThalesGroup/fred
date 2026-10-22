@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // The patterns PDF (one page per inventory pattern) behind the review
-// thumbnails, as a blob URL: the agent's analysed template or the built-in
-// one. Binary responses are the sanctioned raw-fetch exception.
+// thumbnails, as a blob URL: the agent's analysed template, the platform
+// default or the built-in one. Binary responses are the sanctioned raw-fetch exception.
 
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
@@ -22,7 +22,11 @@ import { fetchAuthedBlob } from "../../../../utils/downloadUtils";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
 import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
 
-export type PreviewSource = { kind: "analysis"; instanceId: string } | { kind: "builtin" } | null;
+export type PreviewSource =
+  | { kind: "analysis"; instanceId: string }
+  | { kind: "builtin" }
+  | { kind: "platform" }
+  | null;
 
 export interface PatternsPreview {
   objectUrl: string | null;
@@ -42,7 +46,9 @@ export function usePatternsPreview(source: PreviewSource): PatternsPreview {
     ? null
     : source.kind === "analysis"
       ? `/analysis/${encodeURIComponent(source.instanceId)}/patterns.pdf`
-      : "/builtin/patterns.pdf";
+      : source.kind === "platform"
+        ? "/platform/patterns.pdf"
+        : "/builtin/patterns.pdf";
 
   useEffect(() => {
     if (!path || !baseUrl) {

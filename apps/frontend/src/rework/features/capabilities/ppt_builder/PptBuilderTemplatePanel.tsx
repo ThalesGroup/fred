@@ -58,7 +58,11 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
       <div className={styles.summaryRow}>
         <p className={styles.summary}>
           {t(
-            phase === "builtin" ? "capability.ppt_builder.form.summaryBuiltin" : "capability.ppt_builder.form.summary",
+            phase !== "builtin"
+              ? "capability.ppt_builder.form.summary"
+              : analysis.platformTemplate
+                ? "capability.ppt_builder.form.summaryPlatform"
+                : "capability.ppt_builder.form.summaryBuiltin",
             { patterns: summary.patterns, excluded: summary.excluded },
           )}
         </p>
@@ -118,6 +122,15 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
             <Chip
               label={t("capability.ppt_builder.form.currentTemplate")}
               leading={<Icon category="outlined" type="check_circle" />}
+            />
+          ) : analysis.platformTemplate ? (
+            <Chip
+              label={
+                analysis.platformTemplate.filename
+                  ? t("capability.ppt_builder.form.adminTemplate", { name: analysis.platformTemplate.filename })
+                  : t("capability.ppt_builder.form.adminTemplateUnnamed")
+              }
+              leading={<Icon category="outlined" type="admin_panel_settings" />}
             />
           ) : (
             <Chip

@@ -436,7 +436,10 @@
         "summaryBuiltin": "Template intégré : {{patterns}} slides prêtes à l'emploi.",
         "review": "Vérifier les slides",
         "templateGuide": "Comment préparer son template ?",
-        "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce template et seront abandonnées au prochain enregistrement."
+        "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce template et seront abandonnées au prochain enregistrement.",
+        "adminTemplate": "Template défini par l'administrateur : {{name}}",
+        "adminTemplateUnnamed": "Template défini par l'administrateur",
+        "summaryPlatform": "Template de l'administrateur : {{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté."
       },
       "analysis": {
         "staged": "Le template sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
@@ -540,6 +543,45 @@
           "intent_shown_otherwise_highlight_column": "La colonne mise en avant est affichée en gras seulement, pour rester lisible sur les couleurs sombres du tableau.",
           "illustrative_data": "Les chiffres de cette slide sont illustratifs : ils ne viennent pas de vos documents."
         }
+      },
+      "platform": {
+        "intro": "Les agents qui n'ont pas de template à eux construisent leurs présentations sur celui-ci.",
+        "loading": "Chargement du template de la plateforme…",
+        "loadError": "Le template de la plateforme n'a pas pu être chargé.",
+        "current": "Template de la plateforme : {{name}}",
+        "fredTemplate": "Template Fred (intégré)",
+        "upload": "Téléverser un template .pptx",
+        "replace": "Remplacer le template",
+        "uploadAria": "Fichier de template PowerPoint de la plateforme",
+        "uploaded": "Template envoyé : sa lecture a commencé.",
+        "uploadError": "Le template n'a pas été accepté.",
+        "analysing": {
+          "keepCurrent": "Lecture de {{name}} en cours… Les agents gardent le template actuel jusqu'à la fin.",
+          "keepFred": "Lecture de {{name}} en cours… Les agents gardent le template Fred jusqu'à la fin."
+        },
+        "failed": {
+          "keepCurrent": "{{name}} n'a pas pu être lu. Les agents gardent le template actuel ; relancez la lecture ou téléversez un autre fichier.",
+          "keepFred": "{{name}} n'a pas pu être lu. Les agents gardent le template Fred ; relancez la lecture ou téléversez un autre fichier."
+        },
+        "refreshing": "Nouvelle lecture du template… Les agents gardent la lecture précédente jusqu'à la fin.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. Les agents continuent de l'utiliser ; relancez la lecture pour profiter des dernières améliorations.",
+        "defaultModel": "Le modèle d'IA par défaut de la plateforme",
+        "rerun": "Relancer la lecture",
+        "rerunStarted": "Nouvelle lecture lancée.",
+        "rerunError": "La lecture n'a pas pu être relancée.",
+        "reset": "Réinitialiser au template Fred",
+        "resetDone": "Le template Fred est de nouveau utilisé.",
+        "resetError": "Le template n'a pas pu être réinitialisé.",
+        "resetConfirm": {
+          "title": "Revenir au template Fred ?",
+          "message": "Le template de la plateforme et vos corrections de slides seront supprimés. Les agents sans template à eux reviendront au template Fred.",
+          "confirm": "Réinitialiser",
+          "cancel": "Annuler"
+        },
+        "overridesSaved": "Corrections des slides enregistrées.",
+        "overridesError": "Les corrections des slides n'ont pas pu être enregistrées.",
+        "patternsPdf": "PDF des slides",
+        "pdfError": "Le PDF des slides n'a pas pu être téléchargé."
       }
     }
   },
@@ -1474,7 +1516,11 @@
           "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
           "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
         },
-        "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
+        "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement.",
+        "platformSettings": "Réglages de la plateforme",
+        "platformDrawer": {
+          "title": "{{name}} : réglages de la plateforme"
+        }
       },
       "platformModelBindings": {
         "openButton": "Modèles par défaut",

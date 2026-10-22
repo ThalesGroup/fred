@@ -22,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useGetPptBuilderAnalysisQuery,
   useGetPptBuilderBuiltinQuery,
+  useGetPptBuilderPlatformQuery,
   type AnalysisStatusResponse,
   type TemplateInventory,
 } from "./api/pptBuilderCapabilityOpenApi";
@@ -46,10 +47,11 @@ import {
 export const TEMPLATE_SLOT = "template";
 
 const POLL_MS = 3000;
+const NO_OVERRIDES: PatternOverride[] = [];
 
 /** What the panel shows about the template. */
 export type AnalysisPhase =
-  | "builtin" // no template: the built-in one is used
+  | "builtin" // no template: the platform default is used (the built-in one unless replaced)
   | "staged" // a file is picked; it is analysed after the save
   | "unknown" // a template is saved but its analysis cannot be read (yet)
   | AnalysisStatusResponse["status"];
@@ -94,6 +96,8 @@ export interface PptBuilderAnalysis {
   canRerun: boolean;
   /** An outdated analysis is being re-read; its old inventory is shown meanwhile. */
   refreshing: boolean;
+  /** No template of its own and the administrator's is in effect (else the built-in one). */
+  platformTemplate: { filename: string | null } | null;
   /** The inventory with the overrides applied (what the agent will see). */
   effective: TemplateInventory | null;
   summary: InventorySummary | null;
@@ -130,7 +134,13 @@ export function usePptBuilderAnalysis({
   const phase = analysisPhase({ stagedFile, templateSha, status });
   const refreshing = phase === "succeeded" && status?.refreshing === true;
   const usesBuiltin = phase === "builtin";
-  const { data: builtin } = useGetPptBuilderBuiltinQuery(undefined, { skip: !usesBuiltin || !routed });
+  // Without a template of its own the agent builds on the platform default:
+  // the administrator's once analysed, else the built-in one.
+  const platformQuery = useGetPptBuilderPlatformQuery(undefined, { skip: !usesBuiltin || !routed });
+  const platform = platformQuery.data?.analysis?.inventory ? platformQuery.data : undefined;
+  const { data: builtin } = useGetPptBuilderBuiltinQuery(undefined, {
+    skip: !usesBuiltin || !routed || platformQuery.isLoading || platform !== undefined,
+  });
 
   // A refresh keeps the row succeeded: poll it too, so its new inventory shows when it ends.
   useEffect(() => {
@@ -150,10 +160,16 @@ export function usePptBuilderAnalysis({
   }, [teamId, agentInstanceId, status, phase, readinessCheck]);
 
   const inventory: TemplateInventory | null =
-    phase === "succeeded" ? (status?.inventory ?? null) : usesBuiltin ? (builtin?.inventory ?? null) : null;
+    phase === "succeeded"
+      ? (status?.inventory ?? null)
+      : usesBuiltin
+        ? (platform?.analysis?.inventory ?? builtin?.inventory ?? null)
+        : null;
+  // The administrator's slide edits apply to the platform template, never the agent's own.
+  const appliedOverrides = usesBuiltin ? (platform?.overrides ?? NO_OVERRIDES) : overrides;
   const effective = useMemo(
-    () => (inventory ? effectiveInventory(inventory, overrides) : null),
-    [inventory, overrides],
+    () => (inventory ? effectiveInventory(inventory, appliedOverrides) : null),
+    [inventory, appliedOverrides],
   );
   const droppedOverrides = useMemo(
     () => (inventory && !usesBuiltin ? unmatchedOverrides(overrides, inventory) : []),
@@ -161,7 +177,11 @@ export function usePptBuilderAnalysis({
   );
 
   const previewSource: PreviewSource = usesBuiltin
-    ? { kind: "builtin" }
+    ? platform
+      ? platform.analysis?.has_thumbnails
+        ? { kind: "platform" }
+        : null
+      : { kind: "builtin" }
     : phase === "succeeded" && status?.has_thumbnails && agentInstanceId
       ? { kind: "analysis", instanceId: agentInstanceId }
       : null;
@@ -174,6 +194,7 @@ export function usePptBuilderAnalysis({
     error: phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null,
     canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
     refreshing,
+    platformTemplate: platform ? { filename: platform.template_filename ?? null } : null,
     effective,
     summary: effective ? summarize(effective) : null,
     droppedOverrides,

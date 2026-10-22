@@ -134,6 +134,12 @@ vi.mock("./CapabilityTeamMatrixDrawer", () => ({
   },
 }));
 
+// Only ppt_builder declares a platform panel here; the drawer is exercised by its panel's own tests.
+vi.mock("../../../../features/capabilities/platformPanelRegistry", () => ({
+  platformPanelFor: (id: string) => (id === "ppt_builder" ? () => null : undefined),
+}));
+vi.mock("./CapabilityPlatformDrawer", () => ({ CapabilityPlatformDrawer: () => null }));
+
 import FeaturesPage from "./FeaturesPage";
 
 function cap(over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablementItem, "id">): CapabilityEnablementItem {
@@ -978,5 +984,15 @@ describe("FeaturesPage reasoning column (REASON-01, MODEL-REASONING-ENABLEMENT-R
       isError: false,
     };
     expect(render()).not.toContain("rework.admin.capabilities.col.reasoning");
+  });
+});
+
+describe("FeaturesPage platform settings action", () => {
+  it("shows the settings action only on capabilities with a platform panel", () => {
+    h.list = { data: { items: [cap({ id: "ppt_builder" })] }, isLoading: false, isError: false };
+    expect(render()).toContain('aria-label="rework.admin.capabilities.platformSettings"');
+
+    h.list = { data: { items: [cap({ id: "web_search" })] }, isLoading: false, isError: false };
+    expect(render()).not.toContain("rework.admin.capabilities.platformSettings");
   });
 });

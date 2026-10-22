@@ -436,7 +436,10 @@
         "summaryBuiltin": "Built-in template: {{patterns}} slides ready to use.",
         "review": "Review slides",
         "templateGuide": "How to prepare your template?",
-        "droppedOverrides": "{{count}} earlier correction(s) no longer match this template and will be dropped on the next save."
+        "droppedOverrides": "{{count}} earlier correction(s) no longer match this template and will be dropped on the next save.",
+        "adminTemplate": "Template set by the administrator: {{name}}",
+        "adminTemplateUnnamed": "Template set by the administrator",
+        "summaryPlatform": "Administrator's template: {{patterns}} slides ready to use, {{excluded}} set aside."
       },
       "analysis": {
         "staged": "The template will be read once you save the agent. The agent becomes available when that is done.",
@@ -540,6 +543,45 @@
           "intent_shown_otherwise_highlight_column": "The emphasised column is shown in bold only, to stay readable on the table's dark colours.",
           "illustrative_data": "The figures on this slide are illustrative: they do not come from your documents."
         }
+      },
+      "platform": {
+        "intro": "Agents without a template of their own build their presentations on this one.",
+        "loading": "Loading the platform template…",
+        "loadError": "The platform template could not be loaded.",
+        "current": "Platform template: {{name}}",
+        "fredTemplate": "Fred template (built-in)",
+        "upload": "Upload a .pptx template",
+        "replace": "Replace the template",
+        "uploadAria": "Platform PowerPoint template file",
+        "uploaded": "Template uploaded: its analysis has started.",
+        "uploadError": "The template was not accepted.",
+        "analysing": {
+          "keepCurrent": "Analysing {{name}}… Agents keep the current template until it ends.",
+          "keepFred": "Analysing {{name}}… Agents keep the Fred template until it ends."
+        },
+        "failed": {
+          "keepCurrent": "{{name}} could not be read. Agents keep the current template; run the analysis again or upload another file.",
+          "keepFred": "{{name}} could not be read. Agents keep the Fred template; run the analysis again or upload another file."
+        },
+        "refreshing": "Reading the template again… Agents keep the previous reading until it ends.",
+        "outdated": "This template was read by an older version. Agents keep using it; run the analysis again to get the latest improvements.",
+        "defaultModel": "The platform's default AI model",
+        "rerun": "Run the analysis again",
+        "rerunStarted": "Analysis started again.",
+        "rerunError": "The analysis could not be started again.",
+        "reset": "Reset to the Fred template",
+        "resetDone": "The Fred template is in use again.",
+        "resetError": "The template could not be reset.",
+        "resetConfirm": {
+          "title": "Go back to the Fred template?",
+          "message": "The platform template and your slide edits will be deleted. Agents without a template of their own will go back to the Fred template.",
+          "confirm": "Reset",
+          "cancel": "Cancel"
+        },
+        "overridesSaved": "Slide edits saved.",
+        "overridesError": "The slide edits could not be saved.",
+        "patternsPdf": "Slides PDF",
+        "pdfError": "The slides PDF could not be downloaded."
       }
     }
   },
@@ -1474,7 +1516,11 @@
           "depNeedsSettings": "{{dep}} needs its own settings for this team — enable it from its own row first.",
           "thenSettingsForm": "You will then be asked to fill in {{agent}}'s settings before it is enabled."
         },
-        "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet."
+        "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet.",
+        "platformSettings": "Platform settings",
+        "platformDrawer": {
+          "title": "{{name}}: platform settings"
+        }
       },
       "platformModelBindings": {
         "openButton": "Model defaults",
