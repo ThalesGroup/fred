@@ -214,6 +214,6 @@ class SetNotificationTypeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(
-        description="False stops sending the type and deletes every notification "
-        "of it already sent; true only affects new events."
+        description="False hides every notification of the type from everyone, "
+        "those already sent included; true shows every one still there."
     )

@@ -407,7 +407,7 @@ async def test_every_type_is_listed_and_on_by_default(
 
 
 @pytest.mark.asyncio
-async def test_turning_a_type_off_deletes_it_for_everyone_and_stops_sending_it(
+async def test_turning_a_type_off_hides_it_from_everyone_until_it_is_back_on(
     admin_service: NotificationService,
 ) -> None:
     await _notify(admin_service, "alice", "bob")
@@ -419,6 +419,10 @@ async def test_turning_a_type_off_deletes_it_for_everyone_and_stops_sending_it(
     for uid in ("alice", "bob"):
         page = await admin_service.list_page(_user(uid), limit=50, before=None)
         assert page.items == []
+        assert (await admin_service.summary(_user(uid))).unseen_count == 0
+    # Clear all only deletes what the user sees: the hidden one survives it.
+    await admin_service.clear(_user("alice"))
+    # Emitted while off: stored, still hidden.
     await _notify(admin_service, "alice", group="g2")
     page = await admin_service.list_page(_user("alice"), limit=50, before=None)
     assert page.items == []
@@ -427,10 +431,10 @@ async def test_turning_a_type_off_deletes_it_for_everyone_and_stops_sending_it(
         _user("admin"), NotificationType.AGENT_REPUBLISH_NEEDED, True
     )
     assert on.enabled and on.disabled_at is None
-    # Back on: only new events, nothing deleted comes back.
-    await _notify(admin_service, "alice", group="g3")
     page = await admin_service.list_page(_user("alice"), limit=50, before=None)
-    assert len(page.items) == 1
+    # Both come back: the one sent before turning it off and the one sent while off.
+    assert len(page.items) == 2
+    assert (await admin_service.summary(_user("alice"))).unseen_count == 2
 
 
 @pytest.mark.asyncio

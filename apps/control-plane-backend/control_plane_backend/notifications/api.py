@@ -161,7 +161,7 @@ async def set_notification_type(
     notifications: Notifications,
     user: KeycloakUser = Depends(get_current_user),
 ) -> NotificationTypeSetting:
-    """Off deletes every notification of the type already sent, for everyone."""
+    """Off hides every notification of the type from everyone until it is on again."""
     return await notifications.set_type_enabled(
         user, notification_type, request.enabled
     )

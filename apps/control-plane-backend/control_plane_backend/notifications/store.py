@@ -13,7 +13,8 @@
 # limitations under the License.
 
 """Storage of notifications. No authorization here: every caller-facing method
-takes the recipient and only ever touches that recipient's unexpired rows."""
+takes the recipient and only ever touches the rows that recipient can see:
+unexpired, and of a type the platform has not turned off."""
 
 from __future__ import annotations
 
@@ -132,6 +133,7 @@ class NotificationStore:
         return [
             NotificationRow.recipient_id == recipient_id,
             NotificationRow.expires_at > now,
+            NotificationRow.type.not_in(select(DisabledNotificationTypeRow.type)),
         ]
 
     async def upsert(self, drafts: Sequence[NotificationDraft]) -> None:
@@ -289,8 +291,8 @@ class NotificationStore:
             )
             return rowcount(result) > 0
 
-    async def delete_all(self, recipient_id: str) -> int:
-        """ "Clear all": every row but the open decisions still waiting for one."""
+    async def delete_all(self, recipient_id: str) -> None:
+        """ "Clear all": every visible row but the open decisions still waiting."""
         decisions = [
             p.TYPE.value for p in NotificationPayload.__subclasses__() if p.DECISION
         ]
@@ -299,12 +301,11 @@ class NotificationStore:
             NotificationRow.handled_at.is_(None),
         )
         async with use_session(self._sessions) as s:
-            result = await s.execute(
+            await s.execute(
                 delete(NotificationRow).where(
-                    NotificationRow.recipient_id == recipient_id, ~waiting
+                    *self._mine(recipient_id, utcnow()), ~waiting
                 )
             )
-            return rowcount(result)
 
     async def delete_expired(self, *, limit: int) -> int:
         """Delete at most `limit` expired rows; returns how many went."""
@@ -358,16 +359,11 @@ class NotificationStore:
                 for row in rows
             }
 
-    async def disable_type(self, type_: str, *, disabled_by: str | None) -> int:
-        """Turn `type_` off and delete every sent notification of it, in one
-        transaction. Returns how many notifications went."""
+    async def disable_type(self, type_: str, *, disabled_by: str | None) -> None:
+        """Hide every notification of `type_`, sent or to come, until it is on again."""
         async with use_session(self._sessions) as s:
             if await s.get(DisabledNotificationTypeRow, type_) is None:
                 s.add(DisabledNotificationTypeRow(type=type_, disabled_by=disabled_by))
-            result = await s.execute(
-                delete(NotificationRow).where(NotificationRow.type == type_)
-            )
-            return rowcount(result)
 
     async def enable_type(self, type_: str) -> None:
         async with use_session(self._sessions) as s:

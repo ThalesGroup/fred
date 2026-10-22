@@ -123,8 +123,6 @@ class NotificationService:
     async def notify(self, drafts: Sequence[NotificationDraft]) -> None:
         """Emit in one insert; on failure, logs ids only."""
         try:
-            disabled = await self._store.disabled_types()
-            drafts = [d for d in drafts if d.payload.TYPE.value not in disabled]
             drafts = await self._allowed_recipients(drafts)
             if not drafts:
                 return
@@ -306,20 +304,18 @@ class NotificationService:
     async def set_type_enabled(
         self, user: KeycloakUser, type_: NotificationType, enabled: bool
     ) -> NotificationTypeSetting:
-        """Off deletes every sent notification of the type for everyone; back on
-        only affects new events."""
+        """Off hides the type's notifications from everyone, those already sent
+        included; back on shows every one still there."""
         await self._require_manage_platform(user)
-        deleted = 0
         if enabled:
             await self._store.enable_type(type_.value)
         else:
-            deleted = await self._store.disable_type(type_.value, disabled_by=user.uid)
+            await self._store.disable_type(type_.value, disabled_by=user.uid)
         emit_audit_log(
             "platform.notification_type.updated",
             actor_uid=user.uid,
             notification_type=type_.value,
             enabled=enabled,
-            deleted_notifications=deleted,
         )
         disabled = await self._store.disabled_types()
         return _setting(type_, disabled.get(type_.value))
