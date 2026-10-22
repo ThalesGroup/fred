@@ -59,10 +59,11 @@
   overflow-y: auto;
 }
 
+/* Same gap between cards as the popover's own padding around them. */
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-2xs);
   margin: 0;
   padding: 0;
 }
