@@ -46,6 +46,14 @@ def _make_app(kpi=None) -> tuple[FastAPI, MagicMock]:
     def ready():
         return {"ready": True}
 
+    @app.get("/control-plane/v1/notifications/summary")
+    def notification_summary():
+        return {"unseen_count": 0}
+
+    @app.get("/control-plane/v1/notifications")
+    def notifications():
+        return {"items": []}
+
     @app.get("/error")
     def error():
         raise ValueError("boom")
@@ -116,6 +124,12 @@ class TestKPIMiddlewareSkipPaths:
     def test_ready_suffix_not_emitted(self) -> None:
         self.client.get("/api/v1/ready")
         self.spy.assert_not_called()
+
+    def test_notification_badge_poll_not_emitted(self) -> None:
+        self.client.get("/control-plane/v1/notifications/summary")
+        self.spy.assert_not_called()
+        self.client.get("/control-plane/v1/notifications")
+        self.spy.assert_called_once()
 
 
 class TestKPIMiddlewareFailSafe:

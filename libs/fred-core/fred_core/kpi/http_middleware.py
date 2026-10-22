@@ -27,8 +27,9 @@ from fred_core.security.oidc import decode_jwt
 
 logger = logging.getLogger(__name__)
 
-# Paths whose suffixes are skipped — health and readiness probes add no analytics value.
-_SKIP_SUFFIXES = ("/healthz", "/ready")
+# Probes and the notification badge poll (every open tab, every 15 s) add no
+# analytics value, only one OpenSearch event per call.
+_SKIP_SUFFIXES = ("/healthz", "/ready", "/notifications/summary")
 
 KPIWriterSource = Union[BaseKPIWriter, Callable[[], BaseKPIWriter]]
 _UNHANDLED_EXCEPTION_TYPE = "fred.unhandled_exception_type"
