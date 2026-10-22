@@ -60,7 +60,7 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
 
     # Chroma's validate_where() requires that each where expression dict has
     # exactly one top-level operator key.
-    clauses: List[Dict[str, Dict]] = []
+    clauses: List[Dict[str, Any]] = []
 
     def _encode_value(value: Any) -> Any:
         if isinstance(value, list):
@@ -71,8 +71,10 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
     # ---- Tag IDs ----
     if search_filter.tag_ids is not None:
         if search_filter.tag_ids:
-            tag_values = [json.dumps([t]) for t in search_filter.tag_ids]
-            clauses.append({"tag_ids": {"$in": tag_values}})
+            tag_ids = [str(t) for t in search_filter.tag_ids]
+            # Native arrays match any member; older chunks hold a one-folder JSON string.
+            legacy = {"tag_ids": {"$in": [json.dumps([t]) for t in tag_ids]}}
+            clauses.append({"$or": [legacy, *({"tag_ids": {"$contains": t}} for t in tag_ids)]})
         else:
             # Empty list = user has no authorized tags → match nothing
             clauses.append({"tag_ids": {"$eq": "__impossible_match__"}})
@@ -120,6 +122,9 @@ def sanitize_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
     for k, v in meta.items():
         if isinstance(v, datetime):
             clean[k] = v.isoformat()
+        elif k == "tag_ids" and isinstance(v, list) and v:
+            # Kept native so a folder filter can match one member of several.
+            clean[k] = [str(t) for t in v]
         elif isinstance(v, list):
             # always JSON encode, even single element or empty
             json_encoded = json.dumps(v)
