@@ -4851,11 +4851,8 @@ team home and in team settings. Full behavior: OpenSpec `team-description`.
 ## 67. Contract Notes — platform admin team editing (2026-10-16, #3145)
 
 **Route.** `PATCH /teams/{team_id}/registry`, gated on
-`organization#can_edit_team_info` for name and description. Requests with
-nonempty `add_admin_ids` or `remove_admin_ids` additionally require
-`organization#can_edit_team_registry` before any write. `team_manager` holds
-only the first permission; `platform_admin` holds both. Body
-`EditTeamRegistryRequest`; response
+`organization#can_edit_team_registry` (`platform_admin` only; `team_manager`
+keeps `POST /teams` but not this). Body `EditTeamRegistryRequest`; response
 `TeamWithPermissions`, built without the caller's `can_read` (they need not be
 a member).
 

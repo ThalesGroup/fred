@@ -200,7 +200,7 @@ export default function AdminTeamsPage() {
             },
           ]
         : []),
-      ...(canManageTeams
+      ...(canAdmin
         ? [
             {
               label: "",
@@ -220,7 +220,7 @@ export default function AdminTeamsPage() {
           ]
         : []),
     ],
-    [t, canManageTeams, admissionEnabled, admissionLocked, accessTeams, runMutationAction, setAdmissionTeam, showError],
+    [t, canAdmin, admissionEnabled, admissionLocked, accessTeams, runMutationAction, setAdmissionTeam, showError],
   );
 
   return (
@@ -296,11 +296,7 @@ export default function AdminTeamsPage() {
         )}
       </section>
       {teamForm && (
-        <TeamFormDialog
-          team={teamForm === "create" ? undefined : teamForm}
-          canEditAdmins={canAdmin}
-          onClose={() => setTeamForm(null)}
-        />
+        <TeamFormDialog team={teamForm === "create" ? undefined : teamForm} onClose={() => setTeamForm(null)} />
       )}
       {admissionEnabled && selectedLinkTeam && (
         <PlatformAccessLinkManager team={selectedLinkTeam} onClose={() => setLinkTeam(undefined)} />

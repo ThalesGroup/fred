@@ -1,9 +1,9 @@
 ---
 schema: 1
-title: "Delegate Platform Access and team information management"
+title: "Delegate Platform Access administration"
 impact: minor
 configuration: none
-configuration_reason: "No configuration keys or defaults change; the authorization model gains two role permissions."
+configuration_reason: "No configuration keys or defaults change; the authorization model gains one delegated role and permission."
 ---
 
 ## Applicability
@@ -28,8 +28,8 @@ A platform administrator may grant `platform_access_manager` after deployment.
 
 Grant `platform_access_manager` to a test user and confirm they can manage
 filtering, the whitelist and a Free link while being denied unrelated admin
-routes. Grant `team_manager` to another test user and confirm they can edit a
-team name and description while Free links and admin nomination are denied.
+routes. Grant `team_manager` to another test user and confirm they can create
+and list teams while registry editing and Free links are denied.
 
 ## Rollback
 

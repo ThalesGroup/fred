@@ -253,7 +253,6 @@ class OrganizationPermission(str, Enum):
     CAN_RESCUE_TEAM_ADMIN = "can_rescue_team_admin"
     # Reassign admins of any team; name and description have a narrower gate.
     CAN_EDIT_TEAM_REGISTRY = "can_edit_team_registry"
-    CAN_EDIT_TEAM_INFO = "can_edit_team_info"
 
     # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: platform_observer's own named
     # capability (platform_admin included via the platform_observer union) —

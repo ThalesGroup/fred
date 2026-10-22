@@ -358,8 +358,8 @@ listing and team-information edits are delegable:
   `team_admin` to a named user, **only if the team currently has zero
   `team_admin`** — mechanically inert against any team with an active admin.
   Kept as the break-glass path for a team with no admin at all.
-- **`can_edit_team_registry`** → `PATCH /teams/{team_id}/registry`: adds or
-  removes `team_admin`s of any team, at any time
+- **`can_edit_team_registry`** → `PATCH /teams/{team_id}/registry`: renames,
+  re-describes and adds or removes `team_admin`s of any team, at any time
   (decided with the team on 2026-10-16, reversing the former "never reassign
   an existing team's admins" rule). Bounded instead of forbidden:
   `platform_admin` only, never delegated; the caller gains no relation unless
@@ -367,9 +367,6 @@ listing and team-information edits are delegable:
   added admin still waits for the charter (`pending_team_admin`); every edit
   writes one `team.registry.edited` audit event (actor, team, fields, ids
   added and removed).
-- **`can_edit_team_info`** → the same PATCH route for name and description
-  only. `team_manager` holds it; a request adding or removing admins also
-  requires `can_edit_team_registry` before any write.
 
 ### Delegated admin roles - `team_manager`, `platform_access_manager`, `feature_manager`, `prompt_editor`
 
@@ -378,9 +375,8 @@ teams also handed them import/export, platform reset and user administration.
 Four narrower roles own one admin surface each, and every one of them is
 `[user] or platform_admin` so an admin never loses a surface:
 
-- **`team_manager`** → `can_create_team`, `can_list_all_teams` and
-  `can_edit_team_info` (`/admin/teams`). It creates teams and edits their
-  names and descriptions. `can_delete_team`, `can_rescue_team_admin` and
+- **`team_manager`** → `can_create_team` and `can_list_all_teams`
+  (`/admin/teams`). `can_delete_team`, `can_rescue_team_admin` and
   `can_edit_team_registry` stay `platform_admin`-only. It has no Platform
   Access authority, including Free settings and Free links.
   `can_list_all_teams` is included because without it the page renders empty

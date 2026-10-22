@@ -159,10 +159,7 @@ async def test_platform_admin_edits_name_description_and_admins(
         store.teams["t1"].description
         == "Runs the evaluation campaigns of every product."
     )
-    assert rebac.permission_checks == [
-        OrganizationPermission.CAN_EDIT_TEAM_INFO,
-        OrganizationPermission.CAN_EDIT_TEAM_REGISTRY,
-    ]
+    assert rebac.permission_checks == [OrganizationPermission.CAN_EDIT_TEAM_REGISTRY]
     assert rebac.roles["carol"] == {RelationType.TEAM_ADMIN}
     # A removed admin stays in the team as a plain member.
     assert rebac.roles["bob"] == {RelationType.TEAM_MEMBER}
@@ -206,8 +203,7 @@ async def test_removed_admin_keeps_their_other_roles(
 @pytest.mark.asyncio
 async def test_team_manager_cannot_edit_a_team(audit: list) -> None:
     rebac = _RosterRebac(
-        {"alice": {RelationType.TEAM_ADMIN}},
-        granted=_TEAM_MANAGER_GRANTS | {OrganizationPermission.CAN_EDIT_TEAM_INFO},
+        {"alice": {RelationType.TEAM_ADMIN}}, granted=_TEAM_MANAGER_GRANTS
     )
     store = _store()
 
@@ -219,34 +215,17 @@ async def test_team_manager_cannot_edit_a_team(audit: list) -> None:
             _deps(rebac, store),
         )
 
+    with pytest.raises(AuthorizationError):
+        await edit_team_registry(
+            _team_manager(),
+            TeamId("t1"),
+            EditTeamRegistryRequest(name="Mine"),
+            _deps(rebac, store),
+        )
+
     assert store.teams["t1"].name == "Northbridge"
     assert rebac.added_relations == []
     assert audit == []
-
-
-@pytest.mark.asyncio
-async def test_team_manager_edits_details_without_admin_changes(
-    monkeypatch: pytest.MonkeyPatch, audit: list
-) -> None:
-    rebac = _RosterRebac(
-        {"alice": {RelationType.TEAM_ADMIN}},
-        granted=_TEAM_MANAGER_GRANTS | {OrganizationPermission.CAN_EDIT_TEAM_INFO},
-    )
-    store = _store()
-    _stub_team_projection(monkeypatch)
-
-    await edit_team_registry(
-        _team_manager(),
-        TeamId("t1"),
-        EditTeamRegistryRequest(name="New name", description="A new team description."),
-        _deps(rebac, store),
-    )
-
-    assert store.teams["t1"].name == "New name"
-    assert store.teams["t1"].description == "A new team description."
-    assert OrganizationPermission.CAN_EDIT_TEAM_REGISTRY not in rebac.permission_checks
-    assert rebac.added_relations == []
-    assert audit[0][0] == "team.registry.edited"
 
 
 @pytest.mark.asyncio

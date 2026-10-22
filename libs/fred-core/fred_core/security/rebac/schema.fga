@@ -57,7 +57,6 @@ type organization
   define can_delete_team: platform_admin
   define can_rescue_team_admin: platform_admin
   define can_edit_team_registry: platform_admin
-  define can_edit_team_info: team_manager
 
   # AUTHZ-05 review item 8a (RFC Part 6 §29-32): the legacy Keycloak
   # `admin`/`editor`/`viewer` bridge is removed. Admin-tier capabilities

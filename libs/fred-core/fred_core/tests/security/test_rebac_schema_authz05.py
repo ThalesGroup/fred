@@ -240,7 +240,7 @@ def test_destructive_team_registry_capabilities_stay_platform_admin_only() -> No
         }, f"{capability} must be platform_admin-only."
 
 
-def test_delegated_platform_access_and_team_info_are_isolated() -> None:
+def test_delegated_platform_access_is_isolated() -> None:
     organization = _type_definition("organization")
     relations = organization["relations"]
 
@@ -251,9 +251,6 @@ def test_delegated_platform_access_and_team_info_are_isolated() -> None:
     }
     assert relations["can_manage_platform_access"] == {
         "computedUserset": {"relation": "platform_access_manager"}
-    }
-    assert relations["can_edit_team_info"] == {
-        "computedUserset": {"relation": "team_manager"}
     }
     assert {
         child["computedUserset"]["relation"]

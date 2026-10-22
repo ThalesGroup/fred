@@ -1,13 +1,13 @@
 ## Context
 
-See `proposal.md`. The OpenFGA model currently derives all platform access administration from `can_manage_platform`, which also gates unrelated global actions. `team_manager` has `can_create_team` and `can_list_all_teams` only. The registry edit request combines name, description and admin changes. Platform Access already owns both team admission flags and Free-link routes, so one narrow role can cover that complete surface.
+See `proposal.md`. The OpenFGA model currently derives all platform access administration from `can_manage_platform`, which also gates unrelated global actions. `team_manager` has `can_create_team` and `can_list_all_teams` only. Platform Access already owns both team admission flags and Free-link routes, so one narrow role can cover that complete surface.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
 - Make every action in Platform Access usable by a delegated platform access manager, including whitelist, filtering, rules, T0 and Free management.
-- Give team managers name/description controls without allowing admin nomination or any platform access controls.
+- Keep team managers' existing create and list permissions unchanged.
 - Preserve current link enrollment, audit, lockout and `platform_admin` behavior.
 
 **Non-Goals:**
@@ -20,7 +20,7 @@ See `proposal.md`. The OpenFGA model currently derives all platform access admin
 
 ### 1. Add computed organization permissions with explicit role membership
 
-Add `platform_access_manager: [user] or platform_admin` and `can_manage_platform_access: platform_access_manager` to `schema.fga`. Add `can_edit_team_info: team_manager`, leaving `can_edit_team_registry`, team deletion and admin rescue on `platform_admin`. Include `platform_access_manager` in `can_list_all_teams` so its holder can reach the existing Admin Teams Free controls; that read exposes registry metadata and admins' identity summaries, as documented in `REBAC.md`, but grants no registry mutation. As with existing delegated roles, the `platform_admin` union preserves its access. Wire the new role through the role relation enum, role assignment, bootstrap summary, frontend capability list and generated types. This keeps the permissions in the authorization model rather than inferring them from frontend state or a Keycloak role. Reusing `can_manage_platform` would grant platform reset, import/export and unrelated global powers.
+Add `platform_access_manager: [user] or platform_admin` and `can_manage_platform_access: platform_access_manager` to `schema.fga`. Leave `team_manager` and the admin-only team registry permissions unchanged. Include `platform_access_manager` in `can_list_all_teams` so its holder can reach the existing Admin Teams Free controls; that read exposes registry metadata and admins' identity summaries, as documented in `REBAC.md`, but grants no registry mutation. As with existing delegated roles, the `platform_admin` union preserves its access. Wire the new role through the role relation enum, role assignment, bootstrap summary, frontend capability list and generated types. This keeps the permissions in the authorization model rather than inferring them from frontend state or a Keycloak role. Reusing `can_manage_platform` would grant platform reset, import/export and unrelated global powers.
 
 ### 2. Gate full Platform Access with the narrow permission
 
@@ -30,13 +30,9 @@ Change the platform access admin dependency, including Free-link routes, to `can
 
 Keep the existing `GET /admin/platform/access/teams` and `PATCH /admin/platform/access/teams/{team_id}` under `can_manage_platform_access`. The update body changes both `allowed` and `free`, so callers who can toggle Free must hold the complete platform access role. Keep the existing link routes and actor-safeguard transaction. No Free-only API or second permission is needed. Giving `team_manager` these routes would let a team-registry role change platform admission.
 
-### 4. Check registry edit fields before any write
+### 4. Expose only the permitted UI surfaces
 
-The existing registry edit route accepts both details and admin changes. Require `can_edit_team_info` for every request and require `can_edit_team_registry` as well whenever `add_admin_ids` or `remove_admin_ids` is nonempty, before metadata or relations are written. Keep current validation, locking, rename handling and audit. In the shared UI dialog, show admin selection during creation and to platform admins during editing; show only name and description when a team manager edits. A new details endpoint would duplicate validation and audit logic without improving the boundary.
-
-### 5. Expose only the permitted UI surfaces
-
-Add `canManagePlatformAccess` to the bootstrap-derived frontend capabilities and route/navigation gate. Let that role reach the Admin Teams page for Free controls, with Create and Edit hidden unless it also holds `team_manager`; hide Free controls from a caller with only `team_manager`. The server remains authoritative. Update the role selector and French/English labels, regenerate the control-plane client from the OpenAPI contract, and update the endpoint matrix and compact security/product docs.
+Add `canManagePlatformAccess` to the bootstrap-derived frontend capabilities and route/navigation gate. Let that role reach the Admin Teams page for Free controls. Keep Create available to `team_manager` and Edit limited to `platform_admin`; hide Free controls from a caller with only `team_manager`. The server remains authoritative. Update the role selector and French/English labels, regenerate the control-plane client from the OpenAPI contract, and update the endpoint matrix and compact security/product docs.
 
 ## Risks / Trade-offs
 

@@ -491,7 +491,7 @@ operations:
     method: PATCH
     path: /control-plane/v1/teams/{team_id}/registry
     review_status: approved
-    required_permission: can_edit_team_info_and_can_edit_team_registry_for_admin_changes # no writes before both checks
+    required_permission: can_edit_team_registry
   - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/join

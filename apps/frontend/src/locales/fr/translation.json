@@ -2718,7 +2718,7 @@
       "roleDescriptions": {
         "platform_admin": "Administration complète : toutes les pages d'admin, import/export et réinitialisation de la plateforme.",
         "platform_observer": "Accès en lecture seule aux analyses de la plateforme.",
-        "team_manager": "Créer des équipes et modifier leur nom et leur description. Aucun contrôle sur Platform Access.",
+        "team_manager": "Créer des équipes et voir toutes les équipes de la plateforme.",
         "platform_access_manager": "Gérer le filtrage, les listes d'accès, l'admission des équipes, Free et les liens Free.",
         "feature_manager": "Activer ou désactiver les capacités, modèles et gabarits d'agents.",
         "prompt_editor": "Modifier le prompt plateforme ajouté à chaque agent."

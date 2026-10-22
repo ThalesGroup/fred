@@ -7,7 +7,7 @@ Defines what platform-level administrators may do to a collaborative team's regi
 
 ### Requirement: Platform admins edit a team's registry entry
 
-The control plane SHALL let a caller holding `organization#can_edit_team_info` change an existing collaborative team's name and description. This permission SHALL be held by `team_manager` and `platform_admin`. Changing team admins in the same request SHALL additionally require `organization#can_edit_team_registry`, held by `platform_admin` only. A team manager's request to add or remove an admin SHALL receive 403 and SHALL change neither registry fields nor admin relations. A personal space or an unknown team SHALL return 404.
+The control plane SHALL let a caller holding `organization#can_edit_team_registry` change an existing collaborative team's name, description and team admins in one request. `can_edit_team_registry` SHALL be held by `platform_admin` only. A caller without it SHALL receive 403 and nothing SHALL change. A personal space or an unknown team SHALL return 404.
 
 #### Scenario: Platform admin edits a team
 
@@ -16,18 +16,8 @@ The control plane SHALL let a caller holding `organization#can_edit_team_info` c
 
 #### Scenario: Team manager cannot edit
 
-- **WHEN** a caller holding `team_manager` but not `platform_admin` asks to change an existing team's admin roster
-- **THEN** the response is 403 and the roster is unchanged
-
-#### Scenario: Team manager edits team details
-
-- **WHEN** a caller holding `team_manager` but not `platform_admin` changes the name and description of an existing collaborative team
-- **THEN** the response is 200 and the team details change without changing its admins
-
-#### Scenario: Team manager cannot appoint an admin
-
-- **WHEN** a caller holding only `team_manager` sends a name change and asks to add or remove an admin in the same request
-- **THEN** the response is 403 and neither the name nor any admin relation changes
+- **WHEN** a caller holding `team_manager` but not `platform_admin` sends the same request
+- **THEN** the response is 403 and the team is unchanged
 
 #### Scenario: Personal space is not editable
 
@@ -78,7 +68,7 @@ Every successful registry edit SHALL emit one audit event naming the actor, the 
 
 ### Requirement: Admin Teams page creates and edits teams in one dialog
 
-The admin Teams page SHALL show a "Create team" action in its header to every caller allowed to create teams. It SHALL open a dialog with the name, the description (required) and the initial team admins (at least one), and SHALL create the team on confirm. For a caller holding `can_edit_team_info`, each team row SHALL offer an "Edit" action opening the same dialog prefilled with the team's name and description; callers also holding `can_edit_team_registry` SHALL be able to edit the admins there, while team managers SHALL not see or submit admin edits. Confirming SHALL send only what changed. The confirm action SHALL stay disabled while a required field is empty or invalid. Escape SHALL NOT close the dialog, so a draft is not lost by accident. The admin search in the creation or admin-edit form SHALL open from two characters with localized searching and no-match messages, above the dialog rather than clipped by it. Every label and message SHALL exist in French and English.
+The admin Teams page SHALL show a "Create team" action in its header to every caller allowed to create teams. It SHALL open a dialog with the name, the description (required) and the team admins (at least one), and SHALL create the team on confirm. For a caller holding `can_edit_team_registry`, each team row SHALL offer an "Edit" action opening the same dialog prefilled with the team's name, description and admins; confirming SHALL send only what changed. The confirm action SHALL stay disabled while a required field is empty or invalid. Escape SHALL NOT close the dialog, so a draft is not lost by accident. The admin search SHALL open from two characters with localized searching and no-match messages, above the dialog rather than clipped by it. Every label and message SHALL exist in French and English.
 
 #### Scenario: Create from the header
 
@@ -93,17 +83,13 @@ The admin Teams page SHALL show a "Create team" action in its header to every ca
 #### Scenario: No edit action for team managers
 
 - **WHEN** a team manager without `platform_admin` opens the page
-- **THEN** no row SHALL offer an action to edit its admins
-
-#### Scenario: Team manager sees a bounded edit action
-
-- **WHEN** a team manager without `platform_admin` opens the page
-- **THEN** each collaborative team row SHALL offer an "Edit" action for name and description without admin nomination controls
+- **THEN** no row shows an "Edit" action
 
 #### Scenario: Description limit reached
 
 - **WHEN** an admin types a description up to 500 characters
 - **THEN** the field's information line says "500 characters maximum" instead of stopping silently
+
 ### Requirement: Registry refusals are localized
 
 A 409 refusing a team name already taken, the removal of the last active team admin, or a sole replacement still owing the charter SHALL carry a stable `code` (`team_name_taken`, `team_last_admin`, `team_admin_pending_charter`) next to its `detail`. The team dialog SHALL show its own French or English message for each code, and SHALL keep the generic error handling for any other failure.

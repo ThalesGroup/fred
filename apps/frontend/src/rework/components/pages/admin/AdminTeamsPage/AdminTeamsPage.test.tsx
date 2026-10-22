@@ -231,16 +231,13 @@ describe("AdminTeamsPage layout", () => {
     );
   });
 
-  it("offers Edit to team managers", () => {
+  it("offers Edit on every row to a platform admin only", () => {
     render();
     expect(editButtons()).toHaveLength(3);
     h.canAdmin = false;
     rerender();
-    expect(editButtons()).toHaveLength(3);
-    h.canManageTeams = false;
-    rerender();
     expect(editButtons()).toHaveLength(0);
-    expect(buttonByText(container, "rework.adminTeams.createTeam.open")).toBeUndefined();
+    expect(buttonByText(container, "rework.adminTeams.createTeam.open")).toBeDefined();
   });
 
   it("marks the admins still awaiting the charter next to the avatars", () => {
@@ -501,33 +498,6 @@ describe("AdminTeamsPage team edit", () => {
     expect(h.editTeam).toHaveBeenCalledWith({
       teamId: "uid-alpha",
       editTeamRegistryRequest: { description: "Automates the drafting of every monthly report." },
-    });
-  });
-
-  it("lets a team manager edit details without loading or submitting admins", async () => {
-    h.canAdmin = false;
-    h.canManagePlatformAccess = false;
-    openAlpha();
-    expect(dialog()!.querySelectorAll("input")).toHaveLength(1);
-    type(dialog()!.querySelector("textarea")!, "A new description for the team.");
-    await act(async () => save().click());
-    expect(h.editTeam).toHaveBeenCalledWith({
-      teamId: "uid-alpha",
-      editTeamRegistryRequest: { description: "A new description for the team." },
-    });
-  });
-
-  it("lets a team manager update an orphaned team's details", async () => {
-    h.canAdmin = false;
-    h.canManagePlatformAccess = false;
-    render();
-    act(() => editButtons()[1].click());
-    type(dialog()!.querySelector("textarea")!, "A description for the orphaned team.");
-    expect(save().disabled).toBe(false);
-    await act(async () => save().click());
-    expect(h.editTeam).toHaveBeenCalledWith({
-      teamId: "uid-beta",
-      editTeamRegistryRequest: { description: "A description for the orphaned team." },
     });
   });
 

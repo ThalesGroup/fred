@@ -2718,7 +2718,7 @@
       "roleDescriptions": {
         "platform_admin": "Full platform administration: every admin page, import/export and platform reset.",
         "platform_observer": "Read-only access to platform-wide analytics.",
-        "team_manager": "Create teams and edit their names and descriptions. No Platform Access controls.",
+        "team_manager": "Create teams and see every team on the platform.",
         "platform_access_manager": "Manage filtering, whitelists, team admission, Free settings and Free links.",
         "feature_manager": "Enable or disable capabilities, agent templates and models.",
         "prompt_editor": "Edit the platform prompt prepended to every agent."
