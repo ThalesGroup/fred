@@ -88,6 +88,19 @@ def _render(template, inventory, table: PlanTable):
     return result, frame
 
 
+def test_a_french_deck_typesets_its_table_cells(template, inventory):
+    """ "Choix du CRM" makes the deck French: its cells take French spacing."""
+    table = PlanTable(
+        header=["Pays", "Part"], rows=[["Italie : 40 000", "70%"], ["Espagne", "12€"]]
+    )
+    _, frame = _render(template, inventory, table)
+    assert _rows(frame) == [
+        ["Pays", "Part"],
+        ["Italie\u00a0: 40\u202f000", "70\u00a0%"],
+        ["Espagne", "12\u00a0€"],
+    ]
+
+
 def _rows(frame) -> List[List[str]]:
     return [[cell.text for cell in row.cells] for row in frame.table.rows]
 

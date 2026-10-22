@@ -132,6 +132,10 @@ def test_caption_and_notes_follow_the_plans_language():
         ("Marge 12 % ; coût 3 € !", "Marge 12\u00a0%\u00a0; coût 3\u00a0€\u00a0!"),
         ("« Pourquoi ? »", "«\u00a0Pourquoi\u00a0?\u00a0»"),
         ("1 200 000 et 2 500", "1\u202f200\u202f000 et 2\u202f500"),
+        # A figure's % or € gains its space; a sign after a letter does not.
+        ("Marge 70% et 12€", "Marge 70\u00a0% et 12\u00a0€"),
+        ("12,5% de 1 000€", "12,5\u00a0% de 1\u202f000\u00a0€"),
+        ("CO2 x%", "CO2 x%"),
         # Only written spaces change, and a year is no digit group.
         ("Note: voir http://x.fr", "Note: voir http://x.fr"),
         ("En 2024 300 sites", "En 2024 300 sites"),

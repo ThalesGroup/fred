@@ -1142,9 +1142,9 @@ def _fresh_row_ids(tbl, rows: Sequence[Any]) -> None:
             node.set("val", str(new))
 
 
-def fill_table(frame, zone: Zone, fit: TableFit) -> List[str]:
-    """Write ``fit`` into a duplicated table frame; returns the template cell
-    text the check found left over (and cleared)."""
+def fill_table(frame, zone: Zone, fit: TableFit, french: bool = False) -> List[str]:
+    """Write ``fit`` into a duplicated table frame, typeset as French text when
+    ``french``; returns the template cell text the check found left over (and cleared)."""
     tbl = frame._element.find(f".//{qn('a:tbl')}")
     grid = tbl.find(qn("a:tblGrid"))
     originals = {_cell_text(tc) for tc in tbl.iter(qn("a:tc"))} - {""}
@@ -1176,12 +1176,16 @@ def fill_table(frame, zone: Zone, fit: TableFit) -> List[str]:
             _clear_cell(tc)
             if text:
                 _write_paragraphs(
-                    tc.find(qn("a:txBody")), [_Line(t) for t in text.splitlines()]
+                    tc.find(qn("a:txBody")),
+                    [_Line(t) for t in text.splitlines()],
+                    french,
                 )
     if fit.scale is not None and zone.font_pt:
         _scale_runs(tbl, fit.scale, zone.font_pt)
     frame.height = Emu(round(sum(fit.heights) * 12700))
     wanted = {t for row in values for t in row}
+    if french:
+        wanted |= {notes.french_typography(t) for t in wanted}
     left = []
     for tc in tbl.iter(qn("a:tc")):
         text = _cell_text(tc)
@@ -2200,7 +2204,7 @@ class _Renderer:
             )
             return
         frame = cast(Any, placed.shape)
-        removed = fill_table(frame, zone, fit)
+        removed = fill_table(frame, zone, fit, self.language == "fr")
         if removed:
             report.removed.extend(removed)
         tbl = frame._element.find(f".//{qn('a:tbl')}")

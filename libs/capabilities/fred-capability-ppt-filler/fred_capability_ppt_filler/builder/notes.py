@@ -48,16 +48,18 @@ def plan_language(plan: DeckPlan) -> str:
     return "fr" if french > sum(w in _ENGLISH for w in words) else "en"
 
 
-# French spacing: only spaces already written become no-break ones, so line
-# widths stay as measured (a no-break space is as wide as a space, a narrow one less).
+# French spacing: spaces already written become no-break ones, so line widths
+# stay as measured; only "70%" and "12€" gain one, within the fit's estimate.
 _BEFORE_SIGN = re.compile(r"(?<=\S) (?=[:;!?%€»])")
 _DIGIT_GROUPS = re.compile(r"(?<![\d.,])\d{1,3}(?: \d{3})+(?!\d)")
+_DIGIT_SIGN = re.compile(r"(?<=\d)(?=[%€])")
 
 
 def french_typography(text: str) -> str:
-    """No-break space before ``: ; ! ? % € »`` and after ``«``; narrow no-break
-    space between digit groups (``40 000``)."""
+    """No-break space before ``: ; ! ? % € »`` and after ``«``, added between a
+    digit and ``%``/``€``; narrow no-break space between digit groups (``40 000``)."""
     text = _BEFORE_SIGN.sub("\u00a0", text).replace("« ", "«\u00a0")
+    text = _DIGIT_SIGN.sub("\u00a0", text)
     return _DIGIT_GROUPS.sub(lambda m: m.group().replace(" ", "\u202f"), text)
 
 
