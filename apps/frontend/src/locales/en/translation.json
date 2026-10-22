@@ -2916,11 +2916,13 @@
     },
     "teamCard": {
       "join": "Join",
+      "joinFailed": "You could not join the team",
       "inviteOnly": "Invite only",
       "memberCount": "{{count}} members",
       "askToJoin": "Ask to join",
       "requestSent": "Request sent",
       "cancelRequest": "Cancel request",
+      "cancelFailed": "Your request could not be cancelled",
       "requestDeclined": "Request declined",
       "askAgainAt": "Ask again from {{date}}",
       "askDialog": {

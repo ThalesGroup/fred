@@ -276,6 +276,22 @@ describe("TeamCard on_request", () => {
     expect(h.cancelRequest).toHaveBeenCalledWith({ teamId: "team-1" });
   });
 
+  it("a failed cancel says why", async () => {
+    h.cancelRequest.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 404, data: { detail: "Gone" } }) });
+    render(
+      <TeamCard
+        team={onRequestTeam}
+        joinRequest={{ id: "r1", team_id: "team-1", status: "pending", created_at: new Date().toISOString() }}
+      />,
+    );
+
+    await act(async () => buttonByLabel("rework.teamCard.cancelRequest")?.click());
+
+    expect(h.showError).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: "rework.teamCard.cancelFailed", detail: "Gone" }),
+    );
+  });
+
   it("refused less than 24 hours ago: Request declined with when to ask again, no button", () => {
     render(
       <TeamCard

@@ -31,6 +31,7 @@ import JoinRequestDialog from "./JoinRequestDialog.tsx";
 import { formatAskAgainAt, joinRequestState } from "./joinRequestState.ts";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { teamDescriptionText } from "@core/utils/teamFields.ts";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 
 export interface TeamCardProps {
   team: Team;
@@ -49,6 +50,7 @@ export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps)
   const [joinTeam, { isLoading: isJoining }] = useJoinTeamMutation();
   const [cancelRequest, { isLoading: isCancelling }] = useCancelTeamJoinRequestMutation();
   const [askOpen, setAskOpen] = useState(false);
+  const { notifyApiError } = useApiErrorToast();
   const userFullName = KeyCloakService.GetUserFullName();
   const description = teamDescriptionText(team, t);
 
@@ -67,7 +69,10 @@ export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps)
       await joinTeam({ teamId: team.id }).unwrap();
       onJoined?.();
     } catch (error) {
-      console.error("Join team error:", error);
+      notifyApiError(error, {
+        summary: t("rework.teamCard.joinFailed"),
+        fallbackDetail: t("rework.teamCard.askDialog.failedDetail"),
+      });
     }
   };
 
@@ -76,7 +81,10 @@ export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps)
     try {
       await cancelRequest({ teamId: team.id }).unwrap();
     } catch (error) {
-      console.error("Cancel join request error:", error);
+      notifyApiError(error, {
+        summary: t("rework.teamCard.cancelFailed"),
+        fallbackDetail: t("rework.teamCard.askDialog.failedDetail"),
+      });
     }
   };
 
