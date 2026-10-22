@@ -42,7 +42,7 @@ import {
 import styles from "./NotificationsPopover.module.scss";
 
 /** The backend's page size cap. */
-export const NOTIFICATIONS_PAGE_SIZE = 50;
+const NOTIFICATIONS_PAGE_SIZE = 50;
 
 interface TileHandlers {
   /** A click on the tile or on a navigate action. */

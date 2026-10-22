@@ -18,7 +18,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import type { ColorTheme, IconType } from "@shared/utils/Type.ts";
 import styles from "./NotificationTile.module.scss";
 
-export type NotificationCategory = "action_required" | "response" | "information";
+export type NotificationCategory = "action_required" | "information";
 
 export interface NotificationTileAction {
   id: string;

@@ -16,6 +16,7 @@
 // last 7 days ("Accept anyway", only while the team takes requests). The bell is
 // the main surface; this list also covers an admin promoted after a request.
 
+import { useId } from "react";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
@@ -42,6 +43,7 @@ export default function TeamJoinRequestsSection({
   takesRequests,
 }: TeamJoinRequestsSectionProps) {
   const { t, i18n } = useTranslation();
+  const titleId = useId();
   const { showError } = useToast();
   // Requesters and other admins act from their own sessions.
   const { data, refetch } = useTeamJoinRequestsQuery({ teamId }, crossSessionRefreshOptions(!canAdministerMembers));
@@ -67,8 +69,8 @@ export default function TeamJoinRequestsSection({
     new Date(value).toLocaleString(i18n.language, { dateStyle: "medium", timeStyle: "short" });
 
   return (
-    <section className={styles.section} aria-labelledby="team-join-requests-title">
-      <h2 id="team-join-requests-title" className={styles.title}>
+    <section className={styles.section} aria-labelledby={titleId}>
+      <h2 id={titleId} className={styles.title}>
         {t("rework.teamSettings.members.joinRequests.title")}
       </h2>
       <ul className={styles.list}>

@@ -54,7 +54,7 @@ function render(unseen: number) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root!.render(<NotificationsEntry iconStyle={{}} />));
+  act(() => root!.render(<NotificationsEntry />));
   return container;
 }
 

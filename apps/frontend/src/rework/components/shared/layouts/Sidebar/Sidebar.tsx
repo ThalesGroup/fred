@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import MainNavBar, { ICON_STYLE } from "./MainNavBar/MainNavBar.tsx";
+import MainNavBar from "./MainNavBar/MainNavBar.tsx";
 import NotificationsEntry from "@rework/features/notifications/NotificationsEntry";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
@@ -38,7 +38,7 @@ export default function Sidebar() {
         <div className={styles["main-nav-bar-container"]}>
           <MainNavBar />
         </div>
-        <NotificationsEntry iconStyle={ICON_STYLE} />
+        <NotificationsEntry />
         <div className={styles["user-profile-container"]}>
           <UserProfile />
         </div>

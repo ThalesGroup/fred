@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
+import { useClickOutside } from "@shared/hooks/UseClickOutside";
+import { ICON_STYLE } from "@shared/layouts/Sidebar/MainNavBar/MainNavBar.tsx";
 import NotificationsPopover from "./NotificationsPopover";
 import { useNotificationSummary } from "./useNotificationSummary";
 import styles from "./NotificationsEntry.module.scss";
@@ -23,35 +25,25 @@ import styles from "./NotificationsEntry.module.scss";
 // The bell is the container's first button (IconButton takes no ref).
 const focusBell = (container: HTMLElement | null) => container?.querySelector("button")?.focus();
 
-interface NotificationsEntryProps {
-  /** The rail's shared glyph override, so the bell matches its neighbours. */
-  iconStyle: CSSProperties;
-}
-
 /** The rail's bell: unseen count as a badge, the notifications popover on click. */
-export default function NotificationsEntry({ iconStyle }: NotificationsEntryProps) {
+export default function NotificationsEntry() {
   const { t } = useTranslation();
   const unseen = useNotificationSummary();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverId = useId();
 
+  const closeOnOutsideClick = useCallback(() => setOpen(false), []);
+  useClickOutside(containerRef, closeOnOutsideClick);
   useEffect(() => {
     if (!open) return;
-    const onPointer = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpen(false);
       focusBell(containerRef.current);
     };
-    document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
   const close = (refocus: boolean) => {
@@ -68,7 +60,7 @@ export default function NotificationsEntry({ iconStyle }: NotificationsEntryProp
         <IconButton
           variant="icon"
           size="medium"
-          style={iconStyle}
+          style={ICON_STYLE}
           color={open ? "primary" : "on-surface-retreat"}
           icon={{ category: "outlined", type: "notifications", filled: open }}
           badgeCount={unseen}
