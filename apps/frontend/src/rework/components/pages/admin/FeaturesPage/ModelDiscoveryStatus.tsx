@@ -172,7 +172,7 @@ export function ModelDiscoveryStatus({
         <>
           <details className={styles.discoverySettings}>
             <summary className={styles.discoverySettingsToggle}>
-              <span>{t("rework.admin.capabilities.discovery.advancedSettings")}</span>
+              <span>{t("rework.admin.capabilities.discovery.discoveryUrls")}</span>
               <span className={styles.discoverySettingsChevron}>
                 <Icon category="outlined" type="expand_more" />
               </span>

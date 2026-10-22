@@ -62,7 +62,7 @@ it("shows a confirmed disappearance separately from available models", () => {
   expect(html).toContain("https://models.example/v1/models");
   expect(html).toContain("Old chat (chat-a)");
   expect(html).toContain("rework.admin.capabilities.discovery.unavailable");
-  expect(html).toContain("rework.admin.capabilities.discovery.advancedSettings");
+  expect(html).toContain("rework.admin.capabilities.discovery.discoveryUrls");
   expect(html.indexOf("rework.admin.capabilities.discovery.unavailable")).toBeGreaterThan(html.indexOf("</details>"));
   expect(html).not.toContain("chat-b)");
 });
