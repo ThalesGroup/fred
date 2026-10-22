@@ -1,7 +1,7 @@
 # RFC — In-app notifications
 
-**Status:** Slices 1 and 2 are settled and built; only slice 3 and catalogue
-items 7–9 remain open. GitHub issue #3232. The current truth lives in the
+**Status:** Slices 1 and 2 are settled and built; slice 3, catalogue items
+7–9 and the delivery guarantee of §5 remain open. GitHub issue #3232. The current truth lives in the
 OpenSpec changes `add-in-app-notifications` (framework, bell, marketplace
 types, platform switch) and `add-team-join-requests` (`on_request` mode, join
 request types, not-a-member screen), and in
@@ -35,7 +35,7 @@ that can outlive the connection.
 
 After #3223 slices (b) and (c): types 5 and 6 on the existing framework (one
 row per recipient, `group_key`, `resolve`, `call` buttons on the domain
-endpoint, `ACTION_PERMISSION` set to the team admin right). It gets its own
+endpoint, the payload class's `PERMISSION` set to the team admin right). It gets its own
 OpenSpec change; once scoped, this RFC has nothing left open and is archived.
 
 ## 4. Alternatives considered (kept for slice 3)
@@ -53,3 +53,26 @@ OpenSpec change; once scoped, this RFC has nothing left open and is archived.
   Duplicates domain authorization in a second place. Rejected.
 - **Outbox and worker for emission.** Durable, but every v1 trigger is in
   control-plane and best effort is acceptable for a notification.
+
+## 5. Open question: notifications that represent work
+
+Today every producer calls `notify` after its own commit, best effort: a
+failure is logged and counted, and the notification is lost. That is fine for
+information and for join requests, whose Members tab still lists the request.
+It is not for a notification that is the only place some work surfaces:
+workflow approvals, HITL (item 9), quota boost requests (item 5). Losing one
+silently leaves the work waiting with nobody told.
+
+Alternatives:
+
+- **Insert in the producer's transaction.** `upsert` accepts an optional
+  session, so the notification commits or rolls back with the domain write.
+  Simple, but couples the producer's transaction to the notification tables
+  and still needs recipients resolved (ReBAC) inside it.
+- **Outbox.** The producer writes an outbox row in its transaction; a worker
+  turns it into notifications and retries. Durable and decoupled, at the cost
+  of a worker and a delay.
+- **Keep best effort**, and make each such domain list its pending work on its
+  own page so the notification is only a shortcut, as join requests do.
+
+To decide before the first type that represents work ships (slice 3).
