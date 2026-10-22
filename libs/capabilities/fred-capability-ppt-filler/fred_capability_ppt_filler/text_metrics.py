@@ -124,6 +124,10 @@ def width_em(text: str, family: Optional[str] = None, bold: bool = False) -> flo
     """Width of ``text`` in em: multiply by the font size to get points."""
     if not text:
         return 0.0
+    # Raqm refuses line breaks (\n, \r, U+2028...): a text spans its widest line.
+    lines = text.splitlines()
+    if lines != [text]:
+        return max((width_em(line, family, bold) for line in lines), default=0.0)
     font = _font(family, bold)
     if font is None:
         return len(text) * FALLBACK_CHAR_EM

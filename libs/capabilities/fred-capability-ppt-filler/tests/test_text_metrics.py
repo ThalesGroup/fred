@@ -64,3 +64,15 @@ def test_a_family_name_is_not_read_as_fontconfig_syntax(monkeypatch):
     finally:
         text_metrics._font_file.cache_clear()
     assert seen[0][-1] == "Gotham\\-12:bold"
+
+
+def test_a_text_with_line_breaks_measures_its_widest_line():
+    wide = text_metrics.width_em("a much longer line")
+    for text in (
+        "short\na much longer line",
+        "a much longer line\r\nshort",
+        "short a much longer line ",
+        "a much longer line\n",
+    ):
+        assert text_metrics.width_em(text) == wide
+    assert text_metrics.width_em("\n\r") == 0.0

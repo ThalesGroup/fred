@@ -353,6 +353,42 @@ async def test_empty_plan_is_an_error_the_user_can_read(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "slide",
+    [
+        {"title": "Line one\nline two", "bullets": ["a"]},
+        {"title": "T", "bullets": ["first\r\nsecond", "b\u2028c"]},
+        {
+            "title": "Cards",
+            "items": [
+                {"title": "A\nB", "text": "x\ny"},
+                {"title": "C", "text": "z"},
+                {"title": "D", "text": "w"},
+            ],
+        },
+    ],
+)
+async def test_line_breaks_in_the_text_still_build(monkeypatch, slide):
+    workspace = FakeWorkspace()
+    text, result = await _build(
+        monkeypatch, workspace=workspace, variety="off", slides=[COVER, slide]
+    )
+    assert not result.is_error, text
+    assert workspace.writes
+
+
+@pytest.mark.asyncio
+async def test_a_checker_bug_is_a_tool_error_not_an_exception(monkeypatch):
+    def _broken(*_args, **_kwargs):
+        raise RuntimeError("secret plan text")
+
+    monkeypatch.setattr(tools_mod, "_evaluate", _broken)
+    text, result = await _build(monkeypatch, slides=[COVER])
+    assert result.is_error and "internal problem" in text
+    assert "secret" not in text
+
+
+@pytest.mark.asyncio
 async def test_malformed_plan_from_a_small_model_still_builds(monkeypatch):
     """The shape of a real failing call: the old `pattern` key holding ids or
     legacy names, stray strings in `slides`, bullets as one string, numbers as

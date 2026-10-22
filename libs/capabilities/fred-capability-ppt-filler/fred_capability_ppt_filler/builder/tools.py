@@ -171,6 +171,11 @@ _BUSY_MESSAGE = (
     "offer to try again in a moment; then make ONE call, never several calls at once."
 )
 
+_INTERNAL_ERROR = (
+    "No deck was built because of an internal problem. Tell the user and suggest "
+    "trying again; if it persists, simplify the plan."
+)
+
 
 # --- catalogue --------------------------------------------------------------------------
 
@@ -1597,15 +1602,19 @@ def build_builder_tools(
         checked = [n for n, s in enumerate(plan.slides, start=1) if id(s) not in kept]
         # After `checked`: the copies it makes are not slides the call changed.
         plan = renumber_parts(_shown_takeaways(plan))
-        assignment, plan, bad = await asyncio.to_thread(
-            _evaluate,
-            inventory,
-            plan,
-            prefetched,
-            variety,
-            max_uses,
-            checked,
-        )
+        try:
+            assignment, plan, bad = await asyncio.to_thread(
+                _evaluate,
+                inventory,
+                plan,
+                prefetched,
+                variety,
+                max_uses,
+                checked,
+            )
+        except Exception:  # noqa: BLE001 - a checker bug must not escape the tool
+            logger.exception("[PPTBUILD][TOOL] plan evaluation FAILED")
+            return _error(_INTERNAL_ERROR)
         first, called = not called, True
         unloadable = [
             f"image '{uid}' is not a usable image document and was left out: use a "
@@ -1718,10 +1727,7 @@ def build_builder_tools(
         except Exception:  # noqa: BLE001 - wrapped uniformly for the agent
             elapsed = time.monotonic() - started
             logger.exception("[PPTBUILD][TOOL] render FAILED after %.0fs", elapsed)
-            return _error(
-                "No deck was built because of an internal problem. Tell the user and suggest "
-                "trying again; if it persists, simplify the plan."
-            )
+            return _error(_INTERNAL_ERROR)
         finally:
             release_heavy_job_slot()
 
