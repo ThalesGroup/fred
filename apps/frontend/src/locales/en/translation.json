@@ -2958,6 +2958,12 @@
         "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
       }
     },
+    "teamMemberGate": {
+      "title": "You are not a member of this team",
+      "message": "Only its members can open this team's pages.",
+      "pending": "Your request to join this team is waiting for an answer.",
+      "browseTeams": "Browse teams"
+    },
     "teamAdminCharter": {
       "accept": "Accept",
       "acceptedOn": "Accepted on {{date}}",

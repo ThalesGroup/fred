@@ -15,7 +15,6 @@
 import styles from "./TeamCard.module.scss";
 import type { MyTeamJoinRequest, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  useAskToJoinTeamMutation,
   useCancelTeamJoinRequestMutation,
   useJoinTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -28,8 +27,7 @@ import { useFrontendProperties } from "src/hooks/useFrontendProperties";
 import { useFrontendBootstrap } from "src/hooks/useFrontendBootstrap";
 import Button from "@shared/atoms/Button/Button.tsx";
 import React, { useState } from "react";
-import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
-import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import JoinRequestDialog from "./JoinRequestDialog.tsx";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { teamDescriptionText } from "@core/utils/teamFields.ts";
 
@@ -42,9 +40,6 @@ export interface TeamCardProps {
   /** The caller's own request to this team, for an `on_request` team. */
   joinRequest?: MyTeamJoinRequest;
 }
-
-/** The optional message the team admins read with the request. */
-export const JOIN_REQUEST_MESSAGE_MAX_LENGTH = 280;
 
 type RequestState = "ask" | "pending" | "declined";
 
@@ -60,10 +55,8 @@ export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps)
   const { activeTeam } = useFrontendBootstrap();
   const { t, i18n } = useTranslation();
   const [joinTeam, { isLoading: isJoining }] = useJoinTeamMutation();
-  const [askToJoin, { isLoading: isAsking }] = useAskToJoinTeamMutation();
   const [cancelRequest, { isLoading: isCancelling }] = useCancelTeamJoinRequestMutation();
   const [askOpen, setAskOpen] = useState(false);
-  const [message, setMessage] = useState("");
   const userFullName = KeyCloakService.GetUserFullName();
   const description = teamDescriptionText(team, t);
 
@@ -83,19 +76,6 @@ export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps)
       onJoined?.();
     } catch (error) {
       console.error("Join team error:", error);
-    }
-  };
-
-  const handleAsk = async (): Promise<void> => {
-    try {
-      const trimmed = message.trim();
-      await askToJoin({ teamId: team.id, createTeamJoinRequest: { message: trimmed || null } }).unwrap();
-      setAskOpen(false);
-      setMessage("");
-    } catch (error) {
-      // The request list refetches either way, so the card shows the real state.
-      console.error("Ask to join error:", error);
-      setAskOpen(false);
     }
   };
 
@@ -226,25 +206,7 @@ export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps)
           )}
         </div>
       </div>
-      {onRequest && (
-        <Dialog
-          open={askOpen}
-          title={t("rework.teamCard.askDialog.title", { team: team.name })}
-          confirmLabel={t("rework.teamCard.askDialog.confirm")}
-          confirmDisabled={isAsking}
-          onConfirm={() => void handleAsk()}
-          onCancel={() => setAskOpen(false)}
-        >
-          <TextArea
-            label={t("rework.teamCard.askDialog.messageLabel")}
-            description={t("rework.teamCard.askDialog.messageDescription")}
-            value={message}
-            maxLength={JOIN_REQUEST_MESSAGE_MAX_LENGTH}
-            rows={4}
-            onChange={(e) => setMessage(e.target.value)}
-          />
-        </Dialog>
-      )}
+      {onRequest && <JoinRequestDialog team={team} open={askOpen} onClose={() => setAskOpen(false)} />}
     </div>
   );
 }

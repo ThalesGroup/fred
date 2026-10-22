@@ -55,6 +55,10 @@ of its members.
 Note: a private team **cannot** be open to free joining or to requests. You get
 in when one of its Admins adds you or sends you an invite link.
 
+A team's pages open to its members only: following a link to a team you do not
+belong to (or no longer belong to) shows **You are not a member of this team**,
+with **Ask to join** when the team takes requests.
+
 ### Asking to join a team
 
 On the card of an **On request** team, **Ask to join** opens a short form. You

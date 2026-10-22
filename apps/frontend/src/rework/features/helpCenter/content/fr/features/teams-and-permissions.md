@@ -62,6 +62,10 @@ demandez à un de ses membres.
 aux demandes. On y entre quand l'un de ses Admins vous ajoute ou vous envoie un
 lien d'invitation.
 
+Les pages d'une équipe ne s'ouvrent qu'à ses membres : un lien vers une équipe
+dont vous n'êtes pas (ou plus) membre affiche **Vous n'êtes pas membre de cette
+équipe**, avec **Demander à rejoindre** si l'équipe accepte les demandes.
+
 ### Demander à rejoindre une équipe
 
 Sur la carte d'une équipe **Sur demande**, **Demander à rejoindre** ouvre un

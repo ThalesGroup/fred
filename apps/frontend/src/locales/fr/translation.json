@@ -2958,6 +2958,12 @@
         "team_analyst": "Rôle technique : il ouvre aussi l'accès aux extraits de conversation limités sur lesquels ces jeux d'évaluation sont construits. À accorder en connaissance de cause."
       }
     },
+    "teamMemberGate": {
+      "title": "Vous n'êtes pas membre de cette équipe",
+      "message": "Seuls ses membres peuvent ouvrir les pages de cette équipe.",
+      "pending": "Votre demande pour rejoindre cette équipe attend une réponse.",
+      "browseTeams": "Parcourir les équipes"
+    },
     "teamAdminCharter": {
       "accept": "Accepter",
       "acceptedOn": "Acceptée le {{date}}",
