@@ -8,8 +8,8 @@
 
 ## 2. Knowledge Flow server compatibility
 
-- [x] 2.1 Capture existing enabled-server tool names, descriptions, and input schemas as comparison fixtures; verify fixtures against current Knowledge Flow mounts.
-- [x] 2.2 Replace `FastApiMCP` mounts with a FastMCP 4 OpenAPI projection at the same paths and tag filters; verify parity fixtures and disabled-server behavior.
+- [x] 2.1 Compare existing enabled-server tool names, descriptions, and input schemas against the current Knowledge Flow mounts during the migration.
+- [x] 2.2 Replace `FastApiMCP` mounts with a FastMCP 4 OpenAPI projection at the same paths and tag filters; verify selected tools, callable arguments, and disabled-server behavior.
 - [x] 2.3 Rebuild the verified-grant and inner FastAPI request bridge without `fastapi-mcp` private APIs; verify authorized calls, refusals, SQL 400 envelope, and redaction in security tests.
 - [x] 2.4 Remove the v1 session-manager patch and serve stateless MCP HTTP; verify alternating requests across two Knowledge Flow app instances.
 

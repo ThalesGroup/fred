@@ -7146,6 +7146,6 @@ Knowledge Flow projects its existing tagged FastAPI routes with
 `FastMCP.from_fastapi` at the existing MCP paths. HTTP is stateless, so listing
 and calling tools can reach different replicas without a shared MCP session.
 The outer request authenticates before MCP dispatch; the inner FastAPI request
-gets only the verified grant and admitted log context. Tool names,
-descriptions and callable input schemas match the v1 inventory, allowing
-existing agents and legacy HTTP peers to use the same catalog entries.
+gets only the verified grant and admitted log context. The upgrade preserves
+tool names, descriptions and callable input schemas, allowing existing agents
+and legacy HTTP peers to use the same catalog entries.
