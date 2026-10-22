@@ -115,7 +115,10 @@ from fred_capability_ppt_filler.concurrency import (
     acquire_heavy_job_slot,
     release_heavy_job_slot,
 )
-from fred_capability_ppt_filler.pptx_archive import open_presentation
+from fred_capability_ppt_filler.pptx_archive import (
+    UnsafeArchiveError,
+    open_presentation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -177,13 +180,23 @@ def _bounded_analysis(content: bytes):
     return None
 
 
+_STORE_UNAVAILABLE = (
+    "The template cannot be stored right now. Try again later; if it keeps "
+    "failing, contact your administrator."
+)
+
+
 def _check_readable(content: bytes) -> None:
     """Fail the save on an unreadable .pptx (cheap: opening, not analysing)."""
     try:
         open_presentation(content)
+    except UnsafeArchiveError as exc:
+        raise ValueError(f"The uploaded file could not be read: {exc}") from exc
     except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a template error
+        logger.info("[PPTBUILD] unreadable template upload: %r", exc)
         raise ValueError(
-            f"The uploaded file could not be read as a .pptx: {exc}"
+            "The uploaded file could not be read as a PowerPoint presentation (.pptx). "
+            "Check that it opens in PowerPoint, then upload it again."
         ) from exc
 
 
@@ -960,9 +973,8 @@ class PptBuilderCapability(
             release_heavy_job_slot()
         assets = ctx.services.agent_assets
         if assets is None:
-            raise RuntimeError(
-                "ppt_builder: RuntimeServices.agent_assets is not available on this save path; the template cannot be stored."
-            )
+            logger.error("[PPTBUILD] no agent_assets port on this save path")
+            raise ValueError(_STORE_UNAVAILABLE)
         await assets.store(
             PPT_BUILDER_TEMPLATE_KEY,
             content,
@@ -979,9 +991,8 @@ class PptBuilderCapability(
     ) -> str:
         assets = ctx.services.agent_assets
         if assets is None:
-            raise RuntimeError(
-                "ppt_builder: RuntimeServices.agent_assets is not available on this save path."
-            )
+            logger.error("[PPTBUILD] no agent_assets port on this save path")
+            raise ValueError(_STORE_UNAVAILABLE)
         try:
             content = await assets.fetch(PPT_BUILDER_TEMPLATE_KEY)
         except Exception as exc:  # noqa: BLE001 - the author can upload it again
@@ -997,8 +1008,14 @@ class PptBuilderCapability(
         instance = ctx.identity.agent_instance_id
         team = ctx.identity.team_id
         if not instance or not team:
-            raise RuntimeError(
-                "ppt_builder: a template can only be analysed for a saved agent of a team."
+            logger.error(
+                "[PPTBUILD] template save without agent (%s) or team (%s)",
+                instance,
+                team,
+            )
+            raise ValueError(
+                "The template can only be added to an agent saved in a team. Save the "
+                "agent first, then add the template again."
             )
         return await start_analysis(
             instance_id=instance,
