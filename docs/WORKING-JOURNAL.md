@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F18](#f18-audit-des-révocations-effectives) | Audit des seules révocations effectives, sans doublon | Tests ciblés validés ; validation finale du lot | 09 (I16), A3 |
 | [F15](#f15-une-seule-liste-de-routes) | Une seule liste de routes HTTP | Tests automatisés validés | A1, carte des sources |
 | [F20](#f20-migration-sql-unique) | Une seule migration 0001, sans en-tête contradictoire | Tests automatisés validés ; réinstallation k3d par Dimi | A2, A3, AGENTS, README du composant |
 | [F17](#f17-noms-despaces-et-de-dossiers-canoniques) | Noms d'espaces et de dossiers en NFC sans espaces de bord | Tests automatisés validés | 02, 04, 05 |
@@ -80,6 +81,17 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F18 Audit des révocations effectives
+
+- 2026-10-22 : lot des défauts validé par Dimi (commits locaux, tests par l'assistant).
+  Vérification sur HEAD `94c55fa1e` : confirmé. `spaces::revoke` auditait une révocation
+  même sans rôle détenu ; `grant`/`revoke` émettaient aussi un `tracing::info!` non-audit
+  du même nom. Audit seulement si un tuple est supprimé, guard toujours consommé ; doublons
+  supprimés. Test `only_effective_role_changes_are_audited_once` (I16) : échoue sur l'ancien
+  code (deux événements), passe ensuite ; capture de test étendue à la cible. Arc42 09 (I16)
+  et A3. `make test` réussi ; tests d'intégration d'audit ciblés réussis. Le grant d'un rôle
+  déjà détenu reste audité (hors fiche).
 
 ## F15 Une seule liste de routes
 

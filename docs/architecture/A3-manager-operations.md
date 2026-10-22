@@ -24,9 +24,10 @@ Structured stdout, in the format shared by Fred's services.
   (template), `http_status`, `duration_ms`, `outcome`; INFO below 400, WARNING for
   other 4xx, ERROR for 5xx; omitted for a successful `/healthz`; `cancelled` when the
   client goes away (I13).
-- Acknowledged role writes emit `authz.relation.granted` or `authz.relation.revoked`
+- Acknowledged role writes emit one `authz.relation.granted` or `authz.relation.revoked`
   on `fred.security.audit`, with `actor_uid` when known, `subject`, `relation`,
-  `resource` and `outcome: succeeded`. This stream is always JSON and includes INFO
+  `resource` and `outcome: succeeded`; no other event carries those names. Revoking a
+  role that is not held advances the guard but emits nothing. This stream is always JSON and includes INFO
   even when the application threshold is WARNING or ERROR. Events precede SQL commit:
   an acknowledged FGA write remains auditable when SQL commit fails (I16).
 - A changed personal acceptance emits `terms.accepted` on `fred.security.audit`

@@ -1094,11 +1094,9 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
 
 #[derive(Clone, Default)]
 struct AuditCapture(std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>);
+// Records every event with its target, so tests can also prove the absence of duplicates.
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for AuditCapture {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
-        if event.metadata().target() != "fred.security.audit" {
-            return;
-        }
         struct Fields(serde_json::Map<String, serde_json::Value>);
         impl tracing::field::Visit for Fields {
             fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
@@ -1110,8 +1108,43 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for AuditCapture {
             }
         }
         let mut fields = Fields(serde_json::Map::new());
+        fields
+            .0
+            .insert("target".into(), event.metadata().target().into());
         event.record(&mut fields);
         self.0.lock().unwrap().push(fields.0.into());
+    }
+}
+
+// Proves: I16
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn only_effective_role_changes_are_audited_once() {
+    use tracing_subscriber::prelude::*;
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let capture = AuditCapture::default();
+    let _thread =
+        tracing::subscriber::set_default(tracing_subscriber::registry().with(capture.clone()));
+    grant(&e, org.id, Role::Member, "bob").await;
+    spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Editor, "bob")
+        .await
+        .unwrap();
+    spaces::revoke(&e.pool, &e.fga, "alice", org.id, Role::Member, "bob")
+        .await
+        .unwrap();
+    let events = capture.0.lock().unwrap();
+    for event in ["authz.relation.granted", "authz.relation.revoked"] {
+        let named: Vec<_> = events
+            .iter()
+            .filter(|e| e["message"].as_str().is_some_and(|m| m.contains(event)))
+            .collect();
+        assert_eq!(named.len(), 1, "{event}: {named:?}");
+        assert_eq!(named[0]["target"], "fred.security.audit");
+        assert_eq!(
+            (&named[0]["relation"], &named[0]["subject"]),
+            (&"member".into(), &"user:bob".into())
+        );
     }
 }
 

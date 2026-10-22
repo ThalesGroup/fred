@@ -622,7 +622,6 @@ pub async fn grant(
         true,
     );
     tx.commit().await?;
-    tracing::info!(actor_uid = caller, subject = target, ?role, space_id = %space.id, outcome = "granted", "authz.relation.granted");
     Ok(())
 }
 
@@ -675,29 +674,28 @@ pub async fn revoke(
     if domain::revocation_blocked(role, &on_space, in_child) {
         return Err(AppError::Conflict(CHILDREN_FIRST.into()));
     }
-    fga.write(
-        &mut guard,
-        &[],
-        &if on_space.contains(&role) {
-            vec![Tuple {
-                user: target,
-                role,
-                space: space.id,
-            }]
-        } else {
-            vec![]
-        },
-    )
-    .await?;
-    crate::logging::audit_relation(
-        Some(caller),
-        target,
-        role.as_str(),
-        &format!("space:{}", space.id),
-        false,
-    );
+    // A role that is not held still consumes the guard, but nothing is revoked or audited.
+    let removes = on_space.contains(&role);
+    let deletes: &[Tuple] = if removes {
+        &[Tuple {
+            user: target,
+            role,
+            space: space.id,
+        }]
+    } else {
+        &[]
+    };
+    fga.write(&mut guard, &[], deletes).await?;
+    if removes {
+        crate::logging::audit_relation(
+            Some(caller),
+            target,
+            role.as_str(),
+            &format!("space:{}", space.id),
+            false,
+        );
+    }
     tx.commit().await?;
-    tracing::info!(actor_uid = caller, subject = target, ?role, space_id = %space.id, outcome = "revoked", "authz.relation.revoked");
     Ok(())
 }
 
