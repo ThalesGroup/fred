@@ -10,6 +10,17 @@
 - **Generated clients:** `controlPlaneOpenApi.ts` (+4 lines) and `pptBuilderCapabilityOpenApi.ts` regenerated; `npx tsc --noEmit` passes.
 - **Performance review (per-turn path):** a turn of an agent without its own template reads only the pod-local snapshot (no I/O); once expired, the expired value serves and one background read (single flight, shielded) replaces it; only a pod's first turn awaits one primary-key read. The inventory and template bytes come from the existing LRUs. No new metric or log on the hot path; a failed read logs a warning and keeps the last value for 30 s. The upload's readability check runs off-loop in a heavy-job slot.
 
+## Keep the previous template, platform slide edits (2026-10-22)
+
+- **ppt_builder capability:** `make code-quality` clean; `make test` 961 passed, 5 skipped. `tests/test_platform_template.py` (19 tests) now also covers: a first replacement pending or failed leaves agents on the Fred template; a pending, then failed replacement keeps agents on the previous platform template, and a succeeded one replaces it at once on the pod that ran it; a re-run is analysed as the replacement while the current analysis stays in use; a failed replacement is re-run in place; an interrupted replacement restarts on a `GET /platform`; reset clears both rows; `/analysis/__platform_next__` is 404; `PUT /platform/overrides` is 404 without a template, manager-only, pruned (an unknown pattern id is dropped) and reaches agents through the snapshot; a re-run keeps the edits, another file drops them once it succeeds.
+- **Migration (amended `r9d3f4a5b6c7`, never applied):** single head; on a throwaway SQLite file, `upgrade head`, `alembic check` (no drift), downgrade to `q8c2e3b4d5f6`, upgrade, downgrade to base all pass.
+- **Generated client:** `pptBuilderCapabilityOpenApi.ts` regenerated (`usePutPptBuilderPlatformOverridesMutation`, `replacement`, `replacement_filename`, `overrides`).
+- **Per-turn path:** unchanged for a turn (the snapshot holds the effective inventory, edits applied once per read); a snapshot read is still one primary-key read, plus one inventory read only when the row's job id changed.
+
+## Frontend (2026-10-22)
+
+Run without `make` (Vite is running from this checkout): `npx tsc --noEmit` clean; `npx eslint src/rework/features/capabilities src/rework/components/pages/admin/FeaturesPage` clean; `npx prettier --check` on every touched file clean; `npx vitest run src/rework/components/pages/admin src/rework/features/capabilities src/rework/features/helpCenter`: 70 files, 828 tests passed. New tests: `PptBuilderPlatformPanel.test.tsx` (8: Fred template and no write action for a non-manager, current kept while a replacement is analysed, failed first replacement keeps the Fred template, reset only after confirmation, the backend's reason on a refused upload, manager edits saved when the review closes, read-only review for others, catalogue vision profiles), `CapabilityPlatformDrawer.test.tsx` (pod routing and `canManage` from the bootstrap roles), `FeaturesPage.test.tsx` (settings action only for a capability with a platform panel), `usePptBuilderAnalysis.test.tsx` (+2: the administrator's template with its edits and thumbnails, Fred fallback while a first replacement is pending), `PptBuilderTemplatePanel.test.tsx` (+1: "Template set by the administrator" label, upload still offered). Help Center content tests (anchors) pass.
+
 ## Not yet verified
 
-- Frontend tasks 5.2–5.5, Help Center 6.1, browser check 6.4.
+- `make code-quality` / `make test` for the frontend (not run while Vite runs from this checkout), the `fred-performance-reviewer` skill (6.3), browser check 6.4.

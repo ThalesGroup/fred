@@ -1168,7 +1168,10 @@ built-in template.
 
 - **Upload row.** The same row as `ppt_filler` (outlined primary button, file
   `Chip` with remove). The chip reads the staged file name, "A template is
-  configured", or "Built-in template" (`palette`). A staged file is only
+  configured", "Template set by the administrator: {file}"
+  (`admin_panel_settings`, when the platform template is in effect, its slides
+  and the administrator's edits shown read only), or "Built-in template"
+  (`palette`). A staged file is only
   analysed after the save: the status line says so.
 - **Analysis status** (Body Small, `on-surface-retreat`), read from
   `GET /analysis/{instance_id}` and polled every 3 s while pending/running
@@ -1227,6 +1230,42 @@ built-in template.
 Deliberate limits: no pagination (tens of slides, not hundreds); thumbnails
 render with the server's fonts; the vision switch is forced off for display
 only, the stored value is left as is.
+
+---
+
+### `PptBuilderPlatformPanel` — platform presentation template (2026-10-22)
+
+**Location:** `src/rework/features/capabilities/ppt_builder/PptBuilderPlatformPanel.tsx`,
+hosted by `FeaturesPage/CapabilityPlatformDrawer.tsx`
+
+**Status:** `Functional`
+
+Opened from a `settings` `IconButton` (medium, `on-surface-retreat`, tooltip
+"Platform settings") after "Manage by team" on the rows whose UI plugin declares
+a `platformPanel`; an `InlineDrawer` (480px) titled "{capability}: platform
+settings".
+
+- **Template card** (same outlined setting card as the agent form): a `Chip`
+  "Platform template: {file}" (`slideshow`) or "Fred template (built-in)"
+  (`palette`), the outlined primary "Upload / Replace the template" button,
+  the status line, the summary with "Review slides" and "Slides PDF" text
+  buttons, the guide link.
+- **Status line**: spinner + "Analysing {file}… Agents keep the current (or
+  Fred) template until it ends", polled every 3 s; a failed replacement is an
+  `error` line saying agents keep the previous template, plus the backend's
+  reason.
+- **Vision settings**: the agent form's `PptBuilderVisionSettings`, its first
+  option "The platform's default AI model", then the catalogue's vision
+  profiles; applied at the next upload or re-run.
+- **Actions row**: outlined "Run the analysis again" (`refresh`) and outlined
+  `error` "Reset to the Fred template", which opens a critical
+  `ConfirmationDialog`.
+- **Review**: the shared `PatternReviewDialog`, editable for capability
+  managers; the edits are saved once, when it closes.
+
+Write actions (upload, vision, re-run, reset, edits) render only for
+`feature_manager` (platform admins hold it too); the page itself is already
+gated on it.
 
 ---
 

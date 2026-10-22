@@ -117,7 +117,7 @@ each month from the period's documents.
 ### Generate a presentation
 
 **What it does** — the agent builds a PowerPoint presentation from your
-request, on your company template or, without one, on a built-in template. It
+request, on your company template or, without one, on the platform template. It
 picks, for each slide, the template slide that fits the content best and fills
 it; numbers become editable charts in the template's colours, from bars and
 pies to radar, scatter and bubble charts. The deck appears in a preview beside the conversation and downloads as
@@ -138,6 +138,14 @@ settings**. **Review slides** also appears under the template when the reading
 set slides aside.
 To prepare a template the agent understands well, see
 [Prepare your PowerPoint template](/help/en/guides/prepare-powerpoint-template).
+
+**Without a template on the agent** — the agent uses, in order: the template
+uploaded on the agent; else the one the administrator chose for the whole
+platform (the form shows **Template set by the administrator** and the file
+name, see
+[Administration](/help/en/features/administration#the-platform-presentation-template));
+else the built-in Fred template. Uploading a template on the agent always
+takes over.
 
 **Use a vision model** — when a model that can read images is available, it
 looks at each template slide to name it and understand what it is for. You

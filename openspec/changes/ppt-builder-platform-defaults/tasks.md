@@ -13,8 +13,8 @@ Linked issue: #2987 (first slice). Ships inside the ppt_builder PR (#2679).
 - [x] 2.2 Add `AnalysisStore.delete`, `template_filename` and the reserved platform id; verify with store tests.
 - [x] 2.3 Add the `/platform*` routes (D2), with manager-only writes carrying the vision choice, and guard `/analysis/{id}` against the reserved id; verify with route tests (403 for non-managers, Fred template when unset, upload/re-run/reset happy paths, invalid upload keeps the previous default, agent rows untouched by a re-run).
 
-- [ ] 2.4 Keep the previous platform template while a replacement is analysed or failed: uploads and re-runs analyse the `__platform_next__` row, promoted onto `__platform__` in `finish`'s transaction on success; reset deletes both; `GET /platform` reports both and restarts an interrupted replacement (D1, D2); verify with route and job tests (pending and failed replacements keep the previous template for agents, success promotes it, a re-run keeps the current one in use, reset clears both).
-- [ ] 2.5 Store the manager's pattern edits on the platform row (`overrides_json`, amended into `r9d3f4a5b6c7`, never applied) with `PUT /platform/overrides`, pruned against the template in effect; a promotion keeps them pruned for the same file and drops them for another (D7); verify with route tests (manager-only, pruning, kept on re-run, dropped on a new file, applied to agents through the snapshot), a single head and a real SQLite upgrade/downgrade/check.
+- [x] 2.4 Keep the previous platform template while a replacement is analysed or failed: uploads and re-runs analyse the `__platform_next__` row, promoted onto `__platform__` in `finish`'s transaction on success; reset deletes both; `GET /platform` reports both and restarts an interrupted replacement (D1, D2); verify with route and job tests (pending and failed replacements keep the previous template for agents, success promotes it, a re-run keeps the current one in use, reset clears both).
+- [x] 2.5 Store the manager's pattern edits on the platform row (`overrides_json`, amended into `r9d3f4a5b6c7`, never applied) with `PUT /platform/overrides`, pruned against the template in effect; a promotion keeps them pruned for the same file and drops them for another (D7); verify with route tests (manager-only, pruning, kept on re-run, dropped on a new file, applied to agents through the snapshot), a single head and a real SQLite upgrade/downgrade/check.
 
 ## 3. Resolution
 
@@ -30,14 +30,14 @@ Linked issue: #2987 (first slice). Ships inside the ppt_builder PR (#2679).
 ## 5. Frontend
 
 - [x] 5.1 Regenerate the ppt_builder client and verify the `/platform*` hooks exist.
-- [ ] 5.2 Add `platformPanel` to `CapabilityUiPlugin` plus a `platformPanelFor` registry; FeaturesPage shows the settings action only when a panel exists and dispatches capability base URLs; verify with FeaturesPage tests (action shown for ppt_builder, hidden otherwise).
-- [ ] 5.3 Build the platform drawer: current template, upload, status (the previous template stays in use while a replacement is pending or failed), vision choice, re-run, patterns PDF, "Review the slides" (editable for managers, saved as the platform's pattern edits), reset behind a `ConfirmationDialog`; writes shown to capability managers only; verify with drawer tests (states, permission gating, reset confirmation, the error on an invalid upload).
-- [ ] 5.4 Agent form: the no-template branch reads `/platform` and shows "Template set by the administrator" with the file name plus the platform slides in the read-only review; upload still overrides it; verify with tests for set and unset defaults.
-- [ ] 5.5 Add fr/en i18n keys; verify `tsc` and the i18n key checks pass.
+- [x] 5.2 Add `platformPanel` to `CapabilityUiPlugin` plus a `platformPanelFor` registry; FeaturesPage shows the settings action only when a panel exists and dispatches capability base URLs; verify with FeaturesPage tests (action shown for ppt_builder, hidden otherwise).
+- [x] 5.3 Build the platform drawer: current template, upload, status (the previous template stays in use while a replacement is pending or failed), vision choice, re-run, patterns PDF, "Review the slides" (editable for managers, saved as the platform's pattern edits), reset behind a `ConfirmationDialog`; writes shown to capability managers only; verify with drawer tests (states, permission gating, reset confirmation, the error on an invalid upload).
+- [x] 5.4 Agent form: the no-template branch reads `/platform` and shows "Template set by the administrator" with the file name plus the platform slides in the read-only review; upload still overrides it; verify with tests for set and unset defaults.
+- [x] 5.5 Add fr/en i18n keys; verify `tsc` and the i18n key checks pass.
 
 ## 6. Docs and close-out
 
-- [ ] 6.1 Update the Help Center fr/en (`features/capabilities.md` admin side, `agents.md` agent form line) and verify the pages render.
+- [x] 6.1 Update the Help Center fr/en (`features/administration.md` admin side, `features/capabilities.md` fallback order) and verify the pages render.
 - [x] 6.2 Update the #2679 migration note (operations: optional activation, capability table column, overrides dropped with no own template).
 - [ ] 6.3 Run `make code-quality` and `make test` in each touched project, then the `fred-performance-reviewer` skill (middleware per-turn path); record the evidence in `verification.md`.
 - [ ] 6.4 Browser check: upload a platform template as admin, see it in an agent form without a template, build a deck on it, reset to the Fred template; record it in `verification.md`.

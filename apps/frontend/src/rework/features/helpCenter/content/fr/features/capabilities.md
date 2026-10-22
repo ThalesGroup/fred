@@ -124,8 +124,8 @@ remplit chaque mois à partir des documents de la période.
 ### Générer une présentation
 
 **Ce qu'elle fait** — l'agent construit une présentation PowerPoint à partir de
-votre demande, sur le template de votre entreprise ou, à défaut, sur un template
-intégré. Pour chaque diapositive, il choisit la diapositive du template qui
+votre demande, sur le template de votre entreprise ou, à défaut, sur le
+template de la plateforme. Pour chaque diapositive, il choisit la diapositive du template qui
 convient le mieux au contenu et la remplit ; les chiffres deviennent des
 graphiques modifiables, aux couleurs du template, des barres et secteurs
 jusqu'aux radars, nuages de points et bulles. La présentation s'affiche dans un
@@ -148,6 +148,14 @@ Le template et **Valider le plan avant de construire** s'affichent d'emblée ;
 quand la lecture a mis des diapositives de côté.
 Pour préparer un template que l'agent comprend bien, voir
 [Préparer son template PowerPoint](/help/fr/guides/prepare-powerpoint-template).
+
+**Sans template sur l'agent** — l'agent utilise, dans l'ordre : le template
+déposé sur l'agent ; sinon celui choisi par l'administrateur pour toute la
+plateforme (le formulaire affiche **Template défini par l'administrateur** et le
+nom du fichier, voir
+[Administration](/help/fr/features/administration#le-template-de-presentation-de-la-plateforme)) ;
+sinon le template Fred intégré. Déposer un template sur l'agent reprend
+toujours la main.
 
 **Utiliser un modèle de vision** — quand un modèle d'IA capable de lire les
 images est disponible, il regarde chaque diapositive du template pour
