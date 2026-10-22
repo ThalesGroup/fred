@@ -554,6 +554,9 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Observation";
     case "tool_call": {
       if (entry.kind !== "combo") return "Tool call";
+      if (toolName(entry.call) === "ask_user" && translate) {
+        return translate("rework.chatTrace.toolLabels.askUser");
+      }
       if (skillFilePathOf(entry) && translate) {
         return translate("rework.chatTrace.toolLabels.readSkillFile");
       }

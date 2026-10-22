@@ -332,6 +332,11 @@ describe("entryLabel localization", () => {
   ])("uses the active language label %s", (translation, expected) => {
     expect(entryLabel(entry, () => translation)).toBe(expected);
   });
+
+  it("uses the localized label for ask_user", () => {
+    const question = { kind: "combo" as const, call: toolCallMsg("c2", "ask_user") };
+    expect(entryLabel(question, (key) => key)).toBe("rework.chatTrace.toolLabels.askUser");
+  });
 });
 
 // ── statusForEntry ────────────────────────────────────────────────────────────
