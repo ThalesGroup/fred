@@ -119,8 +119,10 @@ each month from the period's documents.
 **What it does** — the agent builds a PowerPoint presentation from your
 request, on your company template or, without one, on the platform template. It
 picks, for each slide, the template slide that fits the content best and fills
-it; numbers become editable charts in the template's colours, from bars and
-pies to radar, scatter and bubble charts. The deck appears in a preview beside the conversation and downloads as
+it. When the template has a slide that can hold a chart, numbers become
+editable charts in the template's colours, from bars and pies to radar,
+scatter and bubble charts; a pie shows percentages unless you give a unit
+(M€, people…), then it shows the values. The deck appears in a preview beside the conversation and downloads as
 `.pptx`. The info button next to the download shows **What was built**: each
 slide, its kind, and what was shortened, left out or continued on another
 slide.
@@ -139,13 +141,12 @@ set slides aside.
 To prepare a template the agent understands well, see
 [Prepare your PowerPoint template](/help/en/guides/prepare-powerpoint-template).
 
-**Without a template on the agent** — the agent uses, in order: the template
-uploaded on the agent; else the one the administrator chose for the whole
-platform (the form shows **Template set by the administrator** and the file
-name, see
+**Without a template on the agent** — the agent uses the one the
+administrator chose for the whole platform (the form shows **Template set by
+the administrator** and the file name, see
 [Administration](/help/en/features/administration#the-platform-presentation-template));
-else the built-in Fred template. Uploading a template on the agent always
-takes over.
+without one, the built-in Fred template. Uploading a template on the agent
+always takes over.
 
 **Use a vision model** — when a model that can read images is available, it
 looks at each template slide to name it and understand what it is for. You
@@ -169,8 +170,10 @@ without reading the template again.
 
 **The thread of the presentation** — for each slide, the agent first decides
 what the audience should take away, in one sentence, then chooses what to show
-to prove it. That sentence is not shown on the slide: it opens the speaker
-notes, and the title sums it up in a few words. When content comes from your
+to prove it. That sentence opens the speaker notes, and the title sums it up
+in a few words. It is shown on the slides only when you ask for the key
+messages on the slides, and only on slides whose template has a place for
+it. When content comes from your
 documents or from what you wrote in the conversation, the notes say where it
 comes from; general knowledge has no source. The agent only
 makes figures up when you ask for sample or made-up data; the chart then says
@@ -182,8 +185,21 @@ first shows its plan for the first presentation of a conversation: the
 audience, the main message, one line per slide and what the build would
 change (a slide built as another kind, for instance). It waits for your answer:
 approve it or say what to change, and it builds. To skip this step once, ask it
-to build directly, without a plan. Changes to a presentation already delivered
-never wait.
+to build directly, without a plan. Once you approve the plan, the slides stay
+as agreed: the agent is not asked to revise the ones that repeat. Changes to a
+presentation already delivered never wait.
+
+**Changing a delivered presentation** — ask in the same conversation: the
+agent changes the last presentation it delivered there, never an older one.
+Name the slides by their number in the file: change the text of slide 4, add
+a slide after slide 2, move slide 6 after slide 3, remove slide 5. To give a
+slide the look of another, ask for "the same layout as slide 3". The other
+slides stay as they were.
+
+**Pictures** — the agent takes pictures from a folder of your team's
+resources: name the folder in your request ("the pictures in Images/Sites").
+Only template slides with a picture area show one. A file that is not a usable
+picture is left out, and **What was built** says so.
 
 **Its limits** — the agent only uses slides the template holds: it does not
 draw new ones. When the content does not fit any slide (too many items, for

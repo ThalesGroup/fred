@@ -190,14 +190,14 @@ then goes with the empty area.
 
 These slides stay visible in **Review slides**, with the reason:
 
-| Reason shown     | What causes it                                                    |
-| ---------------- | ----------------------------------------------------------------- |
-| Chart            | More than four charts share the slide, or a chart inside a group  |
-| Table            | A table that is not a data table (merged cells, per-cell colours) |
-| Icon bank        | Twenty or so pictures or more, with no text                       |
-| Cannot be copied | A SmartArt, a very small chart or an embedded object (Excel…)     |
-| No placeholder   | A layout with nothing to fill                                     |
-| Excluded by you  | You set it aside                                                  |
+| Reason shown     | What causes it                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Chart            | More than four charts share the slide, or a chart inside a group                                                                   |
+| Table            | A table that is not a data table (merged cells, per-cell colours)                                                                  |
+| Resource sheet   | A page of resources, not content: twenty or so small pictures or many shapes with no text, or a title such as "Fonts" or "Palette" |
+| Cannot be copied | A SmartArt, a very small chart or an embedded object (Excel…)                                                                      |
+| No placeholder   | A layout with nothing to fill                                                                                                      |
+| Excluded by you  | You set it aside                                                                                                                   |
 
 A SmartArt can be converted to shapes in PowerPoint: the slide then becomes
 usable.

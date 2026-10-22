@@ -205,14 +205,14 @@ la carte part alors avec la zone vide.
 
 Ces diapositives restent visibles dans **Vérifier les slides**, avec la raison :
 
-| Raison affichée      | Ce qui la provoque                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------ |
-| Graphique            | Plus de quatre graphiques sur la diapositive, ou un graphique dans un groupe               |
-| Tableau              | Un tableau qui n'est pas un tableau de données (cellules fusionnées, couleurs par cellule) |
-| Banque d'icônes      | Une vingtaine d'images ou plus, sans texte                                                 |
-| Non copiable         | Un SmartArt, un très petit graphique ou un objet incorporé (Excel…)                        |
-| Aucun espace réservé | Un masque sans rien à remplir                                                              |
-| Exclu par vous       | Vous l'avez mise de côté                                                                   |
+| Raison affichée       | Ce qui la provoque                                                                                                                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Graphique             | Plus de quatre graphiques sur la diapositive, ou un graphique dans un groupe                                                                                |
+| Tableau               | Un tableau qui n'est pas un tableau de données (cellules fusionnées, couleurs par cellule)                                                                  |
+| Planche de ressources | Une page de ressources, pas de contenu : une vingtaine de petites images ou beaucoup de formes sans texte, ou un titre comme « Typographie » ou « Palette » |
+| Non copiable          | Un SmartArt, un très petit graphique ou un objet incorporé (Excel…)                                                                                         |
+| Aucun espace réservé  | Un masque sans rien à remplir                                                                                                                               |
+| Exclu par vous        | Vous l'avez mise de côté                                                                                                                                    |
 
 Un SmartArt peut être converti en formes dans PowerPoint : la diapositive
 devient alors utilisable.

@@ -104,7 +104,8 @@ Fred template until changed):
   reading succeeds, or if it fails, agents keep the previous template.
 - **Use a vision model** — the AI model that reads this template's slides; by
   default, the platform's default model. The choice applies at the next
-  upload or **Run the analysis again**, and changes nothing for agents.
+  upload or **Run the analysis again**, and changes nothing for agents. It has
+  no effect on the Fred template, which is already read.
 - **Review slides** — rename a slide, change its kind or set it aside. The
   edits are saved when the review closes and apply to every agent using this
   template. A new reading of the same file keeps them; another file starts

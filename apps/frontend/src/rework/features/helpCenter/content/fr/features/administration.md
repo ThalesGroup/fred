@@ -116,7 +116,7 @@ qui n'en ont pas à eux (le template Fred tant que rien n'est changé) :
 - **Utiliser un modèle de vision** — le modèle d'IA qui lit les slides de ce
   template ; par défaut, le modèle par défaut de la plateforme. Le choix vaut
   au prochain téléversement ou à **Relancer la lecture**, et ne change rien aux
-  agents.
+  agents. Il n'a aucun effet sur le template Fred, déjà lu.
 - **Vérifier les slides** — renommez une slide, changez son type ou
   mettez-la de côté. Les corrections s'enregistrent à la fermeture et valent
   pour tous les agents qui utilisent ce template. Une nouvelle lecture du même
