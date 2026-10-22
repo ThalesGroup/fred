@@ -1081,6 +1081,41 @@ operations:
     required_permission: can_manage # capability#can_manage; the target must be an advertised model. The name is platform-wide and does not change access grants.
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/model-discovery
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/model-discovery/refresh
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/model-discovery/{source_id}/url
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform-model-fallback
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform-model-fallback
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform-model-fallback
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: agent-pod
+    method: POST
+    path: /pod/v1/agents/models-catalog/refresh
+    review_status: approved
+    required_permission: can_manage_capabilities # Enforced against the caller when pod security is enabled; local unsecured mode bypasses ReBAC.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
     required_permission: can_manage_capabilities # platform-wide chat model binding (chat-only) — organization_authz.require_manage_capabilities; the model bindings are a panel of the same features page as GET /admin/capabilities and share its gate. binding=null when unset.
