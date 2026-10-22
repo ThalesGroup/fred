@@ -820,6 +820,19 @@ def _chart_data(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
     )
 
 
+def _table_data(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
+    """A table whose rows do not match its columns: no cell is guessed."""
+    table = slide.table
+    if table is None or not table.unshaped:
+        return None
+    return SlideProblem(
+        index,
+        "; ".join(table.unshaped),
+        ["give every row one cell per column, in the columns' order"],
+        slide.kind,
+    )
+
+
 # --- deck assignment ----------------------------------------------------------------------
 
 
@@ -1963,8 +1976,10 @@ def assign(
     problems: List[SlideProblem] = []
     splits: Dict[int, _Split] = {}
     for slide in slides:
-        dropped = _dropped_text(slide.index, slide.plan) or _chart_data(
-            slide.index, slide.plan
+        dropped = (
+            _dropped_text(slide.index, slide.plan)
+            or _chart_data(slide.index, slide.plan)
+            or _table_data(slide.index, slide.plan)
         )
         if dropped is not None:
             problems.append(dropped)

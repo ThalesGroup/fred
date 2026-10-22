@@ -334,6 +334,9 @@ class PlanTable(BaseModel):
         description="Optional: the one column that matters, by its header text or "
         "its index (from 0).",
     )
+    # Rows of another width than the columns, or an empty column list: the
+    # assigner refuses the slide with this text rather than guess the cells.
+    unshaped: SkipJsonSchema[List[str]] = Field(default_factory=list, exclude=True)
 
     @model_validator(mode="before")
     @classmethod
@@ -342,6 +345,10 @@ class PlanTable(BaseModel):
             value = {"rows": value}
         if not isinstance(value, dict):
             return {"rows": [[_as_text(value) or ""]]}
+        no_columns = any(
+            k in value and isinstance(value[k], (list, tuple)) and not value[k]
+            for k in ("columns", "header", "headers")
+        )
         value = _with_aliases(value, _TABLE_ALIASES)
         intents = {
             "total_row": _total(value.get("total_row")),
@@ -365,9 +372,19 @@ class PlanTable(BaseModel):
             if r is not None
         ]
         cells = [r for r in cells if any(r)]
-        # Ragged rows are padded: a missing cell is an empty one.
         width = max([len(header_cells)] + [len(r) for r in cells])
+        unshaped: List[str] = []
+        if no_columns and not header_cells and cells:
+            unshaped.append("table.columns is empty while rows are given")
+        columns = len(header_cells) or width
+        unshaped += [
+            f"table.rows[{i}] has {len(r)} cells for {columns} columns"
+            for i, r in enumerate(cells)
+            if len(r) != columns
+        ]
+        # Padded all the same, so a refused plan stays a valid base for `changes`.
         return {
+            "unshaped": unshaped,
             "header": header_cells + [""] * (width - len(header_cells))
             if header_cells
             else [],

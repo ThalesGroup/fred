@@ -628,11 +628,15 @@ def _sent(slide: Any) -> SlidePlan:
     fit and variety checks, so the fields only the tool sets are dropped."""
     plain = slide.model_dump() if isinstance(slide, BaseModel) else slide
     sent = without_hidden(SlidePlan.model_validate(plain))
-    # The units written beside the values are not dumped: kept from the call
-    # itself so the one-measure check sees them.
+    # The units written beside the values, and a table's ragged rows, are not
+    # dumped: kept from the call itself so the checks see them.
     chart = getattr(slide, "chart", None)
     if isinstance(chart, PlanChart) and sent.chart is not None:
         sent = sent.model_copy(update={"chart": _with_units(sent.chart, chart)})
+    table = getattr(slide, "table", None)
+    if isinstance(table, PlanTable) and table.unshaped and sent.table is not None:
+        update = {"unshaped": table.unshaped}
+        sent = sent.model_copy(update={"table": sent.table.model_copy(update=update)})
     written = getattr(slide, "charts", None) or []
     if sent.charts and len(written) == len(sent.charts):
         update = [_with_units(mine, w) for mine, w in zip(sent.charts, written)]

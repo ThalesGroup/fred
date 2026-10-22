@@ -1369,3 +1369,14 @@ async def test_an_unreadable_plan_is_logged_without_its_text(monkeypatch, caplog
     logged = [r.getMessage() for r in caplog.records if "unreadable plan" in r.msg]
     assert logged == ["[PPTBUILD][TOOL] unreadable plan: title: int_parsing"]
     assert "confidential" not in " ".join(r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_a_ragged_table_is_sent_back_with_its_rows_named(monkeypatch):
+    table = {"columns": ["A", "B", "C"], "rows": [["1"], ["1", "2", "3", "4"]]}
+    text, result = await _build(
+        monkeypatch, variety="off", slides=[COVER, {"title": "T", "table": table}]
+    )
+    assert not result.is_error and "No deck was built" in text
+    assert "table.rows[0] has 1 cells for 3 columns" in text
+    assert "table.rows[1] has 4 cells for 3 columns" in text

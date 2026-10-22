@@ -136,15 +136,46 @@ def test_catalogue_quotes_the_table(inventory):
 # --- plan ---------------------------------------------------------------------------
 
 
-def test_plan_table_coercion_pads_ragged_rows_and_reads_objects():
+def test_plan_table_coercion_flags_ragged_rows_and_reads_objects():
     ragged = PlanTable.model_validate(
         {"header": ["A", "B", "C"], "rows": [["1"], ["2", "3"]]}
     )
     assert ragged.rows == [["1", "", ""], ["2", "3", ""]]
+    assert ragged.unshaped == [
+        "table.rows[0] has 1 cells for 3 columns",
+        "table.rows[1] has 2 cells for 3 columns",
+    ]
     objects = PlanTable.model_validate([{"Offre": "A", "Coût": 3}, {"Offre": "B"}])
     assert objects.header == ["Offre", "Coût"]
     assert objects.rows == [["A", "3"], ["B", ""]]
     assert infer_kinds(SlidePlan(title="T", table=objects)) == ["table"]
+
+
+@pytest.mark.parametrize(
+    ("table", "said"),
+    [
+        (
+            {"columns": ["A", "B"], "rows": [["1", "2", "3"], ["4", "5"]]},
+            "table.rows[0] has 3 cells for 2 columns",
+        ),
+        ({"rows": [["1", "2"], ["3"]]}, "table.rows[1] has 1 cells for 2 columns"),
+        ({"columns": [], "rows": [["1", "2"]]}, "table.columns is empty"),
+    ],
+)
+def test_a_table_whose_rows_miss_its_columns_is_refused(inventory, table, said):
+    plan = _deck(SlidePlan(title="Comparatif", table=PlanTable.model_validate(table)))
+    (problem,) = assign(inventory, plan).problems
+    assert problem.index == 2 and said in problem.problem
+    assert "one cell per column" in problem.options[0]
+
+
+def test_a_fixed_table_is_no_longer_refused(inventory):
+    ragged = PlanTable.model_validate({"columns": ["A", "B"], "rows": [["1"]]})
+    dumped = ragged.model_dump()
+    assert "unshaped" not in dumped
+    dumped["rows"][0] = ["1", "2"]
+    plan = _deck(SlidePlan(title="Comparatif", table=PlanTable.model_validate(dumped)))
+    assert not assign(inventory, plan).problems
 
 
 # --- fit and assignment ---------------------------------------------------------------
