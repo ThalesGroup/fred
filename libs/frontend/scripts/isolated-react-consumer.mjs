@@ -80,7 +80,7 @@ export async function assertReactConsumerFixture(root = fixtureRoot) {
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     typescript: "5.9.3",
-    vite: "6.4.3",
+    vite: "6.4.4",
   });
   const lock = JSON.parse(
     await readFile(path.join(root, "package-lock.json"), "utf8"),
