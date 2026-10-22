@@ -195,7 +195,7 @@ The platform SHALL offer a platform admin, and only a holder of `can_manage_plat
 
 - **GIVEN** Alice holds an unseen `team.join_requested` notification
 - **WHEN** a platform admin turns `team.join_requested` off
-- **THEN** that notification is neither listed nor counted on Alice's bell, "Clear all" leaves it alone, and the request stays in the team's Members > Pending requests
+- **THEN** that notification is neither listed nor counted on Alice's bell, "Clear all" leaves it alone, and the request stays in the team's Members > Join requests
 
 #### Scenario: A notification emitted while its type is off appears after it is turned back on
 

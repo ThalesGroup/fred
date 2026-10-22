@@ -79,7 +79,7 @@ Settings → Joining mode**. Only a public team offers it.
 Each request reaches the team's Admins in their notifications, with the
 person's message: **Refuse**, on the left, declines; **Accept**, on the right,
 makes them a **Member**. The first answer counts; the other Admins then see who answered. The same requests
-appear at the top of **Settings → Members**, under **Pending requests**, with
+appear at the top of **Settings → Members**, under **Join requests**, with
 the same buttons. A request refused in the last 7 days stays listed there with
 **Accept anyway**, in case of a mistake.
 

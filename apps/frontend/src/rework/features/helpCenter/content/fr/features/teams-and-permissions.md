@@ -89,7 +89,7 @@ Chaque demande arrive dans les notifications des Admins de l'équipe, avec le
 message de la personne : **Refuser**, à gauche, la décline ; **Accepter**, à
 droite, en fait un **Membre**. La première réponse compte ; les autres Admins voient ensuite qui a
 répondu. Les mêmes demandes figurent en haut de **Réglages → Membres**, sous
-**Demandes en attente**, avec les mêmes boutons. Une demande refusée depuis
+**Demandes d'adhésion**, avec les mêmes boutons. Une demande refusée depuis
 moins de 7 jours y reste affichée avec **Accepter quand même**, en cas
 d'erreur.
 

@@ -5228,7 +5228,7 @@ row means on). Turning a type off hides it: producers still store its rows,
 but the list, the unseen count and Clear all only see enabled types; turning it
 back on shows every row still there (dismissed or acted-on rows were deleted,
 expiry still applies). Platform-wide only; the underlying actions (e.g. Members
-> Pending requests) stay available. Audit event
+> Join requests) stay available. Audit event
 `platform.notification_type.updated` (type, enabled).
 
 ## 70. Contract Notes — team join requests (2026-10-22, #3232)

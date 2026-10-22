@@ -97,7 +97,7 @@
   - Done: `NotificationsPage.test.tsx` (on saves at once, off asks then saves on confirm, failure toast).
 - [x] 10.8 Performance review fixes: plain indexes on `notifications.team_id` and `group_key` in the revision and the model; `KPIMiddleware` skips `/notifications/summary`; verify `test_table_ownership.py`, `fred_core/tests/kpi/test_http_middleware.py`.
   - Done: both green; `alembic heads` one head (`83b81adf7450`).
-- [ ] 10.6 Owner live check: turn `team.join_requested` off, ask to join an on_request team → no notification shown and existing ones hidden; the request is still in Members > Pending requests; turn it back on → the hidden notifications reappear.
+- [ ] 10.6 Owner live check: turn `team.join_requested` off, ask to join an on_request team → no notification shown and existing ones hidden; the request is still in Members > Join requests; turn it back on → the hidden notifications reappear.
 
 ## 11. Quality refactor (2026-10-22)
 
