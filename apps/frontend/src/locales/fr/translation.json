@@ -1880,6 +1880,7 @@
         "success": "Succès"
       },
       "toolLabels": {
+        "askUser": "Demande d'information à l'utilisateur",
         "readSkillFile": "Lecture d’un fichier du skill",
         "readQuery": "Lecture de la requête",
         "documents": "Liste des documents tabulaires",

@@ -720,6 +720,9 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 #### Resolved
 
+- **Agent question label** - The `ask_user` trace row uses a localized description of the request
+  for information instead of showing the tool name.
+
 - **Tool step showed "running" before the HITL confirmation was even answered, and one
   confirmation was asked per document instead of once for the whole folder (2026-08-03)** —
   a HITL-gated tool call (`document_access`'s `summarize_document` in particular) rendered its
