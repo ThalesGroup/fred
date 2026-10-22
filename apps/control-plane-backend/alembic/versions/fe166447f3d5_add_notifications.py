@@ -97,6 +97,15 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_index(
+        op.f("ix_notifications_team_id"), "notifications", ["team_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_notifications_group_key"),
+        "notifications",
+        ["group_key"],
+        unique=False,
+    )
+    op.create_index(
         "uq_notifications_open_group",
         "notifications",
         ["group_key", "recipient_id"],
@@ -121,6 +130,8 @@ def downgrade() -> None:
     with op.batch_alter_table("agent_marketplace_entry") as batch:
         batch.drop_column("published_by")
     op.drop_index("uq_notifications_open_group", table_name="notifications")
+    op.drop_index(op.f("ix_notifications_group_key"), table_name="notifications")
+    op.drop_index(op.f("ix_notifications_team_id"), table_name="notifications")
     op.drop_index(op.f("ix_notifications_expires_at"), table_name="notifications")
     op.drop_index("ix_notifications_recipient_unseen", table_name="notifications")
     op.drop_index("ix_notifications_recipient_created", table_name="notifications")

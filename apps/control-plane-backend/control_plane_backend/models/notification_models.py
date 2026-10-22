@@ -52,10 +52,12 @@ class NotificationRow(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     recipient_id: Mapped[str] = mapped_column(String, nullable=False)
     type: Mapped[str] = mapped_column(String(64), nullable=False)
-    team_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Indexed for the team cleanups (leave, delete) and whole-group deletes.
+    team_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     group_key: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
+        index=True,
         comment="Shared by every row about the same subject: dedupe and resolve.",
     )
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
