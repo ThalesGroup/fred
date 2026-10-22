@@ -1717,12 +1717,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.markNotificationsSeenRequest,
       }),
     }),
-    markNotificationReadControlPlaneV1NotificationsNotificationIdReadPost: build.mutation<
-      MarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostApiResponse,
-      MarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/control-plane/v1/notifications/${queryArg.notificationId}/read`, method: "POST" }),
-    }),
     deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: build.mutation<
       DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiResponse,
       DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiArg
@@ -3327,10 +3321,6 @@ export type MarkNotificationsSeenControlPlaneV1NotificationsSeenPostApiResponse 
 export type MarkNotificationsSeenControlPlaneV1NotificationsSeenPostApiArg = {
   markNotificationsSeenRequest: MarkNotificationsSeenRequest;
 };
-export type MarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostApiResponse = unknown;
-export type MarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostApiArg = {
-  notificationId: string;
-};
 export type DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiResponse = unknown;
 export type DeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteApiArg = {
   notificationId: string;
@@ -3812,7 +3802,6 @@ export type WikiProposalLifecycleResult = {
 };
 export type NotificationExpiryResult = {
   deleted?: number;
-  batches?: number;
 };
 export type LifecycleManagerResult = {
   scanned?: number;
@@ -5717,8 +5706,6 @@ export type AgentMarketplaceRemovedNotification = {
   created_at: string;
   expires_at: string;
   seen_at?: string | null;
-  /** Null while the tile keeps its unread style. */
-  read_at?: string | null;
   /** Set once someone else acted on the subject; the tile then shows `handled_by_name` instead of its buttons. */
   handled_at?: string | null;
   handled_by_name?: string | null;
@@ -5740,8 +5727,6 @@ export type AgentRepublishNeededNotification = {
   created_at: string;
   expires_at: string;
   seen_at?: string | null;
-  /** Null while the tile keeps its unread style. */
-  read_at?: string | null;
   /** Set once someone else acted on the subject; the tile then shows `handled_by_name` instead of its buttons. */
   handled_at?: string | null;
   handled_by_name?: string | null;
@@ -5760,8 +5745,6 @@ export type TeamJoinRequestAnsweredNotification = {
   created_at: string;
   expires_at: string;
   seen_at?: string | null;
-  /** Null while the tile keeps its unread style. */
-  read_at?: string | null;
   /** Set once someone else acted on the subject; the tile then shows `handled_by_name` instead of its buttons. */
   handled_at?: string | null;
   handled_by_name?: string | null;
@@ -5783,8 +5766,6 @@ export type TeamJoinRequestedNotification = {
   created_at: string;
   expires_at: string;
   seen_at?: string | null;
-  /** Null while the tile keeps its unread style. */
-  read_at?: string | null;
   /** Set once someone else acted on the subject; the tile then shows `handled_by_name` instead of its buttons. */
   handled_at?: string | null;
   handled_by_name?: string | null;
@@ -5829,7 +5810,7 @@ export type NotificationTypeSettings = {
   items: NotificationTypeSetting[];
 };
 export type SetNotificationTypeRequest = {
-  /** False stops sending the type and deletes every notification of it already sent; true only affects new events. */
+  /** False hides every notification of the type from everyone, those already sent included; true shows every one still there. */
   enabled: boolean;
 };
 export type StartTaskResponse = {
@@ -6485,7 +6466,6 @@ export const {
   useLazyListNotificationsControlPlaneV1NotificationsGetQuery,
   useClearNotificationsControlPlaneV1NotificationsDeleteMutation,
   useMarkNotificationsSeenControlPlaneV1NotificationsSeenPostMutation,
-  useMarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostMutation,
   useDeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteMutation,
   useListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery,
   useLazyListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery,
