@@ -3029,7 +3029,7 @@
         },
         "title": "Membres de l'équipe",
         "joinRequests": {
-          "title": "Demandes en attente",
+          "title": "Demandes d'adhésion",
           "sentOn": "Demandé le {{date}}",
           "refusedOn": "Refusé le {{date}}",
           "accept": "Accepter",
@@ -4378,7 +4378,7 @@
         },
         "joinRequested": {
           "name": "Demande pour rejoindre une équipe",
-          "description": "Envoyée aux administrateurs d'une équipe quand quelqu'un demande à la rejoindre ; les demandes restent dans Membres > Demandes en attente.",
+          "description": "Envoyée aux administrateurs d'une équipe quand quelqu'un demande à la rejoindre ; les demandes restent dans Membres > Demandes d'adhésion.",
           "title": "{{name}} demande à rejoindre {{team}}",
           "acceptedBy": "Acceptée par {{name}}",
           "refusedBy": "Refusée par {{name}}"

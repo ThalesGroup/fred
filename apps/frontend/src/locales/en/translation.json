@@ -3029,7 +3029,7 @@
         },
         "title": "Team members",
         "joinRequests": {
-          "title": "Pending requests",
+          "title": "Join requests",
           "sentOn": "Asked on {{date}}",
           "refusedOn": "Refused on {{date}}",
           "accept": "Accept",
@@ -4378,7 +4378,7 @@
         },
         "joinRequested": {
           "name": "Request to join a team",
-          "description": "Sent to a team’s administrators when someone asks to join it; requests stay in Members > Pending requests.",
+          "description": "Sent to a team’s administrators when someone asks to join it; requests stay in Members > Join requests.",
           "title": "{{name}} asks to join {{team}}",
           "acceptedBy": "Accepted by {{name}}",
           "refusedBy": "Refused by {{name}}"
