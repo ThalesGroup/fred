@@ -477,8 +477,8 @@ back to listing every metadata row unfiltered — that branch now filters out
 a ReBAC-disabled deployment would enumerate every user's session-scoped
 attachment to every other user through the same blind
 `list_documents`/`list_datasets` path the paragraph above says attachments
-never appear in — true for the normal, ReBAC-enabled case (no tuple means
-`lookup_user_resources` never includes them), false for this one branch,
+never appear in — true for the normal, ReBAC-enabled case (corpus documents
+come from readable folders, and attachments have none), false for this one branch,
 which bypasses per-user filtering entirely rather than resolving it to
 "none." The ownership fallback above is unaffected either way: it never
 reads `self.rebac` at all, so an owner's own explicit-uid access keeps

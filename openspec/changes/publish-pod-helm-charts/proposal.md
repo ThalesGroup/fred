@@ -11,6 +11,7 @@ same gap: Fred documents how to register one, not how to package it, so each pro
 invents its chart (the evaluator) or ships raw manifests to edit by hand (fred-samples).
 
 Tracking: https://github.com/ThalesGroup/fred/issues/3083
+Gateway API follow-up: https://github.com/ThalesGroup/fred/issues/3187
 
 ## What Changes
 
@@ -26,6 +27,8 @@ Tracking: https://github.com/ThalesGroup/fred/issues/3083
 - Each chart ships an install README (`helm show readme`): what it deploys, what Fred must
   provide, the required values, the credentials, the addresses, and how the pod is
   registered. `NOTES.txt` prints the registration to add to Fred's values.
+- The agent-pod chart optionally renders a Gateway API HTTPRoute for the pod base URL, so
+  operators can expose a pod through a shared Gateway without a separate manifest.
 - The agent-pod chart starts from dt-agents' chart and the knowledge-base chart from
   webdav-knowledge-base's, the two most complete, with their repository-specific parts
   generalized or removed.

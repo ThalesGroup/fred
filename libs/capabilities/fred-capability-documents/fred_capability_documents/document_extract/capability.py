@@ -80,7 +80,7 @@ class DocumentExtractCapability(
     manifest = CapabilityManifest(
         id="document_extract",
         # Pre-GA: version stays 0.1.0 while the platform has not shipped.
-        version="0.1.0",
+        version="0.1.1",
         name="capability.document_extract.name",
         description="capability.document_extract.description",
         icon="find_in_page",

@@ -69,6 +69,7 @@ the actual change; a generic claim does not replace review. Production changes r
 chart schema validation change when the bundled values already satisfy a newly
 enforced constraint. Removing an optional setting documented only as a commented
 example still requires its removal from both the generated schema and values.yaml.
+Published pod chart values are production configuration too.
 Comments or schema descriptions alone do not establish a production change. Existing schema CI checks regenerated
 backend/chart schemas. Local-only changes need an explicit reason why production
 values are unaffected. If the check flags a file under `config/` whose edits only

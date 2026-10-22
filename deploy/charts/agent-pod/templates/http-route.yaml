@@ -1,0 +1,33 @@
+{{- if .Values.httpRoute.enabled }}
+{{- $parentRefs := .Values.httpRoute.parentRefs }}
+{{- $hostnames := .Values.httpRoute.hostnames }}
+{{- if eq (len $parentRefs) 0 }}{{ fail "httpRoute.parentRefs is required when httpRoute.enabled is true" }}{{ end }}
+{{- if eq (len $hostnames) 0 }}{{ fail "httpRoute.hostnames is required when httpRoute.enabled is true" }}{{ end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "agent-pod.fullname" . }}
+  labels:
+    {{- include "agent-pod.labels" . | nindent 4 }}
+  {{- with .Values.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml $parentRefs | nindent 4 }}
+  hostnames:
+    {{- toYaml $hostnames | nindent 4 }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ include "agent-pod.basePath" . | quote }}
+      backendRefs:
+        - name: {{ include "agent-pod.fullname" . }}
+          port: {{ .Values.service.port }}
+      {{- with .Values.httpRoute.requestTimeout }}
+      timeouts:
+        request: {{ . | quote }}
+      {{- end }}
+{{- end }}

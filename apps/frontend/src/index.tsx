@@ -26,6 +26,7 @@ import { KeyCloakService } from "./security/KeycloakService.ts";
 import { getPlatformUiThemes, loadConfig } from "./common/config.tsx";
 import { applyResolvedTheme } from "./app/uiThemes.ts";
 import { loadThemeTranslations } from "./i18n";
+import { installStaleChunkReload } from "./common/staleChunkReload.ts";
 import "@fontsource/inter/100.css";
 import "@fontsource/inter/200.css";
 import "@fontsource/inter/300.css";
@@ -61,6 +62,8 @@ window.addEventListener(
   },
   { passive: true },
 );
+
+installStaleChunkReload();
 
 const startApp = async () => {
   console.info("Starting Fred UI...");
