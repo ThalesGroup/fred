@@ -21,16 +21,16 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import CursorResult, and_, delete, or_, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from control_plane_backend.models.base import utcnow
+from control_plane_backend.models.base import as_utc, rowcount, utcnow
 from control_plane_backend.models.team_join_request_models import TeamJoinRequestRow
 from control_plane_backend.notifications.schemas import NotificationType, group_key
 
@@ -77,11 +77,6 @@ def answer_group(request_id: str) -> str:
     return group_key(NotificationType.TEAM_JOIN_REQUEST_ANSWERED, request_id)
 
 
-def _aware(value: datetime) -> datetime:
-    # SQLite hands timestamps back naive; they were written in UTC.
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-
-
 def _to_stored(row: TeamJoinRequestRow) -> StoredJoinRequest:
     return StoredJoinRequest(
         id=row.id,
@@ -90,15 +85,11 @@ def _to_stored(row: TeamJoinRequestRow) -> StoredJoinRequest:
         requester_name=row.requester_name,
         message=row.message,
         status=JoinRequestStatus(row.status),
-        created_at=_aware(row.created_at),
-        expires_at=_aware(row.expires_at),
-        decided_at=row.decided_at and _aware(row.decided_at),
+        created_at=as_utc(row.created_at),
+        expires_at=as_utc(row.expires_at),
+        decided_at=row.decided_at and as_utc(row.decided_at),
         decided_by=row.decided_by,
     )
-
-
-def _rowcount(result: object) -> int:
-    return cast(CursorResult[Any], result).rowcount
 
 
 def _live(now: datetime) -> Any:
@@ -197,7 +188,7 @@ class TeamJoinRequestStore:
             result = await s.execute(
                 delete(TeamJoinRequestRow).where(TeamJoinRequestRow.id == request_id)
             )
-            return _rowcount(result) == 1
+            return rowcount(result) == 1
 
     async def _delete_if_unchanged(self, request: StoredJoinRequest) -> bool:
         async with use_session(self._sessions) as s:
@@ -208,7 +199,7 @@ class TeamJoinRequestStore:
                     _live(utcnow()),
                 )
             )
-            return _rowcount(result) == 1
+            return rowcount(result) == 1
 
     async def refuse(
         self, team_id: str, request_ids: Sequence[str], *, decided_by: str
@@ -224,24 +215,18 @@ class TeamJoinRequestStore:
             _live(now),
         ]
         async with use_session(self._sessions) as s:
-            ids = list(
-                (
-                    await s.execute(select(TeamJoinRequestRow.id).where(*pending))
-                ).scalars()
-            )
-            if not ids:
-                return []
-            await s.execute(
+            result = await s.execute(
                 update(TeamJoinRequestRow)
-                .where(*pending, TeamJoinRequestRow.id.in_(ids))
+                .where(*pending)
                 .values(
                     status=JoinRequestStatus.REFUSED.value,
                     decided_at=now,
                     decided_by=decided_by,
                     expires_at=now + REFUSED_TTL,
                 )
+                .returning(TeamJoinRequestRow)
             )
-        return await self._select(TeamJoinRequestRow.id.in_(ids))
+            return [_to_stored(row) for row in result.scalars()]
 
     async def delete_pending_for_team(self, team_id: str) -> list[StoredJoinRequest]:
         """The team stopped taking requests: its pending ones go, and are returned.
@@ -281,20 +266,12 @@ class TeamJoinRequestStore:
     async def delete_for_requester(self, requester_id: str) -> list[str]:
         """Returns the deleted ids, so their notifications can go too."""
         async with use_session(self._sessions) as s:
-            ids = list(
-                (
-                    await s.execute(
-                        select(TeamJoinRequestRow.id).where(
-                            TeamJoinRequestRow.requester_id == requester_id
-                        )
-                    )
-                ).scalars()
+            result = await s.execute(
+                delete(TeamJoinRequestRow)
+                .where(TeamJoinRequestRow.requester_id == requester_id)
+                .returning(TeamJoinRequestRow.id)
             )
-            if ids:
-                await s.execute(
-                    delete(TeamJoinRequestRow).where(TeamJoinRequestRow.id.in_(ids))
-                )
-            return ids
+            return list(result.scalars())
 
     async def delete_expired(self, *, limit: int) -> int:
         expired = (
@@ -306,7 +283,7 @@ class TeamJoinRequestStore:
             result = await s.execute(
                 delete(TeamJoinRequestRow).where(TeamJoinRequestRow.id.in_(expired))
             )
-            return _rowcount(result)
+            return rowcount(result)
 
 
 __all__ = [

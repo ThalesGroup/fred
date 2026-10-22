@@ -21,15 +21,15 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast
+from typing import Any
 
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import CursorResult, and_, delete, func, or_, select, tuple_, update
+from sqlalchemy import and_, delete, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from control_plane_backend.models.base import utcnow
+from control_plane_backend.models.base import as_utc, rowcount, utcnow
 from control_plane_backend.models.notification_models import (
     DisabledNotificationTypeRow,
     NotificationRow,
@@ -89,13 +89,8 @@ class PageCursor:
         return PageCursor(created_at=created_at, id=notification_id)
 
 
-def _aware(value: datetime) -> datetime:
-    # SQLite hands timestamps back naive; they were written in UTC.
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-
-
 def _micros(value: datetime) -> int:
-    delta = _aware(value) - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    delta = as_utc(value) - datetime(1970, 1, 1, tzinfo=timezone.utc)
     return delta // timedelta(microseconds=1)
 
 
@@ -107,27 +102,24 @@ def _to_stored(row: NotificationRow) -> StoredNotification:
         team_id=row.team_id,
         group_key=row.group_key,
         payload=dict(row.payload),
-        created_at=_aware(row.created_at),
-        expires_at=_aware(row.expires_at),
-        seen_at=row.seen_at and _aware(row.seen_at),
-        handled_at=row.handled_at and _aware(row.handled_at),
+        created_at=as_utc(row.created_at),
+        expires_at=as_utc(row.expires_at),
+        seen_at=row.seen_at and as_utc(row.seen_at),
+        handled_at=row.handled_at and as_utc(row.handled_at),
         handled_by_name=row.handled_by_name,
         handled_outcome=row.handled_outcome,
     )
 
 
-def _rowcount(result: object) -> int:
-    return cast(CursorResult[Any], result).rowcount
-
-
-def _up_to(cursor: PageCursor) -> Any:
-    """Rows at or before `cursor` in list order (created_at, id)."""
+def _after(cursor: PageCursor, *, inclusive: bool = False) -> Any:
+    """Rows listed after `cursor` (newest first by created_at, then id), and
+    the cursor's own row when `inclusive`."""
+    same_time = (
+        NotificationRow.id <= cursor.id if inclusive else NotificationRow.id < cursor.id
+    )
     return or_(
         NotificationRow.created_at < cursor.created_at,
-        and_(
-            NotificationRow.created_at == cursor.created_at,
-            NotificationRow.id <= cursor.id,
-        ),
+        and_(NotificationRow.created_at == cursor.created_at, same_time),
     )
 
 
@@ -250,15 +242,7 @@ class NotificationStore:
         """Newest first; the cursor is set when an older row remains."""
         query = select(NotificationRow).where(*self._mine(recipient_id, utcnow()))
         if before is not None:
-            query = query.where(
-                or_(
-                    NotificationRow.created_at < before.created_at,
-                    and_(
-                        NotificationRow.created_at == before.created_at,
-                        NotificationRow.id < before.id,
-                    ),
-                )
-            )
+            query = query.where(_after(before))
         query = query.order_by(
             NotificationRow.created_at.desc(), NotificationRow.id.desc()
         ).limit(limit + 1)
@@ -287,7 +271,9 @@ class NotificationStore:
                 .where(
                     *self._mine(recipient_id, now),
                     NotificationRow.seen_at.is_(None),
-                    _up_to(PageCursor(created_at=created_at, id=up_to_id)),
+                    _after(
+                        PageCursor(created_at=created_at, id=up_to_id), inclusive=True
+                    ),
                 )
                 .values(seen_at=now)
             )
@@ -301,7 +287,7 @@ class NotificationStore:
                     NotificationRow.id == notification_id,
                 )
             )
-            return _rowcount(result) > 0
+            return rowcount(result) > 0
 
     async def delete_all(self, recipient_id: str) -> int:
         """ "Clear all": every row but the open decisions still waiting for one."""
@@ -318,7 +304,7 @@ class NotificationStore:
                     NotificationRow.recipient_id == recipient_id, ~waiting
                 )
             )
-            return _rowcount(result)
+            return rowcount(result)
 
     async def delete_expired(self, *, limit: int) -> int:
         """Delete at most `limit` expired rows; returns how many went."""
@@ -331,7 +317,7 @@ class NotificationStore:
             result = await s.execute(
                 delete(NotificationRow).where(NotificationRow.id.in_(expired))
             )
-            return _rowcount(result)
+            return rowcount(result)
 
     async def delete_for_user(self, recipient_id: str) -> None:
         async with use_session(self._sessions) as s:
@@ -367,7 +353,7 @@ class NotificationStore:
             rows = (await s.execute(select(DisabledNotificationTypeRow))).scalars()
             return {
                 row.type: DisabledType(
-                    disabled_by=row.disabled_by, disabled_at=_aware(row.disabled_at)
+                    disabled_by=row.disabled_by, disabled_at=as_utc(row.disabled_at)
                 )
                 for row in rows
             }
@@ -381,7 +367,7 @@ class NotificationStore:
             result = await s.execute(
                 delete(NotificationRow).where(NotificationRow.type == type_)
             )
-            return _rowcount(result)
+            return rowcount(result)
 
     async def enable_type(self, type_: str) -> None:
         async with use_session(self._sessions) as s:
