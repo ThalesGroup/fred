@@ -6,7 +6,7 @@ The control-plane SHALL store one notification per recipient. Every notification
 
 #### Scenario: Reading someone else's notification
 
-- **WHEN** Bob marks as read or deletes a notification addressed to Alice
+- **WHEN** Bob deletes a notification addressed to Alice
 - **THEN** the request answers 404 and Alice's notification is unchanged
 
 #### Scenario: Listing
@@ -51,9 +51,9 @@ While the application tab is visible, the frontend SHALL refresh the unseen coun
 - **WHEN** Alice's tab is hidden
 - **THEN** no unseen-count request is sent until it becomes visible again, when one is sent at once
 
-### Requirement: Popover lists, reads and deletes notifications
+### Requirement: Popover lists and deletes notifications
 
-Clicking the bell SHALL open a popover over the navigation panel, closed by an outside click or Escape. It SHALL list the caller's notifications newest first with an empty state when there are none, and a "Clear all" action deleting all of them except the pending decisions. A tile SHALL disappear as soon as its recipient acts on it: clicking the tile, or a button that follows a link, SHALL delete it for the caller and follow its link if it has one; a button calling a domain endpoint SHALL leave the deletion to that endpoint, so the tile goes only when the call succeeds and stays when it fails. Each tile SHALL show an always-visible close button that deletes it, except a pending decision. Tiles SHALL keep an unread style until acted on.
+Clicking the bell SHALL open a popover over the navigation panel, closed by an outside click or Escape. It SHALL list the caller's notifications newest first with an empty state when there are none, and a "Clear all" action deleting all of them except the pending decisions. A tile SHALL disappear as soon as its recipient acts on it: clicking the tile, or a button that follows a link, SHALL delete it for the caller and follow its link if it has one; a button calling a domain endpoint SHALL leave the deletion to that endpoint, so the tile goes only when the call succeeds and stays when it fails. Each tile SHALL show an always-visible close button that deletes it, except a pending decision. Tiles SHALL show no read/unread distinction.
 
 A pending decision is an unhandled notification of a decision type (`team.join_requested`). Its tile SHALL have no close button, and clicking it SHALL follow its link without deleting it; it SHALL stay until someone decides. Once handled, it SHALL show "handled by <name>" instead of its buttons and get its close button back. "Clear all" SHALL keep pending decisions, server-side, and SHALL be disabled when they are all the popover lists.
 
@@ -91,7 +91,7 @@ A pending decision is an unhandled notification of a decision type (`team.join_r
 
 ### Requirement: Repeated subjects do not repeat notifications
 
-Notifications about the same subject SHALL share a group key. While a recipient has an unhandled notification for a group, a new emission for that group SHALL update its payload and MUST NOT create a second notification nor reset its seen or read state.
+Notifications about the same subject SHALL share a group key. While a recipient has an unhandled notification for a group, a new emission for that group SHALL update its payload and MUST NOT create a second notification nor reset its seen state.
 
 #### Scenario: Two saves of a published agent
 
@@ -184,28 +184,29 @@ When a published entry enters the Removed state (removed by a platform admin, or
 
 ### Requirement: A platform admin turns each notification type on or off
 
-The platform SHALL offer a platform admin, and only a holder of `can_manage_platform`, the list of every notification type the backend knows, each with whether it is sent. Every type SHALL be on until a platform admin turns it off. The setting SHALL be platform-wide, with no per-team or per-user override. While a type is off, no notification of that type SHALL be created. Turning a type off SHALL delete every notification of that type already sent, for every recipient. Turning it back on SHALL affect only events after the change; deleted notifications MUST NOT come back. The action a notification points to SHALL stay available where it lives. Each change SHALL be audited. The admin page SHALL ask for confirmation before turning a type off, saying the notifications of that type already sent will be deleted for everyone; turning a type on SHALL need no confirmation.
+The platform SHALL offer a platform admin, and only a holder of `can_manage_platform`, the list of every notification type the backend knows, each with whether it is shown. Every type SHALL be on until a platform admin turns it off. The setting SHALL be platform-wide, with no per-team or per-user override. Turning a type off SHALL hide it: notifications of that type SHALL still be created, but the list, the unseen count and "Clear all" SHALL see only enabled types. Turning it back on SHALL show every notification of that type still stored; those dismissed or acted on were deleted and MUST NOT come back, and expiry still applies. The action a notification points to SHALL stay available where it lives. Each change SHALL be audited. The admin page SHALL ask for confirmation before turning a type off, saying its notifications will be hidden for everyone until it is turned back on; turning a type on SHALL need no confirmation.
 
 #### Scenario: Every type is on by default
 
 - **WHEN** a platform admin opens the Notifications page on a platform where nothing was changed
 - **THEN** every notification type is listed with its name, a sentence on when it is sent and to whom, and its switch on
 
-#### Scenario: Turning a type off
+#### Scenario: A turned-off type is hidden from the list and the count
 
-- **GIVEN** Alice and Bob each hold a `team.join_requested` notification
+- **GIVEN** Alice holds an unseen `team.join_requested` notification
 - **WHEN** a platform admin turns `team.join_requested` off
-- **THEN** both notifications are deleted, a new join request notifies nobody, and the requests stay in the team's Members > Pending requests
+- **THEN** that notification is neither listed nor counted on Alice's bell, "Clear all" leaves it alone, and the request stays in the team's Members > Pending requests
+
+#### Scenario: A notification emitted while its type is off appears after it is turned back on
+
+- **GIVEN** `team.join_requested` is off
+- **WHEN** someone asks to join Alice's team, and a platform admin later turns the type back on
+- **THEN** Alice's list and badge show that join request notification, unless it expired or was handled meanwhile
 
 #### Scenario: Confirming a switch-off
 
 - **WHEN** a platform admin switches a type off on the Notifications page
-- **THEN** a confirmation says its sent notifications will be deleted, and nothing changes unless they confirm
-
-#### Scenario: Turning a type back on
-
-- **WHEN** a platform admin turns a type back on
-- **THEN** the next event of that type notifies its recipients, and the notifications deleted when it was turned off do not come back
+- **THEN** a confirmation says its notifications will be hidden for everyone until it is turned back on, and nothing changes unless they confirm
 
 #### Scenario: Not a platform admin
 
@@ -214,7 +215,7 @@ The platform SHALL offer a platform admin, and only a holder of `can_manage_plat
 
 ### Requirement: A failed tile action is reported
 
-When a button that calls a domain endpoint fails for any reason other than the subject being gone (404) or the caller no longer allowed to act on it (403), the popover SHALL show the application's error toast and keep the tile usable; on 404 or 403 the tile SHALL be deleted. While one of a tile's calls is in flight, its buttons SHALL be disabled, so a double click sends one decision.
+When a button that calls a domain endpoint fails for any reason other than the subject being gone (404) or the caller no longer allowed to act on it (403), the popover SHALL show the application's error toast and keep the tile usable; on 404 or 403 the tile SHALL be deleted silently, with no toast. While one of a tile's calls is in flight, its buttons SHALL be disabled, so a double click sends one decision.
 
 #### Scenario: Accept fails
 
