@@ -7213,7 +7213,7 @@ whose `schema_version` lags is read through `upgrade_config`. An unknown capabil
 or a slice that no longer parses is omitted: config health owns that verdict. A
 raising hook reports `pending` without detail, since an omitted capability reads as
 ready. Control-plane maps the answers to the `capability_pending` suspension
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §68).
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §69).
 
 `GET /agents/models-catalog` entries gain `vision_profile_ids`, the subset of
 `profile_ids` declaring `supports_vision`, mirrored on

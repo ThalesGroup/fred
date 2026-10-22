@@ -4891,46 +4891,6 @@ admin Teams dialog maps them to its own localized messages.
 the ids in `admins` that still hold `pending_team_admin` only. Filled by the
 team listings that resolve membership (their `admins` include nominees);
 empty on the single-team projection, whose `admins` are accepted admins only.
-## 68. Contract Notes — capability readiness and vision flags (2026-10-05)
-
-**Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
-capability reports, through its pod's `POST /agents/capabilities/readiness`
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.119), that its saved configuration is still
-being prepared, or that preparing it failed. `ManagedAgentInstanceSummary` gains
-`suspension_detail` (nullable; Alembic `b8e1f4a2c6d9` adds the column), set only
-with `capability_pending` to carry the failure message. The existing suspension
-guards apply unchanged (prepare-execution 409, locked toggle, hidden from chat
-pickers, recents and search).
-
-Control-plane asks the pod after an enrol, after a copy and after a save touching
-capabilities, in `run_capability_reconciliation_sweep` after availability and config
-health, and on
-`POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
-(`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
-`GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances
-without a failure detail (a random subset over the cap; a failure only changes on a
-save, a re-run or a re-check), concurrently on the shared runtime HTTP client, with
-the caller's token and a 2 s bound (the sweep has no production host). Readiness verdicts alone set and clear `capability_pending`; every other
-reason outranks it. An older pod without the route (404) reads as ready.
-
-After an enrol, a copy or a capability save, the instance gets one suspension write: none
-when the pod answers ready (the save resolves any earlier reason), else
-`capability_pending`. No answer (timeout, unreachable pod, error) fails closed to
-`capability_pending` without detail, lifted by the next listing, re-check or sweep
-that gets an answer. Elsewhere, no answer changes nothing. Readiness writes are
-compare-and-set on the reason read before the pod call, so they never overwrite a
-suspension written meanwhile.
-
-**Save-time routing.** The pod `validate-config` call carries query parameters
-`template_agent_id`, `chat_default_profile_id` (the team default) and
-`recommended_chat_profile_id` (the instance recommendation, when set): the levels a
-new conversation of this agent starts from, so a capability can call the agent's
-model during its save. No platform binding is sent. The pod
-`copy-config` call carries the same parameters for the destination team.
-
-**Vision flags.** `AvailableModelProfile.supports_vision` and
-`EffectiveChatModel.supports_vision` (default false) report whether the profile
-declares `supports_vision` in the pod catalog. A platform binding reports false.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
@@ -5215,3 +5175,44 @@ personal localStorage values do not seed the row or serve as a fallback; the
 frontend applies the database response or defaults to in-memory controls and
 does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
+
+## 69. Contract Notes — capability readiness and vision flags (2026-10-05)
+
+**Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
+capability reports, through its pod's `POST /agents/capabilities/readiness`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.119), that its saved configuration is still
+being prepared, or that preparing it failed. `ManagedAgentInstanceSummary` gains
+`suspension_detail` (nullable; Alembic `b8e1f4a2c6d9` adds the column), set only
+with `capability_pending` to carry the failure message. The existing suspension
+guards apply unchanged (prepare-execution 409, locked toggle, hidden from chat
+pickers, recents and search).
+
+Control-plane asks the pod after an enrol, after a copy and after a save touching
+capabilities, in `run_capability_reconciliation_sweep` after availability and config
+health, and on
+`POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
+(`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
+`GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances
+without a failure detail (a random subset over the cap; a failure only changes on a
+save, a re-run or a re-check), concurrently on the shared runtime HTTP client, with
+the caller's token and a 2 s bound (the sweep has no production host). Readiness verdicts alone set and clear `capability_pending`; every other
+reason outranks it. An older pod without the route (404) reads as ready.
+
+After an enrol, a copy or a capability save, the instance gets one suspension write: none
+when the pod answers ready (the save resolves any earlier reason), else
+`capability_pending`. No answer (timeout, unreachable pod, error) fails closed to
+`capability_pending` without detail, lifted by the next listing, re-check or sweep
+that gets an answer. Elsewhere, no answer changes nothing. Readiness writes are
+compare-and-set on the reason read before the pod call, so they never overwrite a
+suspension written meanwhile.
+
+**Save-time routing.** The pod `validate-config` call carries query parameters
+`template_agent_id`, `chat_default_profile_id` (the team default) and
+`recommended_chat_profile_id` (the instance recommendation, when set): the levels a
+new conversation of this agent starts from, so a capability can call the agent's
+model during its save. No platform binding is sent. The pod
+`copy-config` call carries the same parameters for the destination team.
+
+**Vision flags.** `AvailableModelProfile.supports_vision` and
+`EffectiveChatModel.supports_vision` (default false) report whether the profile
+declares `supports_vision` in the pod catalog. A platform binding reports false.
