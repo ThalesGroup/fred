@@ -70,7 +70,7 @@ export default function NotificationTile({
   onDismiss,
 }: NotificationTileProps) {
   return (
-    <li className={styles.tile}>
+    <li className={styles.tile} data-dismissible={dismissible || undefined}>
       <span className={styles.icon} data-category={category}>
         <Icon category="outlined" type={icon} />
       </span>

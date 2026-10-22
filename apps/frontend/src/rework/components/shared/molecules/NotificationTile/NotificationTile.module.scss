@@ -26,6 +26,16 @@
   list-style: none;
 }
 
+/* Separates consecutive notifications without boxing each one. */
+.tile + .tile::before {
+  position: absolute;
+  top: 0;
+  right: var(--spacing-s);
+  left: var(--spacing-s);
+  border-top: 1px solid var(--outline-variant);
+  content: "";
+}
+
 .tile:hover,
 .tile:focus-within {
   background: var(--state-on-surface-hover);
@@ -124,11 +134,17 @@
   font-size: 1rem;
 }
 
+/* The close button floats over the corner: only the title and body make room
+ * for it, so the time and actions keep the full width. */
 .trail {
   display: flex;
-  position: relative;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--spacing-2xs);
+  position: absolute;
+  top: var(--spacing-xs);
+  right: var(--spacing-xs);
   z-index: 1;
+}
+
+.tile[data-dismissible] .hit,
+.tile[data-dismissible] .body {
+  padding-right: var(--spacing-2xl);
 }
