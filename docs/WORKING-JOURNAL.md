@@ -120,6 +120,10 @@ fiche plutôt que d'effacer les résultats précédents.
   mis à jour. `cargo check --all-targets` exécuté ; tests et qualité non exécutés ;
   aucun commit.
 - 2026-10-22 : Dimi confirme que tout est bon et autorise le commit et le push de F15.
+- 2026-10-22 : correction de preuve. `openapi.json` est ignoré par Git : le « diff vide »
+  cité plus haut (`git diff`) ne prouvait rien. Contrats régénérés depuis `c017210be` et
+  `94c55fa1e` dans des worktrees jetables : identiques octet pour octet (142 329 octets).
+  La conclusion de F15 tient ; le contrat versionné est le client `controlPlaneOpenApi.ts`.
 
 ## F20 Migration SQL unique
 
