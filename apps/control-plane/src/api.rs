@@ -675,7 +675,7 @@ async fn authorize_scope(
 }
 
 // Platform mutation entry points require a real authenticated actor, even in dev mode.
-fn require_directory_actor(s: &AppState) -> AppResult<()> {
+fn require_real_authentication(s: &AppState) -> AppResult<()> {
     if !s.auth.enabled() {
         return Err(AppError::Unavailable(
             "authentication must be enabled".into(),
@@ -697,7 +697,7 @@ async fn list_platform_roles(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
 ) -> AppResult<Json<Vec<platform::Grant>>> {
-    require_directory_actor(&s)?;
+    require_real_authentication(&s)?;
     Ok(Json(platform::list(&s.fga, &user.uid).await?))
 }
 fn platform_role(name: &str) -> AppResult<PlatformRole> {
@@ -723,7 +723,7 @@ async fn grant_platform_role(
     AdmittedUser(user): AdmittedUser,
     ApiPath((target, role)): ApiPath<(String, String)>,
 ) -> AppResult<StatusCode> {
-    require_directory_actor(&s)?;
+    require_real_authentication(&s)?;
     let directory = s
         .directory
         .as_ref()
@@ -763,7 +763,7 @@ async fn revoke_platform_role(
     AdmittedUser(user): AdmittedUser,
     ApiPath((target, role)): ApiPath<(String, String)>,
 ) -> AppResult<StatusCode> {
-    require_directory_actor(&s)?;
+    require_real_authentication(&s)?;
     platform::revoke(&s.pool, &s.fga, &user.uid, &target, platform_role(&role)?).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1160,7 +1160,7 @@ async fn import_blueprint(
         response::IntoResponse,
     };
     let result = async {
-        require_directory_actor(&s).map_err(IntoResponse::into_response)?;
+        require_real_authentication(&s).map_err(IntoResponse::into_response)?;
         match s.fga.is_platform_owner(&user.uid).await {
             Ok(true) => (),
             Ok(false) => return Err(AppError::Forbidden.into_response()),
@@ -1216,7 +1216,7 @@ async fn delete_space(
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
-    require_directory_actor(&s)?;
+    require_real_authentication(&s)?;
     let receipt = s.lifecycle.accept(&s.pool, &s.fga, &user.uid, id).await?;
     Ok((
         if receipt.status == crate::lifecycle::Status::Completed {
@@ -1237,7 +1237,7 @@ async fn deletion_status(
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<crate::lifecycle::Receipt>> {
-    require_directory_actor(&s)?;
+    require_real_authentication(&s)?;
     Ok(Json(
         crate::lifecycle::store::status(&s.pool, &s.fga, &user.uid, id).await?,
     ))

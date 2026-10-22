@@ -95,9 +95,9 @@ export default function CreateFolderModal({
   // Mirror the backend's TagCreate guards (#2355) so the user learns BEFORE
   // clicking Create, not from a 422 toast: a folder name is a single level
   // (no slashes — a slashed name would smuggle several levels past the depth
-  // cap), and corpus folders stop nesting at MAX_FOLDER_DEPTH. The fs `mkdir`
-  // variant (custom onSubmit) is not tag-backed, so the depth cap — a
-  // ReBAC-chain constraint — doesn't apply there; the slash rule does.
+  // cap), and corpus folders stop nesting at MAX_FOLDER_DEPTH. A custom onSubmit
+  // variant has no default cap and passes its own `maxDepth` (the control-plane
+  // allows 15 levels); the slash rule always applies.
   const nameHasSlash = trimmed.includes("/") || trimmed.includes("\\");
   const depthLimit = maxDepth ?? (!onSubmit ? MAX_FOLDER_DEPTH : undefined);
   const tooDeep = depthLimit !== undefined && folderPathDepth(parentPath) + 1 > depthLimit;

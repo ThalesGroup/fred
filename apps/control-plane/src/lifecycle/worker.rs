@@ -189,6 +189,19 @@ pub async fn connect(config: &LifecycleConfig) -> Result<Client> {
     .context("lifecycle Temporal connection timeout")?
     .map_err(|_| anyhow::anyhow!("lifecycle Temporal unavailable"))
 }
+/// Where the worker stopped. Dependency errors can carry addresses or payloads, so
+/// only this stage is kept for the log line.
+#[derive(Debug, thiserror::Error)]
+#[error("lifecycle worker stopped at {0}")]
+pub struct Stopped(pub &'static str);
+
+/// The stage of a stopped worker, `unknown` for any other error.
+pub fn stage(error: &anyhow::Error) -> &'static str {
+    error
+        .downcast_ref::<Stopped>()
+        .map_or("unknown", |stopped| stopped.0)
+}
+
 pub async fn run(
     pool: PgPool,
     fga: Fga,
@@ -206,16 +219,22 @@ pub async fn run(
             stopping.await;
             return Ok(());
         }
-        Err(error) => return Err(error),
+        Err(_) => return Err(Stopped("temporal_connect").into()),
     };
-    reconcile(&client, &config).await?;
-    let runtime = Runtime::from_current_tokio(Default::default())?;
+    reconcile(&client, &config)
+        .await
+        .map_err(|_| Stopped("schedule_reconcile"))?;
+    fn setup<E>(_: E) -> Stopped {
+        Stopped("worker_setup")
+    }
+    let runtime = Runtime::from_current_tokio(Default::default()).map_err(setup)?;
     let options = WorkerOptions::new(&config.temporal.task_queue)
         .graceful_shutdown_period(Duration::from_secs(2))
-        .register_workflow::<SpaceDeletionSweep>()?
+        .register_workflow::<SpaceDeletionSweep>()
+        .map_err(setup)?
         .register_activities(CleanupActivities { pool, fga, config })
         .build();
-    let mut worker = Worker::new(&runtime, client, options)?;
+    let mut worker = Worker::new(&runtime, client, options).map_err(setup)?;
     let shutdown = worker.shutdown_handle();
     let signal = tokio::spawn(async move {
         stopping.await;
@@ -223,5 +242,5 @@ pub async fn run(
     });
     let result = worker.run().await;
     signal.abort();
-    result.map_err(|_| anyhow::anyhow!("lifecycle worker stopped unexpectedly"))
+    result.map_err(|_| Stopped("worker_run").into())
 }

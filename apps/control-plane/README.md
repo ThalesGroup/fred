@@ -60,6 +60,17 @@ the corresponding frontend `gcu.<language>.md`/`gcu.md` assets with the version;
 `null` disables the gate. Existing Python consent and bootstrap records are not
 manager consent or bootstrap records.
 
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `control-plane serve` | HTTP API and its background tasks (default) |
+| `control-plane migrate` | Applies pending SQL migrations from `DATABASE_URL` |
+| `control-plane generate-openapi` | Prints the HTTP contract, without configuration or services |
+| `control-plane generate-config-schema` | Prints the configuration JSON Schema |
+| `control-plane processing-schema` | Prints the wire contracts shared with the Knowledge Flow worker |
+| `control-plane import-provisioning <bundle.zip> --token-file <path>` | Authenticated additive import ([below](#import-a-provisioning-bundle)) |
+
 ## Background tasks
 
 `control-plane serve` supervises HTTP, storage cleanup, the processing dispatcher

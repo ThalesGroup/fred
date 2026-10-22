@@ -213,7 +213,7 @@ impl Fga {
         Ok(body)
     }
 
-    /// The single authorization call of every request.
+    /// One space permission Check; a request can need several.
     pub async fn check(&self, user: &str, permission: Permission, space: Uuid) -> Result<bool> {
         self.check_object(user, permission.as_str(), &format!("space:{space}"))
             .await

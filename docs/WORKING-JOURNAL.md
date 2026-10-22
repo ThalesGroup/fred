@@ -42,6 +42,7 @@ fiche plutôt que d'effacer les résultats précédents.
 
 | ID | Fonction ou étape | État au 2026-10-21 | Architecture |
 | --- | --- | --- | --- |
+| [F16](#f16-noms-et-usage-cli-exacts) | Noms, commentaires et usage CLI exacts | Tests ciblés validés ; validation finale | README du composant, 09 (bloc généré) |
 | [F09](#f09-lectures-openfga-bornées) | Lectures OpenFGA concurrentes bornées | Tests ciblés validés ; validation finale | 09 |
 | [F11](#f11-une-seule-réponse-dautorisation) | Une seule réponse d'autorisation métier | Tests ciblés validés ; validation finale du lot | 03, 03a, A2 |
 | [F12](#f12-un-seul-format-derreur) | Un seul module d'extracteurs, erreurs toujours en JSON | Tests ciblés validés ; validation finale du lot | A2, carte des sources |
@@ -90,6 +91,17 @@ fiche plutôt que d'effacer les résultats précédents.
 - Un prompt de revue réutilisable accompagne le skill. Validation structurelle du
   skill passée ; aucune nouvelle campagne d'audit, suppression documentaire ou
   validation fonctionnelle n'a été lancée par cette création.
+
+## F16 Noms et usage CLI exacts
+
+- 2026-10-22 : six points vérifiés et corrigés : `require_directory_actor` renommé
+  `require_real_authentication` (il ne vérifie que l'authentification active) ; doc de
+  `Fga::check` (« one space permission Check ») ; commentaire de `CreateFolderModal` aligné sur
+  `maxDepth` (15) de la variante control-plane ; doc du module `lib.rs` ; `processing-schema`
+  ajouté à `USAGE` et section Commands du README du composant ; le worker lifecycle journalise
+  son étape d'arrêt (`temporal_connect`, `schedule_reconcile`, `worker_setup`, `worker_run`)
+  sans jamais le message de la dépendance. Test `a_stopped_lifecycle_worker_reports_only_its_stage`
+  (I11). `make test` réussi. Aucun comportement documenté d'arc42 ne change.
 
 ## F09 Lectures OpenFGA bornées
 

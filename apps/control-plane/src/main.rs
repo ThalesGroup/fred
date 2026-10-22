@@ -20,7 +20,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use control_plane::{api, auth, config::Configuration as Config, fga::Fga, logging};
 
-const USAGE: &str = "usage: control-plane [serve | migrate | generate-openapi | generate-config-schema | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | migrate | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -284,8 +284,9 @@ async fn serve(config: Config) -> Result<()> {
             .await
             {
                 Ok(()) => return Ok(()),
-                Err(_) => tracing::warn!(
+                Err(error) => tracing::warn!(
                     error_code = "lifecycle_retry",
+                    stage = control_plane::lifecycle::worker::stage(&error),
                     "Lifecycle worker will reconnect"
                 ),
             }

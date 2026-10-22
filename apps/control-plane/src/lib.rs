@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! control-plane: space governance, folder operations, document metadata reads
-//! and deferred space cleanup with its dedicated Temporal worker.
+//! control-plane: organizations, teams, projects and personal spaces with their roles,
+//! folders, original documents and their processing, provisioning import and deferred
+//! space cleanup.
 
 pub mod api;
 pub mod auth;

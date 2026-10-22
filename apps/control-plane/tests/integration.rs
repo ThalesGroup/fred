@@ -4631,6 +4631,29 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
     )
 }
 
+// Proves: I11
+#[tokio::test]
+#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+async fn a_stopped_lifecycle_worker_reports_only_its_stage() {
+    use control_plane::lifecycle::{policy::LifecycleConfig, worker};
+    let e = env().await;
+    let mut config = LifecycleConfig::default();
+    config.enabled = true;
+    config.temporal.host = "127.0.0.1:1".into();
+    config.temporal.connect_timeout_seconds = 1;
+    let error = worker::run(
+        e.pool.clone(),
+        e.fga.clone(),
+        config,
+        std::future::pending(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(worker::stage(&error), "temporal_connect");
+    assert!(!format!("{error:#}").contains("127.0.0.1"), "{error:#}");
+    assert_eq!(worker::stage(&anyhow::anyhow!("other")), "unknown");
+}
+
 #[tokio::test]
 #[ignore = "needs Postgres and OpenFGA: make test-integration"]
 async fn tree_walk_reads_stay_within_the_concurrency_bound() {
