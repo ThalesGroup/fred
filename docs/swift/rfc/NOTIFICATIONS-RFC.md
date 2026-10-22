@@ -1,7 +1,8 @@
 # RFC — In-app notifications
 
-**Status:** Draft, pending owner review. GitHub issue #3232.
-Slice 1 is scoped as the OpenSpec change `add-in-app-notifications`.
+**Status:** Owner decisions recorded 2026-10-22; no open question left.
+GitHub issue #3232. Slice 1 is scoped as the OpenSpec change
+`add-in-app-notifications`; slices 2 and 3 get their own changes.
 
 ## 1. Problem
 
@@ -41,6 +42,18 @@ What exists today, none of it per-user targeted:
    once the #3223 boost API exists.
 7. Small starting set: first what asks the user to act, then what answers a
    request the user made; pure information last.
+8. 15 s polling of the badge counts as "without reload" for decision 3
+   (§3.5); no stream.
+9. The badge reads "99+" above 99.
+10. A team's notifications reach only its current members: a recipient who
+    left the team is skipped at send time, and leaving a team deletes the
+    member's notifications about it.
+11. Join requests come through a new opt-in team access mode, "on request",
+    next to `open` and `invite_only` (slice 2). Admins who keep either
+    existing mode receive no requests, as today.
+12. A quota boost request goes to the admins of the requester's teams
+    (slice 3). Every team has at least one admin, so there is no platform
+    admin fallback.
 
 ## 3. Design
 
@@ -121,7 +134,7 @@ action taken from its page.
 
 ### 3.5 Delivery to the browser
 
-**Recommendation: light polling of `GET /notifications/summary` every 15 s
+**Decided: light polling of `GET /notifications/summary` every 15 s
 while the tab is visible**, paused when hidden, refetched on focus and on
 visibility change, and invalidated right after the user's own actions. The
 list is fetched only when the popover opens.
@@ -175,9 +188,9 @@ Legend: AR = action required, R = answer to your request, I = information.
 |---|---|---|---|---|---|---|---|
 | 1 | Published agent changed by another editor: update the marketplace version | `update_agent_instance` (`product/service.py`) when the save makes the entry Modified (`agent_marketplace/service.py` `_state_view`) | the entry's `published_by`, if not the editor | AR | Open the agent | `agent_republish:<entry>`; resolved by republish or removal | Yes; needs `published_by` on the entry |
 | 2 | Your agent was removed from the marketplace (by a platform admin or automatically) | wherever the entry enters the Removed state (`unpublish_agent` with a platform reason, `remove_published_entries`), unless the publisher caused it | `published_by` | I | Open the agent | `agent_removed:<entry>`; none | Yes; needs `published_by` |
-| 3 | X asks to join your team | new join-request endpoint | team admins (`CAN_ADMINISTER_MEMBERS`) | AR | Accept, Refuse | `join_request:<id>`; resolved by the first admin decision | No: `request_only` mode and a request record are new |
+| 3 | X asks to join your team | new join-request endpoint | team admins (`CAN_ADMINISTER_MEMBERS`) | AR | Accept, Refuse | `join_request:<id>`; resolved by the first admin decision | No: the "on request" mode and a request record are new |
 | 4 | Your request to join T was accepted / refused | decision on 3 | requester | R | Open the team (accepted) | `join_request_outcome:<id>` | No (with 3) |
-| 5 | X asks for a quota boost | "Request a boost" in the quota tooltip (#3223 slice c) | admins who can grant it (Q3) | AR | Grant +20%, Decline | `boost_request:<user>:<week>`; resolved by grant/decline | No: after #3223 |
+| 5 | X asks for a quota boost | "Request a boost" in the quota tooltip (#3223 slice c) | admins of the requester's teams (decision 12) | AR | Grant +20%, Decline | `boost_request:<user>:<week>`; resolved by grant/decline | No: after #3223 |
 | 6 | Your boost request was granted / declined | decision on 5 | requester | R | none | `boost_outcome:<id>` | No: after #3223 |
 | 7 | Your weekly quota is at 80% / exhausted | #3223 spend counters | the user | I | none | one per window | No: after #3223; the composer indicator already warns in context |
 | 8 | An agent finished a turn while you were away | turn end | the user | I | Open the conversation | per session | No: a turn ends with its browser connection (`agent_app.py` "a closed connection ends the run") |
@@ -201,19 +214,18 @@ Notes on 1 and 2:
 
 ## 5. Open questions
 
-1. **Latency of "immediately" (decision 3).** Recommendation: 15 s polling
-   (§3.5). A per-user stream is reconsidered only if 15 s proves too slow in
-   use; it would need a multiplexed listener first.
-2. **How join requests come back (slice 2).** Recommendation: restore a third
-   `joining_mode` value `request_only` ("Request to join" on the team card),
-   rather than adding a request button to every `invite_only` team, so
-   admins opt in to receiving requests. This amends §29 of the product
-   contract.
-3. **Who receives a boost request (slice 3).** Recommendation: the admins of
-   every non-personal team the requester belongs to, plus the platform admins
-   only when none of those teams has an admin. The first grant or decline
-   resolves the group for all, matching #3223's "once per user per week
-   across all teams".
+None. The three questions this section held are closed by the owner
+(2026-10-22):
+
+1. Latency: 15 s polling (decision 8).
+2. Join requests: a new opt-in `joining_mode` value, "on request"
+   (decision 11). This reverses the removal of `request_only` in §29 of
+   `CONTROL-PLANE-PRODUCT-CONTRACT.md`; the slice 2 change adds a dated
+   contract entry for it, fixes the wire value, and revisits the importer's
+   mapping of legacy `request_only` to `invite_only`.
+3. Boost recipients: the admins of every non-personal team the requester
+   belongs to (decision 12). The first grant or decline resolves the group
+   for all, matching #3223's "once per user per week across all teams".
 
 ## 6. Slices
 
@@ -222,8 +234,8 @@ Notes on 1 and 2:
    badge, popover, tile, clear all / delete, seen/read, 15 s badge polling,
    action-button framework, expiry step, `published_by`, types 1 and 2,
    Help Center fr+en, migration note (minor).
-2. **Team join requests:** `request_only` mode, join-request record and
-   endpoints, types 3 and 4.
+2. **Team join requests:** the opt-in "on request" access mode, join-request
+   record and endpoints, types 3 and 4.
 3. **Quota boost requests:** after #3223 slices (b) and (c); types 5 and 6.
 
 Each later slice is its own OpenSpec change.

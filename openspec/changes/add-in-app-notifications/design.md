@@ -52,7 +52,7 @@ Existing pieces this builds on:
 ## Risks / Trade-offs
 
 - [Polling cost at scale] → one indexed count per visible tab every 15 s, nothing when hidden; measured in verification with the existing mock load tooling if needed.
-- [Up to 15 s latency vs. "immediately"] → open question 1 in the RFC; a stream can replace polling later behind the same summary contract.
+- [Up to 15 s latency vs. "immediately"] → accepted by the owner; a stream can replace polling later behind the same summary contract.
 - [Bulk removal fans out] (a platform switch turning publication off for many teams) → one row per entry for its publisher, emitted in one batched insert.
 - [Legacy entries have no publisher] → they notify nobody until the next republish; stated in the Help Center.
 
@@ -62,5 +62,4 @@ One linear Alembic revision on the control-plane head current at implementation 
 
 ## Open Questions
 
-- RFC open question 1 (15 s polling vs. a live stream) is answered by decision 6 unless the owner overrides it at sign-off.
-- RFC open questions 2 and 3 belong to slices 2 and 3.
+None. The owner closed the RFC's three open questions on 2026-10-22: 15 s polling is the "live" badge (decision 6); slice 2 brings join requests through a new opt-in team access mode, "on request", reversing §29's removal of `request_only`; slice 3 sends boost requests to the admins of the requester's teams, with no platform admin fallback since every team has an admin.

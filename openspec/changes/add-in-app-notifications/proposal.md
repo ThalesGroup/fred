@@ -18,7 +18,7 @@ Tracking: GitHub issue #3232. Design and catalogue: `docs/swift/rfc/NOTIFICATION
 - **`published_by` on marketplace entries**, written on every publish and republish. Older entries have none and notify nobody until republished.
 - **Help Center** fr+en page on notifications.
 
-Out of scope: join requests and quota boost requests (later slices), email or any other channel, per-category preferences, toasts.
+Out of scope: join requests (slice 2, through a new opt-in "on request" team access mode) and quota boost requests (slice 3, sent to the admins of the requester's teams), email or any other channel, per-category preferences, toasts.
 
 ## Capabilities
 
