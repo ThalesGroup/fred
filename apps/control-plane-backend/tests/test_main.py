@@ -1160,7 +1160,10 @@ async def test_applications_feature_flag_keeps_contract_mounted_but_fails_closed
 @pytest.mark.parametrize(
     ("held_permission", "expected_role"),
     [
-        (OrganizationPermission.CAN_MANAGE_PLATFORM, PlatformRoleRelation.PLATFORM_ADMIN),
+        (
+            OrganizationPermission.CAN_MANAGE_PLATFORM,
+            PlatformRoleRelation.PLATFORM_ADMIN,
+        ),
         (
             OrganizationPermission.IS_PLATFORM_ACCESS_MANAGER,
             PlatformRoleRelation.PLATFORM_ACCESS_MANAGER,
