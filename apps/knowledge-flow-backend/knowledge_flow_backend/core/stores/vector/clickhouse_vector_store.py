@@ -19,7 +19,7 @@ import json
 import logging
 import re
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar
 from urllib.parse import quote_plus
 
 import clickhouse_connect
@@ -499,6 +499,13 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                 document_uid,
             )
             raise RuntimeError("Failed to update document_name in ClickHouse.")
+
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        # Search filters on the promoted column; one mutation instead of a JSON rewrite per chunk.
+        self._command(
+            f"ALTER TABLE {self._table_ref} UPDATE tag_ids = {{tag_ids:Array(String)}} WHERE document_uid = {{doc_uid:String}} SETTINGS mutations_sync = 1",
+            {"tag_ids": [str(t) for t in tag_ids], "doc_uid": document_uid},
+        )
 
     def _decode_metadata(self, metadata_raw: Any, retrievable: Optional[int]) -> Dict[str, Any]:
         md: Dict[str, Any]

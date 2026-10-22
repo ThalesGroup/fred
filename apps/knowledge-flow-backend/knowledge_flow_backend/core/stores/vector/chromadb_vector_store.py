@@ -362,6 +362,14 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             )
             raise
 
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        got = self._collection.get(where={DOC_UID_FIELD: document_uid}, include=["metadatas"])
+        ids: List[str] = got.get("ids") or []
+        if not ids:
+            return
+        metadatas = [{**dict(meta or {}), **sanitize_metadata({"tag_ids": list(tag_ids)})} for meta in got.get("metadatas") or []]
+        self._collection.update(ids=ids, metadatas=metadatas)  # type: ignore[arg-type]
+
     # -------- Introspection / Diagnostics --------
     def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
         """

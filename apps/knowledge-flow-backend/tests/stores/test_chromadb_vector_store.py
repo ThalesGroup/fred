@@ -128,3 +128,15 @@ def test_chunks_stored_as_one_folder_json_strings_still_match(tmp_path):
 
     assert _found(store, "alpha") == {"legacy"}
     assert _found(store, "beta") == set()
+
+
+def test_set_document_tag_ids_moves_the_document_between_folder_filters(tmp_path):
+    store = _make_store(tmp_path)
+    store.add_documents([Document(page_content="report", metadata={CHUNK_ID_FIELD: "doc-1::chunk::0", "document_uid": "doc-1", "tag_ids": ["alpha"]})])
+
+    store.set_document_tag_ids(document_uid="doc-1", tag_ids=["alpha", "beta"])
+    assert (_found(store, "alpha"), _found(store, "beta"), _found(store, "gamma")) == ({"doc-1"}, {"doc-1"}, set())
+
+    store.set_document_tag_ids(document_uid="doc-1", tag_ids=["beta"])
+    assert (_found(store, "alpha"), _found(store, "beta")) == (set(), {"doc-1"})
+    assert store.get_chunks_for_document("doc-1")[0]["metadata"]["tag_ids"] == ["beta"]

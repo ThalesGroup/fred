@@ -427,6 +427,23 @@ class PgVectorStoreAdapter(BaseVectorStore):
             logger.exception("[VECTOR][PGVECTOR] failed to fetch chunks for document_uid=%s", document_uid)
             raise RuntimeError("Failed to fetch chunks from PGVector.")
 
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        with self._engine.begin() as conn:
+            res = conn.execute(
+                text(
+                    """
+                    UPDATE langchain_pg_embedding e
+                    SET cmetadata = jsonb_set(e.cmetadata, '{tag_ids}', CAST(:tag_ids AS jsonb))
+                    FROM langchain_pg_collection c
+                    WHERE e.collection_id = c.uuid
+                      AND c.name = :collection
+                      AND e.cmetadata ->> 'document_uid' = :doc_uid
+                    """
+                ),
+                {"collection": self.collection_name, "doc_uid": document_uid, "tag_ids": json.dumps([str(t) for t in tag_ids])},
+            )
+        logger.info("[VECTOR][PGVECTOR] updated tag_ids on %d chunk(s) for document_uid=%s", res.rowcount or 0, document_uid)
+
     # ---------- BaseVectorStore: ANN search ----------
 
     def ann_search(

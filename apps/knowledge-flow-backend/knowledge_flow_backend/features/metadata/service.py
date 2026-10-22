@@ -436,7 +436,8 @@ class MetadataService:
             tag_ids = metadata.tags.tag_ids or []
             if new_tag_id not in tag_ids:
                 previous_tag_ids = set(tag_ids)
-                tag_ids.append(new_tag_id)
+                tag_ids = [*tag_ids, new_tag_id]
+                await self._sync_vector_tag_ids(metadata, tag_ids)
                 metadata.tags.tag_ids = tag_ids
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
@@ -462,8 +463,18 @@ class MetadataService:
                 await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid, actor_uid=user.uid)
 
         except Exception as e:
-            logger.error(f"Error updating retrievable flag for {metadata.document_name}: {e}")
-            raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
+            logger.error(f"Failed to add tag '{new_tag_id}' to document '{metadata.document_name}': {e}")
+            raise MetadataUpdateError(f"Failed to add tag: {e}")
+
+    async def _sync_vector_tag_ids(self, metadata: DocumentMetadata, tag_ids: list[str]) -> None:
+        """Search pre-filters chunks on their copied folder ids. Written before the
+        metadata save so a vector failure leaves the membership change undone;
+        every failure surfaces, and a retry re-applies both writes."""
+        if ProcessingStage.VECTORIZED not in metadata.processing.stages:
+            return
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+        await asyncio.to_thread(self.vector_store.set_document_tag_ids, document_uid=metadata.document_uid, tag_ids=tag_ids)
 
     async def remove_tag_id_from_document(self, user: KeycloakUser, metadata: DocumentMetadata, tag_id_to_remove: str) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id_to_remove)
@@ -530,6 +541,7 @@ class MetadataService:
                 # TODO: remove all rebac relations for this document
 
             else:
+                await self._sync_vector_tag_ids(metadata, new_ids)
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
                 # Save and release the tag owner that no longer holds this document,
