@@ -72,6 +72,7 @@ export default function NotificationsEntry({ iconStyle }: NotificationsEntryProp
           color={open ? "primary" : "on-surface-retreat"}
           icon={{ category: "outlined", type: "notifications", filled: open }}
           badgeCount={unseen}
+          badgeMax={99}
           aria-label={label}
           aria-haspopup="dialog"
           aria-expanded={open}

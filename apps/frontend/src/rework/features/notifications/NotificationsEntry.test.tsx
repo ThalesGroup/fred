@@ -91,6 +91,12 @@ describe("NotificationsEntry", () => {
     expect(bell(el).getAttribute("aria-label")).toBe("rework.mainNav.notificationsUnseen:3");
   });
 
+  it("caps the badge at 99+", () => {
+    const el = render(100);
+
+    expect(badgeText(el)).toBe("99+");
+  });
+
   it("shows no badge at zero", () => {
     const el = render(0);
 
