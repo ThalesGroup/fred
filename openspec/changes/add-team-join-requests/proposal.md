@@ -7,22 +7,23 @@ Tracking: GitHub issue #3232. Design and catalogue: `docs/swift/rfc/NOTIFICATION
 ## What Changes
 
 - **New opt-in access mode `on_request`** ("On request"), next to `open` and `invite_only`, chosen by a team admin in Team settings > Parameters. Like `open`, it exists only for public teams; making a team private turns it back into `invite_only`. Teams keep their current mode: nobody receives requests until an admin picks it.
-- **Join request record.** At most one request per person and team. A pending request expires after 30 days. A refused one stays until that expiry and blocks a new request to that team; an accepted or cancelled one is deleted.
-- **Requester side, on the existing team card** (Teams marketplace, "Other teams"): "Ask to join" opens a dialog with an optional short message; the card then reads "Request sent" with "Cancel request"; after a refusal it reads "Request declined".
-- **Admin side:** notification "X asks to join <team>" with **Accept** and **Refuse**, sent to every holder of `can_administer_members` on the team. The first decision resolves it for the other admins ("Handled by <name>"). The Members tab shows a "Pending requests" section, with the same two actions, while requests are pending.
+- **Join request record.** At most one request per person and team. A pending request expires after 30 days. A refused one stays 7 days after the refusal; its requester may ask again once 24 hours have passed, and the new request replaces it. An accepted or cancelled one is deleted.
+- **Requester side, on the existing team card** (Teams marketplace, "Other teams"): "Ask to join" opens a dialog with an optional short message (at most 280 characters, shown to admins only); the card then reads "Request sent" with "Cancel request"; after a refusal it reads "Request declined" until the requester may ask again.
+- **Admin side:** notification "X asks to join <team>" with **Accept** and **Refuse**, sent to every holder of `can_administer_members` on the team. The first decision resolves it for the other admins ("Handled by <name>"). The Members tab shows a "Pending requests" section with the pending requests (Accept, Refuse) and the requests refused in the last 7 days (**Accept anyway**, which grants `team_member` and tells the requester they were accepted).
+- **Leaving the mode refuses what is pending:** when a team leaves `on_request` or becomes private, every pending request is refused automatically and each requester gets the refusal notification.
 - **Answer to the requester:** "Your request to join <team> was accepted" (button "Open the team") or "... was refused". It is addressed outside the team (no `team_id`), so it needs no team permission.
 - **Accept grants `team_member`** to the requester, nothing else.
-- **Endpoints:** create, cancel, list mine, list a team's pending requests, accept, refuse.
+- **Endpoints:** create, cancel, list mine, list a team's pending and recently refused requests, accept (also accepts a refused request: "Accept anyway"), refuse.
 - **Importer:** a legacy `request_only` still imports as `invite_only` (it was the default of every team, not an admin's choice); `on_request` imports as is.
 - **Help Center** fr+en, migration note of the PR updated, contract entries.
 
-Out of scope: requests to private teams, email, a per-user rate limit beyond one request per team, quota boost requests (slice 3).
+Out of scope: requests to private teams, email, a per-user rate limit beyond one request per team and the 24-hour wait after a refusal, quota boost requests (slice 3).
 
 ## Capabilities
 
 ### New Capabilities
 
-- `team-join-requests`: the `on_request` access mode, the join request lifecycle (ask, cancel, accept, refuse, expiry) and its requester and admin surfaces.
+- `team-join-requests`: the `on_request` access mode, the join request lifecycle (ask, cancel, accept, refuse, accept anyway, automatic refusal on a mode change, expiry) and its requester and admin surfaces.
 
 ### Modified Capabilities
 
@@ -30,6 +31,6 @@ Out of scope: requests to private teams, email, a per-user rate limit beyond one
 
 ## Impact
 
-- Backend (control-plane): `JoiningMode.ON_REQUEST` in `fred_core/teams/metadata_store.py`; new `teams/join_requests.py` (service) and `models/team_join_request_models.py`; routes in `teams/api.py`; `update_team` downgrade rule; `delete_team` and `delete_user` cleanup; expiry in the lifecycle notification step; `notifications/schemas.py` and `service.py` (optional permission); importer comment and mapping; one linear Alembic revision on `fe166447f3d5`; `authz-endpoint-matrix.yaml`.
+- Backend (control-plane): `JoiningMode.ON_REQUEST` in `fred_core/teams/metadata_store.py`; new `teams/join_requests.py` (service) and `models/team_join_request_models.py`; routes in `teams/api.py`; `update_team` downgrade rule and automatic refusal; `delete_team` and `delete_user` cleanup; expiry in the lifecycle notification step; `notifications/schemas.py` and `service.py` (optional permission); importer comment and mapping; one linear Alembic revision on `fe166447f3d5`; `authz-endpoint-matrix.yaml`.
 - Frontend: regenerated `controlPlaneOpenApi.ts`, aliases in `controlPlaneApiEnhancements.ts`; `TeamCard`, `MarketplaceTeams`, `TeamSettingsParameters`, `TeamSettingsMembers` (pending section), `notificationTypes.ts`; fr+en strings; Help Center fr+en.
 - Docs: `CONTROL-PLANE-PRODUCT-CONTRACT.md` dated entry (and a pointer from §29), `COMPONENT-UX.md`, `NOTIFICATIONS-RFC.md` slice plan, migration note `3232-add-in-app-notifications.md` (still minor).

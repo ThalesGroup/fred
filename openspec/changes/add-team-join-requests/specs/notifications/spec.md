@@ -26,7 +26,7 @@ Creating a join request SHALL send a `team.join_requested` notification, with th
 
 ### Requirement: The requester is told the decision
 
-Accepting or refusing a request SHALL send the requester a `team.join_request_answered` notification without a team, with outcome `accepted` or `refused`, in group `join_request_outcome:<request_id>`. A type sent without a team SHALL declare no action permission and SHALL NOT be filtered by team permissions. The tile SHALL read "Your request to join <team> was accepted" with a link and an "Open the team" button to the team's Agents page, or "Your request to join <team> was refused" with no link or button. It MUST NOT name the deciding admin.
+Accepting, refusing or accepting anyway a request, and the automatic refusal when its team leaves `on_request`, SHALL send the requester a `team.join_request_answered` notification without a team, with outcome `accepted` or `refused`, in group `join_request_outcome:<request_id>`. A type sent without a team SHALL declare no action permission and SHALL NOT be filtered by team permissions. The tile SHALL read "Your request to join <team> was accepted" with a link and an "Open the team" button to the team's Agents page, or "Your request to join <team> was refused" with no link or button. It MUST NOT name the deciding admin. Accepting a refused request SHALL delete the requester's refusal notification before sending the acceptance one.
 
 #### Scenario: Accepted
 
