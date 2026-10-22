@@ -12,12 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""add in-app notifications
+"""add notifications and team join requests
 
-Creates `notifications` (one row per recipient) and adds the nullable
-`agent_marketplace_entry.published_by`. Existing entries keep no publisher.
+Creates `notifications` (one row per recipient), `disabled_notification_types`
+(the types a platform admin turned off; empty means every type is shown) and
+`team_join_requests` for the opt-in `on_request` access mode, and adds the
+nullable `agent_marketplace_entry.published_by`. Existing rows keep their
+values: entries keep no publisher and every team keeps its mode. The
+downgrade turns `on_request` teams back into `invite_only`, which the older
+code knows.
 
-Revision ID: fe166447f3d5
+Revision ID: 83b81adf7450
 Revises: c9acb7dd3ad0
 Create Date: 2026-10-22 00:00:00.000000
 
@@ -28,8 +33,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-# revision identifiers, used by Alembic.
-revision: str = "fe166447f3d5"  # pragma: allowlist secret
+revision: str = "83b81adf7450"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
     "c9acb7dd3ad0"  # pragma: allowlist secret
 )
@@ -64,9 +68,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("seen_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("read_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("handled_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("handled_by", sa.String(), nullable=True),
         sa.Column(
             "handled_by_name",
             sa.String(length=255),
@@ -113,6 +115,52 @@ def upgrade() -> None:
         postgresql_where=sa.text("handled_at IS NULL"),
         sqlite_where=sa.text("handled_at IS NULL"),
     )
+    op.create_table(
+        "disabled_notification_types",
+        sa.Column("type", sa.String(length=64), nullable=False),
+        sa.Column("disabled_by", sa.String(), nullable=True),
+        sa.Column("disabled_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("type"),
+    )
+    op.create_table(
+        "team_join_requests",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("team_id", sa.String(), nullable=False),
+        sa.Column("requester_id", sa.String(), nullable=False),
+        sa.Column(
+            "requester_name",
+            sa.String(length=255),
+            nullable=False,
+            comment="Display snapshot taken when asking.",
+        ),
+        sa.Column("message", sa.String(length=280), nullable=True),
+        sa.Column("status", sa.String(length=16), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "expires_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            comment="30 days after asking while pending, 7 days after a refusal.",
+        ),
+        sa.Column("decided_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("decided_by", sa.String(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "team_id", "requester_id", name="uq_team_join_requests_team_requester"
+        ),
+    )
+    op.create_index(
+        op.f("ix_team_join_requests_requester_id"),
+        "team_join_requests",
+        ["requester_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_team_join_requests_expires_at"),
+        "team_join_requests",
+        ["expires_at"],
+        unique=False,
+    )
     with op.batch_alter_table("agent_marketplace_entry") as batch:
         batch.add_column(
             sa.Column(
@@ -129,6 +177,18 @@ def downgrade() -> None:
     """Downgrade schema."""
     with op.batch_alter_table("agent_marketplace_entry") as batch:
         batch.drop_column("published_by")
+    op.execute(
+        "UPDATE teammetadata SET joining_mode = 'invite_only' "
+        "WHERE joining_mode = 'on_request'"
+    )
+    op.drop_index(
+        op.f("ix_team_join_requests_expires_at"), table_name="team_join_requests"
+    )
+    op.drop_index(
+        op.f("ix_team_join_requests_requester_id"), table_name="team_join_requests"
+    )
+    op.drop_table("team_join_requests")
+    op.drop_table("disabled_notification_types")
     op.drop_index("uq_notifications_open_group", table_name="notifications")
     op.drop_index(op.f("ix_notifications_group_key"), table_name="notifications")
     op.drop_index(op.f("ix_notifications_team_id"), table_name="notifications")
