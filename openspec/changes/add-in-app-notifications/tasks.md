@@ -28,7 +28,10 @@
   - Done: `delete_user` (`tests/test_user_delete_route.py` call order) and `delete_team`, before the team row (`test_team_deletion_deletes_the_teams_notifications`).
 
 - [x] 3.4 Send a team's notifications only to its current members and delete a member's notifications about a team they leave or are removed from; verify tests for both.
-  - Done: `NotificationService(get_rebac=...)` filters drafts by `can_read_members`; `remove_team_member` calls `store.delete_for_member`. Tests: `test_a_team_notification_skips_who_left_the_team`, `test_a_publisher_who_left_the_team_is_told_nothing`, `test_leaving_a_team_removes_only_that_members_rows_about_it`, `test_remove_team_member_self_removal_skips_permission_check`.
+  - Done: `NotificationService(get_rebac=...)` filters drafts (by the type's permission since 3.5); `remove_team_member` calls `store.delete_for_member`. Tests: `test_a_publisher_who_left_the_team_is_told_nothing`, `test_leaving_a_team_removes_only_that_members_rows_about_it`, `test_remove_team_member_self_removal_skips_permission_check`.
+
+- [x] 3.5 Send each notification only to recipients holding the permission its type declares (`can_update_agents` for both marketplace types) and delete a recipient's open rows of a type when they lose that permission through a role change; verify tests.
+  - Done: `ACTION_PERMISSION` in `schemas.py`, checked by `NotificationService._allowed_recipients`; `forget_lost_access` called from `revoke_team_member_role`, the admin removal in `edit_team_registry` and the charter demotion; `store.delete_for_member(types=...)`. Tests: `test_every_type_declares_the_permission_to_act_on_it`, `test_a_team_notification_skips_who_cannot_act_on_it`, `test_losing_the_right_to_act_drops_those_notifications`, `test_a_lost_right_removes_only_the_types_it_covered`, `test_a_publisher_who_can_no_longer_edit_the_agents_is_told_nothing`, `test_revoke_team_member_role_drops_notifications_the_member_cannot_act_on`.
 
 ## 4. Expiry
 

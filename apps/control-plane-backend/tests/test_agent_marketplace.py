@@ -1643,6 +1643,22 @@ async def test_a_publisher_who_left_the_team_is_told_nothing(editors) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_publisher_who_can_no_longer_edit_the_agents_is_told_nothing(
+    editors,
+) -> None:
+    env = editors
+    await _agent(env)
+    await _publish(env)
+    # Still a member, no longer an editor: they could not republish.
+    env.rebac.perms[_TEAM][_EDITOR] = {TeamPermission.CAN_USE_TEAM_AGENTS}
+
+    await _save(env, _EDITOR_2, "A change")
+    await _unpublish(env, 1, uid=_PLATFORM, reason="Duplicate entry")
+
+    assert await _inbox(env, _EDITOR) == []
+
+
+@pytest.mark.asyncio
 async def test_removal_by_the_team_notifies_nobody(editors) -> None:
     env = editors
     await _agent(env)

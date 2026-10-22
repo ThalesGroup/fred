@@ -281,3 +281,16 @@ async def test_leaving_a_team_removes_only_that_members_rows_about_it(
         "b"
     ]
     assert (await _only(store, "bob")).group_key == "c"
+
+
+@pytest.mark.asyncio
+async def test_a_lost_right_removes_only_the_types_it_covered(
+    store: NotificationStore,
+) -> None:
+    await store.upsert([_draft("alice", "a", team="alpha")])
+
+    await store.delete_for_member("alice", "alpha", types=["agent.marketplace_removed"])
+    assert (await _only(store, "alice")).group_key == "a"
+
+    await store.delete_for_member("alice", "alpha", types=["agent.republish_needed"])
+    assert await store.unseen_count("alice") == 0

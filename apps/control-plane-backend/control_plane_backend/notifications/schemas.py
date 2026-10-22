@@ -24,6 +24,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal, Union
 
+from fred_core.security.rebac.rebac_engine import TeamPermission
 from pydantic import BaseModel, ConfigDict, Field
 
 #: Most notifications one page returns.
@@ -69,6 +70,15 @@ class AgentMarketplaceRemovedPayload(_Payload):
 PAYLOAD_MODELS: dict[NotificationType, type[_Payload]] = {
     NotificationType.AGENT_REPUBLISH_NEEDED: AgentRepublishNeededPayload,
     NotificationType.AGENT_MARKETPLACE_REMOVED: AgentMarketplaceRemovedPayload,
+}
+
+
+#: The right a recipient needs, on the notification's team, to act on it. Every
+#: type declares one: it is checked per recipient at send time, and a loss of
+#: it deletes the recipient's open notifications of that type.
+ACTION_PERMISSION: dict[NotificationType, TeamPermission] = {
+    NotificationType.AGENT_REPUBLISH_NEEDED: TeamPermission.CAN_UPDATE_AGENTS,
+    NotificationType.AGENT_MARKETPLACE_REMOVED: TeamPermission.CAN_UPDATE_AGENTS,
 }
 
 

@@ -337,15 +337,19 @@ class NotificationStore:
     async def delete_for_user(self, recipient_id: str) -> None:
         await self.delete_all(recipient_id)
 
-    async def delete_for_member(self, recipient_id: str, team_id: str) -> None:
-        """What `recipient_id` was told about a team they no longer belong to."""
+    async def delete_for_member(
+        self, recipient_id: str, team_id: str, *, types: Sequence[str] | None = None
+    ) -> None:
+        """What `recipient_id` was told about a team they left, or only the
+        `types` they lost the right to receive."""
+        conditions = [
+            NotificationRow.recipient_id == recipient_id,
+            NotificationRow.team_id == team_id,
+        ]
+        if types is not None:
+            conditions.append(NotificationRow.type.in_(types))
         async with use_session(self._sessions) as s:
-            await s.execute(
-                delete(NotificationRow).where(
-                    NotificationRow.recipient_id == recipient_id,
-                    NotificationRow.team_id == team_id,
-                )
-            )
+            await s.execute(delete(NotificationRow).where(*conditions))
 
     async def delete_for_team(self, team_id: str) -> None:
         async with use_session(self._sessions) as s:

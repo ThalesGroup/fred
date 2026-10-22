@@ -649,9 +649,18 @@ async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> i
                         await _swap_team_admin_relation(
                             deps.rebac, metadata.id, user_id, promote=False
                         )
+                        await _forget_lost_notifications(deps, metadata.id, user_id)
                         moved += 1
         await charter_store.set_applied_version(version or "")
     return moved
+
+
+async def _forget_lost_notifications(
+    deps: TeamServiceDependencies, team_id: TeamId, user_id: str
+) -> None:
+    """A role loss also takes the notifications the user can no longer act on."""
+    if deps.get_notification_service is not None:
+        await deps.get_notification_service().forget_lost_access(user_id, team_id)
 
 
 async def _swap_team_admin_relation(
@@ -1280,6 +1289,7 @@ async def edit_team_registry(
                 await _add_team_member_relation(rebac, team_id, user_id, relation)
             for user_id in removed_ids:
                 await _demote_team_admin(rebac, team_id, user_id)
+                await _forget_lost_notifications(deps, team_id, user_id)
             if patch_data:
                 try:
                     updated = await store.upsert(
@@ -1948,6 +1958,7 @@ async def revoke_team_member_role(
                 rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
             )
         await _remove_team_member_relation(rebac, team_id, user_id, relation)
+        await _forget_lost_notifications(deps, team_id, user_id)
 
     logger.info(
         "Revoked role %s from user %s on team %s",

@@ -386,6 +386,31 @@ async def test_revoke_team_member_role_removes_only_that_role() -> None:
 
 
 @pytest.mark.asyncio
+async def test_revoke_team_member_role_drops_notifications_the_member_cannot_act_on() -> (
+    None
+):
+    rebac = _FakeRebac(
+        roles={"bob": {UserTeamRelation.TEAM_EDITOR, UserTeamRelation.TEAM_MEMBER}}
+    )
+    checked: list[tuple[str, str]] = []
+
+    class _FakeNotificationService:
+        async def forget_lost_access(self, user_id: str, team_id: str) -> None:
+            checked.append((user_id, str(team_id)))
+
+    deps = dataclasses.replace(
+        _deps(rebac, "fredlab"),
+        get_notification_service=cast(Any, lambda: _FakeNotificationService()),
+    )
+
+    await revoke_team_member_role(
+        _user(), TeamId("fredlab"), "bob", UserTeamRelation.TEAM_EDITOR, deps
+    )
+
+    assert checked == [("bob", "fredlab")]
+
+
+@pytest.mark.asyncio
 async def test_revoke_team_member_role_raises_when_not_held() -> None:
     rebac = _FakeRebac(roles={"bob": {UserTeamRelation.TEAM_ADMIN}})
 

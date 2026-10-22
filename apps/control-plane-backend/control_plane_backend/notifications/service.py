@@ -37,6 +37,7 @@ from fred_core.security.rebac.rebac_engine import (
 from pydantic import BaseModel, TypeAdapter
 
 from control_plane_backend.notifications.schemas import (
+    ACTION_PERMISSION,
     MAX_PAGE_SIZE,
     NotificationPage,
     NotificationSummary,
@@ -55,6 +56,10 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM = KPIActor(type="system")
 _VIEW: TypeAdapter[Any] = TypeAdapter(NotificationView)
+
+
+def _required_permission(type_: str) -> TeamPermission:
+    return ACTION_PERMISSION[NotificationType(type_)]
 
 
 class NotificationNotFound(Exception):
@@ -150,7 +155,7 @@ class NotificationService:
         try:
             for draft in drafts:
                 validate_payload(draft.type, draft.payload)
-            drafts = await self._members_only(drafts)
+            drafts = await self._allowed_recipients(drafts)
             if not drafts:
                 return True
             await self._store.upsert(drafts)
@@ -169,32 +174,63 @@ class NotificationService:
             )
         return True
 
-    async def _members_only(
+    async def _allowed_recipients(
         self, drafts: Sequence[NotificationDraft]
     ) -> Sequence[NotificationDraft]:
-        """A team's notification only reaches who is still in that team."""
+        """A team's notification only reaches who can act on it now."""
         if self._get_rebac is None:
             return drafts
         rebac = self._get_rebac()
-        pairs = sorted(
-            {(d.recipient_id, d.team_id) for d in drafts if d.team_id is not None}
+        checks = sorted(
+            {
+                (d.recipient_id, d.team_id, _required_permission(d.type))
+                for d in drafts
+                if d.team_id is not None
+            }
         )
         allowed = await asyncio.gather(
             *(
                 rebac.has_permission(
                     RebacReference(Resource.USER, uid),
-                    TeamPermission.CAN_READ_MEMEBERS,
+                    permission,
                     RebacReference(Resource.TEAM, team_id),
                 )
-                for uid, team_id in pairs
+                for uid, team_id, permission in checks
             )
         )
-        members = {pair for pair, ok in zip(pairs, allowed) if ok}
+        granted = {check for check, ok in zip(checks, allowed) if ok}
         return [
             d
             for d in drafts
-            if d.team_id is None or (d.recipient_id, d.team_id) in members
+            if d.team_id is None
+            or (d.recipient_id, d.team_id, _required_permission(d.type)) in granted
         ]
+
+    async def forget_lost_access(self, recipient_id: str, team_id: str) -> None:
+        """After a role change, drop the open notifications about `team_id` that
+        `recipient_id` may no longer receive. Best effort, never raises."""
+        if self._get_rebac is None:
+            return
+        try:
+            rebac = self._get_rebac()
+            permissions = sorted(set(ACTION_PERMISSION.values()))
+            held = await rebac.has_permissions(
+                RebacReference(Resource.USER, recipient_id),
+                permissions,
+                RebacReference(Resource.TEAM, team_id),
+                consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+            )
+            lost = {p for p, ok in zip(permissions, held) if not ok}
+            types = [t.value for t, p in ACTION_PERMISSION.items() if p in lost]
+            if types:
+                await self._store.delete_for_member(recipient_id, team_id, types=types)
+        except Exception:
+            logger.warning(
+                "Failed to drop notifications recipient_id=%s team_id=%s",
+                recipient_id,
+                team_id,
+                exc_info=True,
+            )
 
     async def resolve(
         self,

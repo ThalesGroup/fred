@@ -27,6 +27,7 @@ import pytest_asyncio
 from control_plane_backend.app.dependencies import attach_application_container
 from control_plane_backend.notifications import api as notifications_api
 from control_plane_backend.notifications.schemas import (
+    ACTION_PERMISSION,
     AgentRepublishNeededPayload,
     NotificationType,
     validate_payload,
@@ -106,6 +107,13 @@ def test_payload_validation_refuses_an_unknown_type_and_a_missing_field() -> Non
     )
 
 
+def test_every_type_declares_the_permission_to_act_on_it() -> None:
+    assert set(ACTION_PERMISSION) == set(NotificationType)
+    assert ACTION_PERMISSION[NotificationType.AGENT_MARKETPLACE_REMOVED] == (
+        TeamPermission.CAN_UPDATE_AGENTS
+    )
+
+
 # --- emission -------------------------------------------------------------------
 
 
@@ -132,12 +140,12 @@ async def test_notify_creates_one_row_per_recipient_and_counts_it(
 
 
 @pytest.mark.asyncio
-async def test_a_team_notification_skips_who_left_the_team(
+async def test_a_team_notification_skips_who_cannot_act_on_it(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:
     class _Rebac:
         async def has_permission(self, subject, permission, resource, **_) -> bool:
-            assert permission == TeamPermission.CAN_READ_MEMEBERS
+            assert permission == TeamPermission.CAN_UPDATE_AGENTS
             return (subject.id, resource.id) == ("alice", "alpha")
 
     service = NotificationService(
@@ -160,8 +168,38 @@ async def test_a_team_notification_skips_who_left_the_team(
     alice = await service.list_page(_user("alice"), limit=50, before=None)
     dave = await service.list_page(_user("dave"), limit=50, before=None)
     assert len(alice.items) == 1
-    # Not a member of alpha any more: only the notification with no team reaches him.
+    # Cannot edit alpha's agents: only the notification with no team reaches him.
     assert [item.team_id for item in dave.items] == [None]
+
+
+@pytest.mark.asyncio
+async def test_losing_the_right_to_act_drops_those_notifications(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    held = {"alice": True, "dave": False}
+
+    class _Rebac:
+        async def has_permission(self, subject, permission, resource, **_) -> bool:
+            return True
+
+        async def has_permissions(self, subject, permissions, resource, **_):
+            assert list(permissions) == [TeamPermission.CAN_UPDATE_AGENTS]
+            return [held[subject.id]]
+
+    service = NotificationService(
+        NotificationStore(control_plane_sql_engine),
+        get_rebac=lambda: cast(RebacEngine, _Rebac()),
+    )
+    assert await _notify(service, "alice", "dave")
+
+    await service.forget_lost_access("alice", "alpha")
+    await service.forget_lost_access("dave", "alpha")
+
+    alice = await service.list_page(_user("alice"), limit=50, before=None)
+    dave = await service.list_page(_user("dave"), limit=50, before=None)
+    assert len(alice.items) == 1
+    assert dave.items == []
+    assert (await service.summary(_user("dave"))).unseen_count == 0
 
 
 @pytest.mark.asyncio

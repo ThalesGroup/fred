@@ -45,9 +45,13 @@ What exists today, none of it per-user targeted:
 8. 15 s polling of the badge counts as "without reload" for decision 3
    (§3.5); no stream.
 9. The badge reads "99+" above 99.
-10. A team's notifications reach only its current members: a recipient who
-    left the team is skipped at send time, and leaving a team deletes the
-    member's notifications about it.
+10. A notification reaches only people who can currently act on what it
+    asks. Each type declares the permission needed to act on it, on the
+    notification's team (both marketplace types: `can_update_agents`; join
+    requests: `can_administer_members`; boost requests: the team admin
+    right). It is checked per recipient at send time, and a loss of that
+    right (role change, leaving the team, team deletion) deletes the
+    recipient's open notifications of that type.
 11. Join requests come through a new opt-in team access mode, "on request",
     next to `open` and `invite_only` (slice 2). Admins who keep either
     existing mode receive no requests, as today.

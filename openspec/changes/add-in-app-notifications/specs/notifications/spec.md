@@ -97,14 +97,24 @@ A notification SHALL expire 30 days after its creation. Expired notifications MU
 - **WHEN** a notification is 31 days old
 - **THEN** it is neither listed nor counted, and the next lifecycle run deletes it
 
-### Requirement: A team's notifications reach only its current members
+### Requirement: A notification reaches only who can act on it
 
-A notification about a team SHALL be sent only to recipients who are still members of that team when it is emitted. When a member leaves or is removed from a team, their notifications about that team SHALL be deleted.
+Every notification type SHALL declare the permission a recipient needs, on the notification's team, to act on what it asks; `agent.republish_needed` and `agent.marketplace_removed` SHALL require `can_update_agents`. A team notification SHALL be sent only to recipients who hold that permission when it is emitted. When a recipient loses that permission (a role is revoked, they leave or are removed from the team, or the team is deleted), their open notifications of that type about that team SHALL be deleted. The unseen count MUST stay a single query on the recipient's own rows.
 
 #### Scenario: The publisher left the team
 
 - **WHEN** Alice published an agent, then left its team, and Bob saves a change to it or a platform admin removes it
 - **THEN** Alice receives no notification
+
+#### Scenario: The publisher can no longer edit the team's agents
+
+- **WHEN** Alice published an agent, then lost the editor role while staying a member, and Bob saves a change to it or a platform admin removes it
+- **THEN** Alice receives no notification
+
+#### Scenario: Losing the editor role
+
+- **WHEN** Alice holds a republish notification about a team and her editor role on that team is revoked
+- **THEN** that notification is deleted and no longer counted in her badge
 
 #### Scenario: Leaving a team
 
