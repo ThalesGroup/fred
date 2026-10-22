@@ -61,6 +61,7 @@ import {
 } from "./capabilityEnablement";
 import { ModelIdentityCell } from "./ModelIdentityCell";
 import { ModelDiscoveryStatus } from "./ModelDiscoveryStatus";
+import { splitModelSections } from "./modelSections";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
 // an agent template into this same catalog, CAPAB-01 RFC §8.6) vs "model" (a
@@ -175,6 +176,7 @@ export default function FeaturesPage() {
   // after tools already shipped) — an absent value is a tool, same default
   // as the backend's own `CapabilityEnablementItem.kind`.
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
+  const { manual: manualModels, discovered: discoveredModels } = splitModelSections(capabilities);
   const rowIsUnused = (capability: CapabilityEnablementItem) =>
     hasAgentInstanceLifecycle(capability.kind) ? isUnused(capability) : enabledTeamCount(capability) === 0;
 
@@ -636,6 +638,9 @@ export default function FeaturesPage() {
       {activeKindFilter === "model" && (
         <ModelDiscoveryStatus
           data={discoveryStatus}
+          discoveredSourceIds={discoveredModels.flatMap((model) =>
+            model.model_discovery_source_id ? [model.model_discovery_source_id] : [],
+          )}
           refreshing={discoveryRefresh.isLoading || !modelInventoryReady}
           refreshError={discoveryRefresh.isError}
           refresh={refreshModels}
@@ -659,9 +664,52 @@ export default function FeaturesPage() {
         />
       )}
 
-      {!isLoading && !isError && (activeKindFilter !== "model" || modelInventoryReady) && capabilities.length > 0 && (
-        <DataTable columns={columns} data={capabilities} rowKey={(capability) => capability.id} size="medium" />
-      )}
+      {!isLoading &&
+        !isError &&
+        (activeKindFilter !== "model" || modelInventoryReady) &&
+        capabilities.length > 0 &&
+        (activeKindFilter === "model" ? (
+          <div className={styles.modelSections}>
+            {[
+              {
+                key: "manual",
+                title: t("rework.admin.capabilities.discovery.manualSection"),
+                empty: t("rework.admin.capabilities.discovery.emptyManual"),
+                items: manualModels,
+              },
+              {
+                key: "discovered",
+                title: t("rework.admin.capabilities.discovery.discoveredSection"),
+                empty: t("rework.admin.capabilities.discovery.emptyDiscovered"),
+                items: discoveredModels,
+              },
+            ].map((section) => (
+              <section
+                key={section.key}
+                className={`${styles.modelSection} ${section.items.length === 0 ? styles.modelSectionEmpty : ""}`}
+                aria-label={section.title}
+              >
+                <h2 className={styles.modelSectionTitle}>
+                  {section.title} ({section.items.length})
+                </h2>
+                {section.items.length === 0 ? (
+                  <p className={styles.status}>{section.empty}</p>
+                ) : (
+                  <div className={styles.modelSectionTable}>
+                    <DataTable
+                      columns={columns}
+                      data={section.items}
+                      rowKey={(capability) => capability.id}
+                      size="medium"
+                    />
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+        ) : (
+          <DataTable columns={columns} data={capabilities} rowKey={(capability) => capability.id} size="medium" />
+        ))}
 
       <CapabilityTeamMatrixDrawer
         capability={matrixCapability}

@@ -98,6 +98,34 @@ def test_discovery_only_catalog_has_stable_routable_profiles(monkeypatch) -> Non
     assert all(not p.supports_thinking for p in first.profiles)
 
 
+def test_catalog_projection_uses_resolved_discovery_provenance(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    catalog = ModelCatalog.model_validate(
+        {
+            "discovery": {
+                "source_id": "gateway",
+                "base_url": "https://models.example/v1",
+            },
+            "profiles": [
+                {
+                    "profile_id": "discovered.chat.gateway.pinned",
+                    "capability": "chat",
+                    "model": {"provider": "openai", "name": "pinned"},
+                }
+            ],
+        }
+    )
+    resolved = catalog.resolve_discovery(
+        transport=_transport({"data": [{"id": "chat-a"}]})
+    )
+
+    assert len(resolved.discovered_profile_ids) == 1
+    assert resolved.discovered_profile_ids[0] != "discovered.chat.gateway.pinned"
+    assert _project_model_catalog_response(resolved).discovered_model_ids == [
+        resolved.profiles[1].capability_id
+    ]
+
+
 def test_discovery_endpoint_overrides_common_openai_base(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     catalog = _catalog().model_copy(

@@ -139,8 +139,39 @@
   grid-column: 1 / -1;
   flex-direction: column;
   gap: var(--spacing-3xs);
+  margin-top: var(--spacing-s);
   padding-bottom: var(--spacing-s);
   min-width: 0;
+}
+
+.modelSections {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-height: 0;
+}
+
+.modelSection {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-height: 0;
+}
+
+.modelSectionEmpty {
+  flex: 0 0 auto;
+}
+
+.modelSectionTitle {
+  margin: 0;
+  font: var(--font-title-small);
+}
+
+.modelSectionTable {
+  flex: 1;
+  min-height: 0;
 }
 
 .modelNameEditButton {

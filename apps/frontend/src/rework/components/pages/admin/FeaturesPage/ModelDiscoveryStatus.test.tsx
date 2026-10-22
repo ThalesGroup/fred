@@ -16,7 +16,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { ModelDiscoveryStatus } from "./ModelDiscoveryStatus";
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string, values?: { sources?: string }) => `${key}${values?.sources ?? ""}` }),
+}));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: vi.fn() }),
 }));
@@ -40,6 +42,7 @@ it("shows a confirmed disappearance separately from available models", () => {
           },
         ],
       }}
+      discoveredSourceIds={["gateway"]}
       refreshing={false}
       refreshError={false}
       refresh={async () => undefined}
@@ -49,4 +52,45 @@ it("shows a confirmed disappearance separately from available models", () => {
   expect(html).toContain("Old chat (chat-a)");
   expect(html).toContain("rework.admin.capabilities.discovery.unavailable");
   expect(html).not.toContain("chat-b)");
+});
+
+it("explains why discovered models have no editable source", () => {
+  const html = renderToStaticMarkup(
+    <ModelDiscoveryStatus
+      data={{ sources: [] }}
+      discoveredSourceIds={["gateway"]}
+      refreshing={false}
+      refreshError={false}
+      refresh={async () => undefined}
+    />,
+  );
+
+  expect(html).toContain("rework.admin.capabilities.discovery.unregisteredSource");
+  expect(html).not.toContain("rework.admin.capabilities.discovery.none");
+});
+
+it("warns when one discovered source is missing from a mixed status", () => {
+  const html = renderToStaticMarkup(
+    <ModelDiscoveryStatus
+      data={{
+        sources: [
+          {
+            source_id: "other",
+            yaml_url: "https://other.example/v1/models",
+            effective_url: "https://other.example/v1/models",
+            available_models: [],
+            removed_models: [],
+            new_ids: [],
+          },
+        ],
+      }}
+      discoveredSourceIds={["other", "gateway"]}
+      refreshing={false}
+      refreshError={false}
+      refresh={async () => undefined}
+    />,
+  );
+
+  expect(html).toContain("rework.admin.capabilities.discovery.unregisteredSource");
+  expect(html).toContain("gateway");
 });

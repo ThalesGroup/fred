@@ -82,17 +82,21 @@ function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
 
 export function ModelDiscoveryStatus({
   data,
+  discoveredSourceIds,
   refreshing,
   refreshError,
   refresh,
 }: {
   data: Status | undefined;
+  discoveredSourceIds: string[];
   refreshing: boolean;
   refreshError: boolean;
   refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const sources = data?.sources ?? [];
+  const registeredSourceIds = new Set(sources.map((source) => source.source_id));
+  const missingSourceIds = [...new Set(discoveredSourceIds)].filter((id) => !registeredSourceIds.has(id));
   const newCount = sources.reduce((count, source) => count + (source.new_ids?.length ?? 0), 0);
   const removed = sources.flatMap((source) => source.removed_models ?? []);
 
@@ -108,8 +112,17 @@ export function ModelDiscoveryStatus({
       {(refreshError || data?.refresh_error) && (
         <p className={styles.statusError}>{t("rework.admin.capabilities.discovery.refreshFailed")}</p>
       )}
+      {data && !refreshing && missingSourceIds.length > 0 && (
+        <p className={styles.statusError}>
+          {t("rework.admin.capabilities.discovery.unregisteredSource", { sources: missingSourceIds.join(", ") })}
+        </p>
+      )}
       {sources.length === 0 ? (
-        <p className={styles.status}>{t("rework.admin.capabilities.discovery.none")}</p>
+        data &&
+        !refreshing &&
+        missingSourceIds.length === 0 && (
+          <p className={styles.status}>{t("rework.admin.capabilities.discovery.none")}</p>
+        )
       ) : (
         <>
           <p className={styles.status}>

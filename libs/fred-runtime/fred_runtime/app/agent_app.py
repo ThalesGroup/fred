@@ -1580,6 +1580,7 @@ def _project_model_catalog_response(catalog: Any) -> _ModelCatalogResponse:
     capability_by_profile_id = {
         profile.profile_id: profile.capability for profile in catalog.profiles
     }
+    discovered_profile_ids = set(catalog.discovered_profile_ids)
     return _ModelCatalogResponse(
         models=_project_model_catalog_entries(catalog),
         discovery_source_id=(
@@ -1591,10 +1592,7 @@ def _project_model_catalog_response(catalog: Any) -> _ModelCatalogResponse:
         discovered_model_ids=[
             profile.capability_id
             for profile in catalog.profiles
-            if catalog.discovery is not None
-            and profile.profile_id.startswith(
-                f"discovered.chat.{catalog.discovery.source_id}."
-            )
+            if profile.profile_id in discovered_profile_ids
         ],
         discovery_default_profile_id=(
             f"discovered.chat.{catalog.discovery.source_id}."

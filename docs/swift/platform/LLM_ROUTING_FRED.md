@@ -203,9 +203,14 @@ Fred does not parse vendor-specific fields such as Mistral's
 Use `include_model_ids` to exclude embedding and other non-chat models.
 
 Opening **Capabilities > Models** refreshes the discovered inventory before
-listing models. New models are highlighted and start without a team grant.
+listing models. The view separates manually declared profiles from models
+advertised by discovery, using the pod's inventory provenance rather than the
+model name. Both sections offer the same activation and team controls. If a
+pod advertises discovered models but control-plane lacks registered state for
+that source, the view names it as unavailable for URL management.
+New models are highlighted and start without a team grant.
 Removed models remain visible as unavailable in the discovery summary, while
-static profiles continue to appear in the regular Models list. A failed
+static profiles continue to appear in the manual section. A failed
 refresh preserves the last verified inventory and displays an error. If the
 YAML endpoint is unavailable at startup, the pod starts with its static
 profiles; the first managed turn can apply a saved administrator URL. Until a

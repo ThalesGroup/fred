@@ -32,7 +32,7 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 import yaml
 from fred_core.common import ModelConfiguration
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 
 from .contracts import (
     FrozenModel,
@@ -164,6 +164,11 @@ class ModelCatalog(FrozenModel):
     profiles: tuple[ModelProfile, ...] = ()
     agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
     discovery: ModelDiscoverySource | None = None
+    _discovered_profile_ids: tuple[str, ...] = PrivateAttr(default=())
+
+    @property
+    def discovered_profile_ids(self) -> tuple[str, ...]:
+        return self._discovered_profile_ids
 
     @model_validator(mode="after")
     def _validate_discovery_default(self) -> "ModelCatalog":
@@ -326,6 +331,7 @@ class ModelCatalog(FrozenModel):
         profiles = list(self.profiles)
         existing_profile_ids = {profile.profile_id for profile in profiles}
         existing_capability_ids = {profile.capability_id for profile in profiles}
+        discovered_profile_ids: list[str] = []
         default_profile_id: str | None = None
         for item in selected:
             wire_id = item["id"]
@@ -356,6 +362,7 @@ class ModelCatalog(FrozenModel):
                     f"Model discovery source {source.source_id!r} conflicts with a static model identity"
                 )
             profiles.append(profile)
+            discovered_profile_ids.append(profile_id)
             existing_profile_ids.add(profile_id)
             existing_capability_ids.add(profile.capability_id)
             if wire_id == source.default_model_id:
@@ -368,13 +375,15 @@ class ModelCatalog(FrozenModel):
                 )
             if default_profile_id is not None:
                 defaults[ModelCapability.CHAT] = default_profile_id
-        return self.model_copy(
+        resolved = self.model_copy(
             update={
                 "profiles": tuple(profiles),
                 "default_profile_by_capability": defaults,
                 "discovery": source.model_copy(update={"base_url": base_url}),
             }
         )
+        resolved._discovered_profile_ids = tuple(discovered_profile_ids)
+        return resolved
 
     def to_policy(self) -> ModelRoutingPolicy:
         resolved_profiles: list[ModelProfile] = []
