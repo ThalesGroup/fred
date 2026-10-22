@@ -1992,26 +1992,27 @@ async def _resolve_agent_instance(
         )
 
     resolution = _ResolvedAgentInstance.model_validate(response.json())
-    runtime_config = get_runtime_context().config
-    factory = runtime_config.chat_model_factory
-    if isinstance(factory, RoutedChatModelFactory) and factory.catalog is not None:
-        source = factory.catalog.discovery
-        if source is not None and runtime_config.models_catalog_path:
-            effective_url = resolution.model_discovery_urls.get(source.source_id)
-            if effective_url is not None:
-                try:
-                    await factory.refresh_catalog(
-                        runtime_config.models_catalog_path,
-                        models_url=effective_url,
-                        revision=resolution.model_discovery_revisions.get(
-                            source.source_id, 0
-                        ),
-                    )
-                except ValueError as exc:
-                    logger.warning(
-                        "Model discovery URL could not be applied; keeping the active catalog: %s",
-                        exc,
-                    )
+    if resolution.model_discovery_urls:
+        runtime_config = get_runtime_context().config
+        factory = runtime_config.chat_model_factory
+        if isinstance(factory, RoutedChatModelFactory) and factory.catalog is not None:
+            source = factory.catalog.discovery
+            if source is not None and runtime_config.models_catalog_path:
+                effective_url = resolution.model_discovery_urls.get(source.source_id)
+                if effective_url is not None:
+                    try:
+                        await factory.refresh_catalog(
+                            runtime_config.models_catalog_path,
+                            models_url=effective_url,
+                            revision=resolution.model_discovery_revisions.get(
+                                source.source_id, 0
+                            ),
+                        )
+                    except ValueError as exc:
+                        logger.warning(
+                            "Model discovery URL could not be applied; keeping the active catalog: %s",
+                            exc,
+                        )
     definition = registry.get(resolution.template_agent_id)
     if definition is None:
         raise HTTPException(

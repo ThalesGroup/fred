@@ -187,7 +187,7 @@ value. A successful refresh updates the active pod catalog immediately.
 environment; never put the key in YAML. `source_id` is a stable operator-chosen
 identity. Changing it creates new model capability and profile ids, which need
 new admin grants. `include_model_ids` is optional; when supplied, every listed
-id must be returned at startup. A discovered default must be in the selected list. A
+id must be returned by a successful discovery response. A discovered default must be in the selected list. A
 static chat default and `discovery.default_model_id` cannot coexist.
 
 The standard `/models` response does not identify chat models or define their
@@ -318,8 +318,9 @@ that omits them reads as declaring neither.
 - A team write naming an unknown, non-chat, not-universally-available, or
   non-enabled profile is rejected before persistence.
 - A stored team profile missing from a pod, or declaring a non-chat capability,
-  raises a typed drift error at runtime. Fred never silently substitutes the
-  pod default.
+  raises a typed drift error unless a successful discovery refresh confirmed
+  its removal. A confirmed removal uses the configured platform fallback;
+  neither case silently substitutes the pod default.
 - A resolved non-platform model that is no longer enabled for the team fails
   closed before the LLM call.
 - With no platform binding and no team policy, behavior reduces to the pod's
