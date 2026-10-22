@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -23,7 +22,6 @@ class AgentSandboxBackend:
         self.settings = settings
         self.runner = runner
         self.kubernetes = KubernetesBackend(settings, runner)
-        self._ready_lock = asyncio.Lock()
 
     async def preflight(self) -> None:
         await self.kubernetes.preflight()
@@ -35,9 +33,11 @@ class AgentSandboxBackend:
         if pool_spec.get("updateStrategy", {}).get("type") != "Recreate":
             raise SandboxError("policy_unavailable")
         target = pool_spec.get("replicas", 1)
-        if (
-            not isinstance(target, int)
-            or target != 0
+        pool_status = pool.get("status", {})
+        if not isinstance(target, int) or target != 0 or any(
+            not isinstance(pool_status.get(field, 0), int)
+            or pool_status.get(field, 0) != 0
+            for field in ("replicas", "readyReplicas", "availableReplicas")
         ):
             raise SandboxError("policy_unavailable")
         template = await self._get("sandboxtemplate", template_name)
@@ -91,27 +91,7 @@ class AgentSandboxBackend:
             == [{"name": "scratch", "emptyDir": {"sizeLimit": "16Mi"}}]
         )
 
-    async def warm_state(self) -> tuple[int, int]:
-        pool = await self._get("sandboxwarmpool", self.settings.agent_pool_name)
-        desired = pool.get("spec", {}).get("replicas", 1)
-        ready = pool.get("status", {}).get("readyReplicas", 0)
-        observed = pool.get("status", {}).get("observedGeneration", 0)
-        generation = pool.get("metadata", {}).get("generation", 1)
-        if (
-            not isinstance(desired, int)
-            or desired != 0
-            or not isinstance(ready, int)
-            or observed < generation
-        ):
-            raise SandboxError("policy_unavailable")
-        return ready, desired
-
     async def prepare(self) -> SandboxLease:
-        if not self.settings.cold_start_on_miss:
-            async with self._ready_lock:
-                if (await self.warm_state())[0] < 1:
-                    raise SandboxError("busy")
-                return await self._prepare_claim()
         return await self._prepare_claim()
 
     async def _prepare_claim(self) -> SandboxLease:
@@ -166,15 +146,6 @@ class AgentSandboxBackend:
                 != pod_name
             ):
                 raise SandboxError("policy_unavailable")
-            if not self.settings.cold_start_on_miss:
-                sandbox = await self._get("sandbox", pod_name)
-                if (
-                    sandbox.get("metadata", {})
-                    .get("labels", {})
-                    .get("agents.x-k8s.io/launch-type")
-                    != "warm"
-                ):
-                    raise SandboxError("busy")
             return SandboxLease(id=name, target=pod_name)
         except BaseException:
             try:

@@ -5,15 +5,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import BrokerSettings
-from .pool import WarmPool
 from .sessions import ConversationPool
 
 _REFRESH_SECONDS = 30
+logger = logging.getLogger(__name__)
 
 
 class _AdminPolicy(BaseModel):
@@ -27,12 +28,10 @@ class SettingsSync:
     def __init__(
         self,
         settings: BrokerSettings,
-        pool: WarmPool,
         sessions: ConversationPool,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.settings = settings
-        self.pool = pool
         self.sessions = sessions
         self._client = httpx.AsyncClient(transport=transport, timeout=5)
         self._worker: asyncio.Task[None] | None = None

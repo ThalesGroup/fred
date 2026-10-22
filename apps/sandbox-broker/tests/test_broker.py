@@ -8,7 +8,7 @@ from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResu
 from sandbox_broker.api import create_app
 from sandbox_broker.backend import SandboxLease, SandboxPrepareLeak
 from sandbox_broker.config import BrokerSettings
-from sandbox_broker.pool import WarmPool
+from sandbox_broker.pool import OnDemandCapacity
 from sandbox_broker.sessions import ConversationPool
 from sandbox_broker.settings_sync import SettingsSync
 
@@ -114,7 +114,7 @@ def test_conversation_reuses_workload_and_never_shares_it() -> None:
 @pytest.mark.asyncio
 async def test_conversation_idle_expiry_replaces_workload() -> None:
     fake = FakeBackend()
-    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
+    pool = OnDemandCapacity(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
     await pool.start()
     sessions = ConversationPool(pool, idle_seconds=1200, max_sessions=1)
     request = SandboxRequest(language="bash", code="pwd")
@@ -141,7 +141,7 @@ async def test_failed_retained_workload_is_replaced_on_retry() -> None:
             return await super().execute(lease, request)
 
     fake = DeadBackend()
-    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
+    pool = OnDemandCapacity(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
     await pool.start()
     sessions = ConversationPool(pool, max_sessions=1)
     request = SandboxRequest(language="python", code="print(1)")
@@ -168,7 +168,7 @@ async def test_admin_policy_applies_without_redeploy_with_operator_cap() -> None
         settings_url="https://control-plane.local/control-plane/v1/internal/sandbox-settings",
         settings_token="y" * 32,
     )
-    pool = WarmPool(fake, config)
+    pool = OnDemandCapacity(fake, config)
     await pool.start()
     sessions = ConversationPool(pool, max_sessions=2)
     seen = []
@@ -180,12 +180,11 @@ async def test_admin_policy_applies_without_redeploy_with_operator_cap() -> None
             json={"idle_minutes": 30, "max_active_sessions": 20},
         )
 
-    sync = SettingsSync(config, pool, sessions, httpx.MockTransport(handler))
+    sync = SettingsSync(config, sessions, httpx.MockTransport(handler))
     await sync.refresh()
     assert seen[0].headers["Authorization"] == "Bearer " + "y" * 32
     assert sessions.idle_seconds == 1800
     assert sessions.max_sessions == 2
-    assert pool.target_size == 0
     await sync.close()
     await pool.close()
 
@@ -197,7 +196,7 @@ async def test_admin_policy_does_not_prepare_idle_sandbox() -> None:
         settings_url="https://control-plane.local/control-plane/v1/internal/sandbox-settings",
         settings_token="y" * 32,
     )
-    pool = WarmPool(fake, config)
+    pool = OnDemandCapacity(fake, config)
     await pool.start()
     sessions = ConversationPool(pool)
 
@@ -207,10 +206,8 @@ async def test_admin_policy_does_not_prepare_idle_sandbox() -> None:
             json={"idle_minutes": 30, "max_active_sessions": 1},
         )
 
-    sync = SettingsSync(config, pool, sessions, httpx.MockTransport(handler))
+    sync = SettingsSync(config, sessions, httpx.MockTransport(handler))
     await sync.refresh()
-    assert pool.target_size == 0
-    assert pool.ready_count == 0
     assert fake.prepared == []
     assert sessions.idle_seconds == 1800
     await sync.close()
@@ -220,7 +217,7 @@ async def test_admin_policy_does_not_prepare_idle_sandbox() -> None:
 @pytest.mark.asyncio
 async def test_reducing_active_limit_evicts_oldest_idle_conversation() -> None:
     fake = FakeBackend()
-    pool = WarmPool(
+    pool = OnDemandCapacity(
         fake, settings(warm_pool_size=0, cold_start_on_miss=True, max_sandboxes=2)
     )
     await pool.start()
@@ -254,7 +251,7 @@ async def test_reducing_active_limit_retires_inflight_conversation() -> None:
             return await super().execute(lease, request)
 
     fake = SlowBackend()
-    pool = WarmPool(
+    pool = OnDemandCapacity(
         fake, settings(warm_pool_size=0, cold_start_on_miss=True, max_sandboxes=2)
     )
     await pool.start()
@@ -276,14 +273,13 @@ async def test_reducing_active_limit_retires_inflight_conversation() -> None:
 @pytest.mark.asyncio
 async def test_on_demand_lease_is_single_use_and_pool_is_bounded() -> None:
     fake = FakeBackend()
-    pool = WarmPool(fake, settings())
+    pool = OnDemandCapacity(fake, settings())
     await pool.start()
     first = await pool.acquire()
     with pytest.raises(SandboxError, match="busy"):
         await pool.acquire()
     assert len(fake.prepared) == 1
     await pool.release(first)
-    assert pool.ready_count == 0
     second = await pool.acquire()
     assert second != first
     await pool.release(second)
@@ -292,11 +288,11 @@ async def test_on_demand_lease_is_single_use_and_pool_is_bounded() -> None:
 
 
 @pytest.mark.asyncio
-async def test_zero_idle_pool_provisions_on_demand_and_caps_concurrency() -> None:
+async def test_capacity_provisions_on_demand_and_caps_concurrency() -> None:
     fake = FakeBackend()
-    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
+    pool = OnDemandCapacity(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
     await pool.start()
-    assert pool.ready_count == 0 and fake.prepared == []
+    assert fake.prepared == []
     lease = await pool.acquire()
     with pytest.raises(SandboxError, match="busy"):
         await pool.acquire()
@@ -314,7 +310,7 @@ async def test_uncertain_prepare_cleanup_keeps_capacity_reserved() -> None:
             raise SandboxPrepareLeak(lease)
 
     fake = LeakingBackend()
-    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
+    pool = OnDemandCapacity(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
     await pool.start()
     with pytest.raises(SandboxPrepareLeak):
         await pool.acquire()
@@ -345,7 +341,7 @@ async def test_failed_disposal_retries_before_releasing_capacity() -> None:
             await super().dispose(lease)
 
     fake = FlakyBackend()
-    pool = WarmPool(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
+    pool = OnDemandCapacity(fake, settings(warm_pool_size=0, cold_start_on_miss=True))
     await pool.start()
     lease = await pool.acquire()
     await pool.release(lease)

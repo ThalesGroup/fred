@@ -12,7 +12,7 @@ from time import monotonic
 from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResult
 
 from .backend import SandboxLease
-from .pool import WarmPool
+from .pool import OnDemandCapacity
 
 logger = logging.getLogger(__name__)
 _SWEEP_SECONDS = 10
@@ -28,7 +28,7 @@ class _Session:
 
 class ConversationPool:
     def __init__(
-        self, pool: WarmPool, *, idle_seconds: int = 1200, max_sessions: int = 8
+        self, pool: OnDemandCapacity, *, idle_seconds: int = 1200, max_sessions: int = 8
     ) -> None:
         self.pool = pool
         self.idle_seconds = idle_seconds

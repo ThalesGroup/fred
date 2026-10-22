@@ -22,7 +22,7 @@ from .command import SubprocessRunner
 from .config import BrokerSettings
 from .docker_backend import DockerBackend
 from .kubernetes_backend import KubernetesBackend
-from .pool import WarmPool
+from .pool import OnDemandCapacity
 from .sessions import ConversationPool
 from .settings_sync import SettingsSync
 
@@ -44,7 +44,7 @@ def create_app(
             selected_backend = AgentSandboxBackend(config, SubprocessRunner())
         else:
             selected_backend = KubernetesBackend(config, SubprocessRunner())
-        pool = WarmPool(selected_backend, config)
+        pool = OnDemandCapacity(selected_backend, config)
         await pool.start()
         sessions = ConversationPool(
             pool,
@@ -52,7 +52,7 @@ def create_app(
             max_sessions=config.max_sandboxes,
         )
         sessions.start()
-        sync = SettingsSync(config, pool, sessions)
+        sync = SettingsSync(config, sessions)
         sync.start()
         app.state.settings = config
         app.state.pool = pool
@@ -69,18 +69,9 @@ def create_app(
 
     @app.get("/healthz")
     async def health() -> dict[str, int]:
-        warm_state = getattr(app.state.pool.backend, "warm_state", None)
-        ready, target = (
-            await warm_state()
-            if warm_state is not None
-            else (app.state.pool.ready_count, app.state.pool.target_size)
-        )
         return {
-            "ready": ready,
             "allocated": app.state.pool.allocated_count,
             "limit": app.state.settings.max_sandboxes,
-            "warm_target": target,
-            "cold_on_miss": int(app.state.settings.cold_start_on_miss),
             "active_conversations": app.state.sessions.active_count,
             "idle_timeout_seconds": app.state.sessions.idle_seconds,
         }
@@ -118,7 +109,7 @@ def create_app(
             except Exception:
                 logger.exception("Conversation sandbox execution failed")
                 return _error(503, "backend_failed")
-        pool: WarmPool = app.state.pool
+        pool: OnDemandCapacity = app.state.pool
         try:
             lease = await pool.acquire()
         except SandboxError as exc:

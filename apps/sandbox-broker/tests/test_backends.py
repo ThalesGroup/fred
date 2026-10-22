@@ -223,7 +223,7 @@ class AgentRunner(KubeRunner):
         bad_pod_env=False,
         template_changes=False,
         ready_replicas=0,
-        cold_fallback=False,
+        live_replicas=None,
     ):
         super().__init__()
         self.bad_image = bad_image
@@ -231,7 +231,7 @@ class AgentRunner(KubeRunner):
         self.bad_pod_env = bad_pod_env
         self.template_changes = template_changes
         self.ready_replicas = ready_replicas
-        self.cold_fallback = cold_fallback
+        self.live_replicas = live_replicas
         self.template_reads = 0
         self.claim_name = ""
 
@@ -250,7 +250,8 @@ class AgentRunner(KubeRunner):
                             "updateStrategy": {"type": "Recreate"},
                         },
                         "status": {
-                            "readyReplicas": self.ready_replicas,
+                            "readyReplicas": self.live_replicas or 0,
+                            "replicas": self.live_replicas or 0,
                             "observedGeneration": 1,
                         },
                     }
@@ -294,19 +295,6 @@ class AgentRunner(KubeRunner):
                 ),
                 "",
             )
-        if "sandbox" in args and "get" in args:
-            launch_type = "cold" if self.cold_fallback else "warm"
-            return CommandResult(
-                0,
-                json.dumps(
-                    {
-                        "metadata": {
-                            "labels": {"agents.x-k8s.io/launch-type": launch_type}
-                        }
-                    }
-                ),
-                "",
-            )
         if "pod" in args and "get" in args:
             pod_spec = KubernetesBackend(settings("kubernetes"), self).job_manifest(
                 "x"
@@ -323,11 +311,7 @@ class AgentRunner(KubeRunner):
                     {
                         "metadata": {
                             "ownerReferences": [{"name": self.claim_name}],
-                            "creationTimestamp": (
-                                "2026-10-22T00:00:02Z"
-                                if self.cold_fallback
-                                else "2026-10-22T00:00:00Z"
-                            ),
+                            "creationTimestamp": "2026-10-22T00:00:02Z",
                         },
                         "spec": pod_spec,
                     }
@@ -401,6 +385,14 @@ async def test_agent_sandbox_rejects_injected_secret_on_claimed_pod() -> None:
 @pytest.mark.asyncio
 async def test_agent_sandbox_rejects_preloaded_replicas() -> None:
     runner = AgentRunner(ready_replicas=1)
+    backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
+    with pytest.raises(SandboxError, match="policy_unavailable"):
+        await backend.preflight()
+
+
+@pytest.mark.asyncio
+async def test_agent_sandbox_rejects_live_preloaded_pods_during_scale_down() -> None:
+    runner = AgentRunner(ready_replicas=0, live_replicas=1)
     backend = AgentSandboxBackend(settings("agent_sandbox"), runner)
     with pytest.raises(SandboxError, match="policy_unavailable"):
         await backend.preflight()

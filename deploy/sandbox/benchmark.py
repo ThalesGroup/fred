@@ -33,9 +33,6 @@ def main() -> int:
         parser.error("--target-p95 must be positive")
     base_url = os.environ["FRED_SANDBOX_BROKER_URL"].rstrip("/")
     token = os.environ["FRED_SANDBOX_BROKER_TOKEN"]
-    initial_state = broker_state(base_url)
-    if initial_state.get("warm_target") != 0:
-        parser.error("benchmark requires on-demand provisioning")
     session_key = secrets.token_hex(32) if args.mode == "reuse" else None
 
     def execute() -> float:
