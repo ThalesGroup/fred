@@ -267,6 +267,8 @@ def test_static_catalog_advertisement_still_reads_the_file(tmp_path) -> None:
         "file:///tmp/models",
         "https://user@models.example/v1",
         "https://models.example/v1?q=x",
+        "https://models.example/v1?",
+        "https://models.example/v1#",
         "https://models.example/v1\n",
     ],
 )

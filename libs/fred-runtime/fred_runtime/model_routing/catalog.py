@@ -79,6 +79,8 @@ class ModelDiscoverySource(FrozenModel):
             or not parts.hostname
             or parts.username is not None
             or parts.password is not None
+            or "?" in value
+            or "#" in value
             or parts.query
             or parts.fragment
         ):
