@@ -238,9 +238,10 @@ Managed web chat SHALL accept `/<name> [request]` at the invocation position and
 #### Scenario: Skill badge in the composer and user message
 
 - **WHEN** a user completes a known `/<name>` selection or types a whitespace-delimited known name
-- **THEN** the composer shows an icon/name token inline with the editable request, as a small filled container with the complete name visible after its leading slash and no separate row or removal button, allowing submission without extra text
+- **THEN** the composer shows an icon/name token inline with the editable request, with a transparent background and the shared brand spectrum moving slowly from left to right through the name and platform icon, with the complete name visible without its leading slash and no separate row or removal button, allowing submission without extra text
 - **AND** the token is edited as one block: it cannot be entered with the keyboard, and removing it removes the whole invocation while preserving surrounding text; deleting surrounding request text does not remove the skill
-- **AND** persisted name-only selection metadata lets the sent user bubble display the same skill badge alongside its request, including after reopening history without the current catalog
+- **AND** persisted name-only selection metadata lets the sent user bubble display the skill icon and full name without a leading slash or persistent outline alongside its request, including after reopening history without the current catalog
+- **AND** reduced-motion preferences stop the spectrum animation, and forced-colour mode preserves readable system-colour text and icon
 - **AND** Deep selection metadata preserves the badge/preview without a preload event, instruction injection or load count; native agent-origin reads do not select ordinary user mentions
 - **AND** automatic agent/child loads and ordinary messages merely mentioning `/skill` do not label the user turn as explicitly selected
 - **AND** copying a selected user turn includes the skill invocation and request

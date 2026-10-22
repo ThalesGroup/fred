@@ -5,6 +5,8 @@
 /* A small container for an invoked skill or prompt, in the composer and in a
    sent message. Horizontal padding only: a line holding one keeps its height. */
 .badge {
+  --badge-hover-layer: var(--state-on-secondary-container-hover);
+  --badge-pressed-layer: var(--state-on-secondary-container-pressed);
   display: inline-flex;
   align-items: baseline;
   vertical-align: baseline;
@@ -20,9 +22,72 @@
   line-height: 1.5;
 }
 
-/* The user bubble is itself a secondary container: a hairline in the same
-   hue keeps the container readable there without changing its size. */
-.badge[data-surface="bubble"] {
+.badge[data-kind="skill"] {
+  --badge-hover-layer: var(--state-on-surface-hover);
+  --badge-pressed-layer: var(--state-on-surface-pressed);
+  --skill-spectrum-tint: color-mix(in srgb, var(--on-surface) 60%, transparent);
+  background: transparent;
+  color: inherit;
+}
+
+.badge[data-kind="skill"][data-surface="bubble"] {
+  --skill-spectrum-tint: color-mix(in srgb, var(--on-secondary-container) 60%, transparent);
+}
+
+/* Share the brand spectrum between the text and the masked platform icon. */
+.badge[data-kind="skill"] > :first-child,
+.badge[data-kind="skill"] .name {
+  animation: skill-spectrum-flow 6s linear infinite;
+  background-image:
+    linear-gradient(var(--skill-spectrum-tint), var(--skill-spectrum-tint)),
+    linear-gradient(90deg, var(--gradient-spectrum-stops-core));
+  background-size:
+    100% 100%,
+    200% 100%;
+}
+
+.badge[data-kind="skill"] .name {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+@keyframes skill-spectrum-flow {
+  from {
+    background-position:
+      0 0,
+      100% 50%;
+  }
+  to {
+    background-position:
+      0 0,
+      -100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge[data-kind="skill"] > :first-child,
+  .badge[data-kind="skill"] .name {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .badge[data-kind="skill"] > :first-child,
+  .badge[data-kind="skill"] .name {
+    animation: none;
+    background-image: none;
+    color: inherit;
+  }
+
+  .badge[data-kind="skill"] > :first-child {
+    background-color: CanvasText;
+    forced-color-adjust: none;
+  }
+}
+
+/* Sent prompt commands keep their existing outline. */
+.badge[data-surface="bubble"][data-kind="prompt"] {
   box-shadow: inset 0 0 0 1px var(--secondary);
 }
 
@@ -43,17 +108,11 @@
 /* Hover and press tint the container like a tonal button: the state layer
    is translucent, so it is painted over the container's own fill. */
 .action:hover {
-  background-image: linear-gradient(
-    var(--state-on-secondary-container-hover),
-    var(--state-on-secondary-container-hover)
-  );
+  background-image: linear-gradient(var(--badge-hover-layer), var(--badge-hover-layer));
 }
 
 .action:active {
-  background-image: linear-gradient(
-    var(--state-on-secondary-container-pressed),
-    var(--state-on-secondary-container-pressed)
-  );
+  background-image: linear-gradient(var(--badge-pressed-layer), var(--badge-pressed-layer));
 }
 
 .action:focus-visible {

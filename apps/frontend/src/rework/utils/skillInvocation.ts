@@ -158,9 +158,8 @@ export function skillInvocationsText(
   return [...names].reverse().reduce((value, name) => skillInvocationText(value, name), text);
 }
 
-/** Badges show `/name` as text. A selection touching one is still serialised
- * here: the browser would copy icon glyphs as words and break lines around the
- * badge's flex box. */
+/** Restore canonical slash invocations and omit icon glyphs when copying
+ * a selection within a skill message. */
 export function selectedSkillText(range: Range, container: HTMLElement): string | null {
   if (!container.contains(range.commonAncestorContainer)) return null;
   const regionOf = (node: Node) =>
@@ -170,6 +169,17 @@ export function selectedSkillText(range: Range, container: HTMLElement): string 
   if (!region || region !== regionOf(range.endContainer)) return null;
   const fragment = range.cloneContents();
   fragment.querySelectorAll('.material-symbols-outlined[aria-hidden="true"]').forEach((icon) => icon.remove());
+  // A selection contained in the label clones its text without the label.
+  const startElement =
+    range.startContainer.nodeType === Node.ELEMENT_NODE
+      ? (range.startContainer as Element)
+      : range.startContainer.parentElement;
+  const startsInLabel = startElement?.closest("[data-skill-name]");
+  fragment.querySelectorAll("[data-skill-name]").forEach((label, index) => {
+    if (index || !startsInLabel || range.startOffset === 0) label.prepend("/");
+  });
+  if (range.startOffset === 0 && startsInLabel && fragment.firstChild?.nodeType === Node.TEXT_NODE)
+    fragment.prepend("/");
   const text = fragment.textContent ?? "";
   const touchesBadge = Array.from(region.querySelectorAll("[data-skill-name]")).some((label) =>
     range.intersectsNode(label),
