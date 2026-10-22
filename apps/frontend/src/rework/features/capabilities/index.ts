@@ -23,12 +23,14 @@ import { writableDocumentCapability } from "./writable_document/plugin";
 import { pptFillerCapability } from "./ppt_filler/plugin";
 import { htmlArtifactCapability } from "./html_artifact/plugin";
 import { teamWikiCapability } from "./team_wiki/plugin";
+import { spreadsheetCapability } from "./spreadsheet/plugin";
 
 export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [
   writableDocumentCapability,
   pptFillerCapability,
   htmlArtifactCapability,
   teamWikiCapability,
+  spreadsheetCapability,
 ];
 
 export type { CapabilityUiPlugin, UiPartRenderer, UiPartRendererProps } from "./types";

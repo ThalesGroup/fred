@@ -114,6 +114,34 @@ copied to another team takes its own copy of the template.
 **An example** — a five-slide monthly review template, which the agent fills
 each month from the period's documents.
 
+### Generate an Excel file
+
+**What it does** — the agent turns data from the conversation into an Excel
+file you download from the chat. Each sheet has a header row that stays
+visible and filters; columns are formatted as text, numbers, percentages,
+amounts with their currency, or dates shown in your computer's date format.
+The agent can add a totals row that Excel computes (sum, average, minimum,
+maximum, count), and columns calculated row by row from other columns with
+real Excel formulas: add, subtract, multiply, divide or share of the total (for
+example "a Total incl. VAT column equal to Excl. VAT × 1.2"). Each request
+produces a new file: to change one, ask the agent
+and it writes a corrected copy beside the previous one.
+
+**Its limits** — the agent writes every value itself, so the file stays modest
+in size: at most 10 sheets, 5,000 rows per sheet and 50,000 cells in all;
+beyond that, the agent tells you and suggests splitting the data. Charts are
+not available yet: add them in Excel from the data. No colors by value, no
+macros, and the agent does not edit an existing workbook. Deleting the
+conversation does not yet delete the files it produced.
+
+**The preview** — the **Preview** button on the file card opens the workbook
+beside the conversation: one tab per sheet, amounts and dates in your
+language's format, the totals row in bold. The preview shows the first 500
+rows of each sheet; download the file to see the rest.
+
+**An example** — "Put the expenses we have just listed into an Excel file, one
+sheet per month, with the amounts in euros and a total at the bottom."
+
 ### Generate a web page (HTML/CSS)
 
 **What it does** — the agent produces a web page or component, shown in a

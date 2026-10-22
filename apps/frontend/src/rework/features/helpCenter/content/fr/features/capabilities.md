@@ -121,6 +121,36 @@ dupliqué ou copié dans une autre équipe emporte son propre exemplaire du mod�
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
 
+### Générer un fichier Excel
+
+**Ce qu'elle fait** — l'agent transforme des données de la conversation en un
+fichier Excel que vous téléchargez depuis le chat. Chaque feuille a une ligne
+d'en-tête qui reste visible et sert de filtre ; les colonnes sont mises en
+forme en texte, nombres, pourcentages, montants avec leur devise ou dates au
+format de votre ordinateur. L'agent peut ajouter une ligne de totaux calculée
+par Excel (somme, moyenne, minimum, maximum, nombre), ainsi que des colonnes
+calculées ligne par ligne à partir d'autres colonnes, avec de vraies formules
+Excel : addition, soustraction, multiplication, division ou part du total (par
+exemple « une colonne TTC égale à HT × 1,2 »). Chaque demande produit un
+nouveau fichier : pour en modifier un, demandez-le à l'agent, qui en écrit une
+copie corrigée à côté de la précédente.
+
+**Ses limites** — l'agent écrit lui-même chaque valeur, le fichier reste donc
+de taille modeste : au plus 10 feuilles, 5 000 lignes par feuille et 50 000
+cellules en tout ; au-delà, l'agent vous le dit et propose de découper les
+données. Les graphiques ne sont pas encore disponibles : ajoutez-les dans Excel
+à partir des données. Pas de couleurs selon les valeurs, pas de macro, et
+l'agent ne modifie pas un classeur existant. Supprimer la conversation ne
+supprime pas encore les fichiers qu'elle a produits.
+
+**L'aperçu** — le bouton **Aperçu** de la carte du fichier ouvre le classeur à
+côté de la conversation : une feuille par onglet, les montants et les dates au
+format de votre langue, la ligne de totaux en gras. L'aperçu montre les 500
+premières lignes de chaque feuille ; téléchargez le fichier pour voir le reste.
+
+**Un exemple** — « Mets les dépenses que nous venons de lister dans un fichier
+Excel, une feuille par mois, avec les montants en euros et un total en bas. »
+
 ### Générer une page web (HTML/CSS)
 
 **Ce qu'elle fait** — l'agent produit une page ou un composant web, affiché
