@@ -90,7 +90,7 @@ dev = [
 [project.optional-dependencies]
 # Preserve the optional MCP installation surface for wheel consumers.
 mcp = [
-    "mcp==2.3.0",
+    "mcp>=2.3.0,<3",
 ]
 migration = [
     "alembic>=1.18.4",

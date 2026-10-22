@@ -134,8 +134,8 @@ once already (`mcp` 2.0.0, 2026-08-01, #2194 — `langchain-mcp-adapters`
 declared `mcp>=1.24.0` unbounded, and `mcp` 2.0.0 broke import at boot
 before any upstream release supported it).
 
-Fred now pins `langchain[mcp]` and FastMCP 4 for MCP SDK v2 in the runtime,
-and FastMCP 4 in Knowledge Flow. The former `mcp<2` cap and
+Fred now requires `langchain[mcp]` 1.4.6+, FastMCP 4.1.3+, and MCP SDK 2.3+
+within their current major versions. The former `mcp<2` cap and
 `langchain-mcp-adapters` dependency have been removed.
 
 - If a module's `pyproject.toml` needs to cap a **transitive** dependency

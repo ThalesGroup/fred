@@ -938,7 +938,7 @@ requires-dist = [
     { name = "langchain-mistralai", specifier = ">=1.1.2" },
     { name = "langchain-ollama", specifier = ">=1.0.1" },
     { name = "langchain-openai", specifier = ">=1.1.14" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = "==2.3.0" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.3.0,<3" },
     { name = "minio", specifier = ">=7.2.20" },
     { name = "openfga-sdk", specifier = ">=0.9.9" },
     { name = "opensearch-py", specifier = "==2.8.0" },
