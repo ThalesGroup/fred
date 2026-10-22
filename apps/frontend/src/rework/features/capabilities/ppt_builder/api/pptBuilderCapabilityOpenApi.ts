@@ -1,6 +1,37 @@
 import { pptBuilderCapabilityApi as api } from "./pptBuilderCapabilityApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
+    getPptBuilderPlatform: build.query<GetPptBuilderPlatformApiResponse, GetPptBuilderPlatformApiArg>({
+      query: () => ({ url: `/platform` }),
+    }),
+    getPptBuilderPlatformPatterns: build.query<
+      GetPptBuilderPlatformPatternsApiResponse,
+      GetPptBuilderPlatformPatternsApiArg
+    >({
+      query: () => ({ url: `/platform/patterns.pdf` }),
+    }),
+    putPptBuilderPlatformTemplate: build.mutation<
+      PutPptBuilderPlatformTemplateApiResponse,
+      PutPptBuilderPlatformTemplateApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/platform/template`,
+        method: "PUT",
+        body: queryArg.bodyPutPptBuilderPlatformTemplate,
+      }),
+    }),
+    deletePptBuilderPlatformTemplate: build.mutation<
+      DeletePptBuilderPlatformTemplateApiResponse,
+      DeletePptBuilderPlatformTemplateApiArg
+    >({
+      query: () => ({ url: `/platform/template`, method: "DELETE" }),
+    }),
+    rerunPptBuilderPlatformAnalysis: build.mutation<
+      RerunPptBuilderPlatformAnalysisApiResponse,
+      RerunPptBuilderPlatformAnalysisApiArg
+    >({
+      query: (queryArg) => ({ url: `/platform/analysis`, method: "POST", body: queryArg.platformAnalysisRequest }),
+    }),
     getPptBuilderBuiltin: build.query<GetPptBuilderBuiltinApiResponse, GetPptBuilderBuiltinApiArg>({
       query: () => ({ url: `/builtin` }),
     }),
@@ -23,6 +54,21 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as pptBuilderCapabilityApi };
+export type GetPptBuilderPlatformApiResponse = /** status 200 Successful Response */ PlatformTemplateResponse;
+export type GetPptBuilderPlatformApiArg = void;
+export type GetPptBuilderPlatformPatternsApiResponse = /** status 200 Successful Response */ any;
+export type GetPptBuilderPlatformPatternsApiArg = void;
+export type PutPptBuilderPlatformTemplateApiResponse = /** status 200 Successful Response */ PlatformTemplateResponse;
+export type PutPptBuilderPlatformTemplateApiArg = {
+  bodyPutPptBuilderPlatformTemplate: BodyPutPptBuilderPlatformTemplate;
+};
+export type DeletePptBuilderPlatformTemplateApiResponse =
+  /** status 200 Successful Response */ PlatformTemplateResponse;
+export type DeletePptBuilderPlatformTemplateApiArg = void;
+export type RerunPptBuilderPlatformAnalysisApiResponse = /** status 200 Successful Response */ PlatformTemplateResponse;
+export type RerunPptBuilderPlatformAnalysisApiArg = {
+  platformAnalysisRequest: PlatformAnalysisRequest;
+};
 export type GetPptBuilderBuiltinApiResponse = /** status 200 Successful Response */ AnalyzeResult;
 export type GetPptBuilderBuiltinApiArg = void;
 export type GetPptBuilderBuiltinPatternsApiResponse = /** status 200 Successful Response */ any;
@@ -34,6 +80,13 @@ export type GetPptBuilderAnalysisApiArg = {
 export type GetPptBuilderAnalysisPatternsApiResponse = /** status 200 Successful Response */ any;
 export type GetPptBuilderAnalysisPatternsApiArg = {
   instanceId: string;
+};
+export type AnalysisSummary = {
+  patterns: number;
+  fixed: number;
+  excluded: number;
+  layouts: number;
+  slides: number;
 };
 export type Box = {
   x: number;
@@ -130,6 +183,7 @@ export type Pattern = {
   reusable?: boolean;
   labelled_by?: "heuristic" | "vision";
   warnings?: string[];
+  design?: string;
 };
 export type TemplateInventory = {
   slide_width: number;
@@ -137,23 +191,6 @@ export type TemplateInventory = {
   analysis_version?: number;
   patterns?: Pattern[];
   shared_texts?: string[];
-};
-export type AnalysisSummary = {
-  patterns: number;
-  fixed: number;
-  excluded: number;
-  layouts: number;
-  slides: number;
-};
-export type AnalysisError = {
-  code: string;
-  message: string;
-};
-export type AnalyzeResult = {
-  inventory?: TemplateInventory | null;
-  summary?: AnalysisSummary | null;
-  errors?: AnalysisError[];
-  dropped_overrides?: string[];
 };
 export type AnalysisStatusResponse = {
   status: "pending" | "running" | "succeeded" | "failed" | "interrupted";
@@ -168,6 +205,12 @@ export type AnalysisStatusResponse = {
   summary?: AnalysisSummary | null;
   inventory?: TemplateInventory | null;
 };
+export type PlatformTemplateResponse = {
+  analysis?: AnalysisStatusResponse | null;
+  template_filename?: string | null;
+  use_vision?: boolean;
+  vision_profile_id?: string | null;
+};
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -178,7 +221,33 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
+export type BodyPutPptBuilderPlatformTemplate = {
+  file: string;
+  use_vision?: boolean;
+  vision_profile_id?: string | null;
+};
+export type PlatformAnalysisRequest = {
+  use_vision?: boolean;
+  vision_profile_id?: string | null;
+};
+export type AnalysisError = {
+  code: string;
+  message: string;
+};
+export type AnalyzeResult = {
+  inventory?: TemplateInventory | null;
+  summary?: AnalysisSummary | null;
+  errors?: AnalysisError[];
+  dropped_overrides?: string[];
+};
 export const {
+  useGetPptBuilderPlatformQuery,
+  useLazyGetPptBuilderPlatformQuery,
+  useGetPptBuilderPlatformPatternsQuery,
+  useLazyGetPptBuilderPlatformPatternsQuery,
+  usePutPptBuilderPlatformTemplateMutation,
+  useDeletePptBuilderPlatformTemplateMutation,
+  useRerunPptBuilderPlatformAnalysisMutation,
   useGetPptBuilderBuiltinQuery,
   useLazyGetPptBuilderBuiltinQuery,
   useGetPptBuilderBuiltinPatternsQuery,
