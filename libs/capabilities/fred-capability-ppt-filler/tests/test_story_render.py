@@ -125,6 +125,52 @@ def test_caption_and_notes_follow_the_plans_language():
     assert notes_mod.caption(titled, "fr") == "Sales (illustratif)"
 
 
+@pytest.mark.parametrize(
+    ("sent", "typeset"),
+    [
+        ("Effectif : 40 000 personnes", "Effectif\u00a0: 40\u202f000 personnes"),
+        ("Marge 12 % ; coût 3 € !", "Marge 12\u00a0%\u00a0; coût 3\u00a0€\u00a0!"),
+        ("« Pourquoi ? »", "«\u00a0Pourquoi\u00a0?\u00a0»"),
+        ("1 200 000 et 2 500", "1\u202f200\u202f000 et 2\u202f500"),
+        # Only written spaces change, and a year is no digit group.
+        ("Note: voir http://x.fr", "Note: voir http://x.fr"),
+        ("En 2024 300 sites", "En 2024 300 sites"),
+        ("3,5 000", "3,5 000"),
+    ],
+)
+def test_french_typography_turns_written_spaces_into_no_break_ones(sent, typeset):
+    assert notes_mod.french_typography(sent) == typeset
+
+
+def test_french_chart_labels_are_typeset():
+    chart = PlanChart.model_validate(
+        {
+            "title": "Effectif : 2025",
+            "categories": ["Plus de 10 000", "Moins"],
+            "series": [{"name": "Part (%)", "values": [1, 2]}],
+        }
+    )
+    typeset = notes_mod.french_chart(chart)
+    assert typeset.title == "Effectif\u00a0: 2025"
+    assert typeset.categories == ["Plus de 10\u202f000", "Moins"]
+    assert typeset.series[0].values == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_a_french_deck_is_built_with_french_spacing(monkeypatch):
+    spaced = {**POINTS, "bullets": ["Italie : 40 000 personnes", "Espagne en retrait"]}
+    labelled = {
+        **CHART,
+        "chart": {**CHART["chart"], "categories": ["Italie : 1 200", "Espagne"]},
+    }
+    text, _, workspace = await _built(monkeypatch, [COVER, spaced, labelled])
+    assert text.startswith("Delivered"), text
+    _, points, chart = deck(workspace).slides
+    assert any("Italie\u00a0: 40\u202f000 personnes" in t for t in texts(points))
+    (frame,) = [s for s in chart.shapes if getattr(s, "has_chart", False)]
+    assert frame.chart.plots[0].categories[0] == "Italie\u00a0: 1\u202f200"
+
+
 @pytest.mark.asyncio
 async def test_figures_and_a_wide_range_are_built_as_sent(monkeypatch):
     """No spot-check nor spread question: the first call is built, without a note."""

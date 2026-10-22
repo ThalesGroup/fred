@@ -48,6 +48,33 @@ def plan_language(plan: DeckPlan) -> str:
     return "fr" if french > sum(w in _ENGLISH for w in words) else "en"
 
 
+# French spacing: only spaces already written become no-break ones, so line
+# widths stay as measured (a no-break space is as wide as a space, a narrow one less).
+_BEFORE_SIGN = re.compile(r"(?<=\S) (?=[:;!?%€»])")
+_DIGIT_GROUPS = re.compile(r"(?<![\d.,])\d{1,3}(?: \d{3})+(?!\d)")
+
+
+def french_typography(text: str) -> str:
+    """No-break space before ``: ; ! ? % € »`` and after ``«``; narrow no-break
+    space between digit groups (``40 000``)."""
+    text = _BEFORE_SIGN.sub("\u00a0", text).replace("« ", "«\u00a0")
+    return _DIGIT_GROUPS.sub(lambda m: m.group().replace(" ", "\u202f"), text)
+
+
+def french_chart(chart: PlanChart) -> PlanChart:
+    """The chart's own labels typeset as French text."""
+    return chart.model_copy(
+        update={
+            "categories": [french_typography(c) for c in chart.categories],
+            "series": [
+                s.model_copy(update={"name": french_typography(s.name)})
+                for s in chart.series
+            ],
+            "title": french_typography(chart.title) if chart.title else chart.title,
+        }
+    )
+
+
 _LINES = {
     "en": {
         "source": "Source: {}",

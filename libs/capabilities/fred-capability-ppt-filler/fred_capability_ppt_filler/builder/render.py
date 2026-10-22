@@ -709,17 +709,17 @@ def _paragraph_style(paragraph) -> Tuple[int, Any, Any]:
     return level, copy.deepcopy(pPr) if pPr is not None else None, rPr
 
 
-def _write_lines(shape, lines: Sequence[_Line]) -> None:
+def _write_lines(shape, lines: Sequence[_Line], french: bool = False) -> None:
     """Replace a text frame's content, inheriting the template's style per level.
 
     The first paragraph of each level gives the ``pPr``/``rPr`` every new line
     of that level clones; a level the template lacks takes the first
     paragraph's. Inline ``**bold**``/``*italic*`` is honoured per span.
     """
-    _write_paragraphs(shape.text_frame._txBody, lines)
+    _write_paragraphs(shape.text_frame._txBody, lines, french)
 
 
-def _write_paragraphs(txBody, lines: Sequence[_Line]) -> None:
+def _write_paragraphs(txBody, lines: Sequence[_Line], french: bool = False) -> None:
     """:func:`_write_lines` on a bare ``txBody`` (a table cell has no shape)."""
     paragraphs = txBody.findall(qn("a:p"))
     styles: Dict[int, Tuple[Any, Any]] = {}
@@ -750,7 +750,7 @@ def _write_paragraphs(txBody, lines: Sequence[_Line]) -> None:
             r = p.add_r()
             if base_rPr is not None:
                 r.insert(0, copy.deepcopy(base_rPr))
-            r.text = span.text
+            r.text = notes.french_typography(span.text) if french else span.text
             if span.bold or span.italic:
                 rPr = r.get_or_add_rPr()
                 if span.bold:
@@ -1963,7 +1963,7 @@ class _Renderer:
                 lines, scale, truncated = _fit(
                     zone, lines, self.width, self.height, font_name, bold
                 )
-            _write_lines(shape, lines)
+            _write_lines(shape, lines, self.language == "fr")
             if zone.role == "number":
                 _shrink_trend_glyph(shape, zone.font_pt)
             # Registered even when it needs no shrinking: a sibling that does is
@@ -2068,6 +2068,8 @@ class _Renderer:
     def _draw(self, slide, placed: PlacedShape, host: Zone, chart: PlanChart) -> None:
         """The designer's own chart when it already shows the type asked, else a
         fresh one in its place."""
+        if self.language == "fr":
+            chart = notes.french_chart(chart)
         example = (
             charts.example_frame(placed, chart)
             if host.role == "chart" and host.chart_type == chart.type
