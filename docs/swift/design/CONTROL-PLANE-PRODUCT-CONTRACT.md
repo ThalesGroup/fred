@@ -1931,6 +1931,9 @@ See the [migration note](../ops/migrations/retire-corpus-filesystem-mcp.md).
 
 ## 29. Contract Notes — TEAM-09 amendment, `joining_mode` narrowed to 2 states (2026-07-26, #2084)
 
+> 2026-10-22: the opt-in `on_request` mode adds requests back on top of
+> notifications; see §70. A legacy `request_only` still imports as `invite_only`.
+
 **`JoiningMode` drops `request_only` and `closed`**, leaving `open` /
 `invite_only` — see §24 for the original 4-value contract and
 `FRED-TEAM-CONFIG-RFC.md` §5.1.1 for the full amendment rationale.
@@ -5165,12 +5168,13 @@ control-plane services compute the recipients.
 | `DELETE /notifications`                  | —                                     | 204 (clear all)       |
 
 `NotificationPage.items` is a union discriminated by `type`
-(`agent.republish_needed`, `agent.marketplace_removed`), each with its own
+(`agent.republish_needed`, `agent.marketplace_removed`,
+`team.join_requested`, `team.join_request_answered`, see §70), each with its own
 payload model; `next_cursor` is opaque and goes back as `before` (a malformed
 one is 422). `seen` marks the caller's rows created at or before `up_to`, so a
 later arrival still badges; `read` also marks the row seen. A handled row
 carries `handled_at`, `handled_by_name` and `handled_outcome`
-(`republished`, `removed`). Rows are never text: the frontend renders type and
+(`republished`, `removed`, `accepted`, `refused`). Rows are never text: the frontend renders type and
 payload.
 
 **Emission.** `NotificationService.notify`/`notify_many`/`resolve`, called
@@ -5195,3 +5199,57 @@ lifecycle tick (Temporal `LifecycleManagerWorkflow` and memory
 s; `LifecycleManagerResult.notifications` reports `deleted` and `batches`.
 Deleting a user deletes their rows; deleting a team deletes the rows carrying
 its `team_id`. Full behavior: OpenSpec `add-in-app-notifications`.
+
+## 70. Contract Notes — team join requests (2026-10-22, #3232)
+
+**Access mode.** `JoiningMode` gains `on_request`, next to `open` and
+`invite_only`, set through `PATCH /teams/{team_id}` like the others. A team
+that is private after an update stores `invite_only` instead of `open` or
+`on_request`. When a team leaves `on_request` (explicitly or by becoming
+private), every pending request is refused as the updating admin and each
+requester is notified. No team changes mode on upgrade. Import keeps
+`request_only`/`closed` → `invite_only` and passes `on_request` through.
+
+**Routes.**
+
+| Route | Permission | Body | Response |
+| ----- | ---------- | ---- | -------- |
+| `GET /teams/join-requests/mine` | authenticated | — | `list[MyTeamJoinRequest]` |
+| `POST /teams/{team_id}/join-requests` | authenticated, public `on_request` team, no role on it | `CreateTeamJoinRequest.message` (≤ 280, blank → null) | `MyTeamJoinRequest`, 201 new / 200 already pending |
+| `DELETE /teams/{team_id}/join-requests/mine` | authenticated, own pending request | — | 204 |
+| `GET /teams/{team_id}/join-requests` | `can_administer_members` | — | `list[TeamJoinRequest]` (pending and refused) |
+| `POST /teams/{team_id}/join-requests/{request_id}/accept` | `can_administer_members` | — | 204 |
+| `POST /teams/{team_id}/join-requests/{request_id}/refuse` | `can_administer_members` | — | 204 |
+
+Errors carry `{detail, code}`: 404 `join_request_not_found` (gone, decided,
+cancelled or expired), 409 `team_not_on_request`, `already_team_member`,
+`join_request_refused`. A private or unknown team answers 404 like any
+unreadable team.
+
+**Lifecycle.** Table `team_join_requests` (revision `77cd5dc306cf`), one row
+per team and requester. Pending: expires 30 days after asking; asking again
+returns it and emits nothing. Refused: kept 7 days after the refusal
+(`expires_at = decided_at + 7 days`); `MyTeamJoinRequest.can_ask_again_at` is
+`decided_at + 24 h`, before which asking answers `join_request_refused` and
+after which a new request (new id) replaces it. Accept takes a pending or a
+refused row ("Accept anyway"), grants `team_member` only and deletes the row;
+refusing a refused row is a no-op. Cancel deletes the caller's pending row.
+Decisions are conditional writes: the second of two concurrent decisions
+answers 404. Deleting a team deletes its requests; deleting a user deletes
+theirs. The lifecycle notification step also deletes expired requests (counted
+in `LifecycleManagerResult.notifications.deleted`).
+
+**Notifications.** `team.join_requested` (`TeamJoinRequestedPayload`: team,
+request and requester ids, names, message) goes to the team's `team_admin`
+holders with `team_id` set, action permission `can_administer_members`, group
+`join_request:<request_id>`; a decision resolves it (`accepted`/`refused`),
+a cancel or the requester's deletion deletes it. `team.join_request_answered`
+(`TeamJoinRequestAnsweredPayload`: team id and name, `outcome`) goes to the
+requester without `team_id` and with no action permission, group
+`join_request_outcome:<request_id>`; it never names the admin. Accepting a
+refused request deletes the refusal answer first.
+
+**Audit.** `team.join_request.created|cancelled|accepted|refused` with
+`actor_uid`, `team_id`, `request_id`, `requester_uid` on decisions and
+`reason=joining_mode_changed` on automatic refusals; never the message. Full
+behavior: OpenSpec `add-team-join-requests`.
