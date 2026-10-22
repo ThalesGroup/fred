@@ -89,7 +89,10 @@ from fred_capability_ppt_filler.parser import (
     SlideSchema,
     TemplateError,
 )
-from fred_capability_ppt_filler.pptx_archive import UnsafeArchiveError
+from fred_capability_ppt_filler.pptx_archive import (
+    UnsafeArchiveError,
+    sanitize_template,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +382,8 @@ class PptFillerCapability(
                 raise RuntimeError(_BUSY_MESSAGE)
             try:
                 try:
+                    # Stored sanitised: nothing in it reaches outside the file.
+                    pptx_bytes = await asyncio.to_thread(sanitize_template, pptx_bytes)
                     result = await asyncio.to_thread(
                         run_heavy_ppt_job, analyze_template, pptx_bytes
                     )

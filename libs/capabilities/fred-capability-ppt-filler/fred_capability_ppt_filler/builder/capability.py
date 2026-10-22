@@ -118,6 +118,7 @@ from fred_capability_ppt_filler.concurrency import (
 from fred_capability_ppt_filler.pptx_archive import (
     UnsafeArchiveError,
     open_presentation,
+    sanitize_template,
 )
 
 logger = logging.getLogger(__name__)
@@ -186,9 +187,11 @@ _STORE_UNAVAILABLE = (
 )
 
 
-def _check_readable(content: bytes) -> None:
-    """Fail the save on an unreadable .pptx (cheap: opening, not analysing)."""
+def _check_readable(content: bytes) -> bytes:
+    """The upload as stored: sanitised, and opened to fail the save on an
+    unreadable .pptx (cheap: opening, not analysing)."""
     try:
+        content = sanitize_template(content)
         open_presentation(content)
     except UnsafeArchiveError as exc:
         raise ValueError(f"The uploaded file could not be read: {exc}") from exc
@@ -198,6 +201,7 @@ def _check_readable(content: bytes) -> None:
             "The uploaded file could not be read as a PowerPoint presentation (.pptx). "
             "Check that it opens in PowerPoint, then upload it again."
         ) from exc
+    return content
 
 
 async def _authorised_record(
@@ -306,7 +310,7 @@ async def _readable_upload(file: UploadFile) -> bytes:
     if not acquire_heavy_job_slot():
         raise HTTPException(status_code=503, detail=_BUSY_MESSAGE)
     try:
-        await asyncio.to_thread(_check_readable, content)
+        content = await asyncio.to_thread(_check_readable, content)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
@@ -968,7 +972,7 @@ class PptBuilderCapability(
         if not acquire_heavy_job_slot():
             raise RuntimeError(_BUSY_MESSAGE)
         try:
-            await asyncio.to_thread(_check_readable, content)
+            content = await asyncio.to_thread(_check_readable, content)
         finally:
             release_heavy_job_slot()
         assets = ctx.services.agent_assets
@@ -995,6 +999,8 @@ class PptBuilderCapability(
             raise ValueError(_STORE_UNAVAILABLE)
         try:
             content = await assets.fetch(PPT_BUILDER_TEMPLATE_KEY)
+            # Maybe stored before uploads were sanitised: the analysed copy is.
+            content = await asyncio.to_thread(sanitize_template, content)
         except Exception as exc:  # noqa: BLE001 - the author can upload it again
             raise ValueError(
                 "The stored template could not be read; upload it again."
