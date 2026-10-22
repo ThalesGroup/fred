@@ -344,12 +344,12 @@
         "close": "Close preview",
         "loadError": "Failed to load preview.",
         "loading": "Loading preview…",
-        "empty": "No preview yet. Ask the assistant to fill a deck."
+        "empty": "No presentation yet. Ask the assistant to create one."
       },
       "panel": {
         "ppt_preview_pane": {
           "title": "Presentation preview",
-          "launcher": "PPT viewer"
+          "launcher": "Presentation"
         }
       }
     },
@@ -406,7 +406,8 @@
         "labelling_model": {
           "title": "Model that reads the slides",
           "description": "Leave the agent's model to use the one it answers with.",
-          "agentDefault": "The agent's model"
+          "agentDefault": "The agent's model",
+          "rereadOnSave": "Changing the model reads the template again when you save the agent."
         },
         "variety_check": {
           "title": "Enforce variety",
@@ -414,7 +415,7 @@
           "times": "times each",
           "modeAria": "What must vary",
           "maxAria": "Maximum number of times",
-          "description": "Keeps the same slide from coming back too often, as far as the template allows. The limit counts within each section: a section may reuse the same slides as another. Identical slides in a row are only made when you ask for them. The agent is asked to revise the first presentation of each conversation.",
+          "description": "Keeps the same slide from coming back too often, as far as the template allows.",
           "options": {
             "template_slide": "By slide name",
             "kind": "By identified slide type"
@@ -496,10 +497,29 @@
         "closing": "Closing",
         "other": "Other"
       },
+      "chartTypes": {
+        "column": "column",
+        "bar": "bar",
+        "line": "line",
+        "pie": "pie",
+        "doughnut": "doughnut",
+        "stacked_column": "stacked column",
+        "area": "area",
+        "stacked_bar": "stacked bar",
+        "radar": "radar",
+        "scatter": "scatter",
+        "bubble": "bubble",
+        "waterfall": "waterfall",
+        "funnel": "funnel",
+        "treemap": "treemap",
+        "gantt": "Gantt",
+        "heatmap": "heat map",
+        "gauge": "gauge"
+      },
       "panel": {
         "ppt_preview_pane": {
           "title": "Presentation preview",
-          "launcher": "PPT viewer"
+          "launcher": "Presentation"
         }
       },
       "summary": {
@@ -525,6 +545,7 @@
           "list_continuation": "Continuation of the list from the previous slide.",
           "other_kind": "Built as “{{built}}” instead of “{{asked}}”.",
           "chart_type_changed": "A “{{asked}}” chart is not available: the data is shown as a column chart.",
+          "chart_type_changed_unnamed": "This chart type is not available: the data is shown as a column chart.",
           "chart_shows_shares": "The chart shows percentages: the numbers themselves are not displayed.",
           "layout_repeated": "Same layout as the previous slide, as you asked.",
           "layout_not_repeated": "The previous slide's layout could not be kept: this content does not fit it.",
@@ -548,6 +569,7 @@
         "intro": "Agents without a template of their own build their presentations on this one.",
         "loading": "Loading the platform template…",
         "loadError": "The platform template could not be loaded.",
+        "unavailable": "Presentation settings are not available right now: the service that builds presentations cannot be reached.",
         "current": "Platform template: {{name}}",
         "fredTemplate": "Fred template (built-in)",
         "upload": "Upload a .pptx template",
@@ -555,6 +577,7 @@
         "uploadAria": "Platform PowerPoint template file",
         "uploaded": "Template uploaded: its analysis has started.",
         "uploadError": "The template was not accepted.",
+        "uploadFailed": "Something went wrong while sending the file. Try again in a moment.",
         "analysing": {
           "keepCurrent": "Analysing {{name}}… Agents keep the current template until it ends.",
           "keepFred": "Analysing {{name}}… Agents keep the Fred template until it ends."
@@ -566,6 +589,7 @@
         "refreshing": "Reading the template again… Agents keep the previous reading until it ends.",
         "outdated": "This template was read by an older version. Agents keep using it; run the analysis again to get the latest improvements.",
         "defaultModel": "The platform's default AI model",
+        "visionRereads": "A new model is used the next time the template is read.",
         "rerun": "Run the analysis again",
         "rerunStarted": "Analysis started again.",
         "rerunError": "The analysis could not be started again.",

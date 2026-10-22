@@ -344,12 +344,12 @@
         "close": "Fermer l'aperçu",
         "loadError": "Impossible de charger l'aperçu.",
         "loading": "Chargement de l'aperçu…",
-        "empty": "Pas encore d'aperçu. Demandez à l'assistant de remplir une présentation."
+        "empty": "Pas encore de présentation. Demandez à l'assistant d'en créer une."
       },
       "panel": {
         "ppt_preview_pane": {
           "title": "Aperçu de la présentation",
-          "launcher": "Viewer PPT"
+          "launcher": "Présentation"
         }
       }
     },
@@ -406,7 +406,8 @@
         "labelling_model": {
           "title": "Modèle d'IA qui lit les slides",
           "description": "Gardez le modèle de l'agent pour utiliser celui avec lequel il répond.",
-          "agentDefault": "Le modèle d'IA de l'agent"
+          "agentDefault": "Le modèle d'IA de l'agent",
+          "rereadOnSave": "Changer de modèle relit le template à l'enregistrement de l'agent."
         },
         "variety_check": {
           "title": "Forcer de la variété",
@@ -414,7 +415,7 @@
           "times": "fois chacune",
           "modeAria": "Ce qui doit varier",
           "maxAria": "Nombre maximal de fois",
-          "description": "Évite qu'une même slide revienne trop souvent, autant que le template le permet. La limite compte dans chaque section : une section peut reprendre les mêmes slides qu'une autre. Des slides identiques à la suite ne sont faites que si vous le demandez. L'agent est invité à corriger la première présentation de chaque conversation.",
+          "description": "Évite qu'une même slide revienne trop souvent, autant que le template le permet.",
           "options": {
             "template_slide": "Par nom de slide",
             "kind": "Par type de slide identifié"
@@ -496,10 +497,29 @@
         "closing": "Conclusion",
         "other": "Autre"
       },
+      "chartTypes": {
+        "column": "histogramme",
+        "bar": "barres",
+        "line": "courbe",
+        "pie": "secteurs",
+        "doughnut": "anneau",
+        "stacked_column": "histogramme empilé",
+        "area": "aires",
+        "stacked_bar": "barres empilées",
+        "radar": "radar",
+        "scatter": "nuage de points",
+        "bubble": "bulles",
+        "waterfall": "cascade",
+        "funnel": "entonnoir",
+        "treemap": "carte proportionnelle",
+        "gantt": "Gantt",
+        "heatmap": "carte de chaleur",
+        "gauge": "jauge"
+      },
       "panel": {
         "ppt_preview_pane": {
           "title": "Aperçu de la présentation",
-          "launcher": "Viewer PPT"
+          "launcher": "Présentation"
         }
       },
       "summary": {
@@ -525,6 +545,7 @@
           "list_continuation": "Suite de la liste de la diapositive précédente.",
           "other_kind": "Construite en « {{built}} » au lieu de « {{asked}} ».",
           "chart_type_changed": "Le graphique « {{asked}} » n'est pas disponible : les données sont affichées en histogramme.",
+          "chart_type_changed_unnamed": "Ce type de graphique n'est pas disponible : les données sont affichées en histogramme.",
           "chart_shows_shares": "Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés.",
           "layout_repeated": "Même mise en page que la diapositive précédente, comme demandé.",
           "layout_not_repeated": "La mise en page de la diapositive précédente n'a pas pu être gardée : ce contenu n'y tient pas.",
@@ -548,6 +569,7 @@
         "intro": "Les agents qui n'ont pas de template à eux construisent leurs présentations sur celui-ci.",
         "loading": "Chargement du template de la plateforme…",
         "loadError": "Le template de la plateforme n'a pas pu être chargé.",
+        "unavailable": "Les réglages des présentations ne sont pas disponibles pour le moment : le service qui construit les présentations est injoignable.",
         "current": "Template de la plateforme : {{name}}",
         "fredTemplate": "Template Fred (intégré)",
         "upload": "Téléverser un template .pptx",
@@ -555,6 +577,7 @@
         "uploadAria": "Fichier de template PowerPoint de la plateforme",
         "uploaded": "Template envoyé : sa lecture a commencé.",
         "uploadError": "Le template n'a pas été accepté.",
+        "uploadFailed": "Un problème est survenu pendant l'envoi du fichier. Réessayez dans un instant.",
         "analysing": {
           "keepCurrent": "Lecture de {{name}} en cours… Les agents gardent le template actuel jusqu'à la fin.",
           "keepFred": "Lecture de {{name}} en cours… Les agents gardent le template Fred jusqu'à la fin."
@@ -566,6 +589,7 @@
         "refreshing": "Nouvelle lecture du template… Les agents gardent la lecture précédente jusqu'à la fin.",
         "outdated": "Ce template a été lu avec une version plus ancienne. Les agents continuent de l'utiliser ; relancez la lecture pour profiter des dernières améliorations.",
         "defaultModel": "Le modèle d'IA par défaut de la plateforme",
+        "visionRereads": "Un nouveau modèle sert à la prochaine lecture du template.",
         "rerun": "Relancer la lecture",
         "rerunStarted": "Nouvelle lecture lancée.",
         "rerunError": "La lecture n'a pas pu être relancée.",

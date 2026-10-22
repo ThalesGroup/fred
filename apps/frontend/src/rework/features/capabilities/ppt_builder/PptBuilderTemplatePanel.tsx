@@ -162,6 +162,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
           configValues={configValues}
           onConfigChange={onConfigChange}
           vision={vision}
+          changeHint={t("capability.ppt_builder.fields.labelling_model.rereadOnSave")}
         />
         <PptBuilderVarietySettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
       </AdvancedSettingsSection>

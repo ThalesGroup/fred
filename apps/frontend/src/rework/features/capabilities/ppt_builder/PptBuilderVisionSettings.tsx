@@ -34,9 +34,18 @@ interface Props {
   vision: VisionAvailability;
   /** The first option's label: the model used when none is picked. */
   defaultModelLabel?: string;
+  /** When a changed model takes effect: the template is read again with it. */
+  changeHint: string;
 }
 
-export function PptBuilderVisionSettings({ disabled, configValues, onConfigChange, vision, defaultModelLabel }: Props) {
+export function PptBuilderVisionSettings({
+  disabled,
+  configValues,
+  onConfigChange,
+  vision,
+  defaultModelLabel,
+  changeHint,
+}: Props) {
   const { t } = useTranslation();
   const unavailable = vision.available === false;
   const useVision = !unavailable && configValues[USE_VISION_KEY] !== false;
@@ -79,15 +88,19 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
         />
       </label>
       {useVision && (
-        <Select
-          size="small"
-          compact
-          ariaLabel={t("capability.ppt_builder.fields.labelling_model.title")}
-          options={options}
-          value={selected}
-          disabled={disabled}
-          onChange={(value) => onConfigChange(LABELLING_MODEL_KEY, value === AGENT_DEFAULT ? null : value)}
-        />
+        <>
+          <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.labelling_model.title")}</span>
+          <p className={styles.hint}>{changeHint}</p>
+          <Select
+            size="small"
+            compact
+            ariaLabel={t("capability.ppt_builder.fields.labelling_model.title")}
+            options={options}
+            value={selected}
+            disabled={disabled}
+            onChange={(value) => onConfigChange(LABELLING_MODEL_KEY, value === AGENT_DEFAULT ? null : value)}
+          />
+        </>
       )}
     </div>
   );

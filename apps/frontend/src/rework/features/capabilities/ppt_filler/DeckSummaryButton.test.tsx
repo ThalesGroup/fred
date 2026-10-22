@@ -177,6 +177,25 @@ describe("DeckSummaryButton", () => {
     expect(items[1]).toContain("Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés.");
   });
 
+  it("names a known chart type in the user's language, and leaves an unknown one unnamed", async () => {
+    const slide = (kind: string): BuiltSlide => ({
+      number: 1,
+      part: 1,
+      parts: 1,
+      title: "Flow",
+      kind: "chart",
+      template: "Chart",
+      notes: [{ code: "chart_type_changed", kind }],
+    });
+    const dialog = open(await mount("fr", [slide("waterfall"), slide("sankey ribbon")]));
+    const items = [...dialog.querySelectorAll("ol > li")].map((li) => li.textContent);
+    expect(items[0]).toContain("Le graphique « cascade » n'est pas disponible");
+    expect(items[1]).toContain(
+      "Ce type de graphique n'est pas disponible : les données sont affichées en histogramme.",
+    );
+    expect(items[1]).not.toContain("sankey");
+  });
+
   it("words an intent the chart could not show by its field", async () => {
     const slide: BuiltSlide = {
       number: 1,
@@ -257,6 +276,7 @@ describe("DeckSummaryButton", () => {
       "list_continuation",
       "other_kind",
       "chart_type_changed",
+      "chart_type_changed_unnamed",
       "chart_shows_shares",
       "layout_repeated",
       "layout_not_repeated",

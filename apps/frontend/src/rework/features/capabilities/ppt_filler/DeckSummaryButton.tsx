@@ -57,7 +57,13 @@ const INTENT_FIELDS: Record<string, Set<string>> = {
 };
 
 function kindLabel(t: TFunction, kind: string): string {
-  return t(`capability.ppt_builder.kinds.${kind}`, { defaultValue: kind });
+  return t(`capability.ppt_builder.kinds.${kind}`, { defaultValue: t("capability.ppt_builder.kinds.other") });
+}
+
+/** The chart type asked, worded; a free-text type the UI has no name for is left unnamed. */
+function chartTypeText(t: TFunction, asked: string | null | undefined): string {
+  const name = asked ? t(`capability.ppt_builder.chartTypes.${asked.replace(/ /g, "_")}`, { defaultValue: "" }) : "";
+  return name ? t(`${NOTES}.chart_type_changed`, { asked: name }) : t(`${NOTES}.chart_type_changed_unnamed`);
 }
 
 /** A code the UI does not know yet (newer backend) is skipped, never shown raw. */
@@ -69,7 +75,7 @@ function noteText(t: TFunction, note: BuildNote, slide: BuiltSlide): string | nu
     return t(`${NOTES}.other_kind`, { built: kindLabel(t, slide.kind), asked: kindLabel(t, note.kind ?? "") });
   }
   if (note.code === "chart_type_changed") {
-    return t(`${NOTES}.chart_type_changed`, { asked: note.kind ?? "" });
+    return chartTypeText(t, note.kind);
   }
   const intents = INTENT_FIELDS[note.code];
   if (intents) {

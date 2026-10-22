@@ -63,6 +63,10 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   const baseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
     selectCapabilityBaseUrl(state, CAPABILITY_ID),
   );
+  // Routing known for other capabilities but not this one: its pod is not reachable.
+  const routingKnown = useSelector(
+    (state: { capabilityRouting: CapabilityRoutingState }) => Object.keys(state.capabilityRouting.baseUrls).length > 0,
+  );
   const [pollingInterval, setPollingInterval] = useState(0);
   const query = useGetPptBuilderPlatformQuery(undefined, { skip: !routed, pollingInterval });
   const platform: PlatformTemplateResponse | undefined = query.data;
@@ -113,7 +117,8 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
       setVisionDraft(null);
       void query.refetch();
     } catch (error) {
-      showError({ summary: t(`${K}.uploadError`), detail: error instanceof Error ? error.message : String(error) });
+      const detail = error instanceof Error ? error.message : String(error);
+      showError({ summary: t(`${K}.uploadError`), detail: detail || t(`${K}.uploadFailed`) });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -171,6 +176,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
     }
   };
 
+  if (!routed && routingKnown) return <p className={styles.status}>{t(`${K}.unavailable`)}</p>;
   if (query.isError && !platform) return <p className={styles.error}>{t(`${K}.loadError`)}</p>;
   if (!platform) {
     return (
@@ -260,6 +266,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
             onConfigChange={(key, value) => setVisionDraft({ ...visionValues, [key]: value })}
             vision={{ available: true, visionProfiles }}
             defaultModelLabel={t(`${K}.defaultModel`)}
+            changeHint={t(`${K}.visionRereads`)}
           />
           {(hasTemplate || savedOverrides.length > 0) && (
             <div className={styles.uploadRow}>

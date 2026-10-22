@@ -202,6 +202,7 @@ describe("PptBuilderVisionSettings", () => {
         configValues={configValues}
         onConfigChange={onConfigChange}
         vision={vision}
+        changeHint="Reads again"
       />,
     );
     return onConfigChange;
@@ -224,6 +225,12 @@ describe("PptBuilderVisionSettings", () => {
     expect(toggle.disabled).toBe(false);
     const options = [...container.querySelectorAll("option")].map((o) => o.value);
     expect(options).toEqual(["", "chat.vision"]);
+  });
+
+  it("names the model picker and says when a change takes effect", () => {
+    renderSettings({ available: true, visionProfiles: [] });
+    expect(container.textContent).toContain("capability.ppt_builder.fields.labelling_model.title");
+    expect(container.textContent).toContain("Reads again");
   });
 
   it("hides the selector and writes the toggle when turned off", () => {

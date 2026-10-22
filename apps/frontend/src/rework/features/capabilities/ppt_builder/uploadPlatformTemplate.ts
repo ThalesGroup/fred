@@ -36,9 +36,10 @@ export async function uploadPlatformTemplate(
   });
   await handlePlatformAccessResponse(response);
   if (!response.ok) {
-    // The backend's sentence (unreadable file, size limit) is what the manager can act on.
+    // The backend's sentence (unreadable file, size limit) is what the manager can act on;
+    // without one the message stays empty and the caller shows its own.
     const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
-    throw new Error(typeof body?.detail === "string" ? body.detail : `HTTP ${response.status}`);
+    throw new Error(typeof body?.detail === "string" ? body.detail : "");
   }
   return (await response.json()) as PlatformTemplateResponse;
 }

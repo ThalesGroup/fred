@@ -191,7 +191,7 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
         {!current && (
           <div className={styles.empty}>
             {t("capability.ppt_filler.preview.empty", {
-              defaultValue: "No preview yet. Ask the assistant to fill a deck.",
+              defaultValue: "No presentation yet. Ask the assistant to create one.",
             })}
           </div>
         )}

@@ -27,6 +27,7 @@ import type { AnalysisStatusResponse, PlatformTemplateResponse } from "./api/ppt
 
 const h = vi.hoisted(() => ({
   platform: undefined as PlatformTemplateResponse | undefined,
+  routed: true,
   builtin: undefined as { inventory: AnalysisStatusResponse["inventory"] } | undefined,
   refetch: vi.fn(),
   rerun: vi.fn(),
@@ -57,7 +58,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "fr" } }),
 }));
 vi.mock("react-redux", () => ({ useSelector: () => "/pod/capabilities/ppt_builder" }));
-vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => true }));
+vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => h.routed }));
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
   useGetPptBuilderPlatformQuery: () => ({ data: h.platform, isError: false, refetch: h.refetch }),
@@ -153,6 +154,7 @@ beforeEach(() => {
   for (const fn of [h.refetch, h.rerun, h.reset, h.saveOverrides, h.upload, h.showSuccess, h.showError]) fn.mockReset();
   h.platformModels.mockReset().mockReturnValue({ data: undefined });
   h.review = undefined;
+  h.routed = true;
   h.builtin = { inventory: analysis().inventory };
   h.selectOptions = undefined;
   container = document.createElement("div");
@@ -218,6 +220,27 @@ describe("PptBuilderPlatformPanel", () => {
       summary: `${K}.uploadError`,
       detail: "The uploaded .pptx exceeds the 50 MB limit.",
     });
+  });
+
+  it("says when the upload fails without a reason from the server", async () => {
+    h.upload.mockRejectedValue(new Error(""));
+    show({ analysis: null });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File(["x"], "big.pptx")] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(h.showError).toHaveBeenCalledWith({ summary: `${K}.uploadError`, detail: `${K}.uploadFailed` });
+  });
+
+  it("says the settings are unavailable when the capability cannot be reached", () => {
+    h.routed = false;
+    show({ analysis: null });
+    expect(text()).toContain(`${K}.unavailable`);
+    expect(text()).not.toContain(`${K}.loading`);
+  });
+
+  it("tells the manager when a new vision model takes effect", () => {
+    show({ analysis: analysis(), template_filename: "brand.pptx" });
+    expect(text()).toContain(`${K}.visionRereads`);
   });
 
   it("lets a manager edit the slides and saves the edits when the review closes", async () => {
