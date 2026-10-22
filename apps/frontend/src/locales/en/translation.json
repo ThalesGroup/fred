@@ -4342,7 +4342,6 @@
       "close": "Close notifications",
       "loadMore": "Show more",
       "loadError": "Your notifications could not be loaded.",
-      "unread": "Unread",
       "dismiss": "Dismiss notification",
       "empty": {
         "title": "No notifications",

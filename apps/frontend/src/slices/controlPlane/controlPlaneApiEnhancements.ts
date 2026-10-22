@@ -206,10 +206,6 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     markNotificationsSeenControlPlaneV1NotificationsSeenPost: {
       invalidatesTags: [{ type: "ControlPlaneNotification" as const, id: "SUMMARY" }],
     },
-    // Reading also marks seen, so the badge refreshes too.
-    markNotificationReadControlPlaneV1NotificationsNotificationIdReadPost: {
-      invalidatesTags: ["ControlPlaneNotification"],
-    },
     deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: {
       invalidatesTags: ["ControlPlaneNotification"],
     },
@@ -1255,7 +1251,6 @@ export const {
   useGetNotificationSummaryControlPlaneV1NotificationsSummaryGetQuery: useNotificationSummaryQuery,
   useListNotificationsControlPlaneV1NotificationsGetQuery: useNotificationsQuery,
   useMarkNotificationsSeenControlPlaneV1NotificationsSeenPostMutation: useMarkNotificationsSeenMutation,
-  useMarkNotificationReadControlPlaneV1NotificationsNotificationIdReadPostMutation: useMarkNotificationReadMutation,
   useDeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteMutation: useDeleteNotificationMutation,
   useClearNotificationsControlPlaneV1NotificationsDeleteMutation: useClearNotificationsMutation,
   useListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery: useNotificationTypesQuery,

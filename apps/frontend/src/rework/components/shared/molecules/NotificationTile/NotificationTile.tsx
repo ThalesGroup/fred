@@ -35,9 +35,6 @@ export interface NotificationTileProps {
   /** Already formatted ("5 min ago"); `dateTime` feeds the `<time>` element. */
   time: string;
   dateTime: string;
-  unread: boolean;
-  /** Screen-reader prefix for an unread tile, e.g. "Unread". */
-  unreadLabel: string;
   /** Replaces the actions once someone acted on the subject. */
   handledLabel?: string;
   actions?: NotificationTileAction[];
@@ -62,8 +59,6 @@ export default function NotificationTile({
   body,
   time,
   dateTime,
-  unread,
-  unreadLabel,
   handledLabel,
   actions = [],
   busy = false,
@@ -73,13 +68,12 @@ export default function NotificationTile({
   onDismiss,
 }: NotificationTileProps) {
   return (
-    <li className={styles.tile} data-unread={unread || undefined}>
+    <li className={styles.tile}>
       <span className={styles.icon} data-category={category}>
         <Icon category="outlined" type={icon} />
       </span>
       <div className={styles.text}>
         <button type="button" className={styles.hit} onClick={onOpen}>
-          {unread && <span className={styles.srOnly}>{`${unreadLabel}: `}</span>}
           {title}
         </button>
         {body && <p className={styles.body}>{body}</p>}
@@ -114,7 +108,6 @@ export default function NotificationTile({
         )}
       </div>
       <div className={styles.trail}>
-        {unread && <span className={styles.dot} aria-hidden="true" />}
         {dismissible && (
           <IconButton
             type="button"

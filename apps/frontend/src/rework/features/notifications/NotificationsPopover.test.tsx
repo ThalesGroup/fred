@@ -273,7 +273,7 @@ describe("NotificationsPopover", () => {
     act(() => buttonByText(el, "rework.notifications.loadMore").click());
 
     expect(listMock).toHaveBeenCalledWith({ limit: 50, before: "cursor-1" });
-    expect(el.querySelectorAll("li[data-unread]")).toHaveLength(2);
+    expect(el.querySelectorAll("li time")).toHaveLength(2);
     expect(buttonByText(el, "rework.notifications.loadMore")).toBeUndefined();
   });
 
@@ -292,7 +292,7 @@ describe("NotificationsPopover", () => {
     });
     act(() => root!.render(<NotificationsPopover id="pop" onClose={onClose} />));
 
-    expect(el.querySelectorAll("li[data-unread]")).toHaveLength(3);
+    expect(el.querySelectorAll("li time")).toHaveLength(3);
     expect(listMock).toHaveBeenLastCalledWith({ limit: 50, before: "cursor-1" });
   });
 

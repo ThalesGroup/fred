@@ -136,29 +136,3 @@
   gap: var(--spacing-2xs);
   z-index: 1;
 }
-
-.dot {
-  border-radius: var(--radius-full);
-  background: var(--primary);
-  width: var(--spacing-xs);
-  height: var(--spacing-xs);
-}
-
-.tile[data-unread] .hit {
-  font: var(--font-title-small-emphasized);
-}
-
-.tile[data-unread] .body {
-  color: var(--on-surface);
-}
-
-.srOnly {
-  position: absolute;
-  clip-path: inset(50%);
-  margin: -1px;
-  padding: 0;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  white-space: nowrap;
-}

@@ -66,8 +66,6 @@ function NotificationListItem({ notification, handlers }: { notification: Notifi
       body={rendered.body}
       time={relativeTime(new Date(notification.created_at).getTime(), t)}
       dateTime={notification.created_at}
-      unread={!notification.read_at}
-      unreadLabel={t("rework.notifications.unread")}
       handledLabel={rendered.handledLabel}
       actions={rendered.actions.map((action) => ({
         id: action.id,

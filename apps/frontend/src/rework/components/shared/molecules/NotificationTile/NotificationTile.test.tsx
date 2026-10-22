@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Pins the unread mark (visible and spoken), what a click opens, the always
+// Pins what a click opens, the always
 // visible close button, busy buttons and the handled line.
 
 import { act } from "react";
@@ -38,8 +38,6 @@ function renderTile(overrides: Partial<NotificationTileProps> = {}) {
     body: "Léa changed the agent.",
     time: "5 min ago",
     dateTime: "2026-10-20T10:00:00Z",
-    unread: true,
-    unreadLabel: "Unread",
     dismissLabel: "Dismiss notification",
     onOpen: vi.fn(),
     onDismiss: vi.fn(),
@@ -68,20 +66,6 @@ afterEach(() => {
 });
 
 describe("NotificationTile", () => {
-  it("marks an unread tile, with an accessible prefix on its title", () => {
-    const { el } = renderTile();
-
-    expect(el.querySelector("li")?.hasAttribute("data-unread")).toBe(true);
-    expect(el.querySelector("li button")?.textContent).toBe("Unread: Published agent changed");
-  });
-
-  it("drops the unread style and prefix once read", () => {
-    const { el } = renderTile({ unread: false });
-
-    expect(el.querySelector("li")?.hasAttribute("data-unread")).toBe(false);
-    expect(el.querySelector("li button")?.textContent).toBe("Published agent changed");
-  });
-
   it("opens on a click on its title", () => {
     const { el, props } = renderTile();
 
