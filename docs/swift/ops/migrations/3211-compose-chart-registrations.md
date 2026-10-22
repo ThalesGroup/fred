@@ -4,6 +4,7 @@ title: "Fred chart: register applications and Knowledge Base publishers by id, u
 impact: minor
 configuration: production
 configuration_reason: "The fred chart now derives the control plane's platform.application_sources and knowledge_bases.publishers, and the frontend's FRONTEND_APPLICATIONS_JSON, from the new registrations value, and refuses values that still set them. Overlays that register applications or publishers must move those entries before upgrading; bundled values register nothing and need no edit."
+after: [delegate-platform-access-and-team-management]
 ---
 ## Applicability
 
