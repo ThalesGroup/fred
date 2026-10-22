@@ -2287,7 +2287,8 @@
           },
           "pptFiller": {
             "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",
-            "fill_ppt_template": "Création d'une présentation PowerPoint"
+            "fill_ppt_template": "Création d'une présentation PowerPoint",
+            "build_presentation": "Création d'une présentation PowerPoint"
           },
           "platformOps": {
             "postgres_list_tables": "Consultation des données disponibles",
