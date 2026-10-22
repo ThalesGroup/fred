@@ -67,6 +67,7 @@ class ModelDiscoverySource(FrozenModel):
     base_url: str
     default_model_id: str | None = None
     include_model_ids: tuple[str, ...] | None = None
+    model_display_names: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("base_url")
     @classmethod
@@ -100,6 +101,24 @@ class ModelDiscoverySource(FrozenModel):
         ):
             raise ValueError(
                 "discovery include_model_ids must contain distinct nonblank ids"
+            )
+        if any(not _valid_model_id(model_id) for model_id in self.model_display_names):
+            raise ValueError(
+                "discovery model_display_names contains an invalid model id"
+            )
+        if any(
+            not name.strip() or any(ord(char) < 32 or ord(char) == 127 for char in name)
+            for name in self.model_display_names.values()
+        ):
+            raise ValueError(
+                "discovery model_display_names must contain nonblank labels"
+            )
+        if (
+            self.include_model_ids is not None
+            and not self.model_display_names.keys() <= set(self.include_model_ids)
+        ):
+            raise ValueError(
+                "discovery model_display_names must match included model ids"
             )
         return self
 
@@ -231,6 +250,7 @@ class ModelCatalog(FrozenModel):
         default_profile_id: str | None = None
         for item in selected:
             wire_id = item["id"]
+            configured_name = source.model_display_names.get(wire_id)
             digest = sha256(wire_id.encode("utf-8")).hexdigest()
             profile_id = f"discovered.chat.{source.source_id}.{digest}"
             context = _positive_int(item.get("context_length")) or _positive_int(
@@ -240,7 +260,9 @@ class ModelCatalog(FrozenModel):
                 profile_id=profile_id,
                 capability=ModelCapability.CHAT,
                 model_id=f"discovered.{source.source_id}.{digest}",
-                model_display_name=_display_name(item),
+                model_display_name=(
+                    configured_name.strip() if configured_name else _display_name(item)
+                ),
                 context_window_tokens=context,
                 max_input_tokens=_positive_int(item.get("max_input_tokens")),
                 max_output_tokens=_positive_int(item.get("max_output_tokens")),

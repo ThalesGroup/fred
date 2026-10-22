@@ -137,6 +137,34 @@ def test_optional_metadata_and_allowlist(monkeypatch) -> None:
     assert resolved.profiles[0].max_output_tokens == 2048
 
 
+def test_operator_display_name_overrides_gateway_name_without_changing_wire_id(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    resolved = _catalog(
+        model_display_names={"chat-a": "  Team Chat  "}
+    ).resolve_discovery(
+        transport=_transport(
+            {
+                "data": [
+                    {"id": "chat-a", "name": "Gateway A"},
+                    {"id": "chat-b", "name": "Gateway B"},
+                ]
+            }
+        )
+    )
+
+    first, second = resolved.profiles
+    assert first.model.name == "chat-a"
+    assert first.model_display_name == "Team Chat"
+    assert second.model_display_name == "Gateway B"
+    projected = _project_model_catalog_response(resolved)
+    assert [(item.name, item.display_name) for item in projected.models] == [
+        ("chat-a", "Team Chat"),
+        ("chat-b", "Gateway B"),
+    ]
+
+
 def test_allowlist_ignores_invalid_or_duplicate_excluded_entries(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     resolved = _catalog(include_model_ids=["chat-a"]).resolve_discovery(
@@ -294,6 +322,17 @@ def test_discovery_config_rejects_invalid_model_ids() -> None:
         _catalog(default_model_id=" chat-a")
     with pytest.raises(ValidationError, match="include_model_ids"):
         _catalog(include_model_ids=["chat-a", "chat-a"])
+
+
+def test_discovery_config_rejects_invalid_display_name_mappings() -> None:
+    with pytest.raises(ValidationError, match="model_display_names"):
+        _catalog(model_display_names={" chat-a": "Chat"})
+    with pytest.raises(ValidationError, match="model_display_names"):
+        _catalog(model_display_names={"chat-a": "  "})
+    with pytest.raises(ValidationError, match="model_display_names"):
+        _catalog(model_display_names={"chat-a": "Chat\nA"})
+    with pytest.raises(ValidationError, match="model_display_names"):
+        _catalog(include_model_ids=["chat-a"], model_display_names={"chat-b": "Chat B"})
 
 
 def test_discovered_model_uses_existing_grant_and_drift_gates(monkeypatch) -> None:

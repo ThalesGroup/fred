@@ -9,6 +9,7 @@
 - [x] 2.1 Carry optional display name, context window and input/output limits from the pod response through control-plane model capability and enablement schemas; verify aggregation and absent-metadata tests.
 - [x] 2.2 Regenerate frontend API types and show optional metadata in the existing admin Models table; verify focused component tests for full and id-only responses, and confirm existing activation controls still work.
 - [x] 2.3 Verify an ungranted discovered model is denied, an admin grant allows use, and a removed model follows the existing drift error without fallback; use focused runtime/control-plane integration tests.
+- [x] 2.4 Accept operator-defined display names by upstream id, validate them, and propagate overrides through existing admin and chat picker projections; verify precedence and unchanged wire identity with focused tests.
 
 ## 3. Documentation and close-out
 
@@ -16,3 +17,4 @@
 - [x] 3.2 Run relevant module checks and one root `make code-quality` near PR completion; record exact results in the PR.
 - [x] 3.3 Review the full diff against `swift` with the branch audit procedure and an independent read-only reviewer; record findings and dispositions in the draft PR.
 - [x] 3.4 Reconcile the change artifacts with the implementation, sync the model-routing spec and archive the change after verification; verify `openspec validate --strict` passes.
+- [x] 3.5 Document the display-name mapping, rerun affected checks and branch review, update the draft PR, and resync and archive this amended change.

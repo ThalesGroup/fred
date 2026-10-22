@@ -58,6 +58,16 @@ The pod SHALL preserve each upstream model identifier as its wire name. It SHALL
 - **WHEN** an administrator opens the Models view
 - **THEN** those values appear as model details without changing model activation
 
+### Requirement: Operators can name discovered models
+
+The catalog SHALL allow operators to set a display name for a discovered model by its exact upstream identifier. That name SHALL take precedence over a gateway-supplied name and appear in both the admin Models view and the chat model picker, without changing routing or access identity. If no operator name exists, the gateway name and existing chat label fallback SHALL continue to apply.
+
+#### Scenario: Operator display name overrides gateway metadata
+
+- **GIVEN** a discovered model whose upstream id has an operator-defined display name and whose gateway returns a different name
+- **WHEN** an administrator opens the Models view and a member opens the chat model picker
+- **THEN** both surfaces use the operator-defined display name, while inference still sends the upstream id
+
 ### Requirement: Discovery uses existing access controls
 
 Every discovered model SHALL enter the existing model capability catalog without an initial access grant. Administrators SHALL be able to enable it through the existing default-on and team controls. A turn SHALL remain subject to the existing model access and routing checks. A model removed from the source after a pod restart SHALL not silently fall back to another model when referenced by a stored policy.

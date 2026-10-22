@@ -6,7 +6,7 @@ Operators currently repeat every gateway model as a hand-written `models_catalog
 
 - Allow one OpenAI-compatible model-list endpoint in `models_catalog.yaml`, alongside existing static profiles. Discover `data[].id` from `GET /v1/models` and create stable chat profiles from the response.
 - Resolve the discovered inventory once at pod startup and use that same snapshot for routing and `/agents/models-catalog`. A discovery-only catalog can designate its chat default by upstream model id.
-- Show discovered models in the existing admin Models view, with optional display name, context window and token limits where supplied. New models require the existing admin grant before teams can use them.
+- Show discovered models in the existing admin Models view, with optional display name, context window and token limits where supplied. Operators can override each discovered model's display name in YAML for the admin view and chat picker. New models require the existing admin grant before teams can use them.
 - Keep credentials in the pod environment and define validation, failure and removal behavior. Static catalogs and their activation behavior remain compatible.
 
 ## Capabilities
