@@ -14,6 +14,8 @@
 
 import { describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
+import en from "../../locales/en/translation.json";
+import fr from "../../locales/fr/translation.json";
 import {
   skillLoadOf,
   skillFileReadOf,
@@ -21,6 +23,7 @@ import {
   asRagSearchResult,
   asSqlQueryResult,
   formatLatencyMs,
+  genericToolPayload,
   groupTraceEntries,
   humanizeToolName,
   isDocumentTreeTool,
@@ -336,6 +339,41 @@ describe("entryLabel localization", () => {
   it("uses the localized label for ask_user", () => {
     const question = { kind: "combo" as const, call: toolCallMsg("c2", "ask_user") };
     expect(entryLabel(question, (key) => key)).toBe("rework.chatTrace.toolLabels.askUser");
+  });
+});
+
+describe("known tool labels", () => {
+  const enLabels = en.rework.chatTrace.toolLabels.known as Record<string, string>;
+  const frLabels = fr.rework.chatTrace.toolLabels.known as Record<string, string>;
+
+  it("has a translated label for every known tool in both languages", () => {
+    expect(Object.keys(enLabels).sort()).toEqual(Object.keys(frLabels).sort());
+    for (const [name, label] of Object.entries(frLabels)) {
+      const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };
+      const translate = (key: string) => frLabels[key.replace("rework.chatTrace.toolLabels.known.", "")] ?? key;
+      expect(enLabels[name]).toBeTruthy();
+      expect(label).toBeTruthy();
+      expect(entryLabel(entry, translate)).toBe(label);
+    }
+  });
+
+  it.each([
+    ["list_document_tree", "Consultation de l'arborescence des documents"],
+    ["write_document", "Rédaction d'un document Word"],
+    ["fill_ppt_template", "Création d'une présentation PowerPoint"],
+    ["wiki_read_page", "Lecture d'une page du wiki"],
+    ["mcp__knowledge_flow__os_health", "État de santé d'OpenSearch"],
+    ["mcp__knowledge_flow__prometheus_query_range_2", "Exécution d'une requête Prometheus sur une période"],
+  ])("renders the localized label for %s", (name, expected) => {
+    const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };
+    const translate = (key: string) => frLabels[key.replace("rework.chatTrace.toolLabels.known.", "")] ?? key;
+    expect(entryLabel(entry, translate)).toBe(expected);
+    expect(genericToolPayload(entry, translate).action).toBe(expected);
+  });
+
+  it("keeps the fallback for a namespaced external MCP tool with the same slug", () => {
+    const entry = { kind: "combo" as const, call: toolCallMsg("c1", "mcp__other__os_health") };
+    expect(entryLabel(entry, (key) => frLabels[key] ?? key)).toBe("Os Health");
   });
 });
 

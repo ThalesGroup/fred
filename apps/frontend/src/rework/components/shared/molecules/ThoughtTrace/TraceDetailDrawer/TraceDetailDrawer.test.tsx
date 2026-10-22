@@ -37,11 +37,11 @@ vi.mock("react-i18next", () => ({
         return `${options?.count ?? 0} ${options?.count === 1 ? "table" : "tables"}`;
       if (key === "rework.chatTrace.tabular.tableNumber") return `Table ${options?.number ?? 0}`;
       if (key === "rework.chatTrace.toolLabels.readQuery") return "Reading data";
-      if (key === "rework.chatTrace.toolLabels.documents") return "Listing tabular documents";
+      if (key === "rework.chatTrace.toolLabels.documents") return "Listing data files";
       if (key === "rework.chatTrace.toolLabels.markdown") return "Reading the workbook catalog";
       if (key === "rework.chatTrace.toolLabels.schemas") return "Reading tabular schemas";
-      if (key === "rework.chatTrace.toolLabels.descriptions") return "Reading tabular documents";
-      if (key === "rework.chatTrace.toolLabels.search") return "Searching tabular values";
+      if (key === "rework.chatTrace.toolLabels.descriptions") return "Reading data structure";
+      if (key === "rework.chatTrace.toolLabels.search") return "Searching data";
       if (key === "rework.chatTrace.toolStatus.failure") return "Failed";
       if (key === "rework.chatTrace.toolStatus.success") return "Success";
       if (key === "rework.chatTrace.executionTime") return `Execution time: ${options?.duration ?? ""}`;
@@ -353,7 +353,7 @@ describe("TraceDetailDrawer tabular tools", () => {
       },
     ]);
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("Listing tabular documents");
+    expect(html).toContain("Listing data files");
     expect(html).toContain("Sales.csv");
     expect(html).toContain("Budget.xlsx");
     expect(html).toContain("Revenue");
@@ -497,7 +497,7 @@ describe("TraceDetailDrawer tabular tools", () => {
       },
     ]);
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("Reading tabular documents");
+    expect(html).toContain("Reading data structure");
     expect(html.indexOf("Catalog marker")).toBeLessThan(html.indexOf("amount"));
     expect(html.indexOf("Catalog marker")).toBeLessThan(html.indexOf("rework.chatTrace.tabular.tablesHeading"));
     expect(html).toContain("Sales.csv");
@@ -525,7 +525,7 @@ describe("TraceDetailDrawer tabular tools", () => {
       searched_dataset_uids: ["uid-book"],
     });
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("Searching tabular values");
+    expect(html).toContain("Searching data");
     expect(html).toContain("Search term: <strong>Acme</strong>");
     expect(html).toContain("Response");
     expect(html.match(/data-language="json"/g)).toHaveLength(1);

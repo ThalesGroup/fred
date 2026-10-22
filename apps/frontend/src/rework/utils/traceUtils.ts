@@ -119,9 +119,82 @@ const SLUG_OVERRIDES: Record<string, string> = {
   // tavily-mcp v0.2.x reports its tool as "tavily-search"
   "tavily-search": "Searching the web",
   tavily_search: "Searching the web",
-  // ppt_filler capability: the raw tool name would render as "Fill Ppt Template"
   fill_ppt_template: "Generating the PowerPoint",
 };
+
+// Known tool names get localized labels; namespaced external MCP tools keep the generic fallback.
+const KNOWN_TOOL_LABELS = [
+  "search_documents_using_vectorization",
+  "list_document_tree",
+  "list_documents_by_label",
+  "read_document",
+  "summarize_document",
+  "extract_from_document",
+  "find_similar_passages",
+  "open_writable_document",
+  "write_document",
+  "wiki_list_pages",
+  "wiki_read_page",
+  "wiki_propose_page_text",
+  "wiki_propose_page",
+  "wiki_publish_proposal",
+  "render_html_artifact",
+  "list_images_in_folder",
+  "fill_ppt_template",
+  "postgres_list_tables",
+  "postgres_run_query",
+  "load_skill",
+  "read_skill_file",
+  "ls",
+  "read_file",
+  "write_file",
+  "edit_file",
+  "glob",
+  "grep",
+  "execute",
+  "concat_files",
+  "task",
+  "write_todos",
+  "os_health",
+  "os_pending_tasks",
+  "os_cluster_settings",
+  "os_cluster_state",
+  "os_cluster_stats",
+  "os_allocation_explain",
+  "os_nodes_stats",
+  "os_nodes_info",
+  "os_nodes_hot_threads",
+  "os_indices",
+  "os_index_stats",
+  "os_index_mapping",
+  "os_index_settings",
+  "os_index_recovery",
+  "os_tasks",
+  "os_task_get",
+  "os_shards",
+  "os_cat_nodes",
+  "os_cat_allocation",
+  "os_cat_thread_pool",
+  "os_recovery",
+  "os_diagnostics",
+  "prometheus_query",
+  "prometheus_query_range",
+  "prometheus_series",
+  "prometheus_metrics",
+  "prometheus_metrics_catalog",
+  "prometheus_metadata",
+  "prometheus_labels",
+  "prometheus_label_values",
+  "prometheus_targets",
+] as const;
+
+const KNOWN_TOOL_LABEL_SET = new Set<string>(KNOWN_TOOL_LABELS);
+
+function knownToolLabelKey(rawName: string): string | null {
+  if (rawName.startsWith("mcp__") && !rawName.startsWith("mcp__knowledge_flow__")) return null;
+  const slug = toolSlug(rawName);
+  return KNOWN_TOOL_LABEL_SET.has(slug) ? `rework.chatTrace.toolLabels.known.${slug}` : null;
+}
 
 // Action verb stems → gerund display form.
 const GERUNDS: Record<string, string> = {
@@ -418,8 +491,11 @@ export function stripDocumentUids(tree: string): string {
 }
 
 /** Curated {action, status, latency} payload for tool results with no recognized richer shape. */
-export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): Record<string, unknown> {
-  const action = humanizeToolName(toolName(entry.call));
+export function genericToolPayload(
+  entry: Extract<TraceEntry, { kind: "combo" }>,
+  translate?: (key: string) => string,
+): Record<string, unknown> {
+  const action = entryLabel(entry, translate);
   if (!entry.result) return { action, status: "running" };
   return {
     action,
@@ -567,6 +643,8 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       if (webKind && translate) return translate(`rework.chatTrace.toolLabels.${webKind}`);
       const tabularKind = tabularToolKind(toolName(entry.call));
       if (tabularKind && translate) return translate(`rework.chatTrace.toolLabels.${tabularKind}`);
+      const knownKey = knownToolLabelKey(toolName(entry.call));
+      if (knownKey && translate) return translate(knownKey);
       return humanizeToolName(toolName(entry.call)) || "Tool";
     }
     case "tool_result":
