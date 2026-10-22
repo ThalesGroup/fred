@@ -14,31 +14,23 @@
  * limitations under the License.
  */
 
-/* A list row inside a floating surface: hover is the on-surface state layer,
- * the information icon well is `-high` (never `-highest` inside a float). */
+/* A card on the popover's `surface-container`: lighter than its background,
+ * with the information icon well one step down at `-high`. */
 .tile {
   display: flex;
   position: relative;
   align-items: flex-start;
   gap: var(--spacing-s);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-highest);
   padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
   list-style: none;
 }
 
-/* Separates consecutive notifications without boxing each one. */
-.tile + .tile::before {
-  position: absolute;
-  top: 0;
-  right: var(--spacing-s);
-  left: var(--spacing-s);
-  border-top: 1px solid var(--outline-variant);
-  content: "";
-}
-
+/* The state layer sits over the card instead of replacing it. */
 .tile:hover,
 .tile:focus-within {
-  background: var(--state-on-surface-hover);
+  background-image: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover));
 }
 
 .icon {
@@ -85,7 +77,7 @@
 .hit::after {
   position: absolute;
   inset: 0;
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
   content: "";
 }
 

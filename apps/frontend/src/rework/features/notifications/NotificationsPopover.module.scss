@@ -26,6 +26,7 @@
 
 /* Two classes, so these win over MenuPopover's own surface rules. */
 .wrap .panel {
+  background: var(--surface-container);
   max-height: min(560px, calc(100vh - 12rem));
 }
 
@@ -61,7 +62,7 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3xs);
+  gap: var(--spacing-xs);
   margin: 0;
   padding: 0;
 }
