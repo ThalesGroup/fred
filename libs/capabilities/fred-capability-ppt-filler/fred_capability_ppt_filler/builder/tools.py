@@ -124,7 +124,7 @@ from fred_capability_ppt_filler.builder.plan import (
 from fred_capability_ppt_filler.builder.render import RenderError, render_deck
 from fred_capability_ppt_filler.concurrency import (
     acquire_heavy_job_slot,
-    release_heavy_job_slot,
+    in_slot_thread,
 )
 from fred_capability_ppt_filler.fill import (
     BuildNote,
@@ -1747,7 +1747,7 @@ def build_builder_tools(
         if not acquire_heavy_job_slot():
             return _error(_BUSY_MESSAGE)
         try:
-            result = await asyncio.to_thread(
+            result = await in_slot_thread(
                 _prepare_and_render,
                 template_bytes,
                 inventory,
@@ -1763,8 +1763,6 @@ def build_builder_tools(
             elapsed = time.monotonic() - started
             logger.exception("[PPTBUILD][TOOL] render FAILED after %.0fs", elapsed)
             return _error(_INTERNAL_ERROR)
-        finally:
-            release_heavy_job_slot()
 
         file_name = (
             _sanitize_output_file_name(plan.file_name)
