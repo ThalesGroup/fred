@@ -52,8 +52,8 @@ export function useNotificationSummary(): number {
   }, [refetch, started]);
   useRefetchOnWindowFocus(refetch, !started);
 
-  // A new notification may be another user's answer to a join request: refresh
-  // the caller's requests and team list wherever they are on screen.
+  // A new notification may follow another user's join request, answer or leave:
+  // refresh requests, members and the team list wherever they are on screen.
   const unseen = data?.unseen_count;
   const dispatch = useDispatch<NotificationDispatch>();
   const previous = useRef(unseen);
@@ -62,7 +62,8 @@ export function useNotificationSummary(): number {
     if (previous.current !== undefined && unseen > previous.current)
       dispatch(
         enhancedControlPlaneApi.util.invalidateTags([
-          { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
+          "ControlPlaneTeamJoinRequest",
+          "ControlPlaneTeamMember",
           { type: "ControlPlaneTeam", id: "LIST" },
         ]),
       );

@@ -16,8 +16,8 @@
 // What these pin: the badge shows the unseen count and disappears at zero, the
 // count is in the bell's accessible name; the summary polls every 15 s only
 // while the tab is visible and catches up at once when it returns; a tab opened
-// in the background sends nothing; a rising count refreshes the caller's join
-// requests and teams; Escape closes the popover onto the bell.
+// in the background sends nothing; a rising count refreshes join
+// requests, members and teams; Escape closes the popover onto the bell.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -145,7 +145,7 @@ describe("NotificationsEntry", () => {
     expect(lastOptions()).toEqual({ skip: false, pollingInterval: NOTIFICATION_POLL_INTERVAL_MS });
   });
 
-  it("refreshes the caller's join requests and teams when the count rises, not on the first answer", () => {
+  it("refreshes join requests, members and teams when the count rises, not on the first answer", () => {
     render(1);
     expect(dispatch).not.toHaveBeenCalled();
 
@@ -153,10 +153,7 @@ describe("NotificationsEntry", () => {
     act(() => root!.render(<NotificationsEntry iconStyle={{}} />));
 
     expect(dispatch).toHaveBeenCalledExactlyOnceWith({
-      invalidate: [
-        { type: "ControlPlaneTeamJoinRequest", id: "MINE" },
-        { type: "ControlPlaneTeam", id: "LIST" },
-      ],
+      invalidate: ["ControlPlaneTeamJoinRequest", "ControlPlaneTeamMember", { type: "ControlPlaneTeam", id: "LIST" }],
     });
 
     summaryMock.mockReturnValue({ data: { unseen_count: 0 }, refetch });
