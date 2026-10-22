@@ -7,7 +7,7 @@ See `proposal.md`. The OpenFGA model currently derives all platform access admin
 **Goals:**
 
 - Make every action in Platform Access usable by a delegated platform access manager, including whitelist, filtering, rules, T0 and Free management.
-- Give team managers name/description controls without allowing admin nomination or any platform access controls.
+- Give team managers name/description and Free-link controls without allowing admin nomination, Free activation or other platform access controls.
 - Preserve current link enrollment, audit, lockout and `platform_admin` behavior.
 
 **Non-Goals:**
@@ -20,15 +20,15 @@ See `proposal.md`. The OpenFGA model currently derives all platform access admin
 
 ### 1. Add computed organization permissions with explicit role membership
 
-Add `platform_access_manager: [user] or platform_admin` and `can_manage_platform_access: platform_access_manager` to `schema.fga`. Add `can_edit_team_info: team_manager`, leaving `can_edit_team_registry`, team deletion and admin rescue on `platform_admin`. Include `platform_access_manager` in `can_list_all_teams` so its holder can reach the existing Admin Teams Free controls; that read exposes registry metadata and admins' identity summaries, as documented in `REBAC.md`, but grants no registry mutation. As with existing delegated roles, the `platform_admin` union preserves its access. Wire the new role through the role relation enum, role assignment, bootstrap summary, frontend capability list and generated types. This keeps the permissions in the authorization model rather than inferring them from frontend state or a Keycloak role. Reusing `can_manage_platform` would grant platform reset, import/export and unrelated global powers.
+Add `platform_access_manager: [user] or platform_admin`, `can_manage_platform_access: platform_access_manager`, and `can_manage_free_links: platform_access_manager or team_manager` to `schema.fga`. Add `can_edit_team_info: team_manager`, leaving `can_edit_team_registry`, team deletion and admin rescue on `platform_admin`. Include `platform_access_manager` in `can_list_all_teams` so its holder can reach the existing Admin Teams Free controls; that read exposes registry metadata and admins' identity summaries, as documented in `REBAC.md`, but grants no registry mutation. As with existing delegated roles, the `platform_admin` union preserves its access. Wire the new role through the role relation enum, role assignment, bootstrap summary, frontend capability list and generated types. This keeps the permissions in the authorization model rather than inferring them from frontend state or a Keycloak role. Reusing `can_manage_platform` would grant platform reset, import/export and unrelated global powers.
 
 ### 2. Gate full Platform Access with the narrow permission
 
-Change the platform access admin dependency, including Free-link routes, to `can_manage_platform_access`. Use that same current permission in the admission bypass and activation preview/actor-safeguard checks, so a platform access manager can reach the page while filtering is active and loses that source immediately when the role is revoked. Keep suspension, terms and resource checks. Existing Platform Access routes and request/response shapes remain intact; Free-link creation and token recovery retain their own-human credential requirement and restrict reads and writes to Free links of the requested team.
+Change the platform access admin dependency to `can_manage_platform_access`. Use that same current permission in the admission bypass and activation preview/actor-safeguard checks, so a platform access manager can reach the page while filtering is active and loses that source immediately when the role is revoked. Keep suspension, terms and resource checks. Gate Free-link creation, history, joiners, recovery, revocation and cleanup on `can_manage_free_links`; creation and token recovery retain their own-human credential requirement and restrict reads and writes to Free links of the requested team. Link administration does not itself confer a platform admission bypass on the manager.
 
-### 3. Keep Free enrollment inside Platform Access
+### 3. Separate Free activation from link administration
 
-Keep the existing `GET /admin/platform/access/teams` and `PATCH /admin/platform/access/teams/{team_id}` under `can_manage_platform_access`. The update body changes both `allowed` and `free`, so callers who can toggle Free must hold the complete platform access role. Keep the existing link routes and actor-safeguard transaction. No Free-only API or second permission is needed. Giving `team_manager` these routes would let a team-registry role change platform admission.
+Keep the existing `GET /admin/platform/access/teams` and `PATCH /admin/platform/access/teams/{team_id}` under `can_manage_platform_access`. The update body changes both `allowed` and `free`, so callers who can toggle Free must hold the complete platform access role. Add a narrow read that returns team id, name and Free state for link managers without revealing the independent `allowed` flag, policy or exceptions. The Admin Teams page uses it to show link history even while Free is off. A team manager can create a link only once a platform access manager has enabled Free; listing, recovery, revocation and cleanup follow their current lifecycle rules when Free is off. Granting the combined team update route to `team_manager` would let a registry role change admission policy.
 
 ### 4. Check registry edit fields before any write
 
@@ -36,11 +36,11 @@ The existing registry edit route accepts both details and admin changes. Require
 
 ### 5. Expose only the permitted UI surfaces
 
-Add `canManagePlatformAccess` to the bootstrap-derived frontend capabilities and route/navigation gate. Let that role reach the Admin Teams page for Free controls, with Create and Edit hidden unless it also holds `team_manager`; hide Free controls from a caller with only `team_manager`. The server remains authoritative. Update the role selector and French/English labels, regenerate the control-plane client from the OpenAPI contract, and update the endpoint matrix and compact security/product docs.
+Add `canManagePlatformAccess` to the bootstrap-derived frontend capabilities and route/navigation gate. Let that role reach the Admin Teams page for Free controls, with Create and Edit hidden unless it also holds `team_manager`. Show link management to both roles, but show the Free switch only to `platform_access_manager` or `platform_admin`. The server remains authoritative. Update the role selector and French/English labels, regenerate the control-plane client from the OpenAPI contract, and update the endpoint matrix and compact security/product docs.
 
 ## Risks / Trade-offs
 
-- **Platform access managers can cause admission through Free links:** This is part of the role's explicit scope. Existing audit, own-human token checks and Free-link protections provide accountability.
+- **Team managers can cause admission through Free links once Free is enabled:** This is part of the delegated link authority. Existing audit, own-human token checks and Free-link protections provide accountability; only the platform access role can activate Free.
 - **The Admin Teams page combines registry and Free controls:** Gate each control independently in the UI and keep the server's full platform access permission on the combined `allowed`/`free` endpoint. Add focused denial tests for team managers, including crafted requests.
 - **Admission bypass depends on live OpenFGA state:** Use the higher-consistency check already used for platform admins and retain the existing 503 behavior when authority is unavailable.
 - **Generated clients and deployed authorization models can drift:** Deploy the updated OpenFGA model before backend/frontend use the new relations; verify schema transformation, generated types and focused role isolation tests. Rollback the application before reverting the model if needed.
