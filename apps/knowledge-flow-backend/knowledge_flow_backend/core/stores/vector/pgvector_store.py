@@ -270,6 +270,34 @@ class PgVectorStoreAdapter(BaseVectorStore):
             )
             raise RuntimeError("Failed to delete vectors from PGVector.")
 
+    def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
+        """Set 'retrievable' on every chunk of a document; `ann_search` post-filters on it."""
+        try:
+            with self._engine.begin() as conn:
+                res = conn.execute(
+                    text(
+                        """
+                        UPDATE langchain_pg_embedding e
+                        SET cmetadata = jsonb_set(e.cmetadata, '{retrievable}', to_jsonb(CAST(:value AS boolean)))
+                        FROM langchain_pg_collection c
+                        WHERE e.collection_id = c.uuid
+                          AND c.name = :collection
+                          AND e.cmetadata ->> 'document_uid' = :doc_uid
+                        """
+                    ),
+                    {"collection": self.collection_name, "doc_uid": document_uid, "value": bool(value)},
+                )
+                logger.info(
+                    "[VECTOR][PGVECTOR] updated retrievable=%s on %d chunk(s) for document_uid=%s collection=%s",
+                    value,
+                    res.rowcount or 0,
+                    document_uid,
+                    self.collection_name,
+                )
+        except Exception:
+            logger.exception("[VECTOR][PGVECTOR] failed to update retrievable flag for document_uid=%s", document_uid)
+            raise RuntimeError("Failed to update retrievable flag in PGVector.")
+
     def set_document_name(self, *, document_uid: str, document_name: str) -> None:
         """
         Update the 'document_name' metadata field for all chunks of a document without
