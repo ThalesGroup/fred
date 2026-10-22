@@ -18,6 +18,7 @@ import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
+import Separator from "@shared/atoms/Separator/Separator.tsx";
 import { useLocation } from "react-router-dom";
 import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
 import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
@@ -39,6 +40,9 @@ export default function Sidebar() {
           <UserProfile />
         </div>
         <NotificationsEntry iconStyle={ICON_STYLE} />
+        <div className={styles["rail-divider"]}>
+          <Separator />
+        </div>
         <div className={styles["main-nav-bar-container"]}>
           <MainNavBar />
         </div>

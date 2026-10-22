@@ -30,6 +30,11 @@
   height: 100%;
 }
 
+.rail-divider {
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+}
+
 .main-nav-bar-container {
   flex: 1;
   min-height: 0;
