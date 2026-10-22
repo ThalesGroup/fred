@@ -1257,7 +1257,7 @@
         "reasoningToggleError": "Could not change this model's reasoning setting.",
         "discovery": {
           "title": "Model discovery",
-          "url": "Models URL",
+          "sourceUrlAria": "Discovery URL for {{source}}",
           "lastSuccess": "Last successful check: {{time}}",
           "refresh": "Refresh",
           "refreshing": "Checking available models...",
@@ -1273,7 +1273,7 @@
           "filter": "Filter models",
           "clearFilter": "Clear filter",
           "noMatches": "No models match this filter.",
-          "details": "Discovery settings and unavailable models",
+          "advancedSettings": "Advanced settings",
           "emptyManual": "No manually configured models.",
           "emptyDiscovered": "No discovered models available.",
           "unregisteredSource": "Models from {{sources}} are visible, but discovery settings are unavailable. Check the other configured agent pods and refresh.",

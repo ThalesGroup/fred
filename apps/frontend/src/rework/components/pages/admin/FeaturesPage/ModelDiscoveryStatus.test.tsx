@@ -27,8 +27,8 @@ beforeEach(() => {
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: { sources?: string; services?: string }) =>
-      `${key}${values?.sources ?? values?.services ?? ""}`,
+    t: (key: string, values?: { source?: string; sources?: string; services?: string }) =>
+      `${key}${values?.source ?? values?.sources ?? values?.services ?? ""}`,
   }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -63,6 +63,8 @@ it("shows a confirmed disappearance separately from available models", () => {
   expect(html).toContain("https://models.example/v1/models");
   expect(html).toContain("Old chat (chat-a)");
   expect(html).toContain("rework.admin.capabilities.discovery.unavailable");
+  expect(html).toContain("rework.admin.capabilities.discovery.advancedSettings");
+  expect(html.indexOf("rework.admin.capabilities.discovery.unavailable")).toBeGreaterThan(html.indexOf("</details>"));
   expect(html).not.toContain("chat-b)");
 });
 
@@ -130,7 +132,7 @@ it("shows a source refresh failure outside the collapsed settings", () => {
     />,
   );
   expect(html).toContain("rework.admin.capabilities.discovery.failedSourceswest");
-  expect(html.indexOf("failedSourceswest")).toBeLessThan(html.indexOf("<details>"));
+  expect(html.indexOf("failedSourceswest")).toBeLessThan(html.indexOf("<details"));
 });
 
 it("warns about unreachable agent services without claiming discovery failed", () => {
@@ -227,7 +229,10 @@ it("shows a separate URL editor for each discovery source", () => {
 
   expect(html).toContain("mistral");
   expect(html).toContain("gateway");
+  expect(html.match(/<h3/g)).toHaveLength(2);
   expect(html.match(/<input/g)).toHaveLength(2);
+  expect(html).toContain('aria-label="rework.admin.capabilities.discovery.sourceUrlAriamistral"');
+  expect(html).toContain('aria-label="rework.admin.capabilities.discovery.sourceUrlAriagateway"');
   expect(html.match(/discovery\.save/g)).toHaveLength(2);
   expect(html.match(/discovery\.reset/g)).toHaveLength(2);
 });

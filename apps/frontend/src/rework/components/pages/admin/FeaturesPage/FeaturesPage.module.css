@@ -140,6 +140,43 @@
   gap: var(--spacing-xs);
 }
 
+.discoverySettingsToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  cursor: pointer;
+  border-radius: var(--radius-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  list-style: none;
+}
+
+.discoverySettingsToggle::-webkit-details-marker {
+  display: none;
+}
+
+.discoverySettingsToggle:hover {
+  color: var(--on-surface);
+}
+
+.discoverySettingsToggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.discoverySettingsChevron {
+  display: inline-flex;
+  transition: transform 150ms ease;
+}
+
+.discoverySettings[open] .discoverySettingsChevron {
+  transform: rotate(180deg);
+}
+
+.discoverySettingsContent {
+  margin-top: var(--spacing-s);
+}
+
 .discoverySource {
   display: flex;
   flex-direction: column;
@@ -150,6 +187,17 @@
 
 .discoverySource + .discoverySource {
   margin-top: var(--spacing-s);
+}
+
+.discoverySourceTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium-emphasized);
+}
+
+.discoveryReadOnlyUrl {
+  font-family: var(--font-family-mono, monospace);
+  overflow-wrap: anywhere;
 }
 
 .discoveryRemoved {

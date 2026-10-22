@@ -1257,7 +1257,7 @@
         "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle.",
         "discovery": {
           "title": "Découverte des modèles",
-          "url": "URL des modèles",
+          "sourceUrlAria": "URL de découverte pour {{source}}",
           "lastSuccess": "Dernière vérification réussie : {{time}}",
           "refresh": "Actualiser",
           "refreshing": "Vérification des modèles disponibles...",
@@ -1273,7 +1273,7 @@
           "filter": "Filtrer les modèles",
           "clearFilter": "Effacer le filtre",
           "noMatches": "Aucun modèle ne correspond à ce filtre.",
-          "details": "Paramètres de découverte et modèles indisponibles",
+          "advancedSettings": "Paramètres avancés",
           "emptyManual": "Aucun modèle défini manuellement.",
           "emptyDiscovered": "Aucun modèle découvert disponible.",
           "unregisteredSource": "Les modèles de {{sources}} sont visibles, mais les paramètres de découverte sont indisponibles. Vérifiez les autres pods agents configurés et actualisez.",

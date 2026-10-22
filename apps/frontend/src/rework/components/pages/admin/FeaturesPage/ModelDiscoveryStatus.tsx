@@ -45,11 +45,11 @@ function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
 
   return (
     <div className={styles.discoverySource}>
-      <strong>{source.source_id}</strong>
+      <h3 className={styles.discoverySourceTitle}>{source.source_id}</h3>
       {canAdmin ? (
         <>
           <TextInput
-            label={t("rework.admin.capabilities.discovery.url")}
+            aria-label={t("rework.admin.capabilities.discovery.sourceUrlAria", { source: source.source_id })}
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             disabled={isLoading}
@@ -80,9 +80,7 @@ function SourceUrlEditor({ source }: { source: DiscoverySourceStatus }) {
           </div>
         </>
       ) : (
-        <span className={styles.status}>
-          {t("rework.admin.capabilities.discovery.url")}: {source.effective_url}
-        </span>
+        <code className={styles.discoveryReadOnlyUrl}>{source.effective_url}</code>
       )}
       {source.last_success_at && (
         <span className={styles.status}>
@@ -189,24 +187,31 @@ export function ModelDiscoveryStatus({
         )
       ) : (
         <>
-          <details>
-            <summary>{t("rework.admin.capabilities.discovery.details")}</summary>
-            {sources.map((source) => (
-              <SourceUrlEditor key={source.source_id} source={source} />
-            ))}
-            {removed.length > 0 && (
-              <div className={styles.discoveryRemoved}>
-                <strong>{t("rework.admin.capabilities.discovery.unavailable")}</strong>
-                <ul>
-                  {removed.map((model) => (
-                    <li key={`${model.discoverySourceId}:${model.id}`}>
-                      {model.display_name ?? model.name} ({model.name}) - {model.discoverySourceId}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          <details className={styles.discoverySettings}>
+            <summary className={styles.discoverySettingsToggle}>
+              <span>{t("rework.admin.capabilities.discovery.advancedSettings")}</span>
+              <span className={styles.discoverySettingsChevron}>
+                <Icon category="outlined" type="expand_more" />
+              </span>
+            </summary>
+            <div className={styles.discoverySettingsContent}>
+              {sources.map((source) => (
+                <SourceUrlEditor key={source.source_id} source={source} />
+              ))}
+            </div>
           </details>
+          {removed.length > 0 && (
+            <div className={styles.discoveryRemoved}>
+              <strong>{t("rework.admin.capabilities.discovery.unavailable")}</strong>
+              <ul>
+                {removed.map((model) => (
+                  <li key={`${model.discoverySourceId}:${model.id}`}>
+                    {model.display_name ?? model.name} ({model.name}) - {model.discoverySourceId}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       )}
     </section>
