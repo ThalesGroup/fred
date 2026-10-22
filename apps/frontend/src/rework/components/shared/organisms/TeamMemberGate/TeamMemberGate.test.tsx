@@ -177,6 +177,19 @@ describe("TeamMemberGate", () => {
     expect(h.refetchBootstrap).toHaveBeenCalledTimes(1);
   });
 
+  it("refreshes the team list when a fresh answer shuts out a team it still shows", () => {
+    h.team = team();
+    h.listed = [{ id: "team-1" }];
+    render();
+    expect(h.refetchBootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes the team list when the caller joined a team it does not show yet", () => {
+    h.team = team({ is_member: true });
+    render();
+    expect(h.refetchBootstrap).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves the team list alone for a member", () => {
     h.team = team({ is_member: true });
     h.listed = [{ id: "team-1" }];
@@ -186,6 +199,12 @@ describe("TeamMemberGate", () => {
 
   it("leaves the team list alone when it no longer shows the team", () => {
     h.error = { status: 403, data: { detail: "nope" } };
+    render();
+    expect(h.refetchBootstrap).not.toHaveBeenCalled();
+  });
+
+  it("leaves the team list alone for an outsider it does not show", () => {
+    h.team = team();
     render();
     expect(h.refetchBootstrap).not.toHaveBeenCalled();
   });

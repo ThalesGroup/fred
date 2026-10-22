@@ -56,12 +56,12 @@ export default function TeamMemberGate({ children }: { children: ReactNode }) {
   const denied = status === 403 || status === 404;
   const known = team?.id === teamId && (fulfilledTimeStamp ?? 0) >= opened.at;
   const outsider = !!team && team.id === teamId && team.is_member === false;
-  // Removed from the team in another session: drop it from the team list too.
-  const stillListed = availableTeams.some((listed) => listed.id === teamId);
-  const shutOut = !skip && (denied || (known && outsider));
+  // Added or removed in another session: the team list catches up with the team.
+  const listed = availableTeams.some((available) => available.id === teamId);
+  const disagrees = !skip && (denied ? listed : known && !!team?.is_member !== listed);
   useEffect(() => {
-    if (shutOut && stillListed) refetchBootstrap();
-  }, [shutOut, stillListed, refetchBootstrap]);
+    if (disagrees) refetchBootstrap();
+  }, [disagrees, refetchBootstrap]);
 
   if (skip) return <>{children}</>;
   if (!error && !known) {
