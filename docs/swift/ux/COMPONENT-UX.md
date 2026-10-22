@@ -2225,6 +2225,14 @@ the team's `joining_mode`, gated on `!team.is_member`:
 | `invite_only`    | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable                                                                                                                                                                |
 | already a member | Nothing renders in the footer's join slot                                                                                                                                                                                                                                 |
 
+`on_request` (2026-10-22, team join requests) follows the caller's own request, passed in as `joinRequest` by `MarketplaceTeams` (one `GET /teams/join-requests/mine`, skipped while no listed team is on request):
+
+| Request state                         | Footer content                                                                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| none, or refused more than 24 h ago   | "Ask to join" button (same as "Join") opening the shared `Dialog`: optional `TextArea` (guidance in `description`, 280 max with counter), "Send the request" |
+| pending                               | Muted "Request sent" label above a `text` "Cancel request" button                                                                                           |
+| refused less than 24 h ago            | Muted "Request declined" label above the date asking is allowed again (`can_ask_again_at`); no button                                                       |
+
 The former lock icon next to the team name (driven by the retired
 `is_private` bool) was removed rather than remapped to `joining_mode` — the
 footer label already communicates restricted-join state more specifically,
@@ -2360,6 +2368,8 @@ see the #2398 note below). Both are `ButtonGroup`s (`variant="radio"`,
 same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
 Selecting an option PATCHes immediately (no separate save step), mirroring
 the retired `is_private` `Switch`'s auto-save behavior this control replaced.
+
+Joining mode is a three-item group Open / On request / Invite only since 2026-10-22 (team join requests); a private team keeps the locked "manual only" button. The admins answer requests in a "Pending requests" section at the top of `TeamSettingsMembers` (`TeamJoinRequestsSection`: rendered only for `can_administer_members` holders while the list has rows; `surface-container` list, `outline-variant` row dividers; Accept / Refuse on a pending row, "Accept anyway" on a row refused in the last 7 days).
 
 Joining mode narrowed to 2 options (`open`, `invite_only`) 2026-07-26 —
 `request_only` and `closed` were dropped from the `JoiningMode` enum

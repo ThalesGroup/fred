@@ -9,7 +9,8 @@ icon: notifications
 
 La **cloche** de la barre d'application, tout à gauche sous les autres entrées,
 vous prévient quand quelque chose vous concerne : un agent que vous avez publié
-a été modifié par quelqu'un d'autre, ou il a quitté la marketplace. Un nombre
+a été modifié par quelqu'un d'autre ou a quitté la marketplace, quelqu'un
+demande à rejoindre votre équipe, ou une équipe a répondu à votre demande. Un nombre
 sur la cloche compte les notifications que vous n'avez pas encore vues.
 
 ## Ouvrir vos notifications
@@ -63,3 +64,16 @@ Les deux concernent un agent que vous avez publié sur la
 > Seuls les agents publiés ou mis à jour depuis l'arrivée des notifications
 > savent qui les a publiés. Un agent publié avant ne prévient personne tant que
 > sa version publiée n'a pas été mise à jour.
+
+## Les notifications de demandes d'adhésion
+
+- **… demande à rejoindre …** : envoyée aux Admins d'une équipe quand quelqu'un
+  demande à la rejoindre, avec son message en entier. **Accepter** en fait un
+  membre, **Refuser** décline la demande. La notification disparaît alors pour
+  vous, et affiche **Acceptée par** ou **Refusée par** suivi de votre nom pour
+  les autres Admins. Si la demande a été retirée ou a déjà reçu une réponse, la
+  notification disparaît simplement.
+- **Vous avez rejoint …** / **Demande pour rejoindre … refusée** : la réponse à
+  votre propre demande. Quand vous êtes accepté, **Ouvrir l'équipe** vous y
+  emmène. Voir
+  [Demander à rejoindre une équipe](/help/fr/features/teams-and-permissions#demander-à-rejoindre-une-équipe).

@@ -9,7 +9,8 @@ icon: notifications
 
 The **bell** in the app bar, on the far left under the other entries, tells you
 when something concerns you: an agent you published was changed by someone
-else, or it left the marketplace. A number on the bell counts the notifications
+else or left the marketplace, someone asks to join your team, or a team
+answered your request. A number on the bell counts the notifications
 you have not seen yet.
 
 ## Open your notifications
@@ -60,3 +61,14 @@ Both concern an agent you published on the
 > Only agents published or updated since notifications exist know who
 > published them. An agent published earlier notifies nobody until someone
 > updates its published version.
+
+## Join request notifications
+
+- **… asks to join …**: sent to a team's Admins when someone asks to join it,
+  with their message in full. **Accept** makes the person a member, **Refuse**
+  declines. The notification then goes away for you, and shows **Accepted by**
+  or **Refused by** followed by your name for the other Admins. If the request
+  was withdrawn or already answered, the notification simply disappears.
+- **You joined …** / **Request to join … declined**: the answer to your own
+  request. When you are accepted, **Open the team** takes you to it. See
+  [Asking to join a team](/help/en/features/teams-and-permissions#asking-to-join-a-team).
