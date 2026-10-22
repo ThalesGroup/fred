@@ -19,7 +19,6 @@ See proposal.md for the motivation. Current state that shapes the approach:
 **Non-Goals:**
 - Per-team defaults.
 - A platform default for the model that labels agent templates.
-- Editing the platform template's patterns.
 - The generic `platform_settings_fields` manifest renderer (#2987, part 2).
 - Listing capability pod routes in the authz endpoint matrix, which covers control plane and knowledge flow only.
 
@@ -27,11 +26,13 @@ See proposal.md for the motivation. Current state that shapes the approach:
 
 ### D1. Capability-owned storage, under a reserved id
 
-**Decision.** The platform template is an analysis row with `agent_instance_id = team_id = "__platform__"`. Instance ids are UUIDs, so no collision is possible.
-- The store, job, leases, re-run and recovery are reused unchanged.
+**Decision.** The platform template uses two reserved analysis rows, with `team_id = "__platform__"`. Instance ids are UUIDs, so no collision is possible.
+- `__platform__` is the template in effect. It is only ever written as a succeeded analysis (an outdated refresh keeps it succeeded, as for agents).
+- `__platform_next__` is the replacement: an upload or a re-run analyses it there, while `__platform__` stays in use. When its job succeeds, `finish` moves it onto `__platform__` in the same transaction (delete the current row, rename the candidate's key). A failed or interrupted replacement stays in `__platform_next__`, visible in the drawer, until a re-run, a new upload or a reset.
+- The store, job, leases, re-run and recovery are reused unchanged; the promotion is one optional argument of `finish`.
 - The admin's vision choice is the row's own labelling key: `vision:agent-default` (the platform's default model), `vision:<profile>`, or `rules`. No settings table.
-- No row means the Fred template. "Reset" deletes the row, so the Fred template cannot be removed.
-- Additions: `AnalysisStore.delete`, and a nullable `template_filename` column so the drawer can name the file. One linear revision in the capability's own `ppt_builder_migrations`.
+- No `__platform__` row means the Fred template. "Reset" deletes both rows, so the Fred template cannot be removed.
+- Additions: `AnalysisStore.delete`, `AnalysisStore.set_overrides`, and two nullable columns, `template_filename` (so the drawer and the agent form can name the file) and `overrides_json` (the manager's pattern edits, D7). One linear revision in the capability's own `ppt_builder_migrations`.
 - The template bytes stay in Postgres, under the same 50 MB limit as an agent template (`MAX_TEMPLATE_UPLOAD_BYTES`).
 
 **Alternative: control-plane ownership.** A new table and blob store, admin routes, an SDK port to fetch the bytes, and cross-service analysis triggers. The analysis must run in the capability pod anyway, so control plane would hold bytes it cannot use. AUTHORING.md also keeps capability state out of control plane. Rejected.
@@ -42,9 +43,13 @@ See proposal.md for the motivation. Current state that shapes the approach:
 |---|---|---|---|
 | GET | `/platform` | Analysis status, summary, inventory and `template_filename`; `analysis: null` while the Fred template is in effect | Authenticated |
 | GET | `/platform/patterns.pdf` | Thumbnails; 404 when unset | Authenticated |
-| PUT | `/platform/template` | Multipart upload, with the vision choice | Capability manager |
-| POST | `/platform/analysis` | Re-run, with the vision choice; 404 when unset | Capability manager |
-| DELETE | `/platform/template` | Reset to the Fred template | Capability manager |
+| PUT | `/platform/template` | Multipart upload as the replacement, with the vision choice | Capability manager |
+| POST | `/platform/analysis` | Re-run, with the vision choice, as the replacement; 404 when unset | Capability manager |
+| PUT | `/platform/overrides` | The manager's pattern edits, pruned against the template in effect; 404 without one | Capability manager |
+| DELETE | `/platform/template` | Reset to the Fred template: both rows go | Capability manager |
+
+- **`GET /platform`** returns the template in effect (`analysis`, `template_filename`, `overrides`) and the replacement (`replacement`, `replacement_filename`), each `null` when absent; the vision choice is the replacement's, else the current one's. It also restarts an interrupted replacement where this pod can label it, as an agent's readiness check does.
+- **A re-run** of a failed or interrupted replacement re-runs it; otherwise it copies the template in effect into the replacement row, so the current analysis stays in use.
 
 - **Reads stay open to any authenticated user**, as `/builtin` is today: the template is not team-scoped.
 - **The existing `/analysis/{instance_id}` routes reject the reserved id with a 404.** Otherwise `require_agent_editor("__platform__")` passes when ReBAC is disabled.
@@ -78,7 +83,9 @@ See proposal.md for the motivation. Current state that shapes the approach:
 
 **Decision.** `analysis_job` keeps one snapshot of the platform default: `(sha, inventory) | None`, with a 30 s TTL.
 - A refresh is one primary-key read without the inventory; the inventory comes from the existing LRU (by id, sha and key), and the template bytes from the existing bytes LRU at build time.
-- **Only a succeeded analysis is in effect.** A pending, running or failed row resolves to the Fred template, the same on every replica.
+- **Only the `__platform__` row is read**, and it is always a succeeded analysis: a replacement being analysed or failed never reaches agents, which keep the previous template on every replica.
+- **The manager's pattern edits are applied once per read**, so the snapshot holds the effective inventory and a turn applies nothing.
+- **The inventory is cached by the row's job id**, which changes on every analysis: a re-run with the same file and labelling replaces it on every pod.
 - **Middleware, branch `template_sha256 is None`:**
   - fresh snapshot: build on it, or on the built-in template when unset, with no I/O;
   - expired snapshot: build on the expired value and refresh it in the background (single flight);
@@ -86,13 +93,18 @@ See proposal.md for the motivation. Current state that shapes the approach:
 - **The writing pod clears its own snapshot at once;** other pods converge within the TTL plus one turn.
 - The working rules name "the platform's default template" for every agent without its own, whichever template that is.
 
-**Alternative: keep the previous default while a replacement is analysed.** It needs a second row (current and candidate) or a pod-local memory that replicas do not share. The owner's order is "platform default once its analysis succeeded, else built-in", so the Fred template serves meanwhile.
+**Alternative: fall back to the Fred template while a replacement is analysed.** One row would do, but agents would switch look for the minutes of the analysis, or for good when it fails. The owner chose to keep the previous template (2026-10-22).
+
+**Alternative: a pod-local memory of the previous template.** Replicas do not share it, and a restarted pod has none.
 
 **Alternative: LISTEN/NOTIFY or a per-turn read.** The cost is not justified for an admin-rate change.
 
-### D7. Pattern edits only on the agent's own template (deletion path)
+### D7. Pattern edits belong to the template they were made on
 
-**Decision.** `validate_config` drops overrides when `template_sha256 is None`, instead of pruning them against the built-in inventory, and the middleware ignores any stored ones in that state. This also fixes the existing collision when an agent goes back to no template.
+**Decision.**
+- **Agent.** `validate_config` drops overrides when `template_sha256 is None`, instead of pruning them against the built-in inventory, and the middleware ignores any stored ones in that state. This also fixes the existing collision when an agent goes back to no template.
+- **Platform.** The manager's edits are stored on the `__platform__` row (`overrides_json`) and apply to every agent that builds on it; agents without their own template have none of their own (owner, 2026-10-22).
+- **Re-analysis.** A promotion keeps the current edits pruned against the new inventory when the file is the same (a re-run), and drops them for another file: positional ids would hit unrelated slides.
 
 **Alternative: binding overrides to a template sha.** That means more code, and the agent form never allows editing in the no-template state.
 
@@ -109,8 +121,9 @@ FeaturesPage dispatches the base URLs as `AgentFormBody` does, and builds the vi
 **Decision.**
 - **Plugin field.** `CapabilityUiPlugin` gets an optional `platformPanel`, looked up through `platformPanelFor(id)`, which mirrors `configWidgetRegistry`.
 - **FeaturesPage.** It shows a settings icon button in the row actions only when a panel exists, and mounts the panel in an `InlineDrawer`.
-- **Drawer.** It reuses the template card, the vision selector fed from the admin catalogue, and a read-only `PatternReviewDialog`.
-- **Agent form.** `usePptBuilderAnalysis` queries `/platform` in its no-template branch.
+- **Drawer.** It reuses the template card, the vision selector fed from the admin catalogue, and `PatternReviewDialog` ("Review the slides"), editable for capability managers and saved through `PUT /platform/overrides`. The reset uses `ConfirmationDialog`.
+- **Permission.** Writes are shown to capability managers only, from the bootstrap's platform roles.
+- **Agent form.** `usePptBuilderAnalysis` queries `/platform` in its no-template branch and shows "Template set by the administrator" with the file name.
 - **Upload.** The sanctioned raw multipart `fetch` with the generated response type.
 
 **Why no manifest field.** #2987 part 2 can make a generic `platform_settings_fields` renderer the fallback of the same registry.
@@ -118,7 +131,8 @@ FeaturesPage dispatches the base URLs as `AgentFormBody` does, and builds the vi
 ## Risks / Trade-offs
 
 - **Up to 30 s of mixed defaults across replicas after a change** → The bound is documented in the drawer and Help Center. The writing pod updates at once.
-- **Agents build on the Fred template while a replacement is analysed** → Analyses take minutes; the drawer says so.
+- **A replacement that keeps failing leaves the previous template in use indefinitely** → The drawer shows the failure and that the previous template stays in use, with re-run and reset.
+- **A new file drops the manager's pattern edits** → Positional ids cannot follow another file; the drawer review is where they are made again.
 - **The teamless port ignores team model restrictions for the platform template** → Only capability managers choose that model.
 - **`platform_chat_model_binding` is not applied to labelling** → This is the existing save-path gap, noted and not widened.
 - **A large platform template is stored in Postgres** → The same size limit as agent templates applies, and there is only one row.
@@ -126,7 +140,7 @@ FeaturesPage dispatches the base URLs as `AgentFormBody` does, and builds the vi
 
 ## Migration Plan
 
-- One Alembic revision in the capability's migrations, applied by `python -m fred_runtime migrate`, as for the other capability tables. It adds a nullable column.
+- One Alembic revision in the capability's migrations, applied by `python -m fred_runtime migrate`, as for the other capability tables. It adds two nullable columns.
 - **Rollback:** downgrade the revision. Agents fall back to the built-in template.
 - **No activation needed:** with no platform default set, behaviour is unchanged except for D7.
 - **Migration note:** the #2679 note (operations impact) gains the optional activation and the column.
