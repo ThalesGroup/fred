@@ -333,7 +333,7 @@ async def test_accept_grants_team_member_only_and_tells_everyone(
     [handled] = await world.inbox("carol")
     assert handled.handled_by_name == "Bob" and handled.handled_outcome == "accepted"
     [answer] = await world.inbox("alice")
-    assert answer.type == "team.join_request_answered" and answer.team_id is None
+    assert answer.type == "team.join_request_answered" and answer.team_id == ATLAS
     assert answer.payload.model_dump()["outcome"] == "accepted"
     assert "Bob" not in answer.model_dump_json()
 
@@ -369,6 +369,39 @@ async def test_after_accept_then_leave_the_requester_can_ask_again(
     assert again.id != request.id
     [mine] = await list_my_join_requests(_user("alice"), world.deps)
     assert mine.status == "pending" and mine.team_id == ATLAS
+
+
+async def test_leaving_drops_the_acceptance_but_keeps_an_older_refusal(
+    world: _World,
+) -> None:
+    first, _ = await world.ask()
+    await refuse_join_request(_user("bob"), ATLAS, first.id, world.deps)
+    [refusal] = await world.inbox("alice")
+    assert refusal.team_id is None
+    await world.age(first.id, decided_at=timedelta(days=8))  # gone, may ask again
+    second, _ = await world.ask()
+    await accept_join_request(_user("bob"), ATLAS, second.id, world.deps)
+    assert {n.payload.model_dump()["outcome"] for n in await world.inbox("alice")} == {
+        "accepted",
+        "refused",
+    }
+
+    # What leaving (or being removed from) the team does to her notifications.
+    await world.notifications.store.delete_for_member("alice", ATLAS)
+
+    [kept] = await world.inbox("alice")
+    assert kept.payload.model_dump()["outcome"] == "refused"
+
+
+async def test_deleting_the_team_drops_the_acceptance(world: _World) -> None:
+    request, _ = await world.ask()
+    await accept_join_request(_user("bob"), ATLAS, request.id, world.deps)
+    world.rebac.delete_all_relations_of_reference = AsyncMock()  # type: ignore[attr-defined]
+    world.rebac.check_user_permission_or_raise = AsyncMock()  # type: ignore[attr-defined]
+
+    await delete_team(_user("root"), ATLAS, world.deps)
+
+    assert await world.inbox("alice") == []
 
 
 async def test_a_demoted_admin_loses_the_request_notification(world: _World) -> None:

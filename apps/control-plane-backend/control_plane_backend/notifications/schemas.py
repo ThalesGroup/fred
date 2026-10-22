@@ -98,7 +98,8 @@ PAYLOAD_MODELS: dict[NotificationType, type[_Payload]] = {
 
 #: The right a recipient needs, on the notification's team, to act on it. It is
 #: checked per recipient at send time, and a loss of it deletes the recipient's
-#: open notifications of that type. `None` only for types sent without a team.
+#: open notifications of that type. `None`: never filtered by permission; such a
+#: type may still carry a team so leaving it, or its deletion, removes the row.
 ACTION_PERMISSION: dict[NotificationType, TeamPermission | None] = {
     NotificationType.AGENT_REPUBLISH_NEEDED: TeamPermission.CAN_UPDATE_AGENTS,
     NotificationType.AGENT_MARKETPLACE_REMOVED: TeamPermission.CAN_UPDATE_AGENTS,

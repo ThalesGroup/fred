@@ -335,7 +335,8 @@ async def _answer(
             team_id=metadata.id, team_name=metadata.name, outcome=outcome
         ),
     )
-    # No team: the requester is not a member and needs no permission to read it.
+    # An acceptance carries the team so leaving it, or its deletion, takes the
+    # "Open the team" tile along; a refusal has no team action and stays.
     await notifications.notify_many(
         [
             NotificationDraft(
@@ -343,6 +344,7 @@ async def _answer(
                 type=NotificationType.TEAM_JOIN_REQUEST_ANSWERED.value,
                 group_key=_answer_group(r.id),
                 payload=payload,
+                team_id=metadata.id if outcome == "accepted" else None,
             )
             for r in requests
         ]

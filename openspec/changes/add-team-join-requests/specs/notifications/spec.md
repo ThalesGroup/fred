@@ -26,7 +26,7 @@ Creating a join request SHALL send a `team.join_requested` notification, with th
 
 ### Requirement: The requester is told the decision
 
-Accepting, refusing or accepting anyway a request, and the automatic refusal when its team leaves `on_request`, SHALL send the requester a `team.join_request_answered` notification without a team, with outcome `accepted` or `refused`, in group `join_request_outcome:<request_id>`. A type sent without a team SHALL declare no action permission and SHALL NOT be filtered by team permissions. The tile SHALL read "Your request to join <team> was accepted" with a link and an "Open the team" button to the team's Agents page, or "Your request to join <team> was refused" with no link or button. It MUST NOT name the deciding admin. Accepting a refused request SHALL delete the requester's refusal notification before sending the acceptance one.
+Accepting, refusing or accepting anyway a request, and the automatic refusal when its team leaves `on_request`, SHALL send the requester a `team.join_request_answered` notification with outcome `accepted` or `refused`, in group `join_request_outcome:<request_id>`. The type SHALL declare no action permission and SHALL NOT be filtered by team permissions. An `accepted` notification SHALL carry the team, so the requester leaving or being removed from the team, or the team's deletion, deletes it; a `refused` one SHALL carry no team and survive both. The tile SHALL read "Your request to join <team> was accepted" with a link and an "Open the team" button to the team's Agents page, or "Your request to join <team> was refused" with no link or button. It MUST NOT name the deciding admin. Accepting a refused request SHALL delete the requester's refusal notification before sending the acceptance one.
 
 #### Scenario: Accepted
 
@@ -37,3 +37,9 @@ Accepting, refusing or accepting anyway a request, and the automatic refusal whe
 
 - **WHEN** Bob refuses Alice's request to Atlas
 - **THEN** Alice receives "Your request to join Atlas was refused" with no button and no admin name
+
+#### Scenario: Leaving takes the acceptance, not a refusal
+
+- **GIVEN** Alice holds an old refusal and an acceptance for Atlas
+- **WHEN** she leaves Atlas, is removed from it, or Atlas is deleted
+- **THEN** her acceptance notification is deleted and her refusal notification stays
