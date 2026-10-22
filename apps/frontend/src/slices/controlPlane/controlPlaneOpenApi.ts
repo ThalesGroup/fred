@@ -5146,6 +5146,10 @@ export type CapabilityEnablementItem = {
   model_context_window_tokens?: number | null;
   model_max_input_tokens?: number | null;
   model_max_output_tokens?: number | null;
+  /** For a `kind="model"` row: the profile ids of this model that declare `supports_vision`, so a capability's platform settings can offer only image-reading models. Always empty for other kinds. */
+  vision_profile_ids?: string[];
+  /** Ingress-relative base URL of the capability's own routes on its pod, for its platform settings panel; null when it has none. */
+  route_base_url?: string | null;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];

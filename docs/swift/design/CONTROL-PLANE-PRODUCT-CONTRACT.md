@@ -5216,3 +5216,20 @@ model during its save. No platform binding is sent. The pod
 **Vision flags.** `AvailableModelProfile.supports_vision` and
 `EffectiveChatModel.supports_vision` (default false) report whether the profile
 declares `supports_vision` in the pod catalog. A platform binding reports false.
+
+## 70. Contract Notes — capability platform settings fields (2026-10-22)
+
+`CapabilityEnablementItem` (`GET /admin/capabilities`, `can_manage_capabilities`)
+gains two read-only fields, both derived from the pod catalogue entry:
+
+- `route_base_url` (nullable): the ingress-relative base URL of the capability's own
+  routes (`CapabilityCatalogEntry.route_base_url`), so Admin > Features can open a
+  capability's platform settings panel against its pod, as the agent form does.
+- `vision_profile_ids`: for a `kind="model"` row, the profile ids declaring
+  `supports_vision` (`model_vision_profile_ids`), the mirror of
+  `thinking_profile_ids`; empty for other kinds and projected product objects.
+
+The capability routes those panels call (ppt_builder `/platform*`) live on the pod
+and are gated by the pod's capability-manager check
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.120). Acceptance scenarios:
+`openspec/changes/ppt-builder-platform-defaults/`.
