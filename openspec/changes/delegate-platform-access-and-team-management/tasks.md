@@ -1,0 +1,23 @@
+## 1. Authorization model
+
+- [ ] 1.1 Add `platform_access_manager` and the three scoped organization permissions (`can_manage_platform_access`, `can_manage_team_free`, `can_edit_team_info`) to the OpenFGA model; regenerate its JSON and verify the schema authorization tests cover role isolation and `platform_admin` inheritance.
+- [ ] 1.2 Wire the new role and permissions into Python enums, platform-role grant/revoke/list, and bootstrap reporting; verify focused platform-role and bootstrap tests show the new role without unrelated powers.
+
+## 2. Server enforcement
+
+- [ ] 2.1 Gate the complete Platform Access administration routes and live admission bypass on `can_manage_platform_access`; verify focused tests cover filtering, rules, whitelist, T0, role revocation and authority-unavailable behavior.
+- [ ] 2.2 Add Free-only read and update routes that preserve the independent team authorization flag and actor lockout; verify tests cover normal changes, crafted combined writes, missing/personal teams and unchanged audit behavior.
+- [ ] 2.3 Gate Free-link creation, history, joiners, recovery, revocation and cleanup on `can_manage_team_free`, retaining own-human token checks; verify focused link tests cover team manager success and unauthorized denial.
+- [ ] 2.4 Permit `team_manager` registry edits to name and description only, with admin-change authorization checked before any write; verify registry tests cover mixed forbidden requests, valid edits, `platform_admin` continuity and audit events.
+
+## 3. Frontend and contracts
+
+- [ ] 3.1 Regenerate the control-plane OpenAPI client and add the new bootstrap capability, role option, navigation and route gates; verify focused frontend tests for access-manager and team-manager isolation.
+- [ ] 3.2 Adapt Admin Teams and the shared team dialog so permitted roles can manage Free and names/descriptions while admin nomination remains hidden for team managers; verify focused UI tests for all three roles and no permission-based request leakage.
+- [ ] 3.3 Update French/English role labels and help text plus the endpoint matrix, REBAC guide and product contract; verify localization keys and documented permissions match the API and OpenFGA model.
+
+## 4. Verification and close-out
+
+- [ ] 4.1 Run the relevant backend, frontend and OpenFGA authorization tests, then the root quality gate once for the completed series; record exact commands and outcomes in the PR.
+- [ ] 4.2 Review the full branch against `swift` using the branch audit procedure and obtain an independent read-only review of the authorization change; resolve findings and record base/head, coverage and exclusions in the PR.
+- [ ] 4.3 Reconcile the final OpenSpec artifacts, validate and sync the deltas, archive the completed change, then push the topic branch and open an English draft PR linked to #3235; verify the PR diff and title.
